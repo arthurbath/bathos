@@ -153,7 +153,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="min-w-[140px]">Partner</TableHead>
+                <TableHead className="min-w-[190px]">Partner</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Frequency</TableHead>
