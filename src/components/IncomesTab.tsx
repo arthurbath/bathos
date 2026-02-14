@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,11 +24,12 @@ interface IncomesTabProps {
 const FREQ_OPTIONS: FrequencyType[] = ['monthly', 'twice_monthly', 'weekly', 'every_n_weeks', 'annual', 'k_times_annually'];
 const NEEDS_PARAM: Set<FrequencyType> = new Set(['every_n_weeks', 'k_times_annually']);
 
-function EditableCell({ value, onChange, type = 'text', className = '' }: {
+function EditableCell({ value, onChange, type = 'text', className = '', autoFocus = false }: {
   value: string | number;
   onChange: (v: string) => void;
   type?: string;
   className?: string;
+  autoFocus?: boolean;
 }) {
   const [local, setLocal] = useState(String(value));
   const ref = useRef<HTMLInputElement>(null);
@@ -42,6 +43,7 @@ function EditableCell({ value, onChange, type = 'text', className = '' }: {
       ref={ref}
       type={type}
       value={local}
+      autoFocus={autoFocus}
       onChange={e => setLocal(e.target.value)}
       onBlur={commit}
       onKeyDown={e => e.key === 'Enter' && ref.current?.blur()}
@@ -52,6 +54,16 @@ function EditableCell({ value, onChange, type = 'text', className = '' }: {
 
 export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRemove }: IncomesTabProps) {
   const [adding, setAdding] = useState(false);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const prevCountRef = useRef(incomes.length);
+
+  useEffect(() => {
+    if (incomes.length > prevCountRef.current) {
+      const newest = incomes[incomes.length - 1];
+      if (newest) setFocusId(newest.id);
+    }
+    prevCountRef.current = incomes.length;
+  }, [incomes]);
 
   const handleAdd = async () => {
     setAdding(true);
@@ -150,7 +162,11 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                     </Select>
                   </TableCell>
                   <TableCell>
-                    <EditableCell value={inc.name} onChange={v => handleUpdate(inc.id, 'name', v)} />
+                    <EditableCell
+                      value={inc.name}
+                      onChange={v => handleUpdate(inc.id, 'name', v)}
+                      autoFocus={focusId === inc.id}
+                    />
                   </TableCell>
                   <TableCell>
                     <EditableCell value={Number(inc.amount)} onChange={v => handleUpdate(inc.id, 'amount', v)} type="number" className="text-right" />
