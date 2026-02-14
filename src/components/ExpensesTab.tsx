@@ -109,7 +109,7 @@ function CurrencyCell({ value, onChange, className = '' }: {
     <button
       type="button"
       onClick={() => setFocused(true)}
-      className={`h-7 w-full bg-transparent px-1 !text-xs text-right cursor-text hover:border hover:border-border rounded-md ${className}`}
+      className={`h-7 w-full bg-transparent px-1 !text-xs text-right cursor-text border border-transparent hover:border-border rounded-md ${className}`}
     >
       ${Math.round(Number(local) || 0)}
     </button>
