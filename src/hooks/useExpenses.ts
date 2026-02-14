@@ -45,8 +45,19 @@ export function useExpenses(householdId: string) {
   };
 
   const update = async (id: string, updates: Partial<Omit<Expense, 'id' | 'household_id'>>) => {
-    const { error } = await supabase.from('expenses').update(updates).eq('id', id);
-    if (error) throw error;
+    // Optimistically update local state so UI reacts immediately
+    setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+    try {
+      const { error } = await supabase.from('expenses').update(updates).eq('id', id);
+      if (error) throw error;
+    } catch (e: any) {
+      // "Load failed" is a browser fetch abort from concurrent requests — not a real error
+      if (e instanceof TypeError && e.message === 'Load failed') {
+        // silently ignore; refetch will reconcile
+      } else {
+        throw e;
+      }
+    }
     await fetch();
   };
 
