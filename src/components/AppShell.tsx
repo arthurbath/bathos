@@ -1,6 +1,10 @@
+import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DollarSign, PieChart, BarChart3, Tag, History, LogOut } from 'lucide-react';
+import { DollarSign, PieChart, BarChart3, Tag, History, LogOut, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { toast } from '@/hooks/use-toast';
 import type { HouseholdData } from '@/hooks/useHouseholdData';
 import { useIncomes } from '@/hooks/useIncomes';
 import { useExpenses } from '@/hooks/useExpenses';
@@ -17,10 +21,32 @@ import type { Json } from '@/integrations/supabase/types';
 
 interface AppShellProps {
   household: HouseholdData;
+  userId: string;
   onSignOut: () => void;
+  onHouseholdRefetch: () => void;
 }
 
-export function AppShell({ household, onSignOut }: AppShellProps) {
+export function AppShell({ household, userId, onSignOut, onHouseholdRefetch }: AppShellProps) {
+  const [editOpen, setEditOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleEditName = async () => {
+    if (!newName.trim()) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ display_name: newName.trim() })
+      .eq('id', userId);
+    setSaving(false);
+    if (error) {
+      toast({ title: 'Failed to update name', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Display name updated' });
+      setEditOpen(false);
+      onHouseholdRefetch();
+    }
+  };
   const { incomes, add: addIncome, update: updateIncome, remove: removeIncome, refetch: refetchIncomes } = useIncomes(household.householdId);
   const { expenses, add: addExpense, update: updateExpense, remove: removeExpense, refetch: refetchExpenses } = useExpenses(household.householdId);
   const { categories, add: addCategory, update: updateCategory, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
@@ -81,6 +107,24 @@ export function AppShell({ household, onSignOut }: AppShellProps) {
             <span className="text-sm text-muted-foreground">
               {household.partnerX} & {household.partnerY}
             </span>
+            <Dialog open={editOpen} onOpenChange={(open) => { setEditOpen(open); if (open) setNewName(household.myLabel === 'X' ? household.partnerX : household.partnerY); }}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="icon" title="Edit display name">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>Edit display name</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Your name" autoFocus onKeyDown={(e) => e.key === 'Enter' && handleEditName()} />
+                  <Button className="w-full" disabled={!newName.trim() || saving} onClick={handleEditName}>
+                    {saving ? 'Saving…' : 'Save'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
             <Button variant="ghost" size="icon" onClick={onSignOut} title="Sign out">
               <LogOut className="h-4 w-4" />
             </Button>
