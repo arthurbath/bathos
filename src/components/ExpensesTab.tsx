@@ -140,6 +140,55 @@ function CurrencyCell({ value, onChange, className = '', 'data-row': dataRow, 'd
   );
 }
 
+function PercentCell({ value, onChange, className = '', 'data-row': dataRow, 'data-col': dataCol, onCellKeyDown, onCellMouseDown, min = 0, max = 100 }: {
+  value: number;
+  onChange: (v: string) => void;
+  className?: string;
+  'data-row'?: number;
+  'data-col'?: number;
+  onCellKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
+  onCellMouseDown?: (e: React.MouseEvent<HTMLElement>) => void;
+  min?: number;
+  max?: number;
+}) {
+  const [local, setLocal] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+  const commit = () => { if (local !== String(value)) onChange(local); };
+
+  return focused ? (
+    <Input
+      ref={ref}
+      type="number"
+      value={local}
+      min={min}
+      max={max}
+      data-row={dataRow}
+      data-col={dataCol}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={() => { commit(); setFocused(false); }}
+      onKeyDown={e => {
+        if (onCellKeyDown) onCellKeyDown(e);
+        else if (e.key === 'Enter') ref.current?.blur();
+      }}
+      onMouseDown={onCellMouseDown}
+      autoFocus
+      className={`h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-primary !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
+    />
+  ) : (
+    <button
+      type="button"
+      data-row={dataRow}
+      data-col={dataCol}
+      onClick={() => setFocused(true)}
+      onMouseDown={onCellMouseDown}
+      className={`h-7 w-full bg-transparent px-1 !text-xs text-right cursor-text border border-transparent hover:border-border rounded-md ${className}`}
+    >
+      {Math.round(Number(local) || 0)}%
+    </button>
+  );
+}
+
 interface ComputedRow {
   exp: Expense;
   fairX: number;
@@ -256,10 +305,10 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
         </Select>
       </TableCell>
       <TableCell>
-        <EditableCell value={localBenefitX} onChange={handleBenefitXChange} type="number" className="text-right w-16" min={0} max={100} data-row={rowIndex} data-col={10} {...nav} />
+        <PercentCell value={localBenefitX} onChange={handleBenefitXChange} className="text-right w-16" min={0} max={100} data-row={rowIndex} data-col={10} {...nav} />
       </TableCell>
       <TableCell className="text-right text-muted-foreground tabular-nums text-xs">
-        {100 - localBenefitX}
+        {100 - localBenefitX}%
       </TableCell>
       <TableCell className="text-right tabular-nums text-xs">${Math.round(fairX)}</TableCell>
       <TableCell className="text-right tabular-nums text-xs">${Math.round(fairY)}</TableCell>
