@@ -52,7 +52,7 @@ export function ConfigurationTab({
         onReassign={onReassignBudget}
       />
       <ManagedListSection
-        title="Linked Accounts"
+        title="Payment Methods"
         description="Track which payment method or account is used."
         items={linkedAccounts}
         getUsageCount={(id) => expenses.filter(e => e.linked_account_id === id).length}
