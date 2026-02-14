@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels } from '@/lib/frequency';
 import type { FrequencyType } from '@/types/fairshare';
@@ -33,6 +33,27 @@ const FREQ_OPTIONS: FrequencyType[] = ['monthly', 'twice_monthly', 'weekly', 'ev
 const NEEDS_PARAM: Set<FrequencyType> = new Set(['every_n_weeks', 'k_times_annually']);
 
 type GroupByOption = 'none' | 'category' | 'budget' | 'payer' | 'payment_method';
+type SortColumn = 'name' | 'category' | 'amount' | 'estimate' | 'frequency' | 'param' | 'monthly' | 'budget' | 'payment_method' | 'payer' | 'benefit_x' | 'benefit_y' | 'fair_x' | 'fair_y';
+type SortDir = 'asc' | 'desc';
+
+function SortableHead({ column, label, current, dir, onSort, className = '' }: {
+  column: SortColumn;
+  label: React.ReactNode;
+  current: SortColumn;
+  dir: SortDir;
+  onSort: (col: SortColumn) => void;
+  className?: string;
+}) {
+  const active = current === column;
+  return (
+    <TableHead className={`${className} cursor-pointer select-none hover:bg-muted/50`} onClick={() => onSort(column)}>
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active ? (dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+      </span>
+    </TableHead>
+  );
+}
 
 function EditableCell({ value, onChange, type = 'text', className = '', min, max, step }: {
   value: string | number;
@@ -247,6 +268,17 @@ function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] 
 export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, incomes, partnerX, partnerY, onAdd, onUpdate, onRemove }: ExpensesTabProps) {
   const [adding, setAdding] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupByOption>('none');
+  const [sortCol, setSortCol] = useState<SortColumn>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const toggleSort = (col: SortColumn) => {
+    if (sortCol === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  };
 
   // Compute income ratio
   const incomeX = incomes.filter(i => i.partner_label === 'X').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
@@ -317,13 +349,42 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
   };
 
   let totalFairX = 0, totalFairY = 0, totalMonthly = 0;
-  const rows: ComputedRow[] = expenses.map(exp => {
+  const unsortedRows: ComputedRow[] = expenses.map(exp => {
     const { fairX, fairY, monthly } = computeFairShare(exp);
     totalFairX += fairX;
     totalFairY += fairY;
     totalMonthly += monthly;
     return { exp, fairX, fairY, monthly };
   });
+
+  const resolveName = (id: string | null, list: { id: string; name: string }[]) =>
+    id ? (list.find(x => x.id === id)?.name ?? '') : '';
+
+  const sortRows = (arr: ComputedRow[]): ComputedRow[] => {
+    const m = sortDir === 'asc' ? 1 : -1;
+    return [...arr].sort((a, b) => {
+      let cmp = 0;
+      switch (sortCol) {
+        case 'name': cmp = a.exp.name.localeCompare(b.exp.name); break;
+        case 'category': cmp = resolveName(a.exp.category_id, categories).localeCompare(resolveName(b.exp.category_id, categories)); break;
+        case 'amount': cmp = a.exp.amount - b.exp.amount; break;
+        case 'estimate': cmp = Number(a.exp.is_estimate) - Number(b.exp.is_estimate); break;
+        case 'frequency': cmp = a.exp.frequency_type.localeCompare(b.exp.frequency_type); break;
+        case 'param': cmp = (a.exp.frequency_param ?? 0) - (b.exp.frequency_param ?? 0); break;
+        case 'monthly': cmp = a.monthly - b.monthly; break;
+        case 'budget': cmp = resolveName(a.exp.budget_id, budgets).localeCompare(resolveName(b.exp.budget_id, budgets)); break;
+        case 'payment_method': cmp = resolveName(a.exp.linked_account_id, linkedAccounts).localeCompare(resolveName(b.exp.linked_account_id, linkedAccounts)); break;
+        case 'payer': cmp = a.exp.payer.localeCompare(b.exp.payer); break;
+        case 'benefit_x': cmp = a.exp.benefit_x - b.exp.benefit_x; break;
+        case 'benefit_y': cmp = (100 - a.exp.benefit_x) - (100 - b.exp.benefit_x); break;
+        case 'fair_x': cmp = a.fairX - b.fairX; break;
+        case 'fair_y': cmp = a.fairY - b.fairY; break;
+      }
+      return cmp * m;
+    });
+  };
+
+  const rows = useMemo(() => sortRows(unsortedRows), [unsortedRows, sortCol, sortDir]);
 
   const getGroupKey = (row: ComputedRow): string => {
     switch (groupBy) {
@@ -364,7 +425,6 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(row);
     }
-    // Sort groups: named groups first alphabetically, then _ungrouped last
     return [...map.entries()].sort((a, b) => {
       if (a[0] === '_ungrouped') return 1;
       if (b[0] === '_ungrouped') return -1;
@@ -406,20 +466,20 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
           <Table className="text-xs">
             <TableHeader>
               <TableRow>
-                <TableHead className="min-w-[200px] sticky left-0 z-20 bg-background">Name</TableHead>
-                <TableHead className="min-w-[190px]">Category</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="text-center">Est.</TableHead>
-                <TableHead>Frequency</TableHead>
-                <TableHead className="text-right">Param</TableHead>
-                <TableHead className="text-right">Monthly</TableHead>
-                <TableHead className="min-w-[190px]">Budget</TableHead>
-                <TableHead className="min-w-[140px]">Payment Method</TableHead>
-                <TableHead>Payer</TableHead>
-                <TableHead className="text-right">{partnerX} %</TableHead>
-                <TableHead className="text-right">{partnerY} %</TableHead>
-                <TableHead className="text-right">Fair {partnerX}</TableHead>
-                <TableHead className="text-right">Fair {partnerY}</TableHead>
+                <SortableHead column="name" label="Name" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[200px] sticky left-0 z-20 bg-background" />
+                <SortableHead column="category" label="Category" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
+                <SortableHead column="amount" label="Amount" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
+                <SortableHead column="estimate" label="Est." current={sortCol} dir={sortDir} onSort={toggleSort} className="text-center" />
+                <SortableHead column="frequency" label="Frequency" current={sortCol} dir={sortDir} onSort={toggleSort} />
+                <SortableHead column="param" label="Param" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
+                <SortableHead column="monthly" label="Monthly" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
+                <SortableHead column="budget" label="Budget" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
+                <SortableHead column="payment_method" label="Payment Method" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[140px]" />
+                <SortableHead column="payer" label="Payer" current={sortCol} dir={sortDir} onSort={toggleSort} />
+                <SortableHead column="benefit_x" label={`${partnerX} %`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
+                <SortableHead column="benefit_y" label={`${partnerY} %`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
+                <SortableHead column="fair_x" label={`Fair ${partnerX}`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
+                <SortableHead column="fair_y" label={`Fair ${partnerY}`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
