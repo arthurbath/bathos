@@ -14,6 +14,35 @@ export type Database = {
   }
   public: {
     Tables: {
+      budgets: {
+        Row: {
+          created_at: string
+          household_id: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          household_id: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          household_id?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budgets_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string
@@ -47,7 +76,7 @@ export type Database = {
         Row: {
           amount: number
           benefit_x: number
-          budget: string | null
+          budget_id: string | null
           category_id: string | null
           created_at: string
           frequency_param: number | null
@@ -55,14 +84,14 @@ export type Database = {
           household_id: string
           id: string
           is_estimate: boolean
-          linked_account: string | null
+          linked_account_id: string | null
           name: string
           payer: string
         }
         Insert: {
           amount?: number
           benefit_x?: number
-          budget?: string | null
+          budget_id?: string | null
           category_id?: string | null
           created_at?: string
           frequency_param?: number | null
@@ -70,14 +99,14 @@ export type Database = {
           household_id: string
           id?: string
           is_estimate?: boolean
-          linked_account?: string | null
+          linked_account_id?: string | null
           name: string
           payer?: string
         }
         Update: {
           amount?: number
           benefit_x?: number
-          budget?: string | null
+          budget_id?: string | null
           category_id?: string | null
           created_at?: string
           frequency_param?: number | null
@@ -85,11 +114,18 @@ export type Database = {
           household_id?: string
           id?: string
           is_estimate?: boolean
-          linked_account?: string | null
+          linked_account_id?: string | null
           name?: string
           payer?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "expenses_budget_id_fkey"
+            columns: ["budget_id"]
+            isOneToOne: false
+            referencedRelation: "budgets"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "expenses_category_id_fkey"
             columns: ["category_id"]
@@ -102,6 +138,13 @@ export type Database = {
             columns: ["household_id"]
             isOneToOne: false
             referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "linked_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -193,6 +236,35 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "income_streams_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      linked_accounts: {
+        Row: {
+          created_at: string
+          household_id: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          household_id: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          household_id?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "linked_accounts_household_id_fkey"
             columns: ["household_id"]
             isOneToOne: false
             referencedRelation: "households"

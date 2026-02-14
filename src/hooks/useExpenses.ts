@@ -13,8 +13,8 @@ export interface Expense {
   category_id: string | null;
   household_id: string;
   is_estimate: boolean;
-  budget: string | null;
-  linked_account: string | null;
+  budget_id: string | null;
+  linked_account_id: string | null;
 }
 
 export function useExpenses(householdId: string) {
