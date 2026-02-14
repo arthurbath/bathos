@@ -257,7 +257,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                   </TableCell>
                   <TableCell>
                     <Select value={inc.partner_label} onValueChange={v => handleUpdate(inc.id, 'partner_label', v)}>
-                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={1} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
+                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={1} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -271,7 +271,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                   </TableCell>
                   <TableCell>
                     <Select value={inc.frequency_type} onValueChange={v => handleUpdate(inc.id, 'frequency_type', v)}>
-                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={3} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
+                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={3} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

@@ -230,7 +230,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       </TableCell>
       <TableCell>
         <Select value={exp.category_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'category_id', v)}>
-          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={1} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
+          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={1} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -249,7 +249,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       </TableCell>
       <TableCell>
         <Select value={exp.frequency_type} onValueChange={v => handleUpdate(exp.id, 'frequency_type', v)}>
-          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={4} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
+          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={4} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -269,7 +269,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       <TableCell className="text-right font-medium tabular-nums text-xs">${Math.round(monthly)}</TableCell>
       <TableCell>
         <Select value={exp.budget_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'budget_id', v)}>
-          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={7} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
+          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={7} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -282,7 +282,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       </TableCell>
       <TableCell>
         <Select value={exp.linked_account_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'linked_account_id', v)}>
-          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={8} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
+          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={8} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -295,7 +295,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       </TableCell>
       <TableCell>
         <Select value={exp.payer} onValueChange={v => handleUpdate(exp.id, 'payer', v)}>
-          <SelectTrigger className="h-7 w-24 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={9} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
+          <SelectTrigger className="h-7 w-24 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={9} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
