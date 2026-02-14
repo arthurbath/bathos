@@ -552,11 +552,11 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
         </div>
       </CardHeader>
       <CardContent className="px-2">
-        <div className="overflow-auto max-h-[70vh]" ref={tableRef}>
+        <div className="overflow-auto max-h-[calc(100vh-12rem)]" ref={tableRef}>
           <Table className="text-xs">
-            <TableHeader className="sticky top-0 z-30 bg-background">
+            <TableHeader className="sticky top-0 z-30 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
               <TableRow>
-                <SortableHead column="name" label="Name" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[200px] sticky left-0 z-20 bg-background" />
+                <SortableHead column="name" label="Name" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[200px] sticky left-0 z-40 bg-card" />
                 <SortableHead column="category" label="Category" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
                 <SortableHead column="amount" label="Amount" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
                 <SortableHead column="estimate" label="Est." current={sortCol} dir={sortDir} onSort={toggleSort} className="text-center" />
