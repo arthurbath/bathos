@@ -43,7 +43,7 @@ function ColorPicker({ color, onChange }: { color: string | null | undefined; on
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-2" align="start">
-        <div className="grid grid-cols-6 gap-1.5">
+        <div className="grid grid-cols-5 gap-1.5">
           {COLOR_PALETTE.map(c => (
             <button
               key={c}
