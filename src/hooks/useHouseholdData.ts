@@ -72,21 +72,26 @@ export function useHouseholdData(user: User | null) {
   const createHousehold = async (displayName: string) => {
     if (!user) throw new Error('Not authenticated');
 
+    // Update profile display name
     const { error: profileErr } = await supabase
       .from('profiles')
       .update({ display_name: displayName })
       .eq('id', user.id);
     if (profileErr) throw new Error(`Profile update failed: ${profileErr.message}`);
 
-    const { data: hh, error: hhErr } = await supabase
-      .from('households')
-      .insert({ name: 'My Household' })
-      .select('id')
-      .single();
-    if (hhErr || !hh) throw new Error(`Household creation failed: ${hhErr?.message ?? 'Unknown error'}`);
+    // Generate household ID client-side to avoid needing .select() after insert.
+    // PostgREST's RETURNING clause triggers the SELECT RLS policy, which fails
+    // because the user isn't yet a household member at insert time.
+    const householdId = crypto.randomUUID();
 
+    const { error: hhErr } = await supabase
+      .from('households')
+      .insert({ id: householdId, name: 'My Household' });
+    if (hhErr) throw new Error(`Household creation failed: ${hhErr.message}`);
+
+    // Add self as partner X
     const { error: memberErr } = await supabase.from('household_members').insert({
-      household_id: hh.id,
+      household_id: householdId,
       user_id: user.id,
       partner_label: 'X',
     });
