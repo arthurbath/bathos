@@ -356,9 +356,13 @@ function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] 
 
 export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, incomes, partnerX, partnerY, onAdd, onUpdate, onRemove }: ExpensesTabProps) {
   const [adding, setAdding] = useState(false);
-  const [groupBy, setGroupBy] = useState<GroupByOption>('none');
-  const [sortCol, setSortCol] = useState<SortColumn>('name');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [groupBy, setGroupBy] = useState<GroupByOption>(() => (localStorage.getItem('expenses_groupBy') as GroupByOption) || 'none');
+  const [sortCol, setSortCol] = useState<SortColumn>(() => (localStorage.getItem('expenses_sortCol') as SortColumn) || 'name');
+  const [sortDir, setSortDir] = useState<SortDir>(() => (localStorage.getItem('expenses_sortDir') as SortDir) || 'asc');
+
+  useEffect(() => { localStorage.setItem('expenses_groupBy', groupBy); }, [groupBy]);
+  useEffect(() => { localStorage.setItem('expenses_sortCol', sortCol); }, [sortCol]);
+  useEffect(() => { localStorage.setItem('expenses_sortDir', sortDir); }, [sortDir]);
 
   const toggleSort = (col: SortColumn) => {
     if (sortCol === col) {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { DollarSign, PieChart, BarChart3, Settings, History, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
@@ -27,6 +27,8 @@ interface AppShellProps {
 }
 
 export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onUpdatePartnerNames }: AppShellProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { incomes, add: addIncome, update: updateIncome, remove: removeIncome, refetch: refetchIncomes } = useIncomes(household.householdId);
   const { expenses, add: addExpense, update: updateExpense, remove: removeExpense, refetch: refetchExpenses } = useExpenses(household.householdId);
   const { categories, add: addCategory, update: updateCategory, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
@@ -117,98 +119,95 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-6 space-y-6">
-        <Tabs defaultValue="incomes">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="incomes" className="gap-1.5 text-xs sm:text-sm">
-              <DollarSign className="h-4 w-4" />
-              <span className="hidden sm:inline">Incomes</span>
-            </TabsTrigger>
-            <TabsTrigger value="expenses" className="gap-1.5 text-xs sm:text-sm">
-              <BarChart3 className="h-4 w-4" />
-              <span className="hidden sm:inline">Expenses</span>
-            </TabsTrigger>
-            <TabsTrigger value="summary" className="gap-1.5 text-xs sm:text-sm">
-              <PieChart className="h-4 w-4" />
-              <span className="hidden sm:inline">Summary</span>
-            </TabsTrigger>
-            <TabsTrigger value="config" className="gap-1.5 text-xs sm:text-sm">
-              <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline">Config</span>
-            </TabsTrigger>
-            <TabsTrigger value="restore" className="gap-1.5 text-xs sm:text-sm">
-              <History className="h-4 w-4" />
-              <span className="hidden sm:inline">Restore</span>
-            </TabsTrigger>
-          </TabsList>
+        <nav className="grid w-full grid-cols-5 rounded-lg bg-muted p-1 text-muted-foreground">
+          {([
+            { path: '/incomes', icon: DollarSign, label: 'Incomes' },
+            { path: '/expenses', icon: BarChart3, label: 'Expenses' },
+            { path: '/summary', icon: PieChart, label: 'Summary' },
+            { path: '/config', icon: Settings, label: 'Config' },
+            { path: '/restore', icon: History, label: 'Restore' },
+          ] as const).map(({ path, icon: Icon, label }) => {
+            const active = location.pathname === path;
+            return (
+              <button
+                key={path}
+                onClick={() => navigate(path)}
+                className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-all ${active ? 'bg-background text-foreground shadow-sm' : 'hover:bg-background/50'}`}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            );
+          })}
+        </nav>
 
-          <TabsContent value="incomes">
-            <IncomesTab
-              incomes={incomes}
-              partnerX={household.partnerX}
-              partnerY={household.partnerY}
-              onAdd={addIncome}
-              onUpdate={updateIncome}
-              onRemove={removeIncome}
-            />
-          </TabsContent>
-          <TabsContent value="expenses">
-            <ExpensesTab
-              expenses={expenses}
-              categories={categories}
-              budgets={budgets}
-              linkedAccounts={linkedAccounts}
-              incomes={incomes}
-              partnerX={household.partnerX}
-              partnerY={household.partnerY}
-              onAdd={addExpense}
-              onUpdate={updateExpense}
-              onRemove={removeExpense}
-            />
-          </TabsContent>
-          <TabsContent value="summary">
-            <SummaryTab
-              incomes={incomes}
-              expenses={expenses}
-              partnerX={household.partnerX}
-              partnerY={household.partnerY}
-            />
-          </TabsContent>
-          <TabsContent value="config">
-            <ConfigurationTab
-              categories={categories}
-              budgets={budgets}
-              linkedAccounts={linkedAccounts}
-              expenses={expenses}
-              partnerX={household.partnerX}
-              partnerY={household.partnerY}
-              inviteCode={household.inviteCode}
-              onUpdatePartnerNames={onUpdatePartnerNames}
-              onAddCategory={addCategory}
-              onUpdateCategory={updateCategory}
-              onRemoveCategory={removeCategory}
-              onReassignCategory={handleReassignCategory}
-              onAddBudget={addBudget}
-              onUpdateBudget={updateBudget}
-              onRemoveBudget={removeBudget}
-              onReassignBudget={handleReassignBudget}
-              onAddLinkedAccount={addLinkedAccount}
-              onUpdateLinkedAccount={updateLinkedAccount}
-              onRemoveLinkedAccount={removeLinkedAccount}
-              onReassignLinkedAccount={handleReassignLinkedAccount}
-            />
-          </TabsContent>
-          <TabsContent value="restore">
-            <RestoreTab
-              points={points}
-              incomes={incomes}
-              expenses={expenses}
-              categories={categories}
-              onSave={savePoint}
-              onRemove={removePoint}
-              onRestore={handleRestore}
-            />
-          </TabsContent>
-        </Tabs>
+        {location.pathname === '/incomes' && (
+          <IncomesTab
+            incomes={incomes}
+            partnerX={household.partnerX}
+            partnerY={household.partnerY}
+            onAdd={addIncome}
+            onUpdate={updateIncome}
+            onRemove={removeIncome}
+          />
+        )}
+        {location.pathname === '/expenses' && (
+          <ExpensesTab
+            expenses={expenses}
+            categories={categories}
+            budgets={budgets}
+            linkedAccounts={linkedAccounts}
+            incomes={incomes}
+            partnerX={household.partnerX}
+            partnerY={household.partnerY}
+            onAdd={addExpense}
+            onUpdate={updateExpense}
+            onRemove={removeExpense}
+          />
+        )}
+        {location.pathname === '/summary' && (
+          <SummaryTab
+            incomes={incomes}
+            expenses={expenses}
+            partnerX={household.partnerX}
+            partnerY={household.partnerY}
+          />
+        )}
+        {location.pathname === '/config' && (
+          <ConfigurationTab
+            categories={categories}
+            budgets={budgets}
+            linkedAccounts={linkedAccounts}
+            expenses={expenses}
+            partnerX={household.partnerX}
+            partnerY={household.partnerY}
+            inviteCode={household.inviteCode}
+            onUpdatePartnerNames={onUpdatePartnerNames}
+            onAddCategory={addCategory}
+            onUpdateCategory={updateCategory}
+            onRemoveCategory={removeCategory}
+            onReassignCategory={handleReassignCategory}
+            onAddBudget={addBudget}
+            onUpdateBudget={updateBudget}
+            onRemoveBudget={removeBudget}
+            onReassignBudget={handleReassignBudget}
+            onAddLinkedAccount={addLinkedAccount}
+            onUpdateLinkedAccount={updateLinkedAccount}
+            onRemoveLinkedAccount={removeLinkedAccount}
+            onReassignLinkedAccount={handleReassignLinkedAccount}
+          />
+        )}
+        {location.pathname === '/restore' && (
+          <RestoreTab
+            points={points}
+            incomes={incomes}
+            expenses={expenses}
+            categories={categories}
+            onSave={savePoint}
+            onRemove={removePoint}
+            onRestore={handleRestore}
+          />
+        )}
       </main>
     </div>
   );
