@@ -32,6 +32,8 @@ interface ExpensesTabProps {
 const FREQ_OPTIONS: FrequencyType[] = ['monthly', 'twice_monthly', 'weekly', 'every_n_weeks', 'annual', 'k_times_annually'];
 const NEEDS_PARAM: Set<FrequencyType> = new Set(['every_n_weeks', 'k_times_annually']);
 
+type GroupByOption = 'none' | 'category' | 'budget' | 'payer' | 'payment_method';
+
 function EditableCell({ value, onChange, type = 'text', className = '', min, max, step }: {
   value: string | number;
   onChange: (v: string) => void;
@@ -61,8 +63,158 @@ function EditableCell({ value, onChange, type = 'text', className = '', min, max
   );
 }
 
+interface ComputedRow {
+  exp: Expense;
+  fairX: number;
+  fairY: number;
+  monthly: number;
+}
+
+function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAccounts, partnerX, partnerY, handleUpdate, handleToggleEstimate, handleRemove }: ComputedRow & {
+  categories: Category[];
+  budgets: Budget[];
+  linkedAccounts: LinkedAccount[];
+  partnerX: string;
+  partnerY: string;
+  handleUpdate: (id: string, field: string, value: string) => void;
+  handleToggleEstimate: (id: string, checked: boolean) => void;
+  handleRemove: (id: string) => void;
+}) {
+  return (
+    <TableRow>
+      <TableCell className="sticky left-0 z-10 bg-background">
+        <EditableCell value={exp.name} onChange={v => handleUpdate(exp.id, 'name', v)} />
+      </TableCell>
+      <TableCell>
+        <Select value={exp.category_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'category_id', v)}>
+          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_none">—</SelectItem>
+            {categories.map(c => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell>
+        <EditableCell value={Number(exp.amount)} onChange={v => handleUpdate(exp.id, 'amount', v)} type="number" className="text-right" />
+      </TableCell>
+      <TableCell className="text-center">
+        <Checkbox checked={exp.is_estimate} onCheckedChange={(checked) => handleToggleEstimate(exp.id, !!checked)} />
+      </TableCell>
+      <TableCell>
+        <Select value={exp.frequency_type} onValueChange={v => handleUpdate(exp.id, 'frequency_type', v)}>
+          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FREQ_OPTIONS.map(f => (
+              <SelectItem key={f} value={f}>{frequencyLabels[f]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell>
+        {NEEDS_PARAM.has(exp.frequency_type) ? (
+          <EditableCell value={exp.frequency_param ?? ''} onChange={v => handleUpdate(exp.id, 'frequency_param', v)} type="number" className="text-right w-16" />
+        ) : (
+          <span className="text-muted-foreground text-xs px-1">—</span>
+        )}
+      </TableCell>
+      <TableCell className="text-right font-medium tabular-nums text-xs">${Math.round(monthly)}</TableCell>
+      <TableCell>
+        <Select value={exp.budget_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'budget_id', v)}>
+          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_none">—</SelectItem>
+            {budgets.map(b => (
+              <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell>
+        <Select value={exp.linked_account_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'linked_account_id', v)}>
+          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_none">—</SelectItem>
+            {linkedAccounts.map(la => (
+              <SelectItem key={la.id} value={la.id}>{la.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell>
+        <Select value={exp.payer} onValueChange={v => handleUpdate(exp.id, 'payer', v)}>
+          <SelectTrigger className="h-7 w-24 border-transparent bg-transparent hover:border-border text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="X">{partnerX}</SelectItem>
+            <SelectItem value="Y">{partnerY}</SelectItem>
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell>
+        <EditableCell value={exp.benefit_x} onChange={v => handleUpdate(exp.id, 'benefit_x', v)} type="number" className="text-right w-16" min={0} max={100} />
+      </TableCell>
+      <TableCell className="text-right text-muted-foreground tabular-nums text-xs">
+        {100 - exp.benefit_x}
+      </TableCell>
+      <TableCell className="text-right tabular-nums text-xs">${Math.round(fairX)}</TableCell>
+      <TableCell className="text-right tabular-nums text-xs">${Math.round(fairY)}</TableCell>
+      <TableCell>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7">
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete expense</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete "{exp.name}"? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => handleRemove(exp.id)}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] }) {
+  const groupMonthly = rows.reduce((s, r) => s + r.monthly, 0);
+  const groupFairX = rows.reduce((s, r) => s + r.fairX, 0);
+  const groupFairY = rows.reduce((s, r) => s + r.fairY, 0);
+  return (
+    <TableRow className="bg-muted/30">
+      <TableCell colSpan={6} className="sticky left-0 z-10 bg-muted/30 font-semibold text-xs">
+        {label}
+      </TableCell>
+      <TableCell className="text-right font-semibold tabular-nums text-xs">${Math.round(groupMonthly)}</TableCell>
+      <TableCell colSpan={5} />
+      <TableCell className="text-right font-semibold tabular-nums text-xs">${Math.round(groupFairX)}</TableCell>
+      <TableCell className="text-right font-semibold tabular-nums text-xs">${Math.round(groupFairY)}</TableCell>
+      <TableCell />
+    </TableRow>
+  );
+}
+
 export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, incomes, partnerX, partnerY, onAdd, onUpdate, onRemove }: ExpensesTabProps) {
   const [adding, setAdding] = useState(false);
+  const [groupBy, setGroupBy] = useState<GroupByOption>('none');
 
   // Compute income ratio
   const incomeX = incomes.filter(i => i.partner_label === 'X').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
@@ -133,13 +285,62 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
   };
 
   let totalFairX = 0, totalFairY = 0, totalMonthly = 0;
-  const rows = expenses.map(exp => {
+  const rows: ComputedRow[] = expenses.map(exp => {
     const { fairX, fairY, monthly } = computeFairShare(exp);
     totalFairX += fairX;
     totalFairY += fairY;
     totalMonthly += monthly;
     return { exp, fairX, fairY, monthly };
   });
+
+  const getGroupKey = (row: ComputedRow): string => {
+    switch (groupBy) {
+      case 'category':
+        return row.exp.category_id ?? '_ungrouped';
+      case 'budget':
+        return row.exp.budget_id ?? '_ungrouped';
+      case 'payer':
+        return row.exp.payer;
+      case 'payment_method':
+        return row.exp.linked_account_id ?? '_ungrouped';
+      default:
+        return '_all';
+    }
+  };
+
+  const getGroupLabel = (key: string): string => {
+    if (key === '_ungrouped') return 'Uncategorized';
+    switch (groupBy) {
+      case 'category':
+        return categories.find(c => c.id === key)?.name ?? 'Uncategorized';
+      case 'budget':
+        return budgets.find(b => b.id === key)?.name ?? 'Uncategorized';
+      case 'payer':
+        return key === 'X' ? partnerX : partnerY;
+      case 'payment_method':
+        return linkedAccounts.find(la => la.id === key)?.name ?? 'Uncategorized';
+      default:
+        return '';
+    }
+  };
+
+  const grouped = useMemo(() => {
+    if (groupBy === 'none') return null;
+    const map = new Map<string, ComputedRow[]>();
+    for (const row of rows) {
+      const key = getGroupKey(row);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(row);
+    }
+    // Sort groups: named groups first alphabetically, then _ungrouped last
+    return [...map.entries()].sort((a, b) => {
+      if (a[0] === '_ungrouped') return 1;
+      if (b[0] === '_ungrouped') return -1;
+      return getGroupLabel(a[0]).localeCompare(getGroupLabel(b[0]));
+    });
+  }, [groupBy, rows, categories, budgets, linkedAccounts, partnerX, partnerY]);
+
+  const sharedRowProps = { categories, budgets, linkedAccounts, partnerX, partnerY, handleUpdate, handleToggleEstimate, handleRemove };
 
   return (
     <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2">
@@ -149,9 +350,23 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
             <CardTitle>Expenses</CardTitle>
             <CardDescription>Click any cell to edit. Changes save automatically.</CardDescription>
           </div>
-          <Button onClick={handleAdd} disabled={adding} size="sm" className="gap-1.5">
-            <Plus className="h-4 w-4" /> Add row
-          </Button>
+          <div className="flex items-center gap-2">
+            <Select value={groupBy} onValueChange={v => setGroupBy(v as GroupByOption)}>
+              <SelectTrigger className="h-8 w-44 text-xs">
+                <SelectValue placeholder="Group by…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No grouping</SelectItem>
+                <SelectItem value="category">Group by Category</SelectItem>
+                <SelectItem value="budget">Group by Budget</SelectItem>
+                <SelectItem value="payer">Group by Payer</SelectItem>
+                <SelectItem value="payment_method">Group by Payment Method</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={handleAdd} disabled={adding} size="sm" className="gap-1.5">
+              <Plus className="h-4 w-4" /> Add row
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="px-2">
@@ -167,7 +382,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
                 <TableHead className="text-right">Param</TableHead>
                 <TableHead className="text-right">Monthly</TableHead>
                 <TableHead className="min-w-[140px]">Budget</TableHead>
-                <TableHead className="min-w-[140px]">Linked</TableHead>
+                <TableHead className="min-w-[140px]">Payment Method</TableHead>
                 <TableHead>Payer</TableHead>
                 <TableHead className="text-right">{partnerX} %</TableHead>
                 <TableHead className="text-right">{partnerY} %</TableHead>
@@ -183,118 +398,20 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
                     No expenses yet. Click "Add row" to start.
                   </TableCell>
                 </TableRow>
-              ) : rows.map(({ exp, fairX, fairY, monthly }) => (
-                <TableRow key={exp.id}>
-                  <TableCell className="sticky left-0 z-10 bg-background">
-                    <EditableCell value={exp.name} onChange={v => handleUpdate(exp.id, 'name', v)} />
-                  </TableCell>
-                  <TableCell>
-                    <Select value={exp.category_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'category_id', v)}>
-                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_none">—</SelectItem>
-                        {categories.map(c => (
-                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <EditableCell value={Number(exp.amount)} onChange={v => handleUpdate(exp.id, 'amount', v)} type="number" className="text-right" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Checkbox checked={exp.is_estimate} onCheckedChange={(checked) => handleToggleEstimate(exp.id, !!checked)} />
-                  </TableCell>
-                  <TableCell>
-                    <Select value={exp.frequency_type} onValueChange={v => handleUpdate(exp.id, 'frequency_type', v)}>
-                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FREQ_OPTIONS.map(f => (
-                          <SelectItem key={f} value={f}>{frequencyLabels[f]}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    {NEEDS_PARAM.has(exp.frequency_type) ? (
-                      <EditableCell value={exp.frequency_param ?? ''} onChange={v => handleUpdate(exp.id, 'frequency_param', v)} type="number" className="text-right w-16" />
-                    ) : (
-                      <span className="text-muted-foreground text-xs px-1">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right font-medium tabular-nums text-xs">${Math.round(monthly)}</TableCell>
-                  <TableCell>
-                    <Select value={exp.budget_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'budget_id', v)}>
-                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_none">—</SelectItem>
-                        {budgets.map(b => (
-                          <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Select value={exp.linked_account_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'linked_account_id', v)}>
-                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_none">—</SelectItem>
-                        {linkedAccounts.map(la => (
-                          <SelectItem key={la.id} value={la.id}>{la.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Select value={exp.payer} onValueChange={v => handleUpdate(exp.id, 'payer', v)}>
-                      <SelectTrigger className="h-7 w-24 border-transparent bg-transparent hover:border-border text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="X">{partnerX}</SelectItem>
-                        <SelectItem value="Y">{partnerY}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <EditableCell value={exp.benefit_x} onChange={v => handleUpdate(exp.id, 'benefit_x', v)} type="number" className="text-right w-16" min={0} max={100} />
-                  </TableCell>
-                  <TableCell className="text-right text-muted-foreground tabular-nums text-xs">
-                    {100 - exp.benefit_x}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-xs">${Math.round(fairX)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-xs">${Math.round(fairY)}</TableCell>
-                  <TableCell>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete expense</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Are you sure you want to delete "{exp.name}"? This action cannot be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleRemove(exp.id)}>Delete</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </TableCell>
-                </TableRow>
-              ))}
+              ) : grouped ? (
+                grouped.map(([key, groupRows]) => (
+                  <>{/* Fragment with key on subtotal */}
+                    <GroupSubtotalRow key={`group-${key}`} label={getGroupLabel(key)} rows={groupRows} />
+                    {groupRows.map(row => (
+                      <ExpenseRow key={row.exp.id} {...row} {...sharedRowProps} />
+                    ))}
+                  </>
+                ))
+              ) : (
+                rows.map(row => (
+                  <ExpenseRow key={row.exp.id} {...row} {...sharedRowProps} />
+                ))
+              )}
             </TableBody>
             {rows.length > 0 && (
               <TableFooter>
