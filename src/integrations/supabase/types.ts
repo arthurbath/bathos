@@ -14,13 +14,239 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      categories: {
+        Row: {
+          created_at: string
+          household_id: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          household_id: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          household_id?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categories_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          amount: number
+          benefit_x: number
+          category_id: string | null
+          created_at: string
+          frequency_param: number | null
+          frequency_type: string
+          household_id: string
+          id: string
+          name: string
+          payer: string
+        }
+        Insert: {
+          amount?: number
+          benefit_x?: number
+          category_id?: string | null
+          created_at?: string
+          frequency_param?: number | null
+          frequency_type?: string
+          household_id: string
+          id?: string
+          name: string
+          payer?: string
+        }
+        Update: {
+          amount?: number
+          benefit_x?: number
+          category_id?: string | null
+          created_at?: string
+          frequency_param?: number | null
+          frequency_type?: string
+          household_id?: string
+          id?: string
+          name?: string
+          payer?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      household_members: {
+        Row: {
+          created_at: string
+          household_id: string
+          id: string
+          partner_label: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          household_id: string
+          id?: string
+          partner_label: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          household_id?: string
+          id?: string
+          partner_label?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_members_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      households: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      income_streams: {
+        Row: {
+          amount: number
+          created_at: string
+          frequency_param: number | null
+          frequency_type: string
+          household_id: string
+          id: string
+          name: string
+          partner_label: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          frequency_param?: number | null
+          frequency_type?: string
+          household_id: string
+          id?: string
+          name: string
+          partner_label: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          frequency_param?: number | null
+          frequency_type?: string
+          household_id?: string
+          id?: string
+          name?: string
+          partner_label?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "income_streams_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      restore_points: {
+        Row: {
+          created_at: string
+          data: Json
+          household_id: string
+          id: string
+          name: string | null
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          household_id: string
+          id?: string
+          name?: string | null
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          household_id?: string
+          id?: string
+          name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restore_points_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_household_member: {
+        Args: { _household_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

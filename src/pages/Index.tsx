@@ -1,23 +1,28 @@
 import { HouseholdSetup } from '@/components/HouseholdSetup';
 import { AppShell } from '@/components/AppShell';
-import { useHousehold } from '@/hooks/useHousehold';
+import { useAuth } from '@/hooks/useAuth';
+import { useHouseholdData } from '@/hooks/useHouseholdData';
+import Auth from '@/pages/Auth';
 
 const Index = () => {
-  const { household, setHousehold } = useHousehold();
+  const { user, loading: authLoading, signOut } = useAuth();
+  const { household, loading: hhLoading, createHousehold } = useHouseholdData(user);
 
-  if (!household) {
-    return <HouseholdSetup onComplete={setHousehold} />;
+  if (authLoading || hhLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-muted-foreground">Loading…</p>
+      </div>
+    );
   }
 
-  return (
-    <AppShell
-      household={household}
-      onReset={() => {
-        localStorage.clear();
-        setHousehold(null);
-      }}
-    />
-  );
+  if (!user) return <Auth />;
+
+  if (!household) {
+    return <HouseholdSetup onComplete={createHousehold} />;
+  }
+
+  return <AppShell household={household} onSignOut={signOut} />;
 };
 
 export default Index;
