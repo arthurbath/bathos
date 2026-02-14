@@ -318,21 +318,9 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
         </Select>
       </TableCell>
       <TableCell>
-        {exp.linked_account_id ? (
-          <span className="text-xs px-1">
-            {linkedAccounts.find(la => la.id === exp.linked_account_id)?.owner_partner === 'X' ? partnerX : partnerY}
-          </span>
-        ) : (
-          <Select value={exp.payer} onValueChange={v => handleUpdate(exp.id, 'payer', v)}>
-            <SelectTrigger className="h-7 w-24 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={9} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="X">{partnerX}</SelectItem>
-              <SelectItem value="Y">{partnerY}</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
+        <span className="text-xs px-1">
+          {exp.payer === 'X' ? partnerX : partnerY}
+        </span>
       </TableCell>
       <TableCell>
         <PercentCell value={localBenefitX} onChange={handleBenefitXChange} className="text-right w-16" min={0} max={100} data-row={rowIndex} data-col={10} {...nav} />
@@ -423,7 +411,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
     setAdding(true);
     try {
       await onAdd({
-        name: 'New expense',
+        name: '',
         amount: 0,
         payer: 'X',
         benefit_x: 50,
@@ -433,6 +421,14 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
         frequency_type: 'monthly',
         frequency_param: null,
         is_estimate: false,
+      });
+      // Focus the name cell of the newly added row after render
+      requestAnimationFrame(() => {
+        const table = tableRef.current;
+        if (!table) return;
+        const allNameCells = table.querySelectorAll<HTMLElement>('[data-col="0"]');
+        const last = allNameCells[allNameCells.length - 1];
+        if (last) last.click();
       });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
