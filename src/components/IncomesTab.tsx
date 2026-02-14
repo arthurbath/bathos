@@ -132,7 +132,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                         <span className="cursor-help border-b border-dotted border-muted-foreground">Param</span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="max-w-48 text-sm">Required for "Every N weeks" (N = interval) and "K times/year" (K = occurrences). Not used for other frequencies.</p>
+                        <p className="max-w-48 text-sm">Required for "Every X weeks" (X = interval) and "X times/year" (X = occurrences). Not used for other frequencies.</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
