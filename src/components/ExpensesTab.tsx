@@ -474,7 +474,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
                 <SortableHead column="param" label="Param" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
                 <SortableHead column="monthly" label="Monthly" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
                 <SortableHead column="budget" label="Budget" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
-                <SortableHead column="payment_method" label="Payment Method" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[140px]" />
+                <SortableHead column="payment_method" label="Payment Method" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
                 <SortableHead column="payer" label="Payer" current={sortCol} dir={sortDir} onSort={toggleSort} />
                 <SortableHead column="benefit_x" label={`${partnerX} %`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
                 <SortableHead column="benefit_y" label={`${partnerY} %`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
