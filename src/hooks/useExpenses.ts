@@ -50,15 +50,15 @@ export function useExpenses(householdId: string) {
     try {
       const { error } = await supabase.from('expenses').update(updates).eq('id', id);
       if (error) throw error;
+      await fetch();
     } catch (e: any) {
       // "Load failed" is a browser fetch abort from concurrent requests — not a real error
       if (e instanceof TypeError && e.message === 'Load failed') {
-        // silently ignore; refetch will reconcile
+        // silently ignore; optimistic state is already applied
       } else {
         throw e;
       }
     }
-    await fetch();
   };
 
   const remove = async (id: string) => {
