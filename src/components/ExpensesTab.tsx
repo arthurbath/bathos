@@ -56,7 +56,7 @@ function EditableCell({ value, onChange, type = 'text', className = '', min, max
       onChange={e => setLocal(e.target.value)}
       onBlur={commit}
       onKeyDown={e => e.key === 'Enter' && ref.current?.blur()}
-      className={`h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-primary text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
+      className={`h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-primary !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
     />
   );
 }
