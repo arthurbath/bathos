@@ -25,6 +25,8 @@ interface ExpensesTabProps {
   incomes: Income[];
   partnerX: string;
   partnerY: string;
+  partnerXColor: string | null;
+  partnerYColor: string | null;
   onAdd: (expense: Omit<Expense, 'id' | 'household_id'>) => Promise<void>;
   onUpdate: (id: string, updates: Partial<Omit<Expense, 'id' | 'household_id'>>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
@@ -209,12 +211,14 @@ interface ComputedRow {
   monthly: number;
 }
 
-function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAccounts, partnerX, partnerY, handleUpdate, handleToggleEstimate, handleRemove, rowIndex, onCellKeyDown, onCellMouseDown }: ComputedRow & {
+function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, rowIndex, onCellKeyDown, onCellMouseDown }: ComputedRow & {
   categories: Category[];
   budgets: Budget[];
   linkedAccounts: LinkedAccount[];
   partnerX: string;
   partnerY: string;
+  partnerXColor: string | null;
+  partnerYColor: string | null;
   handleUpdate: (id: string, field: string, value: string) => void;
   handleToggleEstimate: (id: string, checked: boolean) => void;
   handleRemove: (id: string) => void;
@@ -250,7 +254,11 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       </TableCell>
       <TableCell>
         <Select value={exp.category_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'category_id', v)}>
-          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={1} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
+          <SelectTrigger
+            className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
+            style={{ backgroundColor: categories.find(c => c.id === exp.category_id)?.color || 'transparent' }}
+            data-row={rowIndex} data-col={1} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -289,7 +297,11 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       <TableCell className="text-right font-medium tabular-nums text-xs">${Math.round(monthly)}</TableCell>
       <TableCell>
         <Select value={exp.budget_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'budget_id', v)}>
-          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={7} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
+          <SelectTrigger
+            className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
+            style={{ backgroundColor: budgets.find(b => b.id === exp.budget_id)?.color || 'transparent' }}
+            data-row={rowIndex} data-col={7} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -302,7 +314,11 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       </TableCell>
       <TableCell>
         <Select value={exp.linked_account_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'linked_account_id', v)}>
-          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={8} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
+          <SelectTrigger
+            className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
+            style={{ backgroundColor: linkedAccounts.find(la => la.id === exp.linked_account_id)?.color || 'transparent' }}
+            data-row={rowIndex} data-col={8} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}
+          >
             <SelectValue>
               {exp.linked_account_id ? linkedAccounts.find(la => la.id === exp.linked_account_id)?.name ?? '—' : '—'}
             </SelectValue>
@@ -318,7 +334,10 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
         </Select>
       </TableCell>
       <TableCell>
-        <span className="text-xs px-1">
+        <span
+          className="text-xs px-1.5 py-0.5 rounded-sm"
+          style={{ backgroundColor: (exp.payer === 'X' ? partnerXColor : partnerYColor) || 'transparent' }}
+        >
           {exp.payer === 'X' ? partnerX : partnerY}
         </span>
       </TableCell>
@@ -372,7 +391,7 @@ function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] 
   );
 }
 
-export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, incomes, partnerX, partnerY, onAdd, onUpdate, onRemove }: ExpensesTabProps) {
+export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, incomes, partnerX, partnerY, partnerXColor, partnerYColor, onAdd, onUpdate, onRemove }: ExpensesTabProps) {
   const [adding, setAdding] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupByOption>(() => (localStorage.getItem('expenses_groupBy') as GroupByOption) || 'none');
   const [sortCol, setSortCol] = useState<SortColumn>(() => (localStorage.getItem('expenses_sortCol') as SortColumn) || 'name');
@@ -559,7 +578,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
   }, [groupBy, rows, categories, budgets, linkedAccounts, partnerX, partnerY]);
 
   const { tableRef, onCellKeyDown, onCellMouseDown } = useSpreadsheetNav();
-  const sharedRowProps = { categories, budgets, linkedAccounts, partnerX, partnerY, handleUpdate, handleToggleEstimate, handleRemove, onCellKeyDown, onCellMouseDown };
+  const sharedRowProps = { categories, budgets, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, onCellKeyDown, onCellMouseDown };
 
   return (
     <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2">

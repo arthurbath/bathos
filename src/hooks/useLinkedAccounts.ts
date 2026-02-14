@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 export interface LinkedAccount {
   id: string;
   name: string;
+  color: string | null;
   owner_partner: string;
   household_id: string;
 }
@@ -37,11 +38,17 @@ export function useLinkedAccounts(householdId: string) {
     await fetch();
   };
 
+  const updateColor = async (id: string, color: string | null) => {
+    const { error } = await supabase.from('linked_accounts').update({ color }).eq('id', id);
+    if (error) throw error;
+    await fetch();
+  };
+
   const remove = async (id: string) => {
     const { error } = await supabase.from('linked_accounts').delete().eq('id', id);
     if (error) throw error;
     await fetch();
   };
 
-  return { linkedAccounts, loading, add, update, remove, refetch: fetch };
+  return { linkedAccounts, loading, add, update, updateColor, remove, refetch: fetch };
 }

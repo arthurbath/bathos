@@ -24,16 +24,17 @@ interface AppShellProps {
   onSignOut: () => void;
   onHouseholdRefetch: () => void;
   onUpdatePartnerNames: (x: string, y: string) => Promise<void>;
+  onUpdatePartnerColors: (xColor: string | null, yColor: string | null) => Promise<void>;
 }
 
-export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onUpdatePartnerNames }: AppShellProps) {
+export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onUpdatePartnerNames, onUpdatePartnerColors }: AppShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { incomes, add: addIncome, update: updateIncome, remove: removeIncome, refetch: refetchIncomes } = useIncomes(household.householdId);
   const { expenses, add: addExpense, update: updateExpense, remove: removeExpense, refetch: refetchExpenses } = useExpenses(household.householdId);
-  const { categories, add: addCategory, update: updateCategory, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
-  const { budgets, add: addBudget, update: updateBudget, remove: removeBudget, refetch: refetchBudgets } = useBudgets(household.householdId);
-  const { linkedAccounts, add: addLinkedAccount, update: updateLinkedAccount, remove: removeLinkedAccount, refetch: refetchLinkedAccounts } = useLinkedAccounts(household.householdId);
+  const { categories, add: addCategory, update: updateCategory, updateColor: updateCategoryColor, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
+  const { budgets, add: addBudget, update: updateBudget, updateColor: updateBudgetColor, remove: removeBudget, refetch: refetchBudgets } = useBudgets(household.householdId);
+  const { linkedAccounts, add: addLinkedAccount, update: updateLinkedAccount, updateColor: updateLinkedAccountColor, remove: removeLinkedAccount, refetch: refetchLinkedAccounts } = useLinkedAccounts(household.householdId);
   const { points, save: savePoint, remove: removePoint } = useRestorePoints(household.householdId);
 
   const handleReassignCategory = async (oldId: string, newId: string | null) => {
@@ -170,6 +171,8 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             incomes={incomes}
             partnerX={household.partnerX}
             partnerY={household.partnerY}
+            partnerXColor={household.partnerXColor}
+            partnerYColor={household.partnerYColor}
             onAdd={addExpense}
             onUpdate={updateExpense}
             onRemove={removeExpense}
@@ -191,20 +194,26 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             expenses={expenses}
             partnerX={household.partnerX}
             partnerY={household.partnerY}
+            partnerXColor={household.partnerXColor}
+            partnerYColor={household.partnerYColor}
             inviteCode={household.inviteCode}
             onUpdatePartnerNames={onUpdatePartnerNames}
+            onUpdatePartnerColors={onUpdatePartnerColors}
             onAddCategory={addCategory}
             onUpdateCategory={updateCategory}
             onRemoveCategory={removeCategory}
             onReassignCategory={handleReassignCategory}
+            onUpdateCategoryColor={updateCategoryColor}
             onAddBudget={addBudget}
             onUpdateBudget={updateBudget}
             onRemoveBudget={removeBudget}
             onReassignBudget={handleReassignBudget}
+            onUpdateBudgetColor={updateBudgetColor}
             onAddLinkedAccount={addLinkedAccount}
             onUpdateLinkedAccount={updateLinkedAccount}
             onRemoveLinkedAccount={removeLinkedAccount}
             onReassignLinkedAccount={handleReassignLinkedAccount}
+            onUpdateLinkedAccountColor={updateLinkedAccountColor}
             onSyncPayerForAccount={handleSyncPayerForAccount}
           />
         )}

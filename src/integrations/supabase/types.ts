@@ -16,18 +16,21 @@ export type Database = {
     Tables: {
       budgets: {
         Row: {
+          color: string | null
           created_at: string
           household_id: string
           id: string
           name: string
         }
         Insert: {
+          color?: string | null
           created_at?: string
           household_id: string
           id?: string
           name: string
         }
         Update: {
+          color?: string | null
           created_at?: string
           household_id?: string
           id?: string
@@ -45,18 +48,21 @@ export type Database = {
       }
       categories: {
         Row: {
+          color: string | null
           created_at: string
           household_id: string
           id: string
           name: string
         }
         Insert: {
+          color?: string | null
           created_at?: string
           household_id: string
           id?: string
           name: string
         }
         Update: {
+          color?: string | null
           created_at?: string
           household_id?: string
           id?: string
@@ -187,7 +193,9 @@ export type Database = {
           id: string
           invite_code: string | null
           name: string
+          partner_x_color: string | null
           partner_x_name: string
+          partner_y_color: string | null
           partner_y_name: string
         }
         Insert: {
@@ -195,7 +203,9 @@ export type Database = {
           id?: string
           invite_code?: string | null
           name?: string
+          partner_x_color?: string | null
           partner_x_name?: string
+          partner_y_color?: string | null
           partner_y_name?: string
         }
         Update: {
@@ -203,7 +213,9 @@ export type Database = {
           id?: string
           invite_code?: string | null
           name?: string
+          partner_x_color?: string | null
           partner_x_name?: string
+          partner_y_color?: string | null
           partner_y_name?: string
         }
         Relationships: []
@@ -251,6 +263,7 @@ export type Database = {
       }
       linked_accounts: {
         Row: {
+          color: string | null
           created_at: string
           household_id: string
           id: string
@@ -258,6 +271,7 @@ export type Database = {
           owner_partner: string
         }
         Insert: {
+          color?: string | null
           created_at?: string
           household_id: string
           id?: string
@@ -265,6 +279,7 @@ export type Database = {
           owner_partner?: string
         }
         Update: {
+          color?: string | null
           created_at?: string
           household_id?: string
           id?: string

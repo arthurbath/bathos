@@ -6,7 +6,7 @@ import Auth from '@/pages/Auth';
 
 const Index = () => {
   const { user, loading: authLoading, signOut } = useAuth();
-  const { household, loading: hhLoading, createHousehold, joinHousehold, updatePartnerNames, refetch } = useHouseholdData(user);
+  const { household, loading: hhLoading, createHousehold, joinHousehold, updatePartnerNames, updatePartnerColors, refetch } = useHouseholdData(user);
 
   if (authLoading || hhLoading) {
     return (
@@ -29,6 +29,7 @@ const Index = () => {
       onSignOut={signOut}
       onHouseholdRefetch={refetch}
       onUpdatePartnerNames={updatePartnerNames}
+      onUpdatePartnerColors={updatePartnerColors}
     />
   );
 };

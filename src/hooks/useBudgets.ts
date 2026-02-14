@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 export interface Budget {
   id: string;
   name: string;
+  color: string | null;
   household_id: string;
 }
 
@@ -36,11 +37,17 @@ export function useBudgets(householdId: string) {
     await fetch();
   };
 
+  const updateColor = async (id: string, color: string | null) => {
+    const { error } = await supabase.from('budgets').update({ color }).eq('id', id);
+    if (error) throw error;
+    await fetch();
+  };
+
   const remove = async (id: string) => {
     const { error } = await supabase.from('budgets').delete().eq('id', id);
     if (error) throw error;
     await fetch();
   };
 
-  return { budgets, loading, add, update, remove, refetch: fetch };
+  return { budgets, loading, add, update, updateColor, remove, refetch: fetch };
 }

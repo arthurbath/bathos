@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ManagedListSection } from '@/components/ManagedListSection';
+import { ManagedListSection, ColorPicker } from '@/components/ManagedListSection';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -22,27 +22,36 @@ interface ConfigurationTabProps {
   expenses: Expense[];
   partnerX: string;
   partnerY: string;
+  partnerXColor: string | null;
+  partnerYColor: string | null;
   inviteCode: string | null;
   onUpdatePartnerNames: (x: string, y: string) => Promise<void>;
+  onUpdatePartnerColors: (xColor: string | null, yColor: string | null) => Promise<void>;
   onAddCategory: (name: string) => Promise<void>;
   onUpdateCategory: (id: string, name: string) => Promise<void>;
   onRemoveCategory: (id: string) => Promise<void>;
   onReassignCategory: (oldId: string, newId: string | null) => Promise<void>;
+  onUpdateCategoryColor: (id: string, color: string | null) => Promise<void>;
   onAddBudget: (name: string) => Promise<void>;
   onUpdateBudget: (id: string, name: string) => Promise<void>;
   onRemoveBudget: (id: string) => Promise<void>;
   onReassignBudget: (oldId: string, newId: string | null) => Promise<void>;
+  onUpdateBudgetColor: (id: string, color: string | null) => Promise<void>;
   onAddLinkedAccount: (name: string, ownerPartner?: string) => Promise<void>;
   onUpdateLinkedAccount: (id: string, updates: Partial<Pick<LinkedAccount, 'name' | 'owner_partner'>>) => Promise<void>;
   onRemoveLinkedAccount: (id: string) => Promise<void>;
   onReassignLinkedAccount: (oldId: string, newId: string | null) => Promise<void>;
+  onUpdateLinkedAccountColor: (id: string, color: string | null) => Promise<void>;
   onSyncPayerForAccount: (accountId: string, ownerPartner: string) => Promise<void>;
 }
 
-function PartnerNamesCard({ partnerX, partnerY, onSave }: {
+function PartnerNamesCard({ partnerX, partnerY, partnerXColor, partnerYColor, onSave, onUpdateColors }: {
   partnerX: string;
   partnerY: string;
+  partnerXColor: string | null;
+  partnerYColor: string | null;
   onSave: (x: string, y: string) => Promise<void>;
+  onUpdateColors: (xColor: string | null, yColor: string | null) => Promise<void>;
 }) {
   const [nameX, setNameX] = useState(partnerX);
   const [nameY, setNameY] = useState(partnerY);
@@ -71,11 +80,17 @@ function PartnerNamesCard({ partnerX, partnerY, onSave }: {
         <div className="flex items-end gap-3">
           <div className="flex-1 space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Partner X</label>
-            <Input value={nameX} onChange={e => setNameX(e.target.value)} placeholder="e.g. Alice" />
+            <div className="flex items-center gap-2">
+              <ColorPicker color={partnerXColor} onChange={c => onUpdateColors(c, partnerYColor)} />
+              <Input value={nameX} onChange={e => setNameX(e.target.value)} placeholder="e.g. Alice" className="flex-1" />
+            </div>
           </div>
           <div className="flex-1 space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Partner Y</label>
-            <Input value={nameY} onChange={e => setNameY(e.target.value)} placeholder="e.g. Bob" />
+            <div className="flex items-center gap-2">
+              <ColorPicker color={partnerYColor} onChange={c => onUpdateColors(partnerXColor, c)} />
+              <Input value={nameY} onChange={e => setNameY(e.target.value)} placeholder="e.g. Bob" className="flex-1" />
+            </div>
           </div>
           <Button onClick={handleSave} disabled={!dirty || saving || !nameX.trim() || !nameY.trim()}>
             {saving ? 'Saving…' : 'Save'}
@@ -124,7 +139,7 @@ function InviteCard({ inviteCode }: { inviteCode: string | null }) {
   );
 }
 
-function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, onAdd, onUpdate, onRemove, onReassign, onSyncPayer }: {
+function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, onAdd, onUpdate, onRemove, onReassign, onSyncPayer, onUpdateColor }: {
   linkedAccounts: LinkedAccount[];
   expenses: Expense[];
   partnerX: string;
@@ -134,6 +149,7 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
   onRemove: (id: string) => Promise<void>;
   onReassign: (oldId: string, newId: string | null) => Promise<void>;
   onSyncPayer: (accountId: string, ownerPartner: string) => Promise<void>;
+  onUpdateColor: (id: string, color: string | null) => Promise<void>;
 }) {
   const [name, setName] = useState('');
   const [ownerPartner, setOwnerPartner] = useState('X');
@@ -237,6 +253,7 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">Color</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Owner</TableHead>
                   <TableHead className="text-right">Expenses</TableHead>
@@ -248,6 +265,9 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
                   const count = getUsageCount(item.id);
                   return (
                     <TableRow key={item.id}>
+                      <TableCell>
+                        <ColorPicker color={item.color} onChange={c => onUpdateColor(item.id, c)} />
+                      </TableCell>
                       <TableCell>
                         {editingId === item.id ? (
                           <Input
@@ -343,16 +363,16 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
 
 export function ConfigurationTab({
   categories, budgets, linkedAccounts, expenses,
-  partnerX, partnerY, inviteCode,
-  onUpdatePartnerNames,
-  onAddCategory, onUpdateCategory, onRemoveCategory, onReassignCategory,
-  onAddBudget, onUpdateBudget, onRemoveBudget, onReassignBudget,
-  onAddLinkedAccount, onUpdateLinkedAccount, onRemoveLinkedAccount, onReassignLinkedAccount,
+  partnerX, partnerY, partnerXColor, partnerYColor, inviteCode,
+  onUpdatePartnerNames, onUpdatePartnerColors,
+  onAddCategory, onUpdateCategory, onRemoveCategory, onReassignCategory, onUpdateCategoryColor,
+  onAddBudget, onUpdateBudget, onRemoveBudget, onReassignBudget, onUpdateBudgetColor,
+  onAddLinkedAccount, onUpdateLinkedAccount, onRemoveLinkedAccount, onReassignLinkedAccount, onUpdateLinkedAccountColor,
   onSyncPayerForAccount,
 }: ConfigurationTabProps) {
   return (
     <div className="space-y-6">
-      <PartnerNamesCard partnerX={partnerX} partnerY={partnerY} onSave={onUpdatePartnerNames} />
+      <PartnerNamesCard partnerX={partnerX} partnerY={partnerY} partnerXColor={partnerXColor} partnerYColor={partnerYColor} onSave={onUpdatePartnerNames} onUpdateColors={onUpdatePartnerColors} />
       <InviteCard inviteCode={inviteCode} />
       <ManagedListSection
         title="Categories"
@@ -363,6 +383,7 @@ export function ConfigurationTab({
         onUpdate={onUpdateCategory}
         onRemove={onRemoveCategory}
         onReassign={onReassignCategory}
+        onUpdateColor={onUpdateCategoryColor}
       />
       <ManagedListSection
         title="Budgets"
@@ -373,6 +394,7 @@ export function ConfigurationTab({
         onUpdate={onUpdateBudget}
         onRemove={onRemoveBudget}
         onReassign={onReassignBudget}
+        onUpdateColor={onUpdateBudgetColor}
       />
       <PaymentMethodsSection
         linkedAccounts={linkedAccounts}
@@ -384,6 +406,7 @@ export function ConfigurationTab({
         onRemove={onRemoveLinkedAccount}
         onReassign={onReassignLinkedAccount}
         onSyncPayer={onSyncPayerForAccount}
+        onUpdateColor={onUpdateLinkedAccountColor}
       />
     </div>
   );

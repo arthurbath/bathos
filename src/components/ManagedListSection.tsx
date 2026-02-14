@@ -6,28 +6,69 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, Pencil } from 'lucide-react';
+import { Plus, Trash2, Pencil, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { COLOR_PALETTE } from '@/lib/colors';
 
 interface ManagedItem {
   id: string;
   name: string;
+  color?: string | null;
 }
 
 interface ManagedListSectionProps {
   title: string;
   description: string;
   items: ManagedItem[];
-  /** Count how many expenses reference each item */
   getUsageCount: (id: string) => number;
   onAdd: (name: string) => Promise<void>;
   onUpdate: (id: string, name: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onReassign?: (oldId: string, newId: string | null) => Promise<void>;
+  onUpdateColor?: (id: string, color: string | null) => Promise<void>;
 }
 
-export function ManagedListSection({ title, description, items, getUsageCount, onAdd, onUpdate, onRemove, onReassign }: ManagedListSectionProps) {
+function ColorPicker({ color, onChange }: { color: string | null | undefined; onChange: (c: string | null) => void }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          className="h-6 w-6 rounded border border-border shrink-0 transition-shadow hover:ring-2 hover:ring-ring"
+          style={{ backgroundColor: color || 'transparent' }}
+          title="Pick color"
+        >
+          {!color && <span className="text-[10px] text-muted-foreground flex items-center justify-center h-full">—</span>}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2" align="start">
+        <div className="grid grid-cols-6 gap-1.5">
+          {COLOR_PALETTE.map(c => (
+            <button
+              key={c}
+              className={`h-6 w-6 rounded border transition-shadow ${color === c ? 'ring-2 ring-ring border-ring' : 'border-border hover:ring-1 hover:ring-ring'}`}
+              style={{ backgroundColor: c }}
+              onClick={() => onChange(c)}
+            />
+          ))}
+        </div>
+        {color && (
+          <button
+            className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => onChange(null)}
+          >
+            <X className="h-3 w-3" /> Remove color
+          </button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export { ColorPicker };
+
+export function ManagedListSection({ title, description, items, getUsageCount, onAdd, onUpdate, onRemove, onReassign, onUpdateColor }: ManagedListSectionProps) {
   const [name, setName] = useState('');
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -122,6 +163,7 @@ export function ManagedListSection({ title, description, items, getUsageCount, o
             <Table>
               <TableHeader>
                 <TableRow>
+                  {onUpdateColor && <TableHead className="w-10">Color</TableHead>}
                   <TableHead>Name</TableHead>
                   <TableHead className="text-right">Expenses</TableHead>
                   <TableHead className="w-20" />
@@ -132,6 +174,14 @@ export function ManagedListSection({ title, description, items, getUsageCount, o
                   const count = getUsageCount(item.id);
                   return (
                     <TableRow key={item.id}>
+                      {onUpdateColor && (
+                        <TableCell>
+                          <ColorPicker
+                            color={item.color}
+                            onChange={c => onUpdateColor(item.id, c)}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell>
                         {editingId === item.id ? (
                           <Input
