@@ -76,7 +76,7 @@ function EditableCell({ value, onChange, type = 'text', className = '', autoFocu
         else if (e.key === 'Enter') ref.current?.blur();
       }}
       onMouseDown={onCellMouseDown}
-      className={`h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-primary !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
+      className={`h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-primary !text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
     />
   );
 }
@@ -119,7 +119,7 @@ function CurrencyCell({ value, onChange, className = '', 'data-row': dataRow, 'd
       data-col={dataCol}
       onClick={() => setFocused(true)}
       onMouseDown={onCellMouseDown}
-      className={`h-7 w-full bg-transparent px-1 !text-xs text-right cursor-text border border-transparent hover:border-border rounded-md ${className}`}
+      className={`h-7 w-full bg-transparent px-1 !text-xs text-right cursor-text border border-transparent hover:border-border rounded-md underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${className}`}
     >
       ${Math.round(Number(local) || 0)}
     </button>
