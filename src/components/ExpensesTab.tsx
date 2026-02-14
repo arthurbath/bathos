@@ -11,11 +11,15 @@ import { toMonthly, frequencyLabels } from '@/lib/frequency';
 import type { FrequencyType } from '@/types/fairshare';
 import type { Expense } from '@/hooks/useExpenses';
 import type { Category } from '@/hooks/useCategories';
+import type { Budget } from '@/hooks/useBudgets';
+import type { LinkedAccount } from '@/hooks/useLinkedAccounts';
 import type { Income } from '@/hooks/useIncomes';
 
 interface ExpensesTabProps {
   expenses: Expense[];
   categories: Category[];
+  budgets: Budget[];
+  linkedAccounts: LinkedAccount[];
   incomes: Income[];
   partnerX: string;
   partnerY: string;
@@ -56,9 +60,8 @@ function EditableCell({ value, onChange, type = 'text', className = '', min, max
   );
 }
 
-export function ExpensesTab({ expenses, categories, incomes, partnerX, partnerY, onAdd, onUpdate, onRemove }: ExpensesTabProps) {
+export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, incomes, partnerX, partnerY, onAdd, onUpdate, onRemove }: ExpensesTabProps) {
   const [adding, setAdding] = useState(false);
-  const catMap = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c.name])), [categories]);
 
   // Compute income ratio
   const incomeX = incomes.filter(i => i.partner_label === 'X').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
@@ -85,11 +88,11 @@ export function ExpensesTab({ expenses, categories, incomes, partnerX, partnerY,
         payer: 'X',
         benefit_x: 50,
         category_id: null,
+        budget_id: null,
+        linked_account_id: null,
         frequency_type: 'monthly',
         frequency_param: null,
         is_estimate: false,
-        budget: null,
-        linked_account: null,
       });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -105,8 +108,8 @@ export function ExpensesTab({ expenses, categories, incomes, partnerX, partnerY,
       else if (field === 'benefit_x') updates.benefit_x = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
       else if (field === 'frequency_param') updates.frequency_param = value ? Number(value) : null;
       else if (field === 'category_id') updates.category_id = value === '_none' ? null : value;
-      else if (field === 'budget') updates.budget = value === '_none' ? null : value;
-      else if (field === 'linked_account') updates.linked_account = value || null;
+      else if (field === 'budget_id') updates.budget_id = value === '_none' ? null : value;
+      else if (field === 'linked_account_id') updates.linked_account_id = value === '_none' ? null : value;
       else updates[field] = value;
       await onUpdate(id, updates);
     } catch (e: any) {
@@ -224,10 +227,30 @@ export function ExpensesTab({ expenses, categories, incomes, partnerX, partnerY,
                   </TableCell>
                   <TableCell className="text-right font-medium tabular-nums">${Math.round(monthly)}</TableCell>
                   <TableCell>
-                    <EditableCell value={exp.budget ?? ''} onChange={v => handleUpdate(exp.id, 'budget', v)} className="w-28" />
+                    <Select value={exp.budget_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'budget_id', v)}>
+                      <SelectTrigger className="h-8 border-transparent bg-transparent hover:border-border text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">—</SelectItem>
+                        {budgets.map(b => (
+                          <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                   <TableCell>
-                    <EditableCell value={exp.linked_account ?? ''} onChange={v => handleUpdate(exp.id, 'linked_account', v)} className="w-24" />
+                    <Select value={exp.linked_account_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'linked_account_id', v)}>
+                      <SelectTrigger className="h-8 border-transparent bg-transparent hover:border-border text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">—</SelectItem>
+                        {linkedAccounts.map(la => (
+                          <SelectItem key={la.id} value={la.id}>{la.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                   <TableCell>
                     <Select value={exp.payer} onValueChange={v => handleUpdate(exp.id, 'payer', v)}>
@@ -259,9 +282,9 @@ export function ExpensesTab({ expenses, categories, incomes, partnerX, partnerY,
             {rows.length > 0 && (
               <TableFooter>
                 <TableRow>
-                  <TableCell colSpan={7} className="font-semibold">Totals</TableCell>
+                  <TableCell colSpan={6} className="font-semibold">Totals</TableCell>
                   <TableCell className="text-right font-bold tabular-nums">${Math.round(totalMonthly)}</TableCell>
-                  <TableCell colSpan={4} />
+                  <TableCell colSpan={5} />
                   <TableCell className="text-right font-bold tabular-nums">${Math.round(totalFairX)}</TableCell>
                   <TableCell className="text-right font-bold tabular-nums">${Math.round(totalFairY)}</TableCell>
                   <TableCell />

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DollarSign, PieChart, BarChart3, Tag, History, LogOut, Pencil } from 'lucide-react';
+import { DollarSign, PieChart, BarChart3, Settings, History, LogOut, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -9,10 +9,12 @@ import type { HouseholdData } from '@/hooks/useHouseholdData';
 import { useIncomes } from '@/hooks/useIncomes';
 import { useExpenses } from '@/hooks/useExpenses';
 import { useCategories } from '@/hooks/useCategories';
+import { useBudgets } from '@/hooks/useBudgets';
+import { useLinkedAccounts } from '@/hooks/useLinkedAccounts';
 import { useRestorePoints } from '@/hooks/useRestorePoints';
 import { IncomesTab } from '@/components/IncomesTab';
 import { ExpensesTab } from '@/components/ExpensesTab';
-import { CategoriesTab } from '@/components/CategoriesTab';
+import { ConfigurationTab } from '@/components/ConfigurationTab';
 import { SummaryTab } from '@/components/SummaryTab';
 import { RestoreTab } from '@/components/RestoreTab';
 import { InvitePartner } from '@/components/InvitePartner';
@@ -47,17 +49,40 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch }: A
       onHouseholdRefetch();
     }
   };
+
   const { incomes, add: addIncome, update: updateIncome, remove: removeIncome, refetch: refetchIncomes } = useIncomes(household.householdId);
   const { expenses, add: addExpense, update: updateExpense, remove: removeExpense, refetch: refetchExpenses } = useExpenses(household.householdId);
   const { categories, add: addCategory, update: updateCategory, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
+  const { budgets, add: addBudget, update: updateBudget, remove: removeBudget, refetch: refetchBudgets } = useBudgets(household.householdId);
+  const { linkedAccounts, add: addLinkedAccount, update: updateLinkedAccount, remove: removeLinkedAccount, refetch: refetchLinkedAccounts } = useLinkedAccounts(household.householdId);
   const { points, save: savePoint, remove: removePoint } = useRestorePoints(household.householdId);
 
-  const handleReassignExpenses = async (oldCategoryId: string, newCategoryId: string | null) => {
+  const handleReassignCategory = async (oldId: string, newId: string | null) => {
     const { error } = await supabase
       .from('expenses')
-      .update({ category_id: newCategoryId })
+      .update({ category_id: newId })
       .eq('household_id', household.householdId)
-      .eq('category_id', oldCategoryId);
+      .eq('category_id', oldId);
+    if (error) throw error;
+    await refetchExpenses();
+  };
+
+  const handleReassignBudget = async (oldId: string, newId: string | null) => {
+    const { error } = await supabase
+      .from('expenses')
+      .update({ budget_id: newId })
+      .eq('household_id', household.householdId)
+      .eq('budget_id', oldId);
+    if (error) throw error;
+    await refetchExpenses();
+  };
+
+  const handleReassignLinkedAccount = async (oldId: string, newId: string | null) => {
+    const { error } = await supabase
+      .from('expenses')
+      .update({ linked_account_id: newId })
+      .eq('household_id', household.householdId)
+      .eq('linked_account_id', oldId);
     if (error) throw error;
     await refetchExpenses();
   };
@@ -151,9 +176,9 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch }: A
               <PieChart className="h-4 w-4" />
               <span className="hidden sm:inline">Summary</span>
             </TabsTrigger>
-            <TabsTrigger value="categories" className="gap-1.5 text-xs sm:text-sm">
-              <Tag className="h-4 w-4" />
-              <span className="hidden sm:inline">Categories</span>
+            <TabsTrigger value="config" className="gap-1.5 text-xs sm:text-sm">
+              <Settings className="h-4 w-4" />
+              <span className="hidden sm:inline">Config</span>
             </TabsTrigger>
             <TabsTrigger value="restore" className="gap-1.5 text-xs sm:text-sm">
               <History className="h-4 w-4" />
@@ -175,6 +200,8 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch }: A
             <ExpensesTab
               expenses={expenses}
               categories={categories}
+              budgets={budgets}
+              linkedAccounts={linkedAccounts}
               incomes={incomes}
               partnerX={household.partnerX}
               partnerY={household.partnerY}
@@ -191,14 +218,24 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch }: A
               partnerY={household.partnerY}
             />
           </TabsContent>
-          <TabsContent value="categories">
-            <CategoriesTab
+          <TabsContent value="config">
+            <ConfigurationTab
               categories={categories}
+              budgets={budgets}
+              linkedAccounts={linkedAccounts}
               expenses={expenses}
-              onAdd={addCategory}
-              onUpdate={updateCategory}
-              onRemove={removeCategory}
-              onReassignExpenses={handleReassignExpenses}
+              onAddCategory={addCategory}
+              onUpdateCategory={updateCategory}
+              onRemoveCategory={removeCategory}
+              onReassignCategory={handleReassignCategory}
+              onAddBudget={addBudget}
+              onUpdateBudget={updateBudget}
+              onRemoveBudget={removeBudget}
+              onReassignBudget={handleReassignBudget}
+              onAddLinkedAccount={addLinkedAccount}
+              onUpdateLinkedAccount={updateLinkedAccount}
+              onRemoveLinkedAccount={removeLinkedAccount}
+              onReassignLinkedAccount={handleReassignLinkedAccount}
             />
           </TabsContent>
           <TabsContent value="restore">
