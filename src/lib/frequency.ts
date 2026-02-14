@@ -27,7 +27,7 @@ export const frequencyLabels: Record<FrequencyType, string> = {
   weekly: 'Weekly',
   every_n_weeks: 'Every X weeks',
   annual: 'Annual',
-  k_times_annually: 'X times/year',
+  k_times_annually: 'X/year',
 };
 
 export function needsParam(type: FrequencyType): boolean {
