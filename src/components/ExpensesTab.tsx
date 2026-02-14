@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels } from '@/lib/frequency';
@@ -86,6 +87,9 @@ export function ExpensesTab({ expenses, categories, incomes, partnerX, partnerY,
         category_id: null,
         frequency_type: 'monthly',
         frequency_param: null,
+        is_estimate: false,
+        budget: null,
+        linked_account: null,
       });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -101,8 +105,18 @@ export function ExpensesTab({ expenses, categories, incomes, partnerX, partnerY,
       else if (field === 'benefit_x') updates.benefit_x = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
       else if (field === 'frequency_param') updates.frequency_param = value ? Number(value) : null;
       else if (field === 'category_id') updates.category_id = value === '_none' ? null : value;
+      else if (field === 'budget') updates.budget = value === '_none' ? null : value;
+      else if (field === 'linked_account') updates.linked_account = value || null;
       else updates[field] = value;
       await onUpdate(id, updates);
+    } catch (e: any) {
+      toast({ title: 'Error saving', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  const handleToggleEstimate = async (id: string, checked: boolean) => {
+    try {
+      await onUpdate(id, { is_estimate: checked });
     } catch (e: any) {
       toast({ title: 'Error saving', description: e.message, variant: 'destructive' });
     }
@@ -144,9 +158,12 @@ export function ExpensesTab({ expenses, categories, incomes, partnerX, partnerY,
                 <TableHead>Name</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-center">Est.</TableHead>
                 <TableHead>Frequency</TableHead>
                 <TableHead className="text-right">Param</TableHead>
                 <TableHead className="text-right">Monthly</TableHead>
+                <TableHead>Budget</TableHead>
+                <TableHead>Linked</TableHead>
                 <TableHead>Payer</TableHead>
                 <TableHead className="text-right">{partnerX} %</TableHead>
                 <TableHead className="text-right">{partnerY} %</TableHead>
@@ -158,7 +175,7 @@ export function ExpensesTab({ expenses, categories, incomes, partnerX, partnerY,
             <TableBody>
               {rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={15} className="text-center text-muted-foreground py-8">
                     No expenses yet. Click "Add row" to start.
                   </TableCell>
                 </TableRow>
@@ -183,6 +200,9 @@ export function ExpensesTab({ expenses, categories, incomes, partnerX, partnerY,
                   <TableCell>
                     <EditableCell value={Number(exp.amount)} onChange={v => handleUpdate(exp.id, 'amount', v)} type="number" className="text-right" />
                   </TableCell>
+                  <TableCell className="text-center">
+                    <Checkbox checked={exp.is_estimate} onCheckedChange={(checked) => handleToggleEstimate(exp.id, !!checked)} />
+                  </TableCell>
                   <TableCell>
                     <Select value={exp.frequency_type} onValueChange={v => handleUpdate(exp.id, 'frequency_type', v)}>
                       <SelectTrigger className="h-8 border-transparent bg-transparent hover:border-border text-xs">
@@ -203,6 +223,12 @@ export function ExpensesTab({ expenses, categories, incomes, partnerX, partnerY,
                     )}
                   </TableCell>
                   <TableCell className="text-right font-medium tabular-nums">${Math.round(monthly)}</TableCell>
+                  <TableCell>
+                    <EditableCell value={exp.budget ?? ''} onChange={v => handleUpdate(exp.id, 'budget', v)} className="w-28" />
+                  </TableCell>
+                  <TableCell>
+                    <EditableCell value={exp.linked_account ?? ''} onChange={v => handleUpdate(exp.id, 'linked_account', v)} className="w-24" />
+                  </TableCell>
                   <TableCell>
                     <Select value={exp.payer} onValueChange={v => handleUpdate(exp.id, 'payer', v)}>
                       <SelectTrigger className="h-8 w-24 border-transparent bg-transparent hover:border-border">
@@ -233,10 +259,9 @@ export function ExpensesTab({ expenses, categories, incomes, partnerX, partnerY,
             {rows.length > 0 && (
               <TableFooter>
                 <TableRow>
-                  <TableCell colSpan={5} className="font-semibold">Totals</TableCell>
+                  <TableCell colSpan={7} className="font-semibold">Totals</TableCell>
                   <TableCell className="text-right font-bold tabular-nums">${Math.round(totalMonthly)}</TableCell>
-                  <TableCell colSpan={2} />
-                  <TableCell />
+                  <TableCell colSpan={4} />
                   <TableCell className="text-right font-bold tabular-nums">${Math.round(totalFairX)}</TableCell>
                   <TableCell className="text-right font-bold tabular-nums">${Math.round(totalFairY)}</TableCell>
                   <TableCell />

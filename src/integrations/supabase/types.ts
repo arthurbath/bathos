@@ -47,36 +47,45 @@ export type Database = {
         Row: {
           amount: number
           benefit_x: number
+          budget: string | null
           category_id: string | null
           created_at: string
           frequency_param: number | null
           frequency_type: string
           household_id: string
           id: string
+          is_estimate: boolean
+          linked_account: string | null
           name: string
           payer: string
         }
         Insert: {
           amount?: number
           benefit_x?: number
+          budget?: string | null
           category_id?: string | null
           created_at?: string
           frequency_param?: number | null
           frequency_type?: string
           household_id: string
           id?: string
+          is_estimate?: boolean
+          linked_account?: string | null
           name: string
           payer?: string
         }
         Update: {
           amount?: number
           benefit_x?: number
+          budget?: string | null
           category_id?: string | null
           created_at?: string
           frequency_param?: number | null
           frequency_type?: string
           household_id?: string
           id?: string
+          is_estimate?: boolean
+          linked_account?: string | null
           name?: string
           payer?: string
         }

@@ -12,6 +12,9 @@ export interface Expense {
   benefit_x: number;
   category_id: string | null;
   household_id: string;
+  is_estimate: boolean;
+  budget: string | null;
+  linked_account: string | null;
 }
 
 export function useExpenses(householdId: string) {
