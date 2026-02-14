@@ -288,7 +288,9 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
           <SelectContent>
             <SelectItem value="_none">—</SelectItem>
             {linkedAccounts.map(la => (
-              <SelectItem key={la.id} value={la.id}>{la.name}</SelectItem>
+              <SelectItem key={la.id} value={la.id}>
+                {la.name} <span className="text-muted-foreground">({la.owner_partner === 'X' ? partnerX : partnerY})</span>
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
