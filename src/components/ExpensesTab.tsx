@@ -160,7 +160,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
             <TableHeader>
               <TableRow>
                 <TableHead className="min-w-[200px] sticky left-0 z-20 bg-background">Name</TableHead>
-                <TableHead className="min-w-[140px]">Category</TableHead>
+                <TableHead className="min-w-[190px]">Category</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead className="text-center">Est.</TableHead>
                 <TableHead>Frequency</TableHead>
