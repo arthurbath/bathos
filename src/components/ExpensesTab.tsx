@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useSpreadsheetNav } from '@/hooks/useSpreadsheetNav';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,7 +56,7 @@ function SortableHead({ column, label, current, dir, onSort, className = '' }: {
   );
 }
 
-function EditableCell({ value, onChange, type = 'text', className = '', min, max, step }: {
+function EditableCell({ value, onChange, type = 'text', className = '', min, max, step, 'data-row': dataRow, 'data-col': dataCol, onCellKeyDown, onCellMouseDown }: {
   value: string | number;
   onChange: (v: string) => void;
   type?: string;
@@ -63,6 +64,10 @@ function EditableCell({ value, onChange, type = 'text', className = '', min, max
   min?: number;
   max?: number;
   step?: number;
+  'data-row'?: number;
+  'data-col'?: number;
+  onCellKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
+  onCellMouseDown?: (e: React.MouseEvent<HTMLElement>) => void;
 }) {
   const [local, setLocal] = useState(String(value));
   const ref = useRef<HTMLInputElement>(null);
@@ -76,18 +81,28 @@ function EditableCell({ value, onChange, type = 'text', className = '', min, max
       min={min}
       max={max}
       step={step}
+      data-row={dataRow}
+      data-col={dataCol}
       onChange={e => setLocal(e.target.value)}
       onBlur={commit}
-      onKeyDown={e => e.key === 'Enter' && ref.current?.blur()}
+      onKeyDown={e => {
+        if (onCellKeyDown) onCellKeyDown(e);
+        else if (e.key === 'Enter') ref.current?.blur();
+      }}
+      onMouseDown={onCellMouseDown}
       className={`h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-primary !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
     />
   );
 }
 
-function CurrencyCell({ value, onChange, className = '' }: {
+function CurrencyCell({ value, onChange, className = '', 'data-row': dataRow, 'data-col': dataCol, onCellKeyDown, onCellMouseDown }: {
   value: number;
   onChange: (v: string) => void;
   className?: string;
+  'data-row'?: number;
+  'data-col'?: number;
+  onCellKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
+  onCellMouseDown?: (e: React.MouseEvent<HTMLElement>) => void;
 }) {
   const [local, setLocal] = useState(String(value));
   const [focused, setFocused] = useState(false);
@@ -99,16 +114,25 @@ function CurrencyCell({ value, onChange, className = '' }: {
       ref={ref}
       type="number"
       value={local}
+      data-row={dataRow}
+      data-col={dataCol}
       onChange={e => setLocal(e.target.value)}
       onBlur={() => { commit(); setFocused(false); }}
-      onKeyDown={e => e.key === 'Enter' && ref.current?.blur()}
+      onKeyDown={e => {
+        if (onCellKeyDown) onCellKeyDown(e);
+        else if (e.key === 'Enter') ref.current?.blur();
+      }}
+      onMouseDown={onCellMouseDown}
       autoFocus
       className={`h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-primary !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
     />
   ) : (
     <button
       type="button"
+      data-row={dataRow}
+      data-col={dataCol}
       onClick={() => setFocused(true)}
+      onMouseDown={onCellMouseDown}
       className={`h-7 w-full bg-transparent px-1 !text-xs text-right cursor-text border border-transparent hover:border-border rounded-md ${className}`}
     >
       ${Math.round(Number(local) || 0)}
@@ -123,7 +147,7 @@ interface ComputedRow {
   monthly: number;
 }
 
-function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAccounts, partnerX, partnerY, handleUpdate, handleToggleEstimate, handleRemove }: ComputedRow & {
+function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAccounts, partnerX, partnerY, handleUpdate, handleToggleEstimate, handleRemove, rowIndex, onCellKeyDown, onCellMouseDown }: ComputedRow & {
   categories: Category[];
   budgets: Budget[];
   linkedAccounts: LinkedAccount[];
@@ -132,10 +156,12 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
   handleUpdate: (id: string, field: string, value: string) => void;
   handleToggleEstimate: (id: string, checked: boolean) => void;
   handleRemove: (id: string) => void;
+  rowIndex: number;
+  onCellKeyDown: (e: React.KeyboardEvent<HTMLElement>) => void;
+  onCellMouseDown: (e: React.MouseEvent<HTMLElement>) => void;
 }) {
   const [localBenefitX, setLocalBenefitX] = useState(exp.benefit_x);
 
-  // Sync when server value changes
   useEffect(() => {
     setLocalBenefitX(exp.benefit_x);
   }, [exp.benefit_x]);
@@ -146,14 +172,16 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
     handleUpdate(exp.id, 'benefit_x', String(clamped));
   };
 
+  const nav = { onCellKeyDown, onCellMouseDown };
+
   return (
     <TableRow>
       <TableCell className="sticky left-0 z-10 bg-background">
-        <EditableCell value={exp.name} onChange={v => handleUpdate(exp.id, 'name', v)} />
+        <EditableCell value={exp.name} onChange={v => handleUpdate(exp.id, 'name', v)} data-row={rowIndex} data-col={0} {...nav} />
       </TableCell>
       <TableCell>
         <Select value={exp.category_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'category_id', v)}>
-          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
+          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={1} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -165,14 +193,14 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
         </Select>
       </TableCell>
       <TableCell>
-        <CurrencyCell value={Number(exp.amount)} onChange={v => handleUpdate(exp.id, 'amount', v)} className="text-right" />
+        <CurrencyCell value={Number(exp.amount)} onChange={v => handleUpdate(exp.id, 'amount', v)} className="text-right" data-row={rowIndex} data-col={2} {...nav} />
       </TableCell>
       <TableCell className="text-center">
-        <Checkbox checked={exp.is_estimate} onCheckedChange={(checked) => handleToggleEstimate(exp.id, !!checked)} />
+        <Checkbox checked={exp.is_estimate} onCheckedChange={(checked) => handleToggleEstimate(exp.id, !!checked)} data-row={rowIndex} data-col={3} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown} />
       </TableCell>
       <TableCell>
         <Select value={exp.frequency_type} onValueChange={v => handleUpdate(exp.id, 'frequency_type', v)}>
-          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
+          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={4} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -184,7 +212,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       </TableCell>
       <TableCell>
         {NEEDS_PARAM.has(exp.frequency_type) ? (
-          <EditableCell value={exp.frequency_param ?? ''} onChange={v => handleUpdate(exp.id, 'frequency_param', v)} type="number" className="text-right w-16" />
+          <EditableCell value={exp.frequency_param ?? ''} onChange={v => handleUpdate(exp.id, 'frequency_param', v)} type="number" className="text-right w-16" data-row={rowIndex} data-col={5} {...nav} />
         ) : (
           <span className="text-muted-foreground text-xs px-1">—</span>
         )}
@@ -192,7 +220,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       <TableCell className="text-right font-medium tabular-nums text-xs">${Math.round(monthly)}</TableCell>
       <TableCell>
         <Select value={exp.budget_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'budget_id', v)}>
-          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
+          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={7} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -205,7 +233,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       </TableCell>
       <TableCell>
         <Select value={exp.linked_account_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'linked_account_id', v)}>
-          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
+          <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={8} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -218,7 +246,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       </TableCell>
       <TableCell>
         <Select value={exp.payer} onValueChange={v => handleUpdate(exp.id, 'payer', v)}>
-          <SelectTrigger className="h-7 w-24 border-transparent bg-transparent hover:border-border text-xs">
+          <SelectTrigger className="h-7 w-24 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={9} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -228,7 +256,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
         </Select>
       </TableCell>
       <TableCell>
-        <EditableCell value={localBenefitX} onChange={handleBenefitXChange} type="number" className="text-right w-16" min={0} max={100} />
+        <EditableCell value={localBenefitX} onChange={handleBenefitXChange} type="number" className="text-right w-16" min={0} max={100} data-row={rowIndex} data-col={10} {...nav} />
       </TableCell>
       <TableCell className="text-right text-muted-foreground tabular-nums text-xs">
         {100 - localBenefitX}
@@ -259,7 +287,6 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
     </TableRow>
   );
 }
-
 function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] }) {
   const groupMonthly = rows.reduce((s, r) => s + r.monthly, 0);
   const groupFairX = rows.reduce((s, r) => s + r.fairX, 0);
@@ -445,7 +472,8 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
     });
   }, [groupBy, rows, categories, budgets, linkedAccounts, partnerX, partnerY]);
 
-  const sharedRowProps = { categories, budgets, linkedAccounts, partnerX, partnerY, handleUpdate, handleToggleEstimate, handleRemove };
+  const { tableRef, onCellKeyDown, onCellMouseDown } = useSpreadsheetNav();
+  const sharedRowProps = { categories, budgets, linkedAccounts, partnerX, partnerY, handleUpdate, handleToggleEstimate, handleRemove, onCellKeyDown, onCellMouseDown };
 
   return (
     <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2">
@@ -475,7 +503,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
         </div>
       </CardHeader>
       <CardContent className="px-2">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" ref={tableRef}>
           <Table className="text-xs">
             <TableHeader>
               <TableRow>
@@ -504,17 +532,21 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
                   </TableCell>
                 </TableRow>
               ) : grouped ? (
-                grouped.map(([key, groupRows]) => (
-                  <>{/* Fragment with key on subtotal */}
-                    <GroupSubtotalRow key={`group-${key}`} label={getGroupLabel(key)} rows={groupRows} />
-                    {groupRows.map(row => (
-                      <ExpenseRow key={row.exp.id} {...row} {...sharedRowProps} />
-                    ))}
-                  </>
-                ))
+                grouped.map(([key, groupRows]) => {
+                  let globalIdx = 0;
+                  return (
+                    <>{/* Fragment with key on subtotal */}
+                      <GroupSubtotalRow key={`group-${key}`} label={getGroupLabel(key)} rows={groupRows} />
+                      {groupRows.map(row => {
+                        const ri = rows.indexOf(row);
+                        return <ExpenseRow key={row.exp.id} {...row} {...sharedRowProps} rowIndex={ri} />;
+                      })}
+                    </>
+                  );
+                })
               ) : (
-                rows.map(row => (
-                  <ExpenseRow key={row.exp.id} {...row} {...sharedRowProps} />
+                rows.map((row, i) => (
+                  <ExpenseRow key={row.exp.id} {...row} {...sharedRowProps} rowIndex={i} />
                 ))
               )}
             </TableBody>

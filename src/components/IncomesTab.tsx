@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useSpreadsheetNav } from '@/hooks/useSpreadsheetNav';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,12 +46,16 @@ function SortableHead({ column, label, current, dir, onSort, className = '' }: {
   );
 }
 
-function EditableCell({ value, onChange, type = 'text', className = '', autoFocus = false }: {
+function EditableCell({ value, onChange, type = 'text', className = '', autoFocus = false, 'data-row': dataRow, 'data-col': dataCol, onCellKeyDown, onCellMouseDown }: {
   value: string | number;
   onChange: (v: string) => void;
   type?: string;
   className?: string;
   autoFocus?: boolean;
+  'data-row'?: number;
+  'data-col'?: number;
+  onCellKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
+  onCellMouseDown?: (e: React.MouseEvent<HTMLElement>) => void;
 }) {
   const [local, setLocal] = useState(String(value));
   const ref = useRef<HTMLInputElement>(null);
@@ -62,18 +67,28 @@ function EditableCell({ value, onChange, type = 'text', className = '', autoFocu
       type={type}
       value={local}
       autoFocus={autoFocus}
+      data-row={dataRow}
+      data-col={dataCol}
       onChange={e => setLocal(e.target.value)}
       onBlur={commit}
-      onKeyDown={e => e.key === 'Enter' && ref.current?.blur()}
+      onKeyDown={e => {
+        if (onCellKeyDown) onCellKeyDown(e);
+        else if (e.key === 'Enter') ref.current?.blur();
+      }}
+      onMouseDown={onCellMouseDown}
       className={`h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-primary !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
     />
   );
 }
 
-function CurrencyCell({ value, onChange, className = '' }: {
+function CurrencyCell({ value, onChange, className = '', 'data-row': dataRow, 'data-col': dataCol, onCellKeyDown, onCellMouseDown }: {
   value: number;
   onChange: (v: string) => void;
   className?: string;
+  'data-row'?: number;
+  'data-col'?: number;
+  onCellKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
+  onCellMouseDown?: (e: React.MouseEvent<HTMLElement>) => void;
 }) {
   const [local, setLocal] = useState(String(value));
   const [focused, setFocused] = useState(false);
@@ -85,16 +100,25 @@ function CurrencyCell({ value, onChange, className = '' }: {
       ref={ref}
       type="number"
       value={local}
+      data-row={dataRow}
+      data-col={dataCol}
       onChange={e => setLocal(e.target.value)}
       onBlur={() => { commit(); setFocused(false); }}
-      onKeyDown={e => e.key === 'Enter' && ref.current?.blur()}
+      onKeyDown={e => {
+        if (onCellKeyDown) onCellKeyDown(e);
+        else if (e.key === 'Enter') ref.current?.blur();
+      }}
+      onMouseDown={onCellMouseDown}
       autoFocus
       className={`h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-primary !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
     />
   ) : (
     <button
       type="button"
+      data-row={dataRow}
+      data-col={dataCol}
       onClick={() => setFocused(true)}
+      onMouseDown={onCellMouseDown}
       className={`h-7 w-full bg-transparent px-1 !text-xs text-right cursor-text border border-transparent hover:border-border rounded-md ${className}`}
     >
       ${Math.round(Number(local) || 0)}
@@ -108,6 +132,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
   const prevCountRef = useRef(incomes.length);
   const [sortCol, setSortCol] = useState<SortColumn>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const { tableRef, onCellKeyDown, onCellMouseDown } = useSpreadsheetNav();
 
   const toggleSort = (col: SortColumn) => {
     if (sortCol === col) {
@@ -197,7 +222,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
         </div>
       </CardHeader>
       <CardContent className="px-2">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" ref={tableRef}>
           <Table className="text-xs">
             <TableHeader>
               <TableRow>
@@ -217,18 +242,22 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                     No income streams yet. Click "Add row" to start.
                   </TableCell>
                 </TableRow>
-              ) : rows.map(inc => (
+              ) : rows.map((inc, rowIndex) => (
                 <TableRow key={inc.id}>
                   <TableCell className="sticky left-0 z-10 bg-background">
                     <EditableCell
                       value={inc.name}
                       onChange={v => handleUpdate(inc.id, 'name', v)}
                       autoFocus={focusId === inc.id}
+                      data-row={rowIndex}
+                      data-col={0}
+                      onCellKeyDown={onCellKeyDown}
+                      onCellMouseDown={onCellMouseDown}
                     />
                   </TableCell>
                   <TableCell>
                     <Select value={inc.partner_label} onValueChange={v => handleUpdate(inc.id, 'partner_label', v)}>
-                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
+                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={1} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -238,11 +267,11 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                     </Select>
                   </TableCell>
                   <TableCell>
-                    <CurrencyCell value={Number(inc.amount)} onChange={v => handleUpdate(inc.id, 'amount', v)} className="text-right" />
+                    <CurrencyCell value={Number(inc.amount)} onChange={v => handleUpdate(inc.id, 'amount', v)} className="text-right" data-row={rowIndex} data-col={2} onCellKeyDown={onCellKeyDown} onCellMouseDown={onCellMouseDown} />
                   </TableCell>
                   <TableCell>
                     <Select value={inc.frequency_type} onValueChange={v => handleUpdate(inc.id, 'frequency_type', v)}>
-                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs">
+                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs" data-row={rowIndex} data-col={3} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -259,6 +288,10 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                         onChange={v => handleUpdate(inc.id, 'frequency_param', v)}
                         type="number"
                         className="text-right w-16"
+                        data-row={rowIndex}
+                        data-col={4}
+                        onCellKeyDown={onCellKeyDown}
+                        onCellMouseDown={onCellMouseDown}
                       />
                     ) : (
                       <span className="text-muted-foreground text-xs px-1">—</span>
