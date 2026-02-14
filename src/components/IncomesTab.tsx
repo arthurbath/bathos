@@ -52,6 +52,38 @@ function EditableCell({ value, onChange, type = 'text', className = '', autoFocu
   );
 }
 
+function CurrencyCell({ value, onChange, className = '' }: {
+  value: number;
+  onChange: (v: string) => void;
+  className?: string;
+}) {
+  const [local, setLocal] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+  const commit = () => { if (local !== String(value)) onChange(local); };
+
+  return focused ? (
+    <Input
+      ref={ref}
+      type="number"
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={() => { commit(); setFocused(false); }}
+      onKeyDown={e => e.key === 'Enter' && ref.current?.blur()}
+      autoFocus
+      className={`h-8 border-transparent bg-transparent px-1 hover:border-border focus:border-primary ${className}`}
+    />
+  ) : (
+    <button
+      type="button"
+      onClick={() => setFocused(true)}
+      className={`h-8 w-full bg-transparent px-1 text-sm text-right cursor-text hover:border hover:border-border rounded-md ${className}`}
+    >
+      ${Math.round(Number(local) || 0)}
+    </button>
+  );
+}
+
 export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRemove }: IncomesTabProps) {
   const [adding, setAdding] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -121,7 +153,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Partner</TableHead>
+                <TableHead className="min-w-[140px]">Partner</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Frequency</TableHead>
@@ -169,7 +201,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                     />
                   </TableCell>
                   <TableCell>
-                    <EditableCell value={Number(inc.amount)} onChange={v => handleUpdate(inc.id, 'amount', v)} type="number" className="text-right" />
+                    <CurrencyCell value={Number(inc.amount)} onChange={v => handleUpdate(inc.id, 'amount', v)} className="text-right" />
                   </TableCell>
                   <TableCell>
                     <Select value={inc.frequency_type} onValueChange={v => handleUpdate(inc.id, 'frequency_type', v)}>
