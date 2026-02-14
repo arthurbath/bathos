@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels } from '@/lib/frequency';
@@ -67,17 +68,15 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
     setAdding(false);
   };
 
-  const handleUpdate = async (id: string, field: string, value: string) => {
-    try {
-      const updates: any = {};
-      if (field === 'name') updates.name = value;
-      else if (field === 'amount') updates.amount = Number(value) || 0;
-      else if (field === 'frequency_param') updates.frequency_param = value ? Number(value) : null;
-      else updates[field] = value;
-      await onUpdate(id, updates);
-    } catch (e: any) {
+  const handleUpdate = (id: string, field: string, value: string) => {
+    const updates: any = {};
+    if (field === 'name') updates.name = value;
+    else if (field === 'amount') updates.amount = Number(value) || 0;
+    else if (field === 'frequency_param') updates.frequency_param = value ? Number(value) : null;
+    else updates[field] = value;
+    onUpdate(id, updates).catch((e: any) => {
       toast({ title: 'Error saving', description: e.message, variant: 'destructive' });
-    }
+    });
   };
 
   const handleRemove = async (id: string) => {
@@ -113,7 +112,18 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                 <TableHead>Name</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Frequency</TableHead>
-                <TableHead className="text-right">Param</TableHead>
+                <TableHead className="text-right">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help border-b border-dotted border-muted-foreground">Param</span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-48 text-sm">Required for "Every N weeks" (N = interval) and "K times/year" (K = occurrences). Not used for other frequencies.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </TableHead>
                 <TableHead className="text-right">Monthly</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
