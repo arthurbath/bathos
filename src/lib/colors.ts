@@ -1,13 +1,13 @@
-// Light pastel palette – 10 distinct hues
+// Light pastel palette – 10 distinct hues, suitable as backgrounds for dark text
 export const COLOR_PALETTE = [
-  '#fca5a5', // red
-  '#fdba74', // orange
-  '#fcd34d', // yellow
-  '#86efac', // green
-  '#5eead4', // teal
-  '#7dd3fc', // sky
-  '#93c5fd', // blue
-  '#a78bfa', // violet
-  '#f0abfc', // fuchsia
-  '#e5e7eb', // gray
+  '#fecaca', // red-200
+  '#fed7aa', // orange-200
+  '#fde68a', // amber-200
+  '#bbf7d0', // green-200
+  '#a5f3fc', // cyan-200
+  '#bfdbfe', // blue-200
+  '#c7d2fe', // indigo-200
+  '#ddd6fe', // violet-200
+  '#fbcfe8', // pink-200
+  '#e5e7eb', // gray-200
 ] as const;
