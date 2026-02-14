@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useSpreadsheetNav } from '@/hooks/useSpreadsheetNav';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -585,18 +585,18 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
                   </TableCell>
                 </TableRow>
               ) : grouped ? (
-                grouped.map(([key, groupRows]) => {
-                  let globalIdx = 0;
-                  return (
-                    <>{/* Fragment with key on subtotal */}
-                      <GroupSubtotalRow key={`group-${key}`} label={getGroupLabel(key)} rows={groupRows} />
+                (() => {
+                  let visualIdx = 0;
+                  return grouped.map(([key, groupRows]) => (
+                    <React.Fragment key={`group-${key}`}>
+                      <GroupSubtotalRow label={getGroupLabel(key)} rows={groupRows} />
                       {groupRows.map(row => {
-                        const ri = rows.indexOf(row);
+                        const ri = visualIdx++;
                         return <ExpenseRow key={row.exp.id} {...row} {...sharedRowProps} rowIndex={ri} />;
                       })}
-                    </>
-                  );
-                })
+                    </React.Fragment>
+                  ));
+                })()
               ) : (
                 rows.map((row, i) => (
                   <ExpenseRow key={row.exp.id} {...row} {...sharedRowProps} rowIndex={i} />
