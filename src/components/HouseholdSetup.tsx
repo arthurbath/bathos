@@ -1,29 +1,23 @@
 import { useState } from 'react';
-import { Household } from '@/types/fairshare';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users } from 'lucide-react';
 
 interface HouseholdSetupProps {
-  onComplete: (household: Household) => void;
+  onComplete: (displayName: string) => Promise<void>;
 }
 
 export function HouseholdSetup({ onComplete }: HouseholdSetupProps) {
-  const [partnerX, setPartnerX] = useState('');
-  const [partnerY, setPartnerY] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!partnerX.trim() || !partnerY.trim()) return;
-
-    const household: Household = {
-      id: crypto.randomUUID(),
-      partnerX: partnerX.trim(),
-      partnerY: partnerY.trim(),
-      createdAt: new Date().toISOString(),
-    };
-    onComplete(household);
+    if (!displayName.trim()) return;
+    setLoading(true);
+    await onComplete(displayName.trim());
+    setLoading(false);
   };
 
   return (
@@ -33,42 +27,27 @@ export function HouseholdSetup({ onComplete }: HouseholdSetupProps) {
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
             <Users className="h-7 w-7 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">FairShare</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">Create Household</CardTitle>
           <CardDescription className="text-base">
-            Set up your household to start splitting expenses fairly.
+            Enter your name to create a new household. You can invite your partner later.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor="partnerX" className="text-sm font-medium text-foreground">
-                Partner 1 name
+              <label htmlFor="displayName" className="text-sm font-medium text-foreground">
+                Your display name
               </label>
               <Input
-                id="partnerX"
+                id="displayName"
                 placeholder='e.g. "Alice"'
-                value={partnerX}
-                onChange={(e) => setPartnerX(e.target.value)}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
                 autoFocus
               />
             </div>
-            <div className="space-y-2">
-              <label htmlFor="partnerY" className="text-sm font-medium text-foreground">
-                Partner 2 name
-              </label>
-              <Input
-                id="partnerY"
-                placeholder='e.g. "Bob"'
-                value={partnerY}
-                onChange={(e) => setPartnerY(e.target.value)}
-              />
-            </div>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={!partnerX.trim() || !partnerY.trim()}
-            >
-              Get started
+            <Button type="submit" className="w-full" disabled={!displayName.trim() || loading}>
+              {loading ? 'Creating…' : 'Create household'}
             </Button>
           </form>
         </CardContent>

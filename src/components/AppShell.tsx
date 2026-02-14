@@ -1,26 +1,24 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Household, Category, IncomeStream, Expense, RestorePoint } from '@/types/fairshare';
 import { DollarSign, PieChart, BarChart3, Tag, History, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import type { HouseholdData } from '@/hooks/useHouseholdData';
 
 interface AppShellProps {
-  household: Household;
-  onReset: () => void;
+  household: HouseholdData;
+  onSignOut: () => void;
 }
 
-export function AppShell({ household, onReset }: AppShellProps) {
+export function AppShell({ household, onSignOut }: AppShellProps) {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card px-4 py-3">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <h1 className="text-lg font-bold tracking-tight text-foreground">
-            FairShare
-          </h1>
+          <h1 className="text-lg font-bold tracking-tight text-foreground">Split</h1>
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground">
               {household.partnerX} & {household.partnerY}
             </span>
-            <Button variant="ghost" size="icon" onClick={onReset} title="Reset household">
+            <Button variant="ghost" size="icon" onClick={onSignOut} title="Sign out">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
