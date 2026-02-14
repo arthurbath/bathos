@@ -2,6 +2,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DollarSign, PieChart, BarChart3, Tag, History, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { HouseholdData } from '@/hooks/useHouseholdData';
+import { useIncomes } from '@/hooks/useIncomes';
+import { useExpenses } from '@/hooks/useExpenses';
+import { useCategories } from '@/hooks/useCategories';
+import { useRestorePoints } from '@/hooks/useRestorePoints';
+import { IncomesTab } from '@/components/IncomesTab';
+import { ExpensesTab } from '@/components/ExpensesTab';
+import { CategoriesTab } from '@/components/CategoriesTab';
+import { SummaryTab } from '@/components/SummaryTab';
+import { RestoreTab } from '@/components/RestoreTab';
+import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 
 interface AppShellProps {
   household: HouseholdData;
@@ -9,6 +20,63 @@ interface AppShellProps {
 }
 
 export function AppShell({ household, onSignOut }: AppShellProps) {
+  const { incomes, add: addIncome, remove: removeIncome, refetch: refetchIncomes } = useIncomes(household.householdId);
+  const { expenses, add: addExpense, remove: removeExpense, refetch: refetchExpenses } = useExpenses(household.householdId);
+  const { categories, add: addCategory, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
+  const { points, save: savePoint, remove: removePoint } = useRestorePoints(household.householdId);
+
+  const handleRestore = async (data: Json) => {
+    const snap = data as { incomes?: any[]; expenses?: any[]; categories?: any[] };
+    const hid = household.householdId;
+
+    // Clear existing data
+    await supabase.from('expenses').delete().eq('household_id', hid);
+    await supabase.from('income_streams').delete().eq('household_id', hid);
+    await supabase.from('categories').delete().eq('household_id', hid);
+
+    // Restore categories
+    if (snap.categories?.length) {
+      await supabase.from('categories').insert(
+        snap.categories.map((c: any) => ({ id: crypto.randomUUID(), household_id: hid, name: c.name }))
+      );
+    }
+
+    // Restore incomes
+    if (snap.incomes?.length) {
+      await supabase.from('income_streams').insert(
+        snap.incomes.map((i: any) => ({
+          id: crypto.randomUUID(),
+          household_id: hid,
+          name: i.name,
+          amount: i.amount,
+          frequency_type: i.frequency_type,
+          frequency_param: i.frequency_param,
+          partner_label: i.partner_label,
+        }))
+      );
+    }
+
+    // Restore expenses (category_id won't match old IDs, so null them out)
+    if (snap.expenses?.length) {
+      await supabase.from('expenses').insert(
+        snap.expenses.map((e: any) => ({
+          id: crypto.randomUUID(),
+          household_id: hid,
+          name: e.name,
+          amount: e.amount,
+          frequency_type: e.frequency_type,
+          frequency_param: e.frequency_param,
+          payer: e.payer,
+          benefit_x: e.benefit_x,
+          category_id: null,
+        }))
+      );
+    }
+
+    // Refetch all
+    await Promise.all([refetchIncomes(), refetchExpenses(), refetchCategories()]);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card px-4 py-3">
@@ -51,32 +119,52 @@ export function AppShell({ household, onSignOut }: AppShellProps) {
           </TabsList>
 
           <TabsContent value="incomes">
-            <PlaceholderTab title="Incomes" description="Manage income streams for each partner." />
+            <IncomesTab
+              incomes={incomes}
+              partnerX={household.partnerX}
+              partnerY={household.partnerY}
+              onAdd={addIncome}
+              onRemove={removeIncome}
+            />
           </TabsContent>
           <TabsContent value="expenses">
-            <PlaceholderTab title="Expenses" description="Add and manage shared expenses." />
+            <ExpensesTab
+              expenses={expenses}
+              categories={categories}
+              partnerX={household.partnerX}
+              partnerY={household.partnerY}
+              onAdd={addExpense}
+              onRemove={removeExpense}
+            />
           </TabsContent>
           <TabsContent value="summary">
-            <PlaceholderTab title="Summary" description="See how expenses are split and who owes whom." />
+            <SummaryTab
+              incomes={incomes}
+              expenses={expenses}
+              partnerX={household.partnerX}
+              partnerY={household.partnerY}
+            />
           </TabsContent>
           <TabsContent value="categories">
-            <PlaceholderTab title="Categories" description="Organize expenses by category." />
+            <CategoriesTab
+              categories={categories}
+              onAdd={addCategory}
+              onRemove={removeCategory}
+            />
           </TabsContent>
           <TabsContent value="restore">
-            <PlaceholderTab title="Restore Points" description="Save and restore budget snapshots." />
+            <RestoreTab
+              points={points}
+              incomes={incomes}
+              expenses={expenses}
+              categories={categories}
+              onSave={savePoint}
+              onRemove={removePoint}
+              onRestore={handleRestore}
+            />
           </TabsContent>
         </Tabs>
       </main>
-    </div>
-  );
-}
-
-function PlaceholderTab({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 py-20 text-center">
-      <h2 className="text-xl font-semibold text-foreground">{title}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-      <p className="mt-4 text-xs text-muted-foreground/60">Coming in the next phase</p>
     </div>
   );
 }
