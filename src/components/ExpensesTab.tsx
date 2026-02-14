@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -133,6 +133,19 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
   handleToggleEstimate: (id: string, checked: boolean) => void;
   handleRemove: (id: string) => void;
 }) {
+  const [localBenefitX, setLocalBenefitX] = useState(exp.benefit_x);
+
+  // Sync when server value changes
+  useEffect(() => {
+    setLocalBenefitX(exp.benefit_x);
+  }, [exp.benefit_x]);
+
+  const handleBenefitXChange = (v: string) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
+    setLocalBenefitX(clamped);
+    handleUpdate(exp.id, 'benefit_x', String(clamped));
+  };
+
   return (
     <TableRow>
       <TableCell className="sticky left-0 z-10 bg-background">
@@ -215,10 +228,10 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
         </Select>
       </TableCell>
       <TableCell>
-        <EditableCell value={exp.benefit_x} onChange={v => handleUpdate(exp.id, 'benefit_x', v)} type="number" className="text-right w-16" min={0} max={100} />
+        <EditableCell value={localBenefitX} onChange={handleBenefitXChange} type="number" className="text-right w-16" min={0} max={100} />
       </TableCell>
       <TableCell className="text-right text-muted-foreground tabular-nums text-xs">
-        {100 - exp.benefit_x}
+        {100 - localBenefitX}
       </TableCell>
       <TableCell className="text-right tabular-nums text-xs">${Math.round(fairX)}</TableCell>
       <TableCell className="text-right tabular-nums text-xs">${Math.round(fairY)}</TableCell>
