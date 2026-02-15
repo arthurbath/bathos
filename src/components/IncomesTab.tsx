@@ -130,8 +130,11 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
   const [adding, setAdding] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
   const prevCountRef = useRef(incomes.length);
-  const [sortCol, setSortCol] = useState<SortColumn>('name');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [sortCol, setSortCol] = useState<SortColumn>(() => (localStorage.getItem('incomes_sortCol') as SortColumn) || 'name');
+  const [sortDir, setSortDir] = useState<SortDir>(() => (localStorage.getItem('incomes_sortDir') as SortDir) || 'asc');
+
+  useEffect(() => { localStorage.setItem('incomes_sortCol', sortCol); }, [sortCol]);
+  useEffect(() => { localStorage.setItem('incomes_sortDir', sortDir); }, [sortDir]);
   const { tableRef, onCellKeyDown, onCellMouseDown } = useSpreadsheetNav();
 
   const toggleSort = (col: SortColumn) => {
