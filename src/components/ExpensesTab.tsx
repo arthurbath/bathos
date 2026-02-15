@@ -58,7 +58,7 @@ function SortableHead({ column, label, current, dir, onSort, className = '' }: {
   );
 }
 
-function EditableCell({ value, onChange, type = 'text', className = '', min, max, step, 'data-row': dataRow, 'data-col': dataCol, onCellKeyDown, onCellMouseDown }: {
+function EditableCell({ value, onChange, type = 'text', className = '', min, max, step, placeholder, 'data-row': dataRow, 'data-col': dataCol, onCellKeyDown, onCellMouseDown }: {
   value: string | number;
   onChange: (v: string) => void;
   type?: string;
@@ -66,6 +66,7 @@ function EditableCell({ value, onChange, type = 'text', className = '', min, max
   min?: number;
   max?: number;
   step?: number;
+  placeholder?: string;
   'data-row'?: number;
   'data-col'?: number;
   onCellKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
@@ -80,6 +81,7 @@ function EditableCell({ value, onChange, type = 'text', className = '', min, max
       ref={ref}
       type={type}
       value={local}
+      placeholder={placeholder}
       min={min}
       max={max}
       step={step}
@@ -288,7 +290,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
             </SelectContent>
           </Select>
           {NEEDS_PARAM.has(exp.frequency_type) && (
-            <EditableCell value={exp.frequency_param ?? ''} onChange={v => handleUpdate(exp.id, 'frequency_param', v)} type="number" className="text-right w-14" data-row={rowIndex} data-col={5} {...nav} />
+            <EditableCell value={exp.frequency_param ?? ''} onChange={v => handleUpdate(exp.id, 'frequency_param', v)} type="number" placeholder="N" className="text-right w-14" data-row={rowIndex} data-col={5} {...nav} />
           )}
         </div>
       </TableCell>
