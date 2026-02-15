@@ -587,12 +587,12 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
   return (
     <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2">
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <CardTitle>Expenses</CardTitle>
             <CardDescription>Click any cell to edit. Changes save automatically.</CardDescription>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Select value={filterPayer} onValueChange={v => setFilterPayer(v as 'all' | 'X' | 'Y')}>
               <SelectTrigger className="h-8 w-36 text-xs">
                 <SelectValue />
@@ -626,7 +626,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
           <Table className="text-xs">
             <TableHeader className="sticky top-0 z-30 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
               <TableRow>
-                <SortableHead column="name" label="Name" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[200px] sticky left-0 z-40 bg-card" />
+                <SortableHead column="name" label="Name" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[120px] sm:min-w-[200px] sticky left-0 z-40 bg-card" />
                 <SortableHead column="category" label="Category" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
                 <SortableHead column="amount" label="Amount" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
                 <SortableHead column="estimate" label="Est." current={sortCol} dir={sortDir} onSort={toggleSort} className="text-center" />
