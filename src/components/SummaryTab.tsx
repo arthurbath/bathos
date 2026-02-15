@@ -51,7 +51,7 @@ export function SummaryTab({ incomes, expenses, partnerX, partnerY }: SummaryTab
       overUnderX: paidX - fairX,
       overUnderY: paidY - fairY,
     };
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name));
 
   const totalExpenses = paidByX + paidByY;
   const settlement = paidByX - totalFairX; // positive = Y owes X
@@ -112,7 +112,7 @@ export function SummaryTab({ incomes, expenses, partnerX, partnerY }: SummaryTab
       {/* Per-expense breakdown */}
       <Card>
         <CardHeader>
-          <CardTitle>Per-Expense Breakdown</CardTitle>
+          <CardTitle>Per-expense Breakdown</CardTitle>
           <CardDescription>Read-only view of how each expense is split.</CardDescription>
         </CardHeader>
         <CardContent>
