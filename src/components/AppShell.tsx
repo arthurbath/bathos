@@ -129,7 +129,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-6 space-y-6">
+      <main className={`mx-auto max-w-5xl px-4 pt-6 space-y-6 ${location.pathname === '/expenses' || location.pathname === '/incomes' ? 'pb-0' : 'pb-6'}`}>
         <nav className="grid w-full grid-cols-5 rounded-lg bg-muted p-1 text-muted-foreground">
           {([
             { path: '/summary', icon: PieChart, label: 'Summary' },
