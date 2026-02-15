@@ -280,7 +280,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       <TableCell>
         <div className="flex items-center gap-1">
           <Select value={exp.frequency_type} onValueChange={v => handleUpdate(exp.id, 'frequency_type', v)}>
-            <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={4} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
+            <SelectTrigger className="h-7 shrink-0 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={4} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -290,7 +290,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
             </SelectContent>
           </Select>
           {NEEDS_PARAM.has(exp.frequency_type) && (
-            <EditableCell value={exp.frequency_param ?? ''} onChange={v => handleUpdate(exp.id, 'frequency_param', v)} type="number" placeholder="N" className="text-right w-14" data-row={rowIndex} data-col={5} {...nav} />
+            <EditableCell value={exp.frequency_param ?? ''} onChange={v => handleUpdate(exp.id, 'frequency_param', v)} type="number" placeholder="X" className="text-right w-14" data-row={rowIndex} data-col={5} {...nav} />
           )}
         </div>
       </TableCell>
