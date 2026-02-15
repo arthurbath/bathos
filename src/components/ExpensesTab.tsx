@@ -681,7 +681,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
                   <TableCell className="font-semibold text-xs sticky left-0 z-10 bg-muted">Totals</TableCell>
                   <TableCell colSpan={4} className="bg-muted" />
                   <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(totalMonthly)}</TableCell>
-                  <TableCell colSpan={4} className="bg-muted" />
+                  <TableCell colSpan={5} className="bg-muted" />
                   <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(totalFairX)}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(totalFairY)}</TableCell>
                   <TableCell className="bg-muted" />
