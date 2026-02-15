@@ -337,9 +337,8 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                   <TableCell />
                 </TableRow>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-xs text-muted-foreground sticky left-0 z-10 bg-muted/50">
-                    Income ratio: {partnerX} {ratioX.toFixed(0)}% / {partnerY} {(100 - ratioX).toFixed(0)}%
-                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground sticky left-0 z-10 bg-muted">Income ratio: {partnerX} {ratioX.toFixed(0)}% / {partnerY} {(100 - ratioX).toFixed(0)}%</TableCell>
+                  <TableCell colSpan={6} className="bg-muted" />
                 </TableRow>
               </TableFooter>
             )}
