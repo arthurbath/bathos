@@ -219,8 +219,8 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
             <CardTitle>Income Streams</CardTitle>
             <CardDescription>Click any cell to edit. Changes save automatically.</CardDescription>
           </div>
-          <Button onClick={handleAdd} disabled={adding} size="sm" className="gap-1.5">
-            <Plus className="h-4 w-4" /> Add row
+          <Button onClick={handleAdd} disabled={adding} variant="outline" size="sm" className="h-8 gap-1.5">
+            <Plus className="h-4 w-4" /> Add
           </Button>
         </div>
       </CardHeader>
