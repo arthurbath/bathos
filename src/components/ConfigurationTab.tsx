@@ -74,7 +74,7 @@ function PartnerNamesCard({ partnerX, partnerY, partnerXColor, partnerYColor, on
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Partner Names</CardTitle>
-        <CardDescription>Set the names used for splitting expenses. These are labels — they don't need to match user accounts.</CardDescription>
+        
       </CardHeader>
       <CardContent>
         <div className="flex items-end gap-3">
@@ -119,9 +119,6 @@ function InviteCard({ inviteCode }: { inviteCode: string | null }) {
           <Users className="h-5 w-5 text-primary" />
           <CardTitle className="text-base">Invite Collaborators</CardTitle>
         </div>
-        <CardDescription>
-          Share this code so others can join your household and collaborate on the budget.
-        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="flex gap-2">
@@ -222,7 +219,7 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
       <Card>
         <CardHeader>
           <CardTitle>Payment Methods</CardTitle>
-          <CardDescription>Track which payment method or account is used. Each method is owned by a partner, which automatically determines the payer on expenses.</CardDescription>
+          
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-2">

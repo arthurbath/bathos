@@ -71,7 +71,7 @@ export function RestoreTab({ points, incomes, expenses, categories, onSave, onRe
         <Card>
           <CardHeader>
             <CardTitle>Save Snapshot</CardTitle>
-            <CardDescription>Snapshot current categories, incomes, and expenses.</CardDescription>
+            
           </CardHeader>
           <CardContent>
             <div className="flex gap-2">
@@ -86,7 +86,7 @@ export function RestoreTab({ points, incomes, expenses, categories, onSave, onRe
         <Card>
           <CardHeader>
             <CardTitle>Restore Points</CardTitle>
-            <CardDescription>{points.length} snapshots</CardDescription>
+            
           </CardHeader>
           <CardContent>
             {points.length === 0 ? (

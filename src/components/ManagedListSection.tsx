@@ -142,7 +142,7 @@ export function ManagedListSection({ title, description, items, getUsageCount, o
       <Card>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
+          
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-2">

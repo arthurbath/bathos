@@ -113,7 +113,7 @@ export function SummaryTab({ incomes, expenses, partnerX, partnerY }: SummaryTab
       <Card>
         <CardHeader>
           <CardTitle>Per-expense Breakdown</CardTitle>
-          <CardDescription>Read-only view of how each expense is split.</CardDescription>
+          
         </CardHeader>
         <CardContent>
           {breakdown.length === 0 ? (
