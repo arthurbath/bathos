@@ -127,7 +127,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             { path: '/expenses', icon: BarChart3, label: 'Expenses' },
             { path: '/incomes', icon: DollarSign, label: 'Incomes' },
             { path: '/config', icon: Settings, label: 'Config' },
-            { path: '/restore', icon: History, label: 'Restore' },
+            { path: '/restore', icon: History, label: 'Backup' },
           ] as const).map(({ path, icon: Icon, label }) => {
             const active = location.pathname === path;
             return (
