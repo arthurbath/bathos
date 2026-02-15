@@ -689,12 +689,12 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
                 <TableHead className="text-center cursor-pointer select-none hover:bg-muted/50" onClick={() => toggleSort('estimate')}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-1">
+                      <span className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-2">
                         Est
                         {sortCol === 'estimate' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent>Expense is estimated</TooltipContent>
+                    <TooltipContent side="bottom">Expense is estimated</TooltipContent>
                   </Tooltip>
                 </TableHead>
                 <SortableHead column="frequency" label="Frequency" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[185px]" />
@@ -702,18 +702,38 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
                 <TableHead className="text-right cursor-pointer select-none hover:bg-muted/50" onClick={() => toggleSort('monthly')}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-1">
+                      <span className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-2">
                         Monthly
                         {sortCol === 'monthly' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent>Expense normalized to how much it costs you monthly</TooltipContent>
+                    <TooltipContent side="bottom">Expense normalized to how much it costs you monthly</TooltipContent>
                   </Tooltip>
                 </TableHead>
                 <SortableHead column="payment_method" label="Payment Method" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
                 <SortableHead column="payer" label="Payer" current={sortCol} dir={sortDir} onSort={toggleSort} />
-                <SortableHead column="benefit_x" label={`${partnerX} %`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
-                <SortableHead column="benefit_y" label={`${partnerY} %`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
+                <TableHead className="text-right whitespace-nowrap cursor-pointer select-none hover:bg-muted/50" onClick={() => toggleSort('benefit_x')}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-2">
+                        {partnerX} %
+                        {sortCol === 'benefit_x' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">The percentage that {partnerX} benefits from the expense</TooltipContent>
+                  </Tooltip>
+                </TableHead>
+                <TableHead className="text-right whitespace-nowrap cursor-pointer select-none hover:bg-muted/50" onClick={() => toggleSort('benefit_y')}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-2">
+                        {partnerY} %
+                        {sortCol === 'benefit_y' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">The percentage that {partnerY} benefits from the expense</TooltipContent>
+                  </Tooltip>
+                </TableHead>
                 <SortableHead column="fair_x" label={`Fair ${partnerX}`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
                 <SortableHead column="fair_y" label={`Fair ${partnerY}`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
                 <TableHead className="w-10" />
