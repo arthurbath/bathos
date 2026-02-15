@@ -77,19 +77,33 @@ export function useSpreadsheetNav() {
 
   const findNextCol = useCallback((row: number, currentCol: number) => {
     const cells = getEditableCells();
-    // Get all cols for this row, sorted
     const cols = cells
       .filter(c => Number(c.dataset.row) === row)
       .map(c => Number(c.dataset.col))
       .sort((a, b) => a - b);
     const nextIdx = cols.findIndex(c => c > currentCol);
     if (nextIdx !== -1) return { row, col: cols[nextIdx] };
-    // Wrap to next row
     const maxRow = getMaxRow();
     const nextRow = row < maxRow ? row + 1 : 0;
     const minCol = getMinCol(nextRow);
     return { row: nextRow, col: minCol };
   }, [getEditableCells, getMaxRow, getMinCol]);
+
+  const findPrevCol = useCallback((row: number, currentCol: number) => {
+    const cells = getEditableCells();
+    const cols = cells
+      .filter(c => Number(c.dataset.row) === row)
+      .map(c => Number(c.dataset.col))
+      .sort((a, b) => a - b);
+    // Find the last col that is less than currentCol
+    const prevCols = cols.filter(c => c < currentCol);
+    if (prevCols.length > 0) return { row, col: prevCols[prevCols.length - 1] };
+    // Wrap to previous row
+    const maxRow = getMaxRow();
+    const prevRow = row > 0 ? row - 1 : maxRow;
+    const maxCol = getMaxCol(prevRow);
+    return { row: prevRow, col: maxCol };
+  }, [getEditableCells, getMaxRow, getMaxCol]);
 
   const onCellKeyDown = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
     const target = e.currentTarget;
@@ -99,13 +113,11 @@ export function useSpreadsheetNav() {
 
     if (e.key === 'Tab') {
       e.preventDefault();
-      // Commit current value by blurring
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
       }
-      // Small delay to let blur/commit happen
       requestAnimationFrame(() => {
-        const next = findNextCol(row, col);
+        const next = e.shiftKey ? findPrevCol(row, col) : findNextCol(row, col);
         focusCell(next.row, next.col);
       });
     } else if (e.key === 'Enter') {
@@ -123,7 +135,7 @@ export function useSpreadsheetNav() {
         }
       });
     }
-  }, [findNextCol, focusCell, getMaxRow]);
+  }, [findNextCol, findPrevCol, focusCell, getMaxRow]);
 
   const onCellMouseDown = useCallback((e: React.MouseEvent<HTMLElement>) => {
     const col = Number(e.currentTarget.dataset.col);
