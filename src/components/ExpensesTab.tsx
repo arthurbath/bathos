@@ -290,7 +290,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
             </SelectContent>
           </Select>
           {NEEDS_PARAM.has(exp.frequency_type) && (
-            <EditableCell value={exp.frequency_param ?? ''} onChange={v => handleUpdate(exp.id, 'frequency_param', v)} type="number" placeholder="X" className="text-right w-14" data-row={rowIndex} data-col={5} {...nav} />
+            <EditableCell value={exp.frequency_param ?? ''} onChange={v => handleUpdate(exp.id, 'frequency_param', v)} type="number" placeholder="X" className="text-right w-8" data-row={rowIndex} data-col={5} {...nav} />
           )}
         </div>
       </TableCell>
