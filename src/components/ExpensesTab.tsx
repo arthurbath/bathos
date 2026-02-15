@@ -286,7 +286,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, linkedAccounts, pa
     <>
     <TableRow>
       <TableCell className="sticky left-0 z-10 bg-background">
-        <EditableCell value={exp.name} onChange={v => handleUpdate(exp.id, 'name', v)} data-row={rowIndex} data-col={0} {...nav} />
+        <EditableCell value={exp.name} onChange={v => handleUpdate(exp.id, 'name', v)} placeholder="Expense" data-row={rowIndex} data-col={0} {...nav} />
       </TableCell>
       <TableCell>
         <Select value={exp.category_id ?? '_none'} onValueChange={handleSelectWithAddNew('category_id', 'category')}>
@@ -505,7 +505,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         if (!table) return;
         const allNameCells = table.querySelectorAll<HTMLElement>('[data-col="0"]');
         const last = allNameCells[allNameCells.length - 1];
-        if (last) last.click();
+        if (last) last.focus();
       });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
