@@ -1,0 +1,2 @@
+ALTER TABLE public.expenses ALTER COLUMN payer DROP NOT NULL;
+ALTER TABLE public.expenses ALTER COLUMN payer DROP DEFAULT;

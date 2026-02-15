@@ -8,7 +8,7 @@ export interface Expense {
   amount: number;
   frequency_type: FrequencyType;
   frequency_param: number | null;
-  payer: string;
+  payer: string | null;
   benefit_x: number;
   category_id: string | null;
   household_id: string;
