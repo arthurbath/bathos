@@ -620,7 +620,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
           </div>
         </div>
       </CardHeader>
-      <CardContent className="px-2">
+      <CardContent className="px-0">
         <div className="overflow-auto max-h-[calc(100vh-14rem)]" ref={tableRef}>
           <Table className="text-xs">
             <TableHeader className="sticky top-0 z-30 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
