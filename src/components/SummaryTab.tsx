@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { toMonthly } from '@/lib/frequency';
 import type { Income } from '@/hooks/useIncomes';
@@ -15,6 +18,7 @@ interface SummaryTabProps {
 function $(v: number) { return `$${Math.round(v)}`; }
 
 export function SummaryTab({ incomes, expenses, partnerX, partnerY }: SummaryTabProps) {
+  const [hideFullSplits, setHideFullSplits] = useState(false);
   const incomeX = incomes.filter(i => i.partner_label === 'X').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
   const incomeY = incomes.filter(i => i.partner_label === 'Y').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
   const totalIncome = incomeX + incomeY;
@@ -112,8 +116,13 @@ export function SummaryTab({ incomes, expenses, partnerX, partnerY }: SummaryTab
       {/* Per-expense breakdown */}
       <Card>
         <CardHeader>
-          <CardTitle>Per-expense Breakdown</CardTitle>
-          
+          <div className="flex items-center justify-between">
+            <CardTitle>Per-expense Breakdown</CardTitle>
+            <div className="flex items-center gap-2">
+              <Switch id="hide-full-splits" checked={hideFullSplits} onCheckedChange={setHideFullSplits} />
+              <Label htmlFor="hide-full-splits" className="text-xs text-muted-foreground cursor-pointer">Hide 100/0</Label>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {breakdown.length === 0 ? (
@@ -134,7 +143,7 @@ export function SummaryTab({ incomes, expenses, partnerX, partnerY }: SummaryTab
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {breakdown.map(row => (
+                  {breakdown.filter(row => !hideFullSplits || (row.benefitSplit !== '100/0' && row.benefitSplit !== '0/100')).map(row => (
                     <TableRow key={row.id}>
                       <TableCell className="font-medium">{row.name}</TableCell>
                       <TableCell className="text-right tabular-nums">{$(row.monthly)}</TableCell>
