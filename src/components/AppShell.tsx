@@ -132,9 +132,9 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
       <main className="mx-auto max-w-5xl px-4 py-6 space-y-6">
         <nav className="grid w-full grid-cols-5 rounded-lg bg-muted p-1 text-muted-foreground">
           {([
-            { path: '/incomes', icon: DollarSign, label: 'Incomes' },
-            { path: '/expenses', icon: BarChart3, label: 'Expenses' },
             { path: '/summary', icon: PieChart, label: 'Summary' },
+            { path: '/expenses', icon: BarChart3, label: 'Expenses' },
+            { path: '/incomes', icon: DollarSign, label: 'Incomes' },
             { path: '/config', icon: Settings, label: 'Config' },
             { path: '/restore', icon: History, label: 'Restore' },
           ] as const).map(({ path, icon: Icon, label }) => {
