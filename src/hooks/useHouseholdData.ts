@@ -21,40 +21,45 @@ export function useHouseholdData(user: User | null) {
     if (!user) { setHousehold(null); setLoading(false); return; }
     setLoading(true);
 
-    const { data: membership } = await supabase
-      .from('household_members')
-      .select('household_id, partner_label')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    try {
+      const { data: membership } = await supabase
+        .from('household_members')
+        .select('household_id, partner_label')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-    if (!membership) { setLoading(false); return; }
+      if (!membership) { setLoading(false); return; }
 
-    const { data: hh } = await supabase
-      .from('households')
-      .select('id, name, invite_code, partner_x_name, partner_y_name, partner_x_color, partner_y_color')
-      .eq('id', membership.household_id)
-      .single();
+      const { data: hh } = await supabase
+        .from('households')
+        .select('id, name, invite_code, partner_x_name, partner_y_name, partner_x_color, partner_y_color')
+        .eq('id', membership.household_id)
+        .single();
 
-    if (!hh) { setLoading(false); return; }
+      if (!hh) { setLoading(false); return; }
 
-    // Get current user's display name
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('display_name')
-      .eq('id', user.id)
-      .single();
+      // Get current user's display name
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', user.id)
+        .single();
 
-    setHousehold({
-      householdId: hh.id,
-      householdName: hh.name,
-      inviteCode: (hh as any).invite_code ?? null,
-      partnerX: (hh as any).partner_x_name ?? 'Partner X',
-      partnerY: (hh as any).partner_y_name ?? 'Partner Y',
-      partnerXColor: (hh as any).partner_x_color ?? null,
-      partnerYColor: (hh as any).partner_y_color ?? null,
-      displayName: profile?.display_name ?? 'You',
-    });
-    setLoading(false);
+      setHousehold({
+        householdId: hh.id,
+        householdName: hh.name,
+        inviteCode: (hh as any).invite_code ?? null,
+        partnerX: (hh as any).partner_x_name ?? 'Partner X',
+        partnerY: (hh as any).partner_y_name ?? 'Partner Y',
+        partnerXColor: (hh as any).partner_x_color ?? null,
+        partnerYColor: (hh as any).partner_y_color ?? null,
+        displayName: profile?.display_name ?? 'You',
+      });
+    } catch (err) {
+      console.error('Failed to fetch household data:', err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => { fetchHousehold(); }, [fetchHousehold]);
