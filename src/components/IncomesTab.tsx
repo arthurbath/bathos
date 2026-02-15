@@ -328,13 +328,13 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
             </TableBody>
             {incomes.length > 0 && (
               <TableFooter>
-                <TableRow>
-                  <TableCell className="font-semibold sticky left-0 z-10 bg-muted">Totals</TableCell>
-                  <TableCell colSpan={4} className="text-xs">
+                <TableRow className="bg-muted">
+                  <TableCell className="font-semibold text-xs sticky left-0 z-10 bg-muted">Totals</TableCell>
+                  <TableCell colSpan={4} className="text-xs bg-muted">
                     {partnerX}: ${Math.round(xTotal)} · {partnerY}: ${Math.round(yTotal)}
                   </TableCell>
-                  <TableCell className="text-right font-bold tabular-nums">${Math.round(total)}</TableCell>
-                  <TableCell />
+                  <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(total)}</TableCell>
+                  <TableCell className="bg-muted" />
                 </TableRow>
                 <TableRow>
                   <TableCell className="text-xs text-muted-foreground sticky left-0 z-10 bg-muted">Income ratio: {partnerX} {ratioX.toFixed(0)}% / {partnerY} {(100 - ratioX).toFixed(0)}%</TableCell>

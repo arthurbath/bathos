@@ -671,13 +671,14 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
             </TableBody>
             {rows.length > 0 && (
               <TableFooter>
-                <TableRow>
-                  <TableCell colSpan={6} className="font-semibold sticky left-0 z-10 bg-muted/50">Totals</TableCell>
-                  <TableCell className="text-right font-bold tabular-nums">${Math.round(totalMonthly)}</TableCell>
-                  <TableCell colSpan={5} />
-                  <TableCell className="text-right font-bold tabular-nums">${Math.round(totalFairX)}</TableCell>
-                  <TableCell className="text-right font-bold tabular-nums">${Math.round(totalFairY)}</TableCell>
-                  <TableCell />
+                <TableRow className="bg-muted">
+                  <TableCell className="font-semibold text-xs sticky left-0 z-10 bg-muted">Totals</TableCell>
+                  <TableCell colSpan={5} className="bg-muted" />
+                  <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(totalMonthly)}</TableCell>
+                  <TableCell colSpan={5} className="bg-muted" />
+                  <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(totalFairX)}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(totalFairY)}</TableCell>
+                  <TableCell className="bg-muted" />
                 </TableRow>
               </TableFooter>
             )}
