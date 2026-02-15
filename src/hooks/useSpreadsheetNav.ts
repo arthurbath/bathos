@@ -29,8 +29,9 @@ export function useSpreadsheetNav() {
     );
     if (target) {
       // For CurrencyCell/PercentCell buttons, click to activate the input
-      // But not for checkboxes (role="checkbox") — just focus those
-      if (target.tagName === 'BUTTON' && target.getAttribute('role') !== 'checkbox') {
+      // But not for checkboxes or select triggers — just focus those
+      const role = target.getAttribute('role');
+      if (target.tagName === 'BUTTON' && role !== 'checkbox' && role !== 'combobox') {
         target.click();
       } else {
         target.focus();
