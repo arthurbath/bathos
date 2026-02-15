@@ -325,8 +325,8 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
               ))}
             </TableBody>
             {incomes.length > 0 && (
-              <TableFooter>
-                <TableRow className="bg-muted">
+              <TableFooter className="sticky bottom-0 z-30">
+                <TableRow className="bg-muted shadow-[0_-1px_0_0_hsl(var(--border))]">
                   <TableCell className="font-semibold text-xs sticky left-0 z-10 bg-muted">Totals</TableCell>
                   <TableCell colSpan={3} className="text-xs bg-muted">
                     {partnerX}: ${Math.round(xTotal)} · {partnerY}: ${Math.round(yTotal)}
