@@ -11,13 +11,12 @@ import { Label } from '@/components/ui/label';
 import { Users, Copy, Check, Plus, Trash2, Pencil } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import type { Category } from '@/hooks/useCategories';
-import type { Budget } from '@/hooks/useBudgets';
+
 import type { LinkedAccount } from '@/hooks/useLinkedAccounts';
 import type { Expense } from '@/hooks/useExpenses';
 
 interface ConfigurationTabProps {
   categories: Category[];
-  budgets: Budget[];
   linkedAccounts: LinkedAccount[];
   expenses: Expense[];
   partnerX: string;
@@ -32,11 +31,6 @@ interface ConfigurationTabProps {
   onRemoveCategory: (id: string) => Promise<void>;
   onReassignCategory: (oldId: string, newId: string | null) => Promise<void>;
   onUpdateCategoryColor: (id: string, color: string | null) => Promise<void>;
-  onAddBudget: (name: string) => Promise<void>;
-  onUpdateBudget: (id: string, name: string) => Promise<void>;
-  onRemoveBudget: (id: string) => Promise<void>;
-  onReassignBudget: (oldId: string, newId: string | null) => Promise<void>;
-  onUpdateBudgetColor: (id: string, color: string | null) => Promise<void>;
   onAddLinkedAccount: (name: string, ownerPartner?: string) => Promise<void>;
   onUpdateLinkedAccount: (id: string, updates: Partial<Pick<LinkedAccount, 'name' | 'owner_partner'>>) => Promise<void>;
   onRemoveLinkedAccount: (id: string) => Promise<void>;
@@ -359,11 +353,10 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
 }
 
 export function ConfigurationTab({
-  categories, budgets, linkedAccounts, expenses,
+  categories, linkedAccounts, expenses,
   partnerX, partnerY, partnerXColor, partnerYColor, inviteCode,
   onUpdatePartnerNames, onUpdatePartnerColors,
   onAddCategory, onUpdateCategory, onRemoveCategory, onReassignCategory, onUpdateCategoryColor,
-  onAddBudget, onUpdateBudget, onRemoveBudget, onReassignBudget, onUpdateBudgetColor,
   onAddLinkedAccount, onUpdateLinkedAccount, onRemoveLinkedAccount, onReassignLinkedAccount, onUpdateLinkedAccountColor,
   onSyncPayerForAccount,
 }: ConfigurationTabProps) {
@@ -381,17 +374,6 @@ export function ConfigurationTab({
         onRemove={onRemoveCategory}
         onReassign={onReassignCategory}
         onUpdateColor={onUpdateCategoryColor}
-      />
-      <ManagedListSection
-        title="Budgets"
-        description="Define budget buckets like Fixed Essentials, Flexible, etc."
-        items={budgets}
-        getUsageCount={(id) => expenses.filter(e => e.budget_id === id).length}
-        onAdd={onAddBudget}
-        onUpdate={onUpdateBudget}
-        onRemove={onRemoveBudget}
-        onReassign={onReassignBudget}
-        onUpdateColor={onUpdateBudgetColor}
       />
       <PaymentMethodsSection
         linkedAccounts={linkedAccounts}

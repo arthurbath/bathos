@@ -7,7 +7,7 @@ import type { HouseholdData } from '@/hooks/useHouseholdData';
 import { useIncomes } from '@/hooks/useIncomes';
 import { useExpenses } from '@/hooks/useExpenses';
 import { useCategories } from '@/hooks/useCategories';
-import { useBudgets } from '@/hooks/useBudgets';
+
 import { useLinkedAccounts } from '@/hooks/useLinkedAccounts';
 import { useRestorePoints } from '@/hooks/useRestorePoints';
 import { IncomesTab } from '@/components/IncomesTab';
@@ -33,7 +33,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
   const { incomes, add: addIncome, update: updateIncome, remove: removeIncome, refetch: refetchIncomes } = useIncomes(household.householdId);
   const { expenses, add: addExpense, update: updateExpense, remove: removeExpense, refetch: refetchExpenses } = useExpenses(household.householdId);
   const { categories, add: addCategory, update: updateCategory, updateColor: updateCategoryColor, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
-  const { budgets, add: addBudget, update: updateBudget, updateColor: updateBudgetColor, remove: removeBudget, refetch: refetchBudgets } = useBudgets(household.householdId);
+  
   const { linkedAccounts, add: addLinkedAccount, update: updateLinkedAccount, updateColor: updateLinkedAccountColor, remove: removeLinkedAccount, refetch: refetchLinkedAccounts } = useLinkedAccounts(household.householdId);
   const { points, save: savePoint, remove: removePoint } = useRestorePoints(household.householdId);
 
@@ -47,15 +47,6 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
     await refetchExpenses();
   };
 
-  const handleReassignBudget = async (oldId: string, newId: string | null) => {
-    const { error } = await supabase
-      .from('expenses')
-      .update({ budget_id: newId })
-      .eq('household_id', household.householdId)
-      .eq('budget_id', oldId);
-    if (error) throw error;
-    await refetchExpenses();
-  };
 
   const handleReassignLinkedAccount = async (oldId: string, newId: string | null) => {
     const { error } = await supabase
@@ -166,7 +157,6 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
           <ExpensesTab
             expenses={expenses}
             categories={categories}
-            budgets={budgets}
             linkedAccounts={linkedAccounts}
             incomes={incomes}
             partnerX={household.partnerX}
@@ -177,7 +167,6 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             onUpdate={updateExpense}
             onRemove={removeExpense}
             onAddCategory={addCategory}
-            onAddBudget={addBudget}
             onAddLinkedAccount={addLinkedAccount}
           />
         )}
@@ -192,7 +181,6 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
         {location.pathname === '/config' && (
           <ConfigurationTab
             categories={categories}
-            budgets={budgets}
             linkedAccounts={linkedAccounts}
             expenses={expenses}
             partnerX={household.partnerX}
@@ -207,11 +195,6 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             onRemoveCategory={removeCategory}
             onReassignCategory={handleReassignCategory}
             onUpdateCategoryColor={updateCategoryColor}
-            onAddBudget={addBudget}
-            onUpdateBudget={updateBudget}
-            onRemoveBudget={removeBudget}
-            onReassignBudget={handleReassignBudget}
-            onUpdateBudgetColor={updateBudgetColor}
             onAddLinkedAccount={addLinkedAccount}
             onUpdateLinkedAccount={updateLinkedAccount}
             onRemoveLinkedAccount={removeLinkedAccount}

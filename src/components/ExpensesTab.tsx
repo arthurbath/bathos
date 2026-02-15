@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useSpreadsheetNav } from '@/hooks/useSpreadsheetNav';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,14 +16,12 @@ import { toMonthly, frequencyLabels } from '@/lib/frequency';
 import type { FrequencyType } from '@/types/fairshare';
 import type { Expense } from '@/hooks/useExpenses';
 import type { Category } from '@/hooks/useCategories';
-import type { Budget } from '@/hooks/useBudgets';
 import type { LinkedAccount } from '@/hooks/useLinkedAccounts';
 import type { Income } from '@/hooks/useIncomes';
 
 interface ExpensesTabProps {
   expenses: Expense[];
   categories: Category[];
-  budgets: Budget[];
   linkedAccounts: LinkedAccount[];
   incomes: Income[];
   partnerX: string;
@@ -33,15 +32,14 @@ interface ExpensesTabProps {
   onUpdate: (id: string, updates: Partial<Omit<Expense, 'id' | 'household_id'>>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onAddCategory: (name: string) => Promise<void>;
-  onAddBudget: (name: string) => Promise<void>;
   onAddLinkedAccount: (name: string, ownerPartner?: string) => Promise<void>;
 }
 
 const FREQ_OPTIONS: FrequencyType[] = ['monthly', 'twice_monthly', 'weekly', 'every_n_weeks', 'annual', 'k_times_annually'];
 const NEEDS_PARAM: Set<FrequencyType> = new Set(['every_n_weeks', 'k_times_annually']);
 
-type GroupByOption = 'none' | 'category' | 'budget' | 'payer' | 'payment_method';
-type SortColumn = 'name' | 'category' | 'amount' | 'estimate' | 'frequency' | 'monthly' | 'budget' | 'payment_method' | 'payer' | 'benefit_x' | 'benefit_y' | 'fair_x' | 'fair_y';
+type GroupByOption = 'none' | 'category' | 'estimated' | 'payer' | 'payment_method';
+type SortColumn = 'name' | 'category' | 'amount' | 'estimate' | 'frequency' | 'monthly' | 'payment_method' | 'payer' | 'benefit_x' | 'benefit_y' | 'fair_x' | 'fair_y';
 type SortDir = 'asc' | 'desc';
 
 function SortableHead({ column, label, current, dir, onSort, className = '' }: {
@@ -218,9 +216,8 @@ interface ComputedRow {
   monthly: number;
 }
 
-function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, rowIndex, onCellKeyDown, onCellMouseDown, onAddCategory, onAddBudget, onAddLinkedAccount }: ComputedRow & {
+function ExpenseRow({ exp, fairX, fairY, monthly, categories, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, rowIndex, onCellKeyDown, onCellMouseDown, onAddCategory, onAddLinkedAccount }: ComputedRow & {
   categories: Category[];
-  budgets: Budget[];
   linkedAccounts: LinkedAccount[];
   partnerX: string;
   partnerY: string;
@@ -233,10 +230,9 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
   onCellKeyDown: (e: React.KeyboardEvent<HTMLElement>) => void;
   onCellMouseDown: (e: React.MouseEvent<HTMLElement>) => void;
   onAddCategory: (name: string) => Promise<void>;
-  onAddBudget: (name: string) => Promise<void>;
   onAddLinkedAccount: (name: string, ownerPartner?: string) => Promise<void>;
 }) {
-  const [addDialog, setAddDialog] = useState<'category' | 'budget' | 'payment_method' | null>(null);
+  const [addDialog, setAddDialog] = useState<'category' | 'payment_method' | null>(null);
   const [newItemName, setNewItemName] = useState('');
   const [newItemOwner, setNewItemOwner] = useState<'X' | 'Y'>('X');
   const [saving, setSaving] = useState(false);
@@ -261,7 +257,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
 
   const nav = { onCellKeyDown, onCellMouseDown };
 
-  const handleSelectWithAddNew = (field: string, dialogType: 'category' | 'budget' | 'payment_method') => (v: string) => {
+  const handleSelectWithAddNew = (field: string, dialogType: 'category' | 'payment_method') => (v: string) => {
     if (v === '_add_new') {
       setNewItemName('');
       setNewItemOwner('X');
@@ -276,7 +272,6 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
     setSaving(true);
     try {
       if (addDialog === 'category') await onAddCategory(newItemName.trim());
-      else if (addDialog === 'budget') await onAddBudget(newItemName.trim());
       else if (addDialog === 'payment_method') await onAddLinkedAccount(newItemName.trim(), newItemOwner);
       setAddDialog(null);
     } catch (e: any) {
@@ -285,7 +280,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
     setSaving(false);
   };
 
-  const dialogTitle = addDialog === 'category' ? 'New Category' : addDialog === 'budget' ? 'New Budget' : 'New Payment Method';
+  const dialogTitle = addDialog === 'category' ? 'New Category' : 'New Payment Method';
 
   return (
     <>
@@ -336,29 +331,11 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       </TableCell>
       <TableCell className="text-right font-medium tabular-nums text-xs">${Math.round(monthly)}</TableCell>
       <TableCell>
-        <Select value={exp.budget_id ?? '_none'} onValueChange={handleSelectWithAddNew('budget_id', 'budget')}>
-          <SelectTrigger
-            className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
-            style={{ backgroundColor: budgets.find(b => b.id === exp.budget_id)?.color || 'transparent' }}
-            data-row={rowIndex} data-col={6} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_none">—</SelectItem>
-            {budgets.map(b => (
-              <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-            ))}
-            <SelectItem value="_add_new" className="text-primary font-medium"><Plus className="inline h-3 w-3 mr-1" />Add New</SelectItem>
-          </SelectContent>
-        </Select>
-      </TableCell>
-      <TableCell>
         <Select value={exp.linked_account_id ?? '_none'} onValueChange={handleSelectWithAddNew('linked_account_id', 'payment_method')}>
           <SelectTrigger
             className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
             style={{ backgroundColor: linkedAccounts.find(la => la.id === exp.linked_account_id)?.color || 'transparent' }}
-            data-row={rowIndex} data-col={7} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}
+            data-row={rowIndex} data-col={6} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}
           >
             <SelectValue>
               {exp.linked_account_id ? linkedAccounts.find(la => la.id === exp.linked_account_id)?.name ?? '—' : '—'}
@@ -462,7 +439,7 @@ function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] 
       </TableCell>
       <TableCell colSpan={4} className="bg-muted" />
       <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(groupMonthly)}</TableCell>
-      <TableCell colSpan={4} className="bg-muted" />
+      <TableCell colSpan={3} className="bg-muted" />
       <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(groupFairX)}</TableCell>
       <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(groupFairY)}</TableCell>
       <TableCell className="bg-muted" />
@@ -470,7 +447,7 @@ function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] 
   );
 }
 
-export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, incomes, partnerX, partnerY, partnerXColor, partnerYColor, onAdd, onUpdate, onRemove, onAddCategory, onAddBudget, onAddLinkedAccount }: ExpensesTabProps) {
+export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, partnerX, partnerY, partnerXColor, partnerYColor, onAdd, onUpdate, onRemove, onAddCategory, onAddLinkedAccount }: ExpensesTabProps) {
   const [adding, setAdding] = useState(false);
   const [filterPayer, setFilterPayer] = useState<'all' | 'X' | 'Y'>(() => (localStorage.getItem('expenses_filterPayer') as 'all' | 'X' | 'Y') || 'all');
   const [groupBy, setGroupBy] = useState<GroupByOption>(() => (localStorage.getItem('expenses_groupBy') as GroupByOption) || 'none');
@@ -544,7 +521,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
       else if (field === 'benefit_x') updates.benefit_x = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
       else if (field === 'frequency_param') updates.frequency_param = value ? Number(value) : null;
       else if (field === 'category_id') updates.category_id = value === '_none' ? null : value;
-      else if (field === 'budget_id') updates.budget_id = value === '_none' ? null : value;
+      
       else if (field === 'linked_account_id') {
         const accountId = value === '_none' ? null : value;
         updates.linked_account_id = accountId;
@@ -602,7 +579,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
         case 'frequency': cmp = a.exp.frequency_type.localeCompare(b.exp.frequency_type); break;
         
         case 'monthly': cmp = a.monthly - b.monthly; break;
-        case 'budget': cmp = resolveName(a.exp.budget_id, budgets).localeCompare(resolveName(b.exp.budget_id, budgets)); break;
+        
         case 'payment_method': cmp = resolveName(a.exp.linked_account_id, linkedAccounts).localeCompare(resolveName(b.exp.linked_account_id, linkedAccounts)); break;
         case 'payer': cmp = a.exp.payer.localeCompare(b.exp.payer); break;
         case 'benefit_x': cmp = a.exp.benefit_x - b.exp.benefit_x; break;
@@ -620,8 +597,8 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
     switch (groupBy) {
       case 'category':
         return row.exp.category_id ?? '_ungrouped';
-      case 'budget':
-        return row.exp.budget_id ?? '_ungrouped';
+      case 'estimated':
+        return row.exp.is_estimate ? 'Estimated' : 'Actual';
       case 'payer':
         return row.exp.payer;
       case 'payment_method':
@@ -636,8 +613,8 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
     switch (groupBy) {
       case 'category':
         return categories.find(c => c.id === key)?.name ?? 'Uncategorized';
-      case 'budget':
-        return budgets.find(b => b.id === key)?.name ?? 'Uncategorized';
+      case 'estimated':
+        return key;
       case 'payer':
         return key === 'X' ? partnerX : partnerY;
       case 'payment_method':
@@ -660,10 +637,10 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
       if (b[0] === '_ungrouped') return -1;
       return getGroupLabel(a[0]).localeCompare(getGroupLabel(b[0]));
     });
-  }, [groupBy, rows, categories, budgets, linkedAccounts, partnerX, partnerY]);
+  }, [groupBy, rows, categories, linkedAccounts, partnerX, partnerY]);
 
   const { tableRef, onCellKeyDown, onCellMouseDown } = useSpreadsheetNav();
-  const sharedRowProps = { categories, budgets, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, onCellKeyDown, onCellMouseDown, onAddCategory, onAddBudget, onAddLinkedAccount };
+  const sharedRowProps = { categories, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, onCellKeyDown, onCellMouseDown, onAddCategory, onAddLinkedAccount };
 
   return (
     <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2 rounded-none border-x-0">
@@ -690,7 +667,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
               <SelectContent>
                 <SelectItem value="none">No grouping</SelectItem>
                 <SelectItem value="category">Group by Category</SelectItem>
-                <SelectItem value="budget">Group by Budget</SelectItem>
+                <SelectItem value="estimated">Group by Estimated</SelectItem>
                 <SelectItem value="payer">Group by Payer</SelectItem>
                 <SelectItem value="payment_method">Group by Payment Method</SelectItem>
               </SelectContent>
@@ -709,11 +686,20 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
                 <SortableHead column="name" label="Name" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[120px] sm:min-w-[200px] sticky left-0 z-40 bg-card" />
                 <SortableHead column="category" label="Category" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
                 <SortableHead column="amount" label="Amount" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
-                <SortableHead column="estimate" label="Est." current={sortCol} dir={sortDir} onSort={toggleSort} className="text-center" />
+                <TableHead className="text-center cursor-pointer select-none hover:bg-muted/50" onClick={() => toggleSort('estimate')}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center gap-1">
+                        Est
+                        {sortCol === 'estimate' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Expense is estimated</TooltipContent>
+                  </Tooltip>
+                </TableHead>
                 <SortableHead column="frequency" label="Frequency" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[185px]" />
                 
                 <SortableHead column="monthly" label="Monthly" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
-                <SortableHead column="budget" label="Budget" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
                 <SortableHead column="payment_method" label="Payment Method" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
                 <SortableHead column="payer" label="Payer" current={sortCol} dir={sortDir} onSort={toggleSort} />
                 <SortableHead column="benefit_x" label={`${partnerX} %`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
@@ -726,7 +712,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
             <TableBody>
               {rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
                     No expenses yet. Click "Add row" to start.
                   </TableCell>
                 </TableRow>
@@ -755,7 +741,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
                   <TableCell className="font-semibold text-xs sticky left-0 z-10 bg-muted">Totals</TableCell>
                   <TableCell colSpan={4} className="bg-muted" />
                   <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(totalMonthly)}</TableCell>
-                  <TableCell colSpan={5} className="bg-muted" />
+                  <TableCell colSpan={4} className="bg-muted" />
                   <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(totalFairX)}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(totalFairY)}</TableCell>
                   <TableCell className="bg-muted" />
