@@ -212,7 +212,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
   const ratioX = total > 0 ? (xTotal / total * 100) : 50;
 
   return (
-    <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2">
+    <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2 rounded-none border-x-0">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>

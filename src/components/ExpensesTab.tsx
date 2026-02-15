@@ -585,7 +585,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
   const sharedRowProps = { categories, budgets, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, onCellKeyDown, onCellMouseDown };
 
   return (
-    <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2">
+    <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2 rounded-none border-x-0">
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
