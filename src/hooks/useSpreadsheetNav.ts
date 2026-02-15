@@ -122,14 +122,24 @@ export function useSpreadsheetNav() {
       });
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const maxRow = getMaxRow();
-      if (row >= maxRow) return;
-      if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
+      if (e.shiftKey) {
+        if (row <= 0) return;
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+        requestAnimationFrame(() => {
+          focusCell(row - 1, col);
+        });
+      } else {
+        const maxRow = getMaxRow();
+        if (row >= maxRow) return;
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+        requestAnimationFrame(() => {
+          focusCell(row + 1, col);
+        });
       }
-      requestAnimationFrame(() => {
-        focusCell(row + 1, col);
-      });
     }
   }, [findNextCol, findPrevCol, focusCell, getMaxRow]);
 
