@@ -92,7 +92,7 @@ function EditableCell({ value, onChange, type = 'text', className = '', min, max
         else if (e.key === 'Enter') ref.current?.blur();
       }}
       onMouseDown={onCellMouseDown}
-      className={`h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-primary !text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
+      className={`h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring !text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
     />
   );
 }
@@ -128,7 +128,7 @@ function CurrencyCell({ value, onChange, className = '', 'data-row': dataRow, 'd
           }}
           onMouseDown={onCellMouseDown}
           autoFocus
-          className={`h-7 w-full border-transparent bg-transparent px-1 hover:border-border focus:border-primary !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
+          className={`h-7 w-full border-transparent bg-transparent px-1 hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
         />
       ) : (
         <button
@@ -186,7 +186,7 @@ function PercentCell({ value, onChange, className = '', 'data-row': dataRow, 'da
           }}
           onMouseDown={onCellMouseDown}
           autoFocus
-          className={`h-7 w-full border-transparent bg-transparent px-1 hover:border-border focus:border-primary !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
+          className={`h-7 w-full border-transparent bg-transparent px-1 hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
         />
       ) : (
         <button
