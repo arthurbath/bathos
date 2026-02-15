@@ -393,10 +393,12 @@ function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] 
 
 export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, incomes, partnerX, partnerY, partnerXColor, partnerYColor, onAdd, onUpdate, onRemove }: ExpensesTabProps) {
   const [adding, setAdding] = useState(false);
+  const [filterPayer, setFilterPayer] = useState<'all' | 'X' | 'Y'>(() => (localStorage.getItem('expenses_filterPayer') as 'all' | 'X' | 'Y') || 'all');
   const [groupBy, setGroupBy] = useState<GroupByOption>(() => (localStorage.getItem('expenses_groupBy') as GroupByOption) || 'none');
   const [sortCol, setSortCol] = useState<SortColumn>(() => (localStorage.getItem('expenses_sortCol') as SortColumn) || 'name');
   const [sortDir, setSortDir] = useState<SortDir>(() => (localStorage.getItem('expenses_sortDir') as SortDir) || 'asc');
 
+  useEffect(() => { localStorage.setItem('expenses_filterPayer', filterPayer); }, [filterPayer]);
   useEffect(() => { localStorage.setItem('expenses_groupBy', groupBy); }, [groupBy]);
   useEffect(() => { localStorage.setItem('expenses_sortCol', sortCol); }, [sortCol]);
   useEffect(() => { localStorage.setItem('expenses_sortDir', sortDir); }, [sortDir]);
@@ -493,8 +495,10 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
     }
   };
 
+  const filteredExpenses = filterPayer === 'all' ? expenses : expenses.filter(e => e.payer === filterPayer);
+
   let totalFairX = 0, totalFairY = 0, totalMonthly = 0;
-  const unsortedRows: ComputedRow[] = expenses.map(exp => {
+  const unsortedRows: ComputedRow[] = filteredExpenses.map(exp => {
     const { fairX, fairY, monthly } = computeFairShare(exp);
     totalFairX += fairX;
     totalFairY += fairY;
@@ -589,6 +593,16 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
             <CardDescription>Click any cell to edit. Changes save automatically.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
+            <Select value={filterPayer} onValueChange={v => setFilterPayer(v as 'all' | 'X' | 'Y')}>
+              <SelectTrigger className="h-8 w-36 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All partners</SelectItem>
+                <SelectItem value="X">{partnerX} only</SelectItem>
+                <SelectItem value="Y">{partnerY} only</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={groupBy} onValueChange={v => setGroupBy(v as GroupByOption)}>
               <SelectTrigger className="h-8 w-44 text-xs">
                 <SelectValue placeholder="Group by…" />
@@ -601,8 +615,8 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
                 <SelectItem value="payment_method">Group by Payment Method</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={handleAdd} disabled={adding} size="sm" className="gap-1.5">
-              <Plus className="h-4 w-4" /> Add row
+            <Button onClick={handleAdd} disabled={adding} variant="outline" size="sm" className="h-8 gap-1.5">
+              <Plus className="h-4 w-4" /> Add
             </Button>
           </div>
         </div>
