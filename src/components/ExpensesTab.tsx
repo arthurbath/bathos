@@ -590,7 +590,6 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <CardTitle>Expenses</CardTitle>
-            <CardDescription>Click any cell to edit. Changes save automatically.</CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={filterPayer} onValueChange={v => setFilterPayer(v as 'all' | 'X' | 'Y')}>

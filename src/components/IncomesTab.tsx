@@ -217,7 +217,6 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
         <div className="flex items-center justify-between">
           <div>
             <CardTitle>Income Streams</CardTitle>
-            <CardDescription>Click any cell to edit. Changes save automatically.</CardDescription>
           </div>
           <Button onClick={handleAdd} disabled={adding} variant="outline" size="sm" className="h-8 gap-1.5">
             <Plus className="h-4 w-4" /> Add
