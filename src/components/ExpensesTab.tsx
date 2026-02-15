@@ -378,15 +378,16 @@ function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] 
   const groupFairX = rows.reduce((s, r) => s + r.fairX, 0);
   const groupFairY = rows.reduce((s, r) => s + r.fairY, 0);
   return (
-    <TableRow className="bg-muted/30">
-      <TableCell colSpan={6} className="sticky left-0 z-10 bg-muted/30 font-semibold text-xs">
+    <TableRow className="bg-muted sticky top-[37px] z-20">
+      <TableCell className="sticky left-0 z-10 bg-muted font-semibold text-xs">
         {label}
       </TableCell>
-      <TableCell className="text-right font-semibold tabular-nums text-xs">${Math.round(groupMonthly)}</TableCell>
-      <TableCell colSpan={5} />
-      <TableCell className="text-right font-semibold tabular-nums text-xs">${Math.round(groupFairX)}</TableCell>
-      <TableCell className="text-right font-semibold tabular-nums text-xs">${Math.round(groupFairY)}</TableCell>
-      <TableCell />
+      <TableCell colSpan={5} className="bg-muted" />
+      <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(groupMonthly)}</TableCell>
+      <TableCell colSpan={5} className="bg-muted" />
+      <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(groupFairX)}</TableCell>
+      <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(groupFairY)}</TableCell>
+      <TableCell className="bg-muted" />
     </TableRow>
   );
 }
