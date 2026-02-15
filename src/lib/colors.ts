@@ -7,7 +7,7 @@ export const COLOR_PALETTE = [
   '#a5f3fc', // cyan-200
   '#bfdbfe', // blue-200
   '#c7d2fe', // indigo-200
-  '#ddd6fe', // violet-200
+  '#ede9fe', // violet-100
   '#fbcfe8', // pink-200
   '#e5e7eb', // gray-200
 ] as const;
