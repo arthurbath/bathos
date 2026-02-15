@@ -334,12 +334,16 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
         </Select>
       </TableCell>
       <TableCell>
-        <span
-          className="text-xs px-1.5 py-0.5 rounded-sm"
-          style={{ backgroundColor: (exp.payer === 'X' ? partnerXColor : partnerYColor) || 'transparent' }}
-        >
-          {exp.payer === 'X' ? partnerX : partnerY}
-        </span>
+        {exp.payer ? (
+          <span
+            className="text-xs px-1.5 py-0.5 rounded-sm"
+            style={{ backgroundColor: (exp.payer === 'X' ? partnerXColor : partnerYColor) || 'transparent' }}
+          >
+            {exp.payer === 'X' ? partnerX : partnerY}
+          </span>
+        ) : (
+          <span className="text-muted-foreground text-xs px-1">—</span>
+        )}
       </TableCell>
       <TableCell>
         <PercentCell value={localBenefitX} onChange={handleBenefitXChange} className="text-right w-16" min={0} max={100} data-row={rowIndex} data-col={10} {...nav} />
@@ -435,7 +439,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
       await onAdd({
         name: '',
         amount: 0,
-        payer: 'X',
+        payer: null,
         benefit_x: 50,
         category_id: null,
         budget_id: null,
@@ -473,6 +477,8 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
         if (accountId) {
           const account = linkedAccounts.find(la => la.id === accountId);
           if (account) updates.payer = account.owner_partner;
+        } else {
+          updates.payer = null;
         }
       }
       else updates[field] = value;
