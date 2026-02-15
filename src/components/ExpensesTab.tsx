@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { Plus, Trash2, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels } from '@/lib/frequency';
@@ -30,6 +32,9 @@ interface ExpensesTabProps {
   onAdd: (expense: Omit<Expense, 'id' | 'household_id'>) => Promise<void>;
   onUpdate: (id: string, updates: Partial<Omit<Expense, 'id' | 'household_id'>>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
+  onAddCategory: (name: string) => Promise<void>;
+  onAddBudget: (name: string) => Promise<void>;
+  onAddLinkedAccount: (name: string, ownerPartner?: string) => Promise<void>;
 }
 
 const FREQ_OPTIONS: FrequencyType[] = ['monthly', 'twice_monthly', 'weekly', 'every_n_weeks', 'annual', 'k_times_annually'];
@@ -213,7 +218,7 @@ interface ComputedRow {
   monthly: number;
 }
 
-function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, rowIndex, onCellKeyDown, onCellMouseDown }: ComputedRow & {
+function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, rowIndex, onCellKeyDown, onCellMouseDown, onAddCategory, onAddBudget, onAddLinkedAccount }: ComputedRow & {
   categories: Category[];
   budgets: Budget[];
   linkedAccounts: LinkedAccount[];
@@ -227,7 +232,14 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
   rowIndex: number;
   onCellKeyDown: (e: React.KeyboardEvent<HTMLElement>) => void;
   onCellMouseDown: (e: React.MouseEvent<HTMLElement>) => void;
+  onAddCategory: (name: string) => Promise<void>;
+  onAddBudget: (name: string) => Promise<void>;
+  onAddLinkedAccount: (name: string, ownerPartner?: string) => Promise<void>;
 }) {
+  const [addDialog, setAddDialog] = useState<'category' | 'budget' | 'payment_method' | null>(null);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemOwner, setNewItemOwner] = useState<'X' | 'Y'>('X');
+  const [saving, setSaving] = useState(false);
   const [localBenefitX, setLocalBenefitX] = useState(exp.benefit_x);
 
   useEffect(() => {
@@ -249,13 +261,40 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
 
   const nav = { onCellKeyDown, onCellMouseDown };
 
+  const handleSelectWithAddNew = (field: string, dialogType: 'category' | 'budget' | 'payment_method') => (v: string) => {
+    if (v === '_add_new') {
+      setNewItemName('');
+      setNewItemOwner('X');
+      setAddDialog(dialogType);
+    } else {
+      handleUpdate(exp.id, field, v);
+    }
+  };
+
+  const handleSaveNewItem = async () => {
+    if (!newItemName.trim()) return;
+    setSaving(true);
+    try {
+      if (addDialog === 'category') await onAddCategory(newItemName.trim());
+      else if (addDialog === 'budget') await onAddBudget(newItemName.trim());
+      else if (addDialog === 'payment_method') await onAddLinkedAccount(newItemName.trim(), newItemOwner);
+      setAddDialog(null);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    }
+    setSaving(false);
+  };
+
+  const dialogTitle = addDialog === 'category' ? 'New Category' : addDialog === 'budget' ? 'New Budget' : 'New Payment Method';
+
   return (
+    <>
     <TableRow>
       <TableCell className="sticky left-0 z-10 bg-background">
         <EditableCell value={exp.name} onChange={v => handleUpdate(exp.id, 'name', v)} data-row={rowIndex} data-col={0} {...nav} />
       </TableCell>
       <TableCell>
-        <Select value={exp.category_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'category_id', v)}>
+        <Select value={exp.category_id ?? '_none'} onValueChange={handleSelectWithAddNew('category_id', 'category')}>
           <SelectTrigger
             className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
             style={{ backgroundColor: categories.find(c => c.id === exp.category_id)?.color || 'transparent' }}
@@ -268,6 +307,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
             {categories.map(c => (
               <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
             ))}
+            <SelectItem value="_add_new" className="text-primary font-medium"><Plus className="inline h-3 w-3 mr-1" />Add New</SelectItem>
           </SelectContent>
         </Select>
       </TableCell>
@@ -296,7 +336,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       </TableCell>
       <TableCell className="text-right font-medium tabular-nums text-xs">${Math.round(monthly)}</TableCell>
       <TableCell>
-        <Select value={exp.budget_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'budget_id', v)}>
+        <Select value={exp.budget_id ?? '_none'} onValueChange={handleSelectWithAddNew('budget_id', 'budget')}>
           <SelectTrigger
             className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
             style={{ backgroundColor: budgets.find(b => b.id === exp.budget_id)?.color || 'transparent' }}
@@ -309,11 +349,12 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
             {budgets.map(b => (
               <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
             ))}
+            <SelectItem value="_add_new" className="text-primary font-medium"><Plus className="inline h-3 w-3 mr-1" />Add New</SelectItem>
           </SelectContent>
         </Select>
       </TableCell>
       <TableCell>
-        <Select value={exp.linked_account_id ?? '_none'} onValueChange={v => handleUpdate(exp.id, 'linked_account_id', v)}>
+        <Select value={exp.linked_account_id ?? '_none'} onValueChange={handleSelectWithAddNew('linked_account_id', 'payment_method')}>
           <SelectTrigger
             className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
             style={{ backgroundColor: linkedAccounts.find(la => la.id === exp.linked_account_id)?.color || 'transparent' }}
@@ -330,6 +371,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
                 {la.name} <span className="text-muted-foreground group-focus:text-accent-foreground">({la.owner_partner === 'X' ? partnerX : partnerY})</span>
               </SelectItem>
             ))}
+            <SelectItem value="_add_new" className="text-primary font-medium"><Plus className="inline h-3 w-3 mr-1" />Add New</SelectItem>
           </SelectContent>
         </Select>
       </TableCell>
@@ -375,6 +417,38 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
         </AlertDialog>
       </TableCell>
     </TableRow>
+      <Dialog open={addDialog !== null} onOpenChange={open => { if (!open) setAddDialog(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{dialogTitle}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="new-item-name">Name</Label>
+              <Input id="new-item-name" value={newItemName} onChange={e => setNewItemName(e.target.value)} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleSaveNewItem(); }} />
+            </div>
+            {addDialog === 'payment_method' && (
+              <div className="space-y-1.5">
+                <Label>Owner</Label>
+                <Select value={newItemOwner} onValueChange={v => setNewItemOwner(v as 'X' | 'Y')}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="X">{partnerX}</SelectItem>
+                    <SelectItem value="Y">{partnerY}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddDialog(null)}>Cancel</Button>
+            <Button onClick={handleSaveNewItem} disabled={saving || !newItemName.trim()}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] }) {
@@ -396,7 +470,7 @@ function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] 
   );
 }
 
-export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, incomes, partnerX, partnerY, partnerXColor, partnerYColor, onAdd, onUpdate, onRemove }: ExpensesTabProps) {
+export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, incomes, partnerX, partnerY, partnerXColor, partnerYColor, onAdd, onUpdate, onRemove, onAddCategory, onAddBudget, onAddLinkedAccount }: ExpensesTabProps) {
   const [adding, setAdding] = useState(false);
   const [filterPayer, setFilterPayer] = useState<'all' | 'X' | 'Y'>(() => (localStorage.getItem('expenses_filterPayer') as 'all' | 'X' | 'Y') || 'all');
   const [groupBy, setGroupBy] = useState<GroupByOption>(() => (localStorage.getItem('expenses_groupBy') as GroupByOption) || 'none');
@@ -589,7 +663,7 @@ export function ExpensesTab({ expenses, categories, budgets, linkedAccounts, inc
   }, [groupBy, rows, categories, budgets, linkedAccounts, partnerX, partnerY]);
 
   const { tableRef, onCellKeyDown, onCellMouseDown } = useSpreadsheetNav();
-  const sharedRowProps = { categories, budgets, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, onCellKeyDown, onCellMouseDown };
+  const sharedRowProps = { categories, budgets, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, onCellKeyDown, onCellMouseDown, onAddCategory, onAddBudget, onAddLinkedAccount };
 
   return (
     <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2 rounded-none border-x-0">

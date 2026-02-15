@@ -176,6 +176,9 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             onAdd={addExpense}
             onUpdate={updateExpense}
             onRemove={removeExpense}
+            onAddCategory={addCategory}
+            onAddBudget={addBudget}
+            onAddLinkedAccount={addLinkedAccount}
           />
         )}
         {location.pathname === '/summary' && (
