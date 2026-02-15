@@ -352,7 +352,7 @@ function ExpenseRow({ exp, fairX, fairY, monthly, categories, budgets, linkedAcc
       <TableCell>
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7">
+            <Button variant="ghost-destructive" size="icon" className="h-7 w-7">
               <Trash2 className="h-3.5 w-3.5 text-destructive" />
             </Button>
           </AlertDialogTrigger>

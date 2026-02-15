@@ -111,7 +111,7 @@ export function RestoreTab({ points, incomes, expenses, categories, onSave, onRe
                         <Button variant="outline" size="sm" className="gap-1" onClick={() => setRestoreTarget(pt)}>
                           <RotateCcw className="h-3.5 w-3.5" /> Restore
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleRemove(pt.id)}>
+                        <Button variant="ghost-destructive" size="icon" onClick={() => handleRemove(pt.id)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </TableCell>

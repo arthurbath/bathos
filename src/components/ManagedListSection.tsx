@@ -205,13 +205,13 @@ export function ManagedListSection({ title, description, items, getUsageCount, o
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         {count > 0 && onReassign ? (
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteClick(item)}>
+                          <Button variant="ghost-destructive" size="icon" className="h-7 w-7" onClick={() => handleDeleteClick(item)}>
                             <Trash2 className="h-3.5 w-3.5 text-destructive" />
                           </Button>
                         ) : (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <Button variant="ghost-destructive" size="icon" className="h-7 w-7">
                                 <Trash2 className="h-3.5 w-3.5 text-destructive" />
                               </Button>
                             </AlertDialogTrigger>

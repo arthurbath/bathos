@@ -156,7 +156,7 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(cat)}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteClick(cat)}>
+                          <Button variant="ghost-destructive" size="icon" className="h-7 w-7" onClick={() => handleDeleteClick(cat)}>
                             <Trash2 className="h-3.5 w-3.5 text-destructive" />
                           </Button>
                         </TableCell>
