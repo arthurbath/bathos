@@ -46,12 +46,13 @@ function SortableHead({ column, label, current, dir, onSort, className = '' }: {
   );
 }
 
-function EditableCell({ value, onChange, type = 'text', className = '', autoFocus = false, 'data-row': dataRow, 'data-col': dataCol, onCellKeyDown, onCellMouseDown }: {
+function EditableCell({ value, onChange, type = 'text', className = '', autoFocus = false, placeholder, 'data-row': dataRow, 'data-col': dataCol, onCellKeyDown, onCellMouseDown }: {
   value: string | number;
   onChange: (v: string) => void;
   type?: string;
   className?: string;
   autoFocus?: boolean;
+  placeholder?: string;
   'data-row'?: number;
   'data-col'?: number;
   onCellKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
@@ -66,6 +67,7 @@ function EditableCell({ value, onChange, type = 'text', className = '', autoFocu
       ref={ref}
       type={type}
       value={local}
+      placeholder={placeholder}
       autoFocus={autoFocus}
       data-row={dataRow}
       data-col={dataCol}
@@ -289,6 +291,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                           onChange={v => handleUpdate(inc.id, 'frequency_param', v)}
                           type="number"
                           className="text-left w-8 shrink-0"
+                          placeholder="X"
                           data-row={rowIndex}
                           data-col={4}
                           onCellKeyDown={onCellKeyDown}
