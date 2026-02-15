@@ -24,7 +24,7 @@ interface IncomesTabProps {
 const FREQ_OPTIONS: FrequencyType[] = ['monthly', 'twice_monthly', 'weekly', 'every_n_weeks', 'annual', 'k_times_annually'];
 const NEEDS_PARAM: Set<FrequencyType> = new Set(['every_n_weeks', 'k_times_annually']);
 
-type SortColumn = 'partner' | 'name' | 'amount' | 'frequency' | 'param' | 'monthly';
+type SortColumn = 'partner' | 'name' | 'amount' | 'frequency' | 'monthly';
 type SortDir = 'asc' | 'desc';
 
 function SortableHead({ column, label, current, dir, onSort, className = '' }: {
@@ -196,7 +196,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
         case 'partner': cmp = a.partner_label.localeCompare(b.partner_label); break;
         case 'amount': cmp = a.amount - b.amount; break;
         case 'frequency': cmp = a.frequency_type.localeCompare(b.frequency_type); break;
-        case 'param': cmp = (a.frequency_param ?? 0) - (b.frequency_param ?? 0); break;
+        
         case 'monthly':
           cmp = toMonthly(a.amount, a.frequency_type, a.frequency_param ?? undefined)
               - toMonthly(b.amount, b.frequency_type, b.frequency_param ?? undefined);
@@ -231,8 +231,8 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                 <SortableHead column="name" label="Name" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[200px] sticky left-0 z-40 bg-card" />
                 <SortableHead column="partner" label="Partner" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
                 <SortableHead column="amount" label="Amount" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
-                <SortableHead column="frequency" label="Frequency" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[150px]" />
-                <SortableHead column="param" label="Param" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
+                <SortableHead column="frequency" label="Frequency" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[185px]" />
+                <SortableHead column="monthly" label="Monthly" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
                 <SortableHead column="monthly" label="Monthly" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
                 <TableHead className="w-10" />
               </TableRow>
@@ -240,7 +240,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
             <TableBody>
               {rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     No income streams yet. Click "Add row" to start.
                   </TableCell>
                 </TableRow>
@@ -272,32 +272,30 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                     <CurrencyCell value={Number(inc.amount)} onChange={v => handleUpdate(inc.id, 'amount', v)} className="text-right" data-row={rowIndex} data-col={2} onCellKeyDown={onCellKeyDown} onCellMouseDown={onCellMouseDown} />
                   </TableCell>
                   <TableCell>
-                    <Select value={inc.frequency_type} onValueChange={v => handleUpdate(inc.id, 'frequency_type', v)}>
-                      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={3} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FREQ_OPTIONS.map(f => (
-                          <SelectItem key={f} value={f}>{frequencyLabels[f]}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    {NEEDS_PARAM.has(inc.frequency_type) ? (
-                      <EditableCell
-                        value={inc.frequency_param ?? ''}
-                        onChange={v => handleUpdate(inc.id, 'frequency_param', v)}
-                        type="number"
-                        className="text-right w-16"
-                        data-row={rowIndex}
-                        data-col={4}
-                        onCellKeyDown={onCellKeyDown}
-                        onCellMouseDown={onCellMouseDown}
-                      />
-                    ) : (
-                      <span className="text-muted-foreground text-xs px-1">—</span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      <Select value={inc.frequency_type} onValueChange={v => handleUpdate(inc.id, 'frequency_type', v)}>
+                        <SelectTrigger className="h-7 min-w-0 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={3} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FREQ_OPTIONS.map(f => (
+                            <SelectItem key={f} value={f}>{frequencyLabels[f]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {NEEDS_PARAM.has(inc.frequency_type) && (
+                        <EditableCell
+                          value={inc.frequency_param ?? ''}
+                          onChange={v => handleUpdate(inc.id, 'frequency_param', v)}
+                          type="number"
+                          className="text-left w-8 shrink-0"
+                          data-row={rowIndex}
+                          data-col={4}
+                          onCellKeyDown={onCellKeyDown}
+                          onCellMouseDown={onCellMouseDown}
+                        />
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right font-medium tabular-nums text-xs">
                     ${Math.round(toMonthly(inc.amount, inc.frequency_type, inc.frequency_param ?? undefined))}
@@ -330,7 +328,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
               <TableFooter>
                 <TableRow className="bg-muted">
                   <TableCell className="font-semibold text-xs sticky left-0 z-10 bg-muted">Totals</TableCell>
-                  <TableCell colSpan={4} className="text-xs bg-muted">
+                  <TableCell colSpan={3} className="text-xs bg-muted">
                     {partnerX}: ${Math.round(xTotal)} · {partnerY}: ${Math.round(yTotal)}
                   </TableCell>
                   <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(total)}</TableCell>
@@ -338,7 +336,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
                 </TableRow>
                 <TableRow>
                   <TableCell className="text-xs text-muted-foreground sticky left-0 z-10 bg-muted">Income ratio: {partnerX} {ratioX.toFixed(0)}% / {partnerY} {(100 - ratioX).toFixed(0)}%</TableCell>
-                  <TableCell colSpan={6} className="bg-muted" />
+                  <TableCell colSpan={5} className="bg-muted" />
                 </TableRow>
               </TableFooter>
             )}
