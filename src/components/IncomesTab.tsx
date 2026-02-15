@@ -227,7 +227,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
       </CardHeader>
       <CardContent className="px-0 pb-0">
         <div className="overflow-auto max-h-[calc(100vh-14rem)]" ref={tableRef}>
-          <Table className="text-xs">
+          <Table className="text-xs w-full table-fixed">
             <TableHeader className="sticky top-0 z-30 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
               <TableRow>
                 <SortableHead column="name" label="Name" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[200px] sticky left-0 z-40 bg-card" />
