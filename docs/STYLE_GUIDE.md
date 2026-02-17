@@ -22,7 +22,7 @@ Never use colors purely for decoration. Every color must carry meaning.
 ## Typography
 
 - Body: Inter (system-ui fallback)
-- Emoji: Noto Emoji (via `font-noto-emoji` class)
+- Icons: Lucide React (inline SVGs, tree-shakable)
 - No custom display fonts. Let the content speak.
 
 ## Voice
@@ -32,12 +32,11 @@ Never use colors purely for decoration. Every color must carry meaning.
 - No marketing language in the UI
 - Helper text is used sparingly — prefer self-evident UI
 
-## Emoji Usage
+## Icons
 
-- Emojis render via the Noto Emoji font for cross-platform consistency
-- Apply `font-noto-emoji` class to emoji-containing elements
-- Emojis serve as iconography for buttons, labels, and identifiers
-- Use sparingly. Not every element needs an emoji.
+- All iconography uses Lucide React (`lucide-react`)
+- Icons are inline SVGs — no image files, no emoji
+- Use sparingly. Not every element needs an icon.
 
 ## Spacing and Sizing
 
