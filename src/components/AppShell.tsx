@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { DollarSign, PieChart, BarChart3, Settings, History, LogOut } from 'lucide-react';
+import { DollarSign, PieChart, BarChart3, Settings, History, LogOut, User } from 'lucide-react';
+import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import type { HouseholdData } from '@/hooks/useHouseholdData';
@@ -30,6 +31,7 @@ interface AppShellProps {
 export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onUpdatePartnerNames, onUpdatePartnerColors }: AppShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const basePath = useModuleBasePath();
   const { incomes, add: addIncome, update: updateIncome, remove: removeIncome, refetch: refetchIncomes } = useIncomes(household.householdId);
   const { expenses, add: addExpense, update: updateExpense, remove: removeExpense, refetch: refetchExpenses } = useExpenses(household.householdId);
   const { categories, add: addCategory, update: updateCategory, updateColor: updateCategoryColor, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
@@ -39,7 +41,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
 
   const handleReassignCategory = async (oldId: string, newId: string | null) => {
     const { error } = await supabase
-      .from('expenses')
+      .from('budget_expenses')
       .update({ category_id: newId })
       .eq('household_id', household.householdId)
       .eq('category_id', oldId);
@@ -50,7 +52,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
 
   const handleReassignLinkedAccount = async (oldId: string, newId: string | null) => {
     const { error } = await supabase
-      .from('expenses')
+      .from('budget_expenses')
       .update({ linked_account_id: newId })
       .eq('household_id', household.householdId)
       .eq('linked_account_id', oldId);
@@ -60,7 +62,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
 
   const handleSyncPayerForAccount = async (accountId: string, ownerPartner: string) => {
     const { error } = await supabase
-      .from('expenses')
+      .from('budget_expenses')
       .update({ payer: ownerPartner })
       .eq('household_id', household.householdId)
       .eq('linked_account_id', accountId);
@@ -72,17 +74,17 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
     const snap = data as { incomes?: any[]; expenses?: any[]; categories?: any[] };
     const hid = household.householdId;
 
-    await supabase.from('expenses').delete().eq('household_id', hid);
-    await supabase.from('income_streams').delete().eq('household_id', hid);
-    await supabase.from('categories').delete().eq('household_id', hid);
+    await supabase.from('budget_expenses').delete().eq('household_id', hid);
+    await supabase.from('budget_income_streams').delete().eq('household_id', hid);
+    await supabase.from('budget_categories').delete().eq('household_id', hid);
 
     if (snap.categories?.length) {
-      await supabase.from('categories').insert(
+      await supabase.from('budget_categories').insert(
         snap.categories.map((c: any) => ({ id: crypto.randomUUID(), household_id: hid, name: c.name }))
       );
     }
     if (snap.incomes?.length) {
-      await supabase.from('income_streams').insert(
+      await supabase.from('budget_income_streams').insert(
         snap.incomes.map((i: any) => ({
           id: crypto.randomUUID(), household_id: hid,
           name: i.name, amount: i.amount, frequency_type: i.frequency_type,
@@ -91,7 +93,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
       );
     }
     if (snap.expenses?.length) {
-      await supabase.from('expenses').insert(
+      await supabase.from('budget_expenses').insert(
         snap.expenses.map((e: any) => ({
           id: crypto.randomUUID(), household_id: hid,
           name: e.name, amount: e.amount, frequency_type: e.frequency_type,
@@ -108,11 +110,14 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card px-4 py-3">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <h1 className="text-lg font-bold tracking-tight text-foreground">Split</h1>
-          <div className="flex items-center gap-3">
+          <h1 className="text-lg font-bold tracking-tight text-foreground">Budget</h1>
+          <div className="flex items-center gap-1">
             <span className="text-sm text-muted-foreground">
-              Hi, {household.displayName}
+              {household.displayName}
             </span>
+            <Button variant="ghost" size="icon" onClick={() => navigate('/account')} title="Account">
+              <User className="h-4 w-4" />
+            </Button>
             <Button variant="ghost" size="icon" onClick={onSignOut} title="Sign out">
               <LogOut className="h-4 w-4" />
             </Button>
@@ -120,7 +125,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
         </div>
       </header>
 
-      <main className={`mx-auto max-w-5xl px-4 pt-6 space-y-6 ${location.pathname === '/expenses' || location.pathname === '/incomes' ? 'pb-0' : 'pb-6'}`}>
+      <main className={`mx-auto max-w-5xl px-4 pt-6 space-y-6 ${location.pathname.endsWith('/expenses') || location.pathname.endsWith('/incomes') ? 'pb-0' : 'pb-6'}`}>
         <nav className="grid w-full grid-cols-5 rounded-lg bg-muted p-1 text-muted-foreground">
           {([
             { path: '/summary', icon: PieChart, label: 'Summary' },
@@ -129,11 +134,12 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             { path: '/config', icon: Settings, label: 'Config' },
             { path: '/restore', icon: History, label: 'Backup' },
           ] as const).map(({ path, icon: Icon, label }) => {
-            const active = location.pathname === path;
+            const fullPath = `${basePath}${path}`;
+            const active = location.pathname === fullPath || location.pathname === path;
             return (
               <button
                 key={path}
-                onClick={() => navigate(path)}
+                onClick={() => navigate(fullPath)}
                 className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-all ${active ? 'bg-background text-foreground shadow-sm' : 'hover:bg-background/50'}`}
               >
                 <Icon className="h-4 w-4" />
@@ -143,7 +149,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
           })}
         </nav>
 
-        {location.pathname === '/incomes' && (
+        {location.pathname.endsWith('/incomes') && (
           <IncomesTab
             incomes={incomes}
             partnerX={household.partnerX}
@@ -153,7 +159,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             onRemove={removeIncome}
           />
         )}
-        {location.pathname === '/expenses' && (
+        {location.pathname.endsWith('/expenses') && (
           <ExpensesTab
             expenses={expenses}
             categories={categories}
@@ -170,7 +176,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             onAddLinkedAccount={addLinkedAccount}
           />
         )}
-        {location.pathname === '/summary' && (
+        {location.pathname.endsWith('/summary') && (
           <SummaryTab
             incomes={incomes}
             expenses={expenses}
@@ -178,7 +184,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             partnerY={household.partnerY}
           />
         )}
-        {location.pathname === '/config' && (
+        {location.pathname.endsWith('/config') && (
           <ConfigurationTab
             categories={categories}
             linkedAccounts={linkedAccounts}
@@ -203,7 +209,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             onSyncPayerForAccount={handleSyncPayerForAccount}
           />
         )}
-        {location.pathname === '/restore' && (
+        {location.pathname.endsWith('/restore') && (
           <RestoreTab
             points={points}
             incomes={incomes}

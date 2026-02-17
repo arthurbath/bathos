@@ -1,0 +1,16 @@
+{
+  "name": "BathOS",
+  "short_name": "BathOS",
+  "description": "A multi-module platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fcfcfc",
+  "theme_color": "#1f1f1f",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}

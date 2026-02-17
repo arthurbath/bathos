@@ -14,7 +14,70 @@ export type Database = {
   }
   public: {
     Tables: {
-      budgets: {
+      bathos_profiles: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      bathos_user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      bathos_user_settings: {
+        Row: {
+          created_at: string
+          id: string
+          theme: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          theme?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          theme?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      budget_budgets: {
         Row: {
           color: string | null
           created_at: string
@@ -41,12 +104,12 @@ export type Database = {
             foreignKeyName: "budgets_household_id_fkey"
             columns: ["household_id"]
             isOneToOne: false
-            referencedRelation: "households"
+            referencedRelation: "budget_households"
             referencedColumns: ["id"]
           },
         ]
       }
-      categories: {
+      budget_categories: {
         Row: {
           color: string | null
           created_at: string
@@ -73,12 +136,12 @@ export type Database = {
             foreignKeyName: "categories_household_id_fkey"
             columns: ["household_id"]
             isOneToOne: false
-            referencedRelation: "households"
+            referencedRelation: "budget_households"
             referencedColumns: ["id"]
           },
         ]
       }
-      expenses: {
+      budget_expenses: {
         Row: {
           amount: number
           benefit_x: number
@@ -129,33 +192,33 @@ export type Database = {
             foreignKeyName: "expenses_budget_id_fkey"
             columns: ["budget_id"]
             isOneToOne: false
-            referencedRelation: "budgets"
+            referencedRelation: "budget_budgets"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "expenses_category_id_fkey"
             columns: ["category_id"]
             isOneToOne: false
-            referencedRelation: "categories"
+            referencedRelation: "budget_categories"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "expenses_household_id_fkey"
             columns: ["household_id"]
             isOneToOne: false
-            referencedRelation: "households"
+            referencedRelation: "budget_households"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "expenses_linked_account_id_fkey"
             columns: ["linked_account_id"]
             isOneToOne: false
-            referencedRelation: "linked_accounts"
+            referencedRelation: "budget_linked_accounts"
             referencedColumns: ["id"]
           },
         ]
       }
-      household_members: {
+      budget_household_members: {
         Row: {
           created_at: string
           household_id: string
@@ -182,12 +245,12 @@ export type Database = {
             foreignKeyName: "household_members_household_id_fkey"
             columns: ["household_id"]
             isOneToOne: false
-            referencedRelation: "households"
+            referencedRelation: "budget_households"
             referencedColumns: ["id"]
           },
         ]
       }
-      households: {
+      budget_households: {
         Row: {
           created_at: string
           id: string
@@ -220,7 +283,7 @@ export type Database = {
         }
         Relationships: []
       }
-      income_streams: {
+      budget_income_streams: {
         Row: {
           amount: number
           created_at: string
@@ -256,12 +319,12 @@ export type Database = {
             foreignKeyName: "income_streams_household_id_fkey"
             columns: ["household_id"]
             isOneToOne: false
-            referencedRelation: "households"
+            referencedRelation: "budget_households"
             referencedColumns: ["id"]
           },
         ]
       }
-      linked_accounts: {
+      budget_linked_accounts: {
         Row: {
           color: string | null
           created_at: string
@@ -291,30 +354,12 @@ export type Database = {
             foreignKeyName: "linked_accounts_household_id_fkey"
             columns: ["household_id"]
             isOneToOne: false
-            referencedRelation: "households"
+            referencedRelation: "budget_households"
             referencedColumns: ["id"]
           },
         ]
       }
-      profiles: {
-        Row: {
-          created_at: string
-          display_name: string
-          id: string
-        }
-        Insert: {
-          created_at?: string
-          display_name: string
-          id: string
-        }
-        Update: {
-          created_at?: string
-          display_name?: string
-          id?: string
-        }
-        Relationships: []
-      }
-      restore_points: {
+      budget_restore_points: {
         Row: {
           created_at: string
           data: Json
@@ -341,7 +386,7 @@ export type Database = {
             foreignKeyName: "restore_points_household_id_fkey"
             columns: ["household_id"]
             isOneToOne: false
-            referencedRelation: "households"
+            referencedRelation: "budget_households"
             referencedColumns: ["id"]
           },
         ]
@@ -351,13 +396,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       is_household_member: {
         Args: { _household_id: string; _user_id: string }
         Returns: boolean
       }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -484,6 +536,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const

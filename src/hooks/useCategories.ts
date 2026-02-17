@@ -14,7 +14,7 @@ export function useCategories(householdId: string) {
 
   const fetch = useCallback(async () => {
     const { data } = await supabase
-      .from('categories')
+      .from('budget_categories')
       .select('*')
       .eq('household_id', householdId)
       .order('name');
@@ -26,7 +26,7 @@ export function useCategories(householdId: string) {
 
   const add = async (name: string) => {
     const id = crypto.randomUUID();
-    const { error } = await supabase.from('categories').insert({
+    const { error } = await supabase.from('budget_categories').insert({
       id,
       household_id: householdId,
       name,
@@ -36,19 +36,19 @@ export function useCategories(householdId: string) {
   };
 
   const update = async (id: string, name: string) => {
-    const { error } = await supabase.from('categories').update({ name }).eq('id', id);
+    const { error } = await supabase.from('budget_categories').update({ name }).eq('id', id);
     if (error) throw error;
     await fetch();
   };
 
   const updateColor = async (id: string, color: string | null) => {
-    const { error } = await supabase.from('categories').update({ color }).eq('id', id);
+    const { error } = await supabase.from('budget_categories').update({ color }).eq('id', id);
     if (error) throw error;
     await fetch();
   };
 
   const remove = async (id: string) => {
-    const { error } = await supabase.from('categories').delete().eq('id', id);
+    const { error } = await supabase.from('budget_categories').delete().eq('id', id);
     if (error) throw error;
     await fetch();
   };
