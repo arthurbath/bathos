@@ -433,7 +433,7 @@ function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] 
   const groupFairX = rows.reduce((s, r) => s + r.fairX, 0);
   const groupFairY = rows.reduce((s, r) => s + r.fairY, 0);
   return (
-    <TableRow className="bg-muted sticky top-[37px] z-20 border-b-0 shadow-[0_1px_0_0_hsl(var(--border))]">
+    <TableRow className="bg-muted sticky top-[36px] z-20 border-b-0 shadow-[0_1px_0_0_hsl(var(--border))]">
       <TableCell className="sticky left-0 z-10 bg-muted font-semibold text-xs">
         {label}
       </TableCell>
