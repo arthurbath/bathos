@@ -433,7 +433,7 @@ function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] 
   const groupFairX = rows.reduce((s, r) => s + r.fairX, 0);
   const groupFairY = rows.reduce((s, r) => s + r.fairY, 0);
   return (
-    <TableRow className="bg-muted sticky top-[37px] z-20">
+    <TableRow className="bg-muted sticky top-[37px] z-20 border-b-0 shadow-[0_1px_0_0_hsl(var(--border))]">
       <TableCell className="sticky left-0 z-10 bg-muted font-semibold text-xs">
         {label}
       </TableCell>
@@ -682,7 +682,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         <div className="overflow-auto max-h-[calc(100vh-14rem)]" ref={tableRef}>
           <Table className="text-xs">
             <TableHeader className="sticky top-0 z-30 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
-              <TableRow>
+              <TableRow className="border-b-0">
                 <SortableHead column="name" label="Name" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[120px] sm:min-w-[200px] sticky left-0 z-40 bg-card" />
                 <SortableHead column="category" label="Category" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
                 <SortableHead column="amount" label="Amount" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
