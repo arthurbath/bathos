@@ -16,7 +16,7 @@ export function useRestorePoints(householdId: string) {
 
   const fetch = useCallback(async () => {
     const { data } = await supabase
-      .from('restore_points')
+      .from('budget_restore_points')
       .select('*')
       .eq('household_id', householdId)
       .order('created_at', { ascending: false });
@@ -28,7 +28,7 @@ export function useRestorePoints(householdId: string) {
 
   const save = async (name: string, snapshot: Json) => {
     const id = crypto.randomUUID();
-    const { error } = await supabase.from('restore_points').insert({
+    const { error } = await supabase.from('budget_restore_points').insert({
       id,
       household_id: householdId,
       name: name || null,
@@ -39,7 +39,7 @@ export function useRestorePoints(householdId: string) {
   };
 
   const remove = async (id: string) => {
-    const { error } = await supabase.from('restore_points').delete().eq('id', id);
+    const { error } = await supabase.from('budget_restore_points').delete().eq('id', id);
     if (error) throw error;
     await fetch();
   };

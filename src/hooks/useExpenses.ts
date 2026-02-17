@@ -23,7 +23,7 @@ export function useExpenses(householdId: string) {
 
   const fetch = useCallback(async () => {
     const { data } = await supabase
-      .from('expenses')
+      .from('budget_expenses')
       .select('*')
       .eq('household_id', householdId)
       .order('created_at');
@@ -36,7 +36,7 @@ export function useExpenses(householdId: string) {
   const add = async (expense: Omit<Expense, 'id' | 'household_id'>) => {
     const id = crypto.randomUUID();
     try {
-      const { error } = await supabase.from('expenses').insert({
+      const { error } = await supabase.from('budget_expenses').insert({
         id,
         household_id: householdId,
         ...expense,
@@ -53,16 +53,14 @@ export function useExpenses(householdId: string) {
   };
 
   const update = async (id: string, updates: Partial<Omit<Expense, 'id' | 'household_id'>>) => {
-    // Optimistically update local state so UI reacts immediately
     setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
     try {
-      const { error } = await supabase.from('expenses').update(updates).eq('id', id);
+      const { error } = await supabase.from('budget_expenses').update(updates).eq('id', id);
       if (error) throw error;
       await fetch();
     } catch (e: any) {
-      // "Load failed" is a browser fetch abort from concurrent requests — not a real error
       if (e instanceof TypeError && e.message === 'Load failed') {
-        // silently ignore; optimistic state is already applied
+        // silently ignore
       } else {
         throw e;
       }
@@ -70,7 +68,7 @@ export function useExpenses(householdId: string) {
   };
 
   const remove = async (id: string) => {
-    const { error } = await supabase.from('expenses').delete().eq('id', id);
+    const { error } = await supabase.from('budget_expenses').delete().eq('id', id);
     if (error) throw error;
     await fetch();
   };

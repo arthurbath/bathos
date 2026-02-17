@@ -3,6 +3,12 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "@/platform/contexts/AuthContext";
+import { useHostModule } from "@/platform/hooks/useHostModule";
+import LauncherPage from "@/platform/components/LauncherPage";
+import AccountPage from "@/platform/components/AccountPage";
+import ForgotPasswordPage from "@/platform/components/ForgotPasswordPage";
+import ResetPasswordPage from "@/platform/components/ResetPasswordPage";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -10,23 +16,63 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
 });
 
+function AppRoutes() {
+  const module = useHostModule();
+
+  // Budget module (subdomain or /budget/* path)
+  if (module === 'budget') {
+    return (
+      <Routes>
+        <Route path="/" element={<Navigate to="/summary" replace />} />
+        <Route path="/incomes" element={<Index />} />
+        <Route path="/expenses" element={<Index />} />
+        <Route path="/summary" element={<Index />} />
+        <Route path="/config" element={<Index />} />
+        <Route path="/restore" element={<Index />} />
+        <Route path="/account" element={<AccountPage />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    );
+  }
+
+  // Platform root (bath.garden or dev fallback)
+  return (
+    <Routes>
+      <Route path="/" element={<LauncherPage />} />
+      <Route path="/account" element={<AccountPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+      {/* Path-based budget routes for dev/preview */}
+      <Route path="/budget" element={<Navigate to="/budget/summary" replace />} />
+      <Route path="/budget/incomes" element={<Index />} />
+      <Route path="/budget/expenses" element={<Index />} />
+      <Route path="/budget/summary" element={<Index />} />
+      <Route path="/budget/config" element={<Index />} />
+      <Route path="/budget/restore" element={<Index />} />
+
+      {/* Legacy routes - redirect to path-based */}
+      <Route path="/incomes" element={<Navigate to="/budget/incomes" replace />} />
+      <Route path="/expenses" element={<Navigate to="/budget/expenses" replace />} />
+      <Route path="/summary" element={<Navigate to="/budget/summary" replace />} />
+      <Route path="/config" element={<Navigate to="/budget/config" replace />} />
+      <Route path="/restore" element={<Navigate to="/budget/restore" replace />} />
+
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/summary" replace />} />
-          <Route path="/incomes" element={<Index />} />
-          <Route path="/expenses" element={<Index />} />
-          <Route path="/summary" element={<Index />} />
-          <Route path="/config" element={<Index />} />
-          <Route path="/restore" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

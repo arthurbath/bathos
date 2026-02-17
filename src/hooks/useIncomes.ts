@@ -18,7 +18,7 @@ export function useIncomes(householdId: string) {
 
   const fetch = useCallback(async () => {
     const { data } = await supabase
-      .from('income_streams')
+      .from('budget_income_streams')
       .select('*')
       .eq('household_id', householdId)
       .order('created_at');
@@ -30,7 +30,7 @@ export function useIncomes(householdId: string) {
 
   const add = async (income: Omit<Income, 'id' | 'household_id'>) => {
     const id = crypto.randomUUID();
-    const { error } = await supabase.from('income_streams').insert({
+    const { error } = await supabase.from('budget_income_streams').insert({
       id,
       household_id: householdId,
       ...income,
@@ -40,13 +40,13 @@ export function useIncomes(householdId: string) {
   };
 
   const update = async (id: string, updates: Partial<Omit<Income, 'id' | 'household_id'>>) => {
-    const { error } = await supabase.from('income_streams').update(updates).eq('id', id);
+    const { error } = await supabase.from('budget_income_streams').update(updates).eq('id', id);
     if (error) throw error;
     await fetch();
   };
 
   const remove = async (id: string) => {
-    const { error } = await supabase.from('income_streams').delete().eq('id', id);
+    const { error } = await supabase.from('budget_income_streams').delete().eq('id', id);
     if (error) throw error;
     await fetch();
   };

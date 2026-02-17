@@ -15,7 +15,7 @@ export function useLinkedAccounts(householdId: string) {
 
   const fetch = useCallback(async () => {
     const { data } = await supabase
-      .from('linked_accounts')
+      .from('budget_linked_accounts')
       .select('*')
       .eq('household_id', householdId)
       .order('name');
@@ -27,25 +27,25 @@ export function useLinkedAccounts(householdId: string) {
 
   const add = async (name: string, ownerPartner: string = 'X') => {
     const id = crypto.randomUUID();
-    const { error } = await supabase.from('linked_accounts').insert({ id, household_id: householdId, name, owner_partner: ownerPartner });
+    const { error } = await supabase.from('budget_linked_accounts').insert({ id, household_id: householdId, name, owner_partner: ownerPartner });
     if (error) throw error;
     await fetch();
   };
 
   const update = async (id: string, updates: Partial<Pick<LinkedAccount, 'name' | 'owner_partner'>>) => {
-    const { error } = await supabase.from('linked_accounts').update(updates).eq('id', id);
+    const { error } = await supabase.from('budget_linked_accounts').update(updates).eq('id', id);
     if (error) throw error;
     await fetch();
   };
 
   const updateColor = async (id: string, color: string | null) => {
-    const { error } = await supabase.from('linked_accounts').update({ color }).eq('id', id);
+    const { error } = await supabase.from('budget_linked_accounts').update({ color }).eq('id', id);
     if (error) throw error;
     await fetch();
   };
 
   const remove = async (id: string) => {
-    const { error } = await supabase.from('linked_accounts').delete().eq('id', id);
+    const { error } = await supabase.from('budget_linked_accounts').delete().eq('id', id);
     if (error) throw error;
     await fetch();
   };

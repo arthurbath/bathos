@@ -23,7 +23,7 @@ export function useHouseholdData(user: User | null) {
 
     try {
       const { data: membership } = await supabase
-        .from('household_members')
+        .from('budget_household_members')
         .select('household_id, partner_label')
         .eq('user_id', user.id)
         .maybeSingle();
@@ -31,16 +31,15 @@ export function useHouseholdData(user: User | null) {
       if (!membership) { setLoading(false); return; }
 
       const { data: hh } = await supabase
-        .from('households')
+        .from('budget_households')
         .select('id, name, invite_code, partner_x_name, partner_y_name, partner_x_color, partner_y_color')
         .eq('id', membership.household_id)
         .single();
 
       if (!hh) { setLoading(false); return; }
 
-      // Get current user's display name
       const { data: profile } = await supabase
-        .from('profiles')
+        .from('bathos_profiles')
         .select('display_name')
         .eq('id', user.id)
         .single();
@@ -68,18 +67,18 @@ export function useHouseholdData(user: User | null) {
     if (!user) throw new Error('Not authenticated');
 
     const { error: profileErr } = await supabase
-      .from('profiles')
+      .from('bathos_profiles')
       .update({ display_name: displayName })
       .eq('id', user.id);
     if (profileErr) throw new Error(`Profile update failed: ${profileErr.message}`);
 
     const householdId = crypto.randomUUID();
     const { error: hhErr } = await supabase
-      .from('households')
+      .from('budget_households')
       .insert({ id: householdId, name: 'My Household', partner_x_name: displayName, partner_y_name: 'Partner Y' });
     if (hhErr) throw new Error(`Household creation failed: ${hhErr.message}`);
 
-    const { error: memberErr } = await supabase.from('household_members').insert({
+    const { error: memberErr } = await supabase.from('budget_household_members').insert({
       household_id: householdId,
       user_id: user.id,
       partner_label: 'X',
@@ -92,16 +91,14 @@ export function useHouseholdData(user: User | null) {
   const joinHousehold = async (displayName: string, inviteCode: string) => {
     if (!user) throw new Error('Not authenticated');
 
-    // Update display name
     const { error: profileErr } = await supabase
-      .from('profiles')
+      .from('bathos_profiles')
       .update({ display_name: displayName })
       .eq('id', user.id);
     if (profileErr) throw new Error(`Profile update failed: ${profileErr.message}`);
 
-    // Find household by invite code
     const { data: hh, error: findErr } = await supabase
-      .from('households')
+      .from('budget_households')
       .select('id')
       .eq('invite_code', inviteCode)
       .maybeSingle();
@@ -109,9 +106,8 @@ export function useHouseholdData(user: User | null) {
     if (findErr) throw new Error(`Lookup failed: ${findErr.message}`);
     if (!hh) throw new Error('Invalid invite code. Please check and try again.');
 
-    // Check if already a member
     const { data: existing } = await supabase
-      .from('household_members')
+      .from('budget_household_members')
       .select('id')
       .eq('household_id', hh.id)
       .eq('user_id', user.id)
@@ -119,8 +115,7 @@ export function useHouseholdData(user: User | null) {
 
     if (existing) throw new Error('You are already a member of this household.');
 
-    // Join as a member
-    const { error: memberErr } = await supabase.from('household_members').insert({
+    const { error: memberErr } = await supabase.from('budget_household_members').insert({
       household_id: hh.id,
       user_id: user.id,
       partner_label: 'Y',
@@ -133,7 +128,7 @@ export function useHouseholdData(user: User | null) {
   const updatePartnerNames = async (partnerXName: string, partnerYName: string) => {
     if (!household) throw new Error('No household');
     const { error } = await supabase
-      .from('households')
+      .from('budget_households')
       .update({ partner_x_name: partnerXName, partner_y_name: partnerYName })
       .eq('id', household.householdId);
     if (error) throw new Error(error.message);
@@ -143,7 +138,7 @@ export function useHouseholdData(user: User | null) {
   const updatePartnerColors = async (partnerXColor: string | null, partnerYColor: string | null) => {
     if (!household) throw new Error('No household');
     const { error } = await supabase
-      .from('households')
+      .from('budget_households')
       .update({ partner_x_color: partnerXColor, partner_y_color: partnerYColor })
       .eq('id', household.householdId);
     if (error) throw new Error(error.message);
