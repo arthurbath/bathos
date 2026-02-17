@@ -1,23 +1,39 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useSpreadsheetNav } from '@/hooks/useSpreadsheetNav';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  createColumnHelper,
+  type SortingState,
+  type Row,
+} from '@tanstack/react-table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { toMonthly, frequencyLabels } from '@/lib/frequency';
+import { toMonthly, frequencyLabels, needsParam } from '@/lib/frequency';
+import { DataGrid, GridEditableCell, GridCurrencyCell, GridPercentCell, useDataGrid, gridNavProps } from '@/components/ui/data-grid';
 import type { FrequencyType } from '@/types/fairshare';
 import type { Expense } from '@/hooks/useExpenses';
 import type { Category } from '@/hooks/useCategories';
 import type { LinkedAccount } from '@/hooks/useLinkedAccounts';
 import type { Income } from '@/hooks/useIncomes';
+
+// ─── Types ───
+
+interface ComputedRow {
+  exp: Expense;
+  fairX: number;
+  fairY: number;
+  monthly: number;
+}
 
 interface ExpensesTabProps {
   expenses: Expense[];
@@ -36,439 +52,141 @@ interface ExpensesTabProps {
 }
 
 const FREQ_OPTIONS: FrequencyType[] = ['weekly', 'twice_monthly', 'monthly', 'annual', 'every_n_days', 'every_n_weeks', 'every_n_months', 'k_times_weekly', 'k_times_monthly', 'k_times_annually'];
-const NEEDS_PARAM: Set<FrequencyType> = new Set(['every_n_weeks', 'every_n_months', 'every_n_days', 'k_times_annually', 'k_times_monthly', 'k_times_weekly']);
-
 type GroupByOption = 'none' | 'category' | 'estimated' | 'payer' | 'payment_method';
-type SortColumn = 'name' | 'category' | 'amount' | 'estimate' | 'frequency' | 'monthly' | 'payment_method' | 'payer' | 'benefit_x' | 'benefit_y' | 'fair_x' | 'fair_y';
-type SortDir = 'asc' | 'desc';
 
-function SortableHead({ column, label, current, dir, onSort, className = '' }: {
-  column: SortColumn;
-  label: React.ReactNode;
-  current: SortColumn;
-  dir: SortDir;
-  onSort: (col: SortColumn) => void;
-  className?: string;
+const columnHelper = createColumnHelper<ComputedRow>();
+
+// ─── Cell Components ───
+
+function CategoryCell({ exp, categories, onChange, onAddNew }: {
+  exp: Expense; categories: Category[]; onChange: (v: string) => void; onAddNew: () => void;
 }) {
-  const active = current === column;
+  const ctx = useDataGrid();
   return (
-    <TableHead className={`${className} cursor-pointer select-none hover:bg-muted/50`} onClick={() => onSort(column)}>
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {active ? (dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-      </span>
-    </TableHead>
+    <Select value={exp.category_id ?? '_none'} onValueChange={v => { if (v === '_add_new') onAddNew(); else onChange(v); }}>
+      <SelectTrigger
+        className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
+        style={{ backgroundColor: categories.find(c => c.id === exp.category_id)?.color || 'transparent' }}
+        {...gridNavProps(ctx, 1)}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="_none">—</SelectItem>
+        {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+        <SelectItem value="_add_new" className="text-primary font-medium"><Plus className="inline h-3 w-3 mr-1" />Add New</SelectItem>
+      </SelectContent>
+    </Select>
   );
 }
 
-function EditableCell({ value, onChange, type = 'text', className = '', min, max, step, placeholder, 'data-row': dataRow, 'data-col': dataCol, onCellKeyDown, onCellMouseDown }: {
-  value: string | number;
-  onChange: (v: string) => void;
-  type?: string;
-  className?: string;
-  min?: number;
-  max?: number;
-  step?: number;
-  placeholder?: string;
-  'data-row'?: number;
-  'data-col'?: number;
-  onCellKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
-  onCellMouseDown?: (e: React.MouseEvent<HTMLElement>) => void;
-}) {
-  const [local, setLocal] = useState(String(value));
-  const ref = useRef<HTMLInputElement>(null);
-  const commit = () => { if (local !== String(value)) onChange(local); };
-
+function ExpenseFrequencyCell({ exp, onChange }: { exp: Expense; onChange: (field: string, v: string) => void }) {
+  const ctx = useDataGrid();
   return (
-    <Input
-      ref={ref}
-      type={type}
-      value={local}
-      placeholder={placeholder}
-      min={min}
-      max={max}
-      step={step}
-      data-row={dataRow}
-      data-col={dataCol}
-      onChange={e => setLocal(e.target.value)}
-      onBlur={commit}
-      onKeyDown={e => {
-        if (onCellKeyDown) onCellKeyDown(e);
-        else if (e.key === 'Enter') ref.current?.blur();
-      }}
-      onMouseDown={onCellMouseDown}
-      className={`h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring !text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
-    />
-  );
-}
-
-function CurrencyCell({ value, onChange, className = '', 'data-row': dataRow, 'data-col': dataCol, onCellKeyDown, onCellMouseDown }: {
-  value: number;
-  onChange: (v: string) => void;
-  className?: string;
-  'data-row'?: number;
-  'data-col'?: number;
-  onCellKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
-  onCellMouseDown?: (e: React.MouseEvent<HTMLElement>) => void;
-}) {
-  const [local, setLocal] = useState(String(value));
-  const [focused, setFocused] = useState(false);
-  const ref = useRef<HTMLInputElement>(null);
-  const commit = () => { if (local !== String(value)) onChange(local); };
-
-  return (
-    <div className="min-w-[5rem]">
-      {focused ? (
-        <Input
-          ref={ref}
-          type="number"
-          value={local}
-          data-row={dataRow}
-          data-col={dataCol}
-          onChange={e => setLocal(e.target.value)}
-          onBlur={() => { commit(); setFocused(false); }}
-          onKeyDown={e => {
-            if (onCellKeyDown) onCellKeyDown(e);
-            else if (e.key === 'Enter') ref.current?.blur();
-          }}
-          onMouseDown={onCellMouseDown}
-          autoFocus
-          className={`h-7 w-full border-transparent bg-transparent px-1 hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
-        />
-      ) : (
-        <button
-          type="button"
-          data-row={dataRow}
-          data-col={dataCol}
-          onClick={() => setFocused(true)}
-          onMouseDown={onCellMouseDown}
-          className={`h-7 w-full bg-transparent px-1 !text-xs text-right cursor-text border border-transparent hover:border-border rounded-md underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${className}`}
-        >
-          ${Math.round(Number(local) || 0)}
-        </button>
+    <div className="flex items-center gap-1">
+      <Select value={exp.frequency_type} onValueChange={v => onChange('frequency_type', v)}>
+        <SelectTrigger className="h-7 min-w-0 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" {...gridNavProps(ctx, 4)}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {FREQ_OPTIONS.map(f => <SelectItem key={f} value={f}>{frequencyLabels[f]}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      {needsParam(exp.frequency_type) && (
+        <GridEditableCell value={exp.frequency_param ?? ''} onChange={v => onChange('frequency_param', v)} type="number" navCol={5} placeholder="N" className="text-left w-8 shrink-0" />
       )}
     </div>
   );
 }
 
-function PercentCell({ value, onChange, className = '', 'data-row': dataRow, 'data-col': dataCol, onCellKeyDown, onCellMouseDown, min = 0, max = 100 }: {
-  value: number;
-  onChange: (v: string) => void;
-  className?: string;
-  'data-row'?: number;
-  'data-col'?: number;
-  onCellKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
-  onCellMouseDown?: (e: React.MouseEvent<HTMLElement>) => void;
-  min?: number;
-  max?: number;
+function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, onAddNew }: {
+  exp: Expense; linkedAccounts: LinkedAccount[]; partnerX: string; partnerY: string; onChange: (v: string) => void; onAddNew: () => void;
 }) {
-  const [local, setLocal] = useState(String(value));
-  const [focused, setFocused] = useState(false);
-  const ref = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!focused) setLocal(String(value));
-  }, [value, focused]);
-
-  const commit = () => { if (local !== String(value)) onChange(local); };
-
+  const ctx = useDataGrid();
   return (
-    <div className="min-w-[4rem]">
-      {focused ? (
-        <Input
-          ref={ref}
-          type="number"
-          value={local}
-          min={min}
-          max={max}
-          data-row={dataRow}
-          data-col={dataCol}
-          onChange={e => setLocal(e.target.value)}
-          onBlur={() => { commit(); setFocused(false); }}
-          onKeyDown={e => {
-            if (onCellKeyDown) onCellKeyDown(e);
-            else if (e.key === 'Enter') ref.current?.blur();
-          }}
-          onMouseDown={onCellMouseDown}
-          autoFocus
-          className={`h-7 w-full border-transparent bg-transparent px-1 hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring !text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${className}`}
-        />
-      ) : (
-        <button
-          type="button"
-          data-row={dataRow}
-          data-col={dataCol}
-          onClick={() => setFocused(true)}
-          onMouseDown={onCellMouseDown}
-          className={`h-7 w-full bg-transparent px-1 !text-xs text-right cursor-text border border-transparent hover:border-border rounded-md underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${className}`}
-        >
-          {Math.round(Number(local) || 0)}%
-        </button>
-      )}
-    </div>
+    <Select value={exp.linked_account_id ?? '_none'} onValueChange={v => { if (v === '_add_new') onAddNew(); else onChange(v); }}>
+      <SelectTrigger
+        className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
+        style={{ backgroundColor: linkedAccounts.find(la => la.id === exp.linked_account_id)?.color || 'transparent' }}
+        {...gridNavProps(ctx, 6)}
+      >
+        <SelectValue>
+          {exp.linked_account_id ? linkedAccounts.find(la => la.id === exp.linked_account_id)?.name ?? '—' : '—'}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="_none">—</SelectItem>
+        {linkedAccounts.map(la => (
+          <SelectItem key={la.id} value={la.id}>
+            {la.name} <span className="text-muted-foreground">({la.owner_partner === 'X' ? partnerX : partnerY})</span>
+          </SelectItem>
+        ))}
+        <SelectItem value="_add_new" className="text-primary font-medium"><Plus className="inline h-3 w-3 mr-1" />Add New</SelectItem>
+      </SelectContent>
+    </Select>
   );
 }
 
-interface ComputedRow {
-  exp: Expense;
-  fairX: number;
-  fairY: number;
-  monthly: number;
+function EstimateCell({ checked, onToggle }: { checked: boolean; onToggle: (v: boolean) => void }) {
+  const ctx = useDataGrid();
+  return <Checkbox checked={checked} onCheckedChange={v => onToggle(!!v)} {...gridNavProps(ctx, 3)} />;
 }
 
-function ExpenseRow({ exp, fairX, fairY, monthly, categories, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, rowIndex, onCellKeyDown, onCellMouseDown, onAddCategory, onAddLinkedAccount }: ComputedRow & {
-  categories: Category[];
-  linkedAccounts: LinkedAccount[];
-  partnerX: string;
-  partnerY: string;
-  partnerXColor: string | null;
-  partnerYColor: string | null;
-  handleUpdate: (id: string, field: string, value: string) => void;
-  handleToggleEstimate: (id: string, checked: boolean) => void;
-  handleRemove: (id: string) => void;
-  rowIndex: number;
-  onCellKeyDown: (e: React.KeyboardEvent<HTMLElement>) => void;
-  onCellMouseDown: (e: React.MouseEvent<HTMLElement>) => void;
-  onAddCategory: (name: string) => Promise<void>;
-  onAddLinkedAccount: (name: string, ownerPartner?: string) => Promise<void>;
-}) {
-  const [addDialog, setAddDialog] = useState<'category' | 'payment_method' | null>(null);
-  const [newItemName, setNewItemName] = useState('');
-  const [newItemOwner, setNewItemOwner] = useState<'X' | 'Y'>('X');
-  const [saving, setSaving] = useState(false);
-  const [localBenefitX, setLocalBenefitX] = useState(exp.benefit_x);
-
-  useEffect(() => {
-    setLocalBenefitX(exp.benefit_x);
-  }, [exp.benefit_x]);
-
-  const handleBenefitXChange = (v: string) => {
-    const clamped = Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
-    setLocalBenefitX(clamped);
-    handleUpdate(exp.id, 'benefit_x', String(clamped));
-  };
-
-  const handleBenefitYChange = (v: string) => {
-    const clamped = Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
-    const newX = 100 - clamped;
-    setLocalBenefitX(newX);
-    handleUpdate(exp.id, 'benefit_x', String(newX));
-  };
-
-  const nav = { onCellKeyDown, onCellMouseDown };
-
-  const handleSelectWithAddNew = (field: string, dialogType: 'category' | 'payment_method') => (v: string) => {
-    if (v === '_add_new') {
-      setNewItemName('');
-      setNewItemOwner('X');
-      setAddDialog(dialogType);
-    } else {
-      handleUpdate(exp.id, field, v);
-    }
-  };
-
-  const handleSaveNewItem = async () => {
-    if (!newItemName.trim()) return;
-    setSaving(true);
-    try {
-      if (addDialog === 'category') await onAddCategory(newItemName.trim());
-      else if (addDialog === 'payment_method') await onAddLinkedAccount(newItemName.trim(), newItemOwner);
-      setAddDialog(null);
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
-    }
-    setSaving(false);
-  };
-
-  const dialogTitle = addDialog === 'category' ? 'New Category' : 'New Payment Method';
-
+function ExpenseDeleteCell({ name, onRemove }: { name: string; onRemove: () => void }) {
   return (
-    <>
-    <TableRow>
-      <TableCell className="sticky left-0 z-10 bg-background">
-        <EditableCell value={exp.name} onChange={v => handleUpdate(exp.id, 'name', v)} placeholder="Expense" data-row={rowIndex} data-col={0} {...nav} />
-      </TableCell>
-      <TableCell>
-        <Select value={exp.category_id ?? '_none'} onValueChange={handleSelectWithAddNew('category_id', 'category')}>
-          <SelectTrigger
-            className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
-            style={{ backgroundColor: categories.find(c => c.id === exp.category_id)?.color || 'transparent' }}
-            data-row={rowIndex} data-col={1} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_none">—</SelectItem>
-            {categories.map(c => (
-              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-            ))}
-            <SelectItem value="_add_new" className="text-primary font-medium"><Plus className="inline h-3 w-3 mr-1" />Add New</SelectItem>
-          </SelectContent>
-        </Select>
-      </TableCell>
-      <TableCell>
-        <CurrencyCell value={Number(exp.amount)} onChange={v => handleUpdate(exp.id, 'amount', v)} className="text-right" data-row={rowIndex} data-col={2} {...nav} />
-      </TableCell>
-      <TableCell className="text-center">
-        <Checkbox checked={exp.is_estimate} onCheckedChange={(checked) => handleToggleEstimate(exp.id, !!checked)} data-row={rowIndex} data-col={3} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown} />
-      </TableCell>
-      <TableCell>
-        <div className="flex items-center gap-1">
-          <Select value={exp.frequency_type} onValueChange={v => handleUpdate(exp.id, 'frequency_type', v)}>
-            <SelectTrigger className="h-7 min-w-0 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" data-row={rowIndex} data-col={4} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {FREQ_OPTIONS.map(f => (
-                <SelectItem key={f} value={f}>{frequencyLabels[f]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {NEEDS_PARAM.has(exp.frequency_type) && (
-            <EditableCell value={exp.frequency_param ?? ''} onChange={v => handleUpdate(exp.id, 'frequency_param', v)} type="number" placeholder="X" className="text-left w-8 shrink-0" data-row={rowIndex} data-col={5} {...nav} />
-          )}
-        </div>
-      </TableCell>
-      <TableCell className="text-right font-medium tabular-nums text-xs">${Math.round(monthly)}</TableCell>
-      <TableCell>
-        <Select value={exp.linked_account_id ?? '_none'} onValueChange={handleSelectWithAddNew('linked_account_id', 'payment_method')}>
-          <SelectTrigger
-            className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
-            style={{ backgroundColor: linkedAccounts.find(la => la.id === exp.linked_account_id)?.color || 'transparent' }}
-            data-row={rowIndex} data-col={6} onKeyDown={onCellKeyDown} onMouseDown={onCellMouseDown}
-          >
-            <SelectValue>
-              {exp.linked_account_id ? linkedAccounts.find(la => la.id === exp.linked_account_id)?.name ?? '—' : '—'}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_none">—</SelectItem>
-            {linkedAccounts.map(la => (
-              <SelectItem key={la.id} value={la.id}>
-                {la.name} <span className="text-muted-foreground group-focus:text-accent-foreground">({la.owner_partner === 'X' ? partnerX : partnerY})</span>
-              </SelectItem>
-            ))}
-            <SelectItem value="_add_new" className="text-primary font-medium"><Plus className="inline h-3 w-3 mr-1" />Add New</SelectItem>
-          </SelectContent>
-        </Select>
-      </TableCell>
-      <TableCell>
-        {exp.payer ? (
-          <span
-            className="text-xs px-1.5 py-0.5 rounded-sm"
-            style={{ backgroundColor: (exp.payer === 'X' ? partnerXColor : partnerYColor) || 'transparent' }}
-          >
-            {exp.payer === 'X' ? partnerX : partnerY}
-          </span>
-        ) : (
-          <span className="text-muted-foreground text-xs px-1">—</span>
-        )}
-      </TableCell>
-      <TableCell>
-        <PercentCell value={localBenefitX} onChange={handleBenefitXChange} className="text-right w-16" min={0} max={100} data-row={rowIndex} data-col={9} {...nav} />
-      </TableCell>
-      <TableCell className="text-right tabular-nums text-xs">
-        <PercentCell value={100 - localBenefitX} onChange={handleBenefitYChange} className="text-right w-16" min={0} max={100} data-row={rowIndex} data-col={10} {...nav} />
-      </TableCell>
-      <TableCell className="text-right tabular-nums text-xs">${Math.round(fairX)}</TableCell>
-      <TableCell className="text-right tabular-nums text-xs">${Math.round(fairY)}</TableCell>
-      <TableCell>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="ghost-destructive" size="icon" className="h-7 w-7">
-              <Trash2 className="h-3.5 w-3.5 text-destructive" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete expense</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete "{exp.name}"? This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleRemove(exp.id)}>Delete</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </TableCell>
-    </TableRow>
-      <Dialog open={addDialog !== null} onOpenChange={open => { if (!open) setAddDialog(null); }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{dialogTitle}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="new-item-name">Name</Label>
-              <Input id="new-item-name" value={newItemName} onChange={e => setNewItemName(e.target.value)} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleSaveNewItem(); }} />
-            </div>
-            {addDialog === 'payment_method' && (
-              <div className="space-y-1.5">
-                <Label>Owner</Label>
-                <Select value={newItemOwner} onValueChange={v => setNewItemOwner(v as 'X' | 'Y')}>
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="X">{partnerX}</SelectItem>
-                    <SelectItem value="Y">{partnerY}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddDialog(null)}>Cancel</Button>
-            <Button onClick={handleSaveNewItem} disabled={saving || !newItemName.trim()}>Add</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="ghost-destructive" size="icon" className="h-7 w-7">
+          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete expense</AlertDialogTitle>
+          <AlertDialogDescription>Are you sure you want to delete &ldquo;{name}&rdquo;? This action cannot be undone.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={onRemove}>Delete</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
-function GroupSubtotalRow({ label, rows }: { label: string; rows: ComputedRow[] }) {
-  const groupMonthly = rows.reduce((s, r) => s + r.monthly, 0);
-  const groupFairX = rows.reduce((s, r) => s + r.fairX, 0);
-  const groupFairY = rows.reduce((s, r) => s + r.fairY, 0);
-  return (
-    <TableRow className="bg-muted sticky top-[36px] z-20 border-b-0 shadow-[0_1px_0_0_hsl(var(--border))]">
-      <TableCell className="sticky left-0 z-10 bg-muted font-semibold text-xs">
-        {label}
-      </TableCell>
-      <TableCell colSpan={4} className="bg-muted" />
-      <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(groupMonthly)}</TableCell>
-      <TableCell colSpan={3} className="bg-muted" />
-      <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(groupFairX)}</TableCell>
-      <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(groupFairY)}</TableCell>
-      <TableCell className="bg-muted" />
-    </TableRow>
-  );
-}
+
+// ─── Main Component ───
 
 export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, partnerX, partnerY, partnerXColor, partnerYColor, onAdd, onUpdate, onRemove, onAddCategory, onAddLinkedAccount }: ExpensesTabProps) {
   const [adding, setAdding] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const prevCountRef = useRef(expenses.length);
+  const [addDialog, setAddDialog] = useState<'category' | 'payment_method' | null>(null);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemOwner, setNewItemOwner] = useState<'X' | 'Y'>('X');
+  const [savingItem, setSavingItem] = useState(false);
+
   const [filterPayer, setFilterPayer] = useState<'all' | 'X' | 'Y'>(() => (localStorage.getItem('expenses_filterPayer') as 'all' | 'X' | 'Y') || 'all');
   const [groupBy, setGroupBy] = useState<GroupByOption>(() => (localStorage.getItem('expenses_groupBy') as GroupByOption) || 'none');
-  const [sortCol, setSortCol] = useState<SortColumn>(() => (localStorage.getItem('expenses_sortCol') as SortColumn) || 'name');
-  const [sortDir, setSortDir] = useState<SortDir>(() => (localStorage.getItem('expenses_sortDir') as SortDir) || 'asc');
+  const [sorting, setSorting] = useState<SortingState>(() => {
+    try { const s = localStorage.getItem('expenses_sorting'); return s ? JSON.parse(s) : [{ id: 'name', desc: false }]; }
+    catch { return [{ id: 'name', desc: false }]; }
+  });
 
   useEffect(() => { localStorage.setItem('expenses_filterPayer', filterPayer); }, [filterPayer]);
   useEffect(() => { localStorage.setItem('expenses_groupBy', groupBy); }, [groupBy]);
-  useEffect(() => { localStorage.setItem('expenses_sortCol', sortCol); }, [sortCol]);
-  useEffect(() => { localStorage.setItem('expenses_sortDir', sortDir); }, [sortDir]);
+  useEffect(() => { localStorage.setItem('expenses_sorting', JSON.stringify(sorting)); }, [sorting]);
 
-  const toggleSort = (col: SortColumn) => {
-    if (sortCol === col) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortCol(col);
-      setSortDir('asc');
+  useEffect(() => {
+    if (expenses.length > prevCountRef.current) {
+      requestAnimationFrame(() => {
+        const cells = wrapperRef.current?.querySelectorAll<HTMLElement>('[data-col="0"]');
+        if (cells?.length) cells[cells.length - 1].focus();
+      });
     }
-  };
+    prevCountRef.current = expenses.length;
+  }, [expenses.length]);
 
-  // Compute income ratio
+  // Income ratio
   const incomeX = incomes.filter(i => i.partner_label === 'X').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
   const incomeY = incomes.filter(i => i.partner_label === 'Y').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
   const totalIncome = incomeX + incomeY;
@@ -484,67 +202,51 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     return { fairX: monthly * (wx / tw), fairY: monthly * (wy / tw), monthly };
   };
 
+  const filteredExpenses = filterPayer === 'all' ? expenses : expenses.filter(e => e.payer === filterPayer);
+  const computedData: ComputedRow[] = useMemo(() =>
+    filteredExpenses.map(exp => ({ exp, ...computeFairShare(exp) })),
+    [filteredExpenses, incomeRatioX],
+  );
+
+  let totalFairX = 0, totalFairY = 0, totalMonthly = 0;
+  computedData.forEach(r => { totalFairX += r.fairX; totalFairY += r.fairY; totalMonthly += r.monthly; });
+
+  // ─── Handlers ───
+
   const handleAdd = async () => {
     setAdding(true);
     try {
-      await onAdd({
-        name: '',
-        amount: 0,
-        payer: null,
-        benefit_x: 50,
-        category_id: null,
-        budget_id: null,
-        linked_account_id: null,
-        frequency_type: 'monthly',
-        frequency_param: null,
-        is_estimate: false,
-      });
-      // Focus the name cell of the newly added row after render
-      requestAnimationFrame(() => {
-        const table = tableRef.current;
-        if (!table) return;
-        const allNameCells = table.querySelectorAll<HTMLElement>('[data-col="0"]');
-        const last = allNameCells[allNameCells.length - 1];
-        if (last) last.focus();
-      });
+      await onAdd({ name: '', amount: 0, payer: null, benefit_x: 50, category_id: null, budget_id: null, linked_account_id: null, frequency_type: 'monthly', frequency_param: null, is_estimate: false });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
     setAdding(false);
   };
 
-  const handleUpdate = async (id: string, field: string, value: string) => {
-    try {
-      const updates: any = {};
-      if (field === 'name') updates.name = value;
-      else if (field === 'amount') updates.amount = Number(value) || 0;
-      else if (field === 'benefit_x') updates.benefit_x = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
-      else if (field === 'frequency_param') updates.frequency_param = value ? Number(value) : null;
-      else if (field === 'category_id') updates.category_id = value === '_none' ? null : value;
-      
-      else if (field === 'linked_account_id') {
-        const accountId = value === '_none' ? null : value;
-        updates.linked_account_id = accountId;
-        if (accountId) {
-          const account = linkedAccounts.find(la => la.id === accountId);
-          if (account) updates.payer = account.owner_partner;
-        } else {
-          updates.payer = null;
-        }
-      }
-      else updates[field] = value;
-      await onUpdate(id, updates);
-    } catch (e: any) {
+  const handleUpdate = (id: string, field: string, value: string) => {
+    const updates: Record<string, unknown> = {};
+    if (field === 'name') updates.name = value;
+    else if (field === 'amount') updates.amount = Number(value) || 0;
+    else if (field === 'benefit_x') updates.benefit_x = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+    else if (field === 'frequency_param') updates.frequency_param = value ? Number(value) : null;
+    else if (field === 'category_id') updates.category_id = value === '_none' ? null : value;
+    else if (field === 'linked_account_id') {
+      const accountId = value === '_none' ? null : value;
+      updates.linked_account_id = accountId;
+      if (accountId) {
+        const account = linkedAccounts.find(la => la.id === accountId);
+        if (account) updates.payer = account.owner_partner;
+      } else { updates.payer = null; }
+    } else updates[field] = value;
+    onUpdate(id, updates as any).catch((e: any) => {
       toast({ title: 'Error saving', description: e.message, variant: 'destructive' });
-    }
+    });
   };
 
-  const handleToggleEstimate = async (id: string, checked: boolean) => {
-    try {
-      await onUpdate(id, { is_estimate: checked });
-    } catch (e: any) {
+  const handleToggleEstimate = (id: string, checked: boolean) => {
+    onUpdate(id, { is_estimate: checked }).catch((e: any) => {
       toast({ title: 'Error saving', description: e.message, variant: 'destructive' });
-    }
+    });
   };
 
   const handleRemove = async (id: string) => {
@@ -553,107 +255,190 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     }
   };
 
-  const filteredExpenses = filterPayer === 'all' ? expenses : expenses.filter(e => e.payer === filterPayer);
+  const handleSaveNewItem = async () => {
+    if (!newItemName.trim()) return;
+    setSavingItem(true);
+    try {
+      if (addDialog === 'category') await onAddCategory(newItemName.trim());
+      else if (addDialog === 'payment_method') await onAddLinkedAccount(newItemName.trim(), newItemOwner);
+      setAddDialog(null);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    }
+    setSavingItem(false);
+  };
 
-  let totalFairX = 0, totalFairY = 0, totalMonthly = 0;
-  const unsortedRows: ComputedRow[] = filteredExpenses.map(exp => {
-    const { fairX, fairY, monthly } = computeFairShare(exp);
-    totalFairX += fairX;
-    totalFairY += fairY;
-    totalMonthly += monthly;
-    return { exp, fairX, fairY, monthly };
+  // ─── Columns ───
+
+  const columns = useMemo(() => [
+    columnHelper.accessor(r => r.exp.name, {
+      id: 'name',
+      header: 'Name',
+      meta: { headerClassName: 'min-w-[120px] sm:min-w-[200px]' },
+      cell: ({ row }) => <GridEditableCell value={row.original.exp.name} onChange={v => handleUpdate(row.original.exp.id, 'name', v)} navCol={0} placeholder="Expense" />,
+    }),
+    columnHelper.accessor(r => r.exp.category_id, {
+      id: 'category',
+      header: 'Category',
+      meta: { headerClassName: 'min-w-[190px]' },
+      sortingFn: (a, b) => (categories.find(c => c.id === a.original.exp.category_id)?.name ?? '').localeCompare(categories.find(c => c.id === b.original.exp.category_id)?.name ?? ''),
+      cell: ({ row }) => (
+        <CategoryCell exp={row.original.exp} categories={categories} onChange={v => handleUpdate(row.original.exp.id, 'category_id', v)} onAddNew={() => { setNewItemName(''); setNewItemOwner('X'); setAddDialog('category'); }} />
+      ),
+    }),
+    columnHelper.accessor(r => r.exp.amount, {
+      id: 'amount',
+      header: 'Amount',
+      meta: { headerClassName: 'text-right' },
+      cell: ({ row }) => <GridCurrencyCell value={Number(row.original.exp.amount)} onChange={v => handleUpdate(row.original.exp.id, 'amount', v)} navCol={2} />,
+    }),
+    columnHelper.accessor(r => r.exp.is_estimate, {
+      id: 'estimate',
+      header: () => (
+        <Tooltip><TooltipTrigger asChild><span className="underline decoration-dotted underline-offset-2">Est</span></TooltipTrigger><TooltipContent side="bottom">Expense is estimated</TooltipContent></Tooltip>
+      ),
+      meta: { headerClassName: 'text-center', cellClassName: 'text-center' },
+      cell: ({ row }) => <EstimateCell checked={row.original.exp.is_estimate} onToggle={v => handleToggleEstimate(row.original.exp.id, v)} />,
+    }),
+    columnHelper.accessor(r => r.exp.frequency_type, {
+      id: 'frequency',
+      header: 'Frequency',
+      meta: { headerClassName: 'min-w-[185px]' },
+      cell: ({ row }) => <ExpenseFrequencyCell exp={row.original.exp} onChange={(field, v) => handleUpdate(row.original.exp.id, field, v)} />,
+    }),
+    columnHelper.accessor('monthly', {
+      id: 'monthly',
+      header: () => (
+        <Tooltip><TooltipTrigger asChild><span className="underline decoration-dotted underline-offset-2">Monthly</span></TooltipTrigger><TooltipContent side="bottom">Expense normalized to how much it costs you monthly</TooltipContent></Tooltip>
+      ),
+      meta: { headerClassName: 'text-right', cellClassName: 'text-right font-medium tabular-nums text-xs' },
+      cell: ({ getValue }) => `$${Math.round(getValue())}`,
+    }),
+    columnHelper.accessor(r => r.exp.linked_account_id, {
+      id: 'payment_method',
+      header: 'Payment Method',
+      meta: { headerClassName: 'min-w-[190px]' },
+      sortingFn: (a, b) => (linkedAccounts.find(la => la.id === a.original.exp.linked_account_id)?.name ?? '').localeCompare(linkedAccounts.find(la => la.id === b.original.exp.linked_account_id)?.name ?? ''),
+      cell: ({ row }) => (
+        <PaymentMethodCell exp={row.original.exp} linkedAccounts={linkedAccounts} partnerX={partnerX} partnerY={partnerY} onChange={v => handleUpdate(row.original.exp.id, 'linked_account_id', v)} onAddNew={() => { setNewItemName(''); setNewItemOwner('X'); setAddDialog('payment_method'); }} />
+      ),
+    }),
+    columnHelper.accessor(r => r.exp.payer, {
+      id: 'payer',
+      header: 'Payer',
+      sortingFn: (a, b) => (a.original.exp.payer ?? '').localeCompare(b.original.exp.payer ?? ''),
+      cell: ({ row }) => {
+        const p = row.original.exp.payer;
+        return p ? (
+          <span className="text-xs px-1.5 py-0.5 rounded-sm" style={{ backgroundColor: (p === 'X' ? partnerXColor : partnerYColor) || 'transparent' }}>
+            {p === 'X' ? partnerX : partnerY}
+          </span>
+        ) : <span className="text-muted-foreground text-xs px-1">—</span>;
+      },
+    }),
+    columnHelper.accessor(r => r.exp.benefit_x, {
+      id: 'benefit_x',
+      header: () => (
+        <Tooltip><TooltipTrigger asChild><span className="underline decoration-dotted underline-offset-2">{partnerX} %</span></TooltipTrigger><TooltipContent side="bottom">The percentage that {partnerX} benefits from the expense</TooltipContent></Tooltip>
+      ),
+      meta: { headerClassName: 'text-right whitespace-nowrap' },
+      cell: ({ row }) => (
+        <GridPercentCell value={row.original.exp.benefit_x} onChange={v => { const c = Math.max(0, Math.min(100, Math.round(Number(v) || 0))); handleUpdate(row.original.exp.id, 'benefit_x', String(c)); }} navCol={7} className="w-16" />
+      ),
+    }),
+    columnHelper.accessor(r => 100 - r.exp.benefit_x, {
+      id: 'benefit_y',
+      header: () => (
+        <Tooltip><TooltipTrigger asChild><span className="underline decoration-dotted underline-offset-2">{partnerY} %</span></TooltipTrigger><TooltipContent side="bottom">The percentage that {partnerY} benefits from the expense</TooltipContent></Tooltip>
+      ),
+      meta: { headerClassName: 'text-right whitespace-nowrap', cellClassName: 'text-right tabular-nums text-xs' },
+      cell: ({ row }) => (
+        <GridPercentCell value={100 - row.original.exp.benefit_x} onChange={v => { const c = Math.max(0, Math.min(100, Math.round(Number(v) || 0))); handleUpdate(row.original.exp.id, 'benefit_x', String(100 - c)); }} navCol={8} className="w-16" />
+      ),
+    }),
+    columnHelper.accessor('fairX', {
+      id: 'fair_x',
+      header: `Fair ${partnerX}`,
+      meta: { headerClassName: 'text-right', cellClassName: 'text-right tabular-nums text-xs' },
+      cell: ({ getValue }) => `$${Math.round(getValue())}`,
+    }),
+    columnHelper.accessor('fairY', {
+      id: 'fair_y',
+      header: `Fair ${partnerY}`,
+      meta: { headerClassName: 'text-right', cellClassName: 'text-right tabular-nums text-xs' },
+      cell: ({ getValue }) => `$${Math.round(getValue())}`,
+    }),
+    columnHelper.display({
+      id: 'actions',
+      header: '',
+      enableSorting: false,
+      meta: { headerClassName: 'w-10' },
+      cell: ({ row }) => <ExpenseDeleteCell name={row.original.exp.name} onRemove={() => handleRemove(row.original.exp.id)} />,
+    }),
+  ], [categories, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor]);
+
+  const table = useReactTable({
+    data: computedData,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   });
 
-  const resolveName = (id: string | null, list: { id: string; name: string }[]) =>
-    id ? (list.find(x => x.id === id)?.name ?? '') : '';
+  // ─── Grouping ───
 
-  const sortRows = (arr: ComputedRow[]): ComputedRow[] => {
-    const m = sortDir === 'asc' ? 1 : -1;
-    return [...arr].sort((a, b) => {
-      let cmp = 0;
-      switch (sortCol) {
-        case 'name': cmp = a.exp.name.localeCompare(b.exp.name); break;
-        case 'category': cmp = resolveName(a.exp.category_id, categories).localeCompare(resolveName(b.exp.category_id, categories)); break;
-        case 'amount': cmp = a.exp.amount - b.exp.amount; break;
-        case 'estimate': cmp = Number(a.exp.is_estimate) - Number(b.exp.is_estimate); break;
-        case 'frequency': cmp = a.exp.frequency_type.localeCompare(b.exp.frequency_type); break;
-        
-        case 'monthly': cmp = a.monthly - b.monthly; break;
-        
-        case 'payment_method': cmp = resolveName(a.exp.linked_account_id, linkedAccounts).localeCompare(resolveName(b.exp.linked_account_id, linkedAccounts)); break;
-        case 'payer': cmp = a.exp.payer.localeCompare(b.exp.payer); break;
-        case 'benefit_x': cmp = a.exp.benefit_x - b.exp.benefit_x; break;
-        case 'benefit_y': cmp = (100 - a.exp.benefit_x) - (100 - b.exp.benefit_x); break;
-        case 'fair_x': cmp = a.fairX - b.fairX; break;
-        case 'fair_y': cmp = a.fairY - b.fairY; break;
+  const getGroupKey = useMemo(() => {
+    if (groupBy === 'none') return undefined;
+    return (row: ComputedRow): string => {
+      switch (groupBy) {
+        case 'category': return row.exp.category_id ?? '_ungrouped';
+        case 'estimated': return row.exp.is_estimate ? 'Estimated' : 'Actual';
+        case 'payer': return row.exp.payer ?? '_ungrouped';
+        case 'payment_method': return row.exp.linked_account_id ?? '_ungrouped';
+        default: return '_all';
       }
-      return cmp * m;
-    });
-  };
-
-  const rows = useMemo(() => sortRows(unsortedRows), [unsortedRows, sortCol, sortDir]);
-
-  const getGroupKey = (row: ComputedRow): string => {
-    switch (groupBy) {
-      case 'category':
-        return row.exp.category_id ?? '_ungrouped';
-      case 'estimated':
-        return row.exp.is_estimate ? 'Estimated' : 'Actual';
-      case 'payer':
-        return row.exp.payer;
-      case 'payment_method':
-        return row.exp.linked_account_id ?? '_ungrouped';
-      default:
-        return '_all';
-    }
-  };
+    };
+  }, [groupBy]);
 
   const getGroupLabel = (key: string): string => {
     if (key === '_ungrouped') return 'Uncategorized';
     switch (groupBy) {
-      case 'category':
-        return categories.find(c => c.id === key)?.name ?? 'Uncategorized';
-      case 'estimated':
-        return key;
-      case 'payer':
-        return key === 'X' ? partnerX : partnerY;
-      case 'payment_method':
-        return linkedAccounts.find(la => la.id === key)?.name ?? 'Uncategorized';
-      default:
-        return '';
+      case 'category': return categories.find(c => c.id === key)?.name ?? 'Uncategorized';
+      case 'estimated': return key;
+      case 'payer': return key === 'X' ? partnerX : key === 'Y' ? partnerY : 'Unassigned';
+      case 'payment_method': return linkedAccounts.find(la => la.id === key)?.name ?? 'Uncategorized';
+      default: return '';
     }
   };
 
-  const grouped = useMemo(() => {
-    if (groupBy === 'none') return null;
-    const map = new Map<string, ComputedRow[]>();
-    for (const row of rows) {
-      const key = getGroupKey(row);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(row);
-    }
-    return [...map.entries()].sort((a, b) => {
-      if (a[0] === '_ungrouped') return 1;
-      if (b[0] === '_ungrouped') return -1;
-      return getGroupLabel(a[0]).localeCompare(getGroupLabel(b[0]));
-    });
-  }, [groupBy, rows, categories, linkedAccounts, partnerX, partnerY]);
+  const renderGroupHeader = (key: string, groupRows: Row<ComputedRow>[]) => {
+    const gMonthly = groupRows.reduce((s, r) => s + r.original.monthly, 0);
+    const gFairX = groupRows.reduce((s, r) => s + r.original.fairX, 0);
+    const gFairY = groupRows.reduce((s, r) => s + r.original.fairY, 0);
+    return (
+      <tr key={`gh-${key}`} className="bg-muted sticky top-[36px] z-20 border-b-0 shadow-[0_1px_0_0_hsl(var(--border))]">
+        <td className="sticky left-0 z-10 bg-muted font-semibold text-xs px-2 py-1">{getGroupLabel(key)}</td>
+        <td colSpan={4} className="bg-muted" />
+        <td className="text-right font-semibold tabular-nums text-xs bg-muted px-2 py-1">${Math.round(gMonthly)}</td>
+        <td colSpan={4} className="bg-muted" />
+        <td className="text-right font-semibold tabular-nums text-xs bg-muted px-2 py-1">${Math.round(gFairX)}</td>
+        <td className="text-right font-semibold tabular-nums text-xs bg-muted px-2 py-1">${Math.round(gFairY)}</td>
+        <td className="bg-muted" />
+      </tr>
+    );
+  };
 
-  const { tableRef, onCellKeyDown, onCellMouseDown } = useSpreadsheetNav();
-  const sharedRowProps = { categories, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, handleUpdate, handleToggleEstimate, handleRemove, onCellKeyDown, onCellMouseDown, onAddCategory, onAddLinkedAccount };
+  const dialogTitle = addDialog === 'category' ? 'New Category' : 'New Payment Method';
 
   return (
     <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2 rounded-none border-x-0">
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <CardTitle>Expenses</CardTitle>
-          </div>
+          <CardTitle>Expenses</CardTitle>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={filterPayer} onValueChange={v => setFilterPayer(v as 'all' | 'X' | 'Y')}>
-              <SelectTrigger className="h-8 w-36 text-xs">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All partners</SelectItem>
                 <SelectItem value="X">{partnerX} only</SelectItem>
@@ -661,9 +446,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
               </SelectContent>
             </Select>
             <Select value={groupBy} onValueChange={v => setGroupBy(v as GroupByOption)}>
-              <SelectTrigger className="h-8 w-44 text-xs">
-                <SelectValue placeholder="Group by…" />
-              </SelectTrigger>
+              <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Group by…" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No grouping</SelectItem>
                 <SelectItem value="category">Group by Category</SelectItem>
@@ -679,108 +462,54 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         </div>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <div className="overflow-auto max-h-[calc(100dvh-15.5rem)]" ref={tableRef}>
-          <Table className="text-xs">
-            <TableHeader className="sticky top-0 z-30 bg-card shadow-[0_1px_0_0_hsl(var(--border))] [&_tr]:border-b-0">
-              <TableRow>
-                <SortableHead column="name" label="Name" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[120px] sm:min-w-[200px] sticky left-0 z-40 bg-card" />
-                <SortableHead column="category" label="Category" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
-                <SortableHead column="amount" label="Amount" current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
-                <TableHead className="text-center cursor-pointer select-none hover:bg-muted/50" onClick={() => toggleSort('estimate')}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-2">
-                        Est
-                        {sortCol === 'estimate' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">Expense is estimated</TooltipContent>
-                  </Tooltip>
-                </TableHead>
-                <SortableHead column="frequency" label="Frequency" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[185px]" />
-                
-                <TableHead className="text-right cursor-pointer select-none hover:bg-muted/50" onClick={() => toggleSort('monthly')}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-2">
-                        Monthly
-                        {sortCol === 'monthly' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">Expense normalized to how much it costs you monthly</TooltipContent>
-                  </Tooltip>
-                </TableHead>
-                <SortableHead column="payment_method" label="Payment Method" current={sortCol} dir={sortDir} onSort={toggleSort} className="min-w-[190px]" />
-                <SortableHead column="payer" label="Payer" current={sortCol} dir={sortDir} onSort={toggleSort} />
-                <TableHead className="text-right whitespace-nowrap cursor-pointer select-none hover:bg-muted/50" onClick={() => toggleSort('benefit_x')}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-2">
-                        {partnerX} %
-                        {sortCol === 'benefit_x' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">The percentage that {partnerX} benefits from the expense</TooltipContent>
-                  </Tooltip>
-                </TableHead>
-                <TableHead className="text-right whitespace-nowrap cursor-pointer select-none hover:bg-muted/50" onClick={() => toggleSort('benefit_y')}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-2">
-                        {partnerY} %
-                        {sortCol === 'benefit_y' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">The percentage that {partnerY} benefits from the expense</TooltipContent>
-                  </Tooltip>
-                </TableHead>
-                <SortableHead column="fair_x" label={`Fair ${partnerX}`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
-                <SortableHead column="fair_y" label={`Fair ${partnerY}`} current={sortCol} dir={sortDir} onSort={toggleSort} className="text-right" />
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
-                    No expenses yet. Click "Add row" to start.
-                  </TableCell>
-                </TableRow>
-              ) : grouped ? (
-                (() => {
-                  let visualIdx = 0;
-                  return grouped.map(([key, groupRows]) => (
-                    <React.Fragment key={`group-${key}`}>
-                      <GroupSubtotalRow label={getGroupLabel(key)} rows={groupRows} />
-                      {groupRows.map(row => {
-                        const ri = visualIdx++;
-                        return <ExpenseRow key={row.exp.id} {...row} {...sharedRowProps} rowIndex={ri} />;
-                      })}
-                    </React.Fragment>
-                  ));
-                })()
-              ) : (
-                rows.map((row, i) => (
-                  <ExpenseRow key={row.exp.id} {...row} {...sharedRowProps} rowIndex={i} />
-                ))
-              )}
-            </TableBody>
-            {rows.length > 0 && (
-              <TableFooter className="sticky bottom-0 z-30">
-                <TableRow className="bg-muted shadow-[0_-1px_0_0_hsl(var(--border))]">
-                  <TableCell className="font-semibold text-xs sticky left-0 z-10 bg-muted">Totals</TableCell>
-                  <TableCell colSpan={4} className="bg-muted" />
-                  <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(totalMonthly)}</TableCell>
-                  <TableCell colSpan={4} className="bg-muted" />
-                  <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(totalFairX)}</TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums text-xs bg-muted">${Math.round(totalFairY)}</TableCell>
-                  <TableCell className="bg-muted" />
-                </TableRow>
-              </TableFooter>
-            )}
-          </Table>
+        <div ref={wrapperRef}>
+          <DataGrid
+            table={table}
+            emptyMessage='No expenses yet. Click "Add" to start.'
+            groupBy={getGroupKey}
+            renderGroupHeader={renderGroupHeader}
+            footer={computedData.length > 0 ? (
+              <tr className="bg-muted shadow-[0_-1px_0_0_hsl(var(--border))]">
+                <td className="font-semibold text-xs sticky left-0 z-10 bg-muted px-2 py-1">Totals</td>
+                <td colSpan={4} className="bg-muted" />
+                <td className="text-right font-semibold tabular-nums text-xs bg-muted px-2 py-1">${Math.round(totalMonthly)}</td>
+                <td colSpan={4} className="bg-muted" />
+                <td className="text-right font-semibold tabular-nums text-xs bg-muted px-2 py-1">${Math.round(totalFairX)}</td>
+                <td className="text-right font-semibold tabular-nums text-xs bg-muted px-2 py-1">${Math.round(totalFairY)}</td>
+                <td className="bg-muted" />
+              </tr>
+            ) : undefined}
+          />
         </div>
       </CardContent>
+
+      <Dialog open={addDialog !== null} onOpenChange={open => { if (!open) setAddDialog(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>{dialogTitle}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="new-item-name">Name</Label>
+              <Input id="new-item-name" value={newItemName} onChange={e => setNewItemName(e.target.value)} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleSaveNewItem(); }} />
+            </div>
+            {addDialog === 'payment_method' && (
+              <div className="space-y-1.5">
+                <Label>Owner</Label>
+                <Select value={newItemOwner} onValueChange={v => setNewItemOwner(v as 'X' | 'Y')}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="X">{partnerX}</SelectItem>
+                    <SelectItem value="Y">{partnerY}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddDialog(null)}>Cancel</Button>
+            <Button onClick={handleSaveNewItem} disabled={savingItem || !newItemName.trim()}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
