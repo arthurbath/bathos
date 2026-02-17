@@ -407,6 +407,10 @@ export type Database = {
         Args: { _household_id: string; _user_id: string }
         Returns: boolean
       }
+      lookup_household_by_invite_code: {
+        Args: { _code: string }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "user"

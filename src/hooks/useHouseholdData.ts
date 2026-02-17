@@ -97,26 +97,23 @@ export function useHouseholdData(user: User | null) {
       .eq('id', user.id);
     if (profileErr) throw new Error(`Profile update failed: ${profileErr.message}`);
 
-    const { data: hh, error: findErr } = await supabase
-      .from('budget_households')
-      .select('id')
-      .eq('invite_code', inviteCode)
-      .maybeSingle();
+    const { data: householdId, error: findErr } = await supabase
+      .rpc('lookup_household_by_invite_code', { _code: inviteCode });
 
     if (findErr) throw new Error(`Lookup failed: ${findErr.message}`);
-    if (!hh) throw new Error('Invalid invite code. Please check and try again.');
+    if (!householdId) throw new Error('Invalid invite code. Please check and try again.');
 
     const { data: existing } = await supabase
       .from('budget_household_members')
       .select('id')
-      .eq('household_id', hh.id)
+      .eq('household_id', householdId)
       .eq('user_id', user.id)
       .maybeSingle();
 
     if (existing) throw new Error('You are already a member of this household.');
 
     const { error: memberErr } = await supabase.from('budget_household_members').insert({
-      household_id: hh.id,
+      household_id: householdId,
       user_id: user.id,
       partner_label: 'Y',
     });
