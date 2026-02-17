@@ -679,7 +679,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         </div>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <div className="overflow-auto max-h-[calc(100dvh-18rem)]" ref={tableRef}>
+        <div className="overflow-auto max-h-[calc(100dvh-15.5rem)]" ref={tableRef}>
           <Table className="text-xs">
             <TableHeader className="sticky top-0 z-30 bg-card shadow-[0_1px_0_0_hsl(var(--border))] [&_tr]:border-b-0">
               <TableRow>
