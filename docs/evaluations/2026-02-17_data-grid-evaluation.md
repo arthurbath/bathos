@@ -61,15 +61,15 @@
 
 **Trade-off acknowledged**: We must build inline editing and keyboard navigation ourselves. This is ~2-3 days of focused work to create a reusable `<DataGrid>` component, but the result will be perfectly tailored to our design language and interaction patterns.
 
-### Implementation Plan (when approved)
+### Implementation (completed 2026-02-17)
 
-1. Install `@tanstack/react-table`
-2. Build `src/components/ui/data-grid.tsx` — a shared wrapper with:
-   - Inline cell editing (click-to-edit, Enter/Escape/Tab)
-   - Arrow key navigation
-   - Column sorting (click header)
-   - Column filtering (search input per column)
-   - Row grouping (collapsible groups)
-   - Mobile-responsive layout (card view on small screens)
-3. Migrate Budget module's expenses and incomes tables to use the new component
-4. Document the component API in the style guide
+1. Installed `@tanstack/react-table`
+2. Built `src/components/ui/data-grid.tsx` — shared DataGrid component with:
+   - TanStack Table integration (sorting, column definitions)
+   - Built-in keyboard navigation (Tab/Shift+Tab, Enter/Shift+Enter)
+   - Sticky headers and footers
+   - Grouping support via `groupBy` + `renderGroupHeader` props
+   - Cell primitives: `GridEditableCell`, `GridCurrencyCell`, `GridPercentCell`
+   - `useDataGrid()` hook and `gridNavProps()` helper for custom interactive cells
+3. Migrated `IncomesTab` (351 → ~170 lines) and `ExpensesTab` (786 → ~370 lines) to use DataGrid
+4. Removed `useSpreadsheetNav.ts` (functionality absorbed into DataGrid)
