@@ -202,7 +202,10 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     return { fairX: monthly * (wx / tw), fairY: monthly * (wy / tw), monthly };
   };
 
-  const filteredExpenses = filterPayer === 'all' ? expenses : expenses.filter(e => e.payer === filterPayer);
+  const filteredExpenses = useMemo(() =>
+    filterPayer === 'all' ? expenses : expenses.filter(e => e.payer === filterPayer),
+    [expenses, filterPayer],
+  );
   const computedData: ComputedRow[] = useMemo(() =>
     filteredExpenses.map(exp => ({ exp, ...computeFairShare(exp) })),
     [filteredExpenses, incomeRatioX],
