@@ -47,27 +47,13 @@ Deno.serve(async (req) => {
   const userEmail = claimsData.claims.email as string;
 
   try {
-    const { message, context } = await req.json();
+    const { message, context, file_url } = await req.json();
 
-    if (!message || typeof message !== "string" || message.trim().length === 0) {
-      return new Response(JSON.stringify({ error: "Message is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Build email body
+    let body = `From: ${userEmail} (${userId})\nContext: ${prettyContext}\n\n${message.trim()}`;
+    if (file_url) {
+      body += `\n\nAttachment: ${file_url}`;
     }
-
-    if (message.length > 2000) {
-      return new Response(JSON.stringify({ error: "Message exceeds 2000 characters" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Pretty-format the context for display
-    const contextLabels: Record<string, string> = {
-      terms_update: "Terms Update",
-    };
-    const prettyContext = contextLabels[context] || context || "General";
 
     // Send email via Resend
     const resendRes = await fetch("https://api.resend.com/emails", {
@@ -80,7 +66,7 @@ Deno.serve(async (req) => {
         from: "BathOS <noreply@bath.garden>",
         to: ["webmaster@bath.garden"],
         subject: `[BathOS Feedback] ${prettyContext}`,
-        text: `From: ${userEmail} (${userId})\nContext: ${prettyContext}\n\n${message.trim()}`,
+        text: body,
       }),
     });
 

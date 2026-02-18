@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DollarSign, PieChart, BarChart3, Settings, History, LogOut, User } from 'lucide-react';
+import { FeedbackDialog } from '@/platform/components/FeedbackDialog';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
@@ -112,6 +113,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <h1 className="text-lg font-bold tracking-tight text-foreground">Budget</h1>
           <div className="flex items-center gap-1">
+            <FeedbackDialog userId={userId} />
             <span className="text-sm text-muted-foreground">
               {household.displayName}
             </span>
