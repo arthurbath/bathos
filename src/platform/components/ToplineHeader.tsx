@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { FeedbackDialog } from '@/platform/components/FeedbackDialog';
 import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
+import { buildRelayUrl } from '@/lib/tokenRelay';
 
 interface ToplineHeaderProps {
   title: string;
@@ -16,10 +17,11 @@ interface ToplineHeaderProps {
 export function ToplineHeader({ title, userId, displayName, onSignOut, showAppSwitcher = false }: ToplineHeaderProps) {
   const navigate = useNavigate();
   const { isAdmin } = useIsAdmin(userId);
-  const handleAppSwitcher = () => {
+  const handleAppSwitcher = async () => {
     const hostname = window.location.hostname;
     if (hostname.endsWith('.bath.garden') && hostname !== 'bath.garden' && hostname !== 'www.bath.garden') {
-      window.location.href = 'https://bath.garden/';
+      const relayUrl = await buildRelayUrl('https://bath.garden/');
+      window.location.href = relayUrl;
       return;
     }
     navigate('/');

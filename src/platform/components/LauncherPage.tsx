@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthContext } from '@/platform/contexts/AuthContext';
 import { getModuleUrl } from '@/platform/hooks/useHostModule';
+import { buildRelayUrl } from '@/lib/tokenRelay';
 import { ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -63,33 +64,26 @@ export default function LauncherPage() {
             const url = getModuleUrl(mod.id);
             const isExternal = url.startsWith('http');
 
+            const handleClick = async () => {
+              if (isExternal) {
+                const relayUrl = await buildRelayUrl(`${url}/summary`);
+                window.location.href = relayUrl;
+              } else {
+                navigate(`${url}/summary`);
+              }
+            };
+
             return (
-              <Card key={mod.id} className="cursor-pointer hover:shadow-sm transition-shadow">
-                {isExternal ? (
-                  <a href={url} className="block">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">{mod.name}</CardTitle>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground">{mod.description}</p>
-                    </CardContent>
-                  </a>
-                ) : (
-                  <div onClick={() => navigate(`${url}/summary`)}>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">{mod.name}</CardTitle>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground">{mod.description}</p>
-                    </CardContent>
+              <Card key={mod.id} className="cursor-pointer hover:shadow-sm transition-shadow" onClick={handleClick}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">{mod.name}</CardTitle>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   </div>
-                )}
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{mod.description}</p>
+                </CardContent>
               </Card>
             );
           })}
