@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { DollarSign, PieChart, BarChart3, Settings, History, LogOut, User } from 'lucide-react';
+import { DollarSign, PieChart, BarChart3, Settings, History, LogOut, User, Shield } from 'lucide-react';
 import { FeedbackDialog } from '@/platform/components/FeedbackDialog';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { toast } from '@/hooks/use-toast';
 import type { HouseholdData } from '@/hooks/useHouseholdData';
 import { useIncomes } from '@/hooks/useIncomes';
 import { useExpenses } from '@/hooks/useExpenses';
+import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
 import { useCategories } from '@/hooks/useCategories';
 
 import { useLinkedAccounts } from '@/hooks/useLinkedAccounts';
@@ -33,6 +34,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
   const location = useLocation();
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
+  const { isAdmin } = useIsAdmin(userId);
   const { incomes, add: addIncome, update: updateIncome, remove: removeIncome, refetch: refetchIncomes } = useIncomes(household.householdId);
   const { expenses, add: addExpense, update: updateExpense, remove: removeExpense, refetch: refetchExpenses } = useExpenses(household.householdId);
   const { categories, add: addCategory, update: updateCategory, updateColor: updateCategoryColor, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
@@ -113,6 +115,11 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <h1 className="text-lg font-bold tracking-tight text-foreground">Budget</h1>
           <div className="flex items-center gap-1">
+            {isAdmin && (
+              <Button variant="ghost" size="icon" onClick={() => navigate('/admin')} title="Administration">
+                <Shield className="h-4 w-4" />
+              </Button>
+            )}
             <FeedbackDialog userId={userId} />
             <span className="text-sm text-muted-foreground">
               {household.displayName}
