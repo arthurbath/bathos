@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DollarSign, PieChart, BarChart3, Settings, History, LogOut, User, Shield } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { FeedbackDialog } from '@/platform/components/FeedbackDialog';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import { Button } from '@/components/ui/button';
@@ -121,15 +122,24 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
               </Button>
             )}
             <FeedbackDialog userId={userId} />
-            <span className="text-sm text-muted-foreground">
-              {household.displayName}
-            </span>
-            <Button variant="ghost" size="icon" onClick={() => navigate('/account')} title="Account">
-              <User className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={onSignOut} title="Sign out">
-              <LogOut className="h-4 w-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-1.5">
+                  <User className="h-4 w-4" />
+                  <span className="text-sm">{household.displayName}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-popover">
+                <DropdownMenuItem onClick={() => navigate('/account')}>
+                  <User className="h-4 w-4 mr-2" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onSignOut}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
