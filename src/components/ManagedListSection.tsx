@@ -31,10 +31,17 @@ interface ManagedListSectionProps {
 }
 
 function ColorPicker({ color, onChange }: { color: string | null | undefined; onChange: (c: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const handleChange = (nextColor: string | null) => {
+    onChange(nextColor);
+    setOpen(false);
+  };
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
+          type="button"
           className="h-6 w-6 rounded border border-border shrink-0 transition-shadow hover:ring-2 hover:ring-ring"
           style={{ backgroundColor: color || 'transparent' }}
           title="Pick color"
@@ -46,17 +53,19 @@ function ColorPicker({ color, onChange }: { color: string | null | undefined; on
         <div className="grid grid-cols-5 gap-1.5">
           {COLOR_PALETTE.map(c => (
             <button
+              type="button"
               key={c}
               className={`h-6 w-6 rounded border transition-shadow ${color === c ? 'ring-2 ring-ring border-ring' : 'border-border hover:ring-1 hover:ring-ring'}`}
               style={{ backgroundColor: c }}
-              onClick={() => onChange(c)}
+              onClick={() => handleChange(c)}
             />
           ))}
         </div>
         {color && (
           <button
+            type="button"
             className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => onChange(null)}
+            onClick={() => handleChange(null)}
           >
             <X className="h-3 w-3" /> Remove color
           </button>

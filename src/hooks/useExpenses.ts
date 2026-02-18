@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { FrequencyType } from '@/types/fairshare';
+import { isLikelyNetworkError, toUserFacingErrorMessage } from '@/lib/networkErrors';
 
 export interface Expense {
   id: string;
@@ -28,13 +29,19 @@ export function useExpenses(householdId: string) {
     });
 
   const fetch = useCallback(async () => {
-    const { data } = await supabase
-      .from('budget_expenses')
-      .select('*')
-      .eq('household_id', householdId)
-      .order('created_at');
-    setExpenses((data as Expense[]) ?? []);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('budget_expenses')
+        .select('*')
+        .eq('household_id', householdId)
+        .order('created_at');
+      if (error) throw error;
+      setExpenses((data as Expense[]) ?? []);
+    } catch {
+      // Keep previous in-memory data if fetch fails.
+    } finally {
+      setLoading(false);
+    }
   }, [householdId]);
 
   useEffect(() => { fetch(); }, [fetch]);
@@ -55,12 +62,11 @@ export function useExpenses(householdId: string) {
         setExpenses(prev => sortByCreatedAt(prev.map(e => (e.id === id ? (data as Expense) : e))));
       }
     } catch (e: any) {
-      if (e instanceof TypeError && e.message === 'Load failed') {
-        await fetch();
-      } else {
-        setExpenses(prev => prev.filter(e => e.id !== id));
-        throw e;
+      setExpenses(prev => prev.filter(e => e.id !== id));
+      if (isLikelyNetworkError(e)) {
+        throw new Error(toUserFacingErrorMessage(e));
       }
+      throw e;
     }
   };
 
@@ -74,22 +80,26 @@ export function useExpenses(householdId: string) {
         setExpenses(prev => sortByCreatedAt(prev.map(e => (e.id === id ? (data as Expense) : e))));
       }
     } catch (e: any) {
-      if (e instanceof TypeError && e.message === 'Load failed') {
-        // silently ignore
-      } else {
-        setExpenses(prevExpenses);
-        throw e;
+      setExpenses(prevExpenses);
+      if (isLikelyNetworkError(e)) {
+        throw new Error(toUserFacingErrorMessage(e));
       }
+      throw e;
     }
   };
 
   const remove = async (id: string) => {
     const prevExpenses = expenses;
     setExpenses(prev => prev.filter(e => e.id !== id));
-    const { error } = await supabase.from('budget_expenses').delete().eq('id', id);
-    if (error) {
+    try {
+      const { error } = await supabase.from('budget_expenses').delete().eq('id', id);
+      if (error) throw error;
+    } catch (e: any) {
       setExpenses(prevExpenses);
-      throw error;
+      if (isLikelyNetworkError(e)) {
+        throw new Error(toUserFacingErrorMessage(e));
+      }
+      throw e;
     }
   };
 

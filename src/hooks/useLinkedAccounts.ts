@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { isLikelyNetworkError, toUserFacingErrorMessage } from '@/lib/networkErrors';
 
 export interface LinkedAccount {
   id: string;
@@ -15,13 +16,19 @@ export function useLinkedAccounts(householdId: string) {
   const sortByName = (rows: LinkedAccount[]) => [...rows].sort((a, b) => a.name.localeCompare(b.name));
 
   const fetch = useCallback(async () => {
-    const { data } = await supabase
-      .from('budget_linked_accounts')
-      .select('*')
-      .eq('household_id', householdId)
-      .order('name');
-    setLinkedAccounts((data as LinkedAccount[]) ?? []);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('budget_linked_accounts')
+        .select('*')
+        .eq('household_id', householdId)
+        .order('name');
+      if (error) throw error;
+      setLinkedAccounts((data as LinkedAccount[]) ?? []);
+    } catch {
+      // Keep previous in-memory data if fetch fails.
+    } finally {
+      setLoading(false);
+    }
   }, [householdId]);
 
   useEffect(() => { fetch(); }, [fetch]);
@@ -31,49 +38,73 @@ export function useLinkedAccounts(householdId: string) {
     const optimistic: LinkedAccount = { id, household_id: householdId, name, owner_partner: ownerPartner, color: null };
     setLinkedAccounts(prev => sortByName([...prev, optimistic]));
 
-    const { data, error } = await supabase.from('budget_linked_accounts').insert({ id, household_id: householdId, name, owner_partner: ownerPartner }).select('*').single();
-    if (error) {
+    try {
+      const { data, error } = await supabase
+        .from('budget_linked_accounts')
+        .insert({ id, household_id: householdId, name, owner_partner: ownerPartner })
+        .select('*')
+        .single();
+      if (error) throw error;
+      if (data) {
+        setLinkedAccounts(prev => sortByName(prev.map(a => (a.id === id ? (data as LinkedAccount) : a))));
+      }
+    } catch (e: any) {
       setLinkedAccounts(prev => prev.filter(a => a.id !== id));
-      throw error;
-    }
-    if (data) {
-      setLinkedAccounts(prev => sortByName(prev.map(a => (a.id === id ? (data as LinkedAccount) : a))));
+      if (isLikelyNetworkError(e)) {
+        throw new Error(toUserFacingErrorMessage(e));
+      }
+      throw e;
     }
   };
 
   const update = async (id: string, updates: Partial<Pick<LinkedAccount, 'name' | 'owner_partner'>>) => {
     const prevAccounts = linkedAccounts;
     setLinkedAccounts(prev => sortByName(prev.map(a => a.id === id ? { ...a, ...updates } : a)));
-    const { data, error } = await supabase.from('budget_linked_accounts').update(updates).eq('id', id).select('*').single();
-    if (error) {
+    try {
+      const { data, error } = await supabase.from('budget_linked_accounts').update(updates).eq('id', id).select('*').single();
+      if (error) throw error;
+      if (data) {
+        setLinkedAccounts(prev => sortByName(prev.map(a => (a.id === id ? (data as LinkedAccount) : a))));
+      }
+    } catch (e: any) {
       setLinkedAccounts(prevAccounts);
-      throw error;
-    }
-    if (data) {
-      setLinkedAccounts(prev => sortByName(prev.map(a => (a.id === id ? (data as LinkedAccount) : a))));
+      if (isLikelyNetworkError(e)) {
+        throw new Error(toUserFacingErrorMessage(e));
+      }
+      throw e;
     }
   };
 
   const updateColor = async (id: string, color: string | null) => {
     const prevAccounts = linkedAccounts;
     setLinkedAccounts(prev => sortByName(prev.map(a => a.id === id ? { ...a, color } : a)));
-    const { data, error } = await supabase.from('budget_linked_accounts').update({ color }).eq('id', id).select('*').single();
-    if (error) {
+    try {
+      const { data, error } = await supabase.from('budget_linked_accounts').update({ color }).eq('id', id).select('*').single();
+      if (error) throw error;
+      if (data) {
+        setLinkedAccounts(prev => sortByName(prev.map(a => (a.id === id ? (data as LinkedAccount) : a))));
+      }
+    } catch (e: any) {
       setLinkedAccounts(prevAccounts);
-      throw error;
-    }
-    if (data) {
-      setLinkedAccounts(prev => sortByName(prev.map(a => (a.id === id ? (data as LinkedAccount) : a))));
+      if (isLikelyNetworkError(e)) {
+        throw new Error(toUserFacingErrorMessage(e));
+      }
+      throw e;
     }
   };
 
   const remove = async (id: string) => {
     const prevAccounts = linkedAccounts;
     setLinkedAccounts(prev => prev.filter(a => a.id !== id));
-    const { error } = await supabase.from('budget_linked_accounts').delete().eq('id', id);
-    if (error) {
+    try {
+      const { error } = await supabase.from('budget_linked_accounts').delete().eq('id', id);
+      if (error) throw error;
+    } catch (e: any) {
       setLinkedAccounts(prevAccounts);
-      throw error;
+      if (isLikelyNetworkError(e)) {
+        throw new Error(toUserFacingErrorMessage(e));
+      }
+      throw e;
     }
   };
 
