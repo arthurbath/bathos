@@ -108,7 +108,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
 
   return (
     <div className="min-h-screen bg-background">
-      <ToplineHeader title="Budget" userId={userId} displayName={household.displayName} onSignOut={onSignOut} showAppSwitcher />
+      <ToplineHeader title="Budget" userId={userId} displayName={household.displayName} onSignOut={onSignOut} />
 
       <main className={`mx-auto max-w-5xl px-4 pt-6 space-y-6 ${location.pathname.endsWith('/expenses') || location.pathname.endsWith('/incomes') ? 'pb-0' : 'pb-6'}`}>
         <nav className="grid w-full grid-cols-5 rounded-lg bg-muted p-1 text-muted-foreground">
