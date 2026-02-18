@@ -63,6 +63,12 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Pretty-format the context for display
+    const contextLabels: Record<string, string> = {
+      terms_update: "Terms Update",
+    };
+    const prettyContext = contextLabels[context] || context || "General";
+
     // Send email via Resend
     const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -73,8 +79,8 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: "BathOS <noreply@bath.garden>",
         to: ["webmaster@bath.garden"],
-        subject: `[BathOS Feedback] ${context || "General"}`,
-        text: `From: ${userEmail} (${userId})\nContext: ${context || "General"}\n\n${message.trim()}`,
+        subject: `[BathOS Feedback] ${prettyContext}`,
+        text: `From: ${userEmail} (${userId})\nContext: ${prettyContext}\n\n${message.trim()}`,
       }),
     });
 
