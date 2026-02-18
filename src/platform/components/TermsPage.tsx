@@ -38,9 +38,7 @@ export default function TermsPage() {
           <hr />
 
           <h2>2. Eligibility</h2>
-          <p>You must be <strong>at least 18 years old</strong> to use the Service.</p>
-          <p>Use by minors is strictly prohibited, even with parental consent. By using the Service, you represent and warrant that you are at least 18 years old.</p>
-          <p>Accounts found to belong to minors will be terminated immediately and without notice.</p>
+          <p>By creating an account, you represent that you have the legal capacity to enter into these Terms.</p>
 
           <hr />
 
@@ -90,7 +88,6 @@ export default function TermsPage() {
           <h2>6. Prohibited use</h2>
           <p>You agree not to:</p>
           <ul>
-            <li>Use the Service if you are under 18</li>
             <li>Harass, threaten, impersonate, or abuse others</li>
             <li>Submit unlawful or infringing content</li>
             <li>Scrape or automate access to the Service</li>

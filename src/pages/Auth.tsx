@@ -96,7 +96,7 @@ export default function Auth() {
                     onCheckedChange={(checked) => setTermsAccepted(checked === true)}
                   />
                   <Label htmlFor="terms-auth" className="text-sm leading-relaxed cursor-pointer">
-                    I'm 18+ years old and agree to the{' '}
+                    I agree to the{' '}
                     <a
                       href="/terms"
                       target="_blank"
