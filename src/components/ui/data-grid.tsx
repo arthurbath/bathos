@@ -257,7 +257,11 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
 }) {
   const ctx = useDataGrid();
   const [local, setLocal] = useState(String(value));
+  const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (!focused) setLocal(String(value)); }, [value, focused]);
+
   const commit = () => { if (local !== String(value)) onChange(local); };
 
   return (
@@ -269,7 +273,8 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
       data-row={ctx?.rowIndex}
       data-col={navCol}
       onChange={e => setLocal(e.target.value)}
-      onBlur={commit}
+      onFocus={() => setFocused(true)}
+      onBlur={() => { commit(); setFocused(false); }}
       onKeyDown={e => { if (ctx) ctx.onCellKeyDown(e); else if (e.key === 'Enter') ref.current?.blur(); }}
       onMouseDown={ctx?.onCellMouseDown}
       className={cn(CELL_INPUT_CLASS, className)}
@@ -287,6 +292,9 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
   const [local, setLocal] = useState(String(value));
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (!focused) setLocal(String(value)); }, [value, focused]);
+
   const commit = () => { if (local !== String(value)) onChange(local); };
 
   return (
