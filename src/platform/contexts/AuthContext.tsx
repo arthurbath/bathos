@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { consumeRelayToken } from '@/lib/tokenRelay';
 import type { User, Session } from '@supabase/supabase-js';
 
 interface AuthContextValue {
@@ -29,16 +28,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    // Try consuming a relay token first, then fall back to existing session
-    consumeRelayToken().then((consumed) => {
-      if (!consumed) {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          setSession(session);
-          setUser(session?.user ?? null);
-          setLoading(false);
-        });
-      }
-      // If consumed, onAuthStateChange will fire and set state
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();

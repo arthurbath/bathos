@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { FeedbackDialog } from '@/platform/components/FeedbackDialog';
 import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
-import { buildRelayUrl } from '@/lib/tokenRelay';
 
 interface ToplineHeaderProps {
   title: string;
@@ -17,22 +16,13 @@ interface ToplineHeaderProps {
 export function ToplineHeader({ title, userId, displayName, onSignOut, showAppSwitcher = false }: ToplineHeaderProps) {
   const navigate = useNavigate();
   const { isAdmin } = useIsAdmin(userId);
-  const handleAppSwitcher = async () => {
-    const hostname = window.location.hostname;
-    if (hostname.endsWith('.bath.garden') && hostname !== 'bath.garden' && hostname !== 'www.bath.garden') {
-      const relayUrl = await buildRelayUrl('https://bath.garden/');
-      window.location.href = relayUrl;
-      return;
-    }
-    navigate('/');
-  };
 
   return (
     <header className="border-b bg-card px-4 py-3">
       <div className="mx-auto flex max-w-5xl items-center justify-between">
         <div className="flex items-center gap-2">
           {showAppSwitcher && (
-            <Button variant="ghost" size="icon" onClick={handleAppSwitcher} title="All apps">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/')} title="All apps">
               <span className="grid h-4 w-4 grid-cols-3 gap-[2px]" aria-hidden="true">
                 {Array.from({ length: 9 }).map((_, idx) => (
                   <span key={idx} className="block rounded-[1px] bg-current" />
