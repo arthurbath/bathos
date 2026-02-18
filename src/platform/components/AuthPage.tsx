@@ -5,10 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAuthContext } from '@/platform/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
+import { TermsDocument } from '@/platform/components/TermsDocument';
 
 export default function AuthPage() {
   const { signIn, signUp } = useAuthContext();
@@ -21,6 +23,7 @@ export default function AuthPage() {
   const [signupPassword, setSignupPassword] = useState('');
   const [signupName, setSignupName] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const [latestTermsVersion, setLatestTermsVersion] = useState('1.0.0');
 
   useEffect(() => {
@@ -90,24 +93,24 @@ export default function AuthPage() {
                 <Input placeholder="Display name" value={signupName} onChange={e => setSignupName(e.target.value)} required />
                 <Input placeholder="Email" type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} required />
                 <Input placeholder="Password (min 6 chars)" type="password" value={signupPassword} onChange={e => setSignupPassword(e.target.value)} required minLength={6} />
-                <div className="flex items-center space-x-3">
+                <div className="flex items-start space-x-3">
                   <Checkbox
                     id="terms"
                     checked={termsAccepted}
                     onCheckedChange={(checked) => setTermsAccepted(checked === true)}
                   />
-                  <Label htmlFor="terms" className="text-sm leading-relaxed cursor-pointer">
-                    I agree to the{' '}
-                    <a
-                      href="/terms"
-                      target="_blank"
-                      rel="noopener noreferrer"
+                  <div className="text-sm leading-relaxed">
+                    <Label htmlFor="terms" className="cursor-pointer">
+                      I agree to the{' '}
+                    </Label>
+                    <button
+                      type="button"
                       className="underline hover:text-primary transition-colors"
-                      onClick={e => e.stopPropagation()}
+                      onClick={() => setShowTermsModal(true)}
                     >
                       Terms of Service and Privacy Policy
-                    </a>
-                  </Label>
+                    </button>
+                  </div>
                 </div>
                 <Button type="submit" className="w-full" disabled={loading || !termsAccepted}>Sign up</Button>
               </form>
@@ -115,6 +118,17 @@ export default function AuthPage() {
           </Tabs>
         </CardContent>
       </Card>
+
+      <Dialog open={showTermsModal} onOpenChange={setShowTermsModal}>
+        <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-4xl flex-col overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
+            <DialogTitle>Terms of Service and Privacy Policy</DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 md:px-8 md:py-6">
+            <TermsDocument className="text-sm md:text-[15px]" />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
