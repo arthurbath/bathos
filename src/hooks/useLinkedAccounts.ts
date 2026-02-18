@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { isLikelyNetworkError, toUserFacingErrorMessage } from '@/lib/networkErrors';
 
@@ -13,6 +13,8 @@ export interface LinkedAccount {
 export function useLinkedAccounts(householdId: string) {
   const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
   const [loading, setLoading] = useState(true);
+  const accountsRef = useRef(linkedAccounts);
+  accountsRef.current = linkedAccounts;
   const sortByName = (rows: LinkedAccount[]) => [...rows].sort((a, b) => a.name.localeCompare(b.name));
 
   const fetch = useCallback(async () => {
@@ -33,7 +35,7 @@ export function useLinkedAccounts(householdId: string) {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const add = async (name: string, ownerPartner: string = 'X') => {
+  const add = useCallback(async (name: string, ownerPartner: string = 'X') => {
     const id = crypto.randomUUID();
     const optimistic: LinkedAccount = { id, household_id: householdId, name, owner_partner: ownerPartner, color: null };
     setLinkedAccounts(prev => sortByName([...prev, optimistic]));
@@ -55,10 +57,10 @@ export function useLinkedAccounts(householdId: string) {
       }
       throw e;
     }
-  };
+  }, [householdId]);
 
-  const update = async (id: string, updates: Partial<Pick<LinkedAccount, 'name' | 'owner_partner'>>) => {
-    const prevAccounts = linkedAccounts;
+  const update = useCallback(async (id: string, updates: Partial<Pick<LinkedAccount, 'name' | 'owner_partner'>>) => {
+    const prevAccounts = accountsRef.current;
     setLinkedAccounts(prev => sortByName(prev.map(a => a.id === id ? { ...a, ...updates } : a)));
     try {
       const { data, error } = await supabase.from('budget_linked_accounts').update(updates).eq('id', id).select('*').single();
@@ -73,10 +75,10 @@ export function useLinkedAccounts(householdId: string) {
       }
       throw e;
     }
-  };
+  }, []);
 
-  const updateColor = async (id: string, color: string | null) => {
-    const prevAccounts = linkedAccounts;
+  const updateColor = useCallback(async (id: string, color: string | null) => {
+    const prevAccounts = accountsRef.current;
     setLinkedAccounts(prev => sortByName(prev.map(a => a.id === id ? { ...a, color } : a)));
     try {
       const { data, error } = await supabase.from('budget_linked_accounts').update({ color }).eq('id', id).select('*').single();
@@ -91,10 +93,10 @@ export function useLinkedAccounts(householdId: string) {
       }
       throw e;
     }
-  };
+  }, []);
 
-  const remove = async (id: string) => {
-    const prevAccounts = linkedAccounts;
+  const remove = useCallback(async (id: string) => {
+    const prevAccounts = accountsRef.current;
     setLinkedAccounts(prev => prev.filter(a => a.id !== id));
     try {
       const { error } = await supabase.from('budget_linked_accounts').delete().eq('id', id);
@@ -106,7 +108,7 @@ export function useLinkedAccounts(householdId: string) {
       }
       throw e;
     }
-  };
+  }, []);
 
   return { linkedAccounts, loading, add, update, updateColor, remove, refetch: fetch };
 }

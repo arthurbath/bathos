@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { FrequencyType } from '@/types/fairshare';
 import { isLikelyNetworkError, toUserFacingErrorMessage } from '@/lib/networkErrors';
@@ -21,6 +21,9 @@ export interface Expense {
 export function useExpenses(householdId: string) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
+  const expensesRef = useRef(expenses);
+  expensesRef.current = expenses;
+
   const sortByCreatedAt = (rows: Expense[]) =>
     [...rows].sort((a, b) => {
       const aCreated = (a as unknown as { created_at?: string }).created_at ?? '';
@@ -46,7 +49,7 @@ export function useExpenses(householdId: string) {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const add = async (expense: Omit<Expense, 'id' | 'household_id'>) => {
+  const add = useCallback(async (expense: Omit<Expense, 'id' | 'household_id'>) => {
     const id = crypto.randomUUID();
     const optimistic: Expense = { id, household_id: householdId, ...expense };
     setExpenses(prev => sortByCreatedAt([...prev, optimistic]));
@@ -68,10 +71,10 @@ export function useExpenses(householdId: string) {
       }
       throw e;
     }
-  };
+  }, [householdId]);
 
-  const update = async (id: string, updates: Partial<Omit<Expense, 'id' | 'household_id'>>) => {
-    const prevExpenses = expenses;
+  const update = useCallback(async (id: string, updates: Partial<Omit<Expense, 'id' | 'household_id'>>) => {
+    const prevExpenses = expensesRef.current;
     setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
     try {
       const { data, error } = await supabase.from('budget_expenses').update(updates).eq('id', id).select('*').single();
@@ -86,10 +89,10 @@ export function useExpenses(householdId: string) {
       }
       throw e;
     }
-  };
+  }, []);
 
-  const remove = async (id: string) => {
-    const prevExpenses = expenses;
+  const remove = useCallback(async (id: string) => {
+    const prevExpenses = expensesRef.current;
     setExpenses(prev => prev.filter(e => e.id !== id));
     try {
       const { error } = await supabase.from('budget_expenses').delete().eq('id', id);
@@ -101,7 +104,7 @@ export function useExpenses(householdId: string) {
       }
       throw e;
     }
-  };
+  }, []);
 
   return { expenses, loading, add, update, remove, refetch: fetch };
 }
