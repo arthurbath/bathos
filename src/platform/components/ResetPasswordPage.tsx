@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { isWeakOrLeakedPasswordError, WEAK_PASSWORD_MESSAGE } from '@/lib/authErrors';
+import { isPasswordValid } from '@/lib/passwordValidation';
+import { PasswordRequirements } from '@/components/PasswordRequirements';
 
 export default function ResetPasswordPage() {
   const { toast } = useToast();
@@ -27,8 +29,8 @@ export default function ResetPasswordPage() {
       toast({ title: 'Passwords do not match', variant: 'destructive' });
       return;
     }
-    if (newPassword.length < 6) {
-      toast({ title: 'Password must be at least 6 characters', variant: 'destructive' });
+    if (!isPasswordValid(newPassword)) {
+      toast({ title: 'Password does not meet requirements', variant: 'destructive' });
       return;
     }
     setSubmitting(true);
@@ -72,13 +74,14 @@ export default function ResetPasswordPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="text-sm font-medium mb-1 block">New password</label>
-              <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} minLength={6} autoComplete="new-password" autoFocus />
+              <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} minLength={8} autoComplete="new-password" autoFocus />
+              <PasswordRequirements password={newPassword} />
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Confirm password</label>
-              <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} minLength={6} autoComplete="new-password" />
+              <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} minLength={8} autoComplete="new-password" />
             </div>
-            <Button type="submit" className="w-full" disabled={submitting || !newPassword || !confirmPassword}>
+            <Button type="submit" className="w-full" disabled={submitting || !isPasswordValid(newPassword) || !confirmPassword}>
               {submitting ? 'Updating...' : 'Update password'}
             </Button>
           </form>

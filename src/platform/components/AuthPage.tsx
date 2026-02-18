@@ -12,6 +12,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
 import { TermsDocument } from '@/platform/components/TermsDocument';
 import { isWeakOrLeakedPasswordError, WEAK_PASSWORD_MESSAGE } from '@/lib/authErrors';
+import { isPasswordValid } from '@/lib/passwordValidation';
+import { PasswordRequirements } from '@/components/PasswordRequirements';
 
 export default function AuthPage() {
   const { signIn, signUp } = useAuthContext();
@@ -97,7 +99,8 @@ export default function AuthPage() {
               <form onSubmit={handleSignup} className="space-y-4 pt-2">
                 <Input placeholder="Display name" value={signupName} onChange={e => setSignupName(e.target.value)} required />
                 <Input placeholder="Email" type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} required />
-                <Input placeholder="Password (min 6 chars)" type="password" value={signupPassword} onChange={e => setSignupPassword(e.target.value)} required minLength={6} />
+                <Input placeholder="Password" type="password" value={signupPassword} onChange={e => setSignupPassword(e.target.value)} required minLength={8} />
+                <PasswordRequirements password={signupPassword} />
                 <div className="flex items-start space-x-3">
                   <Checkbox
                     id="terms"
@@ -117,7 +120,7 @@ export default function AuthPage() {
                     </button>
                   </div>
                 </div>
-                <Button type="submit" className="w-full" disabled={loading || !termsAccepted}>Sign up</Button>
+                <Button type="submit" className="w-full" disabled={loading || !termsAccepted || !isPasswordValid(signupPassword)}>Sign up</Button>
               </form>
             </TabsContent>
           </Tabs>

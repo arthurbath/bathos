@@ -12,6 +12,8 @@ import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { isWeakOrLeakedPasswordError, WEAK_PASSWORD_MESSAGE } from '@/lib/authErrors';
+import { isPasswordValid } from '@/lib/passwordValidation';
+import { PasswordRequirements } from '@/components/PasswordRequirements';
 
 export default function AccountPage() {
   const { user, signOut } = useAuthContext();
@@ -106,8 +108,8 @@ export default function AccountPage() {
       toast({ title: 'Passwords do not match', variant: 'destructive' });
       return;
     }
-    if (newPassword.length < 6) {
-      toast({ title: 'Password must be at least 6 characters', variant: 'destructive' });
+    if (!isPasswordValid(newPassword)) {
+      toast({ title: 'Password does not meet requirements', variant: 'destructive' });
       return;
     }
     setPasswordSubmitting(true);
@@ -286,15 +288,16 @@ export default function AccountPage() {
           <form onSubmit={handleChangePassword} className="space-y-4 mt-2">
             <div>
               <label className="text-sm font-medium mb-1 block">New password</label>
-              <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} minLength={6} autoComplete="new-password" autoFocus />
+              <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} minLength={8} autoComplete="new-password" autoFocus />
+              <PasswordRequirements password={newPassword} />
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Confirm password</label>
-              <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} minLength={6} autoComplete="new-password" />
+              <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} minLength={8} autoComplete="new-password" />
             </div>
             <div className="flex gap-2 pt-1">
               <Button type="button" variant="outline" onClick={() => setShowChangePassword(false)}>Cancel</Button>
-              <Button type="submit" disabled={passwordSubmitting || !newPassword || !confirmPassword} className="flex-1">
+              <Button type="submit" disabled={passwordSubmitting || !isPasswordValid(newPassword) || !confirmPassword} className="flex-1">
                 {passwordSubmitting ? 'Updating...' : 'Update password'}
               </Button>
             </div>
