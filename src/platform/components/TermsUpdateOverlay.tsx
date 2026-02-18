@@ -45,10 +45,17 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
     if (!user || !feedbackMessage.trim()) return;
     setIsSendingFeedback(true);
     try {
+      // Save to DB
       const { error } = await supabase
         .from('bathos_feedback')
         .insert({ user_id: user.id, message: feedbackMessage.trim(), context: 'terms_update' });
       if (error) throw error;
+
+      // Send email notification
+      await supabase.functions.invoke('send-feedback-email', {
+        body: { message: feedbackMessage.trim(), context: 'terms_update' },
+      });
+
       setFeedbackSent(true);
       setShowFeedbackModal(false);
       setFeedbackMessage('');
