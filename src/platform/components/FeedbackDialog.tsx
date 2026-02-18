@@ -103,7 +103,7 @@ export function FeedbackDialog({ userId }: FeedbackDialogProps) {
         <DialogHeader>
           <DialogTitle>Feedback &amp; Bug Reports</DialogTitle>
           <DialogDescription>
-            Found a bug or have a suggestion? Let us know.
+            Found a bug or have a suggestion? Let me know.
           </DialogDescription>
         </DialogHeader>
 
