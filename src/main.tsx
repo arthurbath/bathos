@@ -9,6 +9,11 @@ if (sentryDsn) {
     dsn: sentryDsn,
     sendDefaultPii: true,
   });
+
+  const shouldTriggerSentryTest = new URLSearchParams(window.location.search).get("sentry_test") === "1";
+  if (shouldTriggerSentryTest) {
+    Sentry.captureException(new Error("Sentry test error: manual trigger via ?sentry_test=1"));
+  }
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
