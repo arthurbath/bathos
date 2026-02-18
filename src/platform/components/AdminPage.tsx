@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
+import * as Sentry from '@sentry/react';
 import { toast } from '@/hooks/use-toast';
 import NotFound from '@/pages/NotFound';
 
@@ -50,6 +51,12 @@ export default function AdminPage() {
               onClick={() => toast({ title: 'Error', description: 'This is a danger toast.', variant: 'destructive' })}
             >
               Test Danger Toast
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => { throw new Error('Sentry test error from admin panel'); }}
+            >
+              Test Sentry Error
             </Button>
           </CardContent>
         </Card>
