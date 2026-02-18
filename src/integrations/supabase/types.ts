@@ -19,16 +19,37 @@ export type Database = {
           created_at: string
           display_name: string
           id: string
+          terms_version_accepted: string | null
         }
         Insert: {
           created_at?: string
           display_name: string
           id: string
+          terms_version_accepted?: string | null
         }
         Update: {
           created_at?: string
           display_name?: string
           id?: string
+          terms_version_accepted?: string | null
+        }
+        Relationships: []
+      }
+      bathos_terms_versions: {
+        Row: {
+          change_description: string
+          created_at: string
+          version: string
+        }
+        Insert: {
+          change_description: string
+          created_at?: string
+          version: string
+        }
+        Update: {
+          change_description?: string
+          created_at?: string
+          version?: string
         }
         Relationships: []
       }

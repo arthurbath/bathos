@@ -125,9 +125,20 @@ export default function AccountPage() {
   const handleDeleteAccount = async () => {
     if (deleteConfirmText.toLowerCase() !== userEmail.toLowerCase()) return;
     setIsDeleting(true);
-    // For now, sign out. Full deletion requires an edge function.
-    await signOut();
-    toast({ title: 'Signed out. Contact support to complete account deletion.' });
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-user-account');
+      if (error) throw new Error(error.message || 'Failed to delete account');
+      if (!data?.success) throw new Error(data?.error || 'Account deletion failed');
+      await signOut();
+      window.location.href = '/';
+    } catch (error) {
+      toast({
+        title: 'Deletion failed',
+        description: error instanceof Error ? error.message : 'There was an error deleting your account.',
+        variant: 'destructive',
+      });
+      setIsDeleting(false);
+    }
   };
 
   if (!user) return null;

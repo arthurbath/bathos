@@ -9,6 +9,7 @@ import LauncherPage from "@/platform/components/LauncherPage";
 import AccountPage from "@/platform/components/AccountPage";
 import ForgotPasswordPage from "@/platform/components/ForgotPasswordPage";
 import ResetPasswordPage from "@/platform/components/ResetPasswordPage";
+import TermsPage from "@/platform/components/TermsPage";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -41,6 +42,7 @@ function AppRoutes() {
           <Route path="/" element={<Navigate to="/summary" replace />} />
           {BudgetRoutes()}
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/terms" element={<TermsPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       );
@@ -54,6 +56,7 @@ function AppRoutes() {
       <Route path="/account" element={<AccountPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/terms" element={<TermsPage />} />
 
       {/* Path-based budget routes for dev/preview */}
       <Route path="/budget" element={<Navigate to="/budget/summary" replace />} />
