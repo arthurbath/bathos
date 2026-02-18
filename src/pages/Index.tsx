@@ -5,7 +5,7 @@ import { useHouseholdData } from '@/hooks/useHouseholdData';
 import { useTermsConfirmation } from '@/hooks/useTermsConfirmation';
 import { TermsUpdateOverlay } from '@/platform/components/TermsUpdateOverlay';
 import { useToast } from '@/hooks/use-toast';
-import Auth from '@/pages/Auth';
+import AuthPage from '@/platform/components/AuthPage';
 
 const Index = () => {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -21,7 +21,7 @@ const Index = () => {
     );
   }
 
-  if (!user) return <Auth />;
+  if (!user) return <AuthPage />;
 
   const handleTermsAgree = async () => {
     await acceptTerms();
