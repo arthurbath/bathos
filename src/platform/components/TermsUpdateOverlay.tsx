@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
+import { TermsDocument } from './TermsDocument';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -23,11 +26,13 @@ const MAX_CHARS = 2000;
 export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: TermsUpdateOverlayProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [isSendingFeedback, setIsSendingFeedback] = useState(false);
   const [isAgreeing, setIsAgreeing] = useState(false);
-  const { user } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { user, signOut } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -39,6 +44,15 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
   const handleAgree = async () => {
     setIsAgreeing(true);
     try { await onAgree(); } finally { setIsAgreeing(false); }
+  };
+
+  const handleLogOut = async () => {
+    setIsLoggingOut(true);
+    try {
+      await signOut();
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const handleSendFeedback = async () => {
@@ -117,6 +131,26 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
         </div>
       )}
 
+      {/* Terms Modal */}
+      {showTermsModal && (
+        <div className="fixed inset-0 z-[92] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowTermsModal(false)} />
+          <div className="relative flex h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border bg-card shadow-lg">
+            <div className="shrink-0 border-b px-6 py-4">
+              <h2 className="text-lg font-semibold text-center">Terms of Service and Privacy Policy</h2>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 md:px-8 md:py-6">
+              <TermsDocument className="text-sm md:text-[15px]" />
+            </div>
+            <div className="shrink-0 border-t px-6 py-4">
+              <Button variant="outline" className="w-full" onClick={() => setShowTermsModal(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Overlay */}
       <div className="relative w-full max-w-md bg-card rounded-lg border shadow-lg overflow-hidden">
         <div className="px-6 py-5 border-b">
@@ -125,9 +159,13 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
         <div className="px-6 py-5 space-y-4">
           <p className="text-muted-foreground text-sm text-center">
             The{' '}
-            <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:text-primary/80">
+            <button
+              type="button"
+              className="text-primary underline underline-offset-2 hover:text-primary/80"
+              onClick={() => setShowTermsModal(true)}
+            >
               Terms of Service & Privacy Policy
-            </a>{' '}
+            </button>{' '}
             have been updated.
           </p>
           {pendingVersions.length > 0 && (
@@ -145,23 +183,31 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
           )}
         </div>
         <div className="px-6 py-4 border-t flex gap-3">
-          <Button
-            variant="outline"
-            onClick={() => feedbackSent ? undefined : setShowFeedbackModal(true)}
-            className="flex-1"
-            disabled={isAgreeing || feedbackSent}
-          >
-            {feedbackSent ? 'Feedback Sent' : 'Question/Feedback'}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setShowDeleteDialog(true)}
-            className="flex-1"
-            disabled={isAgreeing}
-          >
-            Close Account
-          </Button>
-          <Button onClick={handleAgree} className="flex-1" disabled={isAgreeing}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="flex-1" disabled={isAgreeing || isLoggingOut}>
+                Inquire/Decline
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="z-[95] min-w-48 bg-popover">
+              <DropdownMenuItem
+                onClick={() => {
+                  if (!feedbackSent) setShowFeedbackModal(true);
+                }}
+                disabled={feedbackSent}
+              >
+                {feedbackSent ? 'Feedback Sent' : 'Question/Feedback'}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowDeleteDialog(true)}>
+                Close Account
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogOut}>
+                {isLoggingOut ? 'Logging out…' : 'Log Out'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={handleAgree} className="flex-1" disabled={isAgreeing || isLoggingOut}>
             {isAgreeing ? 'Saving…' : 'Agree'}
           </Button>
         </div>

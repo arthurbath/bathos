@@ -1,16 +1,13 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { DollarSign, PieChart, BarChart3, Settings, History, LogOut, User, Shield } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { FeedbackDialog } from '@/platform/components/FeedbackDialog';
+import { DollarSign, PieChart, BarChart3, Settings, History } from 'lucide-react';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
-import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import type { HouseholdData } from '@/hooks/useHouseholdData';
 import { useIncomes } from '@/hooks/useIncomes';
 import { useExpenses } from '@/hooks/useExpenses';
-import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
 import { useCategories } from '@/hooks/useCategories';
+import { ToplineHeader } from '@/platform/components/ToplineHeader';
 
 import { useLinkedAccounts } from '@/hooks/useLinkedAccounts';
 import { useRestorePoints } from '@/hooks/useRestorePoints';
@@ -35,7 +32,6 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
   const location = useLocation();
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
-  const { isAdmin } = useIsAdmin(userId);
   const { incomes, add: addIncome, update: updateIncome, remove: removeIncome, refetch: refetchIncomes } = useIncomes(household.householdId);
   const { expenses, add: addExpense, update: updateExpense, remove: removeExpense, refetch: refetchExpenses } = useExpenses(household.householdId);
   const { categories, add: addCategory, update: updateCategory, updateColor: updateCategoryColor, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
@@ -112,37 +108,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card px-4 py-3">
-        <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <h1 className="text-lg font-bold tracking-tight text-foreground">Budget</h1>
-          <div className="flex items-center gap-1">
-            {isAdmin && (
-              <Button variant="ghost" size="icon" onClick={() => navigate('/admin')} title="Administration">
-                <Shield className="h-4 w-4" />
-              </Button>
-            )}
-            <FeedbackDialog userId={userId} />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1.5">
-                  <User className="h-4 w-4" />
-                  <span className="text-sm">{household.displayName}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-popover">
-                <DropdownMenuItem onClick={() => navigate('/account')}>
-                  <User className="h-4 w-4 mr-2" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onSignOut}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sign Out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </header>
+      <ToplineHeader title="Budget" userId={userId} displayName={household.displayName} onSignOut={onSignOut} showAppSwitcher />
 
       <main className={`mx-auto max-w-5xl px-4 pt-6 space-y-6 ${location.pathname.endsWith('/expenses') || location.pathname.endsWith('/incomes') ? 'pb-0' : 'pb-6'}`}>
         <nav className="grid w-full grid-cols-5 rounded-lg bg-muted p-1 text-muted-foreground">

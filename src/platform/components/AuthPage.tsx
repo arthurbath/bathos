@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
 import { TermsDocument } from '@/platform/components/TermsDocument';
+import { isWeakOrLeakedPasswordError, WEAK_PASSWORD_MESSAGE } from '@/lib/authErrors';
 
 export default function AuthPage() {
   const { signIn, signUp } = useAuthContext();
@@ -54,7 +55,11 @@ export default function AuthPage() {
     setLoading(true);
     const { error } = await signUp(signupEmail, signupPassword, signupName, latestTermsVersion);
     if (error) {
-      toast({ title: 'Sign up failed', description: error.message, variant: 'destructive' });
+      toast({
+        title: 'Sign up failed',
+        description: isWeakOrLeakedPasswordError(error) ? WEAK_PASSWORD_MESSAGE : error.message,
+        variant: 'destructive',
+      });
     } else {
       toast({ title: 'Check your email', description: 'We sent you a confirmation link.' });
     }

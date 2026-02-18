@@ -37,13 +37,12 @@ function compareVersions(a: string, b: string): number {
   return aPatch - bPatch;
 }
 
+// Reconfirmation is required when accepted version is at least 0.1.0 behind latest.
 function requiresReconfirmation(userVersion: string | null, latestVersion: string): boolean {
   if (!userVersion) return true;
   const [userMajor, userMinor] = parseVersion(userVersion);
   const [latestMajor, latestMinor] = parseVersion(latestVersion);
-  if (latestMajor > userMajor) return true;
-  if (latestMajor === userMajor && latestMinor > userMinor) return true;
-  return false;
+  return latestMajor > userMajor || (latestMajor === userMajor && latestMinor > userMinor);
 }
 
 function isMajorOrMinorRelease(version: string): boolean {

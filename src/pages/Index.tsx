@@ -2,18 +2,13 @@ import { HouseholdSetup } from '@/components/HouseholdSetup';
 import { AppShell } from '@/components/AppShell';
 import { useAuth } from '@/hooks/useAuth';
 import { useHouseholdData } from '@/hooks/useHouseholdData';
-import { useTermsConfirmation } from '@/hooks/useTermsConfirmation';
-import { TermsUpdateOverlay } from '@/platform/components/TermsUpdateOverlay';
-import { useToast } from '@/hooks/use-toast';
 import AuthPage from '@/platform/components/AuthPage';
 
 const Index = () => {
   const { user, loading: authLoading, signOut } = useAuth();
   const { household, loading: hhLoading, createHousehold, joinHousehold, updatePartnerNames, updatePartnerColors, refetch } = useHouseholdData(user);
-  const { loading: termsLoading, needsConfirmation, latestVersion, pendingVersions, acceptTerms } = useTermsConfirmation();
-  const { toast } = useToast();
 
-  if (authLoading || hhLoading || (user && termsLoading)) {
+  if (authLoading || hhLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <p className="text-muted-foreground">Loading…</p>
@@ -23,21 +18,8 @@ const Index = () => {
 
   if (!user) return <AuthPage />;
 
-  const handleTermsAgree = async () => {
-    await acceptTerms();
-    toast({ title: 'Terms accepted' });
-  };
-
   return (
     <>
-      {needsConfirmation && (
-        <TermsUpdateOverlay
-          latestVersion={latestVersion}
-          pendingVersions={pendingVersions}
-          onAgree={handleTermsAgree}
-        />
-      )}
-
       {!household ? (
         <HouseholdSetup onComplete={createHousehold} onJoin={joinHousehold} />
       ) : (

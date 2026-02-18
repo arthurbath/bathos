@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { isWeakOrLeakedPasswordError, WEAK_PASSWORD_MESSAGE } from '@/lib/authErrors';
 
 export default function ResetPasswordPage() {
   const { toast } = useToast();
@@ -33,7 +34,11 @@ export default function ResetPasswordPage() {
     setSubmitting(true);
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) {
-      toast({ title: 'Failed to reset password', description: error.message, variant: 'destructive' });
+      toast({
+        title: 'Failed to reset password',
+        description: isWeakOrLeakedPasswordError(error) ? WEAK_PASSWORD_MESSAGE : error.message,
+        variant: 'destructive',
+      });
     } else {
       toast({ title: 'Password updated' });
       setTimeout(() => { window.location.href = '/'; }, 1500);

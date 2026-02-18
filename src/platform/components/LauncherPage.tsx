@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { useAuthContext } from '@/platform/contexts/AuthContext';
 import { getModuleUrl } from '@/platform/hooks/useHostModule';
-import { ArrowRight, User } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import AuthPage from './AuthPage';
 
 const MODULES = [
@@ -15,8 +17,31 @@ const MODULES = [
 ];
 
 export default function LauncherPage() {
-  const { user, loading } = useAuthContext();
+  const { user, loading, signOut } = useAuthContext();
   const navigate = useNavigate();
+  const [displayName, setDisplayName] = useState('Profile');
+
+  useEffect(() => {
+    if (!user) {
+      setDisplayName('Profile');
+      return;
+    }
+
+    let mounted = true;
+    supabase
+      .from('bathos_profiles')
+      .select('display_name')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (!mounted) return;
+        setDisplayName(data?.display_name?.trim() || user.email || 'Profile');
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [user]);
 
   if (loading) {
     return (
@@ -30,14 +55,7 @@ export default function LauncherPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card px-4 py-3">
-        <div className="mx-auto flex max-w-2xl items-center justify-between">
-          <h1 className="text-lg font-bold tracking-tight">BathOS</h1>
-          <Button variant="ghost" size="icon" onClick={() => navigate('/account')} title="Account">
-            <User className="h-4 w-4" />
-          </Button>
-        </div>
-      </header>
+      <ToplineHeader title="BathOS" userId={user.id} displayName={displayName} onSignOut={signOut} />
 
       <main className="mx-auto max-w-2xl px-4 py-8">
         <div className="grid gap-4">

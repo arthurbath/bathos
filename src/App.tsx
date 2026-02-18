@@ -11,6 +11,7 @@ import ForgotPasswordPage from "@/platform/components/ForgotPasswordPage";
 import ResetPasswordPage from "@/platform/components/ResetPasswordPage";
 import TermsPage from "@/platform/components/TermsPage";
 import AdminPage from "@/platform/components/AdminPage";
+import TermsGate from "@/platform/components/TermsGate";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -87,6 +88,7 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <BrowserRouter>
+          <TermsGate />
           <AppRoutes />
         </BrowserRouter>
       </AuthProvider>

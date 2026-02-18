@@ -50,19 +50,20 @@ export function useHouseholdData(user: User | null) {
 
       if (!membership) { setLoading(false); return; }
 
-      const { data: hh } = await supabase
-        .from('budget_households')
-        .select('id, name, invite_code, partner_x_name, partner_y_name, partner_x_color, partner_y_color')
-        .eq('id', membership.household_id)
-        .single();
+      const [{ data: hh }, { data: profile }] = await Promise.all([
+        supabase
+          .from('budget_households')
+          .select('id, name, invite_code, partner_x_name, partner_y_name, partner_x_color, partner_y_color')
+          .eq('id', membership.household_id)
+          .single(),
+        supabase
+          .from('bathos_profiles')
+          .select('display_name')
+          .eq('id', userId)
+          .single(),
+      ]);
 
       if (!hh) { setLoading(false); return; }
-
-      const { data: profile } = await supabase
-        .from('bathos_profiles')
-        .select('display_name')
-        .eq('id', userId)
-        .single();
 
       setHousehold({
         householdId: hh.id,

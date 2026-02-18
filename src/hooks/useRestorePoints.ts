@@ -13,6 +13,8 @@ export interface RestorePoint {
 export function useRestorePoints(householdId: string) {
   const [points, setPoints] = useState<RestorePoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const sortByCreatedAtDesc = (rows: RestorePoint[]) =>
+    [...rows].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
 
   const fetch = useCallback(async () => {
     const { data } = await supabase
@@ -28,20 +30,38 @@ export function useRestorePoints(householdId: string) {
 
   const save = async (name: string, snapshot: Json) => {
     const id = crypto.randomUUID();
-    const { error } = await supabase.from('budget_restore_points').insert({
+    const optimistic: RestorePoint = {
       id,
       household_id: householdId,
       name: name || null,
       data: snapshot,
-    });
-    if (error) throw error;
-    await fetch();
+      created_at: new Date().toISOString(),
+    };
+    setPoints(prev => sortByCreatedAtDesc([optimistic, ...prev]));
+
+    const { data, error } = await supabase.from('budget_restore_points').insert({
+      id,
+      household_id: householdId,
+      name: name || null,
+      data: snapshot,
+    }).select('*').single();
+    if (error) {
+      setPoints(prev => prev.filter(p => p.id !== id));
+      throw error;
+    }
+    if (data) {
+      setPoints(prev => sortByCreatedAtDesc(prev.map(p => (p.id === id ? (data as RestorePoint) : p))));
+    }
   };
 
   const remove = async (id: string) => {
+    const prevPoints = points;
+    setPoints(prev => prev.filter(p => p.id !== id));
     const { error } = await supabase.from('budget_restore_points').delete().eq('id', id);
-    if (error) throw error;
-    await fetch();
+    if (error) {
+      setPoints(prevPoints);
+      throw error;
+    }
   };
 
   return { points, loading, save, remove, refetch: fetch };

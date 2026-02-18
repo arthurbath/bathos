@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { isWeakOrLeakedPasswordError, WEAK_PASSWORD_MESSAGE } from '@/lib/authErrors';
 
 export default function AccountPage() {
   const { user, signOut } = useAuthContext();
@@ -112,7 +113,11 @@ export default function AccountPage() {
     setPasswordSubmitting(true);
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) {
-      toast({ title: 'Failed to change password', description: error.message, variant: 'destructive' });
+      toast({
+        title: 'Failed to change password',
+        description: isWeakOrLeakedPasswordError(error) ? WEAK_PASSWORD_MESSAGE : error.message,
+        variant: 'destructive',
+      });
     } else {
       toast({ title: 'Password updated' });
       setShowChangePassword(false);
