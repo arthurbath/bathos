@@ -47,7 +47,7 @@ export default function AdminPage() {
               Test Info Toast
             </Button>
             <Button
-              variant="destructive"
+              variant="outline"
               onClick={() => toast({ title: 'Error', description: 'This is a danger toast.', variant: 'destructive' })}
             >
               Test Danger Toast
