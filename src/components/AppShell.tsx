@@ -37,7 +37,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
   const { categories, add: addCategory, update: updateCategory, updateColor: updateCategoryColor, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
   
   const { linkedAccounts, add: addLinkedAccount, update: updateLinkedAccount, updateColor: updateLinkedAccountColor, remove: removeLinkedAccount, refetch: refetchLinkedAccounts } = useLinkedAccounts(household.householdId);
-  const { points, save: savePoint, remove: removePoint } = useRestorePoints(household.householdId);
+  const { points, save: savePoint, remove: removePoint, updateNotes: updateRestorePointNotes } = useRestorePoints(household.householdId);
 
   const handleReassignCategory = async (oldId: string, newId: string | null) => {
     const { error } = await supabase
@@ -71,39 +71,73 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
   };
 
   const handleRestore = async (data: Json) => {
-    const snap = data as { incomes?: any[]; expenses?: any[]; categories?: any[] };
+    const snap = data as {
+      incomes?: any[];
+      expenses?: any[];
+      categories?: any[];
+      linkedAccounts?: any[];
+    };
     const hid = household.householdId;
 
     await supabase.from('budget_expenses').delete().eq('household_id', hid);
     await supabase.from('budget_income_streams').delete().eq('household_id', hid);
+    await supabase.from('budget_linked_accounts').delete().eq('household_id', hid);
     await supabase.from('budget_categories').delete().eq('household_id', hid);
 
     if (snap.categories?.length) {
       await supabase.from('budget_categories').insert(
-        snap.categories.map((c: any) => ({ id: crypto.randomUUID(), household_id: hid, name: c.name }))
+        snap.categories.map((c: any) => ({
+          id: c.id ?? crypto.randomUUID(),
+          household_id: hid,
+          name: c.name ?? '',
+          color: c.color ?? null,
+        }))
+      );
+    }
+    if (snap.linkedAccounts?.length) {
+      await supabase.from('budget_linked_accounts').insert(
+        snap.linkedAccounts.map((a: any) => ({
+          id: a.id ?? crypto.randomUUID(),
+          household_id: hid,
+          name: a.name ?? '',
+          color: a.color ?? null,
+          owner_partner: a.owner_partner ?? 'X',
+        }))
       );
     }
     if (snap.incomes?.length) {
       await supabase.from('budget_income_streams').insert(
         snap.incomes.map((i: any) => ({
-          id: crypto.randomUUID(), household_id: hid,
-          name: i.name, amount: i.amount, frequency_type: i.frequency_type,
-          frequency_param: i.frequency_param, partner_label: i.partner_label,
+          id: i.id ?? crypto.randomUUID(),
+          household_id: hid,
+          name: i.name,
+          amount: i.amount,
+          frequency_type: i.frequency_type,
+          frequency_param: i.frequency_param,
+          partner_label: i.partner_label,
         }))
       );
     }
     if (snap.expenses?.length) {
       await supabase.from('budget_expenses').insert(
         snap.expenses.map((e: any) => ({
-          id: crypto.randomUUID(), household_id: hid,
-          name: e.name, amount: e.amount, frequency_type: e.frequency_type,
-          frequency_param: e.frequency_param, payer: e.payer, benefit_x: e.benefit_x,
-          category_id: null,
+          id: e.id ?? crypto.randomUUID(),
+          household_id: hid,
+          name: e.name,
+          amount: e.amount,
+          frequency_type: e.frequency_type,
+          frequency_param: e.frequency_param,
+          payer: e.payer,
+          benefit_x: e.benefit_x,
+          category_id: e.category_id ?? null,
+          linked_account_id: e.linked_account_id ?? null,
+          budget_id: e.budget_id ?? null,
+          is_estimate: e.is_estimate ?? false,
         }))
       );
     }
 
-    await Promise.all([refetchIncomes(), refetchExpenses(), refetchCategories()]);
+    await Promise.all([refetchIncomes(), refetchExpenses(), refetchCategories(), refetchLinkedAccounts()]);
   };
 
   return (
@@ -200,8 +234,10 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             incomes={incomes}
             expenses={expenses}
             categories={categories}
+            linkedAccounts={linkedAccounts}
             onSave={savePoint}
             onRemove={removePoint}
+            onUpdateNotes={updateRestorePointNotes}
             onRestore={handleRestore}
           />
         )}

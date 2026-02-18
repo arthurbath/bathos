@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.send-feedback-email]
 verify_jwt = false
+
+[functions.admin-delete-users]
+verify_jwt = true

@@ -8,6 +8,7 @@ if (sentryDsn) {
   Sentry.init({
     dsn: sentryDsn,
     sendDefaultPii: false,
+    debug: import.meta.env.DEV,
   });
 
   const shouldTriggerSentryTest = new URLSearchParams(window.location.search).get("sentry_test") === "1";

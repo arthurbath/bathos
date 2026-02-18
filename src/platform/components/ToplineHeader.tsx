@@ -11,15 +11,23 @@ interface ToplineHeaderProps {
   displayName: string;
   onSignOut: () => Promise<void> | void;
   showAppSwitcher?: boolean;
+  maxWidthClassName?: string;
 }
 
-export function ToplineHeader({ title, userId, displayName, onSignOut, showAppSwitcher = false }: ToplineHeaderProps) {
+export function ToplineHeader({
+  title,
+  userId,
+  displayName,
+  onSignOut,
+  showAppSwitcher = false,
+  maxWidthClassName = 'max-w-5xl',
+}: ToplineHeaderProps) {
   const navigate = useNavigate();
   const { isAdmin } = useIsAdmin(userId);
 
   return (
-    <header className="border-b bg-card px-4 py-3">
-      <div className="mx-auto flex max-w-5xl items-center justify-between">
+    <header className="sticky top-0 z-40 border-b bg-card">
+      <div className={`mx-auto flex ${maxWidthClassName} items-center justify-between px-4 py-3`}>
         <div className="flex items-center gap-2">
           {showAppSwitcher && (
             <Button variant="ghost" size="icon" onClick={() => navigate('/')} title="All apps">

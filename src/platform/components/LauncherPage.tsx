@@ -40,7 +40,7 @@ export default function LauncherPage() {
   if (MODULES.length > 1) {
     return (
       <div className="min-h-screen bg-background">
-        <ToplineHeader title="BathOS" userId={user.id} displayName="" onSignOut={signOut} />
+        <ToplineHeader title="BathOS" userId={user.id} displayName="" onSignOut={signOut} maxWidthClassName="max-w-2xl" />
 
         <main className="mx-auto max-w-2xl px-4 py-8">
           <div className="grid gap-4">

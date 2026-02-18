@@ -245,7 +245,7 @@ export function DataGrid<TData>({
 }
 
 // ─── Cell Primitives ───
-const CELL_INPUT_CLASS = 'h-7 border-transparent bg-transparent px-1 hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring !text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
+const CELL_INPUT_CLASS = 'h-7 rounded-md border border-transparent bg-transparent px-1 hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring !text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
 
 export function GridEditableCell({ value, onChange, navCol, type = 'text', className, placeholder }: {
   value: string | number;
@@ -312,7 +312,7 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
           data-col={navCol}
           onClick={() => setFocused(true)}
           onMouseDown={ctx?.onCellMouseDown}
-          className={cn('h-7 w-full bg-transparent px-1 !text-xs text-right cursor-text border border-transparent hover:border-border rounded-md underline decoration-dashed decoration-muted-foreground/40 underline-offset-2', className)}
+          className={cn('h-7 w-full bg-transparent px-1 !text-xs text-right cursor-pointer border border-transparent hover:border-border rounded-md underline decoration-dashed decoration-muted-foreground/40 underline-offset-2', className)}
         >
           ${Math.round(Number(local) || 0)}
         </button>
@@ -361,7 +361,7 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
           data-col={navCol}
           onClick={() => setFocused(true)}
           onMouseDown={ctx?.onCellMouseDown}
-          className={cn('h-7 w-full bg-transparent px-1 !text-xs text-right cursor-text border border-transparent hover:border-border rounded-md underline decoration-dashed decoration-muted-foreground/40 underline-offset-2', className)}
+          className={cn('h-7 w-full bg-transparent px-1 !text-xs text-right cursor-pointer border border-transparent hover:border-border rounded-md underline decoration-dashed decoration-muted-foreground/40 underline-offset-2', className)}
         >
           {Math.round(Number(local) || 0)}%
         </button>

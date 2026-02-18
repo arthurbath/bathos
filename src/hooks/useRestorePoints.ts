@@ -4,7 +4,7 @@ import type { Json } from '@/integrations/supabase/types';
 
 export interface RestorePoint {
   id: string;
-  name: string | null;
+  notes: string | null;
   data: Json;
   household_id: string;
   created_at: string;
@@ -22,18 +22,25 @@ export function useRestorePoints(householdId: string) {
       .select('*')
       .eq('household_id', householdId)
       .order('created_at', { ascending: false });
-    setPoints((data as RestorePoint[]) ?? []);
+    const mapped = ((data as Array<Omit<RestorePoint, 'notes'> & { name: string | null }>) ?? []).map((row) => ({
+      id: row.id,
+      household_id: row.household_id,
+      data: row.data,
+      created_at: row.created_at,
+      notes: row.name,
+    }));
+    setPoints(mapped);
     setLoading(false);
   }, [householdId]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const save = async (name: string, snapshot: Json) => {
+  const save = async (notes: string, snapshot: Json) => {
     const id = crypto.randomUUID();
     const optimistic: RestorePoint = {
       id,
       household_id: householdId,
-      name: name || null,
+      notes: notes || null,
       data: snapshot,
       created_at: new Date().toISOString(),
     };
@@ -42,7 +49,7 @@ export function useRestorePoints(householdId: string) {
     const { data, error } = await supabase.from('budget_restore_points').insert({
       id,
       household_id: householdId,
-      name: name || null,
+      name: notes || null,
       data: snapshot,
     }).select('*').single();
     if (error) {
@@ -50,7 +57,15 @@ export function useRestorePoints(householdId: string) {
       throw error;
     }
     if (data) {
-      setPoints(prev => sortByCreatedAtDesc(prev.map(p => (p.id === id ? (data as RestorePoint) : p))));
+      const row = data as Omit<RestorePoint, 'notes'> & { name: string | null };
+      const mapped = {
+        id: row.id,
+        household_id: row.household_id,
+        data: row.data,
+        created_at: row.created_at,
+        notes: row.name,
+      };
+      setPoints(prev => sortByCreatedAtDesc(prev.map(p => (p.id === id ? mapped : p))));
     }
   };
 
@@ -64,5 +79,19 @@ export function useRestorePoints(householdId: string) {
     }
   };
 
-  return { points, loading, save, remove, refetch: fetch };
+  const updateNotes = async (id: string, notes: string) => {
+    const normalized = notes.trim();
+    const prevPoints = points;
+    setPoints(prev => prev.map(p => (p.id === id ? { ...p, notes: normalized || null } : p)));
+    const { error } = await supabase
+      .from('budget_restore_points')
+      .update({ name: normalized || null })
+      .eq('id', id);
+    if (error) {
+      setPoints(prevPoints);
+      throw error;
+    }
+  };
+
+  return { points, loading, save, remove, updateNotes, refetch: fetch };
 }

@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { AuthProvider } from "@/platform/contexts/AuthContext";
 import LauncherPage from "@/platform/components/LauncherPage";
 import AccountPage from "@/platform/components/AccountPage";
@@ -17,6 +18,27 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
 });
+
+function DeferredNotFound() {
+  const location = useLocation();
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    setShow(false);
+    const timer = window.setTimeout(() => setShow(true), 250);
+    return () => window.clearTimeout(timer);
+  }, [location.pathname, location.search, location.hash]);
+
+  if (!show) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  return <NotFound />;
+}
 
 function AppRoutes() {
   return (
@@ -43,7 +65,7 @@ function AppRoutes() {
       <Route path="/config" element={<Navigate to="/budget/config" replace />} />
       <Route path="/restore" element={<Navigate to="/budget/restore" replace />} />
 
-      <Route path="*" element={<NotFound />} />
+      <Route path="*" element={<DeferredNotFound />} />
     </Routes>
   );
 }
