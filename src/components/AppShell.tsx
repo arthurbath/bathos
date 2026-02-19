@@ -60,16 +60,6 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
     await refetchExpenses();
   };
 
-  const handleSyncPayerForAccount = async (accountId: string, ownerPartner: string) => {
-    const { error } = await supabase
-      .from('budget_expenses')
-      .update({ payer: ownerPartner })
-      .eq('household_id', household.householdId)
-      .eq('linked_account_id', accountId);
-    if (error) throw error;
-    await refetchExpenses();
-  };
-
   const handleRestore = async (data: Json) => {
     const snap = data as {
       incomes?: any[];
@@ -127,7 +117,6 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
           amount: e.amount,
           frequency_type: e.frequency_type,
           frequency_param: e.frequency_param,
-          payer: e.payer,
           benefit_x: e.benefit_x,
           category_id: e.category_id ?? null,
           linked_account_id: e.linked_account_id ?? null,
@@ -199,6 +188,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
           <SummaryTab
             incomes={incomes}
             expenses={expenses}
+            linkedAccounts={linkedAccounts}
             partnerX={household.partnerX}
             partnerY={household.partnerY}
           />
@@ -225,7 +215,6 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             onRemoveLinkedAccount={removeLinkedAccount}
             onReassignLinkedAccount={handleReassignLinkedAccount}
             onUpdateLinkedAccountColor={updateLinkedAccountColor}
-            onSyncPayerForAccount={handleSyncPayerForAccount}
           />
         )}
         {location.pathname.endsWith('/restore') && (

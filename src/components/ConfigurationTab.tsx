@@ -36,7 +36,6 @@ interface ConfigurationTabProps {
   onRemoveLinkedAccount: (id: string) => Promise<void>;
   onReassignLinkedAccount: (oldId: string, newId: string | null) => Promise<void>;
   onUpdateLinkedAccountColor: (id: string, color: string | null) => Promise<void>;
-  onSyncPayerForAccount: (accountId: string, ownerPartner: string) => Promise<void>;
 }
 
 function PartnerNamesCard({ partnerX, partnerY, partnerXColor, partnerYColor, onSave, onUpdateColors }: {
@@ -130,7 +129,7 @@ function InviteCard({ inviteCode }: { inviteCode: string | null }) {
   );
 }
 
-function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, onAdd, onUpdate, onRemove, onReassign, onSyncPayer, onUpdateColor }: {
+function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, onAdd, onUpdate, onRemove, onReassign, onUpdateColor }: {
   linkedAccounts: LinkedAccount[];
   expenses: Expense[];
   partnerX: string;
@@ -139,7 +138,6 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
   onUpdate: (id: string, updates: Partial<Pick<LinkedAccount, 'name' | 'owner_partner'>>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onReassign: (oldId: string, newId: string | null) => Promise<void>;
-  onSyncPayer: (accountId: string, ownerPartner: string) => Promise<void>;
   onUpdateColor: (id: string, color: string | null) => Promise<void>;
 }) {
   const [name, setName] = useState('');
@@ -179,7 +177,6 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
   const handleOwnerChange = async (id: string, newOwner: string) => {
     try {
       await onUpdate(id, { owner_partner: newOwner });
-      await onSyncPayer(id, newOwner);
     } catch (e: any) {
       toast({ title: 'Error updating owner', description: e.message, variant: 'destructive' });
     }
@@ -358,7 +355,6 @@ export function ConfigurationTab({
   onUpdatePartnerNames, onUpdatePartnerColors,
   onAddCategory, onUpdateCategory, onRemoveCategory, onReassignCategory, onUpdateCategoryColor,
   onAddLinkedAccount, onUpdateLinkedAccount, onRemoveLinkedAccount, onReassignLinkedAccount, onUpdateLinkedAccountColor,
-  onSyncPayerForAccount,
 }: ConfigurationTabProps) {
   return (
     <div className="space-y-6">
@@ -384,7 +380,6 @@ export function ConfigurationTab({
         onUpdate={onUpdateLinkedAccount}
         onRemove={onRemoveLinkedAccount}
         onReassign={onReassignLinkedAccount}
-        onSyncPayer={onSyncPayerForAccount}
         onUpdateColor={onUpdateLinkedAccountColor}
       />
     </div>

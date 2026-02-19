@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -165,7 +165,11 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
   const [newItemOwner, setNewItemOwner] = useState<'X' | 'Y'>('X');
   const [savingItem, setSavingItem] = useState(false);
 
-  const [filterPayer, setFilterPayer] = useState<'all' | 'X' | 'Y'>(() => (localStorage.getItem('expenses_filterPayer') as 'all' | 'X' | 'Y') || 'all');
+  type PayerFilter = 'all' | 'X' | 'Y' | 'unassigned';
+  const [filterPayer, setFilterPayer] = useState<PayerFilter>(() => {
+    const stored = localStorage.getItem('expenses_filterPayer');
+    return stored === 'X' || stored === 'Y' || stored === 'unassigned' || stored === 'all' ? stored : 'all';
+  });
   const [groupBy, setGroupBy] = useState<GroupByOption>(() => (localStorage.getItem('expenses_groupBy') as GroupByOption) || 'none');
   const [sorting, setSorting] = useState<SortingState>(() => {
     try { const s = localStorage.getItem('expenses_sorting'); return s ? JSON.parse(s) : [{ id: 'name', desc: false }]; }
@@ -202,9 +206,24 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     return { fairX: monthly * (wx / tw), fairY: monthly * (wy / tw), monthly };
   };
 
+  const payerByLinkedAccountId = useMemo(
+    () => new Map(linkedAccounts.map((a) => [a.id, a.owner_partner])),
+    [linkedAccounts],
+  );
+
+  const getDerivedPayer = useCallback((exp: Expense): 'X' | 'Y' | null => {
+    if (!exp.linked_account_id) return null;
+    const owner = payerByLinkedAccountId.get(exp.linked_account_id);
+    return owner === 'X' || owner === 'Y' ? owner : null;
+  }, [payerByLinkedAccountId]);
+
   const filteredExpenses = useMemo(() =>
-    filterPayer === 'all' ? expenses : expenses.filter(e => e.payer === filterPayer),
-    [expenses, filterPayer],
+    filterPayer === 'all'
+      ? expenses
+      : filterPayer === 'unassigned'
+        ? expenses.filter((e) => getDerivedPayer(e) === null)
+        : expenses.filter((e) => getDerivedPayer(e) === filterPayer),
+    [expenses, filterPayer, getDerivedPayer],
   );
   const computedData: ComputedRow[] = useMemo(() =>
     filteredExpenses.map(exp => ({ exp, ...computeFairShare(exp) })),
@@ -219,7 +238,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
   const handleAdd = async () => {
     setAdding(true);
     try {
-      await onAdd({ name: '', amount: 0, payer: null, benefit_x: 50, category_id: null, budget_id: null, linked_account_id: null, frequency_type: 'monthly', frequency_param: null, is_estimate: false });
+      await onAdd({ name: '', amount: 0, benefit_x: 50, category_id: null, budget_id: null, linked_account_id: null, frequency_type: 'monthly', frequency_param: null, is_estimate: false });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
@@ -234,12 +253,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     else if (field === 'frequency_param') updates.frequency_param = value ? Number(value) : null;
     else if (field === 'category_id') updates.category_id = value === '_none' ? null : value;
     else if (field === 'linked_account_id') {
-      const accountId = value === '_none' ? null : value;
-      updates.linked_account_id = accountId;
-      if (accountId) {
-        const account = linkedAccounts.find(la => la.id === accountId);
-        if (account) updates.payer = account.owner_partner;
-      } else { updates.payer = null; }
+      updates.linked_account_id = value === '_none' ? null : value;
     } else updates[field] = value;
     onUpdate(id, updates as any).catch((e: any) => {
       toast({ title: 'Error saving', description: e.message, variant: 'destructive' });
@@ -326,12 +340,12 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         <PaymentMethodCell exp={row.original.exp} linkedAccounts={linkedAccounts} partnerX={partnerX} partnerY={partnerY} onChange={v => handleUpdate(row.original.exp.id, 'linked_account_id', v)} onAddNew={() => { setNewItemName(''); setNewItemOwner('X'); setAddDialog('payment_method'); }} />
       ),
     }),
-    columnHelper.accessor(r => r.exp.payer, {
+    columnHelper.accessor(r => getDerivedPayer(r.exp), {
       id: 'payer',
       header: 'Payer',
-      sortingFn: (a, b) => (a.original.exp.payer ?? '').localeCompare(b.original.exp.payer ?? ''),
+      sortingFn: (a, b) => (getDerivedPayer(a.original.exp) ?? '').localeCompare(getDerivedPayer(b.original.exp) ?? ''),
       cell: ({ row }) => {
-        const p = row.original.exp.payer;
+        const p = getDerivedPayer(row.original.exp);
         return p ? (
           <span className="text-xs px-1.5 py-0.5 rounded-sm" style={{ backgroundColor: (p === 'X' ? partnerXColor : partnerYColor) || 'transparent' }}>
             {p === 'X' ? partnerX : partnerY}
@@ -378,7 +392,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       meta: { headerClassName: 'w-10' },
       cell: ({ row }) => <ExpenseDeleteCell name={row.original.exp.name} onRemove={() => handleRemove(row.original.exp.id)} />,
     }),
-  ], [categories, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor]);
+  ], [categories, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, getDerivedPayer]);
 
   const table = useReactTable({
     data: computedData,
@@ -397,12 +411,12 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       switch (groupBy) {
         case 'category': return row.exp.category_id ?? '_ungrouped';
         case 'estimated': return row.exp.is_estimate ? 'Estimated' : 'Actual';
-        case 'payer': return row.exp.payer ?? '_ungrouped';
+        case 'payer': return getDerivedPayer(row.exp) ?? '_ungrouped';
         case 'payment_method': return row.exp.linked_account_id ?? '_ungrouped';
         default: return '_all';
       }
     };
-  }, [groupBy]);
+  }, [groupBy, getDerivedPayer]);
 
   const getGroupLabel = (key: string): string => {
     if (key === '_ungrouped') return 'Uncategorized';
@@ -440,12 +454,13 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <CardTitle>Expenses</CardTitle>
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={filterPayer} onValueChange={v => setFilterPayer(v as 'all' | 'X' | 'Y')}>
+            <Select value={filterPayer} onValueChange={v => setFilterPayer(v as PayerFilter)}>
               <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All partners</SelectItem>
                 <SelectItem value="X">{partnerX} only</SelectItem>
                 <SelectItem value="Y">{partnerY} only</SelectItem>
+                <SelectItem value="unassigned">Unassigned only</SelectItem>
               </SelectContent>
             </Select>
             <Select value={groupBy} onValueChange={v => setGroupBy(v as GroupByOption)}>

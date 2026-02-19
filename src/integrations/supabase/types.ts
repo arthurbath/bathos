@@ -200,7 +200,6 @@ export type Database = {
           is_estimate: boolean
           linked_account_id: string | null
           name: string
-          payer: string | null
         }
         Insert: {
           amount?: number
@@ -215,7 +214,6 @@ export type Database = {
           is_estimate?: boolean
           linked_account_id?: string | null
           name: string
-          payer?: string | null
         }
         Update: {
           amount?: number
@@ -230,7 +228,6 @@ export type Database = {
           is_estimate?: boolean
           linked_account_id?: string | null
           name?: string
-          payer?: string | null
         }
         Relationships: [
           {

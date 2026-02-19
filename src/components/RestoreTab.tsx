@@ -55,14 +55,13 @@ export function RestoreTab({ points, incomes, expenses, categories, linkedAccoun
           amount,
           frequency_type,
           frequency_param,
-          payer,
           benefit_x,
           category_id,
           linked_account_id,
           budget_id,
           is_estimate,
         }) =>
-          ({ id, name, amount, frequency_type, frequency_param, payer, benefit_x, category_id, linked_account_id, budget_id, is_estimate })
+          ({ id, name, amount, frequency_type, frequency_param, benefit_x, category_id, linked_account_id, budget_id, is_estimate })
         ) as unknown as Json,
         categories: categories.map(({ id, name, color }) => ({ id, name, color })) as unknown as Json,
         linkedAccounts: linkedAccounts.map(({ id, name, color, owner_partner }) => ({ id, name, color, owner_partner })) as unknown as Json,

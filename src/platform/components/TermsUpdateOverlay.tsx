@@ -92,7 +92,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
       {/* Feedback Modal */}
       {showFeedbackModal && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowFeedbackModal(false)} />
+          <div className="absolute inset-0 cursor-pointer bg-black/50" onClick={() => setShowFeedbackModal(false)} />
           <div className="relative w-full max-w-md bg-card rounded-lg border shadow-lg overflow-hidden">
             <div className="px-6 py-5 border-b">
               <h2 className="text-lg font-semibold text-center">Feedback</h2>
@@ -134,7 +134,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
       {/* Terms Modal */}
       {showTermsModal && (
         <div className="fixed inset-0 z-[92] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowTermsModal(false)} />
+          <div className="absolute inset-0 cursor-pointer bg-black/50" onClick={() => setShowTermsModal(false)} />
           <div className="relative flex h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border bg-card shadow-lg">
             <div className="shrink-0 border-b px-6 py-4">
               <h2 className="text-lg font-semibold text-center">Terms of Service and Privacy Policy</h2>

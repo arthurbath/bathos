@@ -7,22 +7,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { toMonthly } from '@/lib/frequency';
 import type { Income } from '@/hooks/useIncomes';
 import type { Expense } from '@/hooks/useExpenses';
+import type { LinkedAccount } from '@/hooks/useLinkedAccounts';
 
 interface SummaryTabProps {
   incomes: Income[];
   expenses: Expense[];
+  linkedAccounts: LinkedAccount[];
   partnerX: string;
   partnerY: string;
 }
 
 function $(v: number) { return `$${Math.round(v)}`; }
 
-export function SummaryTab({ incomes, expenses, partnerX, partnerY }: SummaryTabProps) {
+export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partnerY }: SummaryTabProps) {
   const [hideFullSplits, setHideFullSplits] = useState(false);
   const incomeX = incomes.filter(i => i.partner_label === 'X').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
   const incomeY = incomes.filter(i => i.partner_label === 'Y').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
   const totalIncome = incomeX + incomeY;
   const incomeRatioX = totalIncome > 0 ? incomeX / totalIncome : 0.5;
+  const payerByLinkedAccountId = new Map(linkedAccounts.map((a) => [a.id, a.owner_partner]));
 
   let totalFairX = 0, totalFairY = 0, paidByX = 0, paidByY = 0;
 
@@ -38,17 +41,18 @@ export function SummaryTab({ incomes, expenses, partnerX, partnerY }: SummaryTab
 
     totalFairX += fairX;
     totalFairY += fairY;
-    if (exp.payer === 'X') paidByX += monthly;
-    else paidByY += monthly;
+    const payer = exp.linked_account_id ? payerByLinkedAccountId.get(exp.linked_account_id) : null;
+    if (payer === 'X') paidByX += monthly;
+    else if (payer === 'Y') paidByY += monthly;
 
-    const paidX = exp.payer === 'X' ? monthly : 0;
-    const paidY = exp.payer === 'Y' ? monthly : 0;
+    const paidX = payer === 'X' ? monthly : 0;
+    const paidY = payer === 'Y' ? monthly : 0;
 
     return {
       id: exp.id,
       name: exp.name,
       monthly,
-      payer: exp.payer === 'X' ? partnerX : partnerY,
+      payer: payer === 'X' ? partnerX : payer === 'Y' ? partnerY : 'Unassigned',
       benefitSplit: `${exp.benefit_x}/${100 - exp.benefit_x}`,
       fairX,
       fairY,
