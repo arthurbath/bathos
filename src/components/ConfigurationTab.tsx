@@ -72,14 +72,14 @@ function PartnerNamesCard({ partnerX, partnerY, partnerXColor, partnerYColor, on
       <CardContent>
         <div className="flex items-end gap-3">
           <div className="flex-1 space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Partner X</label>
+            <label className="text-xs font-medium text-muted-foreground">Partner A</label>
             <div className="flex items-center gap-2">
               <ColorPicker color={partnerXColor} onChange={c => onUpdateColors(c, partnerYColor)} />
               <Input value={nameX} onChange={e => setNameX(e.target.value)} placeholder="e.g. Alice" className="flex-1" />
             </div>
           </div>
           <div className="flex-1 space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Partner Y</label>
+            <label className="text-xs font-medium text-muted-foreground">Partner B</label>
             <div className="flex items-center gap-2">
               <ColorPicker color={partnerYColor} onChange={c => onUpdateColors(partnerXColor, c)} />
               <Input value={nameY} onChange={e => setNameY(e.target.value)} placeholder="e.g. Bob" className="flex-1" />

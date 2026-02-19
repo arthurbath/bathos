@@ -21,6 +21,7 @@ function $(v: number) { return `$${Math.round(v)}`; }
 
 export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partnerY }: SummaryTabProps) {
   const [hideFullSplits, setHideFullSplits] = useState(false);
+  const hasFullSplitExpenses = expenses.some((exp) => exp.benefit_x === 100 || exp.benefit_x === 0);
   const incomeX = incomes.filter(i => i.partner_label === 'X').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
   const incomeY = incomes.filter(i => i.partner_label === 'Y').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
   const totalIncome = incomeX + incomeY;
@@ -122,10 +123,12 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Per-expense Breakdown</CardTitle>
-            <div className="flex items-center gap-2">
-              <Switch id="hide-full-splits" checked={hideFullSplits} onCheckedChange={setHideFullSplits} />
-              <Label htmlFor="hide-full-splits" className="text-xs text-muted-foreground cursor-pointer">Hide 100/0</Label>
-            </div>
+            {hasFullSplitExpenses && (
+              <div className="flex items-center gap-2">
+                <Switch id="hide-full-splits" checked={hideFullSplits} onCheckedChange={setHideFullSplits} />
+                <Label htmlFor="hide-full-splits" className="text-xs text-muted-foreground cursor-pointer">Hide 100/0</Label>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>

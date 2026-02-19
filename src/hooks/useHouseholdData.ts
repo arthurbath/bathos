@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User } from '@supabase/supabase-js';
 
+const DEFAULT_PARTNER_X_NAME = 'Partner A';
+const DEFAULT_PARTNER_Y_NAME = 'Partner B';
+
 export interface HouseholdData {
   householdId: string;
   householdName: string;
@@ -69,8 +72,8 @@ export function useHouseholdData(user: User | null) {
         householdId: hh.id,
         householdName: hh.name,
         inviteCode: (hh as any).invite_code ?? null,
-        partnerX: (hh as any).partner_x_name ?? 'Partner X',
-        partnerY: (hh as any).partner_y_name ?? 'Partner Y',
+        partnerX: (hh as any).partner_x_name ?? DEFAULT_PARTNER_X_NAME,
+        partnerY: (hh as any).partner_y_name ?? DEFAULT_PARTNER_Y_NAME,
         partnerXColor: (hh as any).partner_x_color ?? null,
         partnerYColor: (hh as any).partner_y_color ?? null,
         displayName: profile?.display_name ?? 'You',
@@ -91,7 +94,7 @@ export function useHouseholdData(user: User | null) {
     const householdId = crypto.randomUUID();
     const { error: hhErr } = await supabase
       .from('budget_households')
-      .insert({ id: householdId, name: 'My Household', partner_x_name: displayName, partner_y_name: 'Partner Y' });
+      .insert({ id: householdId, name: 'My Household', partner_x_name: displayName, partner_y_name: DEFAULT_PARTNER_Y_NAME });
     if (hhErr) throw new Error(`Household creation failed: ${hhErr.message}`);
 
     const { error: memberErr } = await supabase.from('budget_household_members').insert({
@@ -106,7 +109,7 @@ export function useHouseholdData(user: User | null) {
 
   const joinHousehold = async (inviteCode: string) => {
     if (!userId) throw new Error('Not authenticated');
-    await getProfileDisplayName();
+    const displayName = await getProfileDisplayName();
 
     const { data: householdId, error: findErr } = await supabase
       .rpc('lookup_household_by_invite_code', { _code: inviteCode });
@@ -129,6 +132,13 @@ export function useHouseholdData(user: User | null) {
       partner_label: 'Y',
     });
     if (memberErr) throw new Error(`Join failed: ${memberErr.message}`);
+
+    const { error: renameErr } = await supabase
+      .from('budget_households')
+      .update({ partner_y_name: displayName })
+      .eq('id', householdId)
+      .in('partner_y_name', [DEFAULT_PARTNER_Y_NAME, 'Partner Y']);
+    if (renameErr) throw new Error(`Partner name update failed: ${renameErr.message}`);
 
     await fetchHousehold();
   };
