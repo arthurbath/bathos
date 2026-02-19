@@ -155,7 +155,7 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
                       <TableCell className="font-medium">{row.name}</TableCell>
                       <TableCell className="text-right tabular-nums">{$(row.monthly)}</TableCell>
                       <TableCell>{row.payer}</TableCell>
-                      <TableCell className="text-xs">{row.benefitSplit}</TableCell>
+                      <TableCell>{row.benefitSplit}</TableCell>
                       <TableCell className="text-right tabular-nums">{$(row.fairX)}</TableCell>
                       <TableCell className="text-right tabular-nums">{$(row.fairY)}</TableCell>
                       <TableCell className={`text-right tabular-nums ${row.overUnderX > 0.5 ? 'text-primary' : row.overUnderX < -0.5 ? 'text-destructive' : ''}`}>

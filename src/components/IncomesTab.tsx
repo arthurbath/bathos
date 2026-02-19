@@ -13,7 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels, needsParam } from '@/lib/frequency';
-import { DataGrid, GridEditableCell, GridCurrencyCell, useDataGrid, gridNavProps } from '@/components/ui/data-grid';
+import { DataGrid, GridEditableCell, GridCurrencyCell, useDataGrid } from '@/components/ui/data-grid';
 import type { FrequencyType } from '@/types/fairshare';
 import type { Income } from '@/hooks/useIncomes';
 
@@ -36,7 +36,20 @@ function PartnerCell({ value, partnerX, partnerY, onChange }: { value: string; p
   const ctx = useDataGrid();
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" {...gridNavProps(ctx, 1)}>
+      <SelectTrigger
+        className="h-7 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
+        data-row={ctx?.rowIndex}
+        data-col={1}
+        onMouseDown={ctx?.onCellMouseDown}
+        onKeyDown={(e) => {
+          if (!ctx) return;
+          const expanded = e.currentTarget.getAttribute('aria-expanded') === 'true';
+          if (expanded) return;
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') {
+            ctx.onCellKeyDown(e);
+          }
+        }}
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -52,7 +65,20 @@ function FrequencyCell({ income, onChange }: { income: Income; onChange: (field:
   return (
     <div className="flex items-center gap-1">
       <Select value={income.frequency_type} onValueChange={v => onChange('frequency_type', v)}>
-        <SelectTrigger className="h-7 min-w-0 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" {...gridNavProps(ctx, 3)}>
+        <SelectTrigger
+          className="h-7 min-w-0 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
+          data-row={ctx?.rowIndex}
+          data-col={3}
+          onMouseDown={ctx?.onCellMouseDown}
+          onKeyDown={(e) => {
+            if (!ctx) return;
+            const expanded = e.currentTarget.getAttribute('aria-expanded') === 'true';
+            if (expanded) return;
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') {
+              ctx.onCellKeyDown(e);
+            }
+          }}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

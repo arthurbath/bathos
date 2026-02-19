@@ -66,24 +66,15 @@ function useGridNav(containerRef: React.RefObject<HTMLDivElement | null>) {
   const findNextCol = useCallback((row: number, currentCol: number) => {
     const cells = getEditableCells();
     const cols = cells.filter(c => Number(c.dataset.row) === row).map(c => Number(c.dataset.col)).sort((a, b) => a - b);
-    const next = cols.find(c => c > currentCol);
-    if (next !== undefined) return { row, col: next };
-    const maxRow = getMaxRow();
-    const nextRow = row < maxRow ? row + 1 : 0;
-    const nextCols = cells.filter(c => Number(c.dataset.row) === nextRow).map(c => Number(c.dataset.col)).sort((a, b) => a - b);
-    return { row: nextRow, col: nextCols[0] ?? 0 };
-  }, [getEditableCells, getMaxRow]);
+    return cols.find(c => c > currentCol) ?? null;
+  }, [getEditableCells]);
 
   const findPrevCol = useCallback((row: number, currentCol: number) => {
     const cells = getEditableCells();
     const cols = cells.filter(c => Number(c.dataset.row) === row).map(c => Number(c.dataset.col)).sort((a, b) => a - b);
     const prev = cols.filter(c => c < currentCol);
-    if (prev.length > 0) return { row, col: prev[prev.length - 1] };
-    const maxRow = getMaxRow();
-    const prevRow = row > 0 ? row - 1 : maxRow;
-    const prevCols = cells.filter(c => Number(c.dataset.row) === prevRow).map(c => Number(c.dataset.col)).sort((a, b) => a - b);
-    return { row: prevRow, col: prevCols[prevCols.length - 1] ?? 0 };
-  }, [getEditableCells, getMaxRow]);
+    return prev.length > 0 ? prev[prev.length - 1] : null;
+  }, [getEditableCells]);
 
   const onCellKeyDown = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
     const el = e.currentTarget;
@@ -91,20 +82,56 @@ function useGridNav(containerRef: React.RefObject<HTMLDivElement | null>) {
     const col = Number(el.dataset.col);
     if (isNaN(row) || isNaN(col)) return;
 
+    const target = e.target;
+    const isTextInput =
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      (target instanceof HTMLElement && target.isContentEditable);
+    const isEditing = target instanceof HTMLElement && target.dataset.gridEditing === 'true';
+
+    const moveTo = (nextRow: number, nextCol: number) => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      requestAnimationFrame(() => focusCell(nextRow, nextCol));
+    };
+
     if (e.key === 'Tab') {
       e.preventDefault();
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-      requestAnimationFrame(() => {
-        const dest = e.shiftKey ? findPrevCol(row, col) : findNextCol(row, col);
-        focusCell(dest.row, dest.col);
-      });
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
+      const nextCol = e.shiftKey ? findPrevCol(row, col) : findNextCol(row, col);
+      if (nextCol === null) return;
+      moveTo(row, nextCol);
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      if (isTextInput && isEditing) return;
       const maxRow = getMaxRow();
-      const nextRow = e.shiftKey ? (row > 0 ? row - 1 : null) : (row < maxRow ? row + 1 : null);
-      if (nextRow === null) return;
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-      requestAnimationFrame(() => focusCell(nextRow, col));
+      const nextRow = e.key === 'ArrowUp' ? Math.max(0, row - 1) : Math.min(maxRow, row + 1);
+      if (nextRow === row) return;
+      e.preventDefault();
+      moveTo(nextRow, col);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      if (e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
+
+      let shouldNavigate = true;
+      if (isTextInput) {
+        if (!isEditing) {
+          shouldNavigate = true;
+        } else if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+          const start = target.selectionStart;
+          const end = target.selectionEnd;
+          if (start !== null && end !== null) {
+            const atStart = start === 0 && end === 0;
+            const atEnd = start === target.value.length && end === target.value.length;
+            shouldNavigate = e.key === 'ArrowLeft' ? atStart : atEnd;
+          }
+        }
+      } else {
+        shouldNavigate = true;
+      }
+
+      if (!shouldNavigate) return;
+
+      const nextCol = e.key === 'ArrowLeft' ? findPrevCol(row, col) : findNextCol(row, col);
+      if (nextCol === null) return;
+      e.preventDefault();
+      moveTo(row, nextCol);
     }
   }, [findNextCol, findPrevCol, focusCell, getMaxRow]);
 
@@ -123,6 +150,7 @@ interface DataGridProps<TData> {
   stickyFirstColumn?: boolean;
   groupBy?: (row: TData) => string;
   renderGroupHeader?: (groupKey: string, groupRows: Row<TData>[]) => React.ReactNode;
+  groupOrder?: (aKey: string, bKey: string) => number;
 }
 
 export function DataGrid<TData>({
@@ -134,6 +162,7 @@ export function DataGrid<TData>({
   stickyFirstColumn = true,
   groupBy,
   renderGroupHeader,
+  groupOrder,
 }: DataGridProps<TData>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { onCellKeyDown, onCellMouseDown } = useGridNav(containerRef);
@@ -148,8 +177,9 @@ export function DataGrid<TData>({
       if (!map.has(key)) { map.set(key, []); order.push(key); }
       map.get(key)!.push(row);
     }
+    if (groupOrder) order.sort(groupOrder);
     return { map, order };
-  }, [groupBy, rows]);
+  }, [groupBy, groupOrder, rows]);
 
   let visualRowIdx = 0;
 
@@ -257,10 +287,14 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
 }) {
   const ctx = useDataGrid();
   const [local, setLocal] = useState(String(value));
+  const [editing, setEditing] = useState(false);
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
+  const pointerDownRef = useRef(false);
 
-  useEffect(() => { if (!focused) setLocal(String(value)); }, [value, focused]);
+  useEffect(() => {
+    if (!focused || !editing) setLocal(String(value));
+  }, [value, focused, editing]);
 
   const commit = () => { if (local !== String(value)) onChange(local); };
 
@@ -269,15 +303,93 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
       ref={ref}
       type={type}
       value={local}
+      readOnly={!editing}
       placeholder={placeholder}
       data-row={ctx?.rowIndex}
       data-col={navCol}
-      onChange={e => setLocal(e.target.value)}
-      onFocus={() => setFocused(true)}
-      onBlur={() => { commit(); setFocused(false); }}
-      onKeyDown={e => { if (ctx) ctx.onCellKeyDown(e); else if (e.key === 'Enter') ref.current?.blur(); }}
-      onMouseDown={ctx?.onCellMouseDown}
-      className={cn(CELL_INPUT_CLASS, className)}
+      data-grid-editing={editing ? 'true' : 'false'}
+      onChange={e => { if (editing) setLocal(e.target.value); }}
+      onMouseDown={e => {
+        ctx?.onCellMouseDown(e);
+        pointerDownRef.current = true;
+        if (!editing) setEditing(true);
+      }}
+      onFocus={() => {
+        setFocused(true);
+        if (!pointerDownRef.current) setEditing(false);
+        pointerDownRef.current = false;
+      }}
+      onBlur={() => {
+        if (editing) commit();
+        setFocused(false);
+        setEditing(false);
+        pointerDownRef.current = false;
+      }}
+      onKeyDown={e => {
+        if (!ctx) {
+          if (e.key === 'Enter') {
+            if (!editing) {
+              e.preventDefault();
+              setEditing(true);
+              requestAnimationFrame(() => {
+                const input = ref.current;
+                if (!input) return;
+                const end = input.value.length;
+                input.setSelectionRange(end, end);
+              });
+            } else {
+              e.preventDefault();
+              commit();
+              setEditing(false);
+              requestAnimationFrame(() => ref.current?.focus());
+            }
+          }
+          return;
+        }
+
+        if (!editing) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            setEditing(true);
+            requestAnimationFrame(() => {
+              const input = ref.current;
+              if (!input) return;
+              const end = input.value.length;
+              input.setSelectionRange(end, end);
+            });
+            return;
+          }
+          if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+            e.preventDefault();
+            setEditing(true);
+            return;
+          }
+          ctx.onCellKeyDown(e);
+          return;
+        }
+
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+          setEditing(false);
+          requestAnimationFrame(() => ref.current?.focus());
+          return;
+        }
+
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setLocal(String(value));
+          setEditing(false);
+          requestAnimationFrame(() => ref.current?.focus());
+          return;
+        }
+
+        if (e.key === 'Tab') {
+          commit();
+          ctx.onCellKeyDown(e);
+        }
+      }}
+      className={cn(CELL_INPUT_CLASS, !editing && 'caret-transparent', className)}
     />
   );
 }
@@ -290,41 +402,111 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
 }) {
   const ctx = useDataGrid();
   const [local, setLocal] = useState(String(value));
+  const [editing, setEditing] = useState(false);
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
+  const pointerDownRef = useRef(false);
 
-  useEffect(() => { if (!focused) setLocal(String(value)); }, [value, focused]);
+  useEffect(() => {
+    if (!focused || !editing) setLocal(String(value));
+  }, [value, focused, editing]);
 
   const commit = () => { if (local !== String(value)) onChange(local); };
 
   return (
-    <div className="min-w-[5rem]">
-      {focused ? (
-        <Input
-          ref={ref}
-          type="number"
-          value={local}
-          data-row={ctx?.rowIndex}
-          data-col={navCol}
-          onChange={e => setLocal(e.target.value)}
-          onBlur={() => { commit(); setFocused(false); }}
-          onKeyDown={e => { if (ctx) ctx.onCellKeyDown(e); else if (e.key === 'Enter') ref.current?.blur(); }}
-          onMouseDown={ctx?.onCellMouseDown}
-          autoFocus
-          className={cn(CELL_INPUT_CLASS, className)}
-        />
-      ) : (
-        <button
-          type="button"
-          data-row={ctx?.rowIndex}
-          data-col={navCol}
-          onClick={() => setFocused(true)}
-          onMouseDown={ctx?.onCellMouseDown}
-          className={cn('h-7 w-full bg-transparent px-1 !text-xs text-right cursor-pointer border border-transparent hover:border-border rounded-md underline decoration-dashed decoration-muted-foreground/40 underline-offset-2', className)}
-        >
-          ${Math.round(Number(local) || 0)}
-        </button>
-      )}
+    <div className="relative min-w-[5rem]">
+      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 !text-xs text-muted-foreground">$</span>
+      <Input
+        ref={ref}
+        type="number"
+        value={local}
+        readOnly={!editing}
+        data-row={ctx?.rowIndex}
+        data-col={navCol}
+        data-grid-editing={editing ? 'true' : 'false'}
+        onChange={e => { if (editing) setLocal(e.target.value); }}
+        onMouseDown={e => {
+          ctx?.onCellMouseDown(e);
+          pointerDownRef.current = true;
+          if (!editing) setEditing(true);
+        }}
+        onFocus={() => {
+          setFocused(true);
+          if (!pointerDownRef.current) setEditing(false);
+          pointerDownRef.current = false;
+        }}
+        onBlur={() => {
+          if (editing) commit();
+          setFocused(false);
+          setEditing(false);
+          pointerDownRef.current = false;
+        }}
+        onKeyDown={e => {
+          if (!ctx) {
+            if (e.key === 'Enter') {
+              if (!editing) {
+                e.preventDefault();
+                setEditing(true);
+                requestAnimationFrame(() => {
+                  const input = ref.current;
+                  if (!input) return;
+                  const end = input.value.length;
+                  input.setSelectionRange(end, end);
+                });
+              } else {
+                e.preventDefault();
+                commit();
+                setEditing(false);
+                requestAnimationFrame(() => ref.current?.focus());
+              }
+            }
+            return;
+          }
+
+          if (!editing) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setEditing(true);
+              requestAnimationFrame(() => {
+                const input = ref.current;
+                if (!input) return;
+                const end = input.value.length;
+                input.setSelectionRange(end, end);
+              });
+              return;
+            }
+            if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+              e.preventDefault();
+              setEditing(true);
+              return;
+            }
+            ctx.onCellKeyDown(e);
+            return;
+          }
+
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+            setEditing(false);
+            requestAnimationFrame(() => ref.current?.focus());
+            return;
+          }
+
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            setLocal(String(value));
+            setEditing(false);
+            requestAnimationFrame(() => ref.current?.focus());
+            return;
+          }
+
+          if (e.key === 'Tab') {
+            commit();
+            ctx.onCellKeyDown(e);
+          }
+        }}
+        className={cn(CELL_INPUT_CLASS, 'pl-4 !text-right', !editing && 'caret-transparent', className)}
+      />
     </div>
   );
 }
@@ -337,43 +519,113 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
 }) {
   const ctx = useDataGrid();
   const [local, setLocal] = useState(String(value));
+  const [editing, setEditing] = useState(false);
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
+  const pointerDownRef = useRef(false);
 
-  useEffect(() => { if (!focused) setLocal(String(value)); }, [value, focused]);
+  useEffect(() => {
+    if (!focused || !editing) setLocal(String(value));
+  }, [value, focused, editing]);
 
   const commit = () => { if (local !== String(value)) onChange(local); };
 
   return (
-    <div className="min-w-[4rem]">
-      {focused ? (
-        <Input
-          ref={ref}
-          type="number"
-          value={local}
-          min={0}
-          max={100}
-          data-row={ctx?.rowIndex}
-          data-col={navCol}
-          onChange={e => setLocal(e.target.value)}
-          onBlur={() => { commit(); setFocused(false); }}
-          onKeyDown={e => { if (ctx) ctx.onCellKeyDown(e); else if (e.key === 'Enter') ref.current?.blur(); }}
-          onMouseDown={ctx?.onCellMouseDown}
-          autoFocus
-          className={cn(CELL_INPUT_CLASS, className)}
-        />
-      ) : (
-        <button
-          type="button"
-          data-row={ctx?.rowIndex}
-          data-col={navCol}
-          onClick={() => setFocused(true)}
-          onMouseDown={ctx?.onCellMouseDown}
-          className={cn('h-7 w-full bg-transparent px-1 !text-xs text-right cursor-pointer border border-transparent hover:border-border rounded-md underline decoration-dashed decoration-muted-foreground/40 underline-offset-2', className)}
-        >
-          {Math.round(Number(local) || 0)}%
-        </button>
-      )}
+    <div className="relative min-w-[4rem]">
+      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 !text-xs text-muted-foreground">%</span>
+      <Input
+        ref={ref}
+        type="number"
+        value={local}
+        min={0}
+        max={100}
+        readOnly={!editing}
+        data-row={ctx?.rowIndex}
+        data-col={navCol}
+        data-grid-editing={editing ? 'true' : 'false'}
+        onChange={e => { if (editing) setLocal(e.target.value); }}
+        onMouseDown={e => {
+          ctx?.onCellMouseDown(e);
+          pointerDownRef.current = true;
+          if (!editing) setEditing(true);
+        }}
+        onFocus={() => {
+          setFocused(true);
+          if (!pointerDownRef.current) setEditing(false);
+          pointerDownRef.current = false;
+        }}
+        onBlur={() => {
+          if (editing) commit();
+          setFocused(false);
+          setEditing(false);
+          pointerDownRef.current = false;
+        }}
+        onKeyDown={e => {
+          if (!ctx) {
+            if (e.key === 'Enter') {
+              if (!editing) {
+                e.preventDefault();
+                setEditing(true);
+                requestAnimationFrame(() => {
+                  const input = ref.current;
+                  if (!input) return;
+                  const end = input.value.length;
+                  input.setSelectionRange(end, end);
+                });
+              } else {
+                e.preventDefault();
+                commit();
+                setEditing(false);
+                requestAnimationFrame(() => ref.current?.focus());
+              }
+            }
+            return;
+          }
+
+          if (!editing) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setEditing(true);
+              requestAnimationFrame(() => {
+                const input = ref.current;
+                if (!input) return;
+                const end = input.value.length;
+                input.setSelectionRange(end, end);
+              });
+              return;
+            }
+            if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+              e.preventDefault();
+              setEditing(true);
+              return;
+            }
+            ctx.onCellKeyDown(e);
+            return;
+          }
+
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+            setEditing(false);
+            requestAnimationFrame(() => ref.current?.focus());
+            return;
+          }
+
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            setLocal(String(value));
+            setEditing(false);
+            requestAnimationFrame(() => ref.current?.focus());
+            return;
+          }
+
+          if (e.key === 'Tab') {
+            commit();
+            ctx.onCellKeyDown(e);
+          }
+        }}
+        className={cn(CELL_INPUT_CLASS, 'pr-4 !text-right', !editing && 'caret-transparent', className)}
+      />
     </div>
   );
 }

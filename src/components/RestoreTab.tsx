@@ -243,13 +243,10 @@ export function RestoreTab({ points, incomes, expenses, categories, linkedAccoun
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete backup from {deleteTarget ? formatTimestamp(deleteTarget.created_at) : ''}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This permanently deletes the backup. This action cannot be undone.
-            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete}>Delete</AlertDialogAction>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleConfirmDelete}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -19,7 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels, needsParam } from '@/lib/frequency';
-import { DataGrid, GridEditableCell, GridCurrencyCell, GridPercentCell, useDataGrid, gridNavProps } from '@/components/ui/data-grid';
+import { DataGrid, GridEditableCell, GridCurrencyCell, GridPercentCell, useDataGrid } from '@/components/ui/data-grid';
 import type { FrequencyType } from '@/types/fairshare';
 import type { Expense } from '@/hooks/useExpenses';
 import type { Category } from '@/hooks/useCategories';
@@ -67,7 +67,17 @@ function CategoryCell({ exp, categories, onChange, onAddNew }: {
       <SelectTrigger
         className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
         style={{ backgroundColor: categories.find(c => c.id === exp.category_id)?.color || 'transparent' }}
-        {...gridNavProps(ctx, 1)}
+        data-row={ctx?.rowIndex}
+        data-col={1}
+        onMouseDown={ctx?.onCellMouseDown}
+        onKeyDown={(e) => {
+          if (!ctx) return;
+          const expanded = e.currentTarget.getAttribute('aria-expanded') === 'true';
+          if (expanded) return;
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') {
+            ctx.onCellKeyDown(e);
+          }
+        }}
       >
         <SelectValue />
       </SelectTrigger>
@@ -85,7 +95,20 @@ function ExpenseFrequencyCell({ exp, onChange }: { exp: Expense; onChange: (fiel
   return (
     <div className="flex items-center gap-1">
       <Select value={exp.frequency_type} onValueChange={v => onChange('frequency_type', v)}>
-        <SelectTrigger className="h-7 min-w-0 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2" {...gridNavProps(ctx, 4)}>
+        <SelectTrigger
+          className="h-7 min-w-0 border-transparent bg-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
+          data-row={ctx?.rowIndex}
+          data-col={4}
+          onMouseDown={ctx?.onCellMouseDown}
+          onKeyDown={(e) => {
+            if (!ctx) return;
+            const expanded = e.currentTarget.getAttribute('aria-expanded') === 'true';
+            if (expanded) return;
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') {
+              ctx.onCellKeyDown(e);
+            }
+          }}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -108,7 +131,17 @@ function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, 
       <SelectTrigger
         className="h-7 border-transparent hover:border-border text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
         style={{ backgroundColor: linkedAccounts.find(la => la.id === exp.linked_account_id)?.color || 'transparent' }}
-        {...gridNavProps(ctx, 6)}
+        data-row={ctx?.rowIndex}
+        data-col={6}
+        onMouseDown={ctx?.onCellMouseDown}
+        onKeyDown={(e) => {
+          if (!ctx) return;
+          const expanded = e.currentTarget.getAttribute('aria-expanded') === 'true';
+          if (expanded) return;
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') {
+            ctx.onCellKeyDown(e);
+          }
+        }}
       >
         <SelectValue>
           {exp.linked_account_id ? linkedAccounts.find(la => la.id === exp.linked_account_id)?.name ?? '—' : '—'}
@@ -129,7 +162,23 @@ function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, 
 
 function EstimateCell({ checked, onToggle }: { checked: boolean; onToggle: (v: boolean) => void }) {
   const ctx = useDataGrid();
-  return <Checkbox checked={checked} onCheckedChange={v => onToggle(!!v)} {...gridNavProps(ctx, 3)} />;
+  return (
+    <Checkbox
+      checked={checked}
+      onCheckedChange={v => onToggle(!!v)}
+      data-row={ctx?.rowIndex}
+      data-col={3}
+      onMouseDown={ctx?.onCellMouseDown}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onToggle(!checked);
+          return;
+        }
+        if (ctx) ctx.onCellKeyDown(e);
+      }}
+    />
+  );
 }
 
 function ExpenseDeleteCell({ name, onRemove }: { name: string; onRemove: () => void }) {
@@ -429,6 +478,12 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     }
   };
 
+  const groupOrder = useMemo(() => {
+    if (groupBy !== 'category' && groupBy !== 'payer' && groupBy !== 'payment_method') return undefined;
+    return (aKey: string, bKey: string) =>
+      getGroupLabel(aKey).localeCompare(getGroupLabel(bKey), undefined, { sensitivity: 'base', numeric: true });
+  }, [groupBy, categories, linkedAccounts, partnerX, partnerY]);
+
   const renderGroupHeader = (key: string, groupRows: Row<ComputedRow>[]) => {
     const gMonthly = groupRows.reduce((s, r) => s + r.original.monthly, 0);
     const gFairX = groupRows.reduce((s, r) => s + r.original.fairX, 0);
@@ -486,6 +541,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
             emptyMessage='No expenses yet. Click "Add" to start.'
             groupBy={getGroupKey}
             renderGroupHeader={renderGroupHeader}
+            groupOrder={groupOrder}
             footer={computedData.length > 0 ? (
               <tr className="bg-muted shadow-[0_-1px_0_0_hsl(var(--border))]">
                 <td className="font-semibold text-xs sticky left-0 z-10 bg-muted px-2 py-1">Totals</td>

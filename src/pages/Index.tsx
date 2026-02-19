@@ -7,6 +7,7 @@ import AuthPage from '@/platform/components/AuthPage';
 const Index = () => {
   const { user, loading: authLoading, signOut } = useAuth();
   const { household, loading: hhLoading, createHousehold, joinHousehold, updatePartnerNames, updatePartnerColors, refetch } = useHouseholdData(user);
+  const setupDisplayName = (user?.user_metadata?.display_name as string | undefined)?.trim() || user?.email || 'You';
 
   if (authLoading || hhLoading) {
     return (
@@ -21,7 +22,13 @@ const Index = () => {
   return (
     <>
       {!household ? (
-        <HouseholdSetup onComplete={createHousehold} onJoin={joinHousehold} />
+        <HouseholdSetup
+          userId={user.id}
+          displayName={setupDisplayName}
+          onSignOut={signOut}
+          onComplete={createHousehold}
+          onJoin={joinHousehold}
+        />
       ) : (
         <AppShell
           household={household}
