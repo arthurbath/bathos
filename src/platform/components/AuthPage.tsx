@@ -101,7 +101,7 @@ export default function AuthPage() {
                 <Input placeholder="Email" type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} required />
                 <Input placeholder="Password" type="password" value={signupPassword} onChange={e => setSignupPassword(e.target.value)} required minLength={8} />
                 <PasswordRequirements password={signupPassword} />
-                <div className="flex items-start space-x-3">
+                <div className="flex items-center space-x-3">
                   <Checkbox
                     id="terms"
                     checked={termsAccepted}

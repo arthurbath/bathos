@@ -6,7 +6,7 @@ import {
   type Row,
 } from '@tanstack/react-table';
 import { Input } from '@/components/ui/input';
-import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ─── Column Meta Augmentation ───
@@ -216,6 +216,7 @@ export function DataGrid<TData>({
             <tr key={hg.id} className="border-b transition-colors">
               {hg.headers.map((header, colIdx) => {
                 const meta = header.column.columnDef.meta;
+                const sortState = header.column.getIsSorted();
                 return (
                   <th
                     key={header.id}
@@ -230,11 +231,8 @@ export function DataGrid<TData>({
                     {header.isPlaceholder ? null : (
                       <span className="inline-flex items-center gap-1">
                         {flexRender(header.column.columnDef.header, header.getContext())}
-                        {header.column.getCanSort() && (
-                          header.column.getIsSorted() === 'asc' ? <ArrowUp className="h-3 w-3" /> :
-                          header.column.getIsSorted() === 'desc' ? <ArrowDown className="h-3 w-3" /> :
-                          <ArrowUpDown className="h-3 w-3 opacity-30" />
-                        )}
+                        {header.column.getCanSort() && sortState === 'asc' && <ArrowUp className="h-3 w-3" />}
+                        {header.column.getCanSort() && sortState === 'desc' && <ArrowDown className="h-3 w-3" />}
                       </span>
                     )}
                   </th>
@@ -276,6 +274,21 @@ export function DataGrid<TData>({
 
 // ─── Cell Primitives ───
 const CELL_INPUT_CLASS = 'h-7 rounded-md border border-transparent bg-transparent px-1 hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring !text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
+
+function isPrintableEntryKey(e: React.KeyboardEvent<HTMLInputElement>) {
+  return e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey;
+}
+
+function isNumberEntryKey(e: React.KeyboardEvent<HTMLInputElement>) {
+  return isPrintableEntryKey(e) && /^[0-9.-]$/.test(e.key);
+}
+
+function focusInputAtEnd(input: HTMLInputElement | null) {
+  if (!input) return;
+  input.focus();
+  const end = input.value.length;
+  input.setSelectionRange(end, end);
+}
 
 export function GridEditableCell({ value, onChange, navCol, type = 'text', className, placeholder }: {
   value: string | number;
@@ -325,46 +338,47 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
         setEditing(false);
         pointerDownRef.current = false;
       }}
-      onKeyDown={e => {
-        if (!ctx) {
-          if (e.key === 'Enter') {
-            if (!editing) {
+        onKeyDown={e => {
+          const startEditingWithKey = (key: string) => {
+            setEditing(true);
+            setLocal(key);
+            requestAnimationFrame(() => focusInputAtEnd(ref.current));
+          };
+
+          if (!ctx) {
+            if (e.key === 'Enter') {
+              if (!editing) {
+                e.preventDefault();
+                setEditing(true);
+                requestAnimationFrame(() => focusInputAtEnd(ref.current));
+              } else {
+                e.preventDefault();
+                commit();
+                setEditing(false);
+                requestAnimationFrame(() => ref.current?.focus());
+              }
+              return;
+            }
+            if (!editing && isPrintableEntryKey(e)) {
+              e.preventDefault();
+              startEditingWithKey(e.key);
+            }
+            return;
+          }
+
+          if (!editing) {
+            if (e.key === 'Enter') {
               e.preventDefault();
               setEditing(true);
-              requestAnimationFrame(() => {
-                const input = ref.current;
-                if (!input) return;
-                const end = input.value.length;
-                input.setSelectionRange(end, end);
-              });
-            } else {
-              e.preventDefault();
-              commit();
-              setEditing(false);
-              requestAnimationFrame(() => ref.current?.focus());
+              requestAnimationFrame(() => focusInputAtEnd(ref.current));
+              return;
             }
-          }
-          return;
-        }
-
-        if (!editing) {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            setEditing(true);
-            requestAnimationFrame(() => {
-              const input = ref.current;
-              if (!input) return;
-              const end = input.value.length;
-              input.setSelectionRange(end, end);
-            });
-            return;
-          }
-          if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
-            e.preventDefault();
-            setEditing(true);
-            return;
-          }
-          ctx.onCellKeyDown(e);
+            if (isPrintableEntryKey(e)) {
+              e.preventDefault();
+              startEditingWithKey(e.key);
+              return;
+            }
+            ctx.onCellKeyDown(e);
           return;
         }
 
@@ -442,23 +456,29 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
           pointerDownRef.current = false;
         }}
         onKeyDown={e => {
+          const startEditingWithKey = (key: string) => {
+            setEditing(true);
+            setLocal(key);
+            requestAnimationFrame(() => focusInputAtEnd(ref.current));
+          };
+
           if (!ctx) {
             if (e.key === 'Enter') {
               if (!editing) {
                 e.preventDefault();
                 setEditing(true);
-                requestAnimationFrame(() => {
-                  const input = ref.current;
-                  if (!input) return;
-                  const end = input.value.length;
-                  input.setSelectionRange(end, end);
-                });
+                requestAnimationFrame(() => focusInputAtEnd(ref.current));
               } else {
                 e.preventDefault();
                 commit();
                 setEditing(false);
                 requestAnimationFrame(() => ref.current?.focus());
               }
+              return;
+            }
+            if (!editing && isNumberEntryKey(e)) {
+              e.preventDefault();
+              startEditingWithKey(e.key);
             }
             return;
           }
@@ -467,17 +487,12 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               setEditing(true);
-              requestAnimationFrame(() => {
-                const input = ref.current;
-                if (!input) return;
-                const end = input.value.length;
-                input.setSelectionRange(end, end);
-              });
+              requestAnimationFrame(() => focusInputAtEnd(ref.current));
               return;
             }
-            if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+            if (isNumberEntryKey(e)) {
               e.preventDefault();
-              setEditing(true);
+              startEditingWithKey(e.key);
               return;
             }
             ctx.onCellKeyDown(e);
@@ -561,23 +576,29 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
           pointerDownRef.current = false;
         }}
         onKeyDown={e => {
+          const startEditingWithKey = (key: string) => {
+            setEditing(true);
+            setLocal(key);
+            requestAnimationFrame(() => focusInputAtEnd(ref.current));
+          };
+
           if (!ctx) {
             if (e.key === 'Enter') {
               if (!editing) {
                 e.preventDefault();
                 setEditing(true);
-                requestAnimationFrame(() => {
-                  const input = ref.current;
-                  if (!input) return;
-                  const end = input.value.length;
-                  input.setSelectionRange(end, end);
-                });
+                requestAnimationFrame(() => focusInputAtEnd(ref.current));
               } else {
                 e.preventDefault();
                 commit();
                 setEditing(false);
                 requestAnimationFrame(() => ref.current?.focus());
               }
+              return;
+            }
+            if (!editing && isNumberEntryKey(e)) {
+              e.preventDefault();
+              startEditingWithKey(e.key);
             }
             return;
           }
@@ -586,17 +607,12 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               setEditing(true);
-              requestAnimationFrame(() => {
-                const input = ref.current;
-                if (!input) return;
-                const end = input.value.length;
-                input.setSelectionRange(end, end);
-              });
+              requestAnimationFrame(() => focusInputAtEnd(ref.current));
               return;
             }
-            if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+            if (isNumberEntryKey(e)) {
               e.preventDefault();
-              setEditing(true);
+              startEditingWithKey(e.key);
               return;
             }
             ctx.onCellKeyDown(e);
@@ -624,7 +640,7 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
             ctx.onCellKeyDown(e);
           }
         }}
-        className={cn(CELL_INPUT_CLASS, 'pr-4 !text-right', !editing && 'caret-transparent', className)}
+        className={cn(CELL_INPUT_CLASS, 'pr-6 !text-right', !editing && 'caret-transparent', className)}
       />
     </div>
   );

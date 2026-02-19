@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { FrequencyType } from '@/types/fairshare';
-import { isLikelyNetworkError, toUserFacingErrorMessage } from '@/lib/networkErrors';
+import { isLikelyNetworkError, retryOnLikelyNetworkError, toUserFacingErrorMessage } from '@/lib/networkErrors';
 
 export interface Expense {
   id: string;
@@ -32,11 +32,13 @@ export function useExpenses(householdId: string) {
 
   const fetch = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('budget_expenses')
-        .select('*')
-        .eq('household_id', householdId)
-        .order('created_at');
+      const { data, error } = await retryOnLikelyNetworkError(() =>
+        supabase
+          .from('budget_expenses')
+          .select('*')
+          .eq('household_id', householdId)
+          .order('created_at'),
+      );
       if (error) throw error;
       setExpenses((data as Expense[]) ?? []);
     } catch {
@@ -54,11 +56,13 @@ export function useExpenses(householdId: string) {
     setExpenses(prev => sortByCreatedAt([...prev, optimistic]));
 
     try {
-      const { data, error } = await supabase.from('budget_expenses').insert({
-        id,
-        household_id: householdId,
-        ...expense,
-      }).select('*').single();
+      const { data, error } = await retryOnLikelyNetworkError(() =>
+        supabase.from('budget_expenses').insert({
+          id,
+          household_id: householdId,
+          ...expense,
+        }).select('*').single(),
+      );
       if (error) throw error;
       if (data) {
         setExpenses(prev => sortByCreatedAt(prev.map(e => (e.id === id ? (data as Expense) : e))));
@@ -76,7 +80,9 @@ export function useExpenses(householdId: string) {
     const prevExpenses = expensesRef.current;
     setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
     try {
-      const { data, error } = await supabase.from('budget_expenses').update(updates).eq('id', id).select('*').single();
+      const { data, error } = await retryOnLikelyNetworkError(() =>
+        supabase.from('budget_expenses').update(updates).eq('id', id).select('*').single(),
+      );
       if (error) throw error;
       if (data) {
         setExpenses(prev => sortByCreatedAt(prev.map(e => (e.id === id ? (data as Expense) : e))));
@@ -94,7 +100,9 @@ export function useExpenses(householdId: string) {
     const prevExpenses = expensesRef.current;
     setExpenses(prev => prev.filter(e => e.id !== id));
     try {
-      const { error } = await supabase.from('budget_expenses').delete().eq('id', id);
+      const { error } = await retryOnLikelyNetworkError(() =>
+        supabase.from('budget_expenses').delete().eq('id', id),
+      );
       if (error) throw error;
     } catch (e: any) {
       setExpenses(prevExpenses);

@@ -71,7 +71,7 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
       <Card className="border-primary/30 bg-primary/5">
         <CardContent className="py-8">
           {Math.abs(settlement) < 0.5 ? (
-            <p className="text-center text-xl font-semibold text-foreground">All square! 🎉</p>
+            <p className="text-center text-xl font-semibold text-foreground">All square</p>
           ) : settlement > 0 ? (
             <div className="text-center">
               <p className="text-lg font-medium text-muted-foreground">Monthly settlement</p>

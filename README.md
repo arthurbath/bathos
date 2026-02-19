@@ -27,3 +27,9 @@ Accessible at [budget.bath.garden](https://budget.bath.garden).
 - Database tables use namespace prefixes (`budget_`, `bathos_`) for clarity
 - Subdomain routing is handled client-side; path-based fallback (`/budget/...`) is used in development
 - See `docs/ARCHITECTURE.md` for structure, `docs/MODULE_GUIDE.md` for adding modules, and `docs/STYLE_GUIDE.md` for design conventions
+
+### Dev Console Bridge (Safari + Vite)
+
+- In local dev (`npm run dev`), browser `console.log/info/warn/error/debug`, uncaught errors, and unhandled promise rejections are mirrored to the Vite terminal.
+- This works for Safari and other browsers, and stays available for this repo as long as the bridge files remain in source control.
+- The bridge is dev-only and does not run in production builds.

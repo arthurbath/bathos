@@ -94,7 +94,7 @@ function sendClientLog(level: ConsoleLevel, args: unknown[]): void {
 }
 
 export function installClientConsoleMirror(): void {
-  if (typeof window === "undefined" || window.__bathosClientConsoleMirrorInstalled) {
+  if (!import.meta.env.DEV || typeof window === "undefined" || window.__bathosClientConsoleMirrorInstalled) {
     return;
   }
   window.__bathosClientConsoleMirrorInstalled = true;

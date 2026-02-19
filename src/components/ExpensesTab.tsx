@@ -162,10 +162,20 @@ function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, 
 
 function EstimateCell({ checked, onToggle }: { checked: boolean; onToggle: (v: boolean) => void }) {
   const ctx = useDataGrid();
+  const checkboxRef = useRef<HTMLButtonElement>(null);
+
+  const focusCheckbox = () => {
+    requestAnimationFrame(() => checkboxRef.current?.focus());
+  };
+
   return (
     <Checkbox
+      ref={checkboxRef}
       checked={checked}
-      onCheckedChange={v => onToggle(!!v)}
+      onCheckedChange={v => {
+        onToggle(!!v);
+        focusCheckbox();
+      }}
       data-row={ctx?.rowIndex}
       data-col={3}
       onMouseDown={ctx?.onCellMouseDown}
@@ -173,6 +183,7 @@ function EstimateCell({ checked, onToggle }: { checked: boolean; onToggle: (v: b
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onToggle(!checked);
+          focusCheckbox();
           return;
         }
         if (ctx) ctx.onCellKeyDown(e);
