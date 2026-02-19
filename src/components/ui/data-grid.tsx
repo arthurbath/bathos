@@ -22,7 +22,7 @@ declare module '@tanstack/react-table' {
 interface DataGridContextValue {
   rowIndex: number;
   rowId: string;
-  onCellKeyDown: (e: React.KeyboardEvent<HTMLElement>) => void;
+  onCellKeyDown: (e: React.KeyboardEvent<HTMLElement>) => boolean;
   onCellMouseDown: (e: React.MouseEvent<HTMLElement>) => void;
   onCellCommit: (col: number) => void;
 }
@@ -41,8 +41,17 @@ export function gridNavProps(ctx: DataGridContextValue | null, navCol: number): 
   };
 }
 
+interface GridNavTarget {
+  row: number;
+  col: number;
+  rowId: string | null;
+}
+
 // ─── Keyboard Navigation ───
-function useGridNav(containerRef: React.RefObject<HTMLDivElement | null>) {
+function useGridNav(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  onNavigateTarget?: (target: GridNavTarget) => void,
+) {
   const getEditableCells = useCallback(() => {
     if (!containerRef.current) return [];
     return Array.from(containerRef.current.querySelectorAll<HTMLElement>('[data-row][data-col]'));
@@ -147,7 +156,7 @@ function useGridNav(containerRef: React.RefObject<HTMLDivElement | null>) {
     const el = e.currentTarget;
     const row = Number(el.dataset.row);
     const col = Number(el.dataset.col);
-    if (isNaN(row) || isNaN(col)) return;
+    if (isNaN(row) || isNaN(col)) return false;
 
     const target = e.target;
     const isTextInput =
@@ -158,6 +167,7 @@ function useGridNav(containerRef: React.RefObject<HTMLDivElement | null>) {
 
     const moveTo = (nextRow: number, nextCol: number) => {
       const targetBeforeSort = findTargetBeforeSort(nextRow, nextCol);
+      onNavigateTarget?.(targetBeforeSort);
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       focusWithRetry(targetBeforeSort);
     };
@@ -165,17 +175,19 @@ function useGridNav(containerRef: React.RefObject<HTMLDivElement | null>) {
     if (e.key === 'Tab') {
       e.preventDefault();
       const nextCol = e.shiftKey ? findPrevCol(row, col) : findNextCol(row, col);
-      if (nextCol === null) return;
+      if (nextCol === null) return false;
       moveTo(row, nextCol);
+      return true;
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      if (isTextInput && isEditing) return;
+      if (isTextInput && isEditing) return false;
       const maxRow = getMaxRow();
       const nextRow = e.key === 'ArrowUp' ? Math.max(0, row - 1) : Math.min(maxRow, row + 1);
-      if (nextRow === row) return;
+      if (nextRow === row) return false;
       e.preventDefault();
       moveTo(nextRow, col);
+      return true;
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      if (e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
+      if (e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return false;
 
       let shouldNavigate = true;
       if (isTextInput) {
@@ -194,14 +206,16 @@ function useGridNav(containerRef: React.RefObject<HTMLDivElement | null>) {
         shouldNavigate = true;
       }
 
-      if (!shouldNavigate) return;
+      if (!shouldNavigate) return false;
 
       const nextCol = e.key === 'ArrowLeft' ? findPrevCol(row, col) : findNextCol(row, col);
-      if (nextCol === null) return;
+      if (nextCol === null) return false;
       e.preventDefault();
       moveTo(row, nextCol);
+      return true;
     }
-  }, [findNextCol, findPrevCol, findTargetBeforeSort, focusWithRetry, getMaxRow]);
+    return false;
+  }, [findNextCol, findPrevCol, findTargetBeforeSort, focusWithRetry, getMaxRow, onNavigateTarget]);
 
   const onCellMouseDown = useCallback((_e: React.MouseEvent<HTMLElement>) => {}, []);
 
@@ -235,14 +249,21 @@ export function DataGrid<TData>({
   groupOrder,
 }: DataGridProps<TData>) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { onCellKeyDown, onCellMouseDown, scrollCellIntoView, focusCellByRowId } = useGridNav(containerRef);
-  const rows = table.getRowModel().rows;
   const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
   const lastCommittedRowIdRef = useRef<string | null>(null);
   const pendingCommitFocusRef = useRef<{ rowId: string; col: number } | null>(null);
   const previousRowPositionsRef = useRef<Map<string, number>>(new Map());
   const previousGroupKeysRef = useRef<Map<string, string | null>>(new Map());
   const clearHighlightTimerRef = useRef<number | null>(null);
+  const { onCellKeyDown, onCellMouseDown, scrollCellIntoView, focusCellByRowId } = useGridNav(
+    containerRef,
+    useCallback((target) => {
+      if (!target.rowId) return;
+      if (lastCommittedRowIdRef.current !== target.rowId) return;
+      pendingCommitFocusRef.current = { rowId: target.rowId, col: target.col };
+    }, []),
+  );
+  const rows = table.getRowModel().rows;
 
   const markRowCommitted = useCallback((rowId: string, col: number) => {
     lastCommittedRowIdRef.current = rowId;
@@ -322,9 +343,25 @@ export function DataGrid<TData>({
       active.dataset.col != null;
 
     if (activeInGridCell) {
-      requestAnimationFrame(() => scrollCellIntoView(active as HTMLElement));
-      pendingCommitFocusRef.current = null;
-      return;
+      const activeEl = active as HTMLElement;
+      const activeRowId = activeEl.dataset.rowId ?? null;
+      const activeCol = Number(activeEl.dataset.col);
+      const activeIsPendingTarget =
+        activeRowId === pending.rowId &&
+        !Number.isNaN(activeCol) &&
+        activeCol === pending.col;
+
+      if (activeIsPendingTarget) {
+        requestAnimationFrame(() => scrollCellIntoView(activeEl));
+        pendingCommitFocusRef.current = null;
+        return;
+      }
+
+      const activeOnDifferentRow = activeRowId !== pending.rowId;
+      if (activeOnDifferentRow) {
+        pendingCommitFocusRef.current = null;
+        return;
+      }
     }
 
     let attempts = 0;
@@ -512,6 +549,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
   const pointerDownRef = useRef(false);
+  const suppressBlurCommitRef = useRef(false);
 
   useEffect(() => {
     if (!focused || !editing) setLocal(String(value));
@@ -548,7 +586,11 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
         pointerDownRef.current = false;
       }}
       onBlur={() => {
-        if (editing) commit();
+        if (suppressBlurCommitRef.current) {
+          suppressBlurCommitRef.current = false;
+        } else if (editing) {
+          commit();
+        }
         setFocused(false);
         setEditing(false);
         pointerDownRef.current = false;
@@ -614,8 +656,10 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
         }
 
         if (e.key === 'Tab') {
+          suppressBlurCommitRef.current = true;
           commit();
-          ctx.onCellKeyDown(e);
+          const moved = ctx.onCellKeyDown(e);
+          if (!moved) suppressBlurCommitRef.current = false;
         }
       }}
       className={cn(CELL_INPUT_CLASS, !editing && 'caret-transparent', className)}
@@ -635,6 +679,7 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
   const pointerDownRef = useRef(false);
+  const suppressBlurCommitRef = useRef(false);
 
   useEffect(() => {
     if (!focused || !editing) setLocal(String(value));
@@ -671,7 +716,11 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
           pointerDownRef.current = false;
         }}
         onBlur={() => {
-          if (editing) commit();
+          if (suppressBlurCommitRef.current) {
+            suppressBlurCommitRef.current = false;
+          } else if (editing) {
+            commit();
+          }
           setFocused(false);
           setEditing(false);
           pointerDownRef.current = false;
@@ -737,8 +786,10 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
           }
 
           if (e.key === 'Tab') {
+            suppressBlurCommitRef.current = true;
             commit();
-            ctx.onCellKeyDown(e);
+            const moved = ctx.onCellKeyDown(e);
+            if (!moved) suppressBlurCommitRef.current = false;
           }
         }}
         className={cn(CELL_INPUT_CLASS, 'pl-4 !text-right', !editing && 'caret-transparent', className)}
@@ -759,6 +810,7 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
   const pointerDownRef = useRef(false);
+  const suppressBlurCommitRef = useRef(false);
 
   useEffect(() => {
     if (!focused || !editing) setLocal(String(value));
@@ -797,7 +849,11 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
           pointerDownRef.current = false;
         }}
         onBlur={() => {
-          if (editing) commit();
+          if (suppressBlurCommitRef.current) {
+            suppressBlurCommitRef.current = false;
+          } else if (editing) {
+            commit();
+          }
           setFocused(false);
           setEditing(false);
           pointerDownRef.current = false;
@@ -863,8 +919,10 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
           }
 
           if (e.key === 'Tab') {
+            suppressBlurCommitRef.current = true;
             commit();
-            ctx.onCellKeyDown(e);
+            const moved = ctx.onCellKeyDown(e);
+            if (!moved) suppressBlurCommitRef.current = false;
           }
         }}
         className={cn(CELL_INPUT_CLASS, 'pr-6 !text-right', !editing && 'caret-transparent', className)}
