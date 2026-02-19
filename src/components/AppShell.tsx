@@ -136,11 +136,11 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
   };
 
   return (
-    <div className={`bg-background ${isFullViewGridRoute ? 'h-dvh overflow-hidden flex flex-col' : 'min-h-screen'}`}>
+    <div className={`bg-background ${isFullViewGridRoute ? 'h-dvh overflow-y-hidden overflow-x-visible flex flex-col' : 'min-h-screen'}`}>
       <ToplineHeader title="Budget" userId={userId} displayName={household.displayName} onSignOut={onSignOut} />
 
       <main className={isFullViewGridRoute
-        ? 'mx-auto flex w-full max-w-5xl flex-1 min-h-0 flex-col gap-6 overflow-hidden px-4 pt-6 pb-0'
+        ? 'mx-auto flex w-full max-w-5xl flex-1 min-h-0 flex-col gap-6 overflow-y-hidden overflow-x-visible px-4 pt-6 pb-0'
         : 'mx-auto max-w-5xl px-4 pt-6 pb-6 space-y-6'}
       >
         <nav className="grid w-full grid-cols-5 rounded-lg bg-muted p-1 text-muted-foreground">
