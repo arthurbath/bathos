@@ -5,8 +5,8 @@ import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft } from 'lucide-react';
@@ -225,12 +225,13 @@ export default function AccountPage() {
                   This action cannot be undone. All your data will be permanently removed. Type your email address to confirm.
                 </AlertDialogDescription>
               </AlertDialogHeader>
-              <Input
-                value={deleteConfirmText}
-                onChange={e => setDeleteConfirmText(e.target.value)}
-                placeholder={userEmail}
-                className="mt-2"
-              />
+              <AlertDialogBody>
+                <Input
+                  value={deleteConfirmText}
+                  onChange={e => setDeleteConfirmText(e.target.value)}
+                  placeholder={userEmail}
+                />
+              </AlertDialogBody>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
@@ -255,26 +256,28 @@ export default function AccountPage() {
               Enter your current password and new email. Confirmation links will be sent to both addresses.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleChangeEmail} className="space-y-4 mt-2">
-            <div>
-              <label className="text-sm font-medium mb-1 block">Current email</label>
-              <Input value={userEmail} disabled className="bg-muted" />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Current password</label>
-              <Input type="password" value={emailPassword} onChange={e => setEmailPassword(e.target.value)} autoComplete="current-password" />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">New email</label>
-              <Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} autoComplete="email" autoFocus />
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Button type="button" variant="outline" onClick={() => setShowChangeEmail(false)}>Cancel</Button>
-              <Button type="submit" disabled={emailSubmitting || !newEmail || !emailPassword} className="flex-1">
-                {emailSubmitting ? 'Sending...' : 'Send confirmation'}
-              </Button>
-            </div>
-          </form>
+          <DialogBody>
+            <form onSubmit={handleChangeEmail} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Current email</label>
+                <Input value={userEmail} disabled className="bg-muted" />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Current password</label>
+                <Input type="password" value={emailPassword} onChange={e => setEmailPassword(e.target.value)} autoComplete="current-password" />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">New email</label>
+                <Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} autoComplete="email" autoFocus />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button type="button" variant="outline" onClick={() => setShowChangeEmail(false)}>Cancel</Button>
+                <Button type="submit" disabled={emailSubmitting || !newEmail || !emailPassword} className="flex-1">
+                  {emailSubmitting ? 'Sending...' : 'Send confirmation'}
+                </Button>
+              </div>
+            </form>
+          </DialogBody>
         </DialogContent>
       </Dialog>
 
@@ -285,23 +288,25 @@ export default function AccountPage() {
             <DialogTitle>Change password</DialogTitle>
             <DialogDescription>Enter a new password for your account.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleChangePassword} className="space-y-4 mt-2">
-            <div>
-              <label className="text-sm font-medium mb-1 block">New password</label>
-              <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} minLength={8} autoComplete="new-password" autoFocus />
-              <PasswordRequirements password={newPassword} />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Confirm password</label>
-              <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} minLength={8} autoComplete="new-password" />
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Button type="button" variant="outline" onClick={() => setShowChangePassword(false)}>Cancel</Button>
-              <Button type="submit" disabled={passwordSubmitting || !isPasswordValid(newPassword) || !confirmPassword} className="flex-1">
-                {passwordSubmitting ? 'Updating...' : 'Update password'}
-              </Button>
-            </div>
-          </form>
+          <DialogBody>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">New password</label>
+                <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} minLength={8} autoComplete="new-password" autoFocus />
+                <PasswordRequirements password={newPassword} />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Confirm password</label>
+                <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} minLength={8} autoComplete="new-password" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button type="button" variant="outline" onClick={() => setShowChangePassword(false)}>Cancel</Button>
+                <Button type="submit" disabled={passwordSubmitting || !isPasswordValid(newPassword) || !confirmPassword} className="flex-1">
+                  {passwordSubmitting ? 'Updating...' : 'Update password'}
+                </Button>
+              </div>
+            </form>
+          </DialogBody>
         </DialogContent>
       </Dialog>
     </div>

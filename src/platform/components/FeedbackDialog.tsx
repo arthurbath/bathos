@@ -3,7 +3,7 @@ import { Megaphone, Paperclip, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
+  Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -99,7 +99,12 @@ export function FeedbackDialog({ userId }: FeedbackDialogProps) {
           <Megaphone className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        onInteractOutside={(event) => {
+          event.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Feedback &amp; Bug Reports</DialogTitle>
           <DialogDescription>
@@ -107,7 +112,7 @@ export function FeedbackDialog({ userId }: FeedbackDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <DialogBody className="space-y-4">
           <div>
             <Textarea
               placeholder="Describe the issue or share your thoughts..."
@@ -151,7 +156,7 @@ export function FeedbackDialog({ userId }: FeedbackDialogProps) {
               PNG, JPEG, GIF, WebP, PDF, or TXT — max 5 MB
             </p>
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button onClick={handleSubmit} disabled={!message.trim() || sending}>

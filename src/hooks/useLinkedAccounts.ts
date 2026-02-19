@@ -37,16 +37,15 @@ export function useLinkedAccounts(householdId: string) {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const add = useCallback(async (name: string, ownerPartner: string = 'X') => {
-    const id = crypto.randomUUID();
-    const optimistic: LinkedAccount = { id, household_id: householdId, name, owner_partner: ownerPartner, color: null };
+  const add = useCallback(async (name: string, ownerPartner: string = 'X', color: string | null = null, id: string = crypto.randomUUID()) => {
+    const optimistic: LinkedAccount = { id, household_id: householdId, name, owner_partner: ownerPartner, color };
     setLinkedAccounts(prev => sortByName([...prev, optimistic]));
 
     try {
       const { data, error } = await retryOnLikelyNetworkError(() =>
         supabase
           .from('budget_linked_accounts')
-          .insert({ id, household_id: householdId, name, owner_partner: ownerPartner })
+          .insert({ id, household_id: householdId, name, owner_partner: ownerPartner, color })
           .select('*')
           .single(),
       );

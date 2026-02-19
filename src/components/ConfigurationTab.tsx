@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Users, Copy, Check, Plus, Trash2, Pencil } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
@@ -327,7 +327,7 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
               {affectedCount} expense{affectedCount !== 1 ? 's' : ''} use this. Choose where to reassign:
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
+          <DialogBody className="space-y-2">
             <Label>Reassign to</Label>
             <Select value={reassignTo} onValueChange={setReassignTo}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -338,7 +338,7 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>Delete & Reassign</Button>

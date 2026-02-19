@@ -290,13 +290,14 @@ function focusInputAtEnd(input: HTMLInputElement | null) {
   input.setSelectionRange(end, end);
 }
 
-export function GridEditableCell({ value, onChange, navCol, type = 'text', className, placeholder }: {
+export function GridEditableCell({ value, onChange, navCol, type = 'text', className, placeholder, cellId }: {
   value: string | number;
   onChange: (v: string) => void;
   navCol: number;
   type?: string;
   className?: string;
   placeholder?: string;
+  cellId?: string;
 }) {
   const ctx = useDataGrid();
   const [local, setLocal] = useState(String(value));
@@ -320,6 +321,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
       placeholder={placeholder}
       data-row={ctx?.rowIndex}
       data-col={navCol}
+      data-grid-key={cellId}
       data-grid-editing={editing ? 'true' : 'false'}
       onChange={e => { if (editing) setLocal(e.target.value); }}
       onMouseDown={e => {

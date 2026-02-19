@@ -45,6 +45,18 @@ Never use colors purely for decoration. Every color must carry meaning.
 - Max content width: `max-w-5xl` for data views, `max-w-lg` for forms
 - Cards use standard `Card` component with minimal padding
 
+## Form Modal Interaction
+
+All form-style modals (Add/Edit dialogs) must follow one keyboard interaction model:
+
+- Tab moves focus forward through every interactive field in top-to-bottom order; Shift+Tab moves backward.
+- Inputs use native editing behavior on focus (no separate focus/edit modes).
+- Selects are keyboard-usable from the trigger: Space/Enter opens, arrow keys navigate options, Enter/Space confirms.
+- Checkboxes keep/receive focus when toggled so tabbing can continue naturally afterward.
+- Custom controls (e.g., color pickers) must remain in the normal tab order and be keyboard operable.
+
+This is a standing standard for all new and updated form modals.
+
 ## Shadows and Borders
 
 - Borders: 1px, using `border` token

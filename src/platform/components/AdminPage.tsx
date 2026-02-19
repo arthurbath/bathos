@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { ArrowLeft } from 'lucide-react';
 import * as Sentry from '@sentry/react';
 import { toast } from '@/hooks/use-toast';
@@ -184,21 +184,19 @@ export default function AdminPage() {
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive">Delete user account</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-3">
-                <p>
-                  This action cannot be undone. Type <span className="font-medium">{emailPendingDelete}</span> to confirm deletion.
-                </p>
-                <Input
-                  value={confirmEmail}
-                  onChange={(e) => setConfirmEmail(e.target.value)}
-                  placeholder={emailPendingDelete ?? ''}
-                  autoComplete="off"
-                  className="border-destructive/30 focus:border-destructive"
-                />
-              </div>
+            <AlertDialogDescription>
+              This action cannot be undone. Type <span className="font-medium">{emailPendingDelete}</span> to confirm deletion.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <AlertDialogBody>
+            <Input
+              value={confirmEmail}
+              onChange={(e) => setConfirmEmail(e.target.value)}
+              placeholder={emailPendingDelete ?? ''}
+              autoComplete="off"
+              className="border-destructive/30 focus:border-destructive"
+            />
+          </AlertDialogBody>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeletingUser}>Cancel</AlertDialogCancel>
             <AlertDialogAction

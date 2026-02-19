@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { useAuthContext } from '@/platform/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -53,19 +53,19 @@ export function DeleteAccountDialog({ isOpen, onOpenChange }: DeleteAccountDialo
       <AlertDialogContent className="max-w-md z-[90]">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-destructive">Delete account</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-3">
-              <p>This action cannot be undone. All your data will be permanently removed. Type your email address to confirm.</p>
-              <Input
-                value={confirmText}
-                onChange={e => setConfirmText(e.target.value)}
-                placeholder={userEmail}
-                autoComplete="off"
-                className="border-destructive/30 focus:border-destructive"
-              />
-            </div>
+          <AlertDialogDescription>
+            This action cannot be undone. All your data will be permanently removed. Type your email address to confirm.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <AlertDialogBody>
+          <Input
+            value={confirmText}
+            onChange={e => setConfirmText(e.target.value)}
+            placeholder={userEmail}
+            autoComplete="off"
+            className="border-destructive/30 focus:border-destructive"
+          />
+        </AlertDialogBody>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction

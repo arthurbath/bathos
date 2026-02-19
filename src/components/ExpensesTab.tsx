@@ -14,8 +14,11 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { ColorPicker } from '@/components/ManagedListSection';
+import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
+import { DataGridAddFormAffixInput } from '@/components/ui/data-grid-add-form-affix-input';
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels, needsParam } from '@/lib/frequency';
@@ -44,17 +47,45 @@ interface ExpensesTabProps {
   partnerY: string;
   partnerXColor: string | null;
   partnerYColor: string | null;
-  onAdd: (expense: Omit<Expense, 'id' | 'household_id'>) => Promise<void>;
+  onAdd: (expense: Omit<Expense, 'id' | 'household_id'>, id?: string) => Promise<void>;
   onUpdate: (id: string, updates: Partial<Omit<Expense, 'id' | 'household_id'>>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
-  onAddCategory: (name: string) => Promise<void>;
-  onAddLinkedAccount: (name: string, ownerPartner?: string) => Promise<void>;
+  onAddCategory: (name: string, color?: string | null, id?: string) => Promise<void>;
+  onAddLinkedAccount: (name: string, ownerPartner?: string, color?: string | null, id?: string) => Promise<void>;
 }
 
 const FREQ_OPTIONS: FrequencyType[] = ['weekly', 'twice_monthly', 'monthly', 'annual', 'every_n_days', 'every_n_weeks', 'every_n_months', 'k_times_weekly', 'k_times_monthly', 'k_times_annually'];
 type GroupByOption = 'none' | 'category' | 'estimated' | 'payer' | 'payment_method';
+type AddSource =
+  | { type: 'existing_expense'; expenseId: string; field: 'category_id' | 'linked_account_id' }
+  | { type: 'new_expense'; field: 'category_id' | 'linked_account_id' };
+type NewExpenseDraft = Omit<Expense, 'id' | 'household_id'>;
 
 const columnHelper = createColumnHelper<ComputedRow>();
+const COLOR_LABELS: Record<string, string> = {
+  '#fecaca': 'Rose',
+  '#fed7aa': 'Peach',
+  '#fde68a': 'Honey',
+  '#bbf7d0': 'Mint',
+  '#a5f3fc': 'Sky',
+  '#bfdbfe': 'Powder Blue',
+  '#c7d2fe': 'Periwinkle',
+  '#ddd6fe': 'Lavender',
+  '#fbcfe8': 'Blush',
+  '#e5e7eb': 'Silver',
+};
+
+const createDefaultExpenseDraft = (): NewExpenseDraft => ({
+  name: '',
+  amount: 0,
+  benefit_x: 50,
+  category_id: null,
+  budget_id: null,
+  linked_account_id: null,
+  frequency_type: 'monthly',
+  frequency_param: null,
+  is_estimate: false,
+});
 
 // ─── Cell Components ───
 
@@ -116,7 +147,7 @@ function ExpenseFrequencyCell({ exp, onChange }: { exp: Expense; onChange: (fiel
         </SelectContent>
       </Select>
       {needsParam(exp.frequency_type) && (
-        <GridEditableCell value={exp.frequency_param ?? ''} onChange={v => onChange('frequency_param', v)} type="number" navCol={5} placeholder="N" className="text-left w-8 shrink-0" />
+        <GridEditableCell value={exp.frequency_param ?? ''} onChange={v => onChange('frequency_param', v)} type="number" navCol={5} placeholder="X" className="text-left w-8 shrink-0" />
       )}
     </div>
   );
@@ -217,12 +248,14 @@ function ExpenseDeleteCell({ name, onRemove }: { name: string; onRemove: () => v
 // ─── Main Component ───
 
 export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, partnerX, partnerY, partnerXColor, partnerYColor, onAdd, onUpdate, onRemove, onAddCategory, onAddLinkedAccount }: ExpensesTabProps) {
-  const [adding, setAdding] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const prevCountRef = useRef(expenses.length);
+  const [addExpenseOpen, setAddExpenseOpen] = useState(false);
+  const [newExpense, setNewExpense] = useState<NewExpenseDraft>(createDefaultExpenseDraft);
   const [addDialog, setAddDialog] = useState<'category' | 'payment_method' | null>(null);
   const [newItemName, setNewItemName] = useState('');
   const [newItemOwner, setNewItemOwner] = useState<'X' | 'Y'>('X');
+  const [newItemColor, setNewItemColor] = useState<string | null>(null);
+  const [addSource, setAddSource] = useState<AddSource | null>(null);
+  const [savingExpense, setSavingExpense] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
 
   type PayerFilter = 'all' | 'X' | 'Y' | 'unassigned';
@@ -239,16 +272,6 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
   useEffect(() => { localStorage.setItem('expenses_filterPayer', filterPayer); }, [filterPayer]);
   useEffect(() => { localStorage.setItem('expenses_groupBy', groupBy); }, [groupBy]);
   useEffect(() => { localStorage.setItem('expenses_sorting', JSON.stringify(sorting)); }, [sorting]);
-
-  useEffect(() => {
-    if (expenses.length > prevCountRef.current) {
-      requestAnimationFrame(() => {
-        const cells = wrapperRef.current?.querySelectorAll<HTMLElement>('[data-col="0"]');
-        if (cells?.length) cells[cells.length - 1].focus();
-      });
-    }
-    prevCountRef.current = expenses.length;
-  }, [expenses.length]);
 
   // Income ratio
   const incomeX = incomes.filter(i => i.partner_label === 'X').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
@@ -295,14 +318,37 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
 
   // ─── Handlers ───
 
-  const handleAdd = async () => {
-    setAdding(true);
+  const openAddExpenseModal = () => {
+    setNewExpense(createDefaultExpenseDraft());
+    setAddExpenseOpen(true);
+  };
+
+  const openNewItemDialog = (source: AddSource, type: 'category' | 'payment_method') => {
+    setNewItemName('');
+    setNewItemOwner('X');
+    setNewItemColor(null);
+    setAddSource(source);
+    setAddDialog(type);
+  };
+
+  const handleSaveNewExpense = async () => {
+    if (savingExpense) return;
+    setSavingExpense(true);
     try {
-      await onAdd({ name: '', amount: 0, benefit_x: 50, category_id: null, budget_id: null, linked_account_id: null, frequency_type: 'monthly', frequency_param: null, is_estimate: false });
+      if (filterPayer !== 'all') {
+        setFilterPayer('all');
+      }
+      const payload: NewExpenseDraft = {
+        ...newExpense,
+        frequency_param: needsParam(newExpense.frequency_type) ? newExpense.frequency_param : null,
+      };
+      await onAdd(payload);
+      setAddExpenseOpen(false);
+      setNewExpense(createDefaultExpenseDraft());
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
-    setAdding(false);
+    setSavingExpense(false);
   };
 
   const handleUpdate = (id: string, field: string, value: string) => {
@@ -336,9 +382,29 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     if (!newItemName.trim()) return;
     setSavingItem(true);
     try {
-      if (addDialog === 'category') await onAddCategory(newItemName.trim());
-      else if (addDialog === 'payment_method') await onAddLinkedAccount(newItemName.trim(), newItemOwner);
+      if (addDialog === 'category') {
+        const newCategoryId = crypto.randomUUID();
+        await onAddCategory(newItemName.trim(), newItemColor, newCategoryId);
+        if (addSource?.field === 'category_id') {
+          if (addSource.type === 'existing_expense') {
+            await onUpdate(addSource.expenseId, { category_id: newCategoryId });
+          } else {
+            setNewExpense(prev => ({ ...prev, category_id: newCategoryId }));
+          }
+        }
+      } else if (addDialog === 'payment_method') {
+        const newLinkedAccountId = crypto.randomUUID();
+        await onAddLinkedAccount(newItemName.trim(), newItemOwner, newItemColor, newLinkedAccountId);
+        if (addSource?.field === 'linked_account_id') {
+          if (addSource.type === 'existing_expense') {
+            await onUpdate(addSource.expenseId, { linked_account_id: newLinkedAccountId });
+          } else {
+            setNewExpense(prev => ({ ...prev, linked_account_id: newLinkedAccountId }));
+          }
+        }
+      }
       setAddDialog(null);
+      setAddSource(null);
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
@@ -352,7 +418,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       id: 'name',
       header: 'Name',
       meta: { headerClassName: 'min-w-[120px] sm:min-w-[200px]' },
-      cell: ({ row }) => <GridEditableCell value={row.original.exp.name} onChange={v => handleUpdate(row.original.exp.id, 'name', v)} navCol={0} placeholder="Expense" />,
+      cell: ({ row }) => <GridEditableCell value={row.original.exp.name} onChange={v => handleUpdate(row.original.exp.id, 'name', v)} navCol={0} placeholder="Expense" cellId={row.original.exp.id} />,
     }),
     columnHelper.accessor(r => r.exp.category_id, {
       id: 'category',
@@ -360,7 +426,12 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       meta: { headerClassName: 'min-w-[190px]' },
       sortingFn: (a, b) => (categories.find(c => c.id === a.original.exp.category_id)?.name ?? '').localeCompare(categories.find(c => c.id === b.original.exp.category_id)?.name ?? ''),
       cell: ({ row }) => (
-        <CategoryCell exp={row.original.exp} categories={categories} onChange={v => handleUpdate(row.original.exp.id, 'category_id', v)} onAddNew={() => { setNewItemName(''); setNewItemOwner('X'); setAddDialog('category'); }} />
+        <CategoryCell
+          exp={row.original.exp}
+          categories={categories}
+          onChange={v => handleUpdate(row.original.exp.id, 'category_id', v)}
+          onAddNew={() => openNewItemDialog({ type: 'existing_expense', expenseId: row.original.exp.id, field: 'category_id' }, 'category')}
+        />
       ),
     }),
     columnHelper.accessor(r => r.exp.amount, {
@@ -397,7 +468,14 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       meta: { headerClassName: 'min-w-[190px]' },
       sortingFn: (a, b) => (linkedAccounts.find(la => la.id === a.original.exp.linked_account_id)?.name ?? '').localeCompare(linkedAccounts.find(la => la.id === b.original.exp.linked_account_id)?.name ?? ''),
       cell: ({ row }) => (
-        <PaymentMethodCell exp={row.original.exp} linkedAccounts={linkedAccounts} partnerX={partnerX} partnerY={partnerY} onChange={v => handleUpdate(row.original.exp.id, 'linked_account_id', v)} onAddNew={() => { setNewItemName(''); setNewItemOwner('X'); setAddDialog('payment_method'); }} />
+        <PaymentMethodCell
+          exp={row.original.exp}
+          linkedAccounts={linkedAccounts}
+          partnerX={partnerX}
+          partnerY={partnerY}
+          onChange={v => handleUpdate(row.original.exp.id, 'linked_account_id', v)}
+          onAddNew={() => openNewItemDialog({ type: 'existing_expense', expenseId: row.original.exp.id, field: 'linked_account_id' }, 'payment_method')}
+        />
       ),
     }),
     columnHelper.accessor(r => getDerivedPayer(r.exp), {
@@ -539,47 +617,253 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
                 <SelectItem value="payment_method">Group by Payment Method</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={handleAdd} disabled={adding} variant="outline" size="sm" className="h-8 gap-1.5">
+            <Button onClick={openAddExpenseModal} disabled={savingExpense} variant="outline" size="sm" className="h-8 gap-1.5">
               <Plus className="h-4 w-4" /> Add
             </Button>
           </div>
         </div>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <div ref={wrapperRef}>
-          <DataGrid
-            table={table}
-            emptyMessage='No expenses yet. Click "Add" to start.'
-            groupBy={getGroupKey}
-            renderGroupHeader={renderGroupHeader}
-            groupOrder={groupOrder}
-            footer={computedData.length > 0 ? (
-              <tr className="bg-muted shadow-[0_-1px_0_0_hsl(var(--border))]">
-                <td className="font-semibold text-xs sticky left-0 z-10 bg-muted px-2 py-1">Totals</td>
-                <td colSpan={4} className="bg-muted" />
-                <td className="text-right font-semibold tabular-nums text-xs bg-muted px-2 py-1">${Math.round(totalMonthly)}</td>
-                <td colSpan={4} className="bg-muted" />
-                <td className="text-right font-semibold tabular-nums text-xs bg-muted px-2 py-1">${Math.round(totalFairX)}</td>
-                <td className="text-right font-semibold tabular-nums text-xs bg-muted px-2 py-1">${Math.round(totalFairY)}</td>
-                <td className="bg-muted" />
-              </tr>
-            ) : undefined}
-          />
-        </div>
+        <DataGrid
+          table={table}
+          emptyMessage='No expenses yet. Click "Add" to start.'
+          groupBy={getGroupKey}
+          renderGroupHeader={renderGroupHeader}
+          groupOrder={groupOrder}
+          footer={computedData.length > 0 ? (
+            <tr className="bg-muted shadow-[0_-1px_0_0_hsl(var(--border))]">
+              <td className="font-semibold text-xs sticky left-0 z-10 bg-muted px-2 py-1">Totals</td>
+              <td colSpan={4} className="bg-muted" />
+              <td className="text-right font-semibold tabular-nums text-xs bg-muted px-2 py-1">${Math.round(totalMonthly)}</td>
+              <td colSpan={4} className="bg-muted" />
+              <td className="text-right font-semibold tabular-nums text-xs bg-muted px-2 py-1">${Math.round(totalFairX)}</td>
+              <td className="text-right font-semibold tabular-nums text-xs bg-muted px-2 py-1">${Math.round(totalFairY)}</td>
+              <td className="bg-muted" />
+            </tr>
+          ) : undefined}
+        />
       </CardContent>
 
-      <Dialog open={addDialog !== null} onOpenChange={open => { if (!open) setAddDialog(null); }}>
-        <DialogContent className="sm:max-w-sm">
+      <Dialog
+        open={addExpenseOpen}
+        onOpenChange={open => {
+          if (!open && !savingExpense) {
+            setAddExpenseOpen(false);
+            setNewExpense(createDefaultExpenseDraft());
+          }
+        }}
+      >
+        <DialogContent
+          className={`sm:max-w-lg max-h-[calc(100dvh-2rem)] flex flex-col ${savingExpense ? '[&>button]:pointer-events-none [&>button]:opacity-50' : ''}`}
+          onInteractOutside={(event) => {
+            event.preventDefault();
+          }}
+        >
+          <DialogHeader><DialogTitle>Add Expense</DialogTitle></DialogHeader>
+          <DialogBody className="min-h-0 flex-1 overflow-y-auto shadow-[inset_0_5px_6px_-6px_hsl(var(--foreground)/0.25),inset_0_-5px_6px_-6px_hsl(var(--foreground)/0.25)]">
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+              <DataGridAddFormLabel htmlFor="new-expense-name">Name</DataGridAddFormLabel>
+              <Input
+                id="new-expense-name"
+                value={newExpense.name}
+                onChange={e => setNewExpense(prev => ({ ...prev, name: e.target.value }))}
+                autoFocus
+                disabled={savingExpense}
+              />
+            </div>
+
+              <div className="space-y-1.5">
+              <DataGridAddFormLabel>Category</DataGridAddFormLabel>
+              <Select
+                value={newExpense.category_id ?? '_none'}
+                onValueChange={v => {
+                  if (v === '_add_new') {
+                    openNewItemDialog({ type: 'new_expense', field: 'category_id' }, 'category');
+                    return;
+                  }
+                  setNewExpense(prev => ({ ...prev, category_id: v === '_none' ? null : v }));
+                }}
+                disabled={savingExpense}
+              >
+                <SelectTrigger
+                  className="h-9 rounded-sm"
+                  style={{ backgroundColor: categories.find(c => c.id === newExpense.category_id)?.color || 'transparent' }}
+                >
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">—</SelectItem>
+                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  <SelectItem value="_add_new" className="text-primary font-medium"><Plus className="inline h-3 w-3 mr-1" />Add New</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+              <div className="space-y-1.5">
+              <DataGridAddFormLabel htmlFor="new-expense-amount">Amount</DataGridAddFormLabel>
+              <DataGridAddFormAffixInput
+                id="new-expense-amount"
+                prefix="$"
+                value={String(newExpense.amount)}
+                onChange={e => setNewExpense(prev => ({ ...prev, amount: Number(e.target.value) || 0 }))}
+                disabled={savingExpense}
+              />
+            </div>
+
+              <div className="space-y-1.5">
+              <DataGridAddFormLabel htmlFor="new-expense-estimate" tooltip="Expense is estimated">Estimate</DataGridAddFormLabel>
+              <div className="h-9 flex items-center">
+                <Checkbox
+                  id="new-expense-estimate"
+                  checked={newExpense.is_estimate}
+                  onCheckedChange={checked => setNewExpense(prev => ({ ...prev, is_estimate: !!checked }))}
+                  disabled={savingExpense}
+                />
+              </div>
+            </div>
+
+              <div className="space-y-1.5">
+              <DataGridAddFormLabel>Frequency</DataGridAddFormLabel>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={newExpense.frequency_type}
+                  onValueChange={v => {
+                    const nextFreq = v as FrequencyType;
+                    setNewExpense(prev => ({
+                      ...prev,
+                      frequency_type: nextFreq,
+                      frequency_param: needsParam(nextFreq) ? prev.frequency_param : null,
+                    }));
+                  }}
+                  disabled={savingExpense}
+                >
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {FREQ_OPTIONS.map(f => <SelectItem key={f} value={f}>{frequencyLabels[f]}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {needsParam(newExpense.frequency_type) && (
+                  <Input
+                    type="number"
+                    value={newExpense.frequency_param == null ? '' : String(newExpense.frequency_param)}
+                    onChange={e => setNewExpense(prev => ({ ...prev, frequency_param: e.target.value ? Number(e.target.value) : null }))}
+                    disabled={savingExpense}
+                    className="h-9 w-24"
+                    placeholder="X"
+                  />
+                )}
+              </div>
+            </div>
+
+              <div className="space-y-1.5">
+              <DataGridAddFormLabel>Payment Method</DataGridAddFormLabel>
+              <Select
+                value={newExpense.linked_account_id ?? '_none'}
+                onValueChange={v => {
+                  if (v === '_add_new') {
+                    openNewItemDialog({ type: 'new_expense', field: 'linked_account_id' }, 'payment_method');
+                    return;
+                  }
+                  setNewExpense(prev => ({ ...prev, linked_account_id: v === '_none' ? null : v }));
+                }}
+                disabled={savingExpense}
+              >
+                <SelectTrigger
+                  className="h-9 rounded-sm"
+                  style={{ backgroundColor: linkedAccounts.find(la => la.id === newExpense.linked_account_id)?.color || 'transparent' }}
+                >
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">—</SelectItem>
+                  {linkedAccounts.map(la => (
+                    <SelectItem key={la.id} value={la.id}>
+                      {la.name} <span className="text-muted-foreground">({la.owner_partner === 'X' ? partnerX : partnerY})</span>
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="_add_new" className="text-primary font-medium"><Plus className="inline h-3 w-3 mr-1" />Add New</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+              <div className="space-y-1.5">
+              <DataGridAddFormLabel htmlFor="new-expense-benefit-x" tooltip={`The percentage that ${partnerX} benefits from the expense`}>
+                {partnerX} %
+              </DataGridAddFormLabel>
+              <DataGridAddFormAffixInput
+                id="new-expense-benefit-x"
+                suffix="%"
+                min={0}
+                max={100}
+                value={String(newExpense.benefit_x)}
+                onChange={e => {
+                  const clamped = Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0)));
+                  setNewExpense(prev => ({ ...prev, benefit_x: clamped }));
+                }}
+                disabled={savingExpense}
+              />
+            </div>
+
+              <div className="space-y-1.5">
+              <DataGridAddFormLabel htmlFor="new-expense-benefit-y" tooltip={`The percentage that ${partnerY} benefits from the expense`}>
+                {partnerY} %
+              </DataGridAddFormLabel>
+              <DataGridAddFormAffixInput
+                id="new-expense-benefit-y"
+                suffix="%"
+                min={0}
+                max={100}
+                value={String(100 - newExpense.benefit_x)}
+                onChange={e => {
+                  const clamped = Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0)));
+                  setNewExpense(prev => ({ ...prev, benefit_x: 100 - clamped }));
+                }}
+                disabled={savingExpense}
+              />
+              </div>
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddExpenseOpen(false);
+                setNewExpense(createDefaultExpenseDraft());
+              }}
+              disabled={savingExpense}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveNewExpense} disabled={savingExpense}>{savingExpense ? 'Saving...' : 'Add'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addDialog !== null} onOpenChange={open => { if (!open && !savingItem) { setAddDialog(null); setAddSource(null); } }}>
+        <DialogContent
+          className={`sm:max-w-sm ${savingItem ? '[&>button]:pointer-events-none [&>button]:opacity-50' : ''}`}
+          onInteractOutside={(event) => {
+            event.preventDefault();
+          }}
+        >
           <DialogHeader><DialogTitle>{dialogTitle}</DialogTitle></DialogHeader>
-          <div className="space-y-3 py-2">
+          <DialogBody className="space-y-3 shadow-[inset_0_5px_6px_-6px_hsl(var(--foreground)/0.25),inset_0_-5px_6px_-6px_hsl(var(--foreground)/0.25)]">
             <div className="space-y-1.5">
               <Label htmlFor="new-item-name">Name</Label>
-              <Input id="new-item-name" value={newItemName} onChange={e => setNewItemName(e.target.value)} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleSaveNewItem(); }} />
+              <Input id="new-item-name" value={newItemName} onChange={e => setNewItemName(e.target.value)} autoFocus disabled={savingItem} onKeyDown={e => { if (e.key === 'Enter' && !savingItem) handleSaveNewItem(); }} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Color</Label>
+              <div className="flex items-center gap-2">
+                <ColorPicker color={newItemColor} onChange={setNewItemColor} disabled={savingItem} />
+                <span className="text-xs text-muted-foreground">{newItemColor ? (COLOR_LABELS[newItemColor] ?? 'Custom color') : 'None'}</span>
+              </div>
             </div>
             {addDialog === 'payment_method' && (
               <div className="space-y-1.5">
                 <Label>Owner</Label>
-                <Select value={newItemOwner} onValueChange={v => setNewItemOwner(v as 'X' | 'Y')}>
+                <Select value={newItemOwner} onValueChange={v => setNewItemOwner(v as 'X' | 'Y')} disabled={savingItem}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="X">{partnerX}</SelectItem>
@@ -588,10 +872,10 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
                 </Select>
               </div>
             )}
-          </div>
+          </DialogBody>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddDialog(null)}>Cancel</Button>
-            <Button onClick={handleSaveNewItem} disabled={savingItem || !newItemName.trim()}>Add</Button>
+            <Button variant="outline" onClick={() => { setAddDialog(null); setAddSource(null); }} disabled={savingItem}>Cancel</Button>
+            <Button onClick={handleSaveNewItem} disabled={savingItem || !newItemName.trim()}>{savingItem ? 'Saving...' : 'Add'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

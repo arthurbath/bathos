@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -30,21 +30,28 @@ interface ManagedListSectionProps {
   onUpdateColor?: (id: string, color: string | null) => Promise<void>;
 }
 
-function ColorPicker({ color, onChange }: { color: string | null | undefined; onChange: (c: string | null) => void }) {
+function ColorPicker({ color, onChange, disabled = false }: { color: string | null | undefined; onChange: (c: string | null) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (disabled && open) setOpen(false);
+  }, [disabled, open]);
+
   const handleChange = (nextColor: string | null) => {
+    if (disabled) return;
     onChange(nextColor);
     setOpen(false);
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(nextOpen) => { if (!disabled) setOpen(nextOpen); }}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="h-6 w-6 rounded border border-border shrink-0 transition-shadow hover:ring-2 hover:ring-ring"
+          className="h-6 w-6 rounded border border-border shrink-0 transition-shadow hover:ring-2 hover:ring-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:ring-0"
           style={{ backgroundColor: color || 'transparent' }}
           title="Pick color"
+          disabled={disabled}
         >
           {!color && <span className="text-[10px] text-muted-foreground flex items-center justify-center h-full">—</span>}
         </button>
@@ -256,7 +263,7 @@ export function ManagedListSection({ title, description, items, getUsageCount, o
               {affectedCount} expense{affectedCount !== 1 ? 's' : ''} use this. Choose where to reassign:
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
+          <DialogBody className="space-y-2">
             <Label>Reassign to</Label>
             <Select value={reassignTo} onValueChange={setReassignTo}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -267,7 +274,7 @@ export function ManagedListSection({ title, description, items, getUsageCount, o
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>Delete & Reassign</Button>

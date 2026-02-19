@@ -50,8 +50,7 @@ export function useExpenses(householdId: string) {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const add = useCallback(async (expense: Omit<Expense, 'id' | 'household_id'>) => {
-    const id = crypto.randomUUID();
+  const add = useCallback(async (expense: Omit<Expense, 'id' | 'household_id'>, id: string = crypto.randomUUID()) => {
     const optimistic: Expense = { id, household_id: householdId, ...expense };
     setExpenses(prev => sortByCreatedAt([...prev, optimistic]));
 

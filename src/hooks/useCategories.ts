@@ -25,15 +25,15 @@ export function useCategories(householdId: string) {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const add = async (name: string) => {
-    const id = crypto.randomUUID();
-    const optimistic: Category = { id, household_id: householdId, name, color: null };
+  const add = async (name: string, color: string | null = null, id: string = crypto.randomUUID()) => {
+    const optimistic: Category = { id, household_id: householdId, name, color };
     setCategories(prev => sortByName([...prev, optimistic]));
 
     const { data, error } = await supabase.from('budget_categories').insert({
       id,
       household_id: householdId,
       name,
+      color,
     }).select('*').single();
     if (error) {
       setCategories(prev => prev.filter(c => c.id !== id));
