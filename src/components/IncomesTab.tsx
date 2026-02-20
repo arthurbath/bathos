@@ -55,7 +55,7 @@ function PartnerCell({ value, partnerX, partnerY, onChange }: { value: string; p
       onChange(v);
     }}>
       <SelectTrigger
-        className="h-7 border-transparent bg-transparent hover:border-foreground/35 text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
+        className="h-7 border-transparent bg-transparent hover:border-border text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
         data-col={1}
@@ -88,7 +88,7 @@ function FrequencyCell({ income, onChange }: { income: Income; onChange: (field:
         onChange('frequency_type', v);
       }}>
         <SelectTrigger
-          className="h-7 min-w-0 border-transparent bg-transparent hover:border-foreground/35 text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
+          className="h-7 min-w-0 border-transparent bg-transparent hover:border-border text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
           data-row={ctx?.rowIndex}
           data-row-id={ctx?.rowId}
           data-col={3}

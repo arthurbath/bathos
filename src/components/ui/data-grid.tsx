@@ -540,8 +540,7 @@ export function DataGrid<TData>({
 }
 
 // ─── Cell Primitives ───
-const CELL_INPUT_CLASS = 'h-7 rounded-md border border-transparent bg-transparent px-1 hover:border-foreground/35 focus:border-transparent focus:ring-2 focus:ring-ring !text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
-const STICKY_COL_INPUT_HOVER_CLASS = 'hover:border-foreground/50';
+const CELL_INPUT_CLASS = 'h-7 rounded-md border border-transparent bg-transparent px-1 hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring !text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
 
 function isPrintableEntryKey(e: React.KeyboardEvent<HTMLInputElement>) {
   return e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey;
@@ -690,7 +689,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
           if (!moved) suppressBlurCommitRef.current = false;
         }
       }}
-      className={cn(CELL_INPUT_CLASS, navCol === 0 && STICKY_COL_INPUT_HOVER_CLASS, !editing && 'caret-transparent', className)}
+      className={cn(CELL_INPUT_CLASS, !editing && 'caret-transparent', className)}
     />
   );
 }
@@ -820,7 +819,7 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
             if (!moved) suppressBlurCommitRef.current = false;
           }
         }}
-        className={cn(CELL_INPUT_CLASS, navCol === 0 && STICKY_COL_INPUT_HOVER_CLASS, 'pl-4 !text-right', !editing && 'caret-transparent', className)}
+        className={cn(CELL_INPUT_CLASS, 'pl-4 !text-right', !editing && 'caret-transparent', className)}
       />
     </div>
   );
@@ -953,7 +952,7 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
             if (!moved) suppressBlurCommitRef.current = false;
           }
         }}
-        className={cn(CELL_INPUT_CLASS, navCol === 0 && STICKY_COL_INPUT_HOVER_CLASS, 'pr-6 !text-right', !editing && 'caret-transparent', className)}
+        className={cn(CELL_INPUT_CLASS, 'pr-6 !text-right', !editing && 'caret-transparent', className)}
       />
     </div>
   );

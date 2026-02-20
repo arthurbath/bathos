@@ -103,7 +103,7 @@ function CategoryCell({ exp, categories, onChange, onAddNew }: {
       onChange(v);
     }}>
       <SelectTrigger
-        className="h-7 border-transparent hover:border-foreground/35 text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
+        className="h-7 border-transparent hover:border-border text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
         style={{ backgroundColor: categories.find(c => c.id === exp.category_id)?.color || 'transparent' }}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
@@ -138,7 +138,7 @@ function ExpenseFrequencyCell({ exp, onChange }: { exp: Expense; onChange: (fiel
         onChange('frequency_type', v);
       }}>
         <SelectTrigger
-          className="h-7 min-w-0 border-transparent bg-transparent hover:border-foreground/35 text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
+          className="h-7 min-w-0 border-transparent bg-transparent hover:border-border text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
           data-row={ctx?.rowIndex}
           data-row-id={ctx?.rowId}
           data-col={4}
@@ -179,7 +179,7 @@ function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, 
       onChange(v);
     }}>
       <SelectTrigger
-        className="h-7 border-transparent hover:border-foreground/35 text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
+        className="h-7 border-transparent hover:border-border text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
         style={{ backgroundColor: linkedAccounts.find(la => la.id === exp.linked_account_id)?.color || 'transparent' }}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
