@@ -21,11 +21,8 @@ interface ConfigurationTabProps {
   expenses: Expense[];
   partnerX: string;
   partnerY: string;
-  partnerXColor: string | null;
-  partnerYColor: string | null;
   inviteCode: string | null;
   onUpdatePartnerNames: (x: string, y: string) => Promise<void>;
-  onUpdatePartnerColors: (xColor: string | null, yColor: string | null) => Promise<void>;
   onAddCategory: (name: string) => Promise<void>;
   onUpdateCategory: (id: string, name: string) => Promise<void>;
   onRemoveCategory: (id: string) => Promise<void>;
@@ -38,13 +35,10 @@ interface ConfigurationTabProps {
   onUpdateLinkedAccountColor: (id: string, color: string | null) => Promise<void>;
 }
 
-function PartnerNamesCard({ partnerX, partnerY, partnerXColor, partnerYColor, onSave, onUpdateColors }: {
+function PartnerNamesCard({ partnerX, partnerY, onSave }: {
   partnerX: string;
   partnerY: string;
-  partnerXColor: string | null;
-  partnerYColor: string | null;
   onSave: (x: string, y: string) => Promise<void>;
-  onUpdateColors: (xColor: string | null, yColor: string | null) => Promise<void>;
 }) {
   const [nameX, setNameX] = useState(partnerX);
   const [nameY, setNameY] = useState(partnerY);
@@ -73,17 +67,11 @@ function PartnerNamesCard({ partnerX, partnerY, partnerXColor, partnerYColor, on
         <div className="flex items-end gap-3">
           <div className="flex-1 space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Partner A</label>
-            <div className="flex items-center gap-2">
-              <ColorPicker color={partnerXColor} onChange={c => onUpdateColors(c, partnerYColor)} />
-              <Input value={nameX} onChange={e => setNameX(e.target.value)} placeholder="e.g. Alice" className="flex-1" />
-            </div>
+            <Input value={nameX} onChange={e => setNameX(e.target.value)} placeholder="e.g. Alice" className="flex-1" />
           </div>
           <div className="flex-1 space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Partner B</label>
-            <div className="flex items-center gap-2">
-              <ColorPicker color={partnerYColor} onChange={c => onUpdateColors(partnerXColor, c)} />
-              <Input value={nameY} onChange={e => setNameY(e.target.value)} placeholder="e.g. Bob" className="flex-1" />
-            </div>
+            <Input value={nameY} onChange={e => setNameY(e.target.value)} placeholder="e.g. Bob" className="flex-1" />
           </div>
           <Button onClick={handleSave} disabled={!dirty || saving || !nameX.trim() || !nameY.trim()}>
             {saving ? 'Saving…' : 'Save'}
@@ -351,14 +339,14 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
 
 export function ConfigurationTab({
   categories, linkedAccounts, expenses,
-  partnerX, partnerY, partnerXColor, partnerYColor, inviteCode,
-  onUpdatePartnerNames, onUpdatePartnerColors,
+  partnerX, partnerY, inviteCode,
+  onUpdatePartnerNames,
   onAddCategory, onUpdateCategory, onRemoveCategory, onReassignCategory, onUpdateCategoryColor,
   onAddLinkedAccount, onUpdateLinkedAccount, onRemoveLinkedAccount, onReassignLinkedAccount, onUpdateLinkedAccountColor,
 }: ConfigurationTabProps) {
   return (
     <div className="space-y-6">
-      <PartnerNamesCard partnerX={partnerX} partnerY={partnerY} partnerXColor={partnerXColor} partnerYColor={partnerYColor} onSave={onUpdatePartnerNames} onUpdateColors={onUpdatePartnerColors} />
+      <PartnerNamesCard partnerX={partnerX} partnerY={partnerY} onSave={onUpdatePartnerNames} />
       <InviteCard inviteCode={inviteCode} />
       <ManagedListSection
         title="Categories"

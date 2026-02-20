@@ -25,10 +25,9 @@ interface AppShellProps {
   onSignOut: () => void;
   onHouseholdRefetch: () => void;
   onUpdatePartnerNames: (x: string, y: string) => Promise<void>;
-  onUpdatePartnerColors: (xColor: string | null, yColor: string | null) => Promise<void>;
 }
 
-export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onUpdatePartnerNames, onUpdatePartnerColors }: AppShellProps) {
+export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onUpdatePartnerNames }: AppShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
@@ -188,8 +187,6 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
                 incomes={incomes}
                 partnerX={household.partnerX}
                 partnerY={household.partnerY}
-                partnerXColor={household.partnerXColor}
-                partnerYColor={household.partnerYColor}
                 onAdd={addExpense}
                 onUpdate={updateExpense}
                 onRemove={removeExpense}
@@ -218,11 +215,8 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
               expenses={expenses}
               partnerX={household.partnerX}
               partnerY={household.partnerY}
-              partnerXColor={household.partnerXColor}
-              partnerYColor={household.partnerYColor}
               inviteCode={household.inviteCode}
               onUpdatePartnerNames={onUpdatePartnerNames}
-              onUpdatePartnerColors={onUpdatePartnerColors}
               onAddCategory={addCategory}
               onUpdateCategory={updateCategory}
               onRemoveCategory={removeCategory}

@@ -54,7 +54,7 @@ function PartnerCell({ value, partnerX, partnerY, onChange }: { value: string; p
       onChange(v);
     }}>
       <SelectTrigger
-        className="h-7 border-transparent bg-transparent hover:border-border text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
+        className="h-7 border-transparent bg-transparent hover:border-foreground/35 text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
         data-col={1}
@@ -87,7 +87,7 @@ function FrequencyCell({ income, onChange }: { income: Income; onChange: (field:
         onChange('frequency_type', v);
       }}>
         <SelectTrigger
-          className="h-7 min-w-0 border-transparent bg-transparent hover:border-border text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
+          className="h-7 min-w-0 border-transparent bg-transparent hover:border-foreground/35 text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
           data-row={ctx?.rowIndex}
           data-row-id={ctx?.rowId}
           data-col={3}
@@ -261,13 +261,13 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
           footer={incomes.length > 0 ? (
             <>
               <tr className={`${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS}`}>
-                <td className={`font-semibold text-xs ${GRID_HEADER_TONE_CLASS} px-2 py-1 ${fullView ? 'sticky left-0 z-10' : ''}`}>Totals</td>
-                <td colSpan={3} className={`text-xs ${GRID_HEADER_TONE_CLASS} px-2 py-1`}>{partnerX}: ${Math.round(xTotal)} · {partnerY}: ${Math.round(yTotal)}</td>
-                <td className={`text-right font-semibold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2 py-1`}>${Math.round(total)}</td>
+                <td className={`font-semibold text-xs ${GRID_HEADER_TONE_CLASS} px-1 py-1 ${fullView ? 'sticky left-0 z-10' : ''}`}>Totals</td>
+                <td colSpan={3} className={`text-xs ${GRID_HEADER_TONE_CLASS} px-1 py-1`}>{partnerX}: ${Math.round(xTotal)} · {partnerY}: ${Math.round(yTotal)}</td>
+                <td className={`text-right font-semibold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-1 py-1`}>${Math.round(total)}</td>
                 <td className={GRID_HEADER_TONE_CLASS} />
               </tr>
               <tr className={`${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS}`}>
-                <td className={`text-xs ${GRID_HEADER_TONE_CLASS} px-2 py-1 ${fullView ? 'sticky left-0 z-10' : ''}`}>Income ratio: {partnerX} {ratioX.toFixed(0)}% / {partnerY} {(100 - ratioX).toFixed(0)}%</td>
+                <td className={`text-xs ${GRID_HEADER_TONE_CLASS} px-1 py-1 ${fullView ? 'sticky left-0 z-10' : ''}`}>Income ratio: {partnerX} {ratioX.toFixed(0)}% / {partnerY} {(100 - ratioX).toFixed(0)}%</td>
                 <td colSpan={5} className={GRID_HEADER_TONE_CLASS} />
               </tr>
             </>

@@ -91,8 +91,6 @@ const household: HouseholdData = {
   inviteCode: null,
   partnerX: "Partner A",
   partnerY: "Partner B",
-  partnerXColor: null,
-  partnerYColor: null,
   displayName: "You",
 };
 
@@ -109,7 +107,6 @@ function renderShell(pathname: string) {
           onSignOut={async () => {}}
           onHouseholdRefetch={() => {}}
           onUpdatePartnerNames={async () => {}}
-          onUpdatePartnerColors={async () => {}}
         />
       </MemoryRouter>,
     );

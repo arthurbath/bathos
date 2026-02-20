@@ -11,8 +11,6 @@ export interface HouseholdData {
   inviteCode: string | null;
   partnerX: string;
   partnerY: string;
-  partnerXColor: string | null;
-  partnerYColor: string | null;
   displayName: string;
 }
 
@@ -56,7 +54,7 @@ export function useHouseholdData(user: User | null) {
       const [{ data: hh }, { data: profile }] = await Promise.all([
         supabase
           .from('budget_households')
-          .select('id, name, invite_code, partner_x_name, partner_y_name, partner_x_color, partner_y_color')
+          .select('id, name, invite_code, partner_x_name, partner_y_name')
           .eq('id', membership.household_id)
           .single(),
         supabase
@@ -74,8 +72,6 @@ export function useHouseholdData(user: User | null) {
         inviteCode: (hh as any).invite_code ?? null,
         partnerX: (hh as any).partner_x_name ?? DEFAULT_PARTNER_X_NAME,
         partnerY: (hh as any).partner_y_name ?? DEFAULT_PARTNER_Y_NAME,
-        partnerXColor: (hh as any).partner_x_color ?? null,
-        partnerYColor: (hh as any).partner_y_color ?? null,
         displayName: profile?.display_name ?? 'You',
       });
     } catch (err) {
@@ -153,15 +149,5 @@ export function useHouseholdData(user: User | null) {
     await fetchHousehold();
   };
 
-  const updatePartnerColors = async (partnerXColor: string | null, partnerYColor: string | null) => {
-    if (!household) throw new Error('No household');
-    const { error } = await supabase
-      .from('budget_households')
-      .update({ partner_x_color: partnerXColor, partner_y_color: partnerYColor })
-      .eq('id', household.householdId);
-    if (error) throw new Error(error.message);
-    await fetchHousehold();
-  };
-
-  return { household, loading, createHousehold, joinHousehold, updatePartnerNames, updatePartnerColors, refetch: fetchHousehold };
+  return { household, loading, createHousehold, joinHousehold, updatePartnerNames, refetch: fetchHousehold };
 }

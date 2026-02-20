@@ -45,8 +45,6 @@ interface ExpensesTabProps {
   incomes: Income[];
   partnerX: string;
   partnerY: string;
-  partnerXColor: string | null;
-  partnerYColor: string | null;
   onAdd: (expense: Omit<Expense, 'id' | 'household_id'>, id?: string) => Promise<void>;
   onUpdate: (id: string, updates: Partial<Omit<Expense, 'id' | 'household_id'>>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
@@ -104,7 +102,7 @@ function CategoryCell({ exp, categories, onChange, onAddNew }: {
       onChange(v);
     }}>
       <SelectTrigger
-        className="h-7 border-transparent hover:border-border text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
+        className="h-7 border-transparent hover:border-foreground/35 text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
         style={{ backgroundColor: categories.find(c => c.id === exp.category_id)?.color || 'transparent' }}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
@@ -139,7 +137,7 @@ function ExpenseFrequencyCell({ exp, onChange }: { exp: Expense; onChange: (fiel
         onChange('frequency_type', v);
       }}>
         <SelectTrigger
-          className="h-7 min-w-0 border-transparent bg-transparent hover:border-border text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
+          className="h-7 min-w-0 border-transparent bg-transparent hover:border-foreground/35 text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
           data-row={ctx?.rowIndex}
           data-row-id={ctx?.rowId}
           data-col={4}
@@ -180,7 +178,7 @@ function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, 
       onChange(v);
     }}>
       <SelectTrigger
-        className="h-7 border-transparent hover:border-border text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
+        className="h-7 border-transparent hover:border-foreground/35 text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm"
         style={{ backgroundColor: linkedAccounts.find(la => la.id === exp.linked_account_id)?.color || 'transparent' }}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
@@ -270,7 +268,7 @@ function ExpenseDeleteCell({ name, onRemove }: { name: string; onRemove: () => v
 
 // ─── Main Component ───
 
-export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, partnerX, partnerY, partnerXColor, partnerYColor, onAdd, onUpdate, onRemove, onAddCategory, onAddLinkedAccount, fullView = false }: ExpensesTabProps) {
+export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, partnerX, partnerY, onAdd, onUpdate, onRemove, onAddCategory, onAddLinkedAccount, fullView = false }: ExpensesTabProps) {
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [newExpense, setNewExpense] = useState<NewExpenseDraft>(createDefaultExpenseDraft);
   const [addDialog, setAddDialog] = useState<'category' | 'payment_method' | null>(null);
@@ -335,6 +333,9 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     filteredExpenses.map(exp => ({ exp, ...computeFairShare(exp) })),
     [filteredExpenses, incomeRatioX],
   );
+  const emptyExpensesMessage = expenses.length === 0
+    ? 'No expenses yet. Click "Add" to start.'
+    : 'No expenses match the filter.';
 
   let totalFairX = 0, totalFairY = 0, totalMonthly = 0;
   computedData.forEach(r => { totalFairX += r.fairX; totalFairY += r.fairY; totalMonthly += r.monthly; });
@@ -507,11 +508,9 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       sortingFn: (a, b) => (getDerivedPayer(a.original.exp) ?? '').localeCompare(getDerivedPayer(b.original.exp) ?? ''),
       cell: ({ row }) => {
         const p = getDerivedPayer(row.original.exp);
-        return p ? (
-          <span className="text-xs px-1.5 py-0.5 rounded-sm" style={{ backgroundColor: (p === 'X' ? partnerXColor : partnerYColor) || 'transparent' }}>
-            {p === 'X' ? partnerX : partnerY}
-          </span>
-        ) : <span className={`text-xs px-1 ${GRID_READONLY_TEXT_CLASS}`}>—</span>;
+        return p
+          ? <span className="text-xs">{p === 'X' ? partnerX : partnerY}</span>
+          : <span className={`text-xs px-1 ${GRID_READONLY_TEXT_CLASS}`}>—</span>;
       },
     }),
     columnHelper.accessor(r => r.exp.benefit_x, {
@@ -553,7 +552,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       meta: { headerClassName: 'w-10' },
       cell: ({ row }) => <ExpenseDeleteCell name={row.original.exp.name} onRemove={() => handleRemove(row.original.exp.id)} />,
     }),
-  ], [categories, linkedAccounts, partnerX, partnerY, partnerXColor, partnerYColor, getDerivedPayer]);
+  ], [categories, linkedAccounts, partnerX, partnerY, getDerivedPayer]);
 
   const table = useReactTable({
     data: computedData,
@@ -659,18 +658,18 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
           fullView={fullView}
           maxHeight={fullView ? 'none' : undefined}
           className={fullView ? 'h-full min-h-0' : undefined}
-          emptyMessage='No expenses yet. Click "Add" to start.'
+          emptyMessage={emptyExpensesMessage}
           groupBy={getGroupKey}
           renderGroupHeader={renderGroupHeader}
           groupOrder={groupOrder}
           footer={computedData.length > 0 ? (
             <tr className={`${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS}`}>
-              <td className={`font-semibold text-xs ${GRID_HEADER_TONE_CLASS} px-2 py-1 ${fullView ? 'sticky left-0 z-10' : ''}`}>Totals</td>
+              <td className={`font-semibold text-xs ${GRID_HEADER_TONE_CLASS} px-1 py-1 ${fullView ? 'sticky left-0 z-10' : ''}`}>Totals</td>
               <td colSpan={4} className={GRID_HEADER_TONE_CLASS} />
-              <td className={`text-right font-semibold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2 py-1`}>${Math.round(totalMonthly)}</td>
+              <td className={`text-right font-semibold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-1 py-1`}>${Math.round(totalMonthly)}</td>
               <td colSpan={4} className={GRID_HEADER_TONE_CLASS} />
-              <td className={`text-right font-semibold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2 py-1`}>${Math.round(totalFairX)}</td>
-              <td className={`text-right font-semibold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2 py-1`}>${Math.round(totalFairY)}</td>
+              <td className={`text-right font-semibold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-1 py-1`}>${Math.round(totalFairX)}</td>
+              <td className={`text-right font-semibold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-1 py-1`}>${Math.round(totalFairY)}</td>
               <td className={GRID_HEADER_TONE_CLASS} />
             </tr>
           ) : undefined}
