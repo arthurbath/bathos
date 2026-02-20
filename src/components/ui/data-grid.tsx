@@ -467,7 +467,7 @@ export function DataGrid<TData>({
     >
       <table className="w-full caption-bottom text-xs">
         <thead className={cn(
-          `z-30 ${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} [&_tr]:border-b [&_tr]:border-foreground`,
+          `z-30 ${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} shadow-[0_1px_0_0_hsl(var(--border))] [&_tr]:border-b-0`,
           fullView && 'sticky top-0',
         )}>
           {table.getHeaderGroups().map(hg => (
@@ -528,7 +528,7 @@ export function DataGrid<TData>({
         </tbody>
         {footer && (
           <tfoot className={cn(
-            `border-t border-foreground ${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} font-medium [&>tr]:last:border-b-0`,
+            `border-t ${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} font-medium [&>tr]:last:border-b-0`,
             fullView && 'sticky bottom-0 z-30',
           )}>
             {footer}
