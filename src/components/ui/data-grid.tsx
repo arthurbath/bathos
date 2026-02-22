@@ -573,7 +573,7 @@ export function DataGrid<TData>({
                       `relative h-9 px-2 text-left align-middle font-medium ${GRID_READONLY_TEXT_CLASS}`,
                       header.column.getCanSort() && 'cursor-pointer select-none hover:bg-muted',
                       colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
-                      colIdx === 0 && stickyFirstColumn && `sticky left-0 z-40 ${GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS}`,
+                      colIdx === 0 && stickyFirstColumn && `sticky left-0 z-20 ${GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS}`,
                       meta?.headerClassName,
                     )}
                     onClick={(event) => {
