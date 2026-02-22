@@ -15,6 +15,8 @@ declare module '@tanstack/react-table' {
   interface ColumnMeta<TData extends unknown, TValue> {
     headerClassName?: string;
     cellClassName?: string;
+    containsEditableInput?: boolean;
+    containsButton?: boolean;
   }
 }
 
@@ -32,6 +34,14 @@ export function useDataGrid() { return useContext(DataGridCtx); }
 
 export const GRID_HEADER_TONE_CLASS = 'bg-border';
 export const GRID_READONLY_TEXT_CLASS = 'text-muted-foreground';
+// Use on button controls rendered inside grid cells to match hover border treatment of other grid inputs.
+export const GRID_CONTROL_HOVER_BORDER_CLASS = 'hover:border-[hsl(var(--grid-sticky-line))]';
+// Header/footer cell borders and sticky first-column divider are baseline grid affordances in both card and full-view layouts.
+// Card layouts should keep bottom padding on the surrounding card content so rounded bottom corners remain visible.
+const GRID_HEADER_CELL_BORDERS_CLASS = '[&>tr>th]:shadow-[inset_0_-1px_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line))]';
+const GRID_FOOTER_CELL_BORDERS_CLASS = '[&>tr>td]:shadow-[inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
+const GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS = 'shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line))]';
+const GRID_FOOTER_FIRST_COLUMN_STICKY_CLASS = '[&>tr>td:first-child]:sticky [&>tr>td:first-child]:left-0 [&>tr>td:first-child]:z-20 [&>tr>td:first-child]:shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
 
 /** Spread onto any interactive element to wire it into grid keyboard navigation. */
 export function gridNavProps(ctx: DataGridContextValue | null, navCol: number): Record<string, unknown> {
@@ -291,18 +301,27 @@ export function DataGrid<TData>({
     : 0;
   const tableWidth = totalColumnWidth + trailingExtraWidth;
   const isResizingColumn = Boolean(table.getState().columnSizingInfo?.isResizingColumn);
+  const hasFooter = Boolean(footer);
+  const sortableColumns = React.useMemo(
+    () => visibleLeafColumns.filter((column) => column.getCanSort()),
+    [visibleLeafColumns],
+  );
   const alphabeticalColumnIds = React.useMemo(() => {
+    if (sortableColumns.length === 0 || coreRows.length === 0) return new Set<string>();
     const ids = new Set<string>();
-    for (const row of coreRows) {
-      for (const cell of row.getAllCells()) {
-        const value = cell.getValue();
-        if (typeof value === 'string' && value.trim().length > 0) {
-          ids.add(cell.column.id);
-        }
+    const sampleSize = Math.min(coreRows.length, 50);
+
+    for (const column of sortableColumns) {
+      for (let idx = 0; idx < sampleSize; idx += 1) {
+        const value = coreRows[idx]?.getValue(column.id);
+        if (value == null || value === '') continue;
+        if (typeof value === 'string' && value.trim().length > 0) ids.add(column.id);
+        break;
       }
     }
+
     return ids;
-  }, [coreRows]);
+  }, [coreRows, sortableColumns]);
 
   const markRowCommitted = useCallback((rowId: string, col: number) => {
     lastCommittedRowIdRef.current = rowId;
@@ -493,14 +512,19 @@ export function DataGrid<TData>({
           const columnSize = cell.column.getSize();
           const fillsRemainingWidth = cell.column.id === lastVisibleColumnId;
           const appliedColumnWidth = columnSize + (fillsRemainingWidth ? trailingExtraWidth : 0);
+          const horizontalPaddingClass = meta?.containsEditableInput ? 'px-1' : 'px-2';
+          const hasInteractiveControl = Boolean(meta?.containsEditableInput || meta?.containsButton);
+          const verticalPaddingClass = hasInteractiveControl ? 'py-1' : 'h-9 py-0';
           return (
             <td
               key={cell.id}
               className={cn(
-                'px-1 py-1 align-middle font-normal overflow-hidden',
+                'align-middle font-normal overflow-hidden',
+                horizontalPaddingClass,
+                verticalPaddingClass,
                 colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
-                colIdx === 0 && stickyFirstColumn && fullView && 'sticky left-0 z-10',
-                colIdx === 0 && stickyFirstColumn && fullView && 'shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line))]',
+                colIdx === 0 && stickyFirstColumn && 'sticky left-0 z-10',
+                colIdx === 0 && stickyFirstColumn && GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS,
                 meta?.cellClassName,
               )}
               style={{
@@ -528,7 +552,8 @@ export function DataGrid<TData>({
       <table className="min-w-full caption-bottom text-xs" style={{ width: `${tableWidth}px` }}>
         <thead className={cn(
           `z-30 ${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} shadow-[0_1px_0_0_hsl(var(--border))] [&_tr]:border-b-0`,
-          fullView && '[&>tr>th]:shadow-[inset_0_-1px_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line))] sticky top-0',
+          GRID_HEADER_CELL_BORDERS_CLASS,
+          fullView && 'sticky top-0',
         )}>
           {table.getHeaderGroups().map(hg => (
             <tr key={hg.id} className="border-b transition-colors">
@@ -546,9 +571,9 @@ export function DataGrid<TData>({
                     key={header.id}
                     className={cn(
                       `relative h-9 px-2 text-left align-middle font-medium ${GRID_READONLY_TEXT_CLASS}`,
-                      header.column.getCanSort() && 'cursor-pointer select-none hover:bg-muted/50',
+                      header.column.getCanSort() && 'cursor-pointer select-none hover:bg-muted',
                       colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
-                      colIdx === 0 && stickyFirstColumn && fullView && 'sticky left-0 z-40',
+                      colIdx === 0 && stickyFirstColumn && `sticky left-0 z-40 ${GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS}`,
                       meta?.headerClassName,
                     )}
                     onClick={(event) => {
@@ -582,7 +607,7 @@ export function DataGrid<TData>({
                         type="button"
                         aria-label={`Resize ${header.column.id} column`}
                         className={cn(
-                          'absolute -right-[5px] top-1/2 z-50 flex h-6 w-[10px] -translate-y-1/2 cursor-ew-resize touch-none select-none items-center justify-center',
+                          'group absolute -right-[5px] top-1/2 z-20 flex h-6 w-[10px] -translate-y-1/2 !cursor-col-resize touch-none select-none items-center justify-center',
                         )}
                         onClick={(event) => {
                           event.preventDefault();
@@ -600,8 +625,8 @@ export function DataGrid<TData>({
                       >
                         <span
                           className={cn(
-                            'block h-6 w-px bg-[hsl(var(--grid-sticky-line))]',
-                            isResizing && 'w-[2px]',
+                            'block h-6 w-px bg-[hsl(var(--grid-handle-line))] group-hover:bg-foreground',
+                            isResizing && 'bg-foreground',
                           )}
                         />
                       </button>
@@ -612,7 +637,11 @@ export function DataGrid<TData>({
             </tr>
           ))}
         </thead>
-        <tbody className="[&_tr:last-child]:border-0">
+        <tbody className={cn(
+          hasFooter
+            ? '[&_tr:last-child]:border-0'
+            : '[&_tr:last-child]:border-0 [&>tr:last-child>td]:shadow-[inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]',
+        )}>
           {rows.length === 0 ? (
             <tr className="border-b">
               <td colSpan={table.getAllColumns().length} className="px-1 py-8 text-center text-muted-foreground">
@@ -635,8 +664,9 @@ export function DataGrid<TData>({
         </tbody>
         {footer && (
           <tfoot className={cn(
-            `border-t ${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} font-medium [&>tr]:last:border-b-0`,
-            fullView && 'sticky bottom-0 z-30 border-t-0 [&>tr:first-child>td]:shadow-[inset_0_1px_0_0_hsl(var(--grid-sticky-line))]',
+            `${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} font-medium ${GRID_FOOTER_CELL_BORDERS_CLASS}`,
+            stickyFirstColumn && GRID_FOOTER_FIRST_COLUMN_STICKY_CLASS,
+            fullView && 'sticky bottom-0 z-30',
           )}>
             {footer}
           </tfoot>

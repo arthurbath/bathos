@@ -28,6 +28,48 @@ function applyUpdater<T>(updater: Updater<T>, current: T): T {
     : updater;
 }
 
+const GRID_COLUMN_WIDTHS_STORAGE_KEY_PREFIX = 'bathos_grid_column_widths';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getGridColumnWidthsStorageKey(userId: string): string {
+  return `${GRID_COLUMN_WIDTHS_STORAGE_KEY_PREFIX}:${userId}`;
+}
+
+function readCachedGridColumnWidths(userId?: string): Record<string, unknown> {
+  if (!userId || typeof window === 'undefined') return {};
+
+  try {
+    const raw = window.localStorage.getItem(getGridColumnWidthsStorageKey(userId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeCachedGridColumnWidths(
+  userId: string | undefined,
+  allGridWidths: unknown,
+): void {
+  if (!userId || typeof window === 'undefined') return;
+
+  const safeWidths = isRecord(allGridWidths) ? allGridWidths : {};
+  const storageKey = getGridColumnWidthsStorageKey(userId);
+
+  try {
+    const serialized = JSON.stringify(safeWidths);
+    if (window.localStorage.getItem(storageKey) !== serialized) {
+      window.localStorage.setItem(storageKey, serialized);
+    }
+  } catch {
+    // Ignore localStorage quota / serialization errors.
+  }
+}
+
 interface UseGridColumnWidthsOptions {
   userId?: string;
   gridKey: GridKey;
@@ -45,24 +87,33 @@ export function useGridColumnWidths({
     () => fixedColumnIds.slice().sort().join('|'),
     [fixedColumnIds],
   );
-  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(() =>
-    sanitizeColumnWidths(undefined, defaults, fixedColumnIds),
-  );
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(() => {
+    const cachedGridWidths = readCachedGridColumnWidths(userId);
+    return sanitizeColumnWidths(cachedGridWidths[gridKey], defaults, fixedColumnIds);
+  });
   const [columnSizingInfo, setColumnSizingInfo] = useState<ColumnSizingInfoState>(
     EMPTY_COLUMN_SIZING_INFO,
   );
   const [loaded, setLoaded] = useState(false);
-  const widthsByGridRef = useRef<Record<string, unknown>>({});
+  const widthsByGridRef = useRef<Record<string, unknown>>(
+    readCachedGridColumnWidths(userId),
+  );
   const wasResizingRef = useRef(false);
   const lastPersistedWidthsRef = useRef('');
 
   useEffect(() => {
     let cancelled = false;
-    const defaultSizing = sanitizeColumnWidths(undefined, defaults, fixedColumnIds);
-    setColumnSizing(defaultSizing);
+    const cachedAllGridWidths = readCachedGridColumnWidths(userId);
+    const optimisticSizing = sanitizeColumnWidths(
+      cachedAllGridWidths[gridKey],
+      defaults,
+      fixedColumnIds,
+    );
+
+    setColumnSizing(optimisticSizing);
     setLoaded(false);
-    widthsByGridRef.current = {};
-    lastPersistedWidthsRef.current = JSON.stringify(defaultSizing);
+    widthsByGridRef.current = cachedAllGridWidths;
+    lastPersistedWidthsRef.current = JSON.stringify(optimisticSizing);
 
     if (!userId) {
       setLoaded(true);
@@ -72,6 +123,7 @@ export function useGridColumnWidths({
     }
 
     void (async () => {
+      const cachedAllGridWidthsSerialized = JSON.stringify(cachedAllGridWidths);
       const { data, error } = await supabase
         .from('bathos_user_settings')
         .select('grid_column_widths')
@@ -92,6 +144,10 @@ export function useGridColumnWidths({
         !Array.isArray(data.grid_column_widths)
           ? (data.grid_column_widths as Record<string, unknown>)
           : {};
+
+      if (JSON.stringify(rawAllGridWidths) !== cachedAllGridWidthsSerialized) {
+        writeCachedGridColumnWidths(userId, rawAllGridWidths);
+      }
 
       widthsByGridRef.current = rawAllGridWidths;
       const loadedSizing = sanitizeColumnWidths(
@@ -154,6 +210,8 @@ export function useGridColumnWidths({
             gridKey,
             sanitizedWidths,
           );
+          widthsByGridRef.current = mergedGridWidths;
+          writeCachedGridColumnWidths(userId, mergedGridWidths);
 
           const { error } = await supabase
             .from('bathos_user_settings')
@@ -170,8 +228,6 @@ export function useGridColumnWidths({
             lastPersistedWidthsRef.current = '';
             return;
           }
-
-          widthsByGridRef.current = mergedGridWidths;
         })();
       }
     }

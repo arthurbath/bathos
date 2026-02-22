@@ -58,14 +58,14 @@ function AppRoutes() {
       <Route path="/budget/expenses" element={<Index />} />
       <Route path="/budget/summary" element={<Index />} />
       <Route path="/budget/config" element={<Index />} />
-      <Route path="/budget/restore" element={<Index />} />
+      <Route path="/budget/restore" element={<Navigate to="/budget/config" replace />} />
 
       {/* Legacy routes */}
       <Route path="/incomes" element={<Navigate to="/budget/incomes" replace />} />
       <Route path="/expenses" element={<Navigate to="/budget/expenses" replace />} />
       <Route path="/summary" element={<Navigate to="/budget/summary" replace />} />
       <Route path="/config" element={<Navigate to="/budget/config" replace />} />
-      <Route path="/restore" element={<Navigate to="/budget/restore" replace />} />
+      <Route path="/restore" element={<Navigate to="/budget/config" replace />} />
 
       <Route path="*" element={<DeferredNotFound />} />
     </Routes>

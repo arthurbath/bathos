@@ -11,9 +11,12 @@ import { Label } from '@/components/ui/label';
 import { Users, Copy, Check, Plus, Trash2, Pencil } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import type { Category } from '@/hooks/useCategories';
-
+import { RestoreTab } from '@/components/RestoreTab';
 import type { LinkedAccount } from '@/hooks/useLinkedAccounts';
 import type { Expense } from '@/hooks/useExpenses';
+import type { Income } from '@/hooks/useIncomes';
+import type { RestorePoint } from '@/hooks/useRestorePoints';
+import type { Json } from '@/integrations/supabase/types';
 
 interface ConfigurationTabProps {
   categories: Category[];
@@ -33,6 +36,12 @@ interface ConfigurationTabProps {
   onRemoveLinkedAccount: (id: string) => Promise<void>;
   onReassignLinkedAccount: (oldId: string, newId: string | null) => Promise<void>;
   onUpdateLinkedAccountColor: (id: string, color: string | null) => Promise<void>;
+  points: RestorePoint[];
+  incomes: Income[];
+  onSaveRestorePoint: (notes: string, snapshot: Json) => Promise<void>;
+  onRemoveRestorePoint: (id: string) => Promise<void>;
+  onUpdateRestorePointNotes: (id: string, notes: string) => Promise<void>;
+  onRestore: (data: Json) => Promise<void>;
 }
 
 function PartnerNamesCard({ partnerX, partnerY, onSave }: {
@@ -343,6 +352,7 @@ export function ConfigurationTab({
   onUpdatePartnerNames,
   onAddCategory, onUpdateCategory, onRemoveCategory, onReassignCategory, onUpdateCategoryColor,
   onAddLinkedAccount, onUpdateLinkedAccount, onRemoveLinkedAccount, onReassignLinkedAccount, onUpdateLinkedAccountColor,
+  points, incomes, onSaveRestorePoint, onRemoveRestorePoint, onUpdateRestorePointNotes, onRestore,
 }: ConfigurationTabProps) {
   return (
     <div className="space-y-6">
@@ -369,6 +379,17 @@ export function ConfigurationTab({
         onRemove={onRemoveLinkedAccount}
         onReassign={onReassignLinkedAccount}
         onUpdateColor={onUpdateLinkedAccountColor}
+      />
+      <RestoreTab
+        points={points}
+        incomes={incomes}
+        expenses={expenses}
+        categories={categories}
+        linkedAccounts={linkedAccounts}
+        onSave={onSaveRestorePoint}
+        onRemove={onRemoveRestorePoint}
+        onUpdateNotes={onUpdateRestorePointNotes}
+        onRestore={onRestore}
       />
     </div>
   );

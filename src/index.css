@@ -54,6 +54,7 @@
 
     --category-group-row-bg: 0 0% 38%;
     --grid-sticky-line: 0 0% 64%;
+    --grid-handle-line: 0 0% 70%;
   }
 
   .dark {
@@ -105,6 +106,7 @@
 
     --category-group-row-bg: 0 0% 38%;
     --grid-sticky-line: 0 0% 64%;
+    --grid-handle-line: 0 0% 42%;
   }
 }
 

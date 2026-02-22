@@ -122,7 +122,7 @@ function unmountShell(root: Root, container: HTMLElement) {
 }
 
 describe("AppShell full-view layout", () => {
-  it("keeps horizontal overflow visible on full-view grid routes", () => {
+  it("keeps horizontal overflow visible on the expenses full-view route", () => {
     const { container, root } = renderShell("/budget/expenses");
     try {
       const shell = container.firstElementChild as HTMLElement;
@@ -134,6 +134,22 @@ describe("AppShell full-view layout", () => {
       expect(main).toHaveClass("w-full");
       expect(main).toHaveClass("flex-1");
       expect(main).not.toHaveClass("max-w-5xl");
+    } finally {
+      unmountShell(root, container);
+    }
+  });
+
+  it("uses normal non-full-view layout on incomes route", () => {
+    const { container, root } = renderShell("/budget/incomes");
+    try {
+      const shell = container.firstElementChild as HTMLElement;
+      const main = container.querySelector("main");
+
+      expect(shell).toHaveClass("min-h-screen");
+      expect(shell).not.toHaveClass("overflow-x-visible");
+      expect(main).toHaveClass("max-w-5xl");
+      expect(main).not.toHaveClass("w-full");
+      expect(main).not.toHaveClass("flex-1");
     } finally {
       unmountShell(root, container);
     }

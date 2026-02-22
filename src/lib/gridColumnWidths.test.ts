@@ -14,7 +14,7 @@ describe('gridColumnWidths', () => {
     const defaults = {
       name: 240,
       amount: 120,
-      actions: 60,
+      actions: 38,
     };
 
     const sanitized = sanitizeColumnWidths(
@@ -31,7 +31,7 @@ describe('gridColumnWidths', () => {
     expect(sanitized).toEqual({
       name: 260,
       amount: 60,
-      actions: 60,
+      actions: 38,
     });
   });
 });

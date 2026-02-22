@@ -23,7 +23,7 @@ import { DataGridAddFormAffixInput } from '@/components/ui/data-grid-add-form-af
 import { Plus, Trash2, MoreHorizontal } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels, needsParam } from '@/lib/frequency';
-import { DataGrid, GridEditableCell, GridCurrencyCell, GridPercentCell, useDataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
+import { DataGrid, GridEditableCell, GridCurrencyCell, GridPercentCell, useDataGrid, GRID_CONTROL_HOVER_BORDER_CLASS, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import { EXPENSES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH } from '@/lib/gridColumnWidths';
 import type { FrequencyType } from '@/types/fairshare';
@@ -261,7 +261,7 @@ function ExpenseActionsCell({ name, onRemove }: { name: string; onRemove: () => 
           <Button
             variant="outline"
             size="icon"
-            className="h-7 w-7 cursor-pointer hover:bg-accent hover:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+            className={`float-right mr-[5px] h-7 w-7 cursor-pointer hover:bg-accent hover:text-accent-foreground ${GRID_CONTROL_HOVER_BORDER_CLASS} data-[state=open]:bg-accent data-[state=open]:text-accent-foreground`}
             aria-label={`Actions for ${name}`}
           >
             <MoreHorizontal className="h-4 w-4" />
@@ -477,6 +477,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       header: 'Name',
       size: EXPENSES_GRID_DEFAULT_WIDTHS.name,
       minSize: GRID_MIN_COLUMN_WIDTH,
+      meta: { containsEditableInput: true },
       cell: ({ row }) => <GridEditableCell value={row.original.exp.name} onChange={v => handleUpdate(row.original.exp.id, 'name', v)} navCol={0} placeholder="Expense" cellId={row.original.exp.id} />,
     }),
     columnHelper.accessor(r => r.exp.category_id, {
@@ -484,6 +485,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       header: 'Category',
       size: EXPENSES_GRID_DEFAULT_WIDTHS.category,
       minSize: GRID_MIN_COLUMN_WIDTH,
+      meta: { containsEditableInput: true },
       sortingFn: (a, b) => (categories.find(c => c.id === a.original.exp.category_id)?.name ?? '').localeCompare(categories.find(c => c.id === b.original.exp.category_id)?.name ?? ''),
       cell: ({ row }) => (
         <CategoryCell
@@ -499,7 +501,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       header: 'Amount',
       size: EXPENSES_GRID_DEFAULT_WIDTHS.amount,
       minSize: GRID_MIN_COLUMN_WIDTH,
-      meta: { headerClassName: 'text-right' },
+      meta: { headerClassName: 'text-right', containsEditableInput: true },
       cell: ({ row }) => <GridCurrencyCell value={Number(row.original.exp.amount)} onChange={v => handleUpdate(row.original.exp.id, 'amount', v)} navCol={2} />,
     }),
     columnHelper.accessor(r => r.exp.is_estimate, {
@@ -509,7 +511,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       ),
       size: EXPENSES_GRID_DEFAULT_WIDTHS.estimate,
       minSize: GRID_MIN_COLUMN_WIDTH,
-      meta: { headerClassName: 'text-center', cellClassName: 'text-center' },
+      meta: { headerClassName: 'text-center', cellClassName: 'text-center', containsEditableInput: true },
       cell: ({ row }) => <EstimateCell checked={row.original.exp.is_estimate} onToggle={v => handleToggleEstimate(row.original.exp.id, v)} />,
     }),
     columnHelper.accessor(r => r.exp.frequency_type, {
@@ -517,6 +519,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       header: 'Frequency',
       size: EXPENSES_GRID_DEFAULT_WIDTHS.frequency,
       minSize: GRID_MIN_COLUMN_WIDTH,
+      meta: { containsEditableInput: true },
       cell: ({ row }) => <ExpenseFrequencyCell exp={row.original.exp} onChange={(field, v) => handleUpdate(row.original.exp.id, field, v)} />,
     }),
     columnHelper.accessor('monthly', {
@@ -534,6 +537,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       header: 'Payment Method',
       size: EXPENSES_GRID_DEFAULT_WIDTHS.payment_method,
       minSize: GRID_MIN_COLUMN_WIDTH,
+      meta: { containsEditableInput: true },
       sortingFn: (a, b) => (linkedAccounts.find(la => la.id === a.original.exp.linked_account_id)?.name ?? '').localeCompare(linkedAccounts.find(la => la.id === b.original.exp.linked_account_id)?.name ?? ''),
       cell: ({ row }) => (
         <PaymentMethodCell
@@ -556,7 +560,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         const p = getDerivedPayer(row.original.exp);
         return p
           ? <span className="text-xs">{p === 'X' ? partnerX : partnerY}</span>
-          : <span className={`text-xs px-1 ${GRID_READONLY_TEXT_CLASS}`}>—</span>;
+          : <span className={`text-xs ${GRID_READONLY_TEXT_CLASS}`}>—</span>;
       },
     }),
     columnHelper.accessor(r => r.exp.benefit_x, {
@@ -566,7 +570,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       ),
       size: EXPENSES_GRID_DEFAULT_WIDTHS.benefit_x,
       minSize: GRID_MIN_COLUMN_WIDTH,
-      meta: { headerClassName: 'text-right whitespace-nowrap' },
+      meta: { headerClassName: 'text-right whitespace-nowrap', containsEditableInput: true },
       cell: ({ row }) => (
         <GridPercentCell value={row.original.exp.benefit_x} onChange={v => { const c = Math.max(0, Math.min(100, Math.round(Number(v) || 0))); handleUpdate(row.original.exp.id, 'benefit_x', String(c)); }} navCol={7} />
       ),
@@ -578,7 +582,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       ),
       size: EXPENSES_GRID_DEFAULT_WIDTHS.benefit_y,
       minSize: GRID_MIN_COLUMN_WIDTH,
-      meta: { headerClassName: 'text-right whitespace-nowrap', cellClassName: 'text-right tabular-nums text-xs' },
+      meta: { headerClassName: 'text-right whitespace-nowrap', cellClassName: 'text-right tabular-nums text-xs', containsEditableInput: true },
       cell: ({ row }) => (
         <GridPercentCell value={100 - row.original.exp.benefit_x} onChange={v => { const c = Math.max(0, Math.min(100, Math.round(Number(v) || 0))); handleUpdate(row.original.exp.id, 'benefit_x', String(100 - c)); }} navCol={8} />
       ),
@@ -607,6 +611,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       size: EXPENSES_GRID_DEFAULT_WIDTHS.actions,
       minSize: EXPENSES_GRID_DEFAULT_WIDTHS.actions,
       maxSize: EXPENSES_GRID_DEFAULT_WIDTHS.actions,
+      meta: { headerClassName: 'px-0', cellClassName: 'px-0', containsButton: true },
       cell: ({ row }) => <ExpenseActionsCell name={row.original.exp.name} onRemove={() => handleRemove(row.original.exp.id)} />,
     }),
   ], [categories, linkedAccounts, partnerX, partnerY, getDerivedPayer]);
@@ -615,6 +620,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     data: computedData,
     columns,
     state: { sorting, columnSizing, columnSizingInfo },
+    enableColumnResizing: true,
     onSortingChange: setSorting,
     onColumnSizingChange,
     onColumnSizingInfoChange,
@@ -667,7 +673,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         key={`gh-${key}`}
         className={`${groupRowBgClass} ${groupRowTextClass} border-b-0 shadow-[0_1px_0_0_hsl(var(--border))] ${fullView ? 'sticky top-[36px] z-20' : ''}`}
       >
-        <td className={`${groupRowBgClass} ${groupRowFontClass} text-xs px-2 py-1 ${fullView ? 'sticky left-0 z-10' : ''}`}>{getGroupLabel(key)}</td>
+        <td className={`${groupRowBgClass} ${groupRowFontClass} text-xs px-2 py-1 sticky left-0 z-10 shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line))]`}>{getGroupLabel(key)}</td>
         <td colSpan={4} className={groupRowBgClass} />
         <td className={`text-right ${groupRowFontClass} tabular-nums text-xs ${groupRowBgClass} px-2 py-1`}>${Math.round(gMonthly)}</td>
         <td colSpan={4} className={groupRowBgClass} />
@@ -679,6 +685,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
   };
 
   const dialogTitle = addDialog === 'category' ? 'New Category' : 'New Payment Method';
+  const gridCardContentClassName = fullView ? 'px-0 pb-0 flex-1 min-h-0' : 'px-0 pb-2.5';
 
   return (
     <Card className={`max-w-none w-[100vw] relative left-1/2 -translate-x-1/2 rounded-none border-x-0 ${fullView ? 'h-full min-h-0 flex flex-col' : ''}`}>
@@ -711,7 +718,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
           </div>
         </div>
       </CardHeader>
-      <CardContent className={`px-0 pb-0 ${fullView ? 'flex-1 min-h-0' : ''}`}>
+      <CardContent className={gridCardContentClassName}>
         <DataGrid
           table={table}
           fullView={fullView}
@@ -723,7 +730,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
           groupOrder={groupOrder}
           footer={computedData.length > 0 ? (
             <tr className={`${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS}`}>
-              <td className={`h-9 align-middle font-semibold text-xs ${GRID_HEADER_TONE_CLASS} px-2 ${fullView ? 'sticky left-0 z-10' : ''}`}>Totals</td>
+              <td className={`h-9 align-middle font-semibold text-xs ${GRID_HEADER_TONE_CLASS} px-2`}>Totals</td>
               <td colSpan={4} className={GRID_HEADER_TONE_CLASS} />
               <td className={`h-9 align-middle text-right font-semibold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2`}>${Math.round(totalMonthly)}</td>
               <td colSpan={4} className={GRID_HEADER_TONE_CLASS} />

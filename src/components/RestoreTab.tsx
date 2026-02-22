@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -126,103 +126,92 @@ export function RestoreTab({ points, incomes, expenses, categories, linkedAccoun
 
   return (
     <>
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Save Snapshot</CardTitle>
-            
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-2">
-              <Input placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} />
-              <Button onClick={handleSave} disabled={saving} className="gap-1.5 shrink-0">
-                <Save className="h-4 w-4" /> Save
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Backups</CardTitle>
-            
-          </CardHeader>
-          <CardContent>
-            {points.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">No backups yet.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Timestamp</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {points.map(pt => (
-                    <TableRow key={pt.id} className="hover:bg-transparent">
-                      <TableCell className="font-medium">{formatTimestamp(pt.created_at)}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {editingNotesId === pt.id ? (
-                          <Input
-                            value={editingNotesValue}
-                            onChange={(e) => setEditingNotesValue(e.target.value)}
-                            onBlur={() => { void commitNotesEdit(); }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                void commitNotesEdit();
-                              }
-                              if (e.key === 'Escape') {
-                                cancelEditingNotes();
-                              }
-                            }}
-                            autoFocus
-                            className="h-7 w-full rounded-md border border-transparent bg-transparent px-1 text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring"
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => startEditingNotes(pt)}
-                            className="h-7 w-full rounded-md border border-transparent bg-transparent px-1 text-left text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer hover:border-border"
+      <Card>
+        <CardHeader>
+          <CardTitle>Backups</CardTitle>
+          <CardDescription>Save a snapshot to create a backup. You can restore any saved snapshot below.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input placeholder="Snapshot notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} />
+            <Button onClick={handleSave} disabled={saving} className="gap-1.5 shrink-0">
+              <Save className="h-4 w-4" /> Save Snapshot
+            </Button>
+          </div>
+          {points.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No backups yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Timestamp</TableHead>
+                  <TableHead>Notes</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {points.map(pt => (
+                  <TableRow key={pt.id} className="hover:bg-transparent">
+                    <TableCell className="font-medium">{formatTimestamp(pt.created_at)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {editingNotesId === pt.id ? (
+                        <Input
+                          value={editingNotesValue}
+                          onChange={(e) => setEditingNotesValue(e.target.value)}
+                          onBlur={() => { void commitNotesEdit(); }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              void commitNotesEdit();
+                            }
+                            if (e.key === 'Escape') {
+                              cancelEditingNotes();
+                            }
+                          }}
+                          autoFocus
+                          className="h-7 w-full rounded-md border border-transparent bg-transparent px-1 text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startEditingNotes(pt)}
+                          className="h-7 w-full rounded-md border border-transparent bg-transparent px-1 text-left text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer hover:border-border"
+                        >
+                          {pt.notes?.trim() || '—'}
+                        </button>
+                      )}
+                    </TableCell>
+                    <TableCell className="w-12 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7 cursor-pointer hover:bg-accent hover:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+                            aria-label="Backup actions"
                           >
-                            {pt.notes?.trim() || '—'}
-                          </button>
-                        )}
-                      </TableCell>
-                      <TableCell className="w-12 text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7 cursor-pointer hover:bg-accent hover:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
-                              aria-label="Backup actions"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-popover">
-                            <DropdownMenuItem onClick={() => setRestoreTarget(pt)}>
-                              <RotateCcw className="mr-2 h-4 w-4" />
-                              Restore
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setDeleteTarget(pt)} className="text-destructive focus:text-destructive">
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-popover">
+                          <DropdownMenuItem onClick={() => setRestoreTarget(pt)}>
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Restore
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setDeleteTarget(pt)} className="text-destructive focus:text-destructive">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       <AlertDialog open={!!restoreTarget} onOpenChange={open => !open && setRestoreTarget(null)}>
         <AlertDialogContent>

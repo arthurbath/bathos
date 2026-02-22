@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { DollarSign, PieChart, BarChart3, Settings, History } from 'lucide-react';
+import { DollarSign, PieChart, BarChart3, Settings } from 'lucide-react';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import { toast } from '@/hooks/use-toast';
 import type { HouseholdData } from '@/hooks/useHouseholdData';
@@ -15,7 +15,6 @@ import { IncomesTab } from '@/components/IncomesTab';
 import { ExpensesTab } from '@/components/ExpensesTab';
 import { ConfigurationTab } from '@/components/ConfigurationTab';
 import { SummaryTab } from '@/components/SummaryTab';
-import { RestoreTab } from '@/components/RestoreTab';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
 
@@ -35,8 +34,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
   const isExpensesRoute = location.pathname.endsWith('/expenses');
   const isSummaryRoute = location.pathname.endsWith('/summary');
   const isConfigRoute = location.pathname.endsWith('/config');
-  const isRestoreRoute = location.pathname.endsWith('/restore');
-  const isFullViewGridRoute = isExpensesRoute || isIncomesRoute;
+  const isFullViewGridRoute = isExpensesRoute;
   const { incomes, add: addIncome, update: updateIncome, remove: removeIncome, refetch: refetchIncomes } = useIncomes(household.householdId);
   const { expenses, add: addExpense, update: updateExpense, remove: removeExpense, refetch: refetchExpenses } = useExpenses(household.householdId);
   const { categories, add: addCategory, update: updateCategory, updateColor: updateCategoryColor, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
@@ -139,13 +137,12 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
       <ToplineHeader title="Budget" userId={userId} displayName={household.displayName} onSignOut={onSignOut} />
 
       <div className="mx-auto max-w-5xl w-full px-4 pt-6">
-        <nav className="grid w-full grid-cols-5 rounded-lg bg-muted p-1 text-muted-foreground">
+        <nav className="grid w-full grid-cols-4 gap-0.5 rounded-lg border border-[hsl(var(--grid-sticky-line))] bg-border p-1 text-muted-foreground">
           {([
             { path: '/summary', icon: PieChart, label: 'Summary' },
             { path: '/expenses', icon: BarChart3, label: 'Expenses' },
             { path: '/incomes', icon: DollarSign, label: 'Incomes' },
             { path: '/config', icon: Settings, label: 'Config' },
-            { path: '/restore', icon: History, label: 'Backup' },
           ] as const).map(({ path, icon: Icon, label }) => {
             const fullPath = `${basePath}${path}`;
             const active = location.pathname === fullPath || location.pathname === path;
@@ -153,10 +150,10 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
               <button
                 key={path}
                 onClick={() => navigate(fullPath)}
-                className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-all ${active ? 'bg-background text-foreground shadow-sm' : 'hover:bg-background/50'}`}
+                className={`inline-flex items-center justify-center gap-0 sm:gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-all ${active ? 'bg-background text-foreground shadow-sm' : 'hover:bg-background/50'}`}
               >
-                <Icon className="h-4 w-4" />
-                <span className="hidden sm:inline">{label}</span>
+                <Icon className="hidden h-4 w-4 sm:inline" />
+                <span>{label}</span>
               </button>
             );
           })}
@@ -165,20 +162,6 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
 
       {isFullViewGridRoute ? (
         <main className="flex w-full flex-1 min-h-0 flex-col pt-6 pb-0">
-          {isIncomesRoute && (
-            <div className="flex-1 min-h-0">
-              <IncomesTab
-                incomes={incomes}
-                partnerX={household.partnerX}
-                partnerY={household.partnerY}
-                userId={userId}
-                onAdd={addIncome}
-                onUpdate={updateIncome}
-                onRemove={removeIncome}
-                fullView
-              />
-            </div>
-          )}
           {isExpensesRoute && (
             <div className="flex-1 min-h-0">
               <ExpensesTab
@@ -201,6 +184,17 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
         </main>
       ) : (
         <main className="mx-auto max-w-5xl px-4 pt-6 pb-6 space-y-6">
+          {isIncomesRoute && (
+            <IncomesTab
+              incomes={incomes}
+              partnerX={household.partnerX}
+              partnerY={household.partnerY}
+              userId={userId}
+              onAdd={addIncome}
+              onUpdate={updateIncome}
+              onRemove={removeIncome}
+            />
+          )}
           {isSummaryRoute && (
             <SummaryTab
               incomes={incomes}
@@ -208,6 +202,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
               linkedAccounts={linkedAccounts}
               partnerX={household.partnerX}
               partnerY={household.partnerY}
+              userId={userId}
             />
           )}
           {isConfigRoute && (
@@ -229,18 +224,11 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
               onRemoveLinkedAccount={removeLinkedAccount}
               onReassignLinkedAccount={handleReassignLinkedAccount}
               onUpdateLinkedAccountColor={updateLinkedAccountColor}
-            />
-          )}
-          {isRestoreRoute && (
-            <RestoreTab
               points={points}
               incomes={incomes}
-              expenses={expenses}
-              categories={categories}
-              linkedAccounts={linkedAccounts}
-              onSave={savePoint}
-              onRemove={removePoint}
-              onUpdateNotes={updateRestorePointNotes}
+              onSaveRestorePoint={savePoint}
+              onRemoveRestorePoint={removePoint}
+              onUpdateRestorePointNotes={updateRestorePointNotes}
               onRestore={handleRestore}
             />
           )}
