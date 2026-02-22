@@ -55,6 +55,7 @@ function useGridNav(
   containerRef: React.RefObject<HTMLDivElement | null>,
   onNavigateTarget?: (target: GridNavTarget) => void,
 ) {
+  const pointerInitiatedFocusRef = useRef(false);
   const getEditableCells = useCallback(() => {
     if (!containerRef.current) return [];
     return Array.from(containerRef.current.querySelectorAll<HTMLElement>('[data-row][data-col]'));
@@ -220,9 +221,17 @@ function useGridNav(
     return false;
   }, [findNextCol, findPrevCol, findTargetBeforeSort, focusWithRetry, getMaxRow, onNavigateTarget]);
 
-  const onCellMouseDown = useCallback((_e: React.MouseEvent<HTMLElement>) => {}, []);
+  const onCellMouseDown = useCallback((_e: React.MouseEvent<HTMLElement>) => {
+    pointerInitiatedFocusRef.current = true;
+  }, []);
 
-  return { onCellKeyDown, onCellMouseDown, scrollCellIntoView, focusCellByRowId };
+  const consumePointerInitiatedFocus = useCallback(() => {
+    const wasPointerInitiated = pointerInitiatedFocusRef.current;
+    pointerInitiatedFocusRef.current = false;
+    return wasPointerInitiated;
+  }, []);
+
+  return { onCellKeyDown, onCellMouseDown, scrollCellIntoView, focusCellByRowId, consumePointerInitiatedFocus };
 }
 
 // ─── DataGrid ───
@@ -252,13 +261,16 @@ export function DataGrid<TData>({
   groupOrder,
 }: DataGridProps<TData>) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
   const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
   const lastCommittedRowIdRef = useRef<string | null>(null);
   const pendingCommitFocusRef = useRef<{ rowId: string; col: number } | null>(null);
   const previousRowPositionsRef = useRef<Map<string, number>>(new Map());
   const previousGroupKeysRef = useRef<Map<string, string | null>>(new Map());
   const clearHighlightTimerRef = useRef<number | null>(null);
-  const { onCellKeyDown, onCellMouseDown, scrollCellIntoView, focusCellByRowId } = useGridNav(
+  const wasResizingRef = useRef(false);
+  const suppressSortClickUntilRef = useRef(0);
+  const { onCellKeyDown, onCellMouseDown, scrollCellIntoView, focusCellByRowId, consumePointerInitiatedFocus } = useGridNav(
     containerRef,
     useCallback((target) => {
       if (!target.rowId) return;
@@ -268,6 +280,17 @@ export function DataGrid<TData>({
   );
   const rows = table.getRowModel().rows;
   const coreRows = table.getCoreRowModel().rows;
+  const visibleLeafColumns = table.getVisibleLeafColumns();
+  const lastVisibleColumnId =
+    visibleLeafColumns.length > 0
+      ? visibleLeafColumns[visibleLeafColumns.length - 1]?.id ?? null
+      : null;
+  const totalColumnWidth = table.getTotalSize();
+  const trailingExtraWidth = lastVisibleColumnId
+    ? Math.max(0, containerWidth - totalColumnWidth)
+    : 0;
+  const tableWidth = totalColumnWidth + trailingExtraWidth;
+  const isResizingColumn = Boolean(table.getState().columnSizingInfo?.isResizingColumn);
   const alphabeticalColumnIds = React.useMemo(() => {
     const ids = new Set<string>();
     for (const row of coreRows) {
@@ -346,6 +369,26 @@ export function DataGrid<TData>({
   }, [currentGroupKeys, renderedRowIds]);
 
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateContainerWidth = () => {
+      setContainerWidth(container.clientWidth);
+    };
+
+    updateContainerWidth();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateContainerWidth);
+      return () => window.removeEventListener('resize', updateContainerWidth);
+    }
+
+    const resizeObserver = new ResizeObserver(() => updateContainerWidth());
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  useEffect(() => {
     const pending = pendingCommitFocusRef.current;
     if (!pending) return;
 
@@ -414,16 +457,24 @@ export function DataGrid<TData>({
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
       if (target.dataset.row == null || target.dataset.col == null) return;
+      if (consumePointerInitiatedFocus()) return;
       requestAnimationFrame(() => scrollCellIntoView(target));
     };
 
     container.addEventListener('focusin', handleFocusIn);
     return () => container.removeEventListener('focusin', handleFocusIn);
-  }, [scrollCellIntoView]);
+  }, [consumePointerInitiatedFocus, scrollCellIntoView]);
 
   useEffect(() => () => {
     if (clearHighlightTimerRef.current != null) window.clearTimeout(clearHighlightTimerRef.current);
   }, []);
+
+  useEffect(() => {
+    if (wasResizingRef.current && !isResizingColumn) {
+      suppressSortClickUntilRef.current = performance.now() + 250;
+    }
+    wasResizingRef.current = isResizingColumn;
+  }, [isResizingColumn]);
 
   let visualRowIdx = 0;
 
@@ -439,15 +490,24 @@ export function DataGrid<TData>({
       >
         {row.getVisibleCells().map((cell, colIdx) => {
           const meta = cell.column.columnDef.meta;
+          const columnSize = cell.column.getSize();
+          const fillsRemainingWidth = cell.column.id === lastVisibleColumnId;
+          const appliedColumnWidth = columnSize + (fillsRemainingWidth ? trailingExtraWidth : 0);
           return (
             <td
               key={cell.id}
               className={cn(
-                'px-1 py-1 align-middle font-normal',
+                'px-1 py-1 align-middle font-normal overflow-hidden',
                 colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
                 colIdx === 0 && stickyFirstColumn && fullView && 'sticky left-0 z-10',
+                colIdx === 0 && stickyFirstColumn && fullView && 'shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line))]',
                 meta?.cellClassName,
               )}
+              style={{
+                width: `${appliedColumnWidth}px`,
+                minWidth: `${appliedColumnWidth}px`,
+                maxWidth: `${appliedColumnWidth}px`,
+              }}
             >
               <DataGridCtx.Provider value={{ rowIndex: currentRow, rowId: row.id, onCellKeyDown, onCellMouseDown, onCellCommit: (col) => markRowCommitted(row.id, col) }}>
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -465,10 +525,10 @@ export function DataGrid<TData>({
       className={cn('overflow-auto', fullView && 'h-full min-h-0', className)}
       style={{ maxHeight: fullView ? 'none' : maxHeight }}
     >
-      <table className="w-full caption-bottom text-xs">
+      <table className="min-w-full caption-bottom text-xs" style={{ width: `${tableWidth}px` }}>
         <thead className={cn(
           `z-30 ${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} shadow-[0_1px_0_0_hsl(var(--border))] [&_tr]:border-b-0`,
-          fullView && 'sticky top-0',
+          fullView && '[&>tr>th]:shadow-[inset_0_-1px_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line))] sticky top-0',
         )}>
           {table.getHeaderGroups().map(hg => (
             <tr key={hg.id} className="border-b transition-colors">
@@ -476,20 +536,38 @@ export function DataGrid<TData>({
                 const meta = header.column.columnDef.meta;
                 const sortState = header.column.getIsSorted();
                 const isAlphabeticalColumn = alphabeticalColumnIds.has(header.column.id);
+                const columnSize = header.getSize();
+                const fillsRemainingWidth = header.column.id === lastVisibleColumnId;
+                const appliedColumnWidth = columnSize + (fillsRemainingWidth ? trailingExtraWidth : 0);
+                const canResize = header.column.getCanResize();
+                const isResizing = header.column.getIsResizing();
                 return (
                   <th
                     key={header.id}
                     className={cn(
-                      `h-9 px-2 text-left align-middle font-medium ${GRID_READONLY_TEXT_CLASS}`,
+                      `relative h-9 px-2 text-left align-middle font-medium ${GRID_READONLY_TEXT_CLASS}`,
                       header.column.getCanSort() && 'cursor-pointer select-none hover:bg-muted/50',
                       colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
                       colIdx === 0 && stickyFirstColumn && fullView && 'sticky left-0 z-40',
                       meta?.headerClassName,
                     )}
-                    onClick={header.column.getToggleSortingHandler()}
+                    onClick={(event) => {
+                      if (performance.now() < suppressSortClickUntilRef.current) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return;
+                      }
+                      const toggleSorting = header.column.getToggleSortingHandler();
+                      toggleSorting?.(event);
+                    }}
+                    style={{
+                      width: `${appliedColumnWidth}px`,
+                      minWidth: `${appliedColumnWidth}px`,
+                      maxWidth: `${appliedColumnWidth}px`,
+                    }}
                   >
                     {header.isPlaceholder ? null : (
-                      <span className="inline-flex items-center gap-1">
+                      <span className="inline-flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis">
                         {flexRender(header.column.columnDef.header, header.getContext())}
                         {header.column.getCanSort() && sortState === 'asc' && (isAlphabeticalColumn
                           ? <ArrowDown className="h-3 w-3" />
@@ -498,6 +576,35 @@ export function DataGrid<TData>({
                           ? <ArrowUp className="h-3 w-3" />
                           : <ArrowDown className="h-3 w-3" />)}
                       </span>
+                    )}
+                    {canResize && (
+                      <button
+                        type="button"
+                        aria-label={`Resize ${header.column.id} column`}
+                        className={cn(
+                          'absolute -right-[5px] top-1/2 z-50 flex h-6 w-[10px] -translate-y-1/2 cursor-ew-resize touch-none select-none items-center justify-center',
+                        )}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          header.getResizeHandler()(event);
+                        }}
+                        onTouchStart={(event) => {
+                          event.stopPropagation();
+                          header.getResizeHandler()(event);
+                        }}
+                      >
+                        <span
+                          className={cn(
+                            'block h-6 w-px bg-[hsl(var(--grid-sticky-line))]',
+                            isResizing && 'w-[2px]',
+                          )}
+                        />
+                      </button>
                     )}
                   </th>
                 );
@@ -529,7 +636,7 @@ export function DataGrid<TData>({
         {footer && (
           <tfoot className={cn(
             `border-t ${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} font-medium [&>tr]:last:border-b-0`,
-            fullView && 'sticky bottom-0 z-30',
+            fullView && 'sticky bottom-0 z-30 border-t-0 [&>tr:first-child>td]:shadow-[inset_0_1px_0_0_hsl(var(--grid-sticky-line))]',
           )}>
             {footer}
           </tfoot>
@@ -540,7 +647,7 @@ export function DataGrid<TData>({
 }
 
 // ─── Cell Primitives ───
-const CELL_INPUT_CLASS = 'h-7 rounded-md border border-transparent bg-transparent px-1 hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring !text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
+const CELL_INPUT_CLASS = 'min-w-0 h-7 rounded-md border border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] focus:border-ring focus:ring-2 focus:ring-ring/30 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0 !text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
 
 function isPrintableEntryKey(e: React.KeyboardEvent<HTMLInputElement>) {
   return e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey;
@@ -720,11 +827,12 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
   };
 
   return (
-    <div className="relative min-w-[5rem]">
+    <div className="relative w-full min-w-[60px]">
       <span className={cn('pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 !text-xs font-normal', GRID_READONLY_TEXT_CLASS)}>$</span>
       <Input
         ref={ref}
-        type="number"
+        type="text"
+        inputMode="decimal"
         value={local}
         readOnly={!editing}
         data-row={ctx?.rowIndex}
@@ -735,11 +843,20 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
         onMouseDown={e => {
           ctx?.onCellMouseDown(e);
           pointerDownRef.current = true;
-          if (!editing) setEditing(true);
         }}
         onFocus={() => {
           setFocused(true);
-          if (!pointerDownRef.current) setEditing(false);
+          if (pointerDownRef.current) {
+            pointerDownRef.current = false;
+            if (!editing) {
+              requestAnimationFrame(() => {
+                if (document.activeElement !== ref.current) return;
+                setEditing(true);
+              });
+            }
+            return;
+          }
+          setEditing(false);
           pointerDownRef.current = false;
         }}
         onBlur={() => {
@@ -819,7 +936,7 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
             if (!moved) suppressBlurCommitRef.current = false;
           }
         }}
-        className={cn(CELL_INPUT_CLASS, 'pl-4 !text-right', !editing && 'caret-transparent', className)}
+        className={cn(CELL_INPUT_CLASS, '!w-full pl-4 pr-2 !text-right', !editing && 'caret-transparent', className)}
       />
     </div>
   );
@@ -851,7 +968,7 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
   };
 
   return (
-    <div className="relative min-w-[4rem]">
+    <div className="relative w-full min-w-[60px]">
       <span className={cn('pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 !text-xs font-normal', GRID_READONLY_TEXT_CLASS)}>%</span>
       <Input
         ref={ref}
@@ -952,7 +1069,7 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
             if (!moved) suppressBlurCommitRef.current = false;
           }
         }}
-        className={cn(CELL_INPUT_CLASS, 'pr-6 !text-right', !editing && 'caret-transparent', className)}
+        className={cn(CELL_INPUT_CLASS, '!w-full pr-6 !text-right', !editing && 'caret-transparent', className)}
       />
     </div>
   );

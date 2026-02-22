@@ -171,6 +171,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
                 incomes={incomes}
                 partnerX={household.partnerX}
                 partnerY={household.partnerY}
+                userId={userId}
                 onAdd={addIncome}
                 onUpdate={updateIncome}
                 onRemove={removeIncome}
@@ -187,6 +188,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
                 incomes={incomes}
                 partnerX={household.partnerX}
                 partnerY={household.partnerY}
+                userId={userId}
                 onAdd={addExpense}
                 onUpdate={updateExpense}
                 onRemove={removeExpense}

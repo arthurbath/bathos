@@ -19,6 +19,8 @@ import { Plus, Trash2, MoreHorizontal } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels, needsParam } from '@/lib/frequency';
 import { DataGrid, GridEditableCell, GridCurrencyCell, useDataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
+import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
+import { GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH, INCOMES_GRID_DEFAULT_WIDTHS } from '@/lib/gridColumnWidths';
 import type { FrequencyType } from '@/types/fairshare';
 import type { Income } from '@/hooks/useIncomes';
 
@@ -37,6 +39,7 @@ interface IncomesTabProps {
   incomes: Income[];
   partnerX: string;
   partnerY: string;
+  userId?: string;
   onAdd: (income: Omit<Income, 'id' | 'household_id'>) => Promise<void>;
   onUpdate: (id: string, updates: Partial<Omit<Income, 'id' | 'household_id'>>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
@@ -44,6 +47,7 @@ interface IncomesTabProps {
 }
 
 const columnHelper = createColumnHelper<Income>();
+const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/30 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0';
 
 // ─── Cell Components ───
 
@@ -55,7 +59,7 @@ function PartnerCell({ value, partnerX, partnerY, onChange }: { value: string; p
       onChange(v);
     }}>
       <SelectTrigger
-        className="h-7 border-transparent bg-transparent hover:border-border text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
+        className={`h-7 border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
         data-col={1}
@@ -88,7 +92,7 @@ function FrequencyCell({ income, onChange }: { income: Income; onChange: (field:
         onChange('frequency_type', v);
       }}>
         <SelectTrigger
-          className="h-7 min-w-0 border-transparent bg-transparent hover:border-border text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2"
+          className={`h-7 min-w-0 border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
           data-row={ctx?.rowIndex}
           data-row-id={ctx?.rowId}
           data-col={3}
@@ -154,7 +158,7 @@ function IncomeActionsCell({ income, onRemove }: { income: Income; onRemove: (id
 
 // ─── Main Component ───
 
-export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRemove, fullView = false }: IncomesTabProps) {
+export function IncomesTab({ incomes, partnerX, partnerY, userId, onAdd, onUpdate, onRemove, fullView = false }: IncomesTabProps) {
   const [addIncomeOpen, setAddIncomeOpen] = useState(false);
   const [savingIncome, setSavingIncome] = useState(false);
   const [newIncome, setNewIncome] = useState<NewIncomeDraft>(createDefaultIncomeDraft);
@@ -164,6 +168,18 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
     catch { return [{ id: 'name', desc: false }]; }
   });
   useEffect(() => { localStorage.setItem('incomes_sorting', JSON.stringify(sorting)); }, [sorting]);
+
+  const {
+    columnSizing,
+    columnSizingInfo,
+    onColumnSizingChange,
+    onColumnSizingInfoChange,
+  } = useGridColumnWidths({
+    userId,
+    gridKey: 'incomes',
+    defaults: INCOMES_GRID_DEFAULT_WIDTHS,
+    fixedColumnIds: GRID_FIXED_COLUMNS.incomes,
+  });
 
   const openAddIncomeModal = () => {
     setNewIncome(createDefaultIncomeDraft());
@@ -206,23 +222,32 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
 
   const columns = useMemo(() => [
     columnHelper.accessor('name', {
+      id: 'name',
       header: 'Name',
-      meta: { headerClassName: 'min-w-[200px]' },
+      size: INCOMES_GRID_DEFAULT_WIDTHS.name,
+      minSize: GRID_MIN_COLUMN_WIDTH,
       cell: ({ row }) => <GridEditableCell value={row.original.name} onChange={v => handleUpdate(row.original.id, 'name', v)} navCol={0} />,
     }),
     columnHelper.accessor('partner_label', {
+      id: 'partner_label',
       header: 'Partner',
-      meta: { headerClassName: 'min-w-[190px]' },
+      size: INCOMES_GRID_DEFAULT_WIDTHS.partner_label,
+      minSize: GRID_MIN_COLUMN_WIDTH,
       cell: ({ row }) => <PartnerCell value={row.original.partner_label} partnerX={partnerX} partnerY={partnerY} onChange={v => handleUpdate(row.original.id, 'partner_label', v)} />,
     }),
     columnHelper.accessor('amount', {
+      id: 'amount',
       header: 'Amount',
+      size: INCOMES_GRID_DEFAULT_WIDTHS.amount,
+      minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { headerClassName: 'text-right' },
       cell: ({ row }) => <GridCurrencyCell value={Number(row.original.amount)} onChange={v => handleUpdate(row.original.id, 'amount', v)} navCol={2} />,
     }),
     columnHelper.accessor('frequency_type', {
+      id: 'frequency_type',
       header: 'Frequency',
-      meta: { headerClassName: 'min-w-[185px]' },
+      size: INCOMES_GRID_DEFAULT_WIDTHS.frequency_type,
+      minSize: GRID_MIN_COLUMN_WIDTH,
       cell: ({ row }) => <FrequencyCell income={row.original} onChange={(field, v) => handleUpdate(row.original.id, field, v)} />,
     }),
     columnHelper.accessor(
@@ -230,6 +255,8 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
       {
         id: 'monthly',
         header: 'Monthly',
+        size: INCOMES_GRID_DEFAULT_WIDTHS.monthly,
+        minSize: GRID_MIN_COLUMN_WIDTH,
         meta: { headerClassName: 'text-right', cellClassName: `text-right tabular-nums text-xs ${GRID_READONLY_TEXT_CLASS}` },
         cell: ({ getValue }) => `$${Math.round(getValue())}`,
       },
@@ -238,7 +265,10 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
       id: 'actions',
       header: '',
       enableSorting: false,
-      meta: { headerClassName: 'w-12' },
+      enableResizing: false,
+      size: INCOMES_GRID_DEFAULT_WIDTHS.actions,
+      minSize: INCOMES_GRID_DEFAULT_WIDTHS.actions,
+      maxSize: INCOMES_GRID_DEFAULT_WIDTHS.actions,
       cell: ({ row }) => <IncomeActionsCell income={row.original} onRemove={handleRemove} />,
     }),
   ], [partnerX, partnerY]);
@@ -246,8 +276,11 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
   const table = useReactTable({
     data: incomes,
     columns,
-    state: { sorting },
+    state: { sorting, columnSizing, columnSizingInfo },
     onSortingChange: setSorting,
+    onColumnSizingChange,
+    onColumnSizingInfoChange,
+    columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
@@ -277,13 +310,13 @@ export function IncomesTab({ incomes, partnerX, partnerY, onAdd, onUpdate, onRem
           footer={incomes.length > 0 ? (
             <>
               <tr className={`${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS}`}>
-                <td className={`font-semibold text-xs ${GRID_HEADER_TONE_CLASS} px-2 py-1 ${fullView ? 'sticky left-0 z-10' : ''}`}>Totals</td>
-                <td colSpan={3} className={`text-xs ${GRID_HEADER_TONE_CLASS} px-2 py-1`}>{partnerX}: ${Math.round(xTotal)} · {partnerY}: ${Math.round(yTotal)}</td>
-                <td className={`text-right font-semibold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2 py-1`}>${Math.round(total)}</td>
+                <td className={`h-9 align-middle font-semibold text-xs ${GRID_HEADER_TONE_CLASS} px-2 ${fullView ? 'sticky left-0 z-10' : ''}`}>Totals</td>
+                <td colSpan={3} className={`h-9 align-middle text-xs ${GRID_HEADER_TONE_CLASS} px-2`}>{partnerX}: ${Math.round(xTotal)} · {partnerY}: ${Math.round(yTotal)}</td>
+                <td className={`h-9 align-middle text-right font-semibold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2`}>${Math.round(total)}</td>
                 <td className={GRID_HEADER_TONE_CLASS} />
               </tr>
               <tr className={`${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS}`}>
-                <td className={`text-xs ${GRID_HEADER_TONE_CLASS} px-2 py-1 ${fullView ? 'sticky left-0 z-10' : ''}`}>Income ratio: {partnerX} {ratioX.toFixed(0)}% / {partnerY} {(100 - ratioX).toFixed(0)}%</td>
+                <td className={`h-9 align-middle text-xs ${GRID_HEADER_TONE_CLASS} px-2 ${fullView ? 'sticky left-0 z-10' : ''}`}>Income ratio: {partnerX} {ratioX.toFixed(0)}% / {partnerY} {(100 - ratioX).toFixed(0)}%</td>
                 <td colSpan={5} className={GRID_HEADER_TONE_CLASS} />
               </tr>
             </>
