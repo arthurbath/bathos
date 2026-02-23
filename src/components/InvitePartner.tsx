@@ -28,7 +28,7 @@ export function InvitePartner({ householdId, inviteCode }: InvitePartnerProps) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5 text-primary" />
-          <CardTitle className="text-base">Invite Your Partner</CardTitle>
+          <CardTitle>Invite Your Partner</CardTitle>
         </div>
         <CardDescription>
           Share this code with your partner. They can enter it after signing up to join your household.

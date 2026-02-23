@@ -24,6 +24,8 @@ Never use colors purely for decoration. Every color must carry meaning.
 - Body: Inter (system-ui fallback)
 - Icons: Lucide React (inline SVGs, tree-shakable)
 - No custom display fonts. Let the content speak.
+- Page and card headings: `text-2xl font-semibold leading-none tracking-tight` (same style as Budget Expenses heading).
+- Use default `CardTitle` for card headings. Do not downsize card headings with local overrides like `text-base`.
 
 ## Voice
 
@@ -31,6 +33,19 @@ Never use colors purely for decoration. Every color must carry meaning.
 - No exclamation points, even for destructive actions
 - No marketing language in the UI
 - Helper text is used sparingly — prefer self-evident UI
+
+## Label Casing
+
+Use Title Case for:
+
+- Buttons
+- Input Labels
+- Dropdown Menu Options
+- Modal Titles
+- Section Titles
+
+Use lowercase for these words when they appear in the middle of a label:
+`a`, `an`, `and`, `as`, `at`, `by`, `for`, `from`, `if`, `in`, `n` (for "and"), `o` (for "of"), `of`, `on`, `or`, `tha` (for "the"), `the`, `to`, `wit` (for "with"), `with`.
 
 ## Icons
 

@@ -2,30 +2,23 @@ import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAuthContext } from '@/platform/contexts/AuthContext';
-import { getModuleUrl } from '@/platform/hooks/useHostModule';
 import { ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
+import { getAvailableModules } from '@/platform/modules';
 import AuthPage from './AuthPage';
-
-const MODULES = [
-  {
-    id: 'budget',
-    name: 'Budget',
-    description: 'Track shared expenses and split costs fairly.',
-  },
-];
 
 export default function LauncherPage() {
   const { user, loading, signOut } = useAuthContext();
   const navigate = useNavigate();
+  const modules = getAvailableModules();
 
   useEffect(() => {
     // If there's only one module, skip the launcher and go straight to it
-    if (!loading && user && MODULES.length === 1) {
-      navigate(`${getModuleUrl(MODULES[0].id)}/summary`, { replace: true });
+    if (!loading && user && modules.length === 1) {
+      navigate(modules[0].launchPath, { replace: true });
     }
-  }, [loading, user, navigate]);
+  }, [loading, user, modules, navigate]);
 
   if (loading) {
     return (
@@ -38,22 +31,22 @@ export default function LauncherPage() {
   if (!user) return <AuthPage />;
 
   // If multiple modules exist in the future, show the launcher grid
-  if (MODULES.length > 1) {
+  if (modules.length > 1) {
     return (
       <div className="min-h-screen bg-background">
         <ToplineHeader title="BathOS" userId={user.id} displayName="" onSignOut={signOut} maxWidthClassName="max-w-2xl" />
 
         <main className="mx-auto max-w-2xl px-4 py-8">
           <div className="grid gap-4">
-            {MODULES.map(mod => (
+            {modules.map(mod => (
               <Card
                 key={mod.id}
                 className="cursor-pointer hover:shadow-sm transition-shadow"
-                onClick={() => navigate(`${getModuleUrl(mod.id)}/summary`)}
+                onClick={() => navigate(mod.launchPath)}
               >
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">{mod.name}</CardTitle>
+                    <CardTitle>{mod.name}</CardTitle>
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </CardHeader>

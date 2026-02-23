@@ -69,7 +69,7 @@ function PartnerNamesCard({ partnerX, partnerY, onSave }: {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Partner Names</CardTitle>
+        <CardTitle>Partner Names</CardTitle>
         
       </CardHeader>
       <CardContent>
@@ -107,7 +107,7 @@ function InviteCard({ inviteCode }: { inviteCode: string | null }) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5 text-primary" />
-          <CardTitle className="text-base">Invite Collaborators</CardTitle>
+          <CardTitle>Invite Collaborators</CardTitle>
         </div>
       </CardHeader>
       <CardContent>

@@ -51,6 +51,8 @@
     --info-foreground: 0 0% 100%;
     --admin: 270 50% 55%;
     --admin-foreground: 0 0% 100%;
+    --drawer-wicker: 30 45% 42%;
+    --drawer-wicker-foreground: 0 0% 100%;
 
     --category-group-row-bg: 0 0% 38%;
     --grid-sticky-line: 0 0% 64%;
@@ -103,6 +105,8 @@
     --info-foreground: 0 0% 100%;
     --admin: 270 45% 60%;
     --admin-foreground: 0 0% 100%;
+    --drawer-wicker: 30 38% 48%;
+    --drawer-wicker-foreground: 0 0% 100%;
 
     --category-group-row-bg: 0 0% 38%;
     --grid-sticky-line: 0 0% 64%;

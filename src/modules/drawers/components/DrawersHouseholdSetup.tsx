@@ -1,33 +1,44 @@
 import { useState } from 'react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, UserPlus } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
+import { Boxes, UserPlus } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 
-interface HouseholdSetupProps {
+interface DrawersHouseholdSetupProps {
   userId: string;
   displayName: string;
   onSignOut: () => Promise<void> | void;
-  onComplete: () => Promise<void>;
+  onCreate: () => Promise<void>;
   onJoin: (inviteCode: string) => Promise<void>;
 }
 
-export function HouseholdSetup({ userId, displayName, onSignOut, onComplete, onJoin }: HouseholdSetupProps) {
+export function DrawersHouseholdSetup({
+  userId,
+  displayName,
+  onSignOut,
+  onCreate,
+  onJoin,
+}: DrawersHouseholdSetupProps) {
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message) return error.message;
+    return fallback;
+  };
+
   const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreate = async (event: React.FormEvent) => {
+    event.preventDefault();
     setLoading(true);
     try {
-      await onComplete();
-    } catch (err: any) {
+      await onCreate();
+    } catch (error: unknown) {
       toast({
-        title: 'Failed to create household',
-        description: err?.message || 'Something went wrong. Please try again.',
+        title: 'Failed to create drawer household',
+        description: getErrorMessage(error, 'Something went wrong. Please try again.'),
         variant: 'destructive',
       });
     } finally {
@@ -35,16 +46,17 @@ export function HouseholdSetup({ userId, displayName, onSignOut, onComplete, onJ
     }
   };
 
-  const handleJoin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleJoin = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!inviteCode.trim()) return;
+
     setLoading(true);
     try {
-      await onJoin(inviteCode.trim());
-    } catch (err: any) {
+      await onJoin(inviteCode);
+    } catch (error: unknown) {
       toast({
-        title: 'Failed to join household',
-        description: err?.message || 'Invalid invite code or household is full.',
+        title: 'Failed to join drawer household',
+        description: getErrorMessage(error, 'Invite code is invalid or unavailable.'),
         variant: 'destructive',
       });
     } finally {
@@ -54,18 +66,19 @@ export function HouseholdSetup({ userId, displayName, onSignOut, onComplete, onJ
 
   return (
     <div className="min-h-screen bg-background">
-      <ToplineHeader title="Budget" userId={userId} displayName={displayName} onSignOut={onSignOut} />
+      <ToplineHeader title="Drawer Planner" userId={userId} displayName={displayName} onSignOut={onSignOut} showAppSwitcher />
       <main className="flex min-h-[calc(100dvh-57px)] items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-              <Users className="h-7 w-7 text-primary" />
+              <Boxes className="h-7 w-7 text-primary" />
             </div>
-            <CardTitle>Get Started</CardTitle>
+            <CardTitle>Drawer Planner Setup</CardTitle>
             <CardDescription className="text-base">
-              Create a new household or join an existing one with an invite code.
+              Create a new drawer household or join one using an invite code.
             </CardDescription>
           </CardHeader>
+
           <CardContent>
             <Tabs defaultValue="create">
               <TabsList className="grid w-full grid-cols-2">
@@ -75,9 +88,8 @@ export function HouseholdSetup({ userId, displayName, onSignOut, onComplete, onJ
 
               <TabsContent value="create">
                 <form onSubmit={handleCreate} className="space-y-4 pt-2">
-                  <Button type="submit" className="w-full gap-1.5" disabled={loading}>
-                    <Users className="h-4 w-4" />
-                    {loading ? 'Creating…' : 'Create household'}
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? 'Creating...' : 'Create Drawer Household'}
                   </Button>
                 </form>
               </TabsContent>
@@ -85,21 +97,22 @@ export function HouseholdSetup({ userId, displayName, onSignOut, onComplete, onJ
               <TabsContent value="join">
                 <form onSubmit={handleJoin} className="space-y-4 pt-2">
                   <div className="space-y-2">
-                    <label htmlFor="inviteCode" className="text-sm font-medium text-foreground">
-                      Invite code
+                    <label htmlFor="drawersInviteCode" className="text-sm font-medium text-foreground">
+                      Invite Code
                     </label>
                     <Input
-                      id="inviteCode"
-                      placeholder="Enter invite code from your partner"
+                      id="drawersInviteCode"
+                      placeholder="Enter invite code"
                       value={inviteCode}
-                      onChange={(e) => setInviteCode(e.target.value)}
+                      onChange={(event) => setInviteCode(event.target.value)}
                       className="font-mono tracking-widest"
                       autoFocus
                     />
                   </div>
-                  <Button type="submit" className="w-full gap-1.5" disabled={!inviteCode.trim() || loading}>
+
+                  <Button type="submit" className="w-full gap-1.5" disabled={loading || !inviteCode.trim()}>
                     <UserPlus className="h-4 w-4" />
-                    {loading ? 'Joining…' : 'Join household'}
+                    {loading ? 'Joining...' : 'Join Household'}
                   </Button>
                 </form>
               </TabsContent>

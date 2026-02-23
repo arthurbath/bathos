@@ -2,14 +2,16 @@
  * Returns the active module based on the current URL path.
  *
  * - /budget/* → 'budget'
+ * - /drawers/* → 'drawers'
  * - everything else → null (platform root)
  */
 
 const PATH_MODULE_MAP: Record<string, string> = {
   budget: 'budget',
+  drawers: 'drawers',
 };
 
-export type ModuleId = 'budget' | null;
+export type ModuleId = 'budget' | 'drawers' | null;
 
 export function useHostModule(): ModuleId {
   const firstSegment = window.location.pathname.split('/')[1];

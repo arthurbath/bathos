@@ -15,6 +15,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import TermsGate from "@/platform/components/TermsGate";
 import AuthCallbackToasts from "@/platform/components/AuthCallbackToasts";
 import Index from "./pages/Index";
+import DrawersIndex from "@/modules/drawers/DrawersIndex";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -59,6 +60,11 @@ function AppRoutes() {
       <Route path="/budget/summary" element={<Index />} />
       <Route path="/budget/config" element={<Index />} />
       <Route path="/budget/restore" element={<Navigate to="/budget/config" replace />} />
+
+      {/* Drawer Planner module */}
+      <Route path="/drawers" element={<Navigate to="/drawers/plan" replace />} />
+      <Route path="/drawers/plan" element={<DrawersIndex />} />
+      <Route path="/drawers/config" element={<DrawersIndex />} />
 
       {/* Legacy routes */}
       <Route path="/incomes" element={<Navigate to="/budget/incomes" replace />} />

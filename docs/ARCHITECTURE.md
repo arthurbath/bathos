@@ -32,6 +32,10 @@ src/
       components/
       hooks/
       types/
+    drawers/           — Drawer Planner module
+      components/
+      hooks/
+      types/
   components/ui/       — shadcn/ui primitives (shared)
   lib/                 — shared utilities
   integrations/        — Supabase client and types

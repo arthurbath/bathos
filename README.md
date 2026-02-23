@@ -20,6 +20,18 @@ Split shared expenses fairly between two partners. The Budget module calculates 
 
 Accessible at [budget.bath.garden](https://budget.bath.garden).
 
+### Drawer Planner
+
+Plan and label Kallax-style cubby layouts across one or more named units in a shared household space. Features include:
+
+- Multiple named units with configurable width/height (1-6 by 1-6)
+- Insert planning with `Black`, `Wicker`, and `White` insert types
+- Limbo staging area for unplaced inserts
+- Click-to-move workflow for placing and relocating inserts
+- Household invite code flow for sharing the same drawer layout
+
+Accessible at [drawers.bath.garden](https://drawers.bath.garden).
+
 ## Development notes
 
 - Built with React, TypeScript, Vite, Tailwind CSS, and Supabase

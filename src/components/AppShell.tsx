@@ -17,6 +17,7 @@ import { ConfigurationTab } from '@/components/ConfigurationTab';
 import { SummaryTab } from '@/components/SummaryTab';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
+import { getAvailableModules } from '@/platform/modules';
 
 interface AppShellProps {
   household: HouseholdData;
@@ -41,6 +42,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
   
   const { linkedAccounts, add: addLinkedAccount, update: updateLinkedAccount, updateColor: updateLinkedAccountColor, remove: removeLinkedAccount, refetch: refetchLinkedAccounts } = useLinkedAccounts(household.householdId);
   const { points, save: savePoint, remove: removePoint, updateNotes: updateRestorePointNotes } = useRestorePoints(household.householdId);
+  const showAppSwitcher = getAvailableModules().length > 1;
 
   const handleReassignCategory = async (oldId: string, newId: string | null) => {
     const { error } = await supabase
@@ -134,7 +136,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
 
   return (
     <div className={`bg-background ${isFullViewGridRoute ? 'h-dvh overflow-y-hidden overflow-x-visible flex flex-col' : 'min-h-screen'}`}>
-      <ToplineHeader title="Budget" userId={userId} displayName={household.displayName} onSignOut={onSignOut} />
+      <ToplineHeader title="Budget" userId={userId} displayName={household.displayName} onSignOut={onSignOut} showAppSwitcher={showAppSwitcher} />
 
       <div className="mx-auto max-w-5xl w-full px-4 pt-6">
         <nav className="grid w-full grid-cols-4 gap-0.5 rounded-lg border border-[hsl(var(--grid-sticky-line))] bg-border p-1 text-muted-foreground">
