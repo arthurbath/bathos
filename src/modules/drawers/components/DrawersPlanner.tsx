@@ -107,12 +107,11 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
   const {
     units,
     loading: unitsLoading,
-    add: addUnit,
-    rename: renameUnit,
-    resize: resizeUnit,
-    setFrameColor: setUnitFrameColor,
+    save: saveUnit,
     reorder,
     remove: removeUnit,
+    pendingById: unitPendingById = {},
+    creating: creatingUnit = false,
   } = useDrawersUnits(
     household.householdId,
   );
@@ -127,6 +126,8 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
     moveToLimbo,
     deleteInsertsInUnit,
     moveInsertsInUnitToLimbo,
+    pendingById: insertPendingById = {},
+    creating: creatingInsert = false,
   } = useDrawerInsertInstances(household.householdId);
 
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
@@ -172,7 +173,12 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
   }, [inserts]);
 
   const heldInsert = heldInsertId ? insertsById.get(heldInsertId) ?? null : null;
+  const heldInsertPending = heldInsert ? !!insertPendingById[heldInsert.id] : false;
   const addTargetUnit = addInsertTarget ? units.find(unit => unit.id === addInsertTarget.unitId) ?? null : null;
+  const pendingUnitInsertCount = unitPendingDelete
+    ? inserts.filter(insert => insert.location_kind === 'cubby' && insert.unit_id === unitPendingDelete.id).length
+    : 0;
+  const pendingUnitHasInserts = pendingUnitInsertCount > 0;
 
   const normalizeDimension = (value: number) => {
     if (Number.isNaN(value)) return 1;
@@ -223,33 +229,13 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
 
     setUnitDialogBusy(true);
     try {
-      if (!unitDialogUnitId) {
-        await addUnit({
-          name: normalizedName,
-          width: normalizedWidth,
-          height: normalizedHeight,
-          frame_color: normalizedFrameColor,
-        });
-        resetUnitDialog();
-        return;
-      }
-
-      const existing = units.find(unit => unit.id === unitDialogUnitId);
-      if (!existing) {
-        throw new Error('Unit no longer exists.');
-      }
-
-      if (existing.name !== normalizedName) {
-        await renameUnit(existing.id, normalizedName);
-      }
-
-      if (existing.width !== normalizedWidth || existing.height !== normalizedHeight) {
-        await resizeUnit(existing.id, normalizedWidth, normalizedHeight);
-      }
-
-      if ((existing.frame_color ?? 'white') !== normalizedFrameColor) {
-        await setUnitFrameColor(existing.id, normalizedFrameColor);
-      }
+      await saveUnit({
+        id: unitDialogUnitId ?? null,
+        name: normalizedName,
+        width: normalizedWidth,
+        height: normalizedHeight,
+        frame_color: normalizedFrameColor,
+      });
 
       resetUnitDialog();
     } catch (error: unknown) {
@@ -350,7 +336,9 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
   };
 
   const handleCellClick = async (unitId: string, x: number, y: number) => {
+    if (heldInsertPending || unitPendingById[unitId]) return;
     const occupant = cubbyMap.get(cubbyKey(unitId, x, y)) ?? null;
+    if (occupant && insertPendingById[occupant.id]) return;
 
     if (!heldInsert) {
       if (!occupant) {
@@ -378,7 +366,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
   };
 
   const handleDropHeldToLimbo = async () => {
-    if (!heldInsert) return;
+    if (!heldInsert || heldInsertPending) return;
     try {
       if (heldInsert.location_kind === 'cubby') {
         await moveToLimbo(heldInsert.id);
@@ -394,6 +382,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
   };
 
   const handleSendInsertToLimbo = async (insertId: string) => {
+    if (insertPendingById[insertId]) return;
     try {
       await moveToLimbo(insertId);
       if (heldInsertId === insertId) setHeldInsertId(null);
@@ -407,6 +396,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
   };
 
   const handleDeleteInsert = async (insertId: string) => {
+    if (insertPendingById[insertId]) return;
     try {
       await removeInsert(insertId);
       if (heldInsertId === insertId) setHeldInsertId(null);
@@ -422,16 +412,22 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
   const handleDeleteUnit = async () => {
     if (!unitPendingDelete) return;
 
+    const targetUnit = unitPendingDelete;
+    const hasInserts = pendingUnitHasInserts;
+    const selectedDeleteMode = deleteMode;
+
+    setUnitPendingDelete(null);
     setDeleteBusy(true);
     try {
-      if (deleteMode === 'move') {
-        await moveInsertsInUnitToLimbo(unitPendingDelete.id);
-      } else {
-        await deleteInsertsInUnit(unitPendingDelete.id);
+      if (hasInserts) {
+        if (selectedDeleteMode === 'move') {
+          await moveInsertsInUnitToLimbo(targetUnit.id);
+        } else {
+          await deleteInsertsInUnit(targetUnit.id);
+        }
       }
 
-      await removeUnit(unitPendingDelete.id);
-      setUnitPendingDelete(null);
+      await removeUnit(targetUnit.id);
     } catch (error: unknown) {
       toast({
         title: 'Failed to delete unit',
@@ -492,14 +488,17 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-semibold leading-none tracking-tight">Units</h2>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={openCreateUnitDialog}>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={openCreateUnitDialog} disabled={creatingUnit}>
                 <Plus className="h-4 w-4" />
                 Add Unit
               </Button>
             </div>
 
             <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-stretch">
-              {units.map((unit, idx) => (
+              {units.map((unit, idx) => {
+                const isUnitPending = !!unitPendingById[unit.id];
+
+                return (
                 <Card
                   key={unit.id}
                   className="flex w-full flex-col sm:basis-[var(--unit-card-width)] sm:min-w-[var(--unit-card-width)] sm:grow sm:self-stretch"
@@ -516,27 +515,28 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="icon" title="Unit Actions" className="-mt-0.5 -mr-0.5 h-7 w-7 shrink-0">
+                            <Button variant="outline" size="icon" title="Unit Actions" className="-mt-0.5 -mr-0.5 h-7 w-7 shrink-0" disabled={isUnitPending || deleteBusy}>
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="bg-popover">
-                            <DropdownMenuItem onClick={() => openEditUnitDialog(unit)}>
+                            <DropdownMenuItem disabled={isUnitPending || deleteBusy} onClick={() => openEditUnitDialog(unit)}>
                               Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              disabled={idx === 0}
+                              disabled={isUnitPending || deleteBusy || idx === 0}
                               onClick={() => void reorder(unit.id, 'up')}
                             >
                               Move Up
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              disabled={idx === units.length - 1}
+                              disabled={isUnitPending || deleteBusy || idx === units.length - 1}
                               onClick={() => void reorder(unit.id, 'down')}
                             >
                               Move Down
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                              disabled={isUnitPending || deleteBusy}
                               onClick={() => {
                                 setDeleteMode('move');
                                 setUnitPendingDelete(unit);
@@ -566,6 +566,9 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
                               const x = colIdx + 1;
                               const occupant = cubbyMap.get(cubbyKey(unit.id, x, y)) ?? null;
                               const isHeldOccupant = heldInsertId === occupant?.id;
+                              const isUnitPending = !!unitPendingById[unit.id];
+                              const isOccupantPending = occupant ? !!insertPendingById[occupant.id] : false;
+                              const isCellBusy = isUnitPending || isOccupantPending || heldInsertPending;
                               const cellClassName = `aspect-square overflow-hidden rounded-sm border text-[11px] text-center transition ${unitCellVisualClass(unit.frame_color, occupant?.insert_type ?? null)} ${isHeldOccupant ? 'border-[3px] border-warning' : ''}`;
 
                               if (occupant && !heldInsert) {
@@ -574,6 +577,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
                                     <DropdownMenuTrigger asChild>
                                       <button
                                         type="button"
+                                        disabled={isCellBusy}
                                         className={cellClassName}
                                       >
                                         <span className="block w-full overflow-hidden text-ellipsis [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] break-normal leading-tight">
@@ -582,16 +586,17 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
                                       </button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="start" className="bg-popover">
-                                      <DropdownMenuItem onClick={() => openEditInsertDialog(occupant)}>
+                                      <DropdownMenuItem disabled={isCellBusy} onClick={() => openEditInsertDialog(occupant)}>
                                         Edit
                                       </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => setHeldInsertId(occupant.id)}>
+                                      <DropdownMenuItem disabled={isCellBusy} onClick={() => setHeldInsertId(occupant.id)}>
                                         Move
                                       </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => void handleSendInsertToLimbo(occupant.id)}>
+                                      <DropdownMenuItem disabled={isCellBusy} onClick={() => void handleSendInsertToLimbo(occupant.id)}>
                                         Send to Limbo
                                       </DropdownMenuItem>
                                       <DropdownMenuItem
+                                        disabled={isCellBusy}
                                         onClick={() => void handleDeleteInsert(occupant.id)}
                                         className="text-destructive focus:text-destructive"
                                       >
@@ -606,6 +611,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
                                 <button
                                   type="button"
                                   key={`${unit.id}:${x}:${y}`}
+                                  disabled={isCellBusy}
                                   onClick={() => void handleCellClick(unit.id, x, y)}
                                   className={cellClassName}
                                 >
@@ -621,7 +627,8 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
 
               {units.length === 0 && (
                 <Card className="w-full bg-muted/30">
@@ -638,7 +645,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
               <div className="flex items-center justify-between gap-2">
                 <CardTitle>Limbo</CardTitle>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => openAddInsertDialog(null)}>
+                  <Button variant="outline" size="sm" onClick={() => openAddInsertDialog(null)} disabled={creatingInsert || heldInsertPending}>
                     + Add Insert
                   </Button>
                 </div>
@@ -648,25 +655,27 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
               <div className="flex flex-wrap gap-2">
                 {limboInserts.map(insert => {
                   const held = heldInsertId === insert.id;
+                  const isInsertPending = !!insertPendingById[insert.id];
                   const limboTileClass = `min-h-16 w-28 flex-none rounded-md border text-left text-xs transition ${limboInsertVisualClass(insert.insert_type)} ${held ? 'border-[3px] border-warning' : ''}`;
 
                   return (
                     <DropdownMenu key={insert.id}>
                       <DropdownMenuTrigger asChild>
-                        <button type="button" className={limboTileClass}>
+                        <button type="button" className={limboTileClass} disabled={isInsertPending || heldInsertPending}>
                           <p className="overflow-hidden text-ellipsis [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] break-normal font-medium leading-tight">
                             {insert.label?.trim() || ''}
                           </p>
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="bg-popover">
-                        <DropdownMenuItem onClick={() => openEditInsertDialog(insert)}>
+                        <DropdownMenuItem disabled={isInsertPending || heldInsertPending} onClick={() => openEditInsertDialog(insert)}>
                           Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setHeldInsertId(insert.id)}>
+                        <DropdownMenuItem disabled={isInsertPending || heldInsertPending} onClick={() => setHeldInsertId(insert.id)}>
                           Move
                         </DropdownMenuItem>
                         <DropdownMenuItem
+                          disabled={isInsertPending || heldInsertPending}
                           onClick={() => void handleDeleteInsert(insert.id)}
                           className="text-destructive focus:text-destructive"
                         >
@@ -724,36 +733,44 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Unit</AlertDialogTitle>
-            <AlertDialogDescription>
-              Choose what to do with inserts currently in {unitPendingDelete?.name || 'this unit'}.
-            </AlertDialogDescription>
+            {pendingUnitHasInserts ? (
+              <AlertDialogDescription>
+                Choose what to do with inserts currently in {unitPendingDelete?.name || 'this unit'}.
+              </AlertDialogDescription>
+            ) : (
+              <AlertDialogDescription>
+                Delete {unitPendingDelete?.name || 'this unit'}?
+              </AlertDialogDescription>
+            )}
           </AlertDialogHeader>
-          <AlertDialogBody className="space-y-2">
-            <Button
-              type="button"
-              variant={deleteMode === 'move' ? 'default' : 'outline'}
-              className="w-full"
-              onClick={() => setDeleteMode('move')}
-            >
-              Move Inserts to Limbo
-            </Button>
-            <Button
-              type="button"
-              variant={deleteMode === 'delete' ? 'destructive' : 'outline'}
-              className="w-full"
-              onClick={() => setDeleteMode('delete')}
-            >
-              Delete Inserts
-            </Button>
-          </AlertDialogBody>
+          {pendingUnitHasInserts && (
+            <AlertDialogBody className="space-y-2">
+              <Button
+                type="button"
+                variant={deleteMode === 'move' ? 'default' : 'outline'}
+                className="w-full"
+                onClick={() => setDeleteMode('move')}
+              >
+                Move Inserts to Limbo
+              </Button>
+              <Button
+                type="button"
+                variant={deleteMode === 'delete' ? 'destructive' : 'outline'}
+                className="w-full"
+                onClick={() => setDeleteMode('delete')}
+              >
+                Delete Inserts
+              </Button>
+            </AlertDialogBody>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteUnit}
               disabled={deleteBusy}
-              className={deleteMode === 'delete' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
+              className={deleteMode === 'delete' || !pendingUnitHasInserts ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
             >
-              {deleteBusy ? 'Deleting...' : 'Confirm'}
+              {deleteBusy ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -881,7 +898,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
             <Button variant="outline" type="button" onClick={resetAddInsertDialog} disabled={addInsertBusy}>
               Cancel
             </Button>
-            <Button type="submit" form="add-insert-form" disabled={addInsertBusy}>
+            <Button type="submit" form="add-insert-form" disabled={addInsertBusy || creatingInsert}>
               {addInsertBusy ? 'Saving...' : 'Save Insert'}
             </Button>
           </DialogFooter>

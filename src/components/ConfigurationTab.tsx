@@ -20,7 +20,9 @@ import type { Json } from '@/integrations/supabase/types';
 
 interface ConfigurationTabProps {
   categories: Category[];
+  categoryPendingById?: Record<string, boolean>;
   linkedAccounts: LinkedAccount[];
+  linkedAccountPendingById?: Record<string, boolean>;
   expenses: Expense[];
   partnerX: string;
   partnerY: string;
@@ -126,7 +128,7 @@ function InviteCard({ inviteCode }: { inviteCode: string | null }) {
   );
 }
 
-function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, onAdd, onUpdate, onRemove, onReassign, onUpdateColor }: {
+function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, onAdd, onUpdate, onRemove, onReassign, onUpdateColor, pendingById = {} }: {
   linkedAccounts: LinkedAccount[];
   expenses: Expense[];
   partnerX: string;
@@ -136,6 +138,7 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
   onRemove: (id: string) => Promise<void>;
   onReassign: (oldId: string, newId: string | null) => Promise<void>;
   onUpdateColor: (id: string, color: string | null) => Promise<void>;
+  pendingById?: Record<string, boolean>;
 }) {
   const [name, setName] = useState('');
   const [ownerPartner, setOwnerPartner] = useState('X');
@@ -180,6 +183,7 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
   };
 
   const handleDeleteClick = (item: LinkedAccount) => {
+    if (pendingById[item.id]) return;
     const count = getUsageCount(item.id);
     if (count > 0) {
       setDeleteTarget(item);
@@ -193,7 +197,6 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
     if (!deleteTarget) return;
     try {
       await onReassign(deleteTarget.id, reassignTo === '_none' ? null : reassignTo);
-      await onRemove(deleteTarget.id);
       setDeleteTarget(null);
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -248,15 +251,17 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
               <TableBody>
                 {linkedAccounts.map(item => {
                   const count = getUsageCount(item.id);
+                  const isPending = !!pendingById[item.id];
                   return (
                     <TableRow key={item.id}>
                       <TableCell>
-                        <ColorPicker color={item.color} onChange={c => onUpdateColor(item.id, c)} />
+                        <ColorPicker color={item.color} disabled={isPending} onChange={c => onUpdateColor(item.id, c)} />
                       </TableCell>
                       <TableCell>
                         {editingId === item.id ? (
                           <Input
                             value={editValue}
+                            disabled={isPending}
                             onChange={e => setEditValue(e.target.value)}
                             onBlur={commitEdit}
                             onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingId(null); }}
@@ -268,8 +273,8 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
                         )}
                       </TableCell>
                       <TableCell>
-                        <Select value={item.owner_partner} onValueChange={v => handleOwnerChange(item.id, v)}>
-                          <SelectTrigger className="h-8 w-28">
+                        <Select value={item.owner_partner} onValueChange={v => handleOwnerChange(item.id, v)} disabled={isPending}>
+                          <SelectTrigger className="h-8 w-28" disabled={isPending}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -278,19 +283,19 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">{count}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{isPending ? 'Saving…' : count}</TableCell>
                       <TableCell className="text-right space-x-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingId(item.id); setEditValue(item.name); }}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" disabled={isPending} onClick={() => { setEditingId(item.id); setEditValue(item.name); }}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         {count > 0 ? (
-                          <Button variant="ghost-destructive" size="icon" className="h-7 w-7" onClick={() => handleDeleteClick(item)}>
+                          <Button variant="ghost-destructive" size="icon" className="h-7 w-7" disabled={isPending} onClick={() => handleDeleteClick(item)}>
                             <Trash2 className="h-3.5 w-3.5 text-destructive" />
                           </Button>
                         ) : (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost-destructive" size="icon" className="h-7 w-7">
+                              <Button variant="ghost-destructive" size="icon" className="h-7 w-7" disabled={isPending}>
                                 <Trash2 className="h-3.5 w-3.5 text-destructive" />
                               </Button>
                             </AlertDialogTrigger>
@@ -348,6 +353,8 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
 
 export function ConfigurationTab({
   categories, linkedAccounts, expenses,
+  categoryPendingById = {},
+  linkedAccountPendingById = {},
   partnerX, partnerY, inviteCode,
   onUpdatePartnerNames,
   onAddCategory, onUpdateCategory, onRemoveCategory, onReassignCategory, onUpdateCategoryColor,
@@ -362,6 +369,8 @@ export function ConfigurationTab({
         title="Categories"
         description="Organize expenses into categories."
         items={categories}
+        pendingById={categoryPendingById}
+        reassignDeletesTarget
         getUsageCount={(id) => expenses.filter(e => e.category_id === id).length}
         onAdd={onAddCategory}
         onUpdate={onUpdateCategory}
@@ -379,6 +388,7 @@ export function ConfigurationTab({
         onRemove={onRemoveLinkedAccount}
         onReassign={onReassignLinkedAccount}
         onUpdateColor={onUpdateLinkedAccountColor}
+        pendingById={linkedAccountPendingById}
       />
       <RestoreTab
         points={points}

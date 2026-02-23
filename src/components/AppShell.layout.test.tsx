@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/AppShell";
 import type { HouseholdData } from "@/hooks/useHouseholdData";
@@ -98,17 +99,29 @@ function renderShell(pathname: string) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+      mutations: {
+        retry: false,
+      },
+    },
+  });
   act(() => {
     root.render(
-      <MemoryRouter initialEntries={[pathname]}>
-        <AppShell
-          household={household}
-          userId="user-1"
-          onSignOut={async () => {}}
-          onHouseholdRefetch={() => {}}
-          onUpdatePartnerNames={async () => {}}
-        />
-      </MemoryRouter>,
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[pathname]}>
+          <AppShell
+            household={household}
+            userId="user-1"
+            onSignOut={async () => {}}
+            onHouseholdRefetch={() => {}}
+            onUpdatePartnerNames={async () => {}}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
   });
   return { container, root };

@@ -40,6 +40,7 @@ interface IncomesTabProps {
   partnerX: string;
   partnerY: string;
   userId?: string;
+  pendingById?: Record<string, boolean>;
   onAdd: (income: Omit<Income, 'id' | 'household_id'>) => Promise<void>;
   onUpdate: (id: string, updates: Partial<Omit<Income, 'id' | 'household_id'>>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
@@ -51,14 +52,27 @@ const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring
 
 // ─── Cell Components ───
 
-function PartnerCell({ value, partnerX, partnerY, onChange }: { value: string; partnerX: string; partnerY: string; onChange: (v: string) => void }) {
+function PartnerCell({
+  value,
+  partnerX,
+  partnerY,
+  onChange,
+  disabled = false,
+}: {
+  value: string;
+  partnerX: string;
+  partnerY: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
   const ctx = useDataGrid();
   return (
     <Select value={value} onValueChange={v => {
       ctx?.onCellCommit(1);
       onChange(v);
-    }}>
+    }} disabled={disabled}>
       <SelectTrigger
+        disabled={disabled}
         className={`h-7 border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
@@ -83,15 +97,24 @@ function PartnerCell({ value, partnerX, partnerY, onChange }: { value: string; p
   );
 }
 
-function FrequencyCell({ income, onChange }: { income: Income; onChange: (field: string, v: string) => void }) {
+function FrequencyCell({
+  income,
+  onChange,
+  disabled = false,
+}: {
+  income: Income;
+  onChange: (field: string, v: string) => void;
+  disabled?: boolean;
+}) {
   const ctx = useDataGrid();
   return (
     <div className="flex items-center gap-1">
       <Select value={income.frequency_type} onValueChange={v => {
         ctx?.onCellCommit(3);
         onChange('frequency_type', v);
-      }}>
+      }} disabled={disabled}>
         <SelectTrigger
+          disabled={disabled}
           className={`h-7 min-w-0 border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
           data-row={ctx?.rowIndex}
           data-row-id={ctx?.rowId}
@@ -113,13 +136,13 @@ function FrequencyCell({ income, onChange }: { income: Income; onChange: (field:
         </SelectContent>
       </Select>
       {needsParam(income.frequency_type) && (
-        <GridEditableCell value={income.frequency_param ?? ''} onChange={v => onChange('frequency_param', v)} type="number" navCol={4} placeholder="X" className="text-left w-8 shrink-0" />
+        <GridEditableCell value={income.frequency_param ?? ''} onChange={v => onChange('frequency_param', v)} type="number" navCol={4} placeholder="X" className="text-left w-8 shrink-0" disabled={disabled} />
       )}
     </div>
   );
 }
 
-function IncomeActionsCell({ income, onRemove }: { income: Income; onRemove: (id: string) => void }) {
+function IncomeActionsCell({ income, onRemove, disabled = false }: { income: Income; onRemove: (id: string) => void; disabled?: boolean }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
@@ -129,6 +152,7 @@ function IncomeActionsCell({ income, onRemove }: { income: Income; onRemove: (id
           <Button
             variant="outline"
             size="icon"
+            disabled={disabled}
             className={`float-right mr-[5px] h-7 w-7 cursor-pointer hover:bg-accent hover:text-accent-foreground ${GRID_CONTROL_HOVER_BORDER_CLASS} data-[state=open]:bg-accent data-[state=open]:text-accent-foreground`}
             aria-label={`Actions for ${income.name}`}
           >
@@ -158,7 +182,7 @@ function IncomeActionsCell({ income, onRemove }: { income: Income; onRemove: (id
 
 // ─── Main Component ───
 
-export function IncomesTab({ incomes, partnerX, partnerY, userId, onAdd, onUpdate, onRemove, fullView = false }: IncomesTabProps) {
+export function IncomesTab({ incomes, partnerX, partnerY, userId, pendingById = {}, onAdd, onUpdate, onRemove, fullView = false }: IncomesTabProps) {
   const [addIncomeOpen, setAddIncomeOpen] = useState(false);
   const [savingIncome, setSavingIncome] = useState(false);
   const [newIncome, setNewIncome] = useState<NewIncomeDraft>(createDefaultIncomeDraft);
@@ -227,7 +251,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, userId, onAdd, onUpdat
       size: INCOMES_GRID_DEFAULT_WIDTHS.name,
       minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { containsEditableInput: true },
-      cell: ({ row }) => <GridEditableCell value={row.original.name} onChange={v => handleUpdate(row.original.id, 'name', v)} navCol={0} />,
+      cell: ({ row }) => <GridEditableCell value={row.original.name} onChange={v => handleUpdate(row.original.id, 'name', v)} navCol={0} disabled={!!pendingById[row.original.id]} />,
     }),
     columnHelper.accessor('partner_label', {
       id: 'partner_label',
@@ -235,7 +259,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, userId, onAdd, onUpdat
       size: INCOMES_GRID_DEFAULT_WIDTHS.partner_label,
       minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { containsEditableInput: true },
-      cell: ({ row }) => <PartnerCell value={row.original.partner_label} partnerX={partnerX} partnerY={partnerY} onChange={v => handleUpdate(row.original.id, 'partner_label', v)} />,
+      cell: ({ row }) => <PartnerCell value={row.original.partner_label} partnerX={partnerX} partnerY={partnerY} onChange={v => handleUpdate(row.original.id, 'partner_label', v)} disabled={!!pendingById[row.original.id]} />,
     }),
     columnHelper.accessor('amount', {
       id: 'amount',
@@ -243,7 +267,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, userId, onAdd, onUpdat
       size: INCOMES_GRID_DEFAULT_WIDTHS.amount,
       minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { headerClassName: 'text-right', containsEditableInput: true },
-      cell: ({ row }) => <GridCurrencyCell value={Number(row.original.amount)} onChange={v => handleUpdate(row.original.id, 'amount', v)} navCol={2} />,
+      cell: ({ row }) => <GridCurrencyCell value={Number(row.original.amount)} onChange={v => handleUpdate(row.original.id, 'amount', v)} navCol={2} disabled={!!pendingById[row.original.id]} />,
     }),
     columnHelper.accessor('frequency_type', {
       id: 'frequency_type',
@@ -251,7 +275,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, userId, onAdd, onUpdat
       size: INCOMES_GRID_DEFAULT_WIDTHS.frequency_type,
       minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { containsEditableInput: true },
-      cell: ({ row }) => <FrequencyCell income={row.original} onChange={(field, v) => handleUpdate(row.original.id, field, v)} />,
+      cell: ({ row }) => <FrequencyCell income={row.original} onChange={(field, v) => handleUpdate(row.original.id, field, v)} disabled={!!pendingById[row.original.id]} />,
     }),
     columnHelper.accessor(
       row => toMonthly(row.amount, row.frequency_type, row.frequency_param ?? undefined),
@@ -273,9 +297,9 @@ export function IncomesTab({ incomes, partnerX, partnerY, userId, onAdd, onUpdat
       minSize: INCOMES_GRID_DEFAULT_WIDTHS.actions,
       maxSize: INCOMES_GRID_DEFAULT_WIDTHS.actions,
       meta: { headerClassName: 'px-0', cellClassName: 'px-0', containsButton: true },
-      cell: ({ row }) => <IncomeActionsCell income={row.original} onRemove={handleRemove} />,
+      cell: ({ row }) => <IncomeActionsCell income={row.original} onRemove={handleRemove} disabled={!!pendingById[row.original.id]} />,
     }),
-  ], [partnerX, partnerY]);
+  ], [partnerX, partnerY, pendingById]);
 
   const table = useReactTable({
     data: incomes,

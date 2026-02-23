@@ -13,6 +13,8 @@ interface AddInsertTarget {
   cubbyY: number;
 }
 
+const CREATE_PENDING_KEY = '__create_insert__';
+
 function nextLimboOrder(inserts: DrawerInsertInstance[]): number {
   return inserts.reduce((max, insert) => {
     if (insert.location_kind !== 'limbo') return max;
@@ -72,7 +74,7 @@ function applyMoveToCubbyState(
     insert.location_kind === 'cubby' &&
     insert.unit_id === unitId &&
     insert.cubby_x === cubbyX &&
-    insert.cubby_y === cubbyY
+    insert.cubby_y === cubbyY,
   );
 
   const nowIso = new Date().toISOString();
@@ -136,24 +138,48 @@ function applyMoveUnitInsertsToLimboState(inserts: DrawerInsertInstance[], unitI
 export function useDrawerInsertInstances(householdId: string) {
   const [inserts, setInserts] = useState<DrawerInsertInstance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingById, setPendingById] = useState<Record<string, boolean>>({});
   const insertsRef = useRef<DrawerInsertInstance[]>([]);
-  const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const structuralQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     insertsRef.current = inserts;
   }, [inserts]);
 
-  const runQueuedMutation = useCallback(function <T>(
+  const setPending = useCallback((keys: string[], pending: boolean) => {
+    if (keys.length === 0) return;
+    setPendingById((prev) => {
+      const next = { ...prev };
+      for (const key of keys) {
+        if (!key) continue;
+        if (pending) {
+          next[key] = true;
+        } else {
+          delete next[key];
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const runStructuralMutation = useCallback(function <T>(
     operation: string,
     run: () => Promise<T>,
   ): Promise<T> {
     const execute = () => withDrawersDbTiming(operation, run);
-    const resultPromise = mutationQueueRef.current.then(execute, execute);
-    mutationQueueRef.current = resultPromise.then(
+    const resultPromise = structuralQueueRef.current.then(execute, execute);
+    structuralQueueRef.current = resultPromise.then(
       () => undefined,
       () => undefined,
     );
     return resultPromise;
+  }, []);
+
+  const runDirectMutation = useCallback(function <T>(
+    operation: string,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    return withDrawersDbTiming(operation, run);
   }, []);
 
   const fetch = useCallback(async () => {
@@ -185,85 +211,98 @@ export function useDrawerInsertInstances(householdId: string) {
 
   const add = useCallback(
     async (insertType: DrawerInsertType, label: string | null, target?: AddInsertTarget) => {
-      return runQueuedMutation('drawers_insert_instances.add', async () => {
-        const id = crypto.randomUUID();
-        const normalizedLabel = label?.trim() || null;
-        const current = insertsRef.current;
-        const nextOrder = target ? null : nextLimboOrder(current);
-        const nowIso = new Date().toISOString();
+      setPending([CREATE_PENDING_KEY], true);
+      try {
+        return await runStructuralMutation('drawers_insert_instances.add', async () => {
+          const id = crypto.randomUUID();
+          const normalizedLabel = label?.trim() || null;
+          const nextOrder = target ? null : nextLimboOrder(insertsRef.current);
 
-        const optimistic: DrawerInsertInstance = {
-          id,
-          household_id: householdId,
-          insert_type: insertType,
-          label: normalizedLabel,
-          location_kind: target ? 'cubby' : 'limbo',
-          unit_id: target?.unitId ?? null,
-          cubby_x: target?.cubbyX ?? null,
-          cubby_y: target?.cubbyY ?? null,
-          limbo_order: nextOrder,
-          created_at: nowIso,
-          updated_at: nowIso,
-        };
+          const { data, error } = await supabase
+            .from('drawers_insert_instances')
+            .insert({
+              id,
+              household_id: householdId,
+              insert_type: insertType,
+              label: normalizedLabel,
+              location_kind: target ? 'cubby' : 'limbo',
+              unit_id: target?.unitId ?? null,
+              cubby_x: target?.cubbyX ?? null,
+              cubby_y: target?.cubbyY ?? null,
+              limbo_order: nextOrder,
+            })
+            .select('*')
+            .single();
 
-        setInserts(prev => [...prev, optimistic]);
+          if (error) throw error;
 
-        const { error } = await supabase
-          .from('drawers_insert_instances')
-          .insert({
-            id,
-            household_id: householdId,
-            insert_type: insertType,
-            label: normalizedLabel,
-            location_kind: target ? 'cubby' : 'limbo',
-            unit_id: target?.unitId ?? null,
-            cubby_x: target?.cubbyX ?? null,
-            cubby_y: target?.cubbyY ?? null,
-            limbo_order: nextOrder,
-          });
+          const inserted = (data as DrawerInsertInstance | null) ?? null;
+          if (!inserted?.id) {
+            throw new Error('Failed to add insert.');
+          }
 
-        if (error) {
-          setInserts(prev => prev.filter(insert => insert.id !== id));
-          throw error;
-        }
-
-        return id;
-      });
+          setInserts(prev => [...prev, inserted]);
+          return inserted.id;
+        });
+      } finally {
+        setPending([CREATE_PENDING_KEY], false);
+      }
     },
-    [householdId, runQueuedMutation],
+    [householdId, runStructuralMutation, setPending],
   );
 
   const update = useCallback(async (id: string, updates: Partial<Pick<DrawerInsertInstance, 'label' | 'insert_type'>>) => {
-    return runQueuedMutation('drawers_insert_instances.update', async () => {
-      const previous = insertsRef.current;
-      const nextUpdates = {
-        ...updates,
-        label: updates.label === undefined ? undefined : updates.label?.trim() || null,
-        updated_at: new Date().toISOString(),
-      };
+    setPending([id], true);
+    try {
+      await runDirectMutation('drawers_insert_instances.update', async () => {
+        const nextUpdates: {
+          updated_at: string;
+          label?: string | null;
+          insert_type?: DrawerInsertType;
+        } = {
+          updated_at: new Date().toISOString(),
+        };
 
-      setInserts(prev => prev.map(insert => (insert.id === id ? { ...insert, ...nextUpdates } : insert)));
+        if (updates.label !== undefined) {
+          nextUpdates.label = updates.label?.trim() || null;
+        }
+        if (updates.insert_type !== undefined) {
+          nextUpdates.insert_type = updates.insert_type;
+        }
 
-      const { error } = await supabase.from('drawers_insert_instances').update(nextUpdates).eq('id', id);
-      if (error) {
-        setInserts(previous);
-        throw error;
-      }
-    });
-  }, [runQueuedMutation]);
+        const { data, error } = await supabase
+          .from('drawers_insert_instances')
+          .update(nextUpdates)
+          .eq('id', id)
+          .select('*')
+          .single();
+
+        if (error) throw error;
+
+        const saved = (data as DrawerInsertInstance | null) ?? null;
+        if (!saved?.id) {
+          throw new Error('Failed to update insert.');
+        }
+
+        setInserts(prev => prev.map(insert => (insert.id === id ? saved : insert)));
+      });
+    } finally {
+      setPending([id], false);
+    }
+  }, [runDirectMutation, setPending]);
 
   const remove = useCallback(async (id: string) => {
-    return runQueuedMutation('drawers_insert_instances.remove', async () => {
-      const previous = insertsRef.current;
-      setInserts(prev => prev.filter(insert => insert.id !== id));
-
-      const { error } = await supabase.from('drawers_insert_instances').delete().eq('id', id);
-      if (error) {
-        setInserts(previous);
-        throw error;
-      }
-    });
-  }, [runQueuedMutation]);
+    setPending([id], true);
+    try {
+      await runStructuralMutation('drawers_insert_instances.remove', async () => {
+        const { error } = await supabase.from('drawers_insert_instances').delete().eq('id', id);
+        if (error) throw error;
+        setInserts(prev => prev.filter(insert => insert.id !== id));
+      });
+    } finally {
+      setPending([id], false);
+    }
+  }, [runStructuralMutation, setPending]);
 
   const moveToCubby = useCallback(async (
     insertId: string,
@@ -272,21 +311,14 @@ export function useDrawerInsertInstances(householdId: string) {
     cubbyY: number,
     existingInsertId?: string | null,
   ) => {
-    return runQueuedMutation('drawers_insert_instances.move_to_cubby', async () => {
-      const previous = insertsRef.current;
-      setInserts(prev => applyMoveToCubbyState(prev, insertId, unitId, cubbyX, cubbyY));
+    const pendingIds = [insertId];
+    if (existingInsertId && existingInsertId !== insertId) {
+      pendingIds.push(existingInsertId);
+    }
 
-      try {
-        if (existingInsertId && existingInsertId !== insertId) {
-          const { error: moveExistingError } = await supabase.rpc('move_drawers_insert_to_limbo', {
-            _insert_id: existingInsertId,
-          });
-
-          if (moveExistingError && !moveExistingError.message.includes('Insert instance not found')) {
-            throw moveExistingError;
-          }
-        }
-
+    setPending(pendingIds, true);
+    try {
+      await runStructuralMutation('drawers_insert_instances.move_to_cubby', async () => {
         const { error } = await supabase.rpc('move_drawers_insert', {
           _insert_id: insertId,
           _target_unit_id: unitId,
@@ -295,71 +327,84 @@ export function useDrawerInsertInstances(householdId: string) {
         });
 
         if (error) throw error;
-      } catch (error: unknown) {
-        setInserts(previous);
-        await fetch().catch(() => undefined);
-        throw error;
-      }
-    });
-  }, [fetch, runQueuedMutation]);
+
+        setInserts(prev => applyMoveToCubbyState(prev, insertId, unitId, cubbyX, cubbyY));
+      });
+    } finally {
+      setPending(pendingIds, false);
+    }
+  }, [runStructuralMutation, setPending]);
 
   const moveToLimbo = useCallback(async (insertId: string) => {
-    return runQueuedMutation('drawers_insert_instances.move_to_limbo', async () => {
-      const previous = insertsRef.current;
-      setInserts(prev => applyMoveToLimboState(prev, insertId));
+    setPending([insertId], true);
+    try {
+      await runStructuralMutation('drawers_insert_instances.move_to_limbo', async () => {
+        const { error } = await supabase.rpc('move_drawers_insert_to_limbo', {
+          _insert_id: insertId,
+        });
 
-      const { error } = await supabase.rpc('move_drawers_insert_to_limbo', {
-        _insert_id: insertId,
+        if (error) throw error;
+
+        setInserts(prev => applyMoveToLimboState(prev, insertId));
       });
-
-      if (error) {
-        setInserts(previous);
-        throw error;
-      }
-    });
-  }, [runQueuedMutation]);
+    } finally {
+      setPending([insertId], false);
+    }
+  }, [runStructuralMutation, setPending]);
 
   const deleteInsertsInUnit = useCallback(async (unitId: string) => {
-    return runQueuedMutation('drawers_insert_instances.delete_in_unit', async () => {
-      const previous = insertsRef.current;
-      setInserts(prev => prev.filter(insert => !(insert.unit_id === unitId && insert.location_kind === 'cubby')));
+    const affectedIds = insertsRef.current
+      .filter(insert => insert.unit_id === unitId && insert.location_kind === 'cubby')
+      .map(insert => insert.id);
 
-      const { error } = await supabase
-        .from('drawers_insert_instances')
-        .delete()
-        .eq('household_id', householdId)
-        .eq('unit_id', unitId)
-        .eq('location_kind', 'cubby');
+    setPending(affectedIds, true);
+    try {
+      await runStructuralMutation('drawers_insert_instances.delete_in_unit', async () => {
+        const { error } = await supabase
+          .from('drawers_insert_instances')
+          .delete()
+          .eq('household_id', householdId)
+          .eq('unit_id', unitId)
+          .eq('location_kind', 'cubby');
 
-      if (error) {
-        setInserts(previous);
-        throw error;
-      }
-    });
-  }, [householdId, runQueuedMutation]);
+        if (error) throw error;
+
+        setInserts(prev => prev.filter(insert => !(insert.unit_id === unitId && insert.location_kind === 'cubby')));
+      });
+    } finally {
+      setPending(affectedIds, false);
+    }
+  }, [householdId, runStructuralMutation, setPending]);
 
   const moveInsertsInUnitToLimbo = useCallback(async (unitId: string) => {
-    return runQueuedMutation('drawers_insert_instances.move_unit_to_limbo', async () => {
-      const previous = insertsRef.current;
-      setInserts(prev => applyMoveUnitInsertsToLimboState(prev, unitId));
+    const affectedIds = insertsRef.current
+      .filter(insert => insert.unit_id === unitId && insert.location_kind === 'cubby')
+      .map(insert => insert.id);
 
-      const { error } = await supabase.rpc('move_drawers_unit_inserts_to_limbo', { _unit_id: unitId });
-      if (error) {
-        setInserts(previous);
-        throw error;
-      }
-    });
-  }, [runQueuedMutation]);
+    setPending(affectedIds, true);
+    try {
+      await runStructuralMutation('drawers_insert_instances.move_unit_to_limbo', async () => {
+        const { error } = await supabase.rpc('move_drawers_unit_inserts_to_limbo', { _unit_id: unitId });
+        if (error) throw error;
+        setInserts(prev => applyMoveUnitInsertsToLimboState(prev, unitId));
+      });
+    } finally {
+      setPending(affectedIds, false);
+    }
+  }, [runStructuralMutation, setPending]);
 
   const limboInserts = useMemo(
     () => inserts.filter(insert => insert.location_kind === 'limbo').sort((a, b) => (a.limbo_order ?? 0) - (b.limbo_order ?? 0)),
     [inserts],
   );
+  const creating = !!pendingById[CREATE_PENDING_KEY];
 
   return {
     inserts,
     limboInserts,
     loading,
+    pendingById,
+    creating,
     add,
     update,
     remove,

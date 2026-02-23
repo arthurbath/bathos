@@ -1,22 +1,5 @@
-const SLOW_OPERATION_THRESHOLD_MS = 800;
+import { withMutationTiming } from '@/lib/mutationTiming';
 
 export async function withDrawersDbTiming<T>(operation: string, run: () => Promise<T>): Promise<T> {
-  const start = performance.now();
-
-  try {
-    return await run();
-  } finally {
-    const durationMs = performance.now() - start;
-    const shouldLog = import.meta.env.DEV || durationMs >= SLOW_OPERATION_THRESHOLD_MS;
-    if (shouldLog) {
-      const durationText = `${Math.round(durationMs)}ms`;
-      const message = `[drawers][db] ${operation} completed in ${durationText}`;
-
-      if (durationMs >= SLOW_OPERATION_THRESHOLD_MS) {
-        console.warn(message);
-      } else {
-        console.debug(message);
-      }
-    }
-  }
+  return withMutationTiming({ module: 'drawers', action: operation }, run);
 }

@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { withMutationTiming } from '@/lib/mutationTiming';
+import { budgetQueryKeys } from '@/hooks/budgetQueryKeys';
 
 export interface Category {
   id: string;
@@ -8,77 +11,143 @@ export interface Category {
   household_id: string;
 }
 
+function sortByName(rows: Category[]): Category[] {
+  return [...rows].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function useCategories(householdId: string) {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const sortByName = (rows: Category[]) => [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  const queryClient = useQueryClient();
+  const queryKey = budgetQueryKeys.categories(householdId);
+  const [pendingById, setPendingById] = useState<Record<string, boolean>>({});
 
-  const fetch = useCallback(async () => {
-    const { data } = await supabase
-      .from('budget_categories')
-      .select('*')
-      .eq('household_id', householdId)
-      .order('name');
-    setCategories((data as Category[]) ?? []);
-    setLoading(false);
-  }, [householdId]);
+  const { data, isLoading, refetch } = useQuery({
+    queryKey,
+    enabled: Boolean(householdId),
+    queryFn: async () => {
+      const { data: rows, error } = await supabase
+        .from('budget_categories')
+        .select('*')
+        .eq('household_id', householdId)
+        .order('name');
 
-  useEffect(() => { fetch(); }, [fetch]);
+      if (error) throw error;
+      return (rows as Category[]) ?? [];
+    },
+  });
 
-  const add = async (name: string, color: string | null = null, id: string = crypto.randomUUID()) => {
-    const optimistic: Category = { id, household_id: householdId, name, color };
-    setCategories(prev => sortByName([...prev, optimistic]));
+  const setPending = useCallback((id: string, pending: boolean) => {
+    setPendingById((current) => {
+      if (pending) return { ...current, [id]: true };
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }, []);
 
-    const { data, error } = await supabase.from('budget_categories').insert({
-      id,
-      household_id: householdId,
-      name,
-      color,
-    }).select('*').single();
-    if (error) {
-      setCategories(prev => prev.filter(c => c.id !== id));
-      throw error;
+  const add = useCallback(async (name: string, color: string | null = null, id: string = crypto.randomUUID()) => {
+    if (!householdId) throw new Error('No household selected.');
+
+    setPending(id, true);
+    try {
+      const saved = await withMutationTiming({ module: 'budget', action: 'categories.add' }, async () => {
+        const { data: row, error } = await supabase
+          .from('budget_categories')
+          .insert({
+            id,
+            household_id: householdId,
+            name,
+            color,
+          })
+          .select('*')
+          .single();
+
+        if (error) throw error;
+        return row as Category;
+      });
+
+      queryClient.setQueryData<Category[]>(queryKey, (current) => sortByName([...(current ?? []), saved]));
+    } finally {
+      setPending(id, false);
     }
-    if (data) {
-      setCategories(prev => sortByName(prev.map(c => (c.id === id ? (data as Category) : c))));
+  }, [householdId, queryClient, queryKey, setPending]);
+
+  const update = useCallback(async (id: string, name: string) => {
+    if (pendingById[id]) return;
+
+    setPending(id, true);
+    try {
+      const saved = await withMutationTiming({ module: 'budget', action: 'categories.update' }, async () => {
+        const { data: row, error } = await supabase
+          .from('budget_categories')
+          .update({ name })
+          .eq('id', id)
+          .select('*')
+          .single();
+
+        if (error) throw error;
+        return row as Category;
+      });
+
+      queryClient.setQueryData<Category[]>(queryKey, (current) =>
+        sortByName((current ?? []).map((category) => (category.id === id ? saved : category))),
+      );
+    } finally {
+      setPending(id, false);
     }
+  }, [pendingById, queryClient, queryKey, setPending]);
+
+  const updateColor = useCallback(async (id: string, color: string | null) => {
+    if (pendingById[id]) return;
+
+    setPending(id, true);
+    try {
+      const saved = await withMutationTiming({ module: 'budget', action: 'categories.updateColor' }, async () => {
+        const { data: row, error } = await supabase
+          .from('budget_categories')
+          .update({ color })
+          .eq('id', id)
+          .select('*')
+          .single();
+
+        if (error) throw error;
+        return row as Category;
+      });
+
+      queryClient.setQueryData<Category[]>(queryKey, (current) =>
+        sortByName((current ?? []).map((category) => (category.id === id ? saved : category))),
+      );
+    } finally {
+      setPending(id, false);
+    }
+  }, [pendingById, queryClient, queryKey, setPending]);
+
+  const remove = useCallback(async (id: string) => {
+    if (pendingById[id]) return;
+
+    setPending(id, true);
+    try {
+      await withMutationTiming({ module: 'budget', action: 'categories.remove' }, async () => {
+        const { error } = await supabase.from('budget_categories').delete().eq('id', id);
+        if (error) throw error;
+      });
+
+      queryClient.setQueryData<Category[]>(queryKey, (current) => (current ?? []).filter((category) => category.id !== id));
+    } finally {
+      setPending(id, false);
+    }
+  }, [pendingById, queryClient, queryKey, setPending]);
+
+  return {
+    categories: data ?? [],
+    loading: isLoading,
+    add,
+    update,
+    updateColor,
+    remove,
+    pendingById,
+    refetch: async () => {
+      await refetch();
+    },
   };
-
-  const update = async (id: string, name: string) => {
-    const prevCategories = categories;
-    setCategories(prev => sortByName(prev.map(c => c.id === id ? { ...c, name } : c)));
-    const { data, error } = await supabase.from('budget_categories').update({ name }).eq('id', id).select('*').single();
-    if (error) {
-      setCategories(prevCategories);
-      throw error;
-    }
-    if (data) {
-      setCategories(prev => sortByName(prev.map(c => (c.id === id ? (data as Category) : c))));
-    }
-  };
-
-  const updateColor = async (id: string, color: string | null) => {
-    const prevCategories = categories;
-    setCategories(prev => sortByName(prev.map(c => c.id === id ? { ...c, color } : c)));
-    const { data, error } = await supabase.from('budget_categories').update({ color }).eq('id', id).select('*').single();
-    if (error) {
-      setCategories(prevCategories);
-      throw error;
-    }
-    if (data) {
-      setCategories(prev => sortByName(prev.map(c => (c.id === id ? (data as Category) : c))));
-    }
-  };
-
-  const remove = async (id: string) => {
-    const prevCategories = categories;
-    setCategories(prev => prev.filter(c => c.id !== id));
-    const { error } = await supabase.from('budget_categories').delete().eq('id', id);
-    if (error) {
-      setCategories(prevCategories);
-      throw error;
-    }
-  };
-
-  return { categories, loading, add, update, updateColor, remove, refetch: fetch };
 }

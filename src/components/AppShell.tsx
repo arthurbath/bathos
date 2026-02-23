@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DollarSign, PieChart, BarChart3, Settings } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import { toast } from '@/hooks/use-toast';
 import type { HouseholdData } from '@/hooks/useHouseholdData';
@@ -18,6 +19,8 @@ import { SummaryTab } from '@/components/SummaryTab';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
 import { getAvailableModules } from '@/platform/modules';
+import { budgetQueryKeys } from '@/hooks/budgetQueryKeys';
+import { withMutationTiming } from '@/lib/mutationTiming';
 
 interface AppShellProps {
   household: HouseholdData;
@@ -30,108 +33,114 @@ interface AppShellProps {
 export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onUpdatePartnerNames }: AppShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const basePath = useModuleBasePath();
   const isIncomesRoute = location.pathname.endsWith('/incomes');
   const isExpensesRoute = location.pathname.endsWith('/expenses');
   const isSummaryRoute = location.pathname.endsWith('/summary');
   const isConfigRoute = location.pathname.endsWith('/config');
   const isFullViewGridRoute = isExpensesRoute;
-  const { incomes, add: addIncome, update: updateIncome, remove: removeIncome, refetch: refetchIncomes } = useIncomes(household.householdId);
-  const { expenses, add: addExpense, update: updateExpense, remove: removeExpense, refetch: refetchExpenses } = useExpenses(household.householdId);
-  const { categories, add: addCategory, update: updateCategory, updateColor: updateCategoryColor, remove: removeCategory, refetch: refetchCategories } = useCategories(household.householdId);
+  const {
+    incomes,
+    add: addIncome,
+    update: updateIncome,
+    remove: removeIncome,
+    pendingById: incomePendingById = {},
+  } = useIncomes(household.householdId);
+  const {
+    expenses,
+    add: addExpense,
+    update: updateExpense,
+    remove: removeExpense,
+    pendingById: expensePendingById = {},
+  } = useExpenses(household.householdId);
+  const {
+    categories,
+    add: addCategory,
+    update: updateCategory,
+    updateColor: updateCategoryColor,
+    remove: removeCategory,
+    pendingById: categoryPendingById = {},
+  } = useCategories(household.householdId);
   
-  const { linkedAccounts, add: addLinkedAccount, update: updateLinkedAccount, updateColor: updateLinkedAccountColor, remove: removeLinkedAccount, refetch: refetchLinkedAccounts } = useLinkedAccounts(household.householdId);
+  const {
+    linkedAccounts,
+    add: addLinkedAccount,
+    update: updateLinkedAccount,
+    updateColor: updateLinkedAccountColor,
+    remove: removeLinkedAccount,
+    pendingById: linkedAccountPendingById = {},
+  } = useLinkedAccounts(household.householdId);
   const { points, save: savePoint, remove: removePoint, updateNotes: updateRestorePointNotes } = useRestorePoints(household.householdId);
   const showAppSwitcher = getAvailableModules().length > 1;
 
   const handleReassignCategory = async (oldId: string, newId: string | null) => {
-    const { error } = await supabase
-      .from('budget_expenses')
-      .update({ category_id: newId })
-      .eq('household_id', household.householdId)
-      .eq('category_id', oldId);
-    if (error) throw error;
-    await refetchExpenses();
+    await withMutationTiming({ module: 'budget', action: 'categories.reassignAndDelete' }, async () => {
+      const { error } = await supabase.rpc('budget_reassign_category_and_delete', {
+        _household_id: household.householdId,
+        _old_category_id: oldId,
+        _new_category_id: newId,
+      });
+      if (error) throw error;
+    });
+
+    queryClient.setQueryData(
+      budgetQueryKeys.categories(household.householdId),
+      categories.filter((category) => category.id !== oldId),
+    );
+    queryClient.setQueryData(
+      budgetQueryKeys.expenses(household.householdId),
+      expenses.map((expense) =>
+        expense.category_id === oldId ? { ...expense, category_id: newId } : expense,
+      ),
+    );
   };
 
 
   const handleReassignLinkedAccount = async (oldId: string, newId: string | null) => {
-    const { error } = await supabase
-      .from('budget_expenses')
-      .update({ linked_account_id: newId })
-      .eq('household_id', household.householdId)
-      .eq('linked_account_id', oldId);
-    if (error) throw error;
-    await refetchExpenses();
+    await withMutationTiming({ module: 'budget', action: 'linkedAccounts.reassignAndDelete' }, async () => {
+      const { error } = await supabase.rpc('budget_reassign_linked_account_and_delete', {
+        _household_id: household.householdId,
+        _old_linked_account_id: oldId,
+        _new_linked_account_id: newId,
+      });
+      if (error) throw error;
+    });
+
+    queryClient.setQueryData(
+      budgetQueryKeys.linkedAccounts(household.householdId),
+      linkedAccounts.filter((linkedAccount) => linkedAccount.id !== oldId),
+    );
+    queryClient.setQueryData(
+      budgetQueryKeys.expenses(household.householdId),
+      expenses.map((expense) =>
+        expense.linked_account_id === oldId ? { ...expense, linked_account_id: newId } : expense,
+      ),
+    );
   };
 
   const handleRestore = async (data: Json) => {
-    const snap = data as {
-      incomes?: any[];
-      expenses?: any[];
-      categories?: any[];
-      linkedAccounts?: any[];
-    };
-    const hid = household.householdId;
+    const restored = await withMutationTiming({ module: 'budget', action: 'restore.apply' }, async () => {
+      const { data: restoredData, error } = await supabase.rpc('budget_restore_household_snapshot', {
+        _household_id: household.householdId,
+        _snapshot: data,
+      });
+      if (error) throw error;
+      return restoredData as {
+        categories?: unknown[];
+        linkedAccounts?: unknown[];
+        incomes?: unknown[];
+        expenses?: unknown[];
+      };
+    });
 
-    await supabase.from('budget_expenses').delete().eq('household_id', hid);
-    await supabase.from('budget_income_streams').delete().eq('household_id', hid);
-    await supabase.from('budget_linked_accounts').delete().eq('household_id', hid);
-    await supabase.from('budget_categories').delete().eq('household_id', hid);
-
-    if (snap.categories?.length) {
-      await supabase.from('budget_categories').insert(
-        snap.categories.map((c: any) => ({
-          id: c.id ?? crypto.randomUUID(),
-          household_id: hid,
-          name: c.name ?? '',
-          color: c.color ?? null,
-        }))
-      );
-    }
-    if (snap.linkedAccounts?.length) {
-      await supabase.from('budget_linked_accounts').insert(
-        snap.linkedAccounts.map((a: any) => ({
-          id: a.id ?? crypto.randomUUID(),
-          household_id: hid,
-          name: a.name ?? '',
-          color: a.color ?? null,
-          owner_partner: a.owner_partner ?? 'X',
-        }))
-      );
-    }
-    if (snap.incomes?.length) {
-      await supabase.from('budget_income_streams').insert(
-        snap.incomes.map((i: any) => ({
-          id: i.id ?? crypto.randomUUID(),
-          household_id: hid,
-          name: i.name,
-          amount: i.amount,
-          frequency_type: i.frequency_type,
-          frequency_param: i.frequency_param,
-          partner_label: i.partner_label,
-        }))
-      );
-    }
-    if (snap.expenses?.length) {
-      await supabase.from('budget_expenses').insert(
-        snap.expenses.map((e: any) => ({
-          id: e.id ?? crypto.randomUUID(),
-          household_id: hid,
-          name: e.name,
-          amount: e.amount,
-          frequency_type: e.frequency_type,
-          frequency_param: e.frequency_param,
-          benefit_x: e.benefit_x,
-          category_id: e.category_id ?? null,
-          linked_account_id: e.linked_account_id ?? null,
-          budget_id: e.budget_id ?? null,
-          is_estimate: e.is_estimate ?? false,
-        }))
-      );
-    }
-
-    await Promise.all([refetchIncomes(), refetchExpenses(), refetchCategories(), refetchLinkedAccounts()]);
+    queryClient.setQueryData(budgetQueryKeys.categories(household.householdId), restored.categories ?? []);
+    queryClient.setQueryData(
+      budgetQueryKeys.linkedAccounts(household.householdId),
+      restored.linkedAccounts ?? [],
+    );
+    queryClient.setQueryData(budgetQueryKeys.incomes(household.householdId), restored.incomes ?? []);
+    queryClient.setQueryData(budgetQueryKeys.expenses(household.householdId), restored.expenses ?? []);
   };
 
   return (
@@ -177,6 +186,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
                 onAdd={addExpense}
                 onUpdate={updateExpense}
                 onRemove={removeExpense}
+                pendingById={expensePendingById}
                 onAddCategory={addCategory}
                 onAddLinkedAccount={addLinkedAccount}
                 fullView
@@ -195,6 +205,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
               onAdd={addIncome}
               onUpdate={updateIncome}
               onRemove={removeIncome}
+              pendingById={incomePendingById}
             />
           )}
           {isSummaryRoute && (
@@ -221,11 +232,13 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
               onRemoveCategory={removeCategory}
               onReassignCategory={handleReassignCategory}
               onUpdateCategoryColor={updateCategoryColor}
+              categoryPendingById={categoryPendingById}
               onAddLinkedAccount={addLinkedAccount}
               onUpdateLinkedAccount={updateLinkedAccount}
               onRemoveLinkedAccount={removeLinkedAccount}
               onReassignLinkedAccount={handleReassignLinkedAccount}
               onUpdateLinkedAccountColor={updateLinkedAccountColor}
+              linkedAccountPendingById={linkedAccountPendingById}
               points={points}
               incomes={incomes}
               onSaveRestorePoint={savePoint}

@@ -1,6 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { FrequencyType } from '@/types/fairshare';
+import { withMutationTiming } from '@/lib/mutationTiming';
+import { budgetQueryKeys } from '@/hooks/budgetQueryKeys';
 
 export interface Income {
   id: string;
@@ -12,69 +15,121 @@ export interface Income {
   household_id: string;
 }
 
+function sortByCreatedAt(rows: Income[]): Income[] {
+  return [...rows].sort((a, b) => {
+    const aCreated = (a as unknown as { created_at?: string }).created_at ?? '';
+    const bCreated = (b as unknown as { created_at?: string }).created_at ?? '';
+    return aCreated.localeCompare(bCreated);
+  });
+}
+
 export function useIncomes(householdId: string) {
-  const [incomes, setIncomes] = useState<Income[]>([]);
-  const [loading, setLoading] = useState(true);
-  const sortByCreatedAt = (rows: Income[]) =>
-    [...rows].sort((a, b) => {
-      const aCreated = (a as unknown as { created_at?: string }).created_at ?? '';
-      const bCreated = (b as unknown as { created_at?: string }).created_at ?? '';
-      return aCreated.localeCompare(bCreated);
+  const queryClient = useQueryClient();
+  const queryKey = budgetQueryKeys.incomes(householdId);
+  const [pendingById, setPendingById] = useState<Record<string, boolean>>({});
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey,
+    enabled: Boolean(householdId),
+    queryFn: async () => {
+      const { data: rows, error } = await supabase
+        .from('budget_income_streams')
+        .select('*')
+        .eq('household_id', householdId)
+        .order('created_at');
+
+      if (error) throw error;
+      return (rows as Income[]) ?? [];
+    },
+  });
+
+  const setPending = useCallback((id: string, pending: boolean) => {
+    setPendingById((current) => {
+      if (pending) return { ...current, [id]: true };
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
     });
+  }, []);
 
-  const fetch = useCallback(async () => {
-    const { data } = await supabase
-      .from('budget_income_streams')
-      .select('*')
-      .eq('household_id', householdId)
-      .order('created_at');
-    setIncomes((data as Income[]) ?? []);
-    setLoading(false);
-  }, [householdId]);
+  const add = useCallback(async (income: Omit<Income, 'id' | 'household_id'>) => {
+    if (!householdId) throw new Error('No household selected.');
 
-  useEffect(() => { fetch(); }, [fetch]);
-
-  const add = async (income: Omit<Income, 'id' | 'household_id'>) => {
     const id = crypto.randomUUID();
-    const optimistic: Income = { id, household_id: householdId, ...income };
-    setIncomes(prev => sortByCreatedAt([...prev, optimistic]));
+    setPending(id, true);
+    try {
+      const saved = await withMutationTiming({ module: 'budget', action: 'incomes.add' }, async () => {
+        const { data: row, error } = await supabase
+          .from('budget_income_streams')
+          .insert({
+            id,
+            household_id: householdId,
+            ...income,
+          })
+          .select('*')
+          .single();
 
-    const { data, error } = await supabase.from('budget_income_streams').insert({
-      id,
-      household_id: householdId,
-      ...income,
-    }).select('*').single();
-    if (error) {
-      setIncomes(prev => prev.filter(i => i.id !== id));
-      throw error;
+        if (error) throw error;
+        return row as Income;
+      });
+
+      queryClient.setQueryData<Income[]>(queryKey, (current) => sortByCreatedAt([...(current ?? []), saved]));
+    } finally {
+      setPending(id, false);
     }
-    if (data) {
-      setIncomes(prev => sortByCreatedAt(prev.map(i => (i.id === id ? (data as Income) : i))));
+  }, [householdId, queryClient, queryKey, setPending]);
+
+  const update = useCallback(async (id: string, updates: Partial<Omit<Income, 'id' | 'household_id'>>) => {
+    if (pendingById[id]) return;
+
+    setPending(id, true);
+    try {
+      const saved = await withMutationTiming({ module: 'budget', action: 'incomes.update' }, async () => {
+        const { data: row, error } = await supabase
+          .from('budget_income_streams')
+          .update(updates)
+          .eq('id', id)
+          .select('*')
+          .single();
+
+        if (error) throw error;
+        return row as Income;
+      });
+
+      queryClient.setQueryData<Income[]>(queryKey, (current) =>
+        sortByCreatedAt((current ?? []).map((income) => (income.id === id ? saved : income))),
+      );
+    } finally {
+      setPending(id, false);
     }
+  }, [pendingById, queryClient, queryKey, setPending]);
+
+  const remove = useCallback(async (id: string) => {
+    if (pendingById[id]) return;
+
+    setPending(id, true);
+    try {
+      await withMutationTiming({ module: 'budget', action: 'incomes.remove' }, async () => {
+        const { error } = await supabase.from('budget_income_streams').delete().eq('id', id);
+        if (error) throw error;
+      });
+
+      queryClient.setQueryData<Income[]>(queryKey, (current) => (current ?? []).filter((income) => income.id !== id));
+    } finally {
+      setPending(id, false);
+    }
+  }, [pendingById, queryClient, queryKey, setPending]);
+
+  return {
+    incomes: data ?? [],
+    loading: isLoading,
+    add,
+    update,
+    remove,
+    pendingById,
+    refetch: async () => {
+      await refetch();
+    },
   };
-
-  const update = async (id: string, updates: Partial<Omit<Income, 'id' | 'household_id'>>) => {
-    const prevIncomes = incomes;
-    setIncomes(prev => sortByCreatedAt(prev.map(i => i.id === id ? { ...i, ...updates } : i)));
-    const { data, error } = await supabase.from('budget_income_streams').update(updates).eq('id', id).select('*').single();
-    if (error) {
-      setIncomes(prevIncomes);
-      throw error;
-    }
-    if (data) {
-      setIncomes(prev => sortByCreatedAt(prev.map(i => (i.id === id ? (data as Income) : i))));
-    }
-  };
-
-  const remove = async (id: string) => {
-    const prevIncomes = incomes;
-    setIncomes(prev => prev.filter(i => i.id !== id));
-    const { error } = await supabase.from('budget_income_streams').delete().eq('id', id);
-    if (error) {
-      setIncomes(prevIncomes);
-      throw error;
-    }
-  };
-
-  return { incomes, loading, add, update, remove, refetch: fetch };
 }

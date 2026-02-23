@@ -49,6 +49,7 @@ interface ExpensesTabProps {
   partnerX: string;
   partnerY: string;
   userId?: string;
+  pendingById?: Record<string, boolean>;
   onAdd: (expense: Omit<Expense, 'id' | 'household_id'>, id?: string) => Promise<void>;
   onUpdate: (id: string, updates: Partial<Omit<Expense, 'id' | 'household_id'>>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
@@ -94,8 +95,8 @@ const createDefaultExpenseDraft = (): NewExpenseDraft => ({
 
 // ─── Cell Components ───
 
-function CategoryCell({ exp, categories, onChange, onAddNew }: {
-  exp: Expense; categories: Category[]; onChange: (v: string) => void; onAddNew: () => void;
+function CategoryCell({ exp, categories, onChange, onAddNew, disabled = false }: {
+  exp: Expense; categories: Category[]; onChange: (v: string) => void; onAddNew: () => void; disabled?: boolean;
 }) {
   const ctx = useDataGrid();
   return (
@@ -106,8 +107,9 @@ function CategoryCell({ exp, categories, onChange, onAddNew }: {
       }
       ctx?.onCellCommit(1);
       onChange(v);
-    }}>
+    }} disabled={disabled}>
       <SelectTrigger
+        disabled={disabled}
         className={`h-7 border-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm ${GRID_CONTROL_FOCUS_CLASS}`}
         style={{ backgroundColor: categories.find(c => c.id === exp.category_id)?.color || 'transparent' }}
         data-row={ctx?.rowIndex}
@@ -134,15 +136,16 @@ function CategoryCell({ exp, categories, onChange, onAddNew }: {
   );
 }
 
-function ExpenseFrequencyCell({ exp, onChange }: { exp: Expense; onChange: (field: string, v: string) => void }) {
+function ExpenseFrequencyCell({ exp, onChange, disabled = false }: { exp: Expense; onChange: (field: string, v: string) => void; disabled?: boolean }) {
   const ctx = useDataGrid();
   return (
     <div className="flex items-center gap-1">
       <Select value={exp.frequency_type} onValueChange={v => {
         ctx?.onCellCommit(4);
         onChange('frequency_type', v);
-      }}>
+      }} disabled={disabled}>
         <SelectTrigger
+          disabled={disabled}
           className={`h-7 min-w-0 border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
           data-row={ctx?.rowIndex}
           data-row-id={ctx?.rowId}
@@ -159,19 +162,19 @@ function ExpenseFrequencyCell({ exp, onChange }: { exp: Expense; onChange: (fiel
         >
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+      <SelectContent>
           {FREQ_OPTIONS.map(f => <SelectItem key={f} value={f}>{frequencyLabels[f]}</SelectItem>)}
         </SelectContent>
       </Select>
       {needsParam(exp.frequency_type) && (
-        <GridEditableCell value={exp.frequency_param ?? ''} onChange={v => onChange('frequency_param', v)} type="number" navCol={5} placeholder="X" className="text-left w-8 shrink-0" />
+        <GridEditableCell value={exp.frequency_param ?? ''} onChange={v => onChange('frequency_param', v)} type="number" navCol={5} placeholder="X" className="text-left w-8 shrink-0" disabled={disabled} />
       )}
     </div>
   );
 }
 
-function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, onAddNew }: {
-  exp: Expense; linkedAccounts: LinkedAccount[]; partnerX: string; partnerY: string; onChange: (v: string) => void; onAddNew: () => void;
+function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, onAddNew, disabled = false }: {
+  exp: Expense; linkedAccounts: LinkedAccount[]; partnerX: string; partnerY: string; onChange: (v: string) => void; onAddNew: () => void; disabled?: boolean;
 }) {
   const ctx = useDataGrid();
   return (
@@ -182,8 +185,9 @@ function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, 
       }
       ctx?.onCellCommit(6);
       onChange(v);
-    }}>
+    }} disabled={disabled}>
       <SelectTrigger
+        disabled={disabled}
         className={`h-7 border-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm ${GRID_CONTROL_FOCUS_CLASS}`}
         style={{ backgroundColor: linkedAccounts.find(la => la.id === exp.linked_account_id)?.color || 'transparent' }}
         data-row={ctx?.rowIndex}
@@ -216,7 +220,7 @@ function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, 
   );
 }
 
-function EstimateCell({ checked, onToggle }: { checked: boolean; onToggle: (v: boolean) => void }) {
+function EstimateCell({ checked, onToggle, disabled = false }: { checked: boolean; onToggle: (v: boolean) => void; disabled?: boolean }) {
   const ctx = useDataGrid();
   const checkboxRef = useRef<HTMLButtonElement>(null);
 
@@ -229,6 +233,7 @@ function EstimateCell({ checked, onToggle }: { checked: boolean; onToggle: (v: b
       ref={checkboxRef}
       className={`focus:border-ring focus:ring-2 focus:ring-ring/30 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0 hover:border-[hsl(var(--grid-sticky-line))]`}
       checked={checked}
+      disabled={disabled}
       onCheckedChange={v => {
         ctx?.onCellCommit(3);
         onToggle(!!v);
@@ -251,7 +256,7 @@ function EstimateCell({ checked, onToggle }: { checked: boolean; onToggle: (v: b
   );
 }
 
-function ExpenseActionsCell({ name, onRemove }: { name: string; onRemove: () => void }) {
+function ExpenseActionsCell({ name, onRemove, disabled = false }: { name: string; onRemove: () => void; disabled?: boolean }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
@@ -261,6 +266,7 @@ function ExpenseActionsCell({ name, onRemove }: { name: string; onRemove: () => 
           <Button
             variant="outline"
             size="icon"
+            disabled={disabled}
             className={`float-right mr-[5px] h-7 w-7 cursor-pointer hover:bg-accent hover:text-accent-foreground ${GRID_CONTROL_HOVER_BORDER_CLASS} data-[state=open]:bg-accent data-[state=open]:text-accent-foreground`}
             aria-label={`Actions for ${name}`}
           >
@@ -290,7 +296,7 @@ function ExpenseActionsCell({ name, onRemove }: { name: string; onRemove: () => 
 
 // ─── Main Component ───
 
-export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, partnerX, partnerY, userId, onAdd, onUpdate, onRemove, onAddCategory, onAddLinkedAccount, fullView = false }: ExpensesTabProps) {
+export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, partnerX, partnerY, userId, pendingById = {}, onAdd, onUpdate, onRemove, onAddCategory, onAddLinkedAccount, fullView = false }: ExpensesTabProps) {
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [newExpense, setNewExpense] = useState<NewExpenseDraft>(createDefaultExpenseDraft);
   const [addDialog, setAddDialog] = useState<'category' | 'payment_method' | null>(null);
@@ -478,7 +484,16 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       size: EXPENSES_GRID_DEFAULT_WIDTHS.name,
       minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { containsEditableInput: true },
-      cell: ({ row }) => <GridEditableCell value={row.original.exp.name} onChange={v => handleUpdate(row.original.exp.id, 'name', v)} navCol={0} placeholder="Expense" cellId={row.original.exp.id} />,
+      cell: ({ row }) => (
+        <GridEditableCell
+          value={row.original.exp.name}
+          onChange={v => handleUpdate(row.original.exp.id, 'name', v)}
+          navCol={0}
+          placeholder="Expense"
+          cellId={row.original.exp.id}
+          disabled={!!pendingById[row.original.exp.id]}
+        />
+      ),
     }),
     columnHelper.accessor(r => r.exp.category_id, {
       id: 'category',
@@ -493,6 +508,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
           categories={categories}
           onChange={v => handleUpdate(row.original.exp.id, 'category_id', v)}
           onAddNew={() => openNewItemDialog({ type: 'existing_expense', expenseId: row.original.exp.id, field: 'category_id' }, 'category')}
+          disabled={!!pendingById[row.original.exp.id]}
         />
       ),
     }),
@@ -502,7 +518,14 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       size: EXPENSES_GRID_DEFAULT_WIDTHS.amount,
       minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { headerClassName: 'text-right', containsEditableInput: true },
-      cell: ({ row }) => <GridCurrencyCell value={Number(row.original.exp.amount)} onChange={v => handleUpdate(row.original.exp.id, 'amount', v)} navCol={2} />,
+      cell: ({ row }) => (
+        <GridCurrencyCell
+          value={Number(row.original.exp.amount)}
+          onChange={v => handleUpdate(row.original.exp.id, 'amount', v)}
+          navCol={2}
+          disabled={!!pendingById[row.original.exp.id]}
+        />
+      ),
     }),
     columnHelper.accessor(r => r.exp.is_estimate, {
       id: 'estimate',
@@ -512,7 +535,13 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       size: EXPENSES_GRID_DEFAULT_WIDTHS.estimate,
       minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { headerClassName: 'text-center', cellClassName: 'text-center', containsEditableInput: true },
-      cell: ({ row }) => <EstimateCell checked={row.original.exp.is_estimate} onToggle={v => handleToggleEstimate(row.original.exp.id, v)} />,
+      cell: ({ row }) => (
+        <EstimateCell
+          checked={row.original.exp.is_estimate}
+          onToggle={v => handleToggleEstimate(row.original.exp.id, v)}
+          disabled={!!pendingById[row.original.exp.id]}
+        />
+      ),
     }),
     columnHelper.accessor(r => r.exp.frequency_type, {
       id: 'frequency',
@@ -520,7 +549,13 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       size: EXPENSES_GRID_DEFAULT_WIDTHS.frequency,
       minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { containsEditableInput: true },
-      cell: ({ row }) => <ExpenseFrequencyCell exp={row.original.exp} onChange={(field, v) => handleUpdate(row.original.exp.id, field, v)} />,
+      cell: ({ row }) => (
+        <ExpenseFrequencyCell
+          exp={row.original.exp}
+          onChange={(field, v) => handleUpdate(row.original.exp.id, field, v)}
+          disabled={!!pendingById[row.original.exp.id]}
+        />
+      ),
     }),
     columnHelper.accessor('monthly', {
       id: 'monthly',
@@ -547,6 +582,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
           partnerY={partnerY}
           onChange={v => handleUpdate(row.original.exp.id, 'linked_account_id', v)}
           onAddNew={() => openNewItemDialog({ type: 'existing_expense', expenseId: row.original.exp.id, field: 'linked_account_id' }, 'payment_method')}
+          disabled={!!pendingById[row.original.exp.id]}
         />
       ),
     }),
@@ -572,7 +608,12 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { headerClassName: 'text-right whitespace-nowrap', containsEditableInput: true },
       cell: ({ row }) => (
-        <GridPercentCell value={row.original.exp.benefit_x} onChange={v => { const c = Math.max(0, Math.min(100, Math.round(Number(v) || 0))); handleUpdate(row.original.exp.id, 'benefit_x', String(c)); }} navCol={7} />
+        <GridPercentCell
+          value={row.original.exp.benefit_x}
+          onChange={v => { const c = Math.max(0, Math.min(100, Math.round(Number(v) || 0))); handleUpdate(row.original.exp.id, 'benefit_x', String(c)); }}
+          navCol={7}
+          disabled={!!pendingById[row.original.exp.id]}
+        />
       ),
     }),
     columnHelper.accessor(r => 100 - r.exp.benefit_x, {
@@ -584,7 +625,12 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { headerClassName: 'text-right whitespace-nowrap', cellClassName: 'text-right tabular-nums text-xs', containsEditableInput: true },
       cell: ({ row }) => (
-        <GridPercentCell value={100 - row.original.exp.benefit_x} onChange={v => { const c = Math.max(0, Math.min(100, Math.round(Number(v) || 0))); handleUpdate(row.original.exp.id, 'benefit_x', String(100 - c)); }} navCol={8} />
+        <GridPercentCell
+          value={100 - row.original.exp.benefit_x}
+          onChange={v => { const c = Math.max(0, Math.min(100, Math.round(Number(v) || 0))); handleUpdate(row.original.exp.id, 'benefit_x', String(100 - c)); }}
+          navCol={8}
+          disabled={!!pendingById[row.original.exp.id]}
+        />
       ),
     }),
     columnHelper.accessor('fairX', {
@@ -612,9 +658,15 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       minSize: EXPENSES_GRID_DEFAULT_WIDTHS.actions,
       maxSize: EXPENSES_GRID_DEFAULT_WIDTHS.actions,
       meta: { headerClassName: 'px-0', cellClassName: 'px-0', containsButton: true },
-      cell: ({ row }) => <ExpenseActionsCell name={row.original.exp.name} onRemove={() => handleRemove(row.original.exp.id)} />,
+      cell: ({ row }) => (
+        <ExpenseActionsCell
+          name={row.original.exp.name}
+          onRemove={() => handleRemove(row.original.exp.id)}
+          disabled={!!pendingById[row.original.exp.id]}
+        />
+      ),
     }),
-  ], [categories, linkedAccounts, partnerX, partnerY, getDerivedPayer]);
+  ], [categories, linkedAccounts, partnerX, partnerY, getDerivedPayer, pendingById]);
 
   const table = useReactTable({
     data: computedData,

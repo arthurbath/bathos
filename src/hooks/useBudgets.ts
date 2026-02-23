@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { withMutationTiming } from '@/lib/mutationTiming';
+import { budgetQueryKeys } from '@/hooks/budgetQueryKeys';
 
 export interface Budget {
   id: string;
@@ -8,73 +11,139 @@ export interface Budget {
   household_id: string;
 }
 
+function sortByName(rows: Budget[]): Budget[] {
+  return [...rows].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function useBudgets(householdId: string) {
-  const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [loading, setLoading] = useState(true);
-  const sortByName = (rows: Budget[]) => [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  const queryClient = useQueryClient();
+  const queryKey = budgetQueryKeys.budgets(householdId);
+  const [pendingById, setPendingById] = useState<Record<string, boolean>>({});
 
-  const fetch = useCallback(async () => {
-    const { data } = await supabase
-      .from('budget_budgets')
-      .select('*')
-      .eq('household_id', householdId)
-      .order('name');
-    setBudgets((data as Budget[]) ?? []);
-    setLoading(false);
-  }, [householdId]);
+  const { data, isLoading, refetch } = useQuery({
+    queryKey,
+    enabled: Boolean(householdId),
+    queryFn: async () => {
+      const { data: rows, error } = await supabase
+        .from('budget_budgets')
+        .select('*')
+        .eq('household_id', householdId)
+        .order('name');
 
-  useEffect(() => { fetch(); }, [fetch]);
+      if (error) throw error;
+      return (rows as Budget[]) ?? [];
+    },
+  });
 
-  const add = async (name: string) => {
+  const setPending = useCallback((id: string, pending: boolean) => {
+    setPendingById((current) => {
+      if (pending) return { ...current, [id]: true };
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }, []);
+
+  const add = useCallback(async (name: string) => {
+    if (!householdId) throw new Error('No household selected.');
+
     const id = crypto.randomUUID();
-    const optimistic: Budget = { id, household_id: householdId, name, color: null };
-    setBudgets(prev => sortByName([...prev, optimistic]));
+    setPending(id, true);
+    try {
+      const saved = await withMutationTiming({ module: 'budget', action: 'budgets.add' }, async () => {
+        const { data: row, error } = await supabase
+          .from('budget_budgets')
+          .insert({ id, household_id: householdId, name })
+          .select('*')
+          .single();
 
-    const { data, error } = await supabase.from('budget_budgets').insert({ id, household_id: householdId, name }).select('*').single();
-    if (error) {
-      setBudgets(prev => prev.filter(b => b.id !== id));
-      throw error;
+        if (error) throw error;
+        return row as Budget;
+      });
+
+      queryClient.setQueryData<Budget[]>(queryKey, (current) => sortByName([...(current ?? []), saved]));
+    } finally {
+      setPending(id, false);
     }
-    if (data) {
-      setBudgets(prev => sortByName(prev.map(b => (b.id === id ? (data as Budget) : b))));
+  }, [householdId, queryClient, queryKey, setPending]);
+
+  const update = useCallback(async (id: string, name: string) => {
+    if (pendingById[id]) return;
+
+    setPending(id, true);
+    try {
+      const saved = await withMutationTiming({ module: 'budget', action: 'budgets.update' }, async () => {
+        const { data: row, error } = await supabase
+          .from('budget_budgets')
+          .update({ name })
+          .eq('id', id)
+          .select('*')
+          .single();
+
+        if (error) throw error;
+        return row as Budget;
+      });
+
+      queryClient.setQueryData<Budget[]>(queryKey, (current) =>
+        sortByName((current ?? []).map((budget) => (budget.id === id ? saved : budget))),
+      );
+    } finally {
+      setPending(id, false);
     }
+  }, [pendingById, queryClient, queryKey, setPending]);
+
+  const updateColor = useCallback(async (id: string, color: string | null) => {
+    if (pendingById[id]) return;
+
+    setPending(id, true);
+    try {
+      const saved = await withMutationTiming({ module: 'budget', action: 'budgets.updateColor' }, async () => {
+        const { data: row, error } = await supabase
+          .from('budget_budgets')
+          .update({ color })
+          .eq('id', id)
+          .select('*')
+          .single();
+
+        if (error) throw error;
+        return row as Budget;
+      });
+
+      queryClient.setQueryData<Budget[]>(queryKey, (current) =>
+        sortByName((current ?? []).map((budget) => (budget.id === id ? saved : budget))),
+      );
+    } finally {
+      setPending(id, false);
+    }
+  }, [pendingById, queryClient, queryKey, setPending]);
+
+  const remove = useCallback(async (id: string) => {
+    if (pendingById[id]) return;
+
+    setPending(id, true);
+    try {
+      await withMutationTiming({ module: 'budget', action: 'budgets.remove' }, async () => {
+        const { error } = await supabase.from('budget_budgets').delete().eq('id', id);
+        if (error) throw error;
+      });
+
+      queryClient.setQueryData<Budget[]>(queryKey, (current) => (current ?? []).filter((budget) => budget.id !== id));
+    } finally {
+      setPending(id, false);
+    }
+  }, [pendingById, queryClient, queryKey, setPending]);
+
+  return {
+    budgets: data ?? [],
+    loading: isLoading,
+    add,
+    update,
+    updateColor,
+    remove,
+    pendingById,
+    refetch: async () => {
+      await refetch();
+    },
   };
-
-  const update = async (id: string, name: string) => {
-    const prevBudgets = budgets;
-    setBudgets(prev => sortByName(prev.map(b => b.id === id ? { ...b, name } : b)));
-    const { data, error } = await supabase.from('budget_budgets').update({ name }).eq('id', id).select('*').single();
-    if (error) {
-      setBudgets(prevBudgets);
-      throw error;
-    }
-    if (data) {
-      setBudgets(prev => sortByName(prev.map(b => (b.id === id ? (data as Budget) : b))));
-    }
-  };
-
-  const updateColor = async (id: string, color: string | null) => {
-    const prevBudgets = budgets;
-    setBudgets(prev => sortByName(prev.map(b => b.id === id ? { ...b, color } : b)));
-    const { data, error } = await supabase.from('budget_budgets').update({ color }).eq('id', id).select('*').single();
-    if (error) {
-      setBudgets(prevBudgets);
-      throw error;
-    }
-    if (data) {
-      setBudgets(prev => sortByName(prev.map(b => (b.id === id ? (data as Budget) : b))));
-    }
-  };
-
-  const remove = async (id: string) => {
-    const prevBudgets = budgets;
-    setBudgets(prev => prev.filter(b => b.id !== id));
-    const { error } = await supabase.from('budget_budgets').delete().eq('id', id);
-    if (error) {
-      setBudgets(prevBudgets);
-      throw error;
-    }
-  };
-
-  return { budgets, loading, add, update, updateColor, remove, refetch: fetch };
 }

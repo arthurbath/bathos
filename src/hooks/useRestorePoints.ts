@@ -1,6 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
+import { withMutationTiming } from '@/lib/mutationTiming';
+import { budgetQueryKeys } from '@/hooks/budgetQueryKeys';
 
 export interface RestorePoint {
   id: string;
@@ -10,88 +13,127 @@ export interface RestorePoint {
   created_at: string;
 }
 
+function sortByCreatedAtDesc(rows: RestorePoint[]): RestorePoint[] {
+  return [...rows].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
+}
+
+function mapRow(row: Omit<RestorePoint, 'notes'> & { name: string | null }): RestorePoint {
+  return {
+    id: row.id,
+    household_id: row.household_id,
+    data: row.data,
+    created_at: row.created_at,
+    notes: row.name,
+  };
+}
+
 export function useRestorePoints(householdId: string) {
-  const [points, setPoints] = useState<RestorePoint[]>([]);
-  const [loading, setLoading] = useState(true);
-  const sortByCreatedAtDesc = (rows: RestorePoint[]) =>
-    [...rows].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
+  const queryClient = useQueryClient();
+  const queryKey = budgetQueryKeys.restorePoints(householdId);
+  const [pendingById, setPendingById] = useState<Record<string, boolean>>({});
 
-  const fetch = useCallback(async () => {
-    const { data } = await supabase
-      .from('budget_restore_points')
-      .select('*')
-      .eq('household_id', householdId)
-      .order('created_at', { ascending: false });
-    const mapped = ((data as Array<Omit<RestorePoint, 'notes'> & { name: string | null }>) ?? []).map((row) => ({
-      id: row.id,
-      household_id: row.household_id,
-      data: row.data,
-      created_at: row.created_at,
-      notes: row.name,
-    }));
-    setPoints(mapped);
-    setLoading(false);
-  }, [householdId]);
+  const { data, isLoading, refetch } = useQuery({
+    queryKey,
+    enabled: Boolean(householdId),
+    queryFn: async () => {
+      const { data: rows, error } = await supabase
+        .from('budget_restore_points')
+        .select('*')
+        .eq('household_id', householdId)
+        .order('created_at', { ascending: false });
 
-  useEffect(() => { fetch(); }, [fetch]);
+      if (error) throw error;
+      const mapped = ((rows as Array<Omit<RestorePoint, 'notes'> & { name: string | null }>) ?? []).map(mapRow);
+      return sortByCreatedAtDesc(mapped);
+    },
+  });
 
-  const save = async (notes: string, snapshot: Json) => {
+  const setPending = useCallback((id: string, pending: boolean) => {
+    setPendingById((current) => {
+      if (pending) return { ...current, [id]: true };
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }, []);
+
+  const save = useCallback(async (notes: string, snapshot: Json) => {
+    if (!householdId) throw new Error('No household selected.');
+
     const id = crypto.randomUUID();
-    const optimistic: RestorePoint = {
-      id,
-      household_id: householdId,
-      notes: notes || null,
-      data: snapshot,
-      created_at: new Date().toISOString(),
-    };
-    setPoints(prev => sortByCreatedAtDesc([optimistic, ...prev]));
+    setPending(id, true);
+    try {
+      const row = await withMutationTiming({ module: 'budget', action: 'restorePoints.save' }, async () => {
+        const { data: savedRow, error } = await supabase
+          .from('budget_restore_points')
+          .insert({
+            id,
+            household_id: householdId,
+            name: notes || null,
+            data: snapshot,
+          })
+          .select('*')
+          .single();
 
-    const { data, error } = await supabase.from('budget_restore_points').insert({
-      id,
-      household_id: householdId,
-      name: notes || null,
-      data: snapshot,
-    }).select('*').single();
-    if (error) {
-      setPoints(prev => prev.filter(p => p.id !== id));
-      throw error;
-    }
-    if (data) {
-      const row = data as Omit<RestorePoint, 'notes'> & { name: string | null };
-      const mapped = {
-        id: row.id,
-        household_id: row.household_id,
-        data: row.data,
-        created_at: row.created_at,
-        notes: row.name,
-      };
-      setPoints(prev => sortByCreatedAtDesc(prev.map(p => (p.id === id ? mapped : p))));
-    }
-  };
+        if (error) throw error;
+        return savedRow as Omit<RestorePoint, 'notes'> & { name: string | null };
+      });
 
-  const remove = async (id: string) => {
-    const prevPoints = points;
-    setPoints(prev => prev.filter(p => p.id !== id));
-    const { error } = await supabase.from('budget_restore_points').delete().eq('id', id);
-    if (error) {
-      setPoints(prevPoints);
-      throw error;
+      queryClient.setQueryData<RestorePoint[]>(queryKey, (current) => sortByCreatedAtDesc([mapRow(row), ...(current ?? [])]));
+    } finally {
+      setPending(id, false);
     }
-  };
+  }, [householdId, queryClient, queryKey, setPending]);
 
-  const updateNotes = async (id: string, notes: string) => {
+  const remove = useCallback(async (id: string) => {
+    if (pendingById[id]) return;
+
+    setPending(id, true);
+    try {
+      await withMutationTiming({ module: 'budget', action: 'restorePoints.remove' }, async () => {
+        const { error } = await supabase.from('budget_restore_points').delete().eq('id', id);
+        if (error) throw error;
+      });
+
+      queryClient.setQueryData<RestorePoint[]>(queryKey, (current) => (current ?? []).filter((point) => point.id !== id));
+    } finally {
+      setPending(id, false);
+    }
+  }, [pendingById, queryClient, queryKey, setPending]);
+
+  const updateNotes = useCallback(async (id: string, notes: string) => {
+    if (pendingById[id]) return;
+
     const normalized = notes.trim();
-    const prevPoints = points;
-    setPoints(prev => prev.map(p => (p.id === id ? { ...p, notes: normalized || null } : p)));
-    const { error } = await supabase
-      .from('budget_restore_points')
-      .update({ name: normalized || null })
-      .eq('id', id);
-    if (error) {
-      setPoints(prevPoints);
-      throw error;
-    }
-  };
+    setPending(id, true);
+    try {
+      await withMutationTiming({ module: 'budget', action: 'restorePoints.updateNotes' }, async () => {
+        const { error } = await supabase
+          .from('budget_restore_points')
+          .update({ name: normalized || null })
+          .eq('id', id);
 
-  return { points, loading, save, remove, updateNotes, refetch: fetch };
+        if (error) throw error;
+      });
+
+      queryClient.setQueryData<RestorePoint[]>(queryKey, (current) =>
+        (current ?? []).map((point) => (point.id === id ? { ...point, notes: normalized || null } : point)),
+      );
+    } finally {
+      setPending(id, false);
+    }
+  }, [pendingById, queryClient, queryKey, setPending]);
+
+  return {
+    points: data ?? [],
+    loading: isLoading,
+    save,
+    remove,
+    updateNotes,
+    pendingById,
+    refetch: async () => {
+      await refetch();
+    },
+  };
 }

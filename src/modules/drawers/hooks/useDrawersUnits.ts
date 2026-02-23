@@ -10,15 +10,50 @@ interface UnitDraft {
   frame_color: DrawersUnitFrameColor;
 }
 
+interface SaveUnitDraft extends UnitDraft {
+  id?: string | null;
+}
+
+const CREATE_PENDING_KEY = '__create_unit__';
+
+function upsertUnit(units: DrawersUnit[], saved: DrawersUnit): DrawersUnit[] {
+  const index = units.findIndex(unit => unit.id === saved.id);
+  if (index === -1) {
+    return [...units, saved].sort((a, b) => a.sort_order - b.sort_order);
+  }
+
+  const next = [...units];
+  next[index] = saved;
+  next.sort((a, b) => a.sort_order - b.sort_order);
+  return next;
+}
+
 export function useDrawersUnits(householdId: string) {
   const [units, setUnits] = useState<DrawersUnit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingById, setPendingById] = useState<Record<string, boolean>>({});
   const unitsRef = useRef<DrawersUnit[]>([]);
   const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     unitsRef.current = units;
   }, [units]);
+
+  const setPending = useCallback((keys: string[], pending: boolean) => {
+    if (keys.length === 0) return;
+    setPendingById((prev) => {
+      const next = { ...prev };
+      for (const key of keys) {
+        if (!key) continue;
+        if (pending) {
+          next[key] = true;
+        } else {
+          delete next[key];
+        }
+      }
+      return next;
+    });
+  }, []);
 
   const runQueuedMutation = useCallback(function <T>(
     operation: string,
@@ -58,155 +93,182 @@ export function useDrawersUnits(householdId: string) {
     void fetch().catch(() => setLoading(false));
   }, [fetch]);
 
-  const add = useCallback(
-    async ({ name, width, height, frame_color }: UnitDraft) => {
-      return runQueuedMutation('drawers_units.add', async () => {
-        const current = unitsRef.current;
-        const nextSortOrder = (current[current.length - 1]?.sort_order ?? -1) + 1;
-        const id = crypto.randomUUID();
-        const nowIso = new Date().toISOString();
+  const persistUnit = useCallback(
+    async (draft: SaveUnitDraft): Promise<DrawersUnit> => {
+      if (!householdId) throw new Error('Missing household id.');
 
-        const optimistic: DrawersUnit = {
-          id,
-          household_id: householdId,
-          name,
-          width,
-          height,
-          frame_color,
-          sort_order: nextSortOrder,
-          created_at: nowIso,
-          updated_at: nowIso,
-        };
+      const pendingKey = draft.id ?? CREATE_PENDING_KEY;
+      setPending([pendingKey], true);
 
-        setUnits(prev => [...prev, optimistic]);
+      try {
+        const { data, error } = await supabase.rpc('drawers_save_unit', {
+          _unit_id: draft.id ?? null,
+          _household_id: householdId,
+          _name: draft.name,
+          _width: draft.width,
+          _height: draft.height,
+          _frame_color: draft.frame_color,
+        });
 
-        const { error } = await supabase
-          .from('drawers_units')
-          .insert({
-            id,
-            household_id: householdId,
-            name,
-            width,
-            height,
-            frame_color,
-            sort_order: nextSortOrder,
-          });
+        if (error) throw error;
 
-        if (error) {
-          setUnits(prev => prev.filter(unit => unit.id !== id));
-          throw error;
+        const saved = (data as DrawersUnit | null) ?? null;
+        if (!saved?.id) {
+          throw new Error('Failed to save unit.');
         }
-      });
+
+        setUnits((prev) => upsertUnit(prev, saved));
+        return saved;
+      } finally {
+        setPending([pendingKey], false);
+      }
     },
-    [householdId, runQueuedMutation],
+    [householdId, setPending],
   );
 
-  const rename = useCallback(async (id: string, name: string) => {
-    return runQueuedMutation('drawers_units.rename', async () => {
-      const previous = unitsRef.current;
-      const updatedAt = new Date().toISOString();
-      setUnits(prev => prev.map(unit => (unit.id === id ? { ...unit, name, updated_at: updatedAt } : unit)));
-
-      const { error } = await supabase.from('drawers_units').update({ name, updated_at: updatedAt }).eq('id', id);
-      if (error) {
-        setUnits(previous);
-        throw error;
+  const save = useCallback(
+    async (draft: SaveUnitDraft): Promise<void> => {
+      if (!draft.id) {
+        await runQueuedMutation('drawers_units.save', async () => {
+          await persistUnit(draft);
+        });
+        return;
       }
-    });
-  }, [runQueuedMutation]);
 
-  const resize = useCallback(async (id: string, width: number, height: number) => {
-    return runQueuedMutation('drawers_units.resize', async () => {
-      const previous = unitsRef.current;
-      const updatedAt = new Date().toISOString();
-      setUnits(prev => prev.map(unit => (unit.id === id ? { ...unit, width, height, updated_at: updatedAt } : unit)));
-
-      const { error } = await supabase.rpc('resize_drawers_unit', {
-        _unit_id: id,
-        _new_w: width,
-        _new_h: height,
+      await withDrawersDbTiming('drawers_units.save', async () => {
+        await persistUnit(draft);
       });
+    },
+    [persistUnit, runQueuedMutation],
+  );
 
-      if (error) {
-        setUnits(previous);
-        throw error;
-      }
-    });
-  }, [runQueuedMutation]);
+  const add = useCallback(
+    async ({ name, width, height, frame_color }: UnitDraft) => {
+      await save({
+        name,
+        width,
+        height,
+        frame_color,
+      });
+    },
+    [save],
+  );
 
-  const setFrameColor = useCallback(async (id: string, frameColor: DrawersUnitFrameColor) => {
-    return runQueuedMutation('drawers_units.set_frame_color', async () => {
-      const previous = unitsRef.current;
-      const updatedAt = new Date().toISOString();
-      setUnits(prev => prev.map(unit => (unit.id === id ? { ...unit, frame_color: frameColor, updated_at: updatedAt } : unit)));
+  const rename = useCallback(
+    async (id: string, name: string) => {
+      const existing = unitsRef.current.find((unit) => unit.id === id);
+      if (!existing) throw new Error('Unit not found');
 
-      const { error } = await supabase
-        .from('drawers_units')
-        .update({ frame_color: frameColor, updated_at: updatedAt })
-        .eq('id', id);
+      await save({
+        id,
+        name,
+        width: existing.width,
+        height: existing.height,
+        frame_color: existing.frame_color ?? 'white',
+      });
+    },
+    [save],
+  );
 
-      if (error) {
-        setUnits(previous);
-        throw error;
-      }
-    });
-  }, [runQueuedMutation]);
+  const resize = useCallback(
+    async (id: string, width: number, height: number) => {
+      const existing = unitsRef.current.find((unit) => unit.id === id);
+      if (!existing) throw new Error('Unit not found');
+
+      await save({
+        id,
+        name: existing.name,
+        width,
+        height,
+        frame_color: existing.frame_color ?? 'white',
+      });
+    },
+    [save],
+  );
+
+  const setFrameColor = useCallback(
+    async (id: string, frameColor: DrawersUnitFrameColor) => {
+      const existing = unitsRef.current.find((unit) => unit.id === id);
+      if (!existing) throw new Error('Unit not found');
+
+      await save({
+        id,
+        name: existing.name,
+        width: existing.width,
+        height: existing.height,
+        frame_color: frameColor,
+      });
+    },
+    [save],
+  );
 
   const reorder = useCallback(
     async (id: string, direction: 'up' | 'down') => {
-      return runQueuedMutation('drawers_units.reorder', async () => {
-        const previous = unitsRef.current;
-        const idx = previous.findIndex(unit => unit.id === id);
-        if (idx === -1) return;
-        const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-        if (targetIdx < 0 || targetIdx >= previous.length) return;
+      setPending([id], true);
+      try {
+        await runQueuedMutation('drawers_units.reorder', async () => {
+          const current = unitsRef.current;
+          const idx = current.findIndex(unit => unit.id === id);
+          if (idx === -1) return;
 
-        const source = previous[idx];
-        const target = previous[targetIdx];
-        const updatedAt = new Date().toISOString();
-        const optimistic = [...previous];
-        optimistic[idx] = { ...target, sort_order: source.sort_order, updated_at: updatedAt };
-        optimistic[targetIdx] = { ...source, sort_order: target.sort_order, updated_at: updatedAt };
-        optimistic.sort((a, b) => a.sort_order - b.sort_order);
-        setUnits(optimistic);
+          const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+          if (targetIdx < 0 || targetIdx >= current.length) return;
 
-        const sourceSort = source.sort_order;
-        const targetSort = target.sort_order;
+          const source = current[idx];
+          const target = current[targetIdx];
+          const updatedAt = new Date().toISOString();
+          const sourceSort = source.sort_order;
+          const targetSort = target.sort_order;
 
-        const [{ error: sourceError }, { error: targetError }] = await Promise.all([
-          supabase.from('drawers_units').update({ sort_order: targetSort, updated_at: updatedAt }).eq('id', source.id),
-          supabase.from('drawers_units').update({ sort_order: sourceSort, updated_at: updatedAt }).eq('id', target.id),
-        ]);
+          const [{ error: sourceError }, { error: targetError }] = await Promise.all([
+            supabase.from('drawers_units').update({ sort_order: targetSort, updated_at: updatedAt }).eq('id', source.id),
+            supabase.from('drawers_units').update({ sort_order: sourceSort, updated_at: updatedAt }).eq('id', target.id),
+          ]);
 
-        if (sourceError || targetError) {
-          setUnits(previous);
-          throw sourceError || targetError;
-        }
-      });
+          if (sourceError || targetError) {
+            throw sourceError || targetError;
+          }
+
+          const next = [...current];
+          next[idx] = { ...target, sort_order: sourceSort, updated_at: updatedAt };
+          next[targetIdx] = { ...source, sort_order: targetSort, updated_at: updatedAt };
+          next.sort((a, b) => a.sort_order - b.sort_order);
+          setUnits(next);
+        });
+      } finally {
+        setPending([id], false);
+      }
     },
-    [runQueuedMutation],
+    [runQueuedMutation, setPending],
   );
 
-  const remove = useCallback(async (id: string) => {
-    return runQueuedMutation('drawers_units.remove', async () => {
-      const previous = unitsRef.current;
-      setUnits(prev => prev.filter(unit => unit.id !== id));
-
-      const { error } = await supabase.from('drawers_units').delete().eq('id', id);
-      if (error) {
-        setUnits(previous);
-        throw error;
+  const remove = useCallback(
+    async (id: string) => {
+      setPending([id], true);
+      try {
+        await runQueuedMutation('drawers_units.remove', async () => {
+          const { error } = await supabase.from('drawers_units').delete().eq('id', id);
+          if (error) throw error;
+          setUnits(prev => prev.filter(unit => unit.id !== id));
+        });
+      } finally {
+        setPending([id], false);
       }
-    });
-  }, [runQueuedMutation]);
+    },
+    [runQueuedMutation, setPending],
+  );
 
   const hasUnits = useMemo(() => units.length > 0, [units.length]);
+  const creating = !!pendingById[CREATE_PENDING_KEY];
 
   return {
     units,
     loading,
     hasUnits,
+    pendingById,
+    creating,
     add,
+    save,
     rename,
     resize,
     setFrameColor,

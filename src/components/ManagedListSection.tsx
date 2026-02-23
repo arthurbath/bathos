@@ -28,6 +28,8 @@ interface ManagedListSectionProps {
   onRemove: (id: string) => Promise<void>;
   onReassign?: (oldId: string, newId: string | null) => Promise<void>;
   onUpdateColor?: (id: string, color: string | null) => Promise<void>;
+  pendingById?: Record<string, boolean>;
+  reassignDeletesTarget?: boolean;
 }
 
 function ColorPicker({ color, onChange, disabled = false }: { color: string | null | undefined; onChange: (c: string | null) => void; disabled?: boolean }) {
@@ -84,7 +86,19 @@ function ColorPicker({ color, onChange, disabled = false }: { color: string | nu
 
 export { ColorPicker };
 
-export function ManagedListSection({ title, description, items, getUsageCount, onAdd, onUpdate, onRemove, onReassign, onUpdateColor }: ManagedListSectionProps) {
+export function ManagedListSection({
+  title,
+  description,
+  items,
+  getUsageCount,
+  onAdd,
+  onUpdate,
+  onRemove,
+  onReassign,
+  onUpdateColor,
+  pendingById = {},
+  reassignDeletesTarget = false,
+}: ManagedListSectionProps) {
   const [name, setName] = useState('');
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -106,6 +120,7 @@ export function ManagedListSection({ title, description, items, getUsageCount, o
   };
 
   const startEdit = (item: ManagedItem) => {
+    if (pendingById[item.id]) return;
     setEditingId(item.id);
     setEditValue(item.name);
     setTimeout(() => editRef.current?.focus(), 50);
@@ -144,7 +159,9 @@ export function ManagedListSection({ title, description, items, getUsageCount, o
     if (!deleteTarget || !onReassign) return;
     try {
       await onReassign(deleteTarget.id, reassignTo === '_none' ? null : reassignTo);
-      await onRemove(deleteTarget.id);
+      if (!reassignDeletesTarget) {
+        await onRemove(deleteTarget.id);
+      }
       setDeleteTarget(null);
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -188,12 +205,14 @@ export function ManagedListSection({ title, description, items, getUsageCount, o
               <TableBody>
                 {items.map(item => {
                   const count = getUsageCount(item.id);
+                  const isPending = !!pendingById[item.id];
                   return (
                     <TableRow key={item.id}>
                       {onUpdateColor && (
                         <TableCell>
                           <ColorPicker
                             color={item.color}
+                            disabled={isPending}
                             onChange={c => onUpdateColor(item.id, c)}
                           />
                         </TableCell>
@@ -203,6 +222,7 @@ export function ManagedListSection({ title, description, items, getUsageCount, o
                           <Input
                             ref={editRef}
                             value={editValue}
+                            disabled={isPending}
                             onChange={e => setEditValue(e.target.value)}
                             onBlur={commitEdit}
                             onKeyDown={e => {
@@ -215,19 +235,19 @@ export function ManagedListSection({ title, description, items, getUsageCount, o
                           <span className="font-medium">{item.name}</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">{count}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{isPending ? 'Saving…' : count}</TableCell>
                       <TableCell className="text-right space-x-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(item)}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(item)} disabled={isPending}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         {count > 0 && onReassign ? (
-                          <Button variant="ghost-destructive" size="icon" className="h-7 w-7" onClick={() => handleDeleteClick(item)}>
+                          <Button variant="ghost-destructive" size="icon" className="h-7 w-7" onClick={() => handleDeleteClick(item)} disabled={isPending}>
                             <Trash2 className="h-3.5 w-3.5 text-destructive" />
                           </Button>
                         ) : (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost-destructive" size="icon" className="h-7 w-7">
+                              <Button variant="ghost-destructive" size="icon" className="h-7 w-7" disabled={isPending}>
                                 <Trash2 className="h-3.5 w-3.5 text-destructive" />
                               </Button>
                             </AlertDialogTrigger>

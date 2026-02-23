@@ -592,6 +592,53 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      budget_create_household_for_current_user: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      budget_join_household_for_current_user: {
+        Args: { _invite_code: string }
+        Returns: Json
+      }
+      budget_reassign_category_and_delete: {
+        Args: {
+          _household_id: string
+          _new_category_id: string | null
+          _old_category_id: string
+        }
+        Returns: Json
+      }
+      budget_reassign_linked_account_and_delete: {
+        Args: {
+          _household_id: string
+          _new_linked_account_id: string | null
+          _old_linked_account_id: string
+        }
+        Returns: Json
+      }
+      budget_restore_household_snapshot: {
+        Args: { _household_id: string; _snapshot: Json }
+        Returns: Json
+      }
+      budget_update_partner_names: {
+        Args: {
+          _household_id: string
+          _partner_x_name: string
+          _partner_y_name: string
+        }
+        Returns: Json
+      }
+      drawers_save_unit: {
+        Args: {
+          _frame_color: string
+          _height: number
+          _household_id: string
+          _name: string
+          _unit_id: string | null
+          _width: number
+        }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

@@ -698,7 +698,7 @@ function focusInputAtEnd(input: HTMLInputElement | null) {
   }
 }
 
-export function GridEditableCell({ value, onChange, navCol, type = 'text', className, placeholder, cellId }: {
+export function GridEditableCell({ value, onChange, navCol, type = 'text', className, placeholder, cellId, disabled = false }: {
   value: string | number;
   onChange: (v: string) => void;
   navCol: number;
@@ -706,6 +706,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
   className?: string;
   placeholder?: string;
   cellId?: string;
+  disabled?: boolean;
 }) {
   const ctx = useDataGrid();
   const [local, setLocal] = useState(String(value));
@@ -720,6 +721,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
   }, [value, focused, editing]);
 
   const commit = () => {
+    if (disabled) return;
     if (local !== String(value)) {
       ctx?.onCellCommit(navCol);
       onChange(local);
@@ -732,6 +734,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
       type={type}
       value={local}
       readOnly={!editing}
+      disabled={disabled}
       placeholder={placeholder}
       data-row={ctx?.rowIndex}
       data-row-id={ctx?.rowId}
@@ -740,11 +743,13 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
       data-grid-editing={editing ? 'true' : 'false'}
       onChange={e => { if (editing) setLocal(e.target.value); }}
       onMouseDown={e => {
+        if (disabled) return;
         ctx?.onCellMouseDown(e);
         pointerDownRef.current = true;
         if (!editing) setEditing(true);
       }}
       onFocus={() => {
+        if (disabled) return;
         setFocused(true);
         if (!pointerDownRef.current) setEditing(false);
         pointerDownRef.current = false;
@@ -760,6 +765,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
         pointerDownRef.current = false;
       }}
         onKeyDown={e => {
+          if (disabled) return;
           const startEditingWithKey = (key: string) => {
             setEditing(true);
             setLocal(key);
@@ -826,16 +832,17 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
           if (!moved) suppressBlurCommitRef.current = false;
         }
       }}
-      className={cn(CELL_INPUT_CLASS, !editing && 'caret-transparent', className)}
+      className={cn(CELL_INPUT_CLASS, !editing && 'caret-transparent', 'disabled:opacity-60 disabled:cursor-not-allowed', className)}
     />
   );
 }
 
-export function GridCurrencyCell({ value, onChange, navCol, className }: {
+export function GridCurrencyCell({ value, onChange, navCol, className, disabled = false }: {
   value: number;
   onChange: (v: string) => void;
   navCol: number;
   className?: string;
+  disabled?: boolean;
 }) {
   const ctx = useDataGrid();
   const [local, setLocal] = useState(String(value));
@@ -850,6 +857,7 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
   }, [value, focused, editing]);
 
   const commit = () => {
+    if (disabled) return;
     if (local !== String(value)) {
       ctx?.onCellCommit(navCol);
       onChange(local);
@@ -865,16 +873,19 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
         inputMode="decimal"
         value={local}
         readOnly={!editing}
+        disabled={disabled}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
         data-col={navCol}
         data-grid-editing={editing ? 'true' : 'false'}
         onChange={e => { if (editing) setLocal(e.target.value); }}
         onMouseDown={e => {
+          if (disabled) return;
           ctx?.onCellMouseDown(e);
           pointerDownRef.current = true;
         }}
         onFocus={() => {
+          if (disabled) return;
           setFocused(true);
           if (pointerDownRef.current) {
             pointerDownRef.current = false;
@@ -900,6 +911,7 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
           pointerDownRef.current = false;
         }}
         onKeyDown={e => {
+          if (disabled) return;
           const startEditingWithKey = (key: string) => {
             setEditing(true);
             setLocal(key);
@@ -966,17 +978,18 @@ export function GridCurrencyCell({ value, onChange, navCol, className }: {
             if (!moved) suppressBlurCommitRef.current = false;
           }
         }}
-        className={cn(CELL_INPUT_CLASS, '!w-full pl-4 pr-2 !text-right', !editing && 'caret-transparent', className)}
+        className={cn(CELL_INPUT_CLASS, '!w-full pl-4 pr-2 !text-right', !editing && 'caret-transparent', 'disabled:opacity-60 disabled:cursor-not-allowed', className)}
       />
     </div>
   );
 }
 
-export function GridPercentCell({ value, onChange, navCol, className }: {
+export function GridPercentCell({ value, onChange, navCol, className, disabled = false }: {
   value: number;
   onChange: (v: string) => void;
   navCol: number;
   className?: string;
+  disabled?: boolean;
 }) {
   const ctx = useDataGrid();
   const [local, setLocal] = useState(String(value));
@@ -991,6 +1004,7 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
   }, [value, focused, editing]);
 
   const commit = () => {
+    if (disabled) return;
     if (local !== String(value)) {
       ctx?.onCellCommit(navCol);
       onChange(local);
@@ -1007,17 +1021,20 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
         min={0}
         max={100}
         readOnly={!editing}
+        disabled={disabled}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
         data-col={navCol}
         data-grid-editing={editing ? 'true' : 'false'}
         onChange={e => { if (editing) setLocal(e.target.value); }}
         onMouseDown={e => {
+          if (disabled) return;
           ctx?.onCellMouseDown(e);
           pointerDownRef.current = true;
           if (!editing) setEditing(true);
         }}
         onFocus={() => {
+          if (disabled) return;
           setFocused(true);
           if (!pointerDownRef.current) setEditing(false);
           pointerDownRef.current = false;
@@ -1033,6 +1050,7 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
           pointerDownRef.current = false;
         }}
         onKeyDown={e => {
+          if (disabled) return;
           const startEditingWithKey = (key: string) => {
             setEditing(true);
             setLocal(key);
@@ -1099,7 +1117,7 @@ export function GridPercentCell({ value, onChange, navCol, className }: {
             if (!moved) suppressBlurCommitRef.current = false;
           }
         }}
-        className={cn(CELL_INPUT_CLASS, '!w-full pr-6 !text-right', !editing && 'caret-transparent', className)}
+        className={cn(CELL_INPUT_CLASS, '!w-full pr-6 !text-right', !editing && 'caret-transparent', 'disabled:opacity-60 disabled:cursor-not-allowed', className)}
       />
     </div>
   );
