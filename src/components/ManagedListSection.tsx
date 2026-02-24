@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Label } from '@/components/ui/label';
 import { Plus, Trash2, Pencil, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { COLOR_PALETTE } from '@/lib/colors';
+import { COLOR_SWATCHES, normalizePaletteColor } from '@/lib/colors';
 
 interface ManagedItem {
   id: string;
@@ -34,6 +34,7 @@ interface ManagedListSectionProps {
 
 function ColorPicker({ color, onChange, disabled = false }: { color: string | null | undefined; onChange: (c: string | null) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
+  const normalizedColor = normalizePaletteColor(color);
 
   useEffect(() => {
     if (disabled && open) setOpen(false);
@@ -51,7 +52,7 @@ function ColorPicker({ color, onChange, disabled = false }: { color: string | nu
         <button
           type="button"
           className="h-6 w-6 rounded border border-border shrink-0 transition-shadow hover:ring-2 hover:ring-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:ring-0"
-          style={{ backgroundColor: color || 'transparent' }}
+          style={{ backgroundColor: normalizedColor || 'transparent' }}
           title="Pick color"
           disabled={disabled}
         >
@@ -60,13 +61,15 @@ function ColorPicker({ color, onChange, disabled = false }: { color: string | nu
       </PopoverTrigger>
       <PopoverContent className="w-auto p-2" align="start">
         <div className="grid grid-cols-5 gap-1.5">
-          {COLOR_PALETTE.map(c => (
+          {COLOR_SWATCHES.map((swatch) => (
             <button
               type="button"
-              key={c}
-              className={`h-6 w-6 rounded border transition-shadow ${color === c ? 'ring-2 ring-ring border-ring' : 'border-border hover:ring-1 hover:ring-ring'}`}
-              style={{ backgroundColor: c }}
-              onClick={() => handleChange(c)}
+              key={swatch.slug}
+              className={`h-6 w-6 rounded border transition-shadow ${normalizedColor === swatch.value ? 'ring-2 ring-ring border-ring' : 'border-border hover:ring-1 hover:ring-ring'}`}
+              style={{ backgroundColor: swatch.value }}
+              title={swatch.label}
+              aria-label={`Use ${swatch.label}`}
+              onClick={() => handleChange(swatch.value)}
             />
           ))}
         </div>
@@ -185,7 +188,7 @@ export function ManagedListSection({
               onChange={e => setName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAdd()}
             />
-            <Button onClick={handleAdd} disabled={!name.trim() || adding} className="gap-1.5 shrink-0" size="sm">
+            <Button variant="outline-success" onClick={handleAdd} disabled={!name.trim() || adding} className="gap-1.5 shrink-0" size="sm">
               <Plus className="h-4 w-4" /> Add
             </Button>
           </div>

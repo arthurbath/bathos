@@ -18,7 +18,7 @@ import { DataGridAddFormAffixInput } from '@/components/ui/data-grid-add-form-af
 import { Plus, Trash2, MoreHorizontal } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels, needsParam } from '@/lib/frequency';
-import { DataGrid, GridEditableCell, GridCurrencyCell, useDataGrid, GRID_CONTROL_HOVER_BORDER_CLASS, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
+import { DataGrid, GridEditableCell, GridCurrencyCell, useDataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import { GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH, INCOMES_GRID_DEFAULT_WIDTHS } from '@/lib/gridColumnWidths';
 import type { FrequencyType } from '@/types/fairshare';
@@ -48,7 +48,7 @@ interface IncomesTabProps {
 }
 
 const columnHelper = createColumnHelper<Income>();
-const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/30 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0';
+const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
 
 // ─── Cell Components ───
 
@@ -153,7 +153,7 @@ function IncomeActionsCell({ income, onRemove, disabled = false }: { income: Inc
             variant="outline"
             size="icon"
             disabled={disabled}
-            className={`float-right mr-[5px] h-7 w-7 cursor-pointer hover:bg-accent hover:text-accent-foreground ${GRID_CONTROL_HOVER_BORDER_CLASS} data-[state=open]:bg-accent data-[state=open]:text-accent-foreground`}
+            className="float-right mr-[5px] h-7 w-7"
             aria-label={`Actions for ${income.name}`}
           >
             <MoreHorizontal className="h-4 w-4" />
@@ -326,8 +326,15 @@ export function IncomesTab({ incomes, partnerX, partnerY, userId, pendingById = 
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Incomes</CardTitle>
-          <Button onClick={openAddIncomeModal} disabled={savingIncome} variant="outline" size="sm" className="h-8 gap-1.5">
-            <Plus className="h-4 w-4" /> Add
+          <Button
+            onClick={openAddIncomeModal}
+            disabled={savingIncome}
+            variant="outline-success"
+            size="sm"
+            className="h-8 w-8 p-0"
+            aria-label="Add income"
+          >
+            <Plus className="h-4 w-4" />
           </Button>
         </div>
       </CardHeader>
@@ -449,7 +456,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, userId, pendingById = 
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveIncome} disabled={savingIncome}>{savingIncome ? 'Saving...' : 'Add'}</Button>
+            <Button variant="outline-success" onClick={handleSaveIncome} disabled={savingIncome}>{savingIncome ? 'Saving...' : 'Add'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

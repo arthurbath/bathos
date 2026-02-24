@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -179,7 +179,7 @@ export default function AccountPage() {
         {/* Display name */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Display name</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Display Name</CardTitle>
           </CardHeader>
           <CardContent>
             {editingName ? (
@@ -215,21 +215,21 @@ export default function AccountPage() {
         {/* Actions */}
         <div className="space-y-2 pt-2">
           <Button variant="outline" className="w-full" onClick={() => setShowChangePassword(true)}>
-            Change password
+            Change Password
           </Button>
           <Button variant="outline" className="w-full" onClick={signOut} disabled={isSigningOut}>
-            Sign out
+            Sign Out
           </Button>
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="ghost" className="w-full text-destructive hover:text-destructive" size="sm">
-                Delete account
+                Delete Account
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete account</AlertDialogTitle>
+                <AlertDialogTitle>Delete Account</AlertDialogTitle>
                 <AlertDialogDescription>
                   This action cannot be undone. All your data will be permanently removed. Type your email address to confirm.
                 </AlertDialogDescription>
@@ -248,7 +248,7 @@ export default function AccountPage() {
                   disabled={deleteConfirmText.toLowerCase() !== userEmail.toLowerCase() || isDeleting}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
-                  {isDeleting ? 'Deleting...' : 'Delete account'}
+                  {isDeleting ? 'Deleting...' : 'Delete Account'}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -260,33 +260,33 @@ export default function AccountPage() {
       <Dialog open={showChangeEmail} onOpenChange={setShowChangeEmail}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Change email</DialogTitle>
+            <DialogTitle>Change Email</DialogTitle>
             <DialogDescription>
               Enter your current password and new email. Confirmation links will be sent to both addresses.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody>
-            <form onSubmit={handleChangeEmail} className="space-y-4">
+          <form id="change-email-form" onSubmit={handleChangeEmail}>
+            <DialogBody className="space-y-4 pb-6">
               <div>
-                <label className="text-sm font-medium mb-1 block">Current email</label>
+                <label className="mb-1 block text-sm font-medium">Current Email</label>
                 <Input value={userEmail} disabled className="bg-muted" />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Current password</label>
+                <label className="mb-1 block text-sm font-medium">Current Password</label>
                 <Input type="password" value={emailPassword} onChange={e => setEmailPassword(e.target.value)} autoComplete="current-password" />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">New email</label>
+                <label className="mb-1 block text-sm font-medium">New Email</label>
                 <Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} autoComplete="email" autoFocus />
               </div>
-              <div className="flex gap-2 pt-1">
-                <Button type="button" variant="outline" onClick={() => setShowChangeEmail(false)}>Cancel</Button>
-                <Button type="submit" disabled={emailSubmitting || !newEmail || !emailPassword} className="flex-1">
-                  {emailSubmitting ? 'Sending...' : 'Send confirmation'}
-                </Button>
-              </div>
-            </form>
-          </DialogBody>
+            </DialogBody>
+            <DialogFooter className="mb-0 pt-6">
+              <Button type="button" variant="outline" onClick={() => setShowChangeEmail(false)}>Cancel</Button>
+              <Button type="submit" disabled={emailSubmitting || !newEmail || !emailPassword}>
+                {emailSubmitting ? 'Sending...' : 'Send Confirmation'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -294,28 +294,28 @@ export default function AccountPage() {
       <Dialog open={showChangePassword} onOpenChange={setShowChangePassword}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Change password</DialogTitle>
+            <DialogTitle>Change Password</DialogTitle>
             <DialogDescription>Enter a new password for your account.</DialogDescription>
           </DialogHeader>
-          <DialogBody>
-            <form onSubmit={handleChangePassword} className="space-y-4">
+          <form id="change-password-form" onSubmit={handleChangePassword}>
+            <DialogBody className="space-y-4 pb-6">
               <div>
-                <label className="text-sm font-medium mb-1 block">New password</label>
+                <label className="text-sm font-medium mb-1 block">New Password</label>
                 <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} minLength={8} autoComplete="new-password" autoFocus />
                 <PasswordRequirements password={newPassword} />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Confirm password</label>
+                <label className="text-sm font-medium mb-1 block">Confirm Password</label>
                 <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} minLength={8} autoComplete="new-password" />
               </div>
-              <div className="flex gap-2 pt-1">
-                <Button type="button" variant="outline" onClick={() => setShowChangePassword(false)}>Cancel</Button>
-                <Button type="submit" disabled={passwordSubmitting || !isPasswordValid(newPassword) || !confirmPassword} className="flex-1">
-                  {passwordSubmitting ? 'Updating...' : 'Update password'}
-                </Button>
-              </div>
-            </form>
-          </DialogBody>
+            </DialogBody>
+            <DialogFooter className="mb-0 pt-6">
+              <Button type="button" variant="outline" onClick={() => setShowChangePassword(false)}>Cancel</Button>
+              <Button type="submit" disabled={passwordSubmitting || !isPasswordValid(newPassword) || !confirmPassword}>
+                {passwordSubmitting ? 'Updating...' : 'Update Password'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

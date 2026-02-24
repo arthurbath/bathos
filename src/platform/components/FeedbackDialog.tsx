@@ -112,7 +112,7 @@ export function FeedbackDialog({ userId }: FeedbackDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4">
+        <DialogBody className="space-y-4 pt-5">
           <div>
             <Textarea
               placeholder="Describe the issue or share your thoughts..."

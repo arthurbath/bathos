@@ -35,7 +35,7 @@ export function useDataGrid() { return useContext(DataGridCtx); }
 export const GRID_HEADER_TONE_CLASS = 'bg-border';
 export const GRID_READONLY_TEXT_CLASS = 'text-muted-foreground';
 // Use on button controls rendered inside grid cells to match hover border treatment of other grid inputs.
-export const GRID_CONTROL_HOVER_BORDER_CLASS = 'hover:border-[hsl(var(--grid-sticky-line))]';
+export const GRID_CONTROL_HOVER_BORDER_CLASS = 'border-transparent hover:border-[hsl(var(--grid-sticky-line))]';
 // Header/footer cell borders and sticky first-column divider are baseline grid affordances in both card and full-view layouts.
 // Card layouts should keep bottom padding on the surrounding card content so rounded bottom corners remain visible.
 const GRID_HEADER_CELL_BORDERS_CLASS = '[&>tr>th]:shadow-[inset_0_-1px_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line))]';
@@ -675,7 +675,7 @@ export function DataGrid<TData>({
 }
 
 // ─── Cell Primitives ───
-const CELL_INPUT_CLASS = 'min-w-0 h-7 rounded-md border border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] focus:border-ring focus:ring-2 focus:ring-ring/30 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0 !text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
+const CELL_INPUT_CLASS = 'min-w-0 h-7 rounded-md border border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 !text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
 
 function isPrintableEntryKey(e: React.KeyboardEvent<HTMLInputElement>) {
   return e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey;

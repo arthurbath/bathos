@@ -146,8 +146,10 @@ describe('SummaryTab DataGrid', () => {
     );
 
     try {
-      const firstCell = container.querySelector('tbody tr td');
-      expect(firstCell?.textContent).toContain('Bravo');
+      const expenseNameCells = Array.from(container.querySelectorAll('tbody tr td:first-child'))
+        .map((cell) => cell.textContent?.trim())
+        .filter((text): text is string => text === 'Alpha' || text === 'Bravo');
+      expect(expenseNameCells[0]).toBe('Bravo');
     } finally {
       unmount(root, container);
       localStorage.removeItem('summary_sorting');

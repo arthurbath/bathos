@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Label } from '@/components/ui/label';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { PersistentTooltipText } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 interface DataGridAddFormLabelProps {
@@ -18,10 +18,7 @@ export function DataGridAddFormLabel({ children, tooltip, htmlFor, className }: 
   const label = (
     <Label
       htmlFor={htmlFor}
-      className={cn(
-        tooltip && 'underline decoration-dotted underline-offset-2',
-        className,
-      )}
+      className={cn(className)}
     >
       {children}
     </Label>
@@ -30,11 +27,8 @@ export function DataGridAddFormLabel({ children, tooltip, htmlFor, className }: 
   if (!tooltip) return label;
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {label}
-      </TooltipTrigger>
-      <TooltipContent side="bottom">{tooltip}</TooltipContent>
-    </Tooltip>
+    <PersistentTooltipText side="bottom" content={tooltip}>
+      {label}
+    </PersistentTooltipText>
   );
 }

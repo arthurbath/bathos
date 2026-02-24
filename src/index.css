@@ -43,19 +43,22 @@
     --sidebar-border: 0 0% 90%;
     --sidebar-ring: 0 0% 12%;
 
+    /* Semantic status colors: success=green, destructive=red, warning=yellow, info=blue, admin=purple */
     --success: 145 60% 40%;
     --success-foreground: 0 0% 100%;
-    --warning: 40 90% 50%;
-    --warning-foreground: 0 0% 100%;
+    --warning: 48 92% 52%;
+    --warning-foreground: 0 0% 10%;
     --info: 210 70% 50%;
     --info-foreground: 0 0% 100%;
     --admin: 270 50% 55%;
     --admin-foreground: 0 0% 100%;
+    --destructive-text: 0 72% 51%;
+    --switch-off: 0 0% 97%;
     --drawer-wicker: 30 45% 42%;
     --drawer-wicker-foreground: 0 0% 100%;
-    --tooltip-bg: 0 0% 9%;
-    --tooltip-foreground: 0 0% 100%;
-    --tooltip-border: 0 0% 22%;
+    --tooltip-bg: 0 0% 98%;
+    --tooltip-foreground: 0 0% 10%;
+    --tooltip-border: 0 0% 72%;
 
     --category-group-row-bg: 0 0% 38%;
     --grid-sticky-line: 0 0% 64%;
@@ -84,7 +87,7 @@
     --accent: 0 0% 14%;
     --accent-foreground: 0 0% 92%;
 
-    --destructive: 0 62% 35%;
+    --destructive: 0 62% 42%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 0 0% 18%;
@@ -102,17 +105,19 @@
 
     --success: 145 55% 45%;
     --success-foreground: 0 0% 100%;
-    --warning: 40 85% 55%;
-    --warning-foreground: 0 0% 100%;
+    --warning: 48 90% 58%;
+    --warning-foreground: 0 0% 10%;
     --info: 210 65% 55%;
     --info-foreground: 0 0% 100%;
     --admin: 270 45% 60%;
     --admin-foreground: 0 0% 100%;
-    --drawer-wicker: 30 38% 48%;
+    --destructive-text: 0 72% 60%;
+    --switch-off: 0 0% 38%;
+    --drawer-wicker: 30 45% 42%;
     --drawer-wicker-foreground: 0 0% 100%;
-    --tooltip-bg: 0 0% 9%;
-    --tooltip-foreground: 0 0% 100%;
-    --tooltip-border: 0 0% 22%;
+    --tooltip-bg: 0 0% 96%;
+    --tooltip-foreground: 0 0% 10%;
+    --tooltip-border: 0 0% 62%;
 
     --category-group-row-bg: 0 0% 38%;
     --grid-sticky-line: 0 0% 64%;

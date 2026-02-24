@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingState, useReactTable } from '@tanstack/react-table';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { PersistentTooltipText, TooltipProvider } from '@/components/ui/tooltip';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { DataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
@@ -50,48 +49,6 @@ type BreakdownRow = {
 
 const breakdownColumnHelper = createColumnHelper<BreakdownRow>();
 
-function PersistOnClickTooltipValue({
-  display,
-  content,
-  contentClassName,
-}: {
-  display: ReactNode;
-  content: ReactNode;
-  contentClassName?: string;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const open = hovered || focused;
-
-  return (
-    <Tooltip open={open}>
-      <TooltipTrigger asChild>
-        <span
-          tabIndex={0}
-          role="button"
-          className="inline-block cursor-help underline decoration-dotted underline-offset-2 focus:outline-none"
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => {
-            setHovered(false);
-            setFocused(false);
-          }}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          onClick={(event) => {
-            setFocused(true);
-            event.currentTarget.focus();
-          }}
-        >
-          {display}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent align="end" side="top" className={contentClassName}>
-        {content}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 function formatFrequencyDescription(type: FrequencyType, param: number | null) {
   const label = frequencyLabels[type];
   if (!needsParam(type) || param == null) return label;
@@ -102,6 +59,12 @@ function formatOverUnder(value: number) {
   if (value > 0.5) return `+${$(value)}`;
   if (value < -0.5) return `-${$(Math.abs(value))}`;
   return '—';
+}
+
+function overUnderToneClass(value: number) {
+  if (value > 0.5) return 'text-primary';
+  if (value < -0.5) return 'text-[hsl(var(--destructive-text))]';
+  return '';
 }
 
 export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partnerY, userId }: SummaryTabProps) {
@@ -268,8 +231,9 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
         const stepPrefix = (step: number) => (hasSingleStep ? '' : `${step}. `);
 
         return (
-          <PersistOnClickTooltipValue
-            display={$(value)}
+          <PersistentTooltipText
+            align="end"
+            side="top"
             contentClassName="max-w-[460px] text-xs tabular-nums"
             content={(
               <div className="space-y-1.5 text-left">
@@ -293,7 +257,9 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
                 )}
               </div>
             )}
-          />
+          >
+            {$(value)}
+          </PersistentTooltipText>
         );
       },
       meta: { headerClassName: 'text-right', cellClassName: 'text-right tabular-nums text-xs' },
@@ -326,8 +292,9 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
         const stepPrefix = (step: number) => (hasSingleStep ? '' : `${step}. `);
 
         return (
-          <PersistOnClickTooltipValue
-            display={$(value)}
+          <PersistentTooltipText
+            align="end"
+            side="top"
             contentClassName="max-w-[460px] text-xs tabular-nums"
             content={(
               <div className="space-y-1.5 text-left">
@@ -351,7 +318,9 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
                 )}
               </div>
             )}
-          />
+          >
+            {$(value)}
+          </PersistentTooltipText>
         );
       },
       meta: { headerClassName: 'text-right', cellClassName: 'text-right tabular-nums text-xs' },
@@ -364,7 +333,7 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
       cell: ({ getValue }) => {
         const value = getValue();
         return (
-          <span className={cn('tabular-nums text-xs', value > 0.5 ? 'text-primary' : value < -0.5 ? 'text-destructive' : '')}>
+          <span className={cn('tabular-nums text-xs', overUnderToneClass(value))}>
             {formatOverUnder(value)}
           </span>
         );
@@ -379,7 +348,7 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
       cell: ({ getValue }) => {
         const value = getValue();
         return (
-          <span className={cn('tabular-nums text-xs', value > 0.5 ? 'text-primary' : value < -0.5 ? 'text-destructive' : '')}>
+          <span className={cn('tabular-nums text-xs', overUnderToneClass(value))}>
             {formatOverUnder(value)}
           </span>
         );
@@ -421,54 +390,58 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
   return (
     <TooltipProvider>
       <div className="space-y-6">
-      {/* Settlement callout */}
-      <Card className="border-primary/30 bg-primary/5">
-        <CardContent className="py-8">
-          {Math.abs(settlement) < 0.5 ? (
-            <p className="text-center text-xl font-semibold text-foreground">All square</p>
-          ) : settlement > 0 ? (
-            <div className="text-center">
-              <p className="text-lg font-medium text-muted-foreground">Monthly settlement</p>
-              <p className="text-3xl font-bold tracking-tight text-primary mt-1">
-                {partnerY} pays {partnerX} {$(Math.abs(settlement))}
-              </p>
-            </div>
-          ) : (
-            <div className="text-center">
-              <p className="text-lg font-medium text-muted-foreground">Monthly settlement</p>
-              <p className="text-3xl font-bold tracking-tight text-primary mt-1">
-                {partnerX} pays {partnerY} {$(Math.abs(settlement))}
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Totals */}
       <Card>
         <CardHeader>
           <CardTitle>Totals</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-3 gap-2 text-sm">
-            <div />
-            <div className="font-medium text-center">Paid</div>
-            <div className="font-medium text-center">Fair share</div>
-            <div className="font-medium">{partnerX}</div>
-            <div className="text-center">{$(paidByX)}</div>
-            <div className="text-center">{$(totalFairX)}</div>
-            <div className="font-medium">{partnerY}</div>
-            <div className="text-center">{$(paidByY)}</div>
-            <div className="text-center">{$(totalFairY)}</div>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[360px] text-sm">
+              <thead>
+                <tr className="border-b text-muted-foreground">
+                  <th className="h-9 px-2 text-left font-medium">Metric</th>
+                  <th className="h-9 px-2 text-right font-medium">{partnerX}</th>
+                  <th className="h-9 px-2 text-right font-medium">{partnerY}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b">
+                  <th className="h-9 px-2 text-left font-medium">Total Paid</th>
+                  <td className="h-9 px-2 text-right tabular-nums">{$(paidByX)}</td>
+                  <td className="h-9 px-2 text-right tabular-nums">{$(paidByY)}</td>
+                </tr>
+                <tr className="border-b">
+                  <th className="h-9 px-2 text-left font-medium">Fair Share</th>
+                  <td className="h-9 px-2 text-right tabular-nums">{$(totalFairX)}</td>
+                  <td className="h-9 px-2 text-right tabular-nums">{$(totalFairY)}</td>
+                </tr>
+                <tr className="border-b">
+                  <th className="h-9 px-2 text-left font-medium">Income Ratio</th>
+                  <td className="h-9 px-2 text-right tabular-nums">{(incomeRatioX * 100).toFixed(0)}%</td>
+                  <td className="h-9 px-2 text-right tabular-nums">{((1 - incomeRatioX) * 100).toFixed(0)}%</td>
+                </tr>
+                <tr className="border-b">
+                  <th className="h-9 px-2 text-left font-medium">Monthly Expenses</th>
+                  <td colSpan={2} className="h-9 px-2 text-right tabular-nums font-semibold">{$(totalExpenses)}</td>
+                </tr>
+                <tr>
+                  <th className="h-9 px-2 text-left font-medium">
+                    <PersistentTooltipText align="start" side="top" contentClassName="text-xs" content="Settlement is calculated as Paid - Fair Share.">
+                      Monthly Settlement
+                    </PersistentTooltipText>
+                  </th>
+                  <td colSpan={2} className="h-9 px-2 text-right tabular-nums">
+                    {Math.abs(settlement) < 0.5
+                      ? 'All square'
+                      : settlement > 0
+                        ? `${partnerY} pays ${partnerX} ${$(Math.abs(settlement))}`
+                        : `${partnerX} pays ${partnerY} ${$(Math.abs(settlement))}`}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <Separator />
-          <div className="flex justify-between font-semibold">
-            <span>Total monthly expenses</span>
-            <span>{$(totalExpenses)}</span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Income ratio: {partnerX} {(incomeRatioX * 100).toFixed(0)}% / {partnerY} {((1 - incomeRatioX) * 100).toFixed(0)}%
-          </p>
         </CardContent>
       </Card>
 
@@ -500,10 +473,10 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
                   <td colSpan={2} className={GRID_HEADER_TONE_CLASS} />
                   <td className={`h-9 align-middle text-right font-bold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2`}>{$(totalFairX)}</td>
                   <td className={`h-9 align-middle text-right font-bold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2`}>{$(totalFairY)}</td>
-                  <td className={`h-9 align-middle text-right font-bold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2 ${totalOverUnderX > 0.5 ? 'text-primary' : totalOverUnderX < -0.5 ? 'text-destructive' : ''}`}>
+                  <td className={cn(`h-9 align-middle text-right font-bold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2`, overUnderToneClass(totalOverUnderX))}>
                     {formatOverUnder(totalOverUnderX)}
                   </td>
-                  <td className={`h-9 align-middle text-right font-bold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2 ${totalOverUnderY > 0.5 ? 'text-primary' : totalOverUnderY < -0.5 ? 'text-destructive' : ''}`}>
+                  <td className={cn(`h-9 align-middle text-right font-bold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2`, overUnderToneClass(totalOverUnderY))}>
                     {formatOverUnder(totalOverUnderY)}
                   </td>
                   <td className={GRID_HEADER_TONE_CLASS} />

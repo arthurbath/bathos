@@ -12,7 +12,7 @@ Colors are semantic, not decorative:
 |---|---|
 | `primary` | Near-black. Buttons, links, focus rings, text |
 | `success` | Green. Confirmation, positive states |
-| `warning` | Gold/amber. Caution states |
+| `warning` | Yellow. Caution states |
 | `destructive` | Red. Errors, danger, destructive actions |
 | `info` | Blue. Informational, help text |
 | `admin` | Purple. Admin privilege indicators only |
@@ -71,6 +71,14 @@ All form-style modals (Add/Edit dialogs) must follow one keyboard interaction mo
 - Custom controls (e.g., color pickers) must remain in the normal tab order and be keyboard operable.
 
 This is a standing standard for all new and updated form modals.
+
+## Tooltip Interaction
+
+For dotted-underline tooltip text triggers, use the persistent interaction model:
+
+- Hover, tap, or click opens the tooltip.
+- Repeated taps/clicks on the same trigger do not dismiss it.
+- Tooltip closes only when the pointer leaves the trigger text or when the user taps/clicks elsewhere in the UI.
 
 ## Shadows and Borders
 

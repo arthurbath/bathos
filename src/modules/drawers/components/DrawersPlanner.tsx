@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Check, Copy, LayoutGrid, MoreHorizontal, Plus, Settings, Users } from 'lucide-react';
+import { Check, Copy, LayoutGrid, MoreHorizontal, Plus, Settings } from 'lucide-react';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -28,9 +28,10 @@ type DeleteMode = 'move' | 'delete';
 type AddDrawerTarget = { unitId: string; cubbyX: number; cubbyY: number } | null;
 
 function limboDrawerVisualClass(drawerType: DrawerType): string {
-  if (drawerType === 'black') return 'bg-primary text-primary-foreground border-primary';
-  if (drawerType === 'wicker') return 'bg-[hsl(var(--drawer-wicker))] text-[hsl(var(--drawer-wicker-foreground))] border-[hsl(var(--drawer-wicker))]';
-  return 'bg-white text-black border-border';
+  const grayBorderClass = 'border-[hsl(var(--muted-foreground))]';
+  if (drawerType === 'black') return `bg-black text-white ${grayBorderClass}`;
+  if (drawerType === 'wicker') return `bg-[hsl(var(--drawer-wicker))] text-[hsl(var(--drawer-wicker-foreground))] ${grayBorderClass}`;
+  return `bg-white text-black ${grayBorderClass}`;
 }
 
 function unitCellVisualClass(_frameColor: DrawersUnitFrameColor | null | undefined, drawerType: DrawerType | null): string {
@@ -47,7 +48,7 @@ function unitCellVisualClass(_frameColor: DrawersUnitFrameColor | null | undefin
   }
 
   if (drawerType === 'black') {
-    return `bg-primary text-primary-foreground ${grayBorderClass}`;
+    return `bg-black text-white ${grayBorderClass}`;
   }
 
   // drawerType === 'wicker' (displayed as Brown in UI)
@@ -55,7 +56,7 @@ function unitCellVisualClass(_frameColor: DrawersUnitFrameColor | null | undefin
 }
 
 function unitFrameClass(frameColor: DrawersUnitFrameColor | null | undefined): string {
-  if (frameColor === 'black') return 'bg-primary border-[hsl(var(--muted-foreground))]';
+  if (frameColor === 'black') return 'bg-black border-[hsl(var(--muted-foreground))]';
   if (frameColor === 'brown') return 'bg-[hsl(var(--drawer-wicker))] border-[hsl(var(--muted-foreground))]';
   return 'bg-white border-[hsl(var(--muted-foreground))]';
 }
@@ -449,7 +450,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
 
     await navigator.clipboard.writeText(household.inviteCode);
     setInviteCodeCopied(true);
-    toast({ title: 'Invite code copied' });
+    toast({ title: 'Invite code copied!' });
     window.setTimeout(() => setInviteCodeCopied(false), 2000);
   };
 
@@ -499,9 +500,9 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-semibold leading-none tracking-tight">Units</h2>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={openCreateUnitDialog} disabled={creatingUnit}>
+              <Button variant="outline-success" size="sm" className="gap-1.5" onClick={openCreateUnitDialog} disabled={creatingUnit}>
                 <Plus className="h-4 w-4" />
-                Add Unit
+                Unit
               </Button>
             </div>
 
@@ -604,7 +605,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
                                         Move
                                       </DropdownMenuItem>
                                       <DropdownMenuItem disabled={isCellBusy} onClick={() => void handleSendDrawerToLimbo(occupant.id)}>
-                                        Send to Limbo
+                                        Move to Unassigned
                                       </DropdownMenuItem>
                                       <DropdownMenuItem
                                         disabled={isCellBusy}
@@ -654,10 +655,10 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
           <Card className="w-full bg-muted/30">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-2">
-                <CardTitle>Limbo</CardTitle>
+                <CardTitle>Unassigned Drawers</CardTitle>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => openAddDrawerDialog(null)} disabled={creatingDrawer || heldDrawerPending}>
-                    + Add Drawer
+                  <Button variant="outline-success" size="sm" onClick={() => openAddDrawerDialog(null)} disabled={creatingDrawer || heldDrawerPending}>
+                    + Drawer
                   </Button>
                 </div>
               </div>
@@ -667,13 +668,13 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
                 {limboDrawers.map(drawer => {
                   const held = heldDrawerId === drawer.id;
                   const isDrawerPending = !!drawerPendingById[drawer.id];
-                  const limboTileClass = `min-h-16 w-28 flex-none rounded-md border text-left text-xs transition ${limboDrawerVisualClass(drawer.drawer_type)} ${held ? 'border-[3px] border-warning' : ''}`;
+                  const limboTileClass = `min-h-16 w-28 flex-none rounded-md border p-2 text-xs transition flex items-center justify-center text-center ${limboDrawerVisualClass(drawer.drawer_type)} ${held ? 'border-[3px] border-warning' : ''}`;
 
                   return (
                     <DropdownMenu key={drawer.id}>
                       <DropdownMenuTrigger asChild>
                         <button type="button" className={limboTileClass} disabled={isDrawerPending || heldDrawerPending}>
-                          <p className="overflow-hidden text-ellipsis [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] break-normal font-medium leading-tight">
+                          <p className="overflow-hidden text-ellipsis text-center [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] break-normal font-medium leading-tight">
                             {drawer.label?.trim() || ''}
                           </p>
                         </button>
@@ -711,11 +712,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
       <main className="mx-auto max-w-5xl px-4 pt-6 pb-24 md:pb-6">
         <Card>
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              <CardTitle>Invite Collaborators</CardTitle>
-            </div>
-            <CardDescription>Share this code so another user can join this drawer household.</CardDescription>
+            <CardTitle>Invite Collaborators</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex gap-2">

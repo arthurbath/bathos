@@ -7,7 +7,7 @@ import {
   type SortingState,
   type Row,
 } from '@tanstack/react-table';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { PersistentTooltipText } from '@/components/ui/tooltip';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,10 +23,11 @@ import { DataGridAddFormAffixInput } from '@/components/ui/data-grid-add-form-af
 import { Plus, Trash2, MoreHorizontal, Filter, FilterX } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels, needsParam } from '@/lib/frequency';
-import { DataGrid, GridEditableCell, GridCurrencyCell, GridPercentCell, useDataGrid, GRID_CONTROL_HOVER_BORDER_CLASS, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
+import { DataGrid, GridEditableCell, GridCurrencyCell, GridPercentCell, useDataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import { EXPENSES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH } from '@/lib/gridColumnWidths';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { COLOR_LABELS, normalizePaletteColor } from '@/lib/colors';
 import type { FrequencyType } from '@/types/fairshare';
 import type { Expense } from '@/hooks/useExpenses';
 import type { Category } from '@/hooks/useCategories';
@@ -67,60 +68,26 @@ type AddSource =
 type NewExpenseDraft = Omit<Expense, 'id' | 'household_id'>;
 
 const columnHelper = createColumnHelper<ComputedRow>();
-const COLOR_LABELS: Record<string, string> = {
-  '#fecaca': 'Rose',
-  '#fed7aa': 'Peach',
-  '#fde68a': 'Honey',
-  '#bbf7d0': 'Mint',
-  '#a5f3fc': 'Sky',
-  '#bfdbfe': 'Powder Blue',
-  '#c7d2fe': 'Periwinkle',
-  '#ddd6fe': 'Lavender',
-  '#fbcfe8': 'Blush',
-  '#e5e7eb': 'Silver',
-};
+const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
 
-const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/30 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0';
-
-function PersistOnClickTooltipValue({
-  display,
-  content,
-  contentClassName,
-}: {
-  display: React.ReactNode;
-  content: React.ReactNode;
-  contentClassName?: string;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const open = hovered || focused;
+function DropdownOptionColorSwatch({ color }: { color?: string | null }) {
+  const normalizedColor = normalizePaletteColor(color);
+  if (!normalizedColor) return null;
 
   return (
-    <Tooltip open={open}>
-      <TooltipTrigger asChild>
-        <span
-          tabIndex={0}
-          role="button"
-          className="inline-block cursor-help underline decoration-dotted underline-offset-2 focus:outline-none"
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => {
-            setHovered(false);
-            setFocused(false);
-          }}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          onClick={(event) => {
-            setFocused(true);
-            event.currentTarget.focus();
-          }}
-        >
-          {display}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent align="end" side="top" className={contentClassName}>
-        {content}
-      </TooltipContent>
-    </Tooltip>
+    <span
+      aria-hidden="true"
+      className="h-3 w-3 rounded-sm border border-white/20"
+      style={{ backgroundColor: normalizedColor }}
+    />
+  );
+}
+
+function CategoryOptionLabel({ category }: { category: Category }) {
+  return (
+    <span className="flex w-full min-w-0 items-center gap-2">
+      <span className="truncate">{category.name}</span>
+    </span>
   );
 }
 
@@ -160,7 +127,7 @@ function CategoryCell({ exp, categories, onChange, onAddNew, disabled = false }:
       <SelectTrigger
         disabled={disabled}
         className={`h-7 border-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm ${GRID_CONTROL_FOCUS_CLASS}`}
-        style={{ backgroundColor: categories.find(c => c.id === exp.category_id)?.color || 'transparent' }}
+        style={{ backgroundColor: normalizePaletteColor(categories.find(c => c.id === exp.category_id)?.color) || 'transparent' }}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
         data-col={1}
@@ -178,7 +145,11 @@ function CategoryCell({ exp, categories, onChange, onAddNew, disabled = false }:
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="_none">—</SelectItem>
-        {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+        {categories.map(c => (
+          <SelectItem key={c.id} value={c.id} rightAdornment={<DropdownOptionColorSwatch color={c.color} />}>
+            <CategoryOptionLabel category={c} />
+          </SelectItem>
+        ))}
         <SelectItem value="_add_new" className="text-primary font-medium"><Plus className="inline h-3 w-3 mr-1" />Add New</SelectItem>
       </SelectContent>
     </Select>
@@ -238,7 +209,7 @@ function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, 
       <SelectTrigger
         disabled={disabled}
         className={`h-7 border-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm ${GRID_CONTROL_FOCUS_CLASS}`}
-        style={{ backgroundColor: linkedAccounts.find(la => la.id === exp.linked_account_id)?.color || 'transparent' }}
+        style={{ backgroundColor: normalizePaletteColor(linkedAccounts.find(la => la.id === exp.linked_account_id)?.color) || 'transparent' }}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
         data-col={6}
@@ -259,7 +230,11 @@ function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, 
       <SelectContent>
         <SelectItem value="_none">—</SelectItem>
         {linkedAccounts.map(la => (
-          <SelectItem key={la.id} value={la.id}>
+          <SelectItem
+            key={la.id}
+            value={la.id}
+            rightAdornment={<DropdownOptionColorSwatch color={la.color} />}
+          >
             {la.name} <span className="text-muted-foreground">({la.owner_partner === 'X' ? partnerX : partnerY})</span>
           </SelectItem>
         ))}
@@ -280,7 +255,7 @@ function EstimateCell({ checked, onToggle, disabled = false }: { checked: boolea
   return (
     <Checkbox
       ref={checkboxRef}
-      className={`focus:border-ring focus:ring-2 focus:ring-ring/30 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0 hover:border-[hsl(var(--grid-sticky-line))]`}
+      className={`focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 hover:border-[hsl(var(--grid-sticky-line))]`}
       checked={checked}
       disabled={disabled}
       onCheckedChange={v => {
@@ -316,7 +291,7 @@ function ExpenseActionsCell({ name, onRemove, disabled = false }: { name: string
             variant="outline"
             size="icon"
             disabled={disabled}
-            className={`float-right mr-[5px] h-7 w-7 cursor-pointer hover:bg-accent hover:text-accent-foreground ${GRID_CONTROL_HOVER_BORDER_CLASS} data-[state=open]:bg-accent data-[state=open]:text-accent-foreground`}
+            className="float-right mr-[5px] h-7 w-7"
             aria-label={`Actions for ${name}`}
           >
             <MoreHorizontal className="h-4 w-4" />
@@ -602,7 +577,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     columnHelper.accessor(r => r.exp.is_estimate, {
       id: 'estimate',
       header: () => (
-        <Tooltip><TooltipTrigger asChild><span className="underline decoration-dotted underline-offset-2">Est</span></TooltipTrigger><TooltipContent side="bottom">Expense is estimated</TooltipContent></Tooltip>
+        <PersistentTooltipText side="bottom" content="Expense is estimated">Est</PersistentTooltipText>
       ),
       size: EXPENSES_GRID_DEFAULT_WIDTHS.estimate,
       minSize: GRID_MIN_COLUMN_WIDTH,
@@ -632,7 +607,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     columnHelper.accessor('monthly', {
       id: 'monthly',
       header: () => (
-        <Tooltip><TooltipTrigger asChild><span className="underline decoration-dotted underline-offset-2">Monthly</span></TooltipTrigger><TooltipContent side="bottom">Expense normalized to how much it costs you monthly</TooltipContent></Tooltip>
+        <PersistentTooltipText side="bottom" content="Expense normalized to how much it costs you monthly">Monthly</PersistentTooltipText>
       ),
       size: EXPENSES_GRID_DEFAULT_WIDTHS.monthly,
       minSize: GRID_MIN_COLUMN_WIDTH,
@@ -674,7 +649,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     columnHelper.accessor(r => r.exp.benefit_x, {
       id: 'benefit_x',
       header: () => (
-        <Tooltip><TooltipTrigger asChild><span className="underline decoration-dotted underline-offset-2">{partnerX} %</span></TooltipTrigger><TooltipContent side="bottom">The percentage that {partnerX} benefits from the expense</TooltipContent></Tooltip>
+        <PersistentTooltipText side="bottom" content={`The percentage that ${partnerX} benefits from the expense`}>{partnerX} %</PersistentTooltipText>
       ),
       size: EXPENSES_GRID_DEFAULT_WIDTHS.benefit_x,
       minSize: GRID_MIN_COLUMN_WIDTH,
@@ -691,7 +666,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     columnHelper.accessor(r => 100 - r.exp.benefit_x, {
       id: 'benefit_y',
       header: () => (
-        <Tooltip><TooltipTrigger asChild><span className="underline decoration-dotted underline-offset-2">{partnerY} %</span></TooltipTrigger><TooltipContent side="bottom">The percentage that {partnerY} benefits from the expense</TooltipContent></Tooltip>
+        <PersistentTooltipText side="bottom" content={`The percentage that ${partnerY} benefits from the expense`}>{partnerY} %</PersistentTooltipText>
       ),
       size: EXPENSES_GRID_DEFAULT_WIDTHS.benefit_y,
       minSize: GRID_MIN_COLUMN_WIDTH,
@@ -734,8 +709,9 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         const stepPrefix = (step: number) => (hasSingleStep ? '' : `${step}. `);
 
         return (
-          <PersistOnClickTooltipValue
-            display={`$${Math.round(value)}`}
+          <PersistentTooltipText
+            align="end"
+            side="top"
             contentClassName="max-w-[460px] text-xs tabular-nums"
             content={(
               <div className="space-y-1.5 text-left">
@@ -759,7 +735,9 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
                 )}
               </div>
             )}
-          />
+          >
+            {`$${Math.round(value)}`}
+          </PersistentTooltipText>
         );
       },
     }),
@@ -792,8 +770,9 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         const stepPrefix = (step: number) => (hasSingleStep ? '' : `${step}. `);
 
         return (
-          <PersistOnClickTooltipValue
-            display={`$${Math.round(value)}`}
+          <PersistentTooltipText
+            align="end"
+            side="top"
             contentClassName="max-w-[460px] text-xs tabular-nums"
             content={(
               <div className="space-y-1.5 text-left">
@@ -817,7 +796,9 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
                 )}
               </div>
             )}
-          />
+          >
+            {`$${Math.round(value)}`}
+          </PersistentTooltipText>
         );
       },
     }),
@@ -929,8 +910,9 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
                 {hasActiveViewControls && (
                   <Button
                     type="button"
+                    variant="outline-warning"
                     size="sm"
-                    className="h-8 w-8 p-0 border border-warning bg-warning text-warning-foreground hover:bg-warning/90"
+                    className="h-8 w-8 p-0"
                     onClick={clearViewControls}
                     aria-label="Clear filters and groupings"
                   >
@@ -962,8 +944,9 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
                 {hasActiveViewControls && (
                   <Button
                     type="button"
+                    variant="outline-warning"
                     size="sm"
-                    className="h-8 w-8 p-0 border border-warning bg-warning text-warning-foreground hover:bg-warning/90"
+                    className="h-8 w-8 p-0"
                     onClick={clearViewControls}
                     aria-label="Clear filters and groupings"
                   >
@@ -972,7 +955,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
                 )}
               </>
             )}
-            <Button onClick={openAddExpenseModal} disabled={savingExpense} variant="outline" size="sm" className="h-8 w-8 p-0" aria-label="Add expense">
+            <Button onClick={openAddExpenseModal} disabled={savingExpense} variant="outline-success" size="sm" className="h-8 w-8 p-0" aria-label="Add expense">
               <Plus className="h-4 w-4" />
             </Button>
           </div>
@@ -1046,13 +1029,17 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
               >
                 <SelectTrigger
                   className="h-9 rounded-sm"
-                  style={{ backgroundColor: categories.find(c => c.id === newExpense.category_id)?.color || 'transparent' }}
+                  style={{ backgroundColor: normalizePaletteColor(categories.find(c => c.id === newExpense.category_id)?.color) || 'transparent' }}
                 >
                   <SelectValue placeholder="—" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_none">—</SelectItem>
-                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {categories.map(c => (
+                    <SelectItem key={c.id} value={c.id} rightAdornment={<DropdownOptionColorSwatch color={c.color} />}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
                   <SelectItem value="_add_new" className="text-primary font-medium"><Plus className="inline h-3 w-3 mr-1" />Add New</SelectItem>
                 </SelectContent>
               </Select>
@@ -1130,14 +1117,14 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
               >
                 <SelectTrigger
                   className="h-9 rounded-sm"
-                  style={{ backgroundColor: linkedAccounts.find(la => la.id === newExpense.linked_account_id)?.color || 'transparent' }}
+                  style={{ backgroundColor: normalizePaletteColor(linkedAccounts.find(la => la.id === newExpense.linked_account_id)?.color) || 'transparent' }}
                 >
                   <SelectValue placeholder="—" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_none">—</SelectItem>
                   {linkedAccounts.map(la => (
-                    <SelectItem key={la.id} value={la.id}>
+                    <SelectItem key={la.id} value={la.id} rightAdornment={<DropdownOptionColorSwatch color={la.color} />}>
                       {la.name} <span className="text-muted-foreground">({la.owner_partner === 'X' ? partnerX : partnerY})</span>
                     </SelectItem>
                   ))}
@@ -1195,7 +1182,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveNewExpense} disabled={savingExpense}>{savingExpense ? 'Saving...' : 'Add'}</Button>
+            <Button variant="outline-success" onClick={handleSaveNewExpense} disabled={savingExpense}>{savingExpense ? 'Saving...' : 'Add'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1260,7 +1247,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
               <Label>Color</Label>
               <div className="flex items-center gap-2">
                 <ColorPicker color={newItemColor} onChange={setNewItemColor} disabled={savingItem} />
-                <span className="text-xs text-muted-foreground">{newItemColor ? (COLOR_LABELS[newItemColor] ?? 'Custom color') : 'None'}</span>
+                <span className="text-xs text-muted-foreground">{newItemColor ? (COLOR_LABELS[normalizePaletteColor(newItemColor) ?? newItemColor] ?? 'Custom color') : 'None'}</span>
               </div>
             </div>
             {addDialog === 'payment_method' && (
@@ -1278,7 +1265,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
           </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setAddDialog(null); setAddSource(null); }} disabled={savingItem}>Cancel</Button>
-            <Button onClick={handleSaveNewItem} disabled={savingItem || !newItemName.trim()}>{savingItem ? 'Saving...' : 'Add'}</Button>
+            <Button variant="outline-success" onClick={handleSaveNewItem} disabled={savingItem || !newItemName.trim()}>{savingItem ? 'Saving...' : 'Add'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

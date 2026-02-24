@@ -16,6 +16,20 @@ interface AddDrawerTarget {
 
 const CREATE_DRAWER_PENDING_KEY = '__create_drawer__';
 
+function isMissingRpcFunctionError(error: unknown, functionName: string): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const maybeError = error as { code?: unknown; message?: unknown };
+  const code = typeof maybeError.code === 'string' ? maybeError.code : '';
+  const message = typeof maybeError.message === 'string' ? maybeError.message : '';
+
+  return (
+    code === 'PGRST202' ||
+    message.includes(`Could not find the function public.${functionName}`) ||
+    message.includes(`Could not find the function ${functionName}`)
+  );
+}
+
 function nextLimboOrder(drawers: DrawerInstance[]): number {
   return drawers.reduce((max, insert) => {
     if (insert.location_kind !== 'limbo') return max;
@@ -183,6 +197,17 @@ export function useDrawerInstances(householdId: string) {
     return withDrawersDbTiming(operation, run);
   }, []);
 
+  const rpcWithFallback = useCallback(async (
+    fn: string,
+    args: Record<string, unknown>,
+    fallback?: { fn: string; args: Record<string, unknown> },
+  ) => {
+    const primary = await retryOnLikelyNetworkError(async () => await supabase.rpc(fn, args));
+    if (!primary.error) return primary;
+    if (!fallback || !isMissingRpcFunctionError(primary.error, fn)) return primary;
+    return await retryOnLikelyNetworkError(async () => await supabase.rpc(fallback.fn, fallback.args));
+  }, []);
+
   const fetch = useCallback(async () => {
     if (!householdId) {
       setDrawers([]);
@@ -337,13 +362,23 @@ export function useDrawerInstances(householdId: string) {
     setPending(pendingIds, true);
     try {
       await runStructuralMutation('drawers_instances.move_to_cubby', async () => {
-        const { error } = await retryOnLikelyNetworkError(async () =>
-          await supabase.rpc('move_drawers_drawer', {
+        const { error } = await rpcWithFallback(
+          'move_drawers_drawer',
+          {
             _drawer_id: drawerId,
             _target_unit_id: unitId,
             _target_x: cubbyX,
             _target_y: cubbyY,
-          }),
+          },
+          {
+            fn: 'move_drawers_insert',
+            args: {
+              _insert_id: drawerId,
+              _target_unit_id: unitId,
+              _target_x: cubbyX,
+              _target_y: cubbyY,
+            },
+          },
         );
 
         if (error) throw error;
@@ -356,16 +391,23 @@ export function useDrawerInstances(householdId: string) {
     } finally {
       setPending(pendingIds, false);
     }
-  }, [runStructuralMutation, setPending]);
+  }, [rpcWithFallback, runStructuralMutation, setPending]);
 
   const moveToLimbo = useCallback(async (drawerId: string) => {
     setPending([drawerId], true);
     try {
       await runStructuralMutation('drawers_instances.move_to_limbo', async () => {
-        const { error } = await retryOnLikelyNetworkError(async () =>
-          await supabase.rpc('move_drawers_drawer_to_limbo', {
+        const { error } = await rpcWithFallback(
+          'move_drawers_drawer_to_limbo',
+          {
             _drawer_id: drawerId,
-          }),
+          },
+          {
+            fn: 'move_drawers_insert_to_limbo',
+            args: {
+              _insert_id: drawerId,
+            },
+          },
         );
 
         if (error) throw error;
@@ -378,7 +420,7 @@ export function useDrawerInstances(householdId: string) {
     } finally {
       setPending([drawerId], false);
     }
-  }, [runStructuralMutation, setPending]);
+  }, [rpcWithFallback, runStructuralMutation, setPending]);
 
   const deleteDrawersInUnit = useCallback(async (unitId: string) => {
     const affectedIds = drawersRef.current
@@ -417,8 +459,10 @@ export function useDrawerInstances(householdId: string) {
     setPending(affectedIds, true);
     try {
       await runStructuralMutation('drawers_instances.move_unit_to_limbo', async () => {
-        const { error } = await retryOnLikelyNetworkError(async () =>
-          await supabase.rpc('move_drawers_unit_drawers_to_limbo', { _unit_id: unitId }),
+        const { error } = await rpcWithFallback(
+          'move_drawers_unit_drawers_to_limbo',
+          { _unit_id: unitId },
+          { fn: 'move_drawers_unit_inserts_to_limbo', args: { _unit_id: unitId } },
         );
         if (error) throw error;
         setDrawers(prev => applyMoveUnitDrawersToLimboState(prev, unitId));
@@ -429,7 +473,7 @@ export function useDrawerInstances(householdId: string) {
     } finally {
       setPending(affectedIds, false);
     }
-  }, [runStructuralMutation, setPending]);
+  }, [rpcWithFallback, runStructuralMutation, setPending]);
 
   const limboDrawers = useMemo(
     () => drawers.filter(insert => insert.location_kind === 'limbo').sort((a, b) => (a.limbo_order ?? 0) - (b.limbo_order ?? 0)),

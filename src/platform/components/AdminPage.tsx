@@ -95,8 +95,8 @@ export default function AdminPage() {
       } else {
         toast({ title: 'Deletion failed', description: result.detail || 'Unknown error', variant: 'destructive' });
       }
-    } catch (e: any) {
-      toast({ title: 'Deletion failed', description: e.message, variant: 'destructive' });
+    } catch (e: unknown) {
+      toast({ title: 'Deletion failed', description: e instanceof Error ? e.message : 'Unknown error', variant: 'destructive' });
     } finally {
       setIsDeletingUser(false);
     }
@@ -136,7 +136,12 @@ export default function AdminPage() {
                 placeholder="user@example.com"
                 autoComplete="off"
               />
-              <Button variant="destructive" onClick={openDeleteDialog} className="shrink-0">
+              <Button
+                variant="destructive"
+                onClick={openDeleteDialog}
+                className="shrink-0"
+                disabled={!targetEmail.trim()}
+              >
                 Delete User
               </Button>
             </div>
@@ -150,25 +155,63 @@ export default function AdminPage() {
           <CardHeader>
             <CardTitle>UI Testing</CardTitle>
           </CardHeader>
-          <CardContent className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={() => toast({ title: 'Info', description: 'This is a generic info toast.' })}
-            >
-              Test Info Toast
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => toast({ title: 'Error', description: 'This is a danger toast.', variant: 'destructive' })}
-            >
-              Test Danger Toast
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleSentryTest}
-            >
-              Test Sentry Error
-            </Button>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="outline"
+                onClick={() => toast({ title: 'Info', description: 'This is a generic info toast.' })}
+              >
+                Test Info Toast
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => toast({ title: 'Error', description: 'This is a danger toast.', variant: 'destructive' })}
+              >
+                Test Danger Toast
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleSentryTest}
+              >
+                Test Sentry Error
+              </Button>
+            </div>
+
+            <div className="space-y-3 border-t pt-4">
+              <p className="text-sm font-medium">Button Variants</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="default" size="sm">Normal Filled</Button>
+                <Button variant="success" size="sm">Success Filled</Button>
+                <Button variant="destructive" size="sm">Danger Filled</Button>
+                <Button variant="warning" size="sm">Warning Filled</Button>
+                <Button variant="info" size="sm">Info Filled</Button>
+                <Button variant="admin" size="sm">Admin Filled</Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm">Normal Outline</Button>
+                <Button variant="outline-success" size="sm">Success Outline</Button>
+                <Button variant="outline-destructive" size="sm">Danger Outline</Button>
+                <Button variant="outline-warning" size="sm">Warning Outline</Button>
+                <Button variant="outline-info" size="sm">Info Outline</Button>
+                <Button variant="outline-admin" size="sm">Admin Outline</Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="default" size="sm" disabled>Normal Filled Disabled</Button>
+                <Button variant="success" size="sm" disabled>Success Filled Disabled</Button>
+                <Button variant="destructive" size="sm" disabled>Danger Filled Disabled</Button>
+                <Button variant="warning" size="sm" disabled>Warning Filled Disabled</Button>
+                <Button variant="info" size="sm" disabled>Info Filled Disabled</Button>
+                <Button variant="admin" size="sm" disabled>Admin Filled Disabled</Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" disabled>Normal Outline Disabled</Button>
+                <Button variant="outline-success" size="sm" disabled>Success Outline Disabled</Button>
+                <Button variant="outline-destructive" size="sm" disabled>Danger Outline Disabled</Button>
+                <Button variant="outline-warning" size="sm" disabled>Warning Outline Disabled</Button>
+                <Button variant="outline-info" size="sm" disabled>Info Outline Disabled</Button>
+                <Button variant="outline-admin" size="sm" disabled>Admin Outline Disabled</Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </main>

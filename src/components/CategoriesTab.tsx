@@ -105,7 +105,7 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
                 onChange={e => setName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleAdd()}
               />
-              <Button onClick={handleAdd} disabled={!name.trim() || adding} className="gap-1.5 shrink-0">
+              <Button variant="outline-success" onClick={handleAdd} disabled={!name.trim() || adding} className="gap-1.5 shrink-0">
                 <Plus className="h-4 w-4" /> Add
               </Button>
             </div>

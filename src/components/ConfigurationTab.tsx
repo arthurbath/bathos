@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Users, Copy, Check, Plus, Trash2, Pencil } from 'lucide-react';
+import { Copy, Check, Plus, Trash2, Pencil } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import type { Category } from '@/hooks/useCategories';
 import { RestoreTab } from '@/components/RestoreTab';
@@ -107,10 +107,7 @@ function InviteCard({ inviteCode }: { inviteCode: string | null }) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center gap-2">
-          <Users className="h-5 w-5 text-primary" />
-          <CardTitle>Invite Collaborators</CardTitle>
-        </div>
+        <CardTitle>Invite Collaborators</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex gap-2">
@@ -230,7 +227,7 @@ function PaymentMethodsSection({ linkedAccounts, expenses, partnerX, partnerY, o
                 <SelectItem value="Y">{partnerY}</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={handleAdd} disabled={!name.trim() || adding} className="gap-1.5 shrink-0" size="sm">
+            <Button variant="outline-success" onClick={handleAdd} disabled={!name.trim() || adding} className="gap-1.5 shrink-0" size="sm">
               <Plus className="h-4 w-4" /> Add
             </Button>
           </div>

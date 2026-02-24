@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Save, Trash2, RotateCcw, MoreHorizontal } from 'lucide-react';
+import { Trash2, RotateCcw, MoreHorizontal } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from '@/hooks/use-toast';
 import type { RestorePoint } from '@/hooks/useRestorePoints';
@@ -129,13 +129,12 @@ export function RestoreTab({ points, incomes, expenses, categories, linkedAccoun
       <Card>
         <CardHeader>
           <CardTitle>Backups</CardTitle>
-          <CardDescription>Save a snapshot to create a backup. You can restore any saved snapshot below.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Input placeholder="Snapshot notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} />
+            <Input placeholder="Backup notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} />
             <Button onClick={handleSave} disabled={saving} className="gap-1.5 shrink-0">
-              <Save className="h-4 w-4" /> Save Snapshot
+              Save
             </Button>
           </div>
           {points.length === 0 ? (
@@ -169,7 +168,7 @@ export function RestoreTab({ points, incomes, expenses, categories, linkedAccoun
                             }
                           }}
                           autoFocus
-                          className="h-7 w-full rounded-md border border-transparent bg-transparent px-1 text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer hover:border-border focus:border-transparent focus:ring-2 focus:ring-ring"
+                          className="h-7 w-full rounded-md border border-transparent bg-transparent px-1 text-xs underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0"
                         />
                       ) : (
                         <button
