@@ -9,7 +9,7 @@ import { getAvailableModules } from '@/platform/modules';
 import AuthPage from './AuthPage';
 
 export default function LauncherPage() {
-  const { user, loading, signOut } = useAuthContext();
+  const { user, loading, isSigningOut, signOut } = useAuthContext();
   const navigate = useNavigate();
   const modules = getAvailableModules();
 
@@ -20,7 +20,7 @@ export default function LauncherPage() {
     }
   }, [loading, user, modules, navigate]);
 
-  if (loading) {
+  if (loading || isSigningOut) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <LoadingSpinner />

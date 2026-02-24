@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingState, useReactTable } from '@tanstack/react-table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { DataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
-import { toMonthly } from '@/lib/frequency';
+import { toMonthly, frequencyLabels, needsParam } from '@/lib/frequency';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import {
   GRID_ACTIONS_COLUMN_ID,
@@ -18,6 +19,7 @@ import { cn } from '@/lib/utils';
 import type { Income } from '@/hooks/useIncomes';
 import type { Expense } from '@/hooks/useExpenses';
 import type { LinkedAccount } from '@/hooks/useLinkedAccounts';
+import type { FrequencyType } from '@/types/fairshare';
 
 interface SummaryTabProps {
   incomes: Income[];
@@ -33,6 +35,10 @@ function $(v: number) { return `$${Math.round(v)}`; }
 type BreakdownRow = {
   id: string;
   name: string;
+  amount: number;
+  frequencyType: FrequencyType;
+  frequencyParam: number | null;
+  benefitX: number;
   monthly: number;
   payer: string;
   benefitSplit: string;
@@ -43,6 +49,54 @@ type BreakdownRow = {
 };
 
 const breakdownColumnHelper = createColumnHelper<BreakdownRow>();
+
+function PersistOnClickTooltipValue({
+  display,
+  content,
+  contentClassName,
+}: {
+  display: ReactNode;
+  content: ReactNode;
+  contentClassName?: string;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const open = hovered || focused;
+
+  return (
+    <Tooltip open={open}>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          role="button"
+          className="inline-block cursor-help underline decoration-dotted underline-offset-2 focus:outline-none"
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => {
+            setHovered(false);
+            setFocused(false);
+          }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onClick={(event) => {
+            setFocused(true);
+            event.currentTarget.focus();
+          }}
+        >
+          {display}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent align="end" side="top" className={contentClassName}>
+        {content}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function formatFrequencyDescription(type: FrequencyType, param: number | null) {
+  const label = frequencyLabels[type];
+  if (!needsParam(type) || param == null) return label;
+  return label.replaceAll('X', String(param));
+}
 
 function formatOverUnder(value: number) {
   if (value > 0.5) return `+${$(value)}`;
@@ -130,6 +184,10 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
         return {
           id: exp.id,
           name: exp.name,
+          amount: Number(exp.amount),
+          frequencyType: exp.frequency_type,
+          frequencyParam: exp.frequency_param,
+          benefitX: exp.benefit_x,
           monthly,
           payer: payer === 'X' ? partnerX : payer === 'Y' ? partnerY : 'Unassigned',
           benefitSplit: `${exp.benefit_x}/${100 - exp.benefit_x}`,
@@ -187,7 +245,57 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
       header: `Fair ${partnerX}`,
       size: SUMMARY_GRID_DEFAULT_WIDTHS.fair_x,
       minSize: GRID_MIN_COLUMN_WIDTH,
-      cell: ({ getValue }) => $(getValue()),
+      cell: ({ getValue, row }) => {
+        const originalAmount = Number(row.original.amount);
+        const shouldShowNormalizationStep = row.original.frequencyType !== 'monthly';
+        const frequencyDescription = formatFrequencyDescription(row.original.frequencyType, row.original.frequencyParam);
+        const monthly = row.original.monthly;
+        const isAllToPartnerX = row.original.benefitX >= 100;
+        const isAllToPartnerY = row.original.benefitX <= 0;
+        const isSingleBeneficiary = isAllToPartnerX || isAllToPartnerY;
+        const beneficiaryLabel = isAllToPartnerX ? partnerX : partnerY;
+        const benefitX = row.original.benefitX / 100;
+        const benefitY = 1 - benefitX;
+        const isEvenBenefitSplit = Math.abs(row.original.benefitX - 50) < 0.0001;
+        const incomeXRatio = incomeRatioX;
+        const incomeYRatio = 1 - incomeXRatio;
+        const weightX = benefitX * incomeXRatio;
+        const weightY = benefitY * incomeYRatio;
+        const totalWeight = weightX + weightY || 1;
+        const normalizedShareX = weightX / totalWeight;
+        const value = Number(getValue());
+        const hasSingleStep = !shouldShowNormalizationStep && (isSingleBeneficiary || isEvenBenefitSplit);
+        const stepPrefix = (step: number) => (hasSingleStep ? '' : `${step}. `);
+
+        return (
+          <PersistOnClickTooltipValue
+            display={$(value)}
+            contentClassName="max-w-[460px] text-xs tabular-nums"
+            content={(
+              <div className="space-y-1.5 text-left">
+                <div className="font-medium">{partnerX} fair share, step by step:</div>
+                {shouldShowNormalizationStep && (
+                  <div>{stepPrefix(1)}Convert the original expense to its monthly equivalent: ${originalAmount.toFixed(2)} {frequencyDescription.toLowerCase()} converts to ${monthly.toFixed(2)} per month.</div>
+                )}
+                {isSingleBeneficiary ? (
+                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit split is {row.original.benefitX}/
+                    {100 - row.original.benefitX}, so this expense is assigned entirely to {beneficiaryLabel}. {partnerX === beneficiaryLabel ? `${partnerX} gets 100% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).` : `${partnerX} gets 0% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).`}
+                  </div>
+                ) : isEvenBenefitSplit ? (
+                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit is exactly 50/50, so just multiply the monthly amount by {partnerX}&apos;s income ratio: ${monthly.toFixed(2)} × {(incomeXRatio * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                ) : (
+                  <>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Calculate {partnerX}&apos;s weight by combining benefit and income share: {(benefitX * 100).toFixed(1)}% × {(incomeXRatio * 100).toFixed(1)}% = {weightX.toFixed(4)}.</div>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 3 : 2)}Calculate total weight for both partners: {weightX.toFixed(4)} + {weightY.toFixed(4)} = {totalWeight.toFixed(4)}.</div>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 4 : 3)}Convert {partnerX}&apos;s weight to a fraction of the total: {weightX.toFixed(4)} / {totalWeight.toFixed(4)} = {(normalizedShareX * 100).toFixed(2)}%.</div>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 5 : 4)}Apply that fraction to the monthly amount: ${monthly.toFixed(2)} × {(normalizedShareX * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                  </>
+                )}
+              </div>
+            )}
+          />
+        );
+      },
       meta: { headerClassName: 'text-right', cellClassName: 'text-right tabular-nums text-xs' },
     }),
     breakdownColumnHelper.accessor('fairY', {
@@ -195,7 +303,57 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
       header: `Fair ${partnerY}`,
       size: SUMMARY_GRID_DEFAULT_WIDTHS.fair_y,
       minSize: GRID_MIN_COLUMN_WIDTH,
-      cell: ({ getValue }) => $(getValue()),
+      cell: ({ getValue, row }) => {
+        const originalAmount = Number(row.original.amount);
+        const shouldShowNormalizationStep = row.original.frequencyType !== 'monthly';
+        const frequencyDescription = formatFrequencyDescription(row.original.frequencyType, row.original.frequencyParam);
+        const monthly = row.original.monthly;
+        const isAllToPartnerX = row.original.benefitX >= 100;
+        const isAllToPartnerY = row.original.benefitX <= 0;
+        const isSingleBeneficiary = isAllToPartnerX || isAllToPartnerY;
+        const beneficiaryLabel = isAllToPartnerX ? partnerX : partnerY;
+        const benefitX = row.original.benefitX / 100;
+        const benefitY = 1 - benefitX;
+        const isEvenBenefitSplit = Math.abs(row.original.benefitX - 50) < 0.0001;
+        const incomeXRatio = incomeRatioX;
+        const incomeYRatio = 1 - incomeXRatio;
+        const weightX = benefitX * incomeXRatio;
+        const weightY = benefitY * incomeYRatio;
+        const totalWeight = weightX + weightY || 1;
+        const normalizedShareY = weightY / totalWeight;
+        const value = Number(getValue());
+        const hasSingleStep = !shouldShowNormalizationStep && (isSingleBeneficiary || isEvenBenefitSplit);
+        const stepPrefix = (step: number) => (hasSingleStep ? '' : `${step}. `);
+
+        return (
+          <PersistOnClickTooltipValue
+            display={$(value)}
+            contentClassName="max-w-[460px] text-xs tabular-nums"
+            content={(
+              <div className="space-y-1.5 text-left">
+                <div className="font-medium">{partnerY} fair share, step by step:</div>
+                {shouldShowNormalizationStep && (
+                  <div>{stepPrefix(1)}Convert the original expense to its monthly equivalent: ${originalAmount.toFixed(2)} {frequencyDescription.toLowerCase()} converts to ${monthly.toFixed(2)} per month.</div>
+                )}
+                {isSingleBeneficiary ? (
+                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit split is {row.original.benefitX}/
+                    {100 - row.original.benefitX}, so this expense is assigned entirely to {beneficiaryLabel}. {partnerY === beneficiaryLabel ? `${partnerY} gets 100% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).` : `${partnerY} gets 0% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).`}
+                  </div>
+                ) : isEvenBenefitSplit ? (
+                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit is exactly 50/50, so just multiply the monthly amount by {partnerY}&apos;s income ratio: ${monthly.toFixed(2)} × {(incomeYRatio * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                ) : (
+                  <>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Calculate {partnerY}&apos;s weight by combining benefit and income share: {(benefitY * 100).toFixed(1)}% × {(incomeYRatio * 100).toFixed(1)}% = {weightY.toFixed(4)}.</div>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 3 : 2)}Calculate total weight for both partners: {weightX.toFixed(4)} + {weightY.toFixed(4)} = {totalWeight.toFixed(4)}.</div>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 4 : 3)}Convert {partnerY}&apos;s weight to a fraction of the total: {weightY.toFixed(4)} / {totalWeight.toFixed(4)} = {(normalizedShareY * 100).toFixed(2)}%.</div>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 5 : 4)}Apply that fraction to the monthly amount: ${monthly.toFixed(2)} × {(normalizedShareY * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                  </>
+                )}
+              </div>
+            )}
+          />
+        );
+      },
       meta: { headerClassName: 'text-right', cellClassName: 'text-right tabular-nums text-xs' },
     }),
     breakdownColumnHelper.accessor('overUnderX', {
@@ -239,7 +397,7 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
       meta: { headerClassName: 'px-0', cellClassName: 'px-0' },
       cell: () => null,
     }),
-  ], [partnerX, partnerY]);
+  ], [incomeRatioX, partnerX, partnerY]);
 
   const breakdownTable = useReactTable({
     data: filteredBreakdown,
@@ -261,7 +419,8 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
   const totalOverUnderY = paidByY - totalFairY;
 
   return (
-    <div className="space-y-6">
+    <TooltipProvider>
+      <div className="space-y-6">
       {/* Settlement callout */}
       <Card className="border-primary/30 bg-primary/5">
         <CardContent className="py-8">
@@ -354,6 +513,7 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
           )}
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

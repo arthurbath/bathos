@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -6,6 +6,7 @@ interface AuthContextValue {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  isSigningOut: boolean;
   signUp: (email: string, password: string, displayName: string, termsVersion?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -18,10 +19,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const isSigningOutRef = useRef(false);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (isSigningOutRef.current && event !== 'SIGNED_OUT') return;
+
         setSession(session);
         // Only update user state if the identity actually changed,
         // preventing a full re-render cascade on routine token refreshes.
@@ -33,12 +38,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
 
         if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+          isSigningOutRef.current = false;
+          setIsSigningOut(false);
           window.location.href = '/';
         }
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (isSigningOutRef.current) return;
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -68,8 +76,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/';
+    if (isSigningOutRef.current) return;
+
+    isSigningOutRef.current = true;
+    setIsSigningOut(true);
+
+    // Immediately reflect signed-out state in UI while Supabase completes logout.
+    setSession(null);
+    setUser(null);
+    setLoading(false);
+
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      isSigningOutRef.current = false;
+      setIsSigningOut(false);
+      window.location.href = '/';
+    }
   };
 
   const resetPassword = async (email: string) => {
@@ -80,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut, resetPassword }}>
+    <AuthContext.Provider value={{ user, session, loading, isSigningOut, signUp, signIn, signOut, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );

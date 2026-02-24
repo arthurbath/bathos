@@ -43,18 +43,21 @@ export type Database = {
           created_at: string
           display_name: string
           id: string
+          is_test_user: boolean
           terms_version_accepted: string | null
         }
         Insert: {
           created_at?: string
           display_name: string
           id: string
+          is_test_user?: boolean
           terms_version_accepted?: string | null
         }
         Update: {
           created_at?: string
           display_name?: string
           id?: string
+          is_test_user?: boolean
           terms_version_accepted?: string | null
         }
         Relationships: []
@@ -410,21 +413,21 @@ export type Database = {
           data: Json
           household_id: string
           id: string
-          name: string | null
+          notes: string | null
         }
         Insert: {
           created_at?: string
           data?: Json
           household_id: string
           id?: string
-          name?: string | null
+          notes?: string | null
         }
         Update: {
           created_at?: string
           data?: Json
           household_id?: string
           id?: string
-          name?: string | null
+          notes?: string | null
         }
         Relationships: [
           {

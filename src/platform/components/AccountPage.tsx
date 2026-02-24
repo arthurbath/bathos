@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -16,7 +17,7 @@ import { isPasswordValid } from '@/lib/passwordValidation';
 import { PasswordRequirements } from '@/components/PasswordRequirements';
 
 export default function AccountPage() {
-  const { user, signOut } = useAuthContext();
+  const { user, isSigningOut, signOut } = useAuthContext();
   const { isAdmin } = useIsAdmin(user?.id);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -148,6 +149,14 @@ export default function AccountPage() {
     }
   };
 
+  if (isSigningOut) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
   if (!user) return null;
 
   return (
@@ -208,7 +217,7 @@ export default function AccountPage() {
           <Button variant="outline" className="w-full" onClick={() => setShowChangePassword(true)}>
             Change password
           </Button>
-          <Button variant="outline" className="w-full" onClick={signOut}>
+          <Button variant="outline" className="w-full" onClick={signOut} disabled={isSigningOut}>
             Sign out
           </Button>
 

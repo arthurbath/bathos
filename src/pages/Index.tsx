@@ -6,11 +6,11 @@ import { useHouseholdData } from '@/hooks/useHouseholdData';
 import AuthPage from '@/platform/components/AuthPage';
 
 const Index = () => {
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, loading: authLoading, isSigningOut, signOut } = useAuth();
   const { household, loading: hhLoading, createHousehold, joinHousehold, updatePartnerNames, refetch } = useHouseholdData(user);
   const setupDisplayName = (user?.user_metadata?.display_name as string | undefined)?.trim() || user?.email || 'You';
 
-  if (authLoading || hhLoading) {
+  if (authLoading || hhLoading || isSigningOut) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <LoadingSpinner />

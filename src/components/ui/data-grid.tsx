@@ -41,7 +41,7 @@ export const GRID_CONTROL_HOVER_BORDER_CLASS = 'hover:border-[hsl(var(--grid-sti
 const GRID_HEADER_CELL_BORDERS_CLASS = '[&>tr>th]:shadow-[inset_0_-1px_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line))]';
 const GRID_FOOTER_CELL_BORDERS_CLASS = '[&>tr>td]:shadow-[inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
 const GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS = 'shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line))]';
-const GRID_FOOTER_FIRST_COLUMN_STICKY_CLASS = '[&>tr>td:first-child]:sticky [&>tr>td:first-child]:left-0 [&>tr>td:first-child]:z-20 [&>tr>td:first-child]:shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
+const GRID_FOOTER_FIRST_COLUMN_STICKY_CLASS = '[&>tr>td:first-child]:sticky [&>tr>td:first-child]:left-0 [&>tr>td:first-child]:z-30 [&>tr>td:first-child]:shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
 
 /** Spread onto any interactive element to wire it into grid keyboard navigation. */
 export function gridNavProps(ctx: DataGridContextValue | null, navCol: number): Record<string, unknown> {
@@ -97,31 +97,41 @@ function useGridNav(
     }
   }, [containerRef]);
 
+  const isCellTemporarilyUnfocusable = useCallback((cell: HTMLElement) => {
+    if (cell.hasAttribute('disabled')) return true;
+    if (cell.getAttribute('aria-disabled') === 'true') return true;
+    return false;
+  }, []);
+
+  const focusCellElement = useCallback((target: HTMLElement) => {
+    requestAnimationFrame(() => scrollCellIntoView(target));
+
+    if (isCellTemporarilyUnfocusable(target)) return false;
+
+    const role = target.getAttribute('role');
+    if (target.tagName === 'BUTTON' && role !== 'checkbox' && role !== 'combobox') {
+      target.click();
+      return true;
+    }
+
+    target.focus();
+    const active = document.activeElement;
+    return active === target || (active instanceof HTMLElement && target.contains(active));
+  }, [isCellTemporarilyUnfocusable, scrollCellIntoView]);
+
   const focusCell = useCallback((row: number, col: number) => {
     const cells = getEditableCells();
     const target = cells.find(el => Number(el.dataset.row) === row && Number(el.dataset.col) === col);
-    if (target) {
-      const role = target.getAttribute('role');
-      if (target.tagName === 'BUTTON' && role !== 'checkbox' && role !== 'combobox') target.click();
-      else target.focus();
-      requestAnimationFrame(() => scrollCellIntoView(target));
-      return true;
-    }
+    if (target) return focusCellElement(target);
     return false;
-  }, [getEditableCells, scrollCellIntoView]);
+  }, [focusCellElement, getEditableCells]);
 
   const focusCellByRowId = useCallback((rowId: string, col: number) => {
     const cells = getEditableCells();
     const target = cells.find(el => el.dataset.rowId === rowId && Number(el.dataset.col) === col);
-    if (target) {
-      const role = target.getAttribute('role');
-      if (target.tagName === 'BUTTON' && role !== 'checkbox' && role !== 'combobox') target.click();
-      else target.focus();
-      requestAnimationFrame(() => scrollCellIntoView(target));
-      return true;
-    }
+    if (target) return focusCellElement(target);
     return false;
-  }, [getEditableCells, scrollCellIntoView]);
+  }, [focusCellElement, getEditableCells]);
 
   const getMaxRow = useCallback(() => {
     let max = -1;
@@ -152,7 +162,24 @@ function useGridNav(
     };
   }, [getEditableCells]);
 
-  const focusWithRetry = useCallback((target: { row: number; col: number; rowId: string | null }, attempts = 10) => {
+  const resolveColInRow = useCallback((targetRow: number, preferredCol: number) => {
+    const cells = getEditableCells();
+    const cols = cells
+      .filter(c => Number(c.dataset.row) === targetRow)
+      .map(c => Number(c.dataset.col))
+      .sort((a, b) => a - b);
+
+    if (cols.length === 0) return null;
+    if (cols.includes(preferredCol)) return preferredCol;
+
+    const lower = cols.filter(c => c < preferredCol);
+    if (lower.length > 0) return lower[lower.length - 1];
+
+    const higher = cols.find(c => c > preferredCol);
+    return higher ?? null;
+  }, [getEditableCells]);
+
+  const focusWithRetry = useCallback((target: { row: number; col: number; rowId: string | null }, attempts = 120) => {
     let tries = 0;
     const tryFocus = () => {
       const focused =
@@ -197,8 +224,10 @@ function useGridNav(
       const maxRow = getMaxRow();
       const nextRow = e.key === 'ArrowUp' ? Math.max(0, row - 1) : Math.min(maxRow, row + 1);
       if (nextRow === row) return false;
+      const nextCol = resolveColInRow(nextRow, col);
+      if (nextCol === null) return false;
       e.preventDefault();
-      moveTo(nextRow, col);
+      moveTo(nextRow, nextCol);
       return true;
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       if (e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return false;
@@ -229,7 +258,7 @@ function useGridNav(
       return true;
     }
     return false;
-  }, [findNextCol, findPrevCol, findTargetBeforeSort, focusWithRetry, getMaxRow, onNavigateTarget]);
+  }, [findNextCol, findPrevCol, findTargetBeforeSort, focusWithRetry, getMaxRow, onNavigateTarget, resolveColInRow]);
 
   const onCellMouseDown = useCallback((_e: React.MouseEvent<HTMLElement>) => {
     pointerInitiatedFocusRef.current = true;
@@ -411,37 +440,6 @@ export function DataGrid<TData>({
     const pending = pendingCommitFocusRef.current;
     if (!pending) return;
 
-    const active = document.activeElement;
-    const container = containerRef.current;
-    const activeInGridCell =
-      active instanceof HTMLElement &&
-      !!container &&
-      container.contains(active) &&
-      active.dataset.row != null &&
-      active.dataset.col != null;
-
-    if (activeInGridCell) {
-      const activeEl = active as HTMLElement;
-      const activeRowId = activeEl.dataset.rowId ?? null;
-      const activeCol = Number(activeEl.dataset.col);
-      const activeIsPendingTarget =
-        activeRowId === pending.rowId &&
-        !Number.isNaN(activeCol) &&
-        activeCol === pending.col;
-
-      if (activeIsPendingTarget) {
-        requestAnimationFrame(() => scrollCellIntoView(activeEl));
-        pendingCommitFocusRef.current = null;
-        return;
-      }
-
-      const activeOnDifferentRow = activeRowId !== pending.rowId;
-      if (activeOnDifferentRow) {
-        pendingCommitFocusRef.current = null;
-        return;
-      }
-    }
-
     let attempts = 0;
     const restoreFocus = () => {
       const focused = focusCellByRowId(pending.rowId, pending.col);
@@ -449,7 +447,7 @@ export function DataGrid<TData>({
         pendingCommitFocusRef.current = null;
         return;
       }
-      if (attempts >= 10) {
+      if (attempts >= 120) {
         pendingCommitFocusRef.current = null;
         return;
       }
@@ -458,7 +456,7 @@ export function DataGrid<TData>({
     };
 
     requestAnimationFrame(restoreFocus);
-  }, [focusCellByRowId, renderedRowIds, scrollCellIntoView]);
+  }, [currentGroupKeys, focusCellByRowId, renderedRowIds, scrollCellIntoView]);
 
   useEffect(() => {
     const active = document.activeElement;
@@ -523,7 +521,7 @@ export function DataGrid<TData>({
                 horizontalPaddingClass,
                 verticalPaddingClass,
                 colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
-                colIdx === 0 && stickyFirstColumn && 'sticky left-0 z-10',
+                colIdx === 0 && stickyFirstColumn && 'sticky left-0 z-20',
                 colIdx === 0 && stickyFirstColumn && GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS,
                 meta?.cellClassName,
               )}
@@ -573,7 +571,7 @@ export function DataGrid<TData>({
                       `relative h-9 px-2 text-left align-middle font-medium ${GRID_READONLY_TEXT_CLASS}`,
                       header.column.getCanSort() && 'cursor-pointer select-none hover:bg-muted',
                       colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
-                      colIdx === 0 && stickyFirstColumn && `sticky left-0 z-20 ${GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS}`,
+                      colIdx === 0 && stickyFirstColumn && `sticky left-0 z-40 ${GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS}`,
                       meta?.headerClassName,
                     )}
                     onClick={(event) => {
@@ -607,7 +605,7 @@ export function DataGrid<TData>({
                         type="button"
                         aria-label={`Resize ${header.column.id} column`}
                         className={cn(
-                          'group absolute -right-[5px] top-1/2 z-20 flex h-6 w-[10px] -translate-y-1/2 !cursor-col-resize touch-none select-none items-center justify-center',
+                          'group absolute -right-[5px] top-1/2 z-10 flex h-6 w-[10px] -translate-y-1/2 !cursor-col-resize touch-none select-none items-center justify-center',
                         )}
                         onClick={(event) => {
                           event.preventDefault();

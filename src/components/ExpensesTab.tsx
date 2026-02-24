@@ -20,12 +20,13 @@ import { Label } from '@/components/ui/label';
 import { ColorPicker } from '@/components/ManagedListSection';
 import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
 import { DataGridAddFormAffixInput } from '@/components/ui/data-grid-add-form-affix-input';
-import { Plus, Trash2, MoreHorizontal } from 'lucide-react';
+import { Plus, Trash2, MoreHorizontal, Filter, FilterX } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels, needsParam } from '@/lib/frequency';
 import { DataGrid, GridEditableCell, GridCurrencyCell, GridPercentCell, useDataGrid, GRID_CONTROL_HOVER_BORDER_CLASS, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import { EXPENSES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH } from '@/lib/gridColumnWidths';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { FrequencyType } from '@/types/fairshare';
 import type { Expense } from '@/hooks/useExpenses';
 import type { Category } from '@/hooks/useCategories';
@@ -80,6 +81,54 @@ const COLOR_LABELS: Record<string, string> = {
 };
 
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/30 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0';
+
+function PersistOnClickTooltipValue({
+  display,
+  content,
+  contentClassName,
+}: {
+  display: React.ReactNode;
+  content: React.ReactNode;
+  contentClassName?: string;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const open = hovered || focused;
+
+  return (
+    <Tooltip open={open}>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          role="button"
+          className="inline-block cursor-help underline decoration-dotted underline-offset-2 focus:outline-none"
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => {
+            setHovered(false);
+            setFocused(false);
+          }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onClick={(event) => {
+            setFocused(true);
+            event.currentTarget.focus();
+          }}
+        >
+          {display}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent align="end" side="top" className={contentClassName}>
+        {content}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function formatFrequencyDescription(type: FrequencyType, param: number | null) {
+  const label = frequencyLabels[type];
+  if (!needsParam(type) || param == null) return label;
+  return label.replaceAll('X', String(param));
+}
 
 const createDefaultExpenseDraft = (): NewExpenseDraft => ({
   name: '',
@@ -297,6 +346,7 @@ function ExpenseActionsCell({ name, onRemove, disabled = false }: { name: string
 // ─── Main Component ───
 
 export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, partnerX, partnerY, userId, pendingById = {}, onAdd, onUpdate, onRemove, onAddCategory, onAddLinkedAccount, fullView = false }: ExpensesTabProps) {
+  const isMobile = useIsMobile();
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [newExpense, setNewExpense] = useState<NewExpenseDraft>(createDefaultExpenseDraft);
   const [addDialog, setAddDialog] = useState<'category' | 'payment_method' | null>(null);
@@ -313,6 +363,9 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     return stored === 'X' || stored === 'Y' || stored === 'unassigned' || stored === 'all' ? stored : 'all';
   });
   const [groupBy, setGroupBy] = useState<GroupByOption>(() => (localStorage.getItem('expenses_groupBy') as GroupByOption) || 'none');
+  const [viewControlsOpen, setViewControlsOpen] = useState(false);
+  const [draftFilterPayer, setDraftFilterPayer] = useState<PayerFilter>('all');
+  const [draftGroupBy, setDraftGroupBy] = useState<GroupByOption>('none');
   const [sorting, setSorting] = useState<SortingState>(() => {
     try { const s = localStorage.getItem('expenses_sorting'); return s ? JSON.parse(s) : [{ id: 'name', desc: false }]; }
     catch { return [{ id: 'name', desc: false }]; }
@@ -385,6 +438,25 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
   const openAddExpenseModal = () => {
     setNewExpense(createDefaultExpenseDraft());
     setAddExpenseOpen(true);
+  };
+
+  const hasActiveViewControls = filterPayer !== 'all' || groupBy !== 'none';
+
+  const clearViewControls = () => {
+    setFilterPayer('all');
+    setGroupBy('none');
+  };
+
+  const openViewControlsModal = () => {
+    setDraftFilterPayer(filterPayer);
+    setDraftGroupBy(groupBy);
+    setViewControlsOpen(true);
+  };
+
+  const applyViewControls = () => {
+    setFilterPayer(draftFilterPayer);
+    setGroupBy(draftGroupBy);
+    setViewControlsOpen(false);
   };
 
   const openNewItemDialog = (source: AddSource, type: 'category' | 'payment_method') => {
@@ -639,7 +711,57 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       size: EXPENSES_GRID_DEFAULT_WIDTHS.fair_x,
       minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { headerClassName: 'text-right', cellClassName: `text-right tabular-nums text-xs ${GRID_READONLY_TEXT_CLASS}` },
-      cell: ({ getValue }) => `$${Math.round(getValue())}`,
+      cell: ({ getValue, row }) => {
+        const originalAmount = Number(row.original.exp.amount);
+        const shouldShowNormalizationStep = row.original.exp.frequency_type !== 'monthly';
+        const frequencyDescription = formatFrequencyDescription(row.original.exp.frequency_type, row.original.exp.frequency_param);
+        const monthly = row.original.monthly;
+        const isAllToPartnerX = row.original.exp.benefit_x >= 100;
+        const isAllToPartnerY = row.original.exp.benefit_x <= 0;
+        const isSingleBeneficiary = isAllToPartnerX || isAllToPartnerY;
+        const beneficiaryLabel = isAllToPartnerX ? partnerX : partnerY;
+        const benefitX = row.original.exp.benefit_x / 100;
+        const benefitY = 1 - benefitX;
+        const isEvenBenefitSplit = Math.abs(row.original.exp.benefit_x - 50) < 0.0001;
+        const incomeXRatio = incomeRatioX;
+        const incomeYRatio = 1 - incomeXRatio;
+        const weightX = benefitX * incomeXRatio;
+        const weightY = benefitY * incomeYRatio;
+        const totalWeight = weightX + weightY || 1;
+        const normalizedShareX = weightX / totalWeight;
+        const value = Number(getValue());
+        const hasSingleStep = !shouldShowNormalizationStep && (isSingleBeneficiary || isEvenBenefitSplit);
+        const stepPrefix = (step: number) => (hasSingleStep ? '' : `${step}. `);
+
+        return (
+          <PersistOnClickTooltipValue
+            display={`$${Math.round(value)}`}
+            contentClassName="max-w-[460px] text-xs tabular-nums"
+            content={(
+              <div className="space-y-1.5 text-left">
+                <div className="font-medium">{partnerX} fair share, step by step:</div>
+                {shouldShowNormalizationStep && (
+                  <div>{stepPrefix(1)}Convert the original expense to its monthly equivalent: ${originalAmount.toFixed(2)} {frequencyDescription.toLowerCase()} converts to ${monthly.toFixed(2)} per month.</div>
+                )}
+                {isSingleBeneficiary ? (
+                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit split is {row.original.exp.benefit_x}/
+                    {100 - row.original.exp.benefit_x}, so this expense is assigned entirely to {beneficiaryLabel}. {partnerX === beneficiaryLabel ? `${partnerX} gets 100% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).` : `${partnerX} gets 0% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).`}
+                  </div>
+                ) : isEvenBenefitSplit ? (
+                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit is exactly 50/50, so just multiply the monthly amount by {partnerX}&apos;s income ratio: ${monthly.toFixed(2)} × {(incomeXRatio * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                ) : (
+                  <>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Calculate {partnerX}&apos;s weight by combining benefit and income share: {(benefitX * 100).toFixed(1)}% × {(incomeXRatio * 100).toFixed(1)}% = {weightX.toFixed(4)}.</div>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 3 : 2)}Calculate total weight for both partners: {weightX.toFixed(4)} + {weightY.toFixed(4)} = {totalWeight.toFixed(4)}.</div>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 4 : 3)}Convert {partnerX}&apos;s weight to a fraction of the total: {weightX.toFixed(4)} / {totalWeight.toFixed(4)} = {(normalizedShareX * 100).toFixed(2)}%.</div>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 5 : 4)}Apply that fraction to the monthly amount: ${monthly.toFixed(2)} × {(normalizedShareX * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                  </>
+                )}
+              </div>
+            )}
+          />
+        );
+      },
     }),
     columnHelper.accessor('fairY', {
       id: 'fair_y',
@@ -647,7 +769,57 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
       size: EXPENSES_GRID_DEFAULT_WIDTHS.fair_y,
       minSize: GRID_MIN_COLUMN_WIDTH,
       meta: { headerClassName: 'text-right', cellClassName: `text-right tabular-nums text-xs ${GRID_READONLY_TEXT_CLASS}` },
-      cell: ({ getValue }) => `$${Math.round(getValue())}`,
+      cell: ({ getValue, row }) => {
+        const originalAmount = Number(row.original.exp.amount);
+        const shouldShowNormalizationStep = row.original.exp.frequency_type !== 'monthly';
+        const frequencyDescription = formatFrequencyDescription(row.original.exp.frequency_type, row.original.exp.frequency_param);
+        const monthly = row.original.monthly;
+        const isAllToPartnerX = row.original.exp.benefit_x >= 100;
+        const isAllToPartnerY = row.original.exp.benefit_x <= 0;
+        const isSingleBeneficiary = isAllToPartnerX || isAllToPartnerY;
+        const beneficiaryLabel = isAllToPartnerX ? partnerX : partnerY;
+        const benefitX = row.original.exp.benefit_x / 100;
+        const benefitY = 1 - benefitX;
+        const isEvenBenefitSplit = Math.abs(row.original.exp.benefit_x - 50) < 0.0001;
+        const incomeXRatio = incomeRatioX;
+        const incomeYRatio = 1 - incomeXRatio;
+        const weightX = benefitX * incomeXRatio;
+        const weightY = benefitY * incomeYRatio;
+        const totalWeight = weightX + weightY || 1;
+        const normalizedShareY = weightY / totalWeight;
+        const value = Number(getValue());
+        const hasSingleStep = !shouldShowNormalizationStep && (isSingleBeneficiary || isEvenBenefitSplit);
+        const stepPrefix = (step: number) => (hasSingleStep ? '' : `${step}. `);
+
+        return (
+          <PersistOnClickTooltipValue
+            display={`$${Math.round(value)}`}
+            contentClassName="max-w-[460px] text-xs tabular-nums"
+            content={(
+              <div className="space-y-1.5 text-left">
+                <div className="font-medium">{partnerY} fair share, step by step:</div>
+                {shouldShowNormalizationStep && (
+                  <div>{stepPrefix(1)}Convert the original expense to its monthly equivalent: ${originalAmount.toFixed(2)} {frequencyDescription.toLowerCase()} converts to ${monthly.toFixed(2)} per month.</div>
+                )}
+                {isSingleBeneficiary ? (
+                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit split is {row.original.exp.benefit_x}/
+                    {100 - row.original.exp.benefit_x}, so this expense is assigned entirely to {beneficiaryLabel}. {partnerY === beneficiaryLabel ? `${partnerY} gets 100% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).` : `${partnerY} gets 0% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).`}
+                  </div>
+                ) : isEvenBenefitSplit ? (
+                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit is exactly 50/50, so just multiply the monthly amount by {partnerY}&apos;s income ratio: ${monthly.toFixed(2)} × {(incomeYRatio * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                ) : (
+                  <>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Calculate {partnerY}&apos;s weight by combining benefit and income share: {(benefitY * 100).toFixed(1)}% × {(incomeYRatio * 100).toFixed(1)}% = {weightY.toFixed(4)}.</div>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 3 : 2)}Calculate total weight for both partners: {weightX.toFixed(4)} + {weightY.toFixed(4)} = {totalWeight.toFixed(4)}.</div>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 4 : 3)}Convert {partnerY}&apos;s weight to a fraction of the total: {weightY.toFixed(4)} / {totalWeight.toFixed(4)} = {(normalizedShareY * 100).toFixed(2)}%.</div>
+                    <div>{stepPrefix(shouldShowNormalizationStep ? 5 : 4)}Apply that fraction to the monthly amount: ${monthly.toFixed(2)} × {(normalizedShareY * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                  </>
+                )}
+              </div>
+            )}
+          />
+        );
+      },
     }),
     columnHelper.display({
       id: 'actions',
@@ -666,7 +838,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         />
       ),
     }),
-  ], [categories, linkedAccounts, partnerX, partnerY, getDerivedPayer, pendingById]);
+  ], [categories, linkedAccounts, partnerX, partnerY, getDerivedPayer, incomeRatioX, pendingById]);
 
   const table = useReactTable({
     data: computedData,
@@ -677,6 +849,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     onColumnSizingChange,
     onColumnSizingInfoChange,
     columnResizeMode: 'onChange',
+    getRowId: (row) => row.exp.id,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
@@ -720,18 +893,20 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     const groupRowBgClass = 'bg-[hsl(var(--category-group-row-bg))]';
     const groupRowTextClass = 'text-white';
     const groupRowFontClass = 'font-medium';
+    const groupRowCellClass = `${groupRowBgClass} h-7 align-middle shadow-[inset_0_1px_0_0_hsl(var(--category-group-row-bg)),inset_0_-1px_0_0_hsl(var(--category-group-row-bg))]`;
+    const groupRowTextCellClass = `${groupRowFontClass} text-xs leading-none`;
     return (
       <tr
         key={`gh-${key}`}
-        className={`${groupRowBgClass} ${groupRowTextClass} border-b-0 shadow-[0_1px_0_0_hsl(var(--border))] ${fullView ? 'sticky top-[36px] z-20' : ''}`}
+        className={`${groupRowBgClass} ${groupRowTextClass} border-b-0 ${fullView ? 'sticky top-[36px] z-30' : ''}`}
       >
-        <td className={`${groupRowBgClass} ${groupRowFontClass} text-xs px-2 py-1 sticky left-0 z-10 shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line))]`}>{getGroupLabel(key)}</td>
-        <td colSpan={4} className={groupRowBgClass} />
-        <td className={`text-right ${groupRowFontClass} tabular-nums text-xs ${groupRowBgClass} px-2 py-1`}>${Math.round(gMonthly)}</td>
-        <td colSpan={4} className={groupRowBgClass} />
-        <td className={`text-right ${groupRowFontClass} tabular-nums text-xs ${groupRowBgClass} px-2 py-1`}>${Math.round(gFairX)}</td>
-        <td className={`text-right ${groupRowFontClass} tabular-nums text-xs ${groupRowBgClass} px-2 py-1`}>${Math.round(gFairY)}</td>
-        <td className={groupRowBgClass} />
+        <td className={`${groupRowCellClass} ${groupRowTextCellClass} px-2 sticky left-0 z-30 shadow-[inset_0_1px_0_0_hsl(var(--category-group-row-bg)),inset_0_-1px_0_0_hsl(var(--category-group-row-bg)),inset_-1px_0_0_0_hsl(var(--grid-sticky-line))]`}>{getGroupLabel(key)}</td>
+        <td colSpan={4} className={groupRowCellClass} />
+        <td className={`${groupRowCellClass} ${groupRowTextCellClass} text-right tabular-nums px-2`}>${Math.round(gMonthly)}</td>
+        <td colSpan={4} className={groupRowCellClass} />
+        <td className={`${groupRowCellClass} ${groupRowTextCellClass} text-right tabular-nums px-2`}>${Math.round(gFairX)}</td>
+        <td className={`${groupRowCellClass} ${groupRowTextCellClass} text-right tabular-nums px-2`}>${Math.round(gFairY)}</td>
+        <td className={groupRowCellClass} />
       </tr>
     );
   };
@@ -740,32 +915,65 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
   const gridCardContentClassName = fullView ? 'px-0 pb-0 flex-1 min-h-0' : 'px-0 pb-2.5';
 
   return (
-    <Card className={`max-w-none w-[100vw] relative left-1/2 -translate-x-1/2 rounded-none border-x-0 ${fullView ? 'h-full min-h-0 flex flex-col' : ''}`}>
+    <Card className={`max-w-none w-[100vw] relative left-1/2 -translate-x-1/2 rounded-none border-x-0 ${fullView ? 'h-full min-h-0 flex flex-col border-t-0 md:border-t' : ''}`}>
       <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
           <CardTitle>Expenses</CardTitle>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={filterPayer} onValueChange={v => setFilterPayer(v as PayerFilter)}>
-              <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All partners</SelectItem>
-                <SelectItem value="X">{partnerX} only</SelectItem>
-                <SelectItem value="Y">{partnerY} only</SelectItem>
-                <SelectItem value="unassigned">Unassigned only</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={groupBy} onValueChange={v => setGroupBy(v as GroupByOption)}>
-              <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Group by…" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No grouping</SelectItem>
-                <SelectItem value="category">Group by Category</SelectItem>
-                <SelectItem value="estimated">Group by Estimated</SelectItem>
-                <SelectItem value="payer">Group by Payer</SelectItem>
-                <SelectItem value="payment_method">Group by Payment Method</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button onClick={openAddExpenseModal} disabled={savingExpense} variant="outline" size="sm" className="h-8 gap-1.5">
-              <Plus className="h-4 w-4" /> Add
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {isMobile ? (
+              <>
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" onClick={openViewControlsModal}>
+                  <Filter className="h-4 w-4" />
+                  Filters
+                </Button>
+                {hasActiveViewControls && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 w-8 p-0 border border-warning bg-warning text-warning-foreground hover:bg-warning/90"
+                    onClick={clearViewControls}
+                    aria-label="Clear filters and groupings"
+                  >
+                    <FilterX className="h-4 w-4" />
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <Select value={filterPayer} onValueChange={v => setFilterPayer(v as PayerFilter)}>
+                  <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All partners</SelectItem>
+                    <SelectItem value="X">{partnerX} only</SelectItem>
+                    <SelectItem value="Y">{partnerY} only</SelectItem>
+                    <SelectItem value="unassigned">Unassigned only</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={groupBy} onValueChange={v => setGroupBy(v as GroupByOption)}>
+                  <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Group by…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No grouping</SelectItem>
+                    <SelectItem value="category">Group by Category</SelectItem>
+                    <SelectItem value="estimated">Group by Estimated</SelectItem>
+                    <SelectItem value="payer">Group by Payer</SelectItem>
+                    <SelectItem value="payment_method">Group by Payment Method</SelectItem>
+                  </SelectContent>
+                </Select>
+                {hasActiveViewControls && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 w-8 p-0 border border-warning bg-warning text-warning-foreground hover:bg-warning/90"
+                    onClick={clearViewControls}
+                    aria-label="Clear filters and groupings"
+                  >
+                    <FilterX className="h-4 w-4" />
+                  </Button>
+                )}
+              </>
+            )}
+            <Button onClick={openAddExpenseModal} disabled={savingExpense} variant="outline" size="sm" className="h-8 w-8 p-0" aria-label="Add expense">
+              <Plus className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -850,28 +1058,29 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
               </Select>
             </div>
 
-              <div className="space-y-1.5">
-              <DataGridAddFormLabel htmlFor="new-expense-amount">Amount</DataGridAddFormLabel>
-              <DataGridAddFormAffixInput
-                id="new-expense-amount"
-                prefix="$"
-                value={String(newExpense.amount)}
-                onChange={e => setNewExpense(prev => ({ ...prev, amount: Number(e.target.value) || 0 }))}
-                disabled={savingExpense}
-              />
-            </div>
-
-              <div className="space-y-1.5">
-              <DataGridAddFormLabel htmlFor="new-expense-estimate" tooltip="Expense is estimated">Estimate</DataGridAddFormLabel>
-              <div className="h-9 flex items-center">
-                <Checkbox
-                  id="new-expense-estimate"
-                  checked={newExpense.is_estimate}
-                  onCheckedChange={checked => setNewExpense(prev => ({ ...prev, is_estimate: !!checked }))}
-                  disabled={savingExpense}
-                />
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
+                <div className="space-y-1.5">
+                  <DataGridAddFormLabel htmlFor="new-expense-amount">Amount</DataGridAddFormLabel>
+                  <DataGridAddFormAffixInput
+                    id="new-expense-amount"
+                    prefix="$"
+                    value={String(newExpense.amount)}
+                    onChange={e => setNewExpense(prev => ({ ...prev, amount: Number(e.target.value) || 0 }))}
+                    disabled={savingExpense}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <DataGridAddFormLabel htmlFor="new-expense-estimate" tooltip="Expense is estimated">Estimated</DataGridAddFormLabel>
+                  <div className="h-9 flex items-center -translate-y-0.5">
+                    <Checkbox
+                      id="new-expense-estimate"
+                      checked={newExpense.is_estimate}
+                      onCheckedChange={checked => setNewExpense(prev => ({ ...prev, is_estimate: !!checked }))}
+                      disabled={savingExpense}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
 
               <div className="space-y-1.5">
               <DataGridAddFormLabel>Frequency</DataGridAddFormLabel>
@@ -937,40 +1146,41 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
               </Select>
             </div>
 
-              <div className="space-y-1.5">
-              <DataGridAddFormLabel htmlFor="new-expense-benefit-x" tooltip={`The percentage that ${partnerX} benefits from the expense`}>
-                {partnerX} %
-              </DataGridAddFormLabel>
-              <DataGridAddFormAffixInput
-                id="new-expense-benefit-x"
-                suffix="%"
-                min={0}
-                max={100}
-                value={String(newExpense.benefit_x)}
-                onChange={e => {
-                  const clamped = Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0)));
-                  setNewExpense(prev => ({ ...prev, benefit_x: clamped }));
-                }}
-                disabled={savingExpense}
-              />
-            </div>
-
-              <div className="space-y-1.5">
-              <DataGridAddFormLabel htmlFor="new-expense-benefit-y" tooltip={`The percentage that ${partnerY} benefits from the expense`}>
-                {partnerY} %
-              </DataGridAddFormLabel>
-              <DataGridAddFormAffixInput
-                id="new-expense-benefit-y"
-                suffix="%"
-                min={0}
-                max={100}
-                value={String(100 - newExpense.benefit_x)}
-                onChange={e => {
-                  const clamped = Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0)));
-                  setNewExpense(prev => ({ ...prev, benefit_x: 100 - clamped }));
-                }}
-                disabled={savingExpense}
-              />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <DataGridAddFormLabel htmlFor="new-expense-benefit-x" tooltip={`The percentage that ${partnerX} benefits from the expense`}>
+                    {partnerX} %
+                  </DataGridAddFormLabel>
+                  <DataGridAddFormAffixInput
+                    id="new-expense-benefit-x"
+                    suffix="%"
+                    min={0}
+                    max={100}
+                    value={String(newExpense.benefit_x)}
+                    onChange={e => {
+                      const clamped = Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0)));
+                      setNewExpense(prev => ({ ...prev, benefit_x: clamped }));
+                    }}
+                    disabled={savingExpense}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <DataGridAddFormLabel htmlFor="new-expense-benefit-y" tooltip={`The percentage that ${partnerY} benefits from the expense`}>
+                    {partnerY} %
+                  </DataGridAddFormLabel>
+                  <DataGridAddFormAffixInput
+                    id="new-expense-benefit-y"
+                    suffix="%"
+                    min={0}
+                    max={100}
+                    value={String(100 - newExpense.benefit_x)}
+                    onChange={e => {
+                      const clamped = Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0)));
+                      setNewExpense(prev => ({ ...prev, benefit_x: 100 - clamped }));
+                    }}
+                    disabled={savingExpense}
+                  />
+                </div>
               </div>
             </div>
           </DialogBody>
@@ -986,6 +1196,49 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
               Cancel
             </Button>
             <Button onClick={handleSaveNewExpense} disabled={savingExpense}>{savingExpense ? 'Saving...' : 'Add'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={viewControlsOpen} onOpenChange={setViewControlsOpen}>
+        <DialogContent className="w-screen max-w-none rounded-none sm:w-full sm:max-w-sm sm:rounded-lg">
+          <DialogHeader>
+            <DialogTitle>Filters & View Settings</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Partner Filter</Label>
+              <Select value={draftFilterPayer} onValueChange={v => setDraftFilterPayer(v as PayerFilter)}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All partners</SelectItem>
+                  <SelectItem value="X">{partnerX} only</SelectItem>
+                  <SelectItem value="Y">{partnerY} only</SelectItem>
+                  <SelectItem value="unassigned">Unassigned only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Group By</Label>
+              <Select value={draftGroupBy} onValueChange={v => setDraftGroupBy(v as GroupByOption)}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Group by…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No grouping</SelectItem>
+                  <SelectItem value="category">Group by Category</SelectItem>
+                  <SelectItem value="estimated">Group by Estimated</SelectItem>
+                  <SelectItem value="payer">Group by Payer</SelectItem>
+                  <SelectItem value="payment_method">Group by Payment Method</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setViewControlsOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={applyViewControls}>
+              Save
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

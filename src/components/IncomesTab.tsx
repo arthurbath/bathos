@@ -310,6 +310,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, userId, pendingById = 
     onColumnSizingChange,
     onColumnSizingInfoChange,
     columnResizeMode: 'onChange',
+    getRowId: (row) => row.id,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
@@ -321,7 +322,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, userId, pendingById = 
   const gridCardContentClassName = fullView ? 'px-0 pb-0 flex-1 min-h-0' : 'px-0 pb-2.5';
 
   return (
-    <Card className={fullView ? 'max-w-none w-[100vw] relative left-1/2 -translate-x-1/2 rounded-none border-x-0 h-full min-h-0 flex flex-col' : undefined}>
+    <Card className={fullView ? 'max-w-none w-[100vw] relative left-1/2 -translate-x-1/2 rounded-none border-x-0 border-t-0 md:border-t h-full min-h-0 flex flex-col' : undefined}>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Incomes</CardTitle>

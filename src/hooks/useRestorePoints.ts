@@ -14,17 +14,19 @@ export interface RestorePoint {
   created_at: string;
 }
 
+type RestorePointRow = Omit<RestorePoint, 'notes'> & { notes: string | null };
+
 function sortByCreatedAtDesc(rows: RestorePoint[]): RestorePoint[] {
   return [...rows].sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
 }
 
-function mapRow(row: Omit<RestorePoint, 'notes'> & { name: string | null }): RestorePoint {
+function mapRow(row: RestorePointRow): RestorePoint {
   return {
     id: row.id,
     household_id: row.household_id,
     data: row.data,
     created_at: row.created_at,
-    notes: row.name,
+    notes: row.notes,
   };
 }
 
@@ -40,13 +42,13 @@ export function useRestorePoints(householdId: string) {
       const { data: rows, error } = await retryOnLikelyNetworkError(async () =>
         await supabase
           .from('budget_restore_points')
-          .select('*')
+          .select('id, household_id, data, created_at, notes')
           .eq('household_id', householdId)
           .order('created_at', { ascending: false }),
       );
 
       if (error) throw error;
-      const mapped = ((rows as Array<Omit<RestorePoint, 'notes'> & { name: string | null }>) ?? []).map(mapRow);
+      const mapped = ((rows as RestorePointRow[]) ?? []).map(mapRow);
       return sortByCreatedAtDesc(mapped);
     },
   });
@@ -64,6 +66,7 @@ export function useRestorePoints(householdId: string) {
   const save = useCallback(async (notes: string, snapshot: Json) => {
     if (!householdId) throw new Error('No household selected.');
 
+    const normalized = notes.trim();
     const id = crypto.randomUUID();
     setPending(id, true);
     try {
@@ -74,15 +77,14 @@ export function useRestorePoints(householdId: string) {
             .insert({
               id,
               household_id: householdId,
-              name: notes || null,
+              notes: normalized || null,
               data: snapshot,
             })
-            .select('*')
+            .select('id, household_id, data, created_at, notes')
             .single(),
         );
-
         if (error) throw error;
-        return savedRow as Omit<RestorePoint, 'notes'> & { name: string | null };
+        return savedRow as RestorePointRow;
       });
 
       queryClient.setQueryData<RestorePoint[]>(queryKey, (current) => sortByCreatedAtDesc([mapRow(row), ...(current ?? [])]));
@@ -117,23 +119,28 @@ export function useRestorePoints(householdId: string) {
 
   const updateNotes = useCallback(async (id: string, notes: string) => {
     if (pendingById[id]) return;
+    if (!householdId) throw new Error('No household selected.');
 
     const normalized = notes.trim();
     setPending(id, true);
     try {
-      await withMutationTiming({ module: 'budget', action: 'restorePoints.updateNotes' }, async () => {
-        const { error } = await retryOnLikelyNetworkError(async () =>
+      const updatedRow = await withMutationTiming({ module: 'budget', action: 'restorePoints.updateNotes' }, async () => {
+        const { data: row, error } = await retryOnLikelyNetworkError(async () =>
           await supabase
             .from('budget_restore_points')
-            .update({ name: normalized || null })
-            .eq('id', id),
+            .update({ notes: normalized || null })
+            .eq('id', id)
+            .eq('household_id', householdId)
+            .select('id, household_id, data, created_at, notes')
+            .single(),
         );
 
         if (error) throw error;
+        return row as RestorePointRow;
       });
 
       queryClient.setQueryData<RestorePoint[]>(queryKey, (current) =>
-        (current ?? []).map((point) => (point.id === id ? { ...point, notes: normalized || null } : point)),
+        (current ?? []).map((point) => (point.id === id ? mapRow(updatedRow) : point)),
       );
     } catch (error: unknown) {
       showMutationError(error);
@@ -141,7 +148,7 @@ export function useRestorePoints(householdId: string) {
     } finally {
       setPending(id, false);
     }
-  }, [pendingById, queryClient, queryKey, setPending]);
+  }, [householdId, pendingById, queryClient, queryKey, setPending]);
 
   return {
     points: data ?? [],

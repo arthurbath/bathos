@@ -16,6 +16,7 @@ import { useDrawerInstances } from '@/modules/drawers/hooks/useDrawerInstances';
 import type { DrawerInstance, DrawerType, DrawersHouseholdData, DrawersUnit, DrawersUnitFrameColor } from '@/modules/drawers/types/drawers';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
+import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 
 interface DrawersPlannerProps {
   household: DrawersHouseholdData;
@@ -90,6 +91,10 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
   const basePath = useModuleBasePath();
   const isPlannerRoute = location.pathname.endsWith('/plan');
   const isConfigRoute = location.pathname.endsWith('/config');
+  const drawersNavItems = [
+    { path: '/plan', icon: LayoutGrid, label: 'Planner' },
+    { path: '/config', icon: Settings, label: 'Config' },
+  ] as const;
 
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) return error.message;
@@ -460,19 +465,17 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
     <div className="min-h-screen bg-background">
       <ToplineHeader title="Drawer Planner" userId={userId} displayName={household.displayName} onSignOut={onSignOut} showAppSwitcher />
 
-      <div className="mx-auto max-w-5xl px-4 pt-6">
-        <nav className="grid w-full grid-cols-2 gap-0.5 rounded-lg border border-[hsl(var(--grid-sticky-line))] bg-border p-1 text-muted-foreground">
-          {([
-            { path: '/plan', icon: LayoutGrid, label: 'Planner' },
-            { path: '/config', icon: Settings, label: 'Config' },
-          ] as const).map(({ path, icon: Icon, label }) => {
+      <div className="mx-auto hidden max-w-5xl px-4 pt-6 md:block">
+        <nav className="hidden w-full grid-cols-2 gap-0.5 rounded-lg border border-[hsl(var(--grid-sticky-line))] bg-border p-1 text-muted-foreground md:grid">
+          {drawersNavItems.map(({ path, icon: Icon, label }) => {
             const fullPath = `${basePath}${path}`;
             const active = location.pathname === fullPath || (!basePath && location.pathname === path);
             return (
               <button
                 key={path}
+                type="button"
                 onClick={() => navigate(fullPath)}
-                className={`inline-flex items-center justify-center gap-0 sm:gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-all ${active ? 'bg-background text-foreground shadow-sm' : 'hover:bg-background/50'}`}
+                className={`inline-flex items-center justify-center gap-0 sm:gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${active ? 'bg-background text-foreground' : 'hover:bg-background/50'}`}
               >
                 <Icon className="hidden h-4 w-4 sm:inline" />
                 <span>{label}</span>
@@ -481,9 +484,17 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
           })}
         </nav>
       </div>
+      <MobileBottomNav
+        items={drawersNavItems}
+        isActive={(path) => {
+          const fullPath = `${basePath}${path}`;
+          return location.pathname === fullPath || (!basePath && location.pathname === path);
+        }}
+        onNavigate={(path) => navigate(`${basePath}${path}`)}
+      />
 
       {isPlannerRoute && (
-      <main className="mx-auto max-w-5xl px-4 pt-6 pb-6">
+      <main className="mx-auto max-w-5xl px-4 pt-6 pb-24 md:pb-6">
         <div className="mb-4 space-y-4">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -697,7 +708,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
       )}
 
       {isConfigRoute && (
-      <main className="mx-auto max-w-5xl px-4 pt-6 pb-6">
+      <main className="mx-auto max-w-5xl px-4 pt-6 pb-24 md:pb-6">
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">

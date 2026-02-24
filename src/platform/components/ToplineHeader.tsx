@@ -26,7 +26,7 @@ export function ToplineHeader({
   const { isAdmin } = useIsAdmin(userId);
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-card">
+    <header className="sticky top-0 z-40 border-b border-[hsl(var(--grid-sticky-line))] bg-card">
       <div className={`mx-auto flex ${maxWidthClassName} items-center justify-between px-4 py-3`}>
         <div className="flex items-center gap-2">
           {showAppSwitcher && (

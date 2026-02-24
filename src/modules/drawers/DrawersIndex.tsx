@@ -6,7 +6,7 @@ import { DrawersPlanner } from '@/modules/drawers/components/DrawersPlanner';
 import { useDrawersHouseholdData } from '@/modules/drawers/hooks/useDrawersHouseholdData';
 
 export default function DrawersIndex() {
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, loading: authLoading, isSigningOut, signOut } = useAuth();
   const {
     household,
     loading: householdLoading,
@@ -15,7 +15,7 @@ export default function DrawersIndex() {
     joinHousehold,
   } = useDrawersHouseholdData(user, !!user);
 
-  if (authLoading || householdLoading) {
+  if (authLoading || householdLoading || isSigningOut) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <LoadingSpinner />

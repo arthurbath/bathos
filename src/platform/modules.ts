@@ -10,14 +10,14 @@ export interface PlatformModule {
 const BUDGET_MODULE: PlatformModule = {
   id: 'budget',
   name: 'Budget',
-  description: 'Track shared expenses and split costs fairly.',
+  description: 'Track your expenses, plan a monthly budget, and split costs fairly with housemates',
   launchPath: '/budget/summary',
 };
 
 const DRAWERS_MODULE: PlatformModule = {
   id: 'drawers',
   name: 'Drawer Planner',
-  description: 'Plan Kallax-style cubbies and drawer arrangements.',
+  description: 'Plan grid-style shelving units and drawer arrangements',
   launchPath: '/drawers/plan',
 };
 
