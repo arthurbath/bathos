@@ -1,3 +1,5 @@
+import { toast } from 'sonner';
+
 const NETWORK_ERROR_FALLBACK = 'Network request failed. Check your connection or content blocker and try again.';
 const DEFAULT_RETRY_ATTEMPTS = 3;
 const DEFAULT_RETRY_BASE_DELAY_MS = 250;
@@ -60,4 +62,8 @@ export async function retryOnLikelyNetworkError<T>(
   }
 
   throw (lastError instanceof Error ? lastError : new Error(toUserFacingErrorMessage(lastError)));
+}
+
+export function showMutationError(error: unknown): void {
+  toast.error(toUserFacingErrorMessage(error));
 }

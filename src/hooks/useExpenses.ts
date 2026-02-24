@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { FrequencyType } from '@/types/fairshare';
-import { isLikelyNetworkError, retryOnLikelyNetworkError, toUserFacingErrorMessage } from '@/lib/networkErrors';
+import { retryOnLikelyNetworkError, showMutationError } from '@/lib/networkErrors';
 import { withMutationTiming } from '@/lib/mutationTiming';
 import { budgetQueryKeys } from '@/hooks/budgetQueryKeys';
 
@@ -85,9 +85,7 @@ export function useExpenses(householdId: string) {
 
       queryClient.setQueryData<Expense[]>(queryKey, (current) => sortByCreatedAt([...(current ?? []), saved]));
     } catch (error: unknown) {
-      if (isLikelyNetworkError(error)) {
-        throw new Error(toUserFacingErrorMessage(error));
-      }
+      showMutationError(error);
       throw error;
     } finally {
       setPending(id, false);
@@ -117,9 +115,7 @@ export function useExpenses(householdId: string) {
         sortByCreatedAt((current ?? []).map((expense) => (expense.id === id ? saved : expense))),
       );
     } catch (error: unknown) {
-      if (isLikelyNetworkError(error)) {
-        throw new Error(toUserFacingErrorMessage(error));
-      }
+      showMutationError(error);
       throw error;
     } finally {
       setPending(id, false);
@@ -141,9 +137,7 @@ export function useExpenses(householdId: string) {
 
       queryClient.setQueryData<Expense[]>(queryKey, (current) => (current ?? []).filter((expense) => expense.id !== id));
     } catch (error: unknown) {
-      if (isLikelyNetworkError(error)) {
-        throw new Error(toUserFacingErrorMessage(error));
-      }
+      showMutationError(error);
       throw error;
     } finally {
       setPending(id, false);

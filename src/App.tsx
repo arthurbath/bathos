@@ -14,12 +14,21 @@ import AdminPage from "@/platform/components/AdminPage";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import TermsGate from "@/platform/components/TermsGate";
 import AuthCallbackToasts from "@/platform/components/AuthCallbackToasts";
+import { isLikelyNetworkError } from "@/lib/networkErrors";
 import Index from "./pages/Index";
 import DrawersIndex from "@/modules/drawers/DrawersIndex";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { refetchOnWindowFocus: false } },
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: (failureCount, error) => {
+        if (failureCount >= 2) return false;
+        return isLikelyNetworkError(error);
+      },
+    },
+  },
 });
 
 function DeferredNotFound() {

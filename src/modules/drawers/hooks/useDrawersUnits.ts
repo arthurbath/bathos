@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { retryOnLikelyNetworkError, showMutationError } from '@/lib/networkErrors';
 import { withDrawersDbTiming } from '@/modules/drawers/lib/dbTiming';
 import type { DrawersUnit, DrawersUnitFrameColor } from '@/modules/drawers/types/drawers';
 
@@ -75,13 +76,15 @@ export function useDrawersUnits(householdId: string) {
       return;
     }
 
-    const { data, error } = await withDrawersDbTiming('drawers_units.fetch', async () => (
-      supabase
-        .from('drawers_units')
-        .select('*')
-        .eq('household_id', householdId)
-        .order('sort_order', { ascending: true })
-    ));
+    const { data, error } = await withDrawersDbTiming('drawers_units.fetch', async () =>
+      await retryOnLikelyNetworkError(async () =>
+        await supabase
+          .from('drawers_units')
+          .select('*')
+          .eq('household_id', householdId)
+          .order('sort_order', { ascending: true }),
+      ),
+    );
 
     if (error) throw error;
 
@@ -101,18 +104,20 @@ export function useDrawersUnits(householdId: string) {
       setPending([pendingKey], true);
 
       try {
-        const { data, error } = await supabase.rpc('drawers_save_unit', {
-          _unit_id: draft.id ?? null,
-          _household_id: householdId,
-          _name: draft.name,
-          _width: draft.width,
-          _height: draft.height,
-          _frame_color: draft.frame_color,
-        });
+        const { data, error } = await retryOnLikelyNetworkError(async () =>
+          await supabase.rpc('drawers_save_unit', {
+            _unit_id: draft.id ?? null,
+            _household_id: householdId,
+            _name: draft.name,
+            _width: draft.width,
+            _height: draft.height,
+            _frame_color: draft.frame_color,
+          }),
+        );
 
         if (error) throw error;
 
-        const saved = (data as DrawersUnit | null) ?? null;
+        const saved = (data as unknown as DrawersUnit | null) ?? null;
         if (!saved?.id) {
           throw new Error('Failed to save unit.');
         }
@@ -128,16 +133,21 @@ export function useDrawersUnits(householdId: string) {
 
   const save = useCallback(
     async (draft: SaveUnitDraft): Promise<void> => {
-      if (!draft.id) {
-        await runQueuedMutation('drawers_units.save', async () => {
+      try {
+        if (!draft.id) {
+          await runQueuedMutation('drawers_units.save', async () => {
+            await persistUnit(draft);
+          });
+          return;
+        }
+
+        await withDrawersDbTiming('drawers_units.save', async () => {
           await persistUnit(draft);
         });
-        return;
+      } catch (error: unknown) {
+        showMutationError(error);
+        throw error;
       }
-
-      await withDrawersDbTiming('drawers_units.save', async () => {
-        await persistUnit(draft);
-      });
     },
     [persistUnit, runQueuedMutation],
   );
@@ -221,8 +231,12 @@ export function useDrawersUnits(householdId: string) {
           const targetSort = target.sort_order;
 
           const [{ error: sourceError }, { error: targetError }] = await Promise.all([
-            supabase.from('drawers_units').update({ sort_order: targetSort, updated_at: updatedAt }).eq('id', source.id),
-            supabase.from('drawers_units').update({ sort_order: sourceSort, updated_at: updatedAt }).eq('id', target.id),
+            retryOnLikelyNetworkError(async () =>
+              await supabase.from('drawers_units').update({ sort_order: targetSort, updated_at: updatedAt }).eq('id', source.id),
+            ),
+            retryOnLikelyNetworkError(async () =>
+              await supabase.from('drawers_units').update({ sort_order: sourceSort, updated_at: updatedAt }).eq('id', target.id),
+            ),
           ]);
 
           if (sourceError || targetError) {
@@ -235,6 +249,9 @@ export function useDrawersUnits(householdId: string) {
           next.sort((a, b) => a.sort_order - b.sort_order);
           setUnits(next);
         });
+      } catch (error: unknown) {
+        showMutationError(error);
+        throw error;
       } finally {
         setPending([id], false);
       }
@@ -247,10 +264,15 @@ export function useDrawersUnits(householdId: string) {
       setPending([id], true);
       try {
         await runQueuedMutation('drawers_units.remove', async () => {
-          const { error } = await supabase.from('drawers_units').delete().eq('id', id);
+          const { error } = await retryOnLikelyNetworkError(async () =>
+            await supabase.from('drawers_units').delete().eq('id', id),
+          );
           if (error) throw error;
           setUnits(prev => prev.filter(unit => unit.id !== id));
         });
+      } catch (error: unknown) {
+        showMutationError(error);
+        throw error;
       } finally {
         setPending([id], false);
       }

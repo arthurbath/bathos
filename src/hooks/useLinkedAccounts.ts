@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { isLikelyNetworkError, retryOnLikelyNetworkError, toUserFacingErrorMessage } from '@/lib/networkErrors';
+import { retryOnLikelyNetworkError, showMutationError } from '@/lib/networkErrors';
 import { withMutationTiming } from '@/lib/mutationTiming';
 import { budgetQueryKeys } from '@/hooks/budgetQueryKeys';
 
@@ -80,9 +80,7 @@ export function useLinkedAccounts(householdId: string) {
 
       queryClient.setQueryData<LinkedAccount[]>(queryKey, (current) => sortByName([...(current ?? []), saved]));
     } catch (error: unknown) {
-      if (isLikelyNetworkError(error)) {
-        throw new Error(toUserFacingErrorMessage(error));
-      }
+      showMutationError(error);
       throw error;
     } finally {
       setPending(id, false);
@@ -112,9 +110,7 @@ export function useLinkedAccounts(householdId: string) {
         sortByName((current ?? []).map((account) => (account.id === id ? saved : account))),
       );
     } catch (error: unknown) {
-      if (isLikelyNetworkError(error)) {
-        throw new Error(toUserFacingErrorMessage(error));
-      }
+      showMutationError(error);
       throw error;
     } finally {
       setPending(id, false);
@@ -144,9 +140,7 @@ export function useLinkedAccounts(householdId: string) {
         sortByName((current ?? []).map((account) => (account.id === id ? saved : account))),
       );
     } catch (error: unknown) {
-      if (isLikelyNetworkError(error)) {
-        throw new Error(toUserFacingErrorMessage(error));
-      }
+      showMutationError(error);
       throw error;
     } finally {
       setPending(id, false);
@@ -170,9 +164,7 @@ export function useLinkedAccounts(householdId: string) {
         (current ?? []).filter((account) => account.id !== id),
       );
     } catch (error: unknown) {
-      if (isLikelyNetworkError(error)) {
-        throw new Error(toUserFacingErrorMessage(error));
-      }
+      showMutationError(error);
       throw error;
     } finally {
       setPending(id, false);

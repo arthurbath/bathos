@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { retryOnLikelyNetworkError, showMutationError } from '@/lib/networkErrors';
 import { withMutationTiming } from '@/lib/mutationTiming';
 import { budgetQueryKeys } from '@/hooks/budgetQueryKeys';
 
@@ -24,11 +25,13 @@ export function useCategories(householdId: string) {
     queryKey,
     enabled: Boolean(householdId),
     queryFn: async () => {
-      const { data: rows, error } = await supabase
-        .from('budget_categories')
-        .select('*')
-        .eq('household_id', householdId)
-        .order('name');
+      const { data: rows, error } = await retryOnLikelyNetworkError(async () =>
+        await supabase
+          .from('budget_categories')
+          .select('*')
+          .eq('household_id', householdId)
+          .order('name'),
+      );
 
       if (error) throw error;
       return (rows as Category[]) ?? [];
@@ -51,22 +54,27 @@ export function useCategories(householdId: string) {
     setPending(id, true);
     try {
       const saved = await withMutationTiming({ module: 'budget', action: 'categories.add' }, async () => {
-        const { data: row, error } = await supabase
-          .from('budget_categories')
-          .insert({
-            id,
-            household_id: householdId,
-            name,
-            color,
-          })
-          .select('*')
-          .single();
+        const { data: row, error } = await retryOnLikelyNetworkError(async () =>
+          await supabase
+            .from('budget_categories')
+            .insert({
+              id,
+              household_id: householdId,
+              name,
+              color,
+            })
+            .select('*')
+            .single(),
+        );
 
         if (error) throw error;
         return row as Category;
       });
 
       queryClient.setQueryData<Category[]>(queryKey, (current) => sortByName([...(current ?? []), saved]));
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(id, false);
     }
@@ -78,12 +86,14 @@ export function useCategories(householdId: string) {
     setPending(id, true);
     try {
       const saved = await withMutationTiming({ module: 'budget', action: 'categories.update' }, async () => {
-        const { data: row, error } = await supabase
-          .from('budget_categories')
-          .update({ name })
-          .eq('id', id)
-          .select('*')
-          .single();
+        const { data: row, error } = await retryOnLikelyNetworkError(async () =>
+          await supabase
+            .from('budget_categories')
+            .update({ name })
+            .eq('id', id)
+            .select('*')
+            .single(),
+        );
 
         if (error) throw error;
         return row as Category;
@@ -92,6 +102,9 @@ export function useCategories(householdId: string) {
       queryClient.setQueryData<Category[]>(queryKey, (current) =>
         sortByName((current ?? []).map((category) => (category.id === id ? saved : category))),
       );
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(id, false);
     }
@@ -103,12 +116,14 @@ export function useCategories(householdId: string) {
     setPending(id, true);
     try {
       const saved = await withMutationTiming({ module: 'budget', action: 'categories.updateColor' }, async () => {
-        const { data: row, error } = await supabase
-          .from('budget_categories')
-          .update({ color })
-          .eq('id', id)
-          .select('*')
-          .single();
+        const { data: row, error } = await retryOnLikelyNetworkError(async () =>
+          await supabase
+            .from('budget_categories')
+            .update({ color })
+            .eq('id', id)
+            .select('*')
+            .single(),
+        );
 
         if (error) throw error;
         return row as Category;
@@ -117,6 +132,9 @@ export function useCategories(householdId: string) {
       queryClient.setQueryData<Category[]>(queryKey, (current) =>
         sortByName((current ?? []).map((category) => (category.id === id ? saved : category))),
       );
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(id, false);
     }
@@ -128,11 +146,16 @@ export function useCategories(householdId: string) {
     setPending(id, true);
     try {
       await withMutationTiming({ module: 'budget', action: 'categories.remove' }, async () => {
-        const { error } = await supabase.from('budget_categories').delete().eq('id', id);
+        const { error } = await retryOnLikelyNetworkError(async () =>
+          await supabase.from('budget_categories').delete().eq('id', id),
+        );
         if (error) throw error;
       });
 
       queryClient.setQueryData<Category[]>(queryKey, (current) => (current ?? []).filter((category) => category.id !== id));
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(id, false);
     }

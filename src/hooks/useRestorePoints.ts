@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
+import { retryOnLikelyNetworkError, showMutationError } from '@/lib/networkErrors';
 import { withMutationTiming } from '@/lib/mutationTiming';
 import { budgetQueryKeys } from '@/hooks/budgetQueryKeys';
 
@@ -36,11 +37,13 @@ export function useRestorePoints(householdId: string) {
     queryKey,
     enabled: Boolean(householdId),
     queryFn: async () => {
-      const { data: rows, error } = await supabase
-        .from('budget_restore_points')
-        .select('*')
-        .eq('household_id', householdId)
-        .order('created_at', { ascending: false });
+      const { data: rows, error } = await retryOnLikelyNetworkError(async () =>
+        await supabase
+          .from('budget_restore_points')
+          .select('*')
+          .eq('household_id', householdId)
+          .order('created_at', { ascending: false }),
+      );
 
       if (error) throw error;
       const mapped = ((rows as Array<Omit<RestorePoint, 'notes'> & { name: string | null }>) ?? []).map(mapRow);
@@ -65,22 +68,27 @@ export function useRestorePoints(householdId: string) {
     setPending(id, true);
     try {
       const row = await withMutationTiming({ module: 'budget', action: 'restorePoints.save' }, async () => {
-        const { data: savedRow, error } = await supabase
-          .from('budget_restore_points')
-          .insert({
-            id,
-            household_id: householdId,
-            name: notes || null,
-            data: snapshot,
-          })
-          .select('*')
-          .single();
+        const { data: savedRow, error } = await retryOnLikelyNetworkError(async () =>
+          await supabase
+            .from('budget_restore_points')
+            .insert({
+              id,
+              household_id: householdId,
+              name: notes || null,
+              data: snapshot,
+            })
+            .select('*')
+            .single(),
+        );
 
         if (error) throw error;
         return savedRow as Omit<RestorePoint, 'notes'> & { name: string | null };
       });
 
       queryClient.setQueryData<RestorePoint[]>(queryKey, (current) => sortByCreatedAtDesc([mapRow(row), ...(current ?? [])]));
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(id, false);
     }
@@ -92,11 +100,16 @@ export function useRestorePoints(householdId: string) {
     setPending(id, true);
     try {
       await withMutationTiming({ module: 'budget', action: 'restorePoints.remove' }, async () => {
-        const { error } = await supabase.from('budget_restore_points').delete().eq('id', id);
+        const { error } = await retryOnLikelyNetworkError(async () =>
+          await supabase.from('budget_restore_points').delete().eq('id', id),
+        );
         if (error) throw error;
       });
 
       queryClient.setQueryData<RestorePoint[]>(queryKey, (current) => (current ?? []).filter((point) => point.id !== id));
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(id, false);
     }
@@ -109,10 +122,12 @@ export function useRestorePoints(householdId: string) {
     setPending(id, true);
     try {
       await withMutationTiming({ module: 'budget', action: 'restorePoints.updateNotes' }, async () => {
-        const { error } = await supabase
-          .from('budget_restore_points')
-          .update({ name: normalized || null })
-          .eq('id', id);
+        const { error } = await retryOnLikelyNetworkError(async () =>
+          await supabase
+            .from('budget_restore_points')
+            .update({ name: normalized || null })
+            .eq('id', id),
+        );
 
         if (error) throw error;
       });
@@ -120,6 +135,9 @@ export function useRestorePoints(householdId: string) {
       queryClient.setQueryData<RestorePoint[]>(queryKey, (current) =>
         (current ?? []).map((point) => (point.id === id ? { ...point, notes: normalized || null } : point)),
       );
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(id, false);
     }

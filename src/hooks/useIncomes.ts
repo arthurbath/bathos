@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { FrequencyType } from '@/types/fairshare';
+import { retryOnLikelyNetworkError, showMutationError } from '@/lib/networkErrors';
 import { withMutationTiming } from '@/lib/mutationTiming';
 import { budgetQueryKeys } from '@/hooks/budgetQueryKeys';
 
@@ -32,11 +33,13 @@ export function useIncomes(householdId: string) {
     queryKey,
     enabled: Boolean(householdId),
     queryFn: async () => {
-      const { data: rows, error } = await supabase
-        .from('budget_income_streams')
-        .select('*')
-        .eq('household_id', householdId)
-        .order('created_at');
+      const { data: rows, error } = await retryOnLikelyNetworkError(async () =>
+        await supabase
+          .from('budget_income_streams')
+          .select('*')
+          .eq('household_id', householdId)
+          .order('created_at'),
+      );
 
       if (error) throw error;
       return (rows as Income[]) ?? [];
@@ -60,21 +63,26 @@ export function useIncomes(householdId: string) {
     setPending(id, true);
     try {
       const saved = await withMutationTiming({ module: 'budget', action: 'incomes.add' }, async () => {
-        const { data: row, error } = await supabase
-          .from('budget_income_streams')
-          .insert({
-            id,
-            household_id: householdId,
-            ...income,
-          })
-          .select('*')
-          .single();
+        const { data: row, error } = await retryOnLikelyNetworkError(async () =>
+          await supabase
+            .from('budget_income_streams')
+            .insert({
+              id,
+              household_id: householdId,
+              ...income,
+            })
+            .select('*')
+            .single(),
+        );
 
         if (error) throw error;
         return row as Income;
       });
 
       queryClient.setQueryData<Income[]>(queryKey, (current) => sortByCreatedAt([...(current ?? []), saved]));
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(id, false);
     }
@@ -86,12 +94,14 @@ export function useIncomes(householdId: string) {
     setPending(id, true);
     try {
       const saved = await withMutationTiming({ module: 'budget', action: 'incomes.update' }, async () => {
-        const { data: row, error } = await supabase
-          .from('budget_income_streams')
-          .update(updates)
-          .eq('id', id)
-          .select('*')
-          .single();
+        const { data: row, error } = await retryOnLikelyNetworkError(async () =>
+          await supabase
+            .from('budget_income_streams')
+            .update(updates)
+            .eq('id', id)
+            .select('*')
+            .single(),
+        );
 
         if (error) throw error;
         return row as Income;
@@ -100,6 +110,9 @@ export function useIncomes(householdId: string) {
       queryClient.setQueryData<Income[]>(queryKey, (current) =>
         sortByCreatedAt((current ?? []).map((income) => (income.id === id ? saved : income))),
       );
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(id, false);
     }
@@ -111,11 +124,16 @@ export function useIncomes(householdId: string) {
     setPending(id, true);
     try {
       await withMutationTiming({ module: 'budget', action: 'incomes.remove' }, async () => {
-        const { error } = await supabase.from('budget_income_streams').delete().eq('id', id);
+        const { error } = await retryOnLikelyNetworkError(async () =>
+          await supabase.from('budget_income_streams').delete().eq('id', id),
+        );
         if (error) throw error;
       });
 
       queryClient.setQueryData<Income[]>(queryKey, (current) => (current ?? []).filter((income) => income.id !== id));
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(id, false);
     }

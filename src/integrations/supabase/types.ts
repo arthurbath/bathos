@@ -125,157 +125,6 @@ export type Database = {
         }
         Relationships: []
       }
-      drawers_household_members: {
-        Row: {
-          created_at: string
-          household_id: string
-          id: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          household_id: string
-          id?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          household_id?: string
-          id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "drawers_household_members_household_id_fkey"
-            columns: ["household_id"]
-            isOneToOne: false
-            referencedRelation: "drawers_households"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      drawers_households: {
-        Row: {
-          created_at: string
-          id: string
-          invite_code: string
-          name: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          invite_code?: string
-          name?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          invite_code?: string
-          name?: string
-        }
-        Relationships: []
-      }
-      drawers_insert_instances: {
-        Row: {
-          created_at: string
-          cubby_x: number | null
-          cubby_y: number | null
-          household_id: string
-          id: string
-          insert_type: string
-          label: string | null
-          limbo_order: number | null
-          location_kind: string
-          unit_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          cubby_x?: number | null
-          cubby_y?: number | null
-          household_id: string
-          id?: string
-          insert_type: string
-          label?: string | null
-          limbo_order?: number | null
-          location_kind: string
-          unit_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          cubby_x?: number | null
-          cubby_y?: number | null
-          household_id?: string
-          id?: string
-          insert_type?: string
-          label?: string | null
-          limbo_order?: number | null
-          location_kind?: string
-          unit_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "drawers_insert_instances_household_id_fkey"
-            columns: ["household_id"]
-            isOneToOne: false
-            referencedRelation: "drawers_households"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "drawers_insert_instances_unit_id_fkey"
-            columns: ["unit_id"]
-            isOneToOne: false
-            referencedRelation: "drawers_units"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      drawers_units: {
-        Row: {
-          created_at: string
-          frame_color: string
-          height: number
-          household_id: string
-          id: string
-          name: string
-          sort_order: number
-          updated_at: string
-          width: number
-        }
-        Insert: {
-          created_at?: string
-          frame_color?: string
-          height: number
-          household_id: string
-          id?: string
-          name: string
-          sort_order: number
-          updated_at?: string
-          width: number
-        }
-        Update: {
-          created_at?: string
-          frame_color?: string
-          height?: number
-          household_id?: string
-          id?: string
-          name?: string
-          sort_order?: number
-          updated_at?: string
-          width?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "drawers_units_household_id_fkey"
-            columns: ["household_id"]
-            isOneToOne: false
-            referencedRelation: "drawers_households"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       budget_budgets: {
         Row: {
           color: string | null
@@ -587,15 +436,163 @@ export type Database = {
           },
         ]
       }
+      drawers_household_members: {
+        Row: {
+          created_at: string
+          household_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          household_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          household_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drawers_household_members_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "drawers_households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      drawers_households: {
+        Row: {
+          created_at: string
+          id: string
+          invite_code: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invite_code?: string
+          name?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invite_code?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      drawers_insert_instances: {
+        Row: {
+          created_at: string
+          cubby_x: number | null
+          cubby_y: number | null
+          household_id: string
+          id: string
+          insert_type: string
+          label: string | null
+          limbo_order: number | null
+          location_kind: string
+          unit_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          cubby_x?: number | null
+          cubby_y?: number | null
+          household_id: string
+          id?: string
+          insert_type: string
+          label?: string | null
+          limbo_order?: number | null
+          location_kind: string
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          cubby_x?: number | null
+          cubby_y?: number | null
+          household_id?: string
+          id?: string
+          insert_type?: string
+          label?: string | null
+          limbo_order?: number | null
+          location_kind?: string
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drawers_insert_instances_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "drawers_households"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drawers_insert_instances_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "drawers_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      drawers_units: {
+        Row: {
+          created_at: string
+          frame_color: string
+          height: number
+          household_id: string
+          id: string
+          name: string
+          sort_order: number
+          updated_at: string
+          width: number
+        }
+        Insert: {
+          created_at?: string
+          frame_color?: string
+          height: number
+          household_id: string
+          id?: string
+          name: string
+          sort_order: number
+          updated_at?: string
+          width: number
+        }
+        Update: {
+          created_at?: string
+          frame_color?: string
+          height?: number
+          household_id?: string
+          id?: string
+          name?: string
+          sort_order?: number
+          updated_at?: string
+          width?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drawers_units_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "drawers_households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      budget_create_household_for_current_user: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
+      budget_create_household_for_current_user: { Args: never; Returns: Json }
       budget_join_household_for_current_user: {
         Args: { _invite_code: string }
         Returns: Json
@@ -603,7 +600,7 @@ export type Database = {
       budget_reassign_category_and_delete: {
         Args: {
           _household_id: string
-          _new_category_id: string | null
+          _new_category_id: string
           _old_category_id: string
         }
         Returns: Json
@@ -611,7 +608,7 @@ export type Database = {
       budget_reassign_linked_account_and_delete: {
         Args: {
           _household_id: string
-          _new_linked_account_id: string | null
+          _new_linked_account_id: string
           _old_linked_account_id: string
         }
         Returns: Json
@@ -634,7 +631,7 @@ export type Database = {
           _height: number
           _household_id: string
           _name: string
-          _unit_id: string | null
+          _unit_id: string
           _width: number
         }
         Returns: Json

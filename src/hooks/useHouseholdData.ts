@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import type { Json } from '@/integrations/supabase/types';
+import { retryOnLikelyNetworkError, showMutationError } from '@/lib/networkErrors';
 import { withMutationTiming } from '@/lib/mutationTiming';
 import { budgetQueryKeys } from '@/hooks/budgetQueryKeys';
 
@@ -46,26 +47,32 @@ export function useHouseholdData(user: User | null) {
     if (!userId) return null;
 
     try {
-      const { data: membership, error: membershipError } = await supabase
-        .from('budget_household_members')
-        .select('household_id')
-        .eq('user_id', userId)
-        .maybeSingle();
+      const { data: membership, error: membershipError } = await retryOnLikelyNetworkError(async () =>
+        await supabase
+          .from('budget_household_members')
+          .select('household_id')
+          .eq('user_id', userId)
+          .maybeSingle(),
+      );
 
       if (membershipError) throw membershipError;
       if (!membership) return null;
 
       const [{ data: household, error: householdError }, { data: profile, error: profileError }] = await Promise.all([
-        supabase
-          .from('budget_households')
-          .select('id, name, invite_code, partner_x_name, partner_y_name')
-          .eq('id', membership.household_id)
-          .single(),
-        supabase
-          .from('bathos_profiles')
-          .select('display_name')
-          .eq('id', userId)
-          .single(),
+        retryOnLikelyNetworkError(async () =>
+          await supabase
+            .from('budget_households')
+            .select('id, name, invite_code, partner_x_name, partner_y_name')
+            .eq('id', membership.household_id)
+            .single(),
+        ),
+        retryOnLikelyNetworkError(async () =>
+          await supabase
+            .from('bathos_profiles')
+            .select('display_name')
+            .eq('id', userId)
+            .single(),
+        ),
       ]);
 
       if (householdError) throw householdError;
@@ -95,28 +102,42 @@ export function useHouseholdData(user: User | null) {
   const createHousehold = useCallback(async () => {
     if (!userId) throw new Error('Not authenticated');
 
-    const payload = await withMutationTiming({ module: 'budget', action: 'household.create' }, async () => {
-      const { data, error } = await supabase.rpc('budget_create_household_for_current_user');
-      if (error) throw new Error(error.message);
-      return data as Json;
-    });
+    try {
+      const payload = await withMutationTiming({ module: 'budget', action: 'household.create' }, async () => {
+        const { data, error } = await retryOnLikelyNetworkError(async () =>
+          await supabase.rpc('budget_create_household_for_current_user'),
+        );
+        if (error) throw new Error(error.message);
+        return data as Json;
+      });
 
-    queryClient.setQueryData(queryKey, toRpcHouseholdData(payload));
+      queryClient.setQueryData(queryKey, toRpcHouseholdData(payload));
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
+    }
   }, [queryClient, queryKey, userId]);
 
   const joinHousehold = useCallback(async (inviteCode: string) => {
     if (!userId) throw new Error('Not authenticated');
 
-    const payload = await withMutationTiming({ module: 'budget', action: 'household.join' }, async () => {
-      const { data, error } = await supabase.rpc('budget_join_household_for_current_user', {
-        _invite_code: inviteCode,
+    try {
+      const payload = await withMutationTiming({ module: 'budget', action: 'household.join' }, async () => {
+        const { data, error } = await retryOnLikelyNetworkError(async () =>
+          await supabase.rpc('budget_join_household_for_current_user', {
+            _invite_code: inviteCode,
+          }),
+        );
+
+        if (error) throw new Error(error.message);
+        return data as Json;
       });
 
-      if (error) throw new Error(error.message);
-      return data as Json;
-    });
-
-    queryClient.setQueryData(queryKey, toRpcHouseholdData(payload));
+      queryClient.setQueryData(queryKey, toRpcHouseholdData(payload));
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
+    }
   }, [queryClient, queryKey, userId]);
 
   const updatePartnerNames = useCallback(async (partnerXName: string, partnerYName: string) => {
@@ -125,18 +146,25 @@ export function useHouseholdData(user: User | null) {
     const currentHousehold = queryClient.getQueryData<HouseholdData | null>(queryKey);
     if (!currentHousehold) throw new Error('No household');
 
-    const payload = await withMutationTiming({ module: 'budget', action: 'household.updatePartnerNames' }, async () => {
-      const { data, error } = await supabase.rpc('budget_update_partner_names', {
-        _household_id: currentHousehold.householdId,
-        _partner_x_name: partnerXName,
-        _partner_y_name: partnerYName,
+    try {
+      const payload = await withMutationTiming({ module: 'budget', action: 'household.updatePartnerNames' }, async () => {
+        const { data, error } = await retryOnLikelyNetworkError(async () =>
+          await supabase.rpc('budget_update_partner_names', {
+            _household_id: currentHousehold.householdId,
+            _partner_x_name: partnerXName,
+            _partner_y_name: partnerYName,
+          }),
+        );
+
+        if (error) throw new Error(error.message);
+        return data as Json;
       });
 
-      if (error) throw new Error(error.message);
-      return data as Json;
-    });
-
-    queryClient.setQueryData(queryKey, toRpcHouseholdData(payload));
+      queryClient.setQueryData(queryKey, toRpcHouseholdData(payload));
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
+    }
   }, [queryClient, queryKey, userId]);
 
   return {

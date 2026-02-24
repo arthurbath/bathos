@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { retryOnLikelyNetworkError, showMutationError } from '@/lib/networkErrors';
 import { withDrawersDbTiming } from '@/modules/drawers/lib/dbTiming';
 import type { DrawerInsertInstance, DrawerInsertType } from '@/modules/drawers/types/drawers';
 
@@ -189,15 +190,17 @@ export function useDrawerInsertInstances(householdId: string) {
       return;
     }
 
-    const { data, error } = await withDrawersDbTiming('drawers_insert_instances.fetch', async () => (
-      supabase
-        .from('drawers_insert_instances')
-        .select('*')
-        .eq('household_id', householdId)
-        .order('location_kind', { ascending: true })
-        .order('limbo_order', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: true })
-    ));
+    const { data, error } = await withDrawersDbTiming('drawers_insert_instances.fetch', async () =>
+      await retryOnLikelyNetworkError(async () =>
+        await supabase
+          .from('drawers_insert_instances')
+          .select('*')
+          .eq('household_id', householdId)
+          .order('location_kind', { ascending: true })
+          .order('limbo_order', { ascending: true, nullsFirst: false })
+          .order('created_at', { ascending: true }),
+      ),
+    );
 
     if (error) throw error;
 
@@ -218,21 +221,23 @@ export function useDrawerInsertInstances(householdId: string) {
           const normalizedLabel = label?.trim() || null;
           const nextOrder = target ? null : nextLimboOrder(insertsRef.current);
 
-          const { data, error } = await supabase
-            .from('drawers_insert_instances')
-            .insert({
-              id,
-              household_id: householdId,
-              insert_type: insertType,
-              label: normalizedLabel,
-              location_kind: target ? 'cubby' : 'limbo',
-              unit_id: target?.unitId ?? null,
-              cubby_x: target?.cubbyX ?? null,
-              cubby_y: target?.cubbyY ?? null,
-              limbo_order: nextOrder,
-            })
-            .select('*')
-            .single();
+          const { data, error } = await retryOnLikelyNetworkError(async () =>
+            await supabase
+              .from('drawers_insert_instances')
+              .insert({
+                id,
+                household_id: householdId,
+                insert_type: insertType,
+                label: normalizedLabel,
+                location_kind: target ? 'cubby' : 'limbo',
+                unit_id: target?.unitId ?? null,
+                cubby_x: target?.cubbyX ?? null,
+                cubby_y: target?.cubbyY ?? null,
+                limbo_order: nextOrder,
+              })
+              .select('*')
+              .single(),
+          );
 
           if (error) throw error;
 
@@ -244,6 +249,9 @@ export function useDrawerInsertInstances(householdId: string) {
           setInserts(prev => [...prev, inserted]);
           return inserted.id;
         });
+      } catch (error: unknown) {
+        showMutationError(error);
+        throw error;
       } finally {
         setPending([CREATE_PENDING_KEY], false);
       }
@@ -270,12 +278,14 @@ export function useDrawerInsertInstances(householdId: string) {
           nextUpdates.insert_type = updates.insert_type;
         }
 
-        const { data, error } = await supabase
-          .from('drawers_insert_instances')
-          .update(nextUpdates)
-          .eq('id', id)
-          .select('*')
-          .single();
+        const { data, error } = await retryOnLikelyNetworkError(async () =>
+          await supabase
+            .from('drawers_insert_instances')
+            .update(nextUpdates)
+            .eq('id', id)
+            .select('*')
+            .single(),
+        );
 
         if (error) throw error;
 
@@ -286,6 +296,9 @@ export function useDrawerInsertInstances(householdId: string) {
 
         setInserts(prev => prev.map(insert => (insert.id === id ? saved : insert)));
       });
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending([id], false);
     }
@@ -295,10 +308,15 @@ export function useDrawerInsertInstances(householdId: string) {
     setPending([id], true);
     try {
       await runStructuralMutation('drawers_insert_instances.remove', async () => {
-        const { error } = await supabase.from('drawers_insert_instances').delete().eq('id', id);
+        const { error } = await retryOnLikelyNetworkError(async () =>
+          await supabase.from('drawers_insert_instances').delete().eq('id', id),
+        );
         if (error) throw error;
         setInserts(prev => prev.filter(insert => insert.id !== id));
       });
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending([id], false);
     }
@@ -319,17 +337,22 @@ export function useDrawerInsertInstances(householdId: string) {
     setPending(pendingIds, true);
     try {
       await runStructuralMutation('drawers_insert_instances.move_to_cubby', async () => {
-        const { error } = await supabase.rpc('move_drawers_insert', {
-          _insert_id: insertId,
-          _target_unit_id: unitId,
-          _target_x: cubbyX,
-          _target_y: cubbyY,
-        });
+        const { error } = await retryOnLikelyNetworkError(async () =>
+          await supabase.rpc('move_drawers_insert', {
+            _insert_id: insertId,
+            _target_unit_id: unitId,
+            _target_x: cubbyX,
+            _target_y: cubbyY,
+          }),
+        );
 
         if (error) throw error;
 
         setInserts(prev => applyMoveToCubbyState(prev, insertId, unitId, cubbyX, cubbyY));
       });
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(pendingIds, false);
     }
@@ -339,14 +362,19 @@ export function useDrawerInsertInstances(householdId: string) {
     setPending([insertId], true);
     try {
       await runStructuralMutation('drawers_insert_instances.move_to_limbo', async () => {
-        const { error } = await supabase.rpc('move_drawers_insert_to_limbo', {
-          _insert_id: insertId,
-        });
+        const { error } = await retryOnLikelyNetworkError(async () =>
+          await supabase.rpc('move_drawers_insert_to_limbo', {
+            _insert_id: insertId,
+          }),
+        );
 
         if (error) throw error;
 
         setInserts(prev => applyMoveToLimboState(prev, insertId));
       });
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending([insertId], false);
     }
@@ -360,17 +388,22 @@ export function useDrawerInsertInstances(householdId: string) {
     setPending(affectedIds, true);
     try {
       await runStructuralMutation('drawers_insert_instances.delete_in_unit', async () => {
-        const { error } = await supabase
-          .from('drawers_insert_instances')
-          .delete()
-          .eq('household_id', householdId)
-          .eq('unit_id', unitId)
-          .eq('location_kind', 'cubby');
+        const { error } = await retryOnLikelyNetworkError(async () =>
+          await supabase
+            .from('drawers_insert_instances')
+            .delete()
+            .eq('household_id', householdId)
+            .eq('unit_id', unitId)
+            .eq('location_kind', 'cubby'),
+        );
 
         if (error) throw error;
 
         setInserts(prev => prev.filter(insert => !(insert.unit_id === unitId && insert.location_kind === 'cubby')));
       });
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(affectedIds, false);
     }
@@ -384,10 +417,15 @@ export function useDrawerInsertInstances(householdId: string) {
     setPending(affectedIds, true);
     try {
       await runStructuralMutation('drawers_insert_instances.move_unit_to_limbo', async () => {
-        const { error } = await supabase.rpc('move_drawers_unit_inserts_to_limbo', { _unit_id: unitId });
+        const { error } = await retryOnLikelyNetworkError(async () =>
+          await supabase.rpc('move_drawers_unit_inserts_to_limbo', { _unit_id: unitId }),
+        );
         if (error) throw error;
         setInserts(prev => applyMoveUnitInsertsToLimboState(prev, unitId));
       });
+    } catch (error: unknown) {
+      showMutationError(error);
+      throw error;
     } finally {
       setPending(affectedIds, false);
     }
