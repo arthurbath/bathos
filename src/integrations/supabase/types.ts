@@ -494,9 +494,9 @@ export type Database = {
           created_at: string
           cubby_x: number | null
           cubby_y: number | null
+          drawer_type: string
           household_id: string
           id: string
-          drawer_type: string
           label: string | null
           limbo_order: number | null
           location_kind: string
@@ -507,9 +507,9 @@ export type Database = {
           created_at?: string
           cubby_x?: number | null
           cubby_y?: number | null
+          drawer_type: string
           household_id: string
           id?: string
-          drawer_type: string
           label?: string | null
           limbo_order?: number | null
           location_kind: string
@@ -520,9 +520,9 @@ export type Database = {
           created_at?: string
           cubby_x?: number | null
           cubby_y?: number | null
+          drawer_type?: string
           household_id?: string
           id?: string
-          drawer_type?: string
           label?: string | null
           limbo_order?: number | null
           location_kind?: string
@@ -664,7 +664,7 @@ export type Database = {
       }
       move_drawers_drawer: {
         Args: {
-          _drawer_id: string
+          _insert_id: string
           _target_unit_id: string
           _target_x: number
           _target_y: number
@@ -672,7 +672,7 @@ export type Database = {
         Returns: undefined
       }
       move_drawers_drawer_to_limbo: {
-        Args: { _drawer_id: string }
+        Args: { _insert_id: string }
         Returns: undefined
       }
       move_drawers_unit_drawers_to_limbo: {

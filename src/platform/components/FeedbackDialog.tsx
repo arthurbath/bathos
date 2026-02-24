@@ -64,10 +64,9 @@ export function FeedbackDialog({ userId }: FeedbackDialogProps) {
           .from('feedback-attachments')
           .upload(path, file);
         if (uploadErr) throw uploadErr;
-        const { data: urlData } = supabase.storage
-          .from('feedback-attachments')
-          .getPublicUrl(path);
-        fileUrl = urlData.publicUrl;
+        // Send the storage path (not a public URL) — the edge function
+        // generates a short-lived signed URL for the email.
+        fileUrl = path;
       }
 
       // Save to DB

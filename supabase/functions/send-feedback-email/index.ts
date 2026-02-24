@@ -70,10 +70,25 @@ Deno.serve(async (req) => {
     };
     const prettyContext = contextLabels[context] || context || "General";
 
+    // If a file path was provided, generate a signed URL using the service role client
+    let attachmentUrl: string | undefined;
+    if (file_url && typeof file_url === "string") {
+      const serviceClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { data: signedData, error: signedErr } = await serviceClient.storage
+        .from("feedback-attachments")
+        .createSignedUrl(file_url, 60 * 60 * 24 * 7); // 7-day link
+      if (!signedErr && signedData?.signedUrl) {
+        attachmentUrl = signedData.signedUrl;
+      }
+    }
+
     // Build email body
     let body = `From: ${userEmail} (${userId})\nContext: ${prettyContext}\n\n${message.trim()}`;
-    if (file_url) {
-      body += `\n\nAttachment: ${file_url}`;
+    if (attachmentUrl) {
+      body += `\n\nAttachment (expires in 7 days): ${attachmentUrl}`;
     }
 
     // Send email via Resend
