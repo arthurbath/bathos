@@ -142,6 +142,15 @@
   button:disabled {
     cursor: not-allowed;
   }
+
+  .terms-document hr + h1,
+  .terms-document hr + h2 {
+    margin-top: 0 !important;
+  }
+
+  .terms-document hr {
+    margin-bottom: 1.125rem !important;
+  }
 }
 
 @keyframes data-grid-resort-highlight {
