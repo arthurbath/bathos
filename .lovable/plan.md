@@ -1,196 +1,122 @@
 
 
-# BathOS Platform Upgrade Plan
+# Resilience and Performance Audit -- Recommendations
 
-## Overview
+## Current State Assessment
 
-Transform the current Split expenses app into a multi-module platform called BathOS. This phase focuses on infrastructure: restructuring routes, database tables, authentication flows, theming, and documentation -- without building new modules.
+After reviewing all data hooks, the network error utility, the Supabase client configuration, and React Query setup, here is a summary of what exists today and what needs to change.
 
----
+### What already works
+- `retryOnLikelyNetworkError` utility exists with exponential backoff (3 attempts, 250ms base delay)
+- Mutation timing/logging via `withMutationTiming` with Sentry breadcrumbs
+- `pendingById` guards prevent double-submission of the same row
+- React Query `refetchOnWindowFocus` is disabled (avoids unnecessary refetches)
+- Auth context compares user IDs before re-rendering
 
-## 1. Database table renaming
+### Problems found
 
-Rename all existing tables with a `budget_` prefix. Add a `bathos_` prefix to shared platform tables.
+**1. Retry coverage is inconsistent -- most hooks have zero retry protection**
 
-| Current table | New name |
-|---|---|
-| `profiles` | `bathos_profiles` |
-| `households` | `budget_households` |
-| `household_members` | `budget_household_members` |
-| `income_streams` | `budget_income_streams` |
-| `expenses` | `budget_expenses` |
-| `categories` | `budget_categories` |
-| `linked_accounts` | `budget_linked_accounts` |
-| `budgets` | `budget_budgets` |
-| `restore_points` | `budget_restore_points` |
+Only `useExpenses` and `useLinkedAccounts` wrap Supabase calls in `retryOnLikelyNetworkError`. The following hooks make bare `supabase.from(...)` calls with no retry at all:
 
-A new shared table `bathos_user_roles` will be created for the admin system, and a `bathos_user_settings` table for platform-level user preferences.
+| Hook | Reads | Mutations |
+|------|-------|-----------|
+| `useIncomes` | No retry | No retry |
+| `useCategories` | No retry | No retry |
+| `useBudgets` | No retry | No retry |
+| `useRestorePoints` | No retry | No retry |
+| `useHouseholdData` | No retry | No retry |
+| `useGridColumnWidths` | No retry | No retry |
+| `useDrawersUnits` | No retry | No retry |
+| `useDrawerInsertInstances` | No retry | No retry |
 
-All RLS policies, functions (`is_household_member`, `handle_new_user`), and triggers will be updated to reference the new table names. All frontend hooks and components referencing Supabase tables will be updated accordingly.
+A single transient "Load failed" in any of these hooks surfaces immediately as an error to the user.
 
-**Important**: The Live/production database has existing data. A migration query will be provided to run on the Live environment before publishing so data is preserved.
+**2. React Query has no built-in retry configured**
 
----
+The `QueryClient` is created with only `refetchOnWindowFocus: false`. React Query's default `retry: 3` applies to queries, but there is no `retry` configured for mutations (default is 0). This means every failed mutation immediately throws.
 
-## 2. Admin role system
+**3. No optimistic updates -- UI waits for the server round-trip**
 
-- Create `bathos_user_roles` table with the `app_role` enum (`admin`, `user`).
-- Create a `has_role` security definer function.
-- Insert an admin role for `arthurbath@icloud.com` (looked up from `auth.users` by email).
-- The admin badge will show on the `/account` page but not unlock any special UI at this time.
+All mutations follow a "wait for server, then update cache" pattern. If the network is slow, the UI feels sluggish. If the network fails, the user sees an error with no local feedback.
 
----
+**4. No user-facing error toasts on mutation failure**
 
-## 3. Routing and subdomain handling
+When a mutation throws, the error bubbles up to the component but most components don't catch it or show a toast. The user sees the UI "lock up" because the pending state clears but no feedback appears.
 
-Since this is a single Lovable project deployed to `bath.garden`, subdomains like `budget.bath.garden` will be handled via client-side hostname detection:
+**5. Two build errors to fix**
 
-- `bath.garden` (or `www.bath.garden`) -- serves the launcher page and platform-level pages (`/account`, `/forgot-password`, `/reset-password`, future public pages like TOS).
-- `budget.bath.garden` -- serves the Budget (formerly Split) module routes (`/expenses`, `/incomes`, `/summary`, `/config`, `/backup`).
-
-A `useHostModule()` hook will detect the current hostname and return the active module (or `null` for the platform root). The router will conditionally render module routes based on this.
-
-For Lovable preview/development, when the hostname does not match a known subdomain, we will fall back to path-based routing (`/budget/expenses`, etc.) so everything remains testable.
-
-You will need to configure the following custom domains in Lovable project settings (Settings > Domains):
-- `bath.garden`
-- `www.bath.garden`
-- `budget.bath.garden`
-
-All three should point their A records to `185.158.133.1` with appropriate TXT verification records.
+- `useGridColumnWidths.ts` line 220: The `.upsert()` call passes an object but TypeScript expects an array
+- `useDrawersUnits.ts` line 115: `data as DrawersUnit` cast needs `as unknown as DrawersUnit`
 
 ---
 
-## 4. Theme and design system overhaul
+## Recommended Plan
 
-Replace the current green-primary color scheme with a neutral, black-and-white minimalistic theme:
+### Phase 1: Fix build errors (immediate)
 
-- **Primary**: Near-black/charcoal (for buttons, links, focus rings)
-- **Green**: Success states only
-- **Gold/amber**: Warning states only
-- **Red**: Danger/error states only
-- **Blue**: Info/help states only
-- **Purple**: Admin privilege badge only
-- Remove all existing green primary usage from CSS variables and replace with neutral tones
-- No gradients; shadows used sparingly and only for functional layering
-- Update CSS variables in `index.css` for both light and dark modes
+**File: `src/hooks/useGridColumnWidths.ts`** (line 216-224)
+- Change `.upsert({ user_id, grid_column_widths }, { onConflict: 'user_id' })` to `.upsert([{ user_id, grid_column_widths }], { onConflict: 'user_id' })` (wrap in array)
 
----
+**File: `src/modules/drawers/hooks/useDrawersUnits.ts`** (line 115)
+- Change `data as DrawersUnit` to `data as unknown as DrawersUnit`
 
-## 5. Noto Emoji font
+### Phase 2: Universal retry for all Supabase calls
 
-- Copy the `NotoEmoji-Bold.woff2` font file from the Bango project into `public/fonts/`.
-- Add `@font-face` declarations in `index.css` matching Bango's approach (with unicode-range for emoji codepoints).
-- Add a `font-noto-emoji` utility class in Tailwind config.
-- Emojis used in the UI will use this class for consistent rendering.
+**File: `src/lib/networkErrors.ts`**
+- No changes needed -- the utility is solid
 
----
+**Files: All 8 hooks listed above**
+- Wrap every `supabase.from(...)` and `supabase.rpc(...)` call in `retryOnLikelyNetworkError(...)`, matching the pattern already used in `useExpenses` and `useLinkedAccounts`
+- This gives every network call 3 automatic retries with exponential backoff before surfacing an error
 
-## 6. Account management page (`/account`)
+Affected files:
+- `src/hooks/useIncomes.ts` -- 4 calls (1 read, 3 mutations)
+- `src/hooks/useCategories.ts` -- 5 calls
+- `src/hooks/useBudgets.ts` -- 5 calls
+- `src/hooks/useRestorePoints.ts` -- 4 calls
+- `src/hooks/useHouseholdData.ts` -- 3 reads + 3 RPCs
+- `src/hooks/useGridColumnWidths.ts` -- 2 calls
+- `src/modules/drawers/hooks/useDrawersUnits.ts` -- 4 calls + 1 RPC
+- `src/modules/drawers/hooks/useDrawerInsertInstances.ts` -- 4 calls + 3 RPCs
 
-Build a dedicated `/account` page accessible from the header bar across all modules. Modeled after Bango's profile page, it will include:
+### Phase 3: Configure React Query retry for queries
 
-- Display name (editable)
-- Email address (change email dialog with password confirmation)
-- Change password dialog
-- Delete account dialog (with email confirmation)
-- Forgot password flow (`/forgot-password` page)
-- Reset password flow (`/reset-password` page, handles `PASSWORD_RECOVERY` event)
-- Admin badge (visible if user has admin role, does nothing else yet)
-
----
-
-## 7. Platform launcher page
-
-At `bath.garden`, authenticated users see a simple launcher showing available modules as cards/tiles. Currently only "Budget" (the renamed Split module) will appear. Each card links to `budget.bath.garden`.
-
-Unauthenticated visitors see a minimal splash/gateway page with BathOS branding and login/signup links.
-
----
-
-## 8. Module file organization
-
-Restructure `src/` to separate platform-level code from module-specific code:
+**File: `src/App.tsx`**
+- Add `retry` configuration to the QueryClient defaults so queries also benefit from automatic retry:
 
 ```text
-src/
-  platform/          -- shared platform code
-    components/       -- header, account page, launcher, auth forms
-    hooks/            -- useAuth, useHostModule, usePlatformSettings
-    contexts/         -- AuthContext
-  modules/
-    budget/           -- the renamed Split module
-      components/     -- ExpensesTab, IncomesTab, SummaryTab, etc.
-      hooks/          -- useIncomes, useExpenses, useCategories, etc.
-      types/
-  components/ui/      -- shadcn/ui primitives (shared)
-  lib/                -- shared utilities
-  integrations/       -- Supabase client and types
+queries: {
+  refetchOnWindowFocus: false,
+  retry: (failureCount, error) => {
+    if (failureCount >= 2) return false;
+    return isLikelyNetworkError(error);
+  },
+}
 ```
 
-All existing Split component and hook files move into `src/modules/budget/`. Platform-level auth, navigation, and account management go into `src/platform/`.
+This gives query-level retry only for network errors, preventing duplicate retries for application-level errors (like RLS violations).
 
----
+### Phase 4: User-facing error feedback on mutation failure
 
-## 9. Documentation
+**File: `src/lib/networkErrors.ts`**
+- Add a small helper `showMutationError(error)` that calls `toast.error(toUserFacingErrorMessage(error))` using sonner
 
-Create a `/docs` folder with central context documents:
+**Files: All hooks with mutations**
+- In the `catch` block of each mutation, call `showMutationError(error)` so the user always sees clear feedback when a save fails, rather than the UI silently doing nothing
 
-- **`/docs/ARCHITECTURE.md`**: Platform structure, module isolation principles, the rule that removing a module should not require surgery on other modules.
-- **`/docs/STYLE_GUIDE.md`**: Design language (B&W minimalism, semantic color usage, no gradients, no exclamation points, pragmatic voice, Noto Emoji usage rules, font stack, sizing conventions).
-- **`/docs/MODULE_GUIDE.md`**: How to add a new module (DB table prefix convention, file structure, routing, PWA manifest, group entity isolation).
+### Summary of changes
 
-These will also be added to the project's Lovable knowledge base for persistent context.
+| Area | Files changed | What it does |
+|------|--------------|--------------|
+| Build fixes | 2 files | Fixes TypeScript errors blocking deployment |
+| Universal retry | 8 hook files | Every Supabase call gets 3 retries with backoff |
+| Query-level retry | `App.tsx` | React Query retries failed queries for network errors |
+| Error toasts | `networkErrors.ts` + 8 hooks | User always sees clear feedback on failure |
 
----
+### What this plan intentionally does NOT include
 
-## 10. PWA support
-
-- Update `index.html` and add a `manifest.json` that supports PWA installation.
-- Default BathOS icon (placeholder) used until a custom icon is supplied.
-- Each module can override the manifest icon via module-specific metadata (future capability, stubbed now).
-
----
-
-## 11. Data grid library evaluation
-
-This will be a research deliverable included alongside the implementation. I will evaluate:
-
-- **TanStack Table** (headless, fully customizable, React-native)
-- **AG Grid Community** (feature-rich, opinionated rendering)
-- **Glide Data Grid** (canvas-based, spreadsheet-like)
-
-Criteria: inline editing, keyboard navigation, sorting/filtering/grouping, mobile usability, bundle size, customization flexibility, and alignment with the B&W minimalist design system.
-
-The evaluation will be documented in `/docs/DATA_GRID_EVALUATION.md` with a recommendation. No migration will happen until you approve the choice.
-
----
-
-## Technical details
-
-### Migration SQL (abbreviated)
-
-The database migration will:
-1. Rename all tables using `ALTER TABLE ... RENAME TO ...`
-2. Update all RLS policies to reference new table names
-3. Update the `is_household_member` and `handle_new_user` functions
-4. Create `bathos_user_roles` table with RLS
-5. Create `has_role` function
-6. Create `bathos_user_settings` table
-7. Insert admin role for the specified user
-
-### Code changes scope
-
-- ~15 hook/component files updated for new table names
-- ~10 new files for platform infrastructure (auth pages, account page, launcher, contexts)
-- ~5 files moved/reorganized into module structure
-- Tailwind config and `index.css` updated for new theme
-- `App.tsx` rewritten with hostname-aware routing
-- Supabase types will auto-regenerate after migration
-
-### Risk areas
-
-- **Table renaming on Live**: Must run migration on Live before publishing. A pre-migration SQL script will be provided.
-- **Subdomain routing in preview**: Lovable preview uses its own domain, so development will fall back to path-based routing. The hostname detection hook handles both modes.
-- **Existing bookmarks/URLs**: Current `/expenses`, `/summary` etc. will break if accessed on `bath.garden` instead of `budget.bath.garden`. A redirect can be added if needed.
+- **Optimistic updates**: These add significant complexity (rollback logic, conflict resolution) and are better addressed as a separate effort once the reliability foundation is solid.
+- **Offline queue / background sync**: Overkill for the current app scope.
+- **Debouncing mutations**: The `pendingById` guards already prevent double-submission; debouncing would add latency to saves.
 
