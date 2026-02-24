@@ -94,7 +94,7 @@ function CategoryOptionLabel({ category }: { category: Category }) {
 function formatFrequencyDescription(type: FrequencyType, param: number | null) {
   const label = frequencyLabels[type];
   if (!needsParam(type) || param == null) return label;
-  return label.replaceAll('X', String(param));
+  return label.split('X').join(String(param));
 }
 
 const createDefaultExpenseDraft = (): NewExpenseDraft => ({

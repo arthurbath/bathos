@@ -202,10 +202,10 @@ export function useDrawerInstances(householdId: string) {
     args: Record<string, unknown>,
     fallback?: { fn: string; args: Record<string, unknown> },
   ) => {
-    const primary = await retryOnLikelyNetworkError(async () => await supabase.rpc(fn, args));
+    const primary = await retryOnLikelyNetworkError(async () => await supabase.rpc(fn as any, args));
     if (!primary.error) return primary;
     if (!fallback || !isMissingRpcFunctionError(primary.error, fn)) return primary;
-    return await retryOnLikelyNetworkError(async () => await supabase.rpc(fallback.fn, fallback.args));
+    return await retryOnLikelyNetworkError(async () => await supabase.rpc(fallback.fn as any, fallback.args));
   }, []);
 
   const fetch = useCallback(async () => {
