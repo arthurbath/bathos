@@ -1,122 +1,117 @@
 
+Objective
+- Eliminate “save failed” experiences in Budget (especially Categories) by hardening client↔Supabase communication, not just speeding individual queries.
+- Deliver a system where transient connectivity issues are absorbed automatically and user writes are eventually persisted.
 
-# Resilience and Performance Audit -- Recommendations
+What I found in the current implementation
+1) Critical retry gap in current architecture
+- Most calls are wrapped with `retryOnLikelyNetworkError(...)`, but Supabase PostgREST often returns network failures as `{ error }` objects rather than throwing.
+- Current pattern retries only thrown exceptions inside the wrapper, then throws later at callsite (`if (error) throw error`) — which bypasses retry.
+- Effect: many “Network request failed” cases are effectively single-attempt failures despite retry code being present.
 
-## Current State Assessment
+2) Budget write paths are still partially unprotected
+- `useCategories`, `useIncomes`, `useExpenses`, etc. are mostly wrapped, but some AppShell RPC writes (`budget_reassign_category_and_delete`, `budget_reassign_linked_account_and_delete`, `budget_restore_household_snapshot`) are not wrapped with retry/backoff and have no standardized mutation error UX.
+- That creates inconsistency in perceived reliability.
 
-After reviewing all data hooks, the network error utility, the Supabase client configuration, and React Query setup, here is a summary of what exists today and what needs to change.
+3) No durable mutation queue for Budget
+- Drawers module already has queued mutation patterns (`runQueuedMutation` / structural queues), but Budget does not.
+- Budget writes are “best effort right now”; if browser loses connection mid-request, the change can fail permanently unless user retries manually.
 
-### What already works
-- `retryOnLikelyNetworkError` utility exists with exponential backoff (3 attempts, 250ms base delay)
-- Mutation timing/logging via `withMutationTiming` with Sentry breadcrumbs
-- `pendingById` guards prevent double-submission of the same row
-- React Query `refetchOnWindowFocus` is disabled (avoids unnecessary refetches)
-- Auth context compares user IDs before re-rendering
+4) Supabase backend appears healthy; failures are likely transport/client resilience
+- No recent postgres/auth/edge error logs surfaced in analytics queries.
+- `budget_categories` volume is tiny and fast (EXPLAIN shows sub-ms execution; no DB bottleneck signature).
+- Existing indexes/policies are appropriate for current dataset.
+- Conclusion: this is not a database throughput problem; it is request-delivery robustness.
 
-### Problems found
+5) Performance opportunities (secondary)
+- Query client only has query retry rules; mutation retries rely entirely on hook-level wrappers.
+- App loads multiple module datasets eagerly in AppShell. Not the root cause of failed category save, but contributes to network chatter under weak connections.
 
-**1. Retry coverage is inconsistent -- most hooks have zero retry protection**
+Serious recommendation (code + Supabase posture)
 
-Only `useExpenses` and `useLinkedAccounts` wrap Supabase calls in `retryOnLikelyNetworkError`. The following hooks make bare `supabase.from(...)` calls with no retry at all:
+Phase 1 — Fix retry semantics at the root (highest impact)
+- Introduce a single “Supabase operation with retry” utility that retries on:
+  - thrown fetch/network errors, and
+  - resolved results containing retriable `error` payloads.
+- Replace direct `retryOnLikelyNetworkError(() => supabase...)` usage with this new helper across all hooks and AppShell RPCs.
+- Expand retriable classifier beyond current string matching to include common fetch abort/offline/timeouts/status-family signals.
+- Add jitter + longer capped backoff (e.g., 4 attempts, exponential with jitter).
 
-| Hook | Reads | Mutations |
-|------|-------|-----------|
-| `useIncomes` | No retry | No retry |
-| `useCategories` | No retry | No retry |
-| `useBudgets` | No retry | No retry |
-| `useRestorePoints` | No retry | No retry |
-| `useHouseholdData` | No retry | No retry |
-| `useGridColumnWidths` | No retry | No retry |
-| `useDrawersUnits` | No retry | No retry |
-| `useDrawerInsertInstances` | No retry | No retry |
+Why this matters
+- This addresses the core mismatch causing false confidence in retry behavior.
 
-A single transient "Load failed" in any of these hooks surfaces immediately as an error to the user.
+Phase 2 — Add deterministic mutation reliability for Budget (not just retries)
+- Create a Budget mutation queue (same design style as Drawers):
+  - serialize conflicting writes per entity/table,
+  - prevent overlapping writes from UI double-actions,
+  - preserve ordering for add→edit→delete sequences.
+- For Categories specifically: queue add/update/remove operations so the UI can’t race itself under rapid interaction.
 
-**2. React Query has no built-in retry configured**
+Why this matters
+- Retries fix transient transport failures; queueing fixes client-side race/ordering fragility.
 
-The `QueryClient` is created with only `refetchOnWindowFocus: false`. React Query's default `retry: 3` applies to queries, but there is no `retry` configured for mutations (default is 0). This means every failed mutation immediately throws.
+Phase 3 — Add offline/eventual-write behavior for critical writes
+- Implement a lightweight outbox for Budget mutations:
+  - when save fails for retriable network reasons, persist pending mutation locally,
+  - replay automatically on reconnect/app resume,
+  - show clear “Pending sync” state rather than hard failure.
+- Keep client-generated UUIDs to make retries idempotent for inserts.
+- For updates/deletes, include idempotency metadata in payload and dedupe replay attempts.
 
-**3. No optimistic updates -- UI waits for the server round-trip**
+Why this matters
+- If the network is unstable, user actions should still “stick” and sync later.
 
-All mutations follow a "wait for server, then update cache" pattern. If the network is slow, the UI feels sluggish. If the network fails, the user sees an error with no local feedback.
+Phase 4 — Harden Budget RPC/mutation consistency
+- Wrap all AppShell RPC writes with the same retry helper + standardized mutation error handling.
+- Standardize all writes through one mutation facade (`budgetApi`) so behavior is identical for categories, linked accounts, restore, household updates.
+- Ensure every mutation has:
+  - retry policy,
+  - timing instrumentation,
+  - user-visible status (saving / retrying / queued / failed).
 
-**4. No user-facing error toasts on mutation failure**
+Phase 5 — Improve observability so failures are diagnosable in production
+- Add request correlation IDs for each mutation and include them in:
+  - client logs/Sentry breadcrumbs,
+  - mutation timing records,
+  - optional DB audit table (minimal payload).
+- Capture explicit failure reason taxonomy:
+  - offline, DNS/TLS/fetch fail, timeout, auth-expired, RLS/validation, server 5xx.
+- Add a hidden diagnostics panel for latest 20 mutation attempts.
 
-When a mutation throws, the error bubbles up to the component but most components don't catch it or show a toast. The user sees the UI "lock up" because the pending state clears but no feedback appears.
+Supabase configuration recommendations
+- Keep current RLS setup (not the bottleneck).
+- Add operational guardrails:
+  1) Monitor PostgREST/API error rates and latency in Supabase dashboard (alerts).
+  2) Ensure project region is close to primary users; if not, migrate/clone to nearer region for lower RTT.
+  3) Keep table/index hygiene (already good for budget tables).
+- Optional reliability enhancement:
+  - Move critical multi-step writes behind SQL functions (RPC) for atomic server-side execution and fewer client round-trips.
+  - For category save specifically, a dedicated `budget_save_category(...)` RPC can centralize validation and simplify client retry logic.
 
-**5. Two build errors to fix**
+Concrete implementation scope (if approved)
+1) New shared helper(s)
+- `src/lib/networkErrors.ts` (or `src/lib/supabaseRequest.ts`): add retry-aware Supabase result handling, richer retriable classifier, jittered backoff.
+2) Refactor write/read callsites
+- All Budget hooks + AppShell RPC write paths to use unified helper.
+3) Budget mutation queue/outbox
+- New hook/util (e.g., `useBudgetMutationQueue`) and integrate into category/income/expense/link account mutations.
+4) QueryClient resilience tuning
+- Add mutation retry defaults for retriable network errors.
+- Tune reconnect behavior and stale-time to reduce request storms.
+5) Instrumentation
+- Correlation IDs + enriched timing/error records.
 
-- `useGridColumnWidths.ts` line 220: The `.upsert()` call passes an object but TypeScript expects an array
-- `useDrawersUnits.ts` line 115: `data as DrawersUnit` cast needs `as unknown as DrawersUnit`
+Success criteria
+- Category save under flaky connection:
+  - no immediate hard failure on first network hiccup,
+  - visible retry/pending state,
+  - eventual success after reconnect without user re-entry.
+- Error rate:
+  - significant drop in user-visible “Network request failed” toasts for Budget writes.
+- Traceability:
+  - every failed save can be classified and traced with correlation ID.
 
----
-
-## Recommended Plan
-
-### Phase 1: Fix build errors (immediate)
-
-**File: `src/hooks/useGridColumnWidths.ts`** (line 216-224)
-- Change `.upsert({ user_id, grid_column_widths }, { onConflict: 'user_id' })` to `.upsert([{ user_id, grid_column_widths }], { onConflict: 'user_id' })` (wrap in array)
-
-**File: `src/modules/drawers/hooks/useDrawersUnits.ts`** (line 115)
-- Change `data as DrawersUnit` to `data as unknown as DrawersUnit`
-
-### Phase 2: Universal retry for all Supabase calls
-
-**File: `src/lib/networkErrors.ts`**
-- No changes needed -- the utility is solid
-
-**Files: All 8 hooks listed above**
-- Wrap every `supabase.from(...)` and `supabase.rpc(...)` call in `retryOnLikelyNetworkError(...)`, matching the pattern already used in `useExpenses` and `useLinkedAccounts`
-- This gives every network call 3 automatic retries with exponential backoff before surfacing an error
-
-Affected files:
-- `src/hooks/useIncomes.ts` -- 4 calls (1 read, 3 mutations)
-- `src/hooks/useCategories.ts` -- 5 calls
-- `src/hooks/useBudgets.ts` -- 5 calls
-- `src/hooks/useRestorePoints.ts` -- 4 calls
-- `src/hooks/useHouseholdData.ts` -- 3 reads + 3 RPCs
-- `src/hooks/useGridColumnWidths.ts` -- 2 calls
-- `src/modules/drawers/hooks/useDrawersUnits.ts` -- 4 calls + 1 RPC
-- `src/modules/drawers/hooks/useDrawerInsertInstances.ts` -- 4 calls + 3 RPCs
-
-### Phase 3: Configure React Query retry for queries
-
-**File: `src/App.tsx`**
-- Add `retry` configuration to the QueryClient defaults so queries also benefit from automatic retry:
-
-```text
-queries: {
-  refetchOnWindowFocus: false,
-  retry: (failureCount, error) => {
-    if (failureCount >= 2) return false;
-    return isLikelyNetworkError(error);
-  },
-}
-```
-
-This gives query-level retry only for network errors, preventing duplicate retries for application-level errors (like RLS violations).
-
-### Phase 4: User-facing error feedback on mutation failure
-
-**File: `src/lib/networkErrors.ts`**
-- Add a small helper `showMutationError(error)` that calls `toast.error(toUserFacingErrorMessage(error))` using sonner
-
-**Files: All hooks with mutations**
-- In the `catch` block of each mutation, call `showMutationError(error)` so the user always sees clear feedback when a save fails, rather than the UI silently doing nothing
-
-### Summary of changes
-
-| Area | Files changed | What it does |
-|------|--------------|--------------|
-| Build fixes | 2 files | Fixes TypeScript errors blocking deployment |
-| Universal retry | 8 hook files | Every Supabase call gets 3 retries with backoff |
-| Query-level retry | `App.tsx` | React Query retries failed queries for network errors |
-| Error toasts | `networkErrors.ts` + 8 hooks | User always sees clear feedback on failure |
-
-### What this plan intentionally does NOT include
-
-- **Optimistic updates**: These add significant complexity (rollback logic, conflict resolution) and are better addressed as a separate effort once the reliability foundation is solid.
-- **Offline queue / background sync**: Overkill for the current app scope.
-- **Debouncing mutations**: The `pendingById` guards already prevent double-submission; debouncing would add latency to saves.
-
+Technical notes
+- I do not see evidence of DB-side slowness causing this class of failure.
+- The most important immediate fix is correcting retry semantics for Supabase’s `{ error }` response style.
+- “Never fail” UX requires eventual-write/outbox behavior; retries alone cannot guarantee that.
