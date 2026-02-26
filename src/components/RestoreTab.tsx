@@ -208,14 +208,14 @@ export function RestoreTab({ userId, points, incomes, expenses, categories, link
       restorePointColumnHelper.accessor('created_at', {
         id: 'timestamp',
         header: 'Timestamp',
-        size: 240,
+        size: CONFIG_BACKUPS_GRID_DEFAULT_WIDTHS.timestamp,
         minSize: GRID_MIN_COLUMN_WIDTH,
         cell: ({ row }) => <span className="font-medium">{formatTimestamp(row.original.created_at)}</span>,
       }),
       restorePointColumnHelper.accessor((row) => row.notes ?? '', {
         id: 'notes',
         header: 'Notes',
-        size: 420,
+        size: CONFIG_BACKUPS_GRID_DEFAULT_WIDTHS.notes,
         minSize: GRID_MIN_COLUMN_WIDTH,
         meta: { containsEditableInput: true },
         cell: ({ row }) => {
@@ -249,7 +249,7 @@ export function RestoreTab({ userId, points, incomes, expenses, categories, link
         },
       }),
       restorePointColumnHelper.display({
-        id: 'actions',
+        id: GRID_ACTIONS_COLUMN_ID,
         header: '',
         enableSorting: false,
         enableResizing: false,

@@ -36,11 +36,13 @@ function GridLayoutHarness({
       columnHelper.accessor("name", {
         id: "name",
         header: "Name",
+        size: 220,
         cell: ({ getValue }) => getValue(),
       }),
       columnHelper.accessor("amount", {
         id: "amount",
         header: "Amount",
+        size: 140,
         cell: ({ getValue }) => String(getValue()),
       }),
       columnHelper.display({
@@ -196,6 +198,34 @@ describe("DataGrid layout affordances", () => {
       expect(tfoot.className).not.toContain("[&>tr>td:last-child]:sticky");
     } finally {
       unmount(root, container);
+    }
+  });
+
+  it("routes excess table width to the actions column when row actions exist", () => {
+    const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return 820;
+      },
+    });
+
+    const { container, root } = mount(<GridLayoutHarness />);
+    try {
+      const nameHeaderCell = container.querySelector("thead th:nth-child(1)") as HTMLElement;
+      const amountHeaderCell = container.querySelector("thead th:nth-child(2)") as HTMLElement;
+      const actionsHeaderCell = container.querySelector("thead th:nth-child(3)") as HTMLElement;
+
+      expect(nameHeaderCell.style.width).toBe("220px");
+      expect(amountHeaderCell.style.width).toBe("140px");
+      expect(actionsHeaderCell.style.width).toBe("460px");
+    } finally {
+      unmount(root, container);
+      if (originalClientWidth) {
+        Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
+      }
     }
   });
 });

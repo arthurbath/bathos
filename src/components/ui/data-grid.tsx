@@ -384,18 +384,23 @@ export function DataGrid<TData>({
     [showActionsColumn, visibleLeafColumns],
   );
   const trailingFillColumnId = React.useMemo(() => {
+    // Grid standard: if row-level actions are present, the trailing actions column
+    // absorbs all excess table width so content columns do not stretch.
+    if (showActionsColumn && hasActionsColumn) return GRID_ACTIONS_COLUMN_ID;
     return renderableLeafColumns.length > 0
       ? renderableLeafColumns[renderableLeafColumns.length - 1]?.id ?? null
       : null;
-  }, [renderableLeafColumns]);
+  }, [hasActionsColumn, renderableLeafColumns, showActionsColumn]);
   const contentColumnWidth = React.useMemo(
     () => renderableLeafColumns.reduce((sum, column) => sum + column.getSize(), 0),
     [renderableLeafColumns],
   );
   const totalColumnWidth = contentColumnWidth + (showTrailingSpacerColumn ? GRID_TRAILING_SPACER_COLUMN_WIDTH : 0);
   const isResizingColumn = Boolean(table.getState().columnSizingInfo?.isResizingColumn);
+  const liveContainerWidth = containerRef.current?.clientWidth ?? 0;
+  const availableTableWidth = Math.max(containerWidth, liveContainerWidth);
   const trailingExtraWidth = trailingFillColumnId
-    ? Math.max(0, containerWidth - totalColumnWidth)
+    ? Math.max(0, availableTableWidth - totalColumnWidth)
     : 0;
   const tableWidth = totalColumnWidth + trailingExtraWidth;
   const hasFooter = Boolean(footer);
@@ -654,7 +659,7 @@ export function DataGrid<TData>({
       className={cn('overflow-auto', fullView && 'h-full min-h-0', className)}
       style={{ maxHeight: fullView ? 'none' : maxHeight }}
     >
-      <table className="min-w-full caption-bottom text-xs" style={{ width: `${tableWidth}px` }}>
+      <table className="min-w-full table-fixed caption-bottom text-xs" style={{ width: `${tableWidth}px` }}>
         <thead className={cn(
           `z-30 ${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} shadow-[0_1px_0_0_hsl(var(--border))] [&_tr]:border-b-0`,
           GRID_HEADER_CELL_BORDERS_CLASS,
