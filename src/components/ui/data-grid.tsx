@@ -8,6 +8,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { GRID_ACTIONS_COLUMN_ID } from '@/lib/gridColumnWidths';
 
 // ─── Column Meta Augmentation ───
 declare module '@tanstack/react-table' {
@@ -33,7 +34,7 @@ const DataGridCtx = createContext<DataGridContextValue | null>(null);
 export function useDataGrid() { return useContext(DataGridCtx); }
 
 export const GRID_HEADER_TONE_CLASS = 'bg-border';
-export const GRID_READONLY_TEXT_CLASS = 'text-muted-foreground';
+export const GRID_READONLY_TEXT_CLASS = 'text-[hsl(var(--grid-text))]';
 // Use on button controls rendered inside grid cells to match hover border treatment of other grid inputs.
 export const GRID_CONTROL_HOVER_BORDER_CLASS = 'border-transparent hover:border-[hsl(var(--grid-sticky-line))]';
 // Header/footer cell borders and sticky first-column divider are baseline grid affordances in both card and full-view layouts.
@@ -43,6 +44,18 @@ const GRID_FOOTER_CELL_BORDERS_CLASS = '[&>tr>td]:shadow-[inset_0_1px_0_0_hsl(va
 const GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS = 'shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line))]';
 const GRID_FOOTER_FIRST_COLUMN_STICKY_CLASS = '[&>tr>td:first-child]:sticky [&>tr>td:first-child]:left-0 [&>tr>td:first-child]:z-30 [&>tr>td:first-child]:shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
 
+function scheduleInNextFrame(callback: () => void) {
+  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(() => callback());
+    return;
+  }
+  if (typeof window !== 'undefined') {
+    window.setTimeout(callback, 16);
+    return;
+  }
+  callback();
+}
+
 /** Spread onto any interactive element to wire it into grid keyboard navigation. */
 export function gridNavProps(ctx: DataGridContextValue | null, navCol: number): Record<string, unknown> {
   return {
@@ -51,6 +64,31 @@ export function gridNavProps(ctx: DataGridContextValue | null, navCol: number): 
     'data-col': navCol,
     onKeyDown: ctx?.onCellKeyDown,
     onMouseDown: ctx?.onCellMouseDown,
+  };
+}
+
+/** Use on menu trigger buttons in cells (for example ellipsis actions). */
+export function gridMenuTriggerProps(
+  ctx: DataGridContextValue | null,
+  navCol: number,
+): Record<string, unknown> {
+  return {
+    'data-row': ctx?.rowIndex,
+    'data-row-id': ctx?.rowId,
+    'data-col': navCol,
+    'data-grid-focus-only': 'true',
+    onMouseDown: ctx?.onCellMouseDown,
+    onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
+      if (
+        event.key === 'Tab' ||
+        event.key === 'ArrowUp' ||
+        event.key === 'ArrowDown' ||
+        event.key === 'ArrowLeft' ||
+        event.key === 'ArrowRight'
+      ) {
+        ctx?.onCellKeyDown(event);
+      }
+    },
   };
 }
 
@@ -104,12 +142,19 @@ function useGridNav(
   }, []);
 
   const focusCellElement = useCallback((target: HTMLElement) => {
-    requestAnimationFrame(() => scrollCellIntoView(target));
+    scheduleInNextFrame(() => scrollCellIntoView(target));
 
     if (isCellTemporarilyUnfocusable(target)) return false;
 
     const role = target.getAttribute('role');
-    if (target.tagName === 'BUTTON' && role !== 'checkbox' && role !== 'combobox') {
+    const hasPopup = target.hasAttribute('aria-haspopup');
+    if (
+      target.tagName === 'BUTTON' &&
+      role !== 'checkbox' &&
+      role !== 'combobox' &&
+      !hasPopup &&
+      target.dataset.gridFocusOnly !== 'true'
+    ) {
       target.click();
       return true;
     }
@@ -188,9 +233,9 @@ function useGridNav(
 
       if (focused || tries >= attempts) return;
       tries += 1;
-      window.setTimeout(() => requestAnimationFrame(tryFocus), 24);
+      window.setTimeout(() => scheduleInNextFrame(tryFocus), 24);
     };
-    requestAnimationFrame(tryFocus);
+    scheduleInNextFrame(tryFocus);
   }, [focusCell, focusCellByRowId]);
 
   const onCellKeyDown = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
@@ -320,16 +365,17 @@ export function DataGrid<TData>({
   const rows = table.getRowModel().rows;
   const coreRows = table.getCoreRowModel().rows;
   const visibleLeafColumns = table.getVisibleLeafColumns();
-  const lastVisibleColumnId =
-    visibleLeafColumns.length > 0
-      ? visibleLeafColumns[visibleLeafColumns.length - 1]?.id ?? null
-      : null;
+  const trailingFillColumnId = React.useMemo(() => {
+    const actionsColumn = visibleLeafColumns.find((column) => column.id === GRID_ACTIONS_COLUMN_ID);
+    if (actionsColumn) return actionsColumn.id;
+    return visibleLeafColumns.length > 0 ? visibleLeafColumns[visibleLeafColumns.length - 1]?.id ?? null : null;
+  }, [visibleLeafColumns]);
   const totalColumnWidth = table.getTotalSize();
-  const trailingExtraWidth = lastVisibleColumnId
+  const isResizingColumn = Boolean(table.getState().columnSizingInfo?.isResizingColumn);
+  const trailingExtraWidth = trailingFillColumnId
     ? Math.max(0, containerWidth - totalColumnWidth)
     : 0;
   const tableWidth = totalColumnWidth + trailingExtraWidth;
-  const isResizingColumn = Boolean(table.getState().columnSizingInfo?.isResizingColumn);
   const hasFooter = Boolean(footer);
   const sortableColumns = React.useMemo(
     () => visibleLeafColumns.filter((column) => column.getCanSort()),
@@ -441,7 +487,14 @@ export function DataGrid<TData>({
     if (!pending) return;
 
     let attempts = 0;
+    let cancelled = false;
+    let retryTimer: number | null = null;
     const restoreFocus = () => {
+      if (cancelled) return;
+      if (!containerRef.current) {
+        pendingCommitFocusRef.current = null;
+        return;
+      }
       const focused = focusCellByRowId(pending.rowId, pending.col);
       if (focused) {
         pendingCommitFocusRef.current = null;
@@ -452,10 +505,14 @@ export function DataGrid<TData>({
         return;
       }
       attempts += 1;
-      window.setTimeout(() => requestAnimationFrame(restoreFocus), 24);
+      retryTimer = window.setTimeout(() => scheduleInNextFrame(restoreFocus), 24);
     };
 
-    requestAnimationFrame(restoreFocus);
+    scheduleInNextFrame(restoreFocus);
+    return () => {
+      cancelled = true;
+      if (retryTimer != null) window.clearTimeout(retryTimer);
+    };
   }, [currentGroupKeys, focusCellByRowId, renderedRowIds, scrollCellIntoView]);
 
   useEffect(() => {
@@ -463,7 +520,7 @@ export function DataGrid<TData>({
     if (!(active instanceof HTMLElement)) return;
     if (!containerRef.current?.contains(active)) return;
     if (active.dataset.row == null || active.dataset.col == null) return;
-    requestAnimationFrame(() => scrollCellIntoView(active));
+    scheduleInNextFrame(() => scrollCellIntoView(active));
   }, [renderedRowIds, scrollCellIntoView]);
 
   useEffect(() => {
@@ -475,7 +532,7 @@ export function DataGrid<TData>({
       if (!(target instanceof HTMLElement)) return;
       if (target.dataset.row == null || target.dataset.col == null) return;
       if (consumePointerInitiatedFocus()) return;
-      requestAnimationFrame(() => scrollCellIntoView(target));
+      scheduleInNextFrame(() => scrollCellIntoView(target));
     };
 
     container.addEventListener('focusin', handleFocusIn);
@@ -507,11 +564,16 @@ export function DataGrid<TData>({
       >
         {row.getVisibleCells().map((cell, colIdx) => {
           const meta = cell.column.columnDef.meta;
+          const isActionsColumn = cell.column.id === GRID_ACTIONS_COLUMN_ID;
           const columnSize = cell.column.getSize();
-          const fillsRemainingWidth = cell.column.id === lastVisibleColumnId;
+          const fillsRemainingWidth = cell.column.id === trailingFillColumnId;
           const appliedColumnWidth = columnSize + (fillsRemainingWidth ? trailingExtraWidth : 0);
-          const horizontalPaddingClass = meta?.containsEditableInput ? 'px-1' : 'px-2';
-          const hasInteractiveControl = Boolean(meta?.containsEditableInput || meta?.containsButton);
+          const horizontalPaddingClass = isActionsColumn
+            ? 'px-0'
+            : meta?.containsEditableInput
+              ? 'px-1'
+              : 'px-2';
+          const hasInteractiveControl = isActionsColumn || Boolean(meta?.containsEditableInput || meta?.containsButton);
           const verticalPaddingClass = hasInteractiveControl ? 'py-1' : 'h-9 py-0';
           return (
             <td
@@ -520,6 +582,7 @@ export function DataGrid<TData>({
                 'align-middle font-normal overflow-hidden',
                 horizontalPaddingClass,
                 verticalPaddingClass,
+                !hasInteractiveControl && GRID_READONLY_TEXT_CLASS,
                 colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
                 colIdx === 0 && stickyFirstColumn && 'sticky left-0 z-20',
                 colIdx === 0 && stickyFirstColumn && GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS,
@@ -554,22 +617,26 @@ export function DataGrid<TData>({
           fullView && 'sticky top-0',
         )}>
           {table.getHeaderGroups().map(hg => (
-            <tr key={hg.id} className="border-b transition-colors">
+            <tr key={hg.id} className="border-b">
               {hg.headers.map((header, colIdx) => {
                 const meta = header.column.columnDef.meta;
+                const isActionsColumn = header.column.id === GRID_ACTIONS_COLUMN_ID;
                 const sortState = header.column.getIsSorted();
                 const isAlphabeticalColumn = alphabeticalColumnIds.has(header.column.id);
                 const columnSize = header.getSize();
-                const fillsRemainingWidth = header.column.id === lastVisibleColumnId;
+                const fillsRemainingWidth = header.column.id === trailingFillColumnId;
                 const appliedColumnWidth = columnSize + (fillsRemainingWidth ? trailingExtraWidth : 0);
-                const canResize = header.column.getCanResize();
+                const canSort = !isActionsColumn && header.column.getCanSort();
+                const canResize = !isActionsColumn && header.column.getCanResize();
                 const isResizing = header.column.getIsResizing();
                 return (
                   <th
                     key={header.id}
                     className={cn(
-                      `relative h-9 px-2 text-left align-middle font-medium ${GRID_READONLY_TEXT_CLASS}`,
-                      header.column.getCanSort() && 'cursor-pointer select-none hover:bg-muted',
+                      `relative h-9 text-left align-middle font-medium ${GRID_READONLY_TEXT_CLASS}`,
+                      isActionsColumn ? 'px-0' : 'px-2',
+                      canSort && 'cursor-pointer select-none',
+                      canSort && !isResizingColumn && 'hover:bg-muted',
                       colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
                       colIdx === 0 && stickyFirstColumn && `sticky left-0 z-40 ${GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS}`,
                       meta?.headerClassName,
@@ -580,6 +647,7 @@ export function DataGrid<TData>({
                         event.stopPropagation();
                         return;
                       }
+                      if (!canSort) return;
                       const toggleSorting = header.column.getToggleSortingHandler();
                       toggleSorting?.(event);
                     }}
@@ -592,10 +660,10 @@ export function DataGrid<TData>({
                     {header.isPlaceholder ? null : (
                       <span className="inline-flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis">
                         {flexRender(header.column.columnDef.header, header.getContext())}
-                        {header.column.getCanSort() && sortState === 'asc' && (isAlphabeticalColumn
+                        {canSort && sortState === 'asc' && (isAlphabeticalColumn
                           ? <ArrowDown className="h-3 w-3" />
                           : <ArrowUp className="h-3 w-3" />)}
-                        {header.column.getCanSort() && sortState === 'desc' && (isAlphabeticalColumn
+                        {canSort && sortState === 'desc' && (isAlphabeticalColumn
                           ? <ArrowUp className="h-3 w-3" />
                           : <ArrowDown className="h-3 w-3" />)}
                       </span>
@@ -642,7 +710,7 @@ export function DataGrid<TData>({
         )}>
           {rows.length === 0 ? (
             <tr className="border-b">
-              <td colSpan={table.getAllColumns().length} className="px-1 py-8 text-center text-muted-foreground">
+              <td colSpan={table.getAllColumns().length} className={cn('px-1 py-8 text-center', GRID_READONLY_TEXT_CLASS)}>
                 {emptyMessage}
               </td>
             </tr>
@@ -713,9 +781,16 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
   const ref = useRef<HTMLInputElement>(null);
   const pointerDownRef = useRef(false);
   const suppressBlurCommitRef = useRef(false);
+  const editStartValueRef = useRef(String(value));
 
   useEffect(() => {
-    if (!focused || !editing) setLocal(String(value));
+    if (!focused || !editing) {
+      const nextValue = String(value);
+      setLocal(nextValue);
+      if (!editing) {
+        editStartValueRef.current = nextValue;
+      }
+    }
   }, [value, focused, editing]);
 
   const commit = () => {
@@ -744,7 +819,10 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
         if (disabled) return;
         ctx?.onCellMouseDown(e);
         pointerDownRef.current = true;
-        if (!editing) setEditing(true);
+        if (!editing) {
+          editStartValueRef.current = local;
+          setEditing(true);
+        }
       }}
       onFocus={() => {
         if (disabled) return;
@@ -765,22 +843,26 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
         onKeyDown={e => {
           if (disabled) return;
           const startEditingWithKey = (key: string) => {
+            if (!editing) {
+              editStartValueRef.current = local;
+            }
             setEditing(true);
             setLocal(key);
-            requestAnimationFrame(() => focusInputAtEnd(ref.current));
+            scheduleInNextFrame(() => focusInputAtEnd(ref.current));
           };
 
           if (!ctx) {
             if (e.key === 'Enter') {
               if (!editing) {
                 e.preventDefault();
+                editStartValueRef.current = local;
                 setEditing(true);
-                requestAnimationFrame(() => focusInputAtEnd(ref.current));
+                scheduleInNextFrame(() => focusInputAtEnd(ref.current));
               } else {
                 e.preventDefault();
                 commit();
                 setEditing(false);
-                requestAnimationFrame(() => ref.current?.focus());
+                scheduleInNextFrame(() => ref.current?.focus());
               }
               return;
             }
@@ -794,8 +876,9 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
           if (!editing) {
             if (e.key === 'Enter') {
               e.preventDefault();
+              editStartValueRef.current = local;
               setEditing(true);
-              requestAnimationFrame(() => focusInputAtEnd(ref.current));
+              scheduleInNextFrame(() => focusInputAtEnd(ref.current));
               return;
             }
             if (isPrintableEntryKey(e)) {
@@ -811,15 +894,15 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
           e.preventDefault();
           commit();
           setEditing(false);
-          requestAnimationFrame(() => ref.current?.focus());
+          scheduleInNextFrame(() => ref.current?.focus());
           return;
         }
 
         if (e.key === 'Escape') {
           e.preventDefault();
-          setLocal(String(value));
+          setLocal(editStartValueRef.current);
           setEditing(false);
-          requestAnimationFrame(() => ref.current?.focus());
+          scheduleInNextFrame(() => ref.current?.focus());
           return;
         }
 
@@ -849,9 +932,16 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
   const ref = useRef<HTMLInputElement>(null);
   const pointerDownRef = useRef(false);
   const suppressBlurCommitRef = useRef(false);
+  const editStartValueRef = useRef(String(value));
 
   useEffect(() => {
-    if (!focused || !editing) setLocal(String(value));
+    if (!focused || !editing) {
+      const nextValue = String(value);
+      setLocal(nextValue);
+      if (!editing) {
+        editStartValueRef.current = nextValue;
+      }
+    }
   }, [value, focused, editing]);
 
   const commit = () => {
@@ -888,7 +978,8 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
           if (pointerDownRef.current) {
             pointerDownRef.current = false;
             if (!editing) {
-              requestAnimationFrame(() => {
+              editStartValueRef.current = local;
+              scheduleInNextFrame(() => {
                 if (document.activeElement !== ref.current) return;
                 setEditing(true);
               });
@@ -911,22 +1002,26 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
         onKeyDown={e => {
           if (disabled) return;
           const startEditingWithKey = (key: string) => {
+            if (!editing) {
+              editStartValueRef.current = local;
+            }
             setEditing(true);
             setLocal(key);
-            requestAnimationFrame(() => focusInputAtEnd(ref.current));
+            scheduleInNextFrame(() => focusInputAtEnd(ref.current));
           };
 
           if (!ctx) {
             if (e.key === 'Enter') {
               if (!editing) {
                 e.preventDefault();
+                editStartValueRef.current = local;
                 setEditing(true);
-                requestAnimationFrame(() => focusInputAtEnd(ref.current));
+                scheduleInNextFrame(() => focusInputAtEnd(ref.current));
               } else {
                 e.preventDefault();
                 commit();
                 setEditing(false);
-                requestAnimationFrame(() => ref.current?.focus());
+                scheduleInNextFrame(() => ref.current?.focus());
               }
               return;
             }
@@ -940,8 +1035,9 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
           if (!editing) {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
+              editStartValueRef.current = local;
               setEditing(true);
-              requestAnimationFrame(() => focusInputAtEnd(ref.current));
+              scheduleInNextFrame(() => focusInputAtEnd(ref.current));
               return;
             }
             if (isNumberEntryKey(e)) {
@@ -957,15 +1053,15 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
             e.preventDefault();
             commit();
             setEditing(false);
-            requestAnimationFrame(() => ref.current?.focus());
+            scheduleInNextFrame(() => ref.current?.focus());
             return;
           }
 
           if (e.key === 'Escape') {
             e.preventDefault();
-            setLocal(String(value));
+            setLocal(editStartValueRef.current);
             setEditing(false);
-            requestAnimationFrame(() => ref.current?.focus());
+            scheduleInNextFrame(() => ref.current?.focus());
             return;
           }
 
@@ -996,9 +1092,16 @@ export function GridPercentCell({ value, onChange, navCol, className, disabled =
   const ref = useRef<HTMLInputElement>(null);
   const pointerDownRef = useRef(false);
   const suppressBlurCommitRef = useRef(false);
+  const editStartValueRef = useRef(String(value));
 
   useEffect(() => {
-    if (!focused || !editing) setLocal(String(value));
+    if (!focused || !editing) {
+      const nextValue = String(value);
+      setLocal(nextValue);
+      if (!editing) {
+        editStartValueRef.current = nextValue;
+      }
+    }
   }, [value, focused, editing]);
 
   const commit = () => {
@@ -1029,7 +1132,10 @@ export function GridPercentCell({ value, onChange, navCol, className, disabled =
           if (disabled) return;
           ctx?.onCellMouseDown(e);
           pointerDownRef.current = true;
-          if (!editing) setEditing(true);
+          if (!editing) {
+            editStartValueRef.current = local;
+            setEditing(true);
+          }
         }}
         onFocus={() => {
           if (disabled) return;
@@ -1050,22 +1156,26 @@ export function GridPercentCell({ value, onChange, navCol, className, disabled =
         onKeyDown={e => {
           if (disabled) return;
           const startEditingWithKey = (key: string) => {
+            if (!editing) {
+              editStartValueRef.current = local;
+            }
             setEditing(true);
             setLocal(key);
-            requestAnimationFrame(() => focusInputAtEnd(ref.current));
+            scheduleInNextFrame(() => focusInputAtEnd(ref.current));
           };
 
           if (!ctx) {
             if (e.key === 'Enter') {
               if (!editing) {
                 e.preventDefault();
+                editStartValueRef.current = local;
                 setEditing(true);
-                requestAnimationFrame(() => focusInputAtEnd(ref.current));
+                scheduleInNextFrame(() => focusInputAtEnd(ref.current));
               } else {
                 e.preventDefault();
                 commit();
                 setEditing(false);
-                requestAnimationFrame(() => ref.current?.focus());
+                scheduleInNextFrame(() => ref.current?.focus());
               }
               return;
             }
@@ -1079,8 +1189,9 @@ export function GridPercentCell({ value, onChange, navCol, className, disabled =
           if (!editing) {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
+              editStartValueRef.current = local;
               setEditing(true);
-              requestAnimationFrame(() => focusInputAtEnd(ref.current));
+              scheduleInNextFrame(() => focusInputAtEnd(ref.current));
               return;
             }
             if (isNumberEntryKey(e)) {
@@ -1096,15 +1207,15 @@ export function GridPercentCell({ value, onChange, navCol, className, disabled =
             e.preventDefault();
             commit();
             setEditing(false);
-            requestAnimationFrame(() => ref.current?.focus());
+            scheduleInNextFrame(() => ref.current?.focus());
             return;
           }
 
           if (e.key === 'Escape') {
             e.preventDefault();
-            setLocal(String(value));
+            setLocal(editStartValueRef.current);
             setEditing(false);
-            requestAnimationFrame(() => ref.current?.focus());
+            scheduleInNextFrame(() => ref.current?.focus());
             return;
           }
 

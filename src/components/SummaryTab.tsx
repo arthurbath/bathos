@@ -62,9 +62,9 @@ function formatOverUnder(value: number) {
 }
 
 function overUnderToneClass(value: number) {
-  if (value > 0.5) return 'text-primary';
+  if (value > 0.5) return GRID_READONLY_TEXT_CLASS;
   if (value < -0.5) return 'text-[hsl(var(--destructive-text))]';
-  return '';
+  return GRID_READONLY_TEXT_CLASS;
 }
 
 export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partnerY, userId }: SummaryTabProps) {
@@ -371,6 +371,7 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
   const breakdownTable = useReactTable({
     data: filteredBreakdown,
     columns,
+    defaultColumn: { minSize: GRID_MIN_COLUMN_WIDTH },
     state: { sorting, columnSizing, columnSizingInfo },
     enableColumnResizing: true,
     onSortingChange: setSorting,

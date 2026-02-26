@@ -59,6 +59,7 @@
     --tooltip-bg: 0 0% 98%;
     --tooltip-foreground: 0 0% 10%;
     --tooltip-border: 0 0% 72%;
+    --grid-text: 0 0% 54%;
 
     --category-group-row-bg: 0 0% 38%;
     --grid-sticky-line: 0 0% 64%;
@@ -118,6 +119,7 @@
     --tooltip-bg: 0 0% 96%;
     --tooltip-foreground: 0 0% 10%;
     --tooltip-border: 0 0% 62%;
+    --grid-text: 0 0% 68%;
 
     --category-group-row-bg: 0 0% 38%;
     --grid-sticky-line: 0 0% 64%;

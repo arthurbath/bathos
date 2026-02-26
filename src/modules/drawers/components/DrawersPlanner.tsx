@@ -467,7 +467,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
       <ToplineHeader title="Drawer Planner" userId={userId} displayName={household.displayName} onSignOut={onSignOut} showAppSwitcher />
 
       <div className="mx-auto hidden max-w-5xl px-4 pt-6 md:block">
-        <nav className="hidden w-full grid-cols-2 gap-0.5 rounded-lg border border-[hsl(var(--grid-sticky-line))] bg-border p-1 text-muted-foreground md:grid">
+        <nav className="hidden w-full grid-cols-2 gap-0.5 rounded-lg border border-[hsl(var(--grid-sticky-line))] bg-[hsl(var(--switch-off))] p-1 text-muted-foreground md:grid">
           {drawersNavItems.map(({ path, icon: Icon, label }) => {
             const fullPath = `${basePath}${path}`;
             const active = location.pathname === fullPath || (!basePath && location.pathname === path);
@@ -476,7 +476,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
                 key={path}
                 type="button"
                 onClick={() => navigate(fullPath)}
-                className={`inline-flex items-center justify-center gap-0 sm:gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${active ? 'bg-background text-foreground' : 'hover:bg-background/50'}`}
+                className={`inline-flex items-center justify-center gap-0 sm:gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${active ? 'bg-background text-foreground' : 'text-foreground hover:bg-background/50'}`}
               >
                 <Icon className="hidden h-4 w-4 sm:inline" />
                 <span>{label}</span>

@@ -3,7 +3,17 @@ import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingState, useReactTable } from "@tanstack/react-table";
 import { describe, expect, it, vi } from "vitest";
-import { DataGrid, GridEditableCell, useDataGrid } from "@/components/ui/data-grid";
+import { ColorPicker } from "@/components/ManagedListSection";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataGrid, GridEditableCell, gridMenuTriggerProps, useDataGrid } from "@/components/ui/data-grid";
+
+if (typeof HTMLElement !== "undefined" && typeof HTMLElement.prototype.scrollIntoView !== "function") {
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: () => {},
+  });
+}
 
 type RowData = {
   id: string;
@@ -22,6 +32,21 @@ type AsyncSelectRowData = {
   id: string;
   label: string;
   category: "A" | "B" | "C";
+};
+
+type MenuRowData = {
+  id: string;
+  name: string;
+};
+
+type ColorRowData = {
+  id: string;
+  color: string | null;
+};
+
+type SelectRowData = {
+  id: string;
+  owner: "X" | "Y";
 };
 
 
@@ -228,6 +253,207 @@ function AsyncSelectCommitHarness() {
   return <DataGrid table={table} />;
 }
 
+function MenuTriggerHarness({ onTriggerClick }: { onTriggerClick: () => void }) {
+  const [rows] = React.useState<MenuRowData[]>([
+    { id: "row-a", name: "Alpha" },
+  ]);
+  const menuColumnHelper = createColumnHelper<MenuRowData>();
+  const columns = React.useMemo(
+    () => [
+      menuColumnHelper.accessor("name", {
+        id: "name",
+        header: "Name",
+        cell: ({ row, getValue }) => (
+          <GridEditableCell
+            value={getValue()}
+            navCol={0}
+            onChange={() => {}}
+            cellId={`name-${row.original.id}`}
+          />
+        ),
+      }),
+      menuColumnHelper.display({
+        id: "actions",
+        header: "Actions",
+        cell: () => {
+          const ctx = useDataGrid();
+          return (
+            <button
+              type="button"
+              data-row={ctx?.rowIndex}
+              data-row-id={ctx?.rowId}
+              data-col={1}
+              aria-haspopup="menu"
+              onMouseDown={ctx?.onCellMouseDown}
+              onKeyDown={ctx?.onCellKeyDown}
+              onClick={onTriggerClick}
+            >
+              ...
+            </button>
+          );
+        },
+      }),
+    ],
+    [menuColumnHelper, onTriggerClick],
+  );
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return <DataGrid table={table} />;
+}
+
+function DropdownMenuHarness() {
+  const [rows] = React.useState<MenuRowData[]>([
+    { id: "row-a", name: "Alpha" },
+  ]);
+  const menuColumnHelper = createColumnHelper<MenuRowData>();
+  const columns = React.useMemo(
+    () => [
+      menuColumnHelper.accessor("name", {
+        id: "name",
+        header: "Name",
+        cell: ({ row, getValue }) => (
+          <GridEditableCell
+            value={getValue()}
+            navCol={0}
+            onChange={() => {}}
+            cellId={`name-${row.original.id}`}
+          />
+        ),
+      }),
+      menuColumnHelper.display({
+        id: "actions",
+        header: "Actions",
+        cell: () => {
+          const ctx = useDataGrid();
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" {...gridMenuTriggerProps(ctx, 1)}>
+                  ...
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem>Delete</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        },
+      }),
+    ],
+    [menuColumnHelper],
+  );
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return <DataGrid table={table} />;
+}
+
+function ColorPickerHarness() {
+  const [rows] = React.useState<ColorRowData[]>([
+    { id: "row-a", color: "#3B82F6" },
+  ]);
+  const colorColumnHelper = createColumnHelper<ColorRowData>();
+  const columns = React.useMemo(
+    () => [
+      colorColumnHelper.display({
+        id: "color",
+        header: "Color",
+        cell: ({ row }) => (
+          <ColorPicker
+            color={row.original.color}
+            onChange={() => {}}
+            navCol={0}
+          />
+        ),
+      }),
+    ],
+    [colorColumnHelper],
+  );
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return <DataGrid table={table} />;
+}
+
+function GridSelectHarness() {
+  const [rows, setRows] = React.useState<SelectRowData[]>([
+    { id: "row-a", owner: "X" },
+  ]);
+  const selectColumnHelper = createColumnHelper<SelectRowData>();
+  const columns = React.useMemo(
+    () => [
+      selectColumnHelper.accessor("owner", {
+        id: "owner",
+        header: "Owner",
+        cell: ({ row, getValue }) => {
+          const ctx = useDataGrid();
+          return (
+            <Select
+              value={getValue()}
+              onValueChange={(next) => {
+                setRows((prev) => prev.map((entry) => (entry.id === row.original.id ? { ...entry, owner: next as "X" | "Y" } : entry)));
+              }}
+            >
+              <SelectTrigger
+                data-row={ctx?.rowIndex}
+                data-row-id={ctx?.rowId}
+                data-col={0}
+                onMouseDown={ctx?.onCellMouseDown}
+                onKeyDown={(event) => {
+                  if (!ctx) return;
+                  const expanded = event.currentTarget.getAttribute("aria-expanded") === "true";
+                  if (expanded) return;
+                  if (
+                    event.key === "ArrowUp" ||
+                    event.key === "ArrowDown" ||
+                    event.key === "ArrowLeft" ||
+                    event.key === "ArrowRight" ||
+                    event.key === "Tab"
+                  ) {
+                    ctx.onCellKeyDown(event);
+                  }
+                }}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="X">X</SelectItem>
+                <SelectItem value="Y">Y</SelectItem>
+              </SelectContent>
+            </Select>
+          );
+        },
+      }),
+    ],
+    [selectColumnHelper],
+  );
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return <DataGrid table={table} />;
+}
+
 
 function findInputByValue(container: HTMLElement, value: string) {
   return Array.from(container.querySelectorAll<HTMLInputElement>("input")).find((input) => input.value === value) ?? null;
@@ -279,6 +505,18 @@ async function dispatchTab(input: HTMLInputElement, shiftKey = false) {
 async function dispatchEnter(input: HTMLInputElement) {
   await act(async () => {
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+}
+
+async function dispatchEnterOnElement(element: HTMLElement) {
+  await act(async () => {
+    element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+}
+
+async function dispatchEscapeOnElement(element: HTMLElement) {
+  await act(async () => {
+    element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
 }
 
@@ -426,6 +664,185 @@ describe("DataGrid focus restore after async commit", () => {
         expect(active?.getAttribute("data-row-id")).toBe("row-a");
         expect(active?.getAttribute("data-col")).toBe("0");
       }, 3000);
+    } finally {
+      unmount(root, container);
+    }
+  });
+});
+
+describe("DataGrid menu trigger keyboard navigation", () => {
+  it("focuses menu trigger buttons without auto-clicking when tabbing from prior cell", async () => {
+    const onTriggerClick = vi.fn();
+    const { container, root } = mount(<MenuTriggerHarness onTriggerClick={onTriggerClick} />);
+    try {
+      const nameInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      expect(nameInput).not.toBeNull();
+
+      await act(async () => {
+        nameInput!.focus();
+      });
+
+      await dispatchTab(nameInput!);
+      await waitForCondition(() => {
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-row-id")).toBe("row-a");
+        expect(active?.getAttribute("data-col")).toBe("1");
+      });
+
+      expect(onTriggerClick).toHaveBeenCalledTimes(0);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("opens dropdown menu from focused ellipsis trigger via Enter and focuses first menu item", async () => {
+    const { container, root } = mount(<DropdownMenuHarness />);
+    try {
+      const nameInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      expect(nameInput).not.toBeNull();
+
+      await act(async () => {
+        nameInput!.focus();
+      });
+
+      await dispatchTab(nameInput!);
+      await waitForCondition(() => {
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-row-id")).toBe("row-a");
+        expect(active?.getAttribute("data-col")).toBe("1");
+      });
+
+      const trigger = document.activeElement as HTMLElement;
+      await dispatchEnterOnElement(trigger);
+      await waitForCondition(() => {
+        const menuItem = document.querySelector<HTMLElement>('[role="menuitem"]');
+        expect(menuItem).not.toBeNull();
+        expect(menuItem!.textContent).toContain("Delete");
+        expect(document.activeElement?.getAttribute("role")).toBe("menuitem");
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("closes dropdown menu via Escape and returns focus to the trigger", async () => {
+    const { container, root } = mount(<DropdownMenuHarness />);
+    try {
+      const nameInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      expect(nameInput).not.toBeNull();
+
+      await act(async () => {
+        nameInput!.focus();
+      });
+
+      await dispatchTab(nameInput!);
+      await waitForCondition(() => {
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-row-id")).toBe("row-a");
+        expect(active?.getAttribute("data-col")).toBe("1");
+      });
+
+      const trigger = document.activeElement as HTMLElement;
+      await dispatchEnterOnElement(trigger);
+      await waitForCondition(() => {
+        expect(document.activeElement?.getAttribute("role")).toBe("menuitem");
+      });
+
+      const focusedMenuItem = document.activeElement as HTMLElement;
+      await dispatchEscapeOnElement(focusedMenuItem);
+      await waitForCondition(() => {
+        expect(document.querySelector<HTMLElement>('[role="menuitem"]')).toBeNull();
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-row-id")).toBe("row-a");
+        expect(active?.getAttribute("data-col")).toBe("1");
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+});
+
+describe("DataGrid escape cancellation", () => {
+  it("restores the pre-edit value for text inputs when Escape is pressed", async () => {
+    const onUpdate = vi.fn();
+    const { container, root } = mount(<SortableGridHarness initialSorting={[{ id: "name", desc: false }]} onUpdate={onUpdate} />);
+    try {
+      const input = findInputByValue(container, "Alpha");
+      expect(input).not.toBeNull();
+
+      await act(async () => {
+        input!.focus();
+      });
+      await dispatchEnter(input!);
+      await waitForCondition(() => {
+        expect(input!.getAttribute("data-grid-editing")).toBe("true");
+      });
+
+      await dispatchInputChange(input!, "Alpha edited");
+      expect(input!.value).toBe("Alpha edited");
+
+      await dispatchEscapeOnElement(input!);
+      await waitForCondition(() => {
+        expect(input!.getAttribute("data-grid-editing")).toBe("false");
+        expect(input!.value).toBe("Alpha");
+      });
+      expect(onUpdate).toHaveBeenCalledTimes(0);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("closes the color palette via Escape and returns focus to the swatch trigger", async () => {
+    const { container, root } = mount(<ColorPickerHarness />);
+    try {
+      const trigger = container.querySelector<HTMLElement>('button[data-row-id="row-a"][data-col="0"][title="Pick color"]');
+      expect(trigger).not.toBeNull();
+
+      await act(async () => {
+        trigger!.focus();
+      });
+      await dispatchEnterOnElement(trigger!);
+      await waitForCondition(() => {
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("aria-label")?.startsWith("Use ")).toBe(true);
+      });
+
+      const focusedSwatch = document.activeElement as HTMLElement;
+      await dispatchEscapeOnElement(focusedSwatch);
+      await waitForCondition(() => {
+        expect(document.querySelector<HTMLElement>('[aria-label^="Use "]')).toBeNull();
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-row-id")).toBe("row-a");
+        expect(active?.getAttribute("data-col")).toBe("0");
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("closes a data-grid select menu via Escape and returns focus to its trigger", async () => {
+    const { container, root } = mount(<GridSelectHarness />);
+    try {
+      const trigger = container.querySelector<HTMLElement>('[data-row-id="row-a"][data-col="0"]');
+      expect(trigger).not.toBeNull();
+
+      await act(async () => {
+        trigger!.focus();
+      });
+      await dispatchEnterOnElement(trigger!);
+      await waitForCondition(() => {
+        const listbox = document.querySelector<HTMLElement>('[role="listbox"]');
+        expect(listbox).not.toBeNull();
+      });
+
+      const focusedOption = document.activeElement as HTMLElement;
+      await dispatchEscapeOnElement(focusedOption);
+      await waitForCondition(() => {
+        expect(document.querySelector<HTMLElement>('[role="listbox"]')).toBeNull();
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-row-id")).toBe("row-a");
+        expect(active?.getAttribute("data-col")).toBe("0");
+      });
     } finally {
       unmount(root, container);
     }

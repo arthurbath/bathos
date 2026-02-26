@@ -158,7 +158,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
       <ToplineHeader title="Budget" userId={userId} displayName={household.displayName} onSignOut={onSignOut} showAppSwitcher={showAppSwitcher} />
 
       <div className="mx-auto hidden w-full max-w-5xl px-4 pt-6 md:block">
-        <nav className="hidden w-full grid-cols-4 gap-0.5 rounded-lg border border-[hsl(var(--grid-sticky-line))] bg-border p-1 text-muted-foreground md:grid">
+        <nav className="hidden w-full grid-cols-4 gap-0.5 rounded-lg border border-[hsl(var(--grid-sticky-line))] bg-[hsl(var(--switch-off))] p-1 text-muted-foreground md:grid">
           {budgetNavItems.map(({ path, icon: Icon, label }) => {
             const fullPath = `${basePath}${path}`;
             const active = location.pathname === fullPath || location.pathname === path;
@@ -167,7 +167,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
                 key={path}
                 type="button"
                 onClick={() => navigate(fullPath)}
-                className={`inline-flex items-center justify-center gap-0 sm:gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${active ? 'bg-background text-foreground' : 'hover:bg-background/50'}`}
+                className={`inline-flex items-center justify-center gap-0 sm:gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${active ? 'bg-background text-foreground' : 'text-foreground hover:bg-background/50'}`}
               >
                 <Icon className="hidden h-4 w-4 sm:inline" />
                 <span>{label}</span>
@@ -249,6 +249,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
           )}
           {isConfigRoute && (
             <ConfigurationTab
+              userId={userId}
               categories={categories}
               linkedAccounts={linkedAccounts}
               expenses={expenses}

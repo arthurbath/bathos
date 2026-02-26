@@ -3,9 +3,15 @@ export const GRID_MIN_COLUMN_WIDTH = 60;
 // Convention: every DataGrid includes a trailing "actions" column, even when it renders empty.
 // This preserves a consistent last cell and stable resize behavior across all grids.
 export const GRID_ACTIONS_COLUMN_ID = 'actions';
-export const GRID_ACTIONS_COLUMN_WIDTH = 38;
+export const GRID_ACTIONS_COLUMN_WIDTH = GRID_MIN_COLUMN_WIDTH;
 
-export type GridKey = 'expenses' | 'incomes' | 'summary';
+export type GridKey =
+  | 'expenses'
+  | 'incomes'
+  | 'summary'
+  | 'config_categories'
+  | 'config_payment_methods'
+  | 'config_backups';
 export type ColumnWidthMap = Record<string, number>;
 
 export const EXPENSES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
@@ -45,10 +51,34 @@ export const SUMMARY_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
   [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
 };
 
+export const CONFIG_CATEGORIES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
+  color: GRID_MIN_COLUMN_WIDTH,
+  name: 300,
+  expenses: 110,
+  [GRID_ACTIONS_COLUMN_ID]: GRID_MIN_COLUMN_WIDTH,
+};
+
+export const CONFIG_PAYMENT_METHODS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
+  color: GRID_MIN_COLUMN_WIDTH,
+  name: 300,
+  owner: 130,
+  expenses: 110,
+  [GRID_ACTIONS_COLUMN_ID]: GRID_MIN_COLUMN_WIDTH,
+};
+
+export const CONFIG_BACKUPS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
+  timestamp: 240,
+  notes: 420,
+  [GRID_ACTIONS_COLUMN_ID]: GRID_MIN_COLUMN_WIDTH,
+};
+
 export const GRID_FIXED_COLUMNS: Record<GridKey, string[]> = {
   expenses: [GRID_ACTIONS_COLUMN_ID],
   incomes: [GRID_ACTIONS_COLUMN_ID],
   summary: [GRID_ACTIONS_COLUMN_ID],
+  config_categories: [GRID_ACTIONS_COLUMN_ID],
+  config_payment_methods: [GRID_ACTIONS_COLUMN_ID],
+  config_backups: [GRID_ACTIONS_COLUMN_ID],
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -57,7 +87,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function normalizeFixedColumnWidth(value: number): number {
   if (!Number.isFinite(value)) return GRID_MIN_COLUMN_WIDTH;
-  return Math.max(1, Math.round(value));
+  return Math.max(GRID_MIN_COLUMN_WIDTH, Math.round(value));
 }
 
 export function snapColumnWidth(value: number): number {

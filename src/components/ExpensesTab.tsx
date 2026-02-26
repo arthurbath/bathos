@@ -23,7 +23,7 @@ import { DataGridAddFormAffixInput } from '@/components/ui/data-grid-add-form-af
 import { Plus, Trash2, MoreHorizontal, Filter, FilterX } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels, needsParam } from '@/lib/frequency';
-import { DataGrid, GridEditableCell, GridCurrencyCell, GridPercentCell, useDataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
+import { DataGrid, GridEditableCell, GridCurrencyCell, GridPercentCell, gridMenuTriggerProps, gridNavProps, useDataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import { EXPENSES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH } from '@/lib/gridColumnWidths';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -69,6 +69,7 @@ type NewExpenseDraft = Omit<Expense, 'id' | 'household_id'>;
 
 const columnHelper = createColumnHelper<ComputedRow>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
+const EXPENSE_ACTIONS_NAV_COL = 12;
 
 function DropdownOptionColorSwatch({ color }: { color?: string | null }) {
   const normalizedColor = normalizePaletteColor(color);
@@ -281,6 +282,7 @@ function EstimateCell({ checked, onToggle, disabled = false }: { checked: boolea
 }
 
 function ExpenseActionsCell({ name, onRemove, disabled = false }: { name: string; onRemove: () => void; disabled?: boolean }) {
+  const ctx = useDataGrid();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
@@ -290,9 +292,11 @@ function ExpenseActionsCell({ name, onRemove, disabled = false }: { name: string
           <Button
             variant="outline"
             size="icon"
+            type="button"
             disabled={disabled}
-            className="float-right mr-[5px] h-7 w-7"
+            className={`float-right mr-[5px] h-7 w-7 ${GRID_CONTROL_FOCUS_CLASS}`}
             aria-label={`Actions for ${name}`}
+            {...gridMenuTriggerProps(ctx, EXPENSE_ACTIONS_NAV_COL)}
           >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
@@ -824,6 +828,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
   const table = useReactTable({
     data: computedData,
     columns,
+    defaultColumn: { minSize: GRID_MIN_COLUMN_WIDTH },
     state: { sorting, columnSizing, columnSizingInfo },
     enableColumnResizing: true,
     onSortingChange: setSorting,

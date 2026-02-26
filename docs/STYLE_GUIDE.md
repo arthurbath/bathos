@@ -60,6 +60,24 @@ Use lowercase for these words when they appear in the middle of a label:
 - Max content width: `max-w-5xl` for data views, `max-w-lg` for forms
 - Cards use standard `Card` component with minimal padding
 
+## Data Grid Card Convention
+
+- When a `DataGrid` is rendered inside a `Card`, the grid must span the full card width.
+- Use `CardContent` with horizontal padding removed (`px-0`) for the grid section.
+- If the card also includes non-grid controls above/below the grid, wrap those controls in an inner padded container (`px-6`) so control spacing remains consistent while the grid stays edge-to-edge.
+- Default behavior conventions for all new `DataGrid` instances:
+  - Column headers are sortable for data columns (except the trailing actions column).
+  - Column headers are resizable for all non-fixed data columns (including utility columns such as color swatches).
+  - Minimum width for all columns is `60px`.
+  - Use a trailing `actions` column with an ellipsis trigger (`MoreHorizontal`) and row actions in a dropdown menu.
+  - Actions triggers participate in grid keyboard navigation: arrow/tab can focus the ellipsis button, Space/Enter opens its menu, and menu items remain keyboard-focusable/selectable via standard dropdown keyboard behavior.
+  - The trailing `actions` column uses the shared fixed width (`60px`) and the same right-edge button spacing used on Expenses/Incomes (`mr-[5px]` on the icon button).
+  - If the grid is narrower than its container, assign all leftover width to the trailing `actions` column (do not distribute it across data columns).
+  - Fields that support inline editing (for example Name) should be click-to-edit directly in-cell, rather than routed through an actions-menu rename flow.
+  - Color swatch controls are treated as inputs: `h-7`, no extra margin, gray input border (`--grid-sticky-line`), standard input focus ring, keyboard/grid navigation focuses the swatch input without auto-opening the menu, and Space/Enter opens the swatch menu with focus landing on the selected swatch (or first swatch when none is selected).
+  - New rows in a data-grid card are created from a `+` button in the card header that opens a modal form; do not use inline add rows above the grid.
+  - Use column meta flags consistently: `containsEditableInput` for inline form controls, `containsButton` for button/menu cells, so shared grid padding and row-height rules are applied correctly.
+
 ## Form Modal Interaction
 
 All form-style modals (Add/Edit dialogs) must follow one keyboard interaction model:
