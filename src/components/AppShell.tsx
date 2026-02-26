@@ -171,7 +171,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
   };
 
   return (
-    <div className={`bg-background ${isFullViewGridRoute ? 'h-dvh overflow-y-hidden overflow-x-visible flex flex-col' : 'min-h-screen'}`}>
+    <div className={`relative isolate bg-background ${isFullViewGridRoute ? 'h-dvh overflow-y-hidden overflow-x-visible flex flex-col' : 'min-h-screen'}`}>
       <ToplineHeader title="Budget" userId={userId} displayName={household.displayName} onSignOut={onSignOut} showAppSwitcher={showAppSwitcher} />
 
       <div className="mx-auto hidden w-full max-w-5xl px-4 pt-6 md:block">

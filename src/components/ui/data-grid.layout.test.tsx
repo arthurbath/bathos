@@ -83,6 +83,84 @@ function GridLayoutHarness({
   );
 }
 
+function BackupResizeHarness() {
+  const rows = React.useMemo<RowData[]>(
+    () => [
+      { id: "row-a", name: "2026-01-01", amount: 1 },
+    ],
+    [],
+  );
+  const [columnSizing, setColumnSizing] = React.useState({
+    timestamp: 240,
+    notes: 420,
+    actions: GRID_ACTIONS_COLUMN_WIDTH,
+  });
+  const [columnSizingInfo, setColumnSizingInfo] = React.useState({
+    startOffset: null,
+    startSize: null,
+    deltaOffset: null,
+    deltaPercentage: null,
+    isResizingColumn: false,
+    columnSizingStart: [],
+  });
+
+  const backupColumns = React.useMemo(
+    () => [
+      columnHelper.accessor("name", {
+        id: "timestamp",
+        header: "Timestamp",
+        size: 240,
+        cell: ({ getValue }) => getValue(),
+      }),
+      columnHelper.accessor("amount", {
+        id: "notes",
+        header: "Notes",
+        size: 420,
+        cell: () => "Example note",
+      }),
+      columnHelper.display({
+        id: "actions",
+        header: "",
+        enableSorting: false,
+        enableResizing: false,
+        size: GRID_ACTIONS_COLUMN_WIDTH,
+        minSize: GRID_ACTIONS_COLUMN_WIDTH,
+        maxSize: GRID_ACTIONS_COLUMN_WIDTH,
+        meta: { containsButton: true },
+        cell: () => <button type="button" aria-label="Row actions">...</button>,
+      }),
+    ],
+    [],
+  );
+
+  const table = useReactTable({
+    data: rows,
+    columns: backupColumns,
+    state: { columnSizing, columnSizingInfo },
+    onColumnSizingChange: setColumnSizing,
+    onColumnSizingInfoChange: setColumnSizingInfo,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return (
+    <div>
+      <button
+        type="button"
+        data-testid="grow-notes"
+        onClick={() => {
+          setColumnSizing((current) => ({
+            ...current,
+            notes: current.notes + 120,
+          }));
+        }}
+      >
+        grow
+      </button>
+      <DataGrid table={table} stickyFirstColumn={false} />
+    </div>
+  );
+}
+
 function mount(ui: React.ReactElement) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -219,6 +297,43 @@ describe("DataGrid layout affordances", () => {
       expect(nameHeaderCell.style.width).toBe("220px");
       expect(amountHeaderCell.style.width).toBe("140px");
       expect(actionsHeaderCell.style.width).toBe("460px");
+    } finally {
+      unmount(root, container);
+      if (originalClientWidth) {
+        Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
+      }
+    }
+  });
+
+  it("shrinks actions trailing fill when a preceding backups column grows", () => {
+    const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return 1000;
+      },
+    });
+
+    const { container, root } = mount(<BackupResizeHarness />);
+    try {
+      const notesHeaderCellBefore = container.querySelector("thead th:nth-child(2)") as HTMLElement;
+      const actionsHeaderCellBefore = container.querySelector("thead th:nth-child(3)") as HTMLElement;
+
+      expect(notesHeaderCellBefore.style.width).toBe("420px");
+      expect(actionsHeaderCellBefore.style.width).toBe("340px");
+
+      const growButton = container.querySelector("[data-testid='grow-notes']") as HTMLButtonElement;
+      act(() => {
+        growButton.click();
+      });
+
+      const notesHeaderCellAfter = container.querySelector("thead th:nth-child(2)") as HTMLElement;
+      const actionsHeaderCellAfter = container.querySelector("thead th:nth-child(3)") as HTMLElement;
+
+      expect(notesHeaderCellAfter.style.width).toBe("540px");
+      expect(actionsHeaderCellAfter.style.width).toBe("220px");
     } finally {
       unmount(root, container);
       if (originalClientWidth) {

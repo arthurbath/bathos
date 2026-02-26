@@ -43,8 +43,8 @@ const GRID_HEADER_CELL_BORDERS_CLASS = '[&>tr>th]:shadow-[inset_0_-1px_0_0_hsl(v
 const GRID_FOOTER_CELL_BORDERS_CLASS = '[&>tr>td]:shadow-[inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
 const GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS = 'shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line))]';
 const GRID_STICKY_LAST_COLUMN_DIVIDER_CLASS = 'shadow-[inset_1px_0_0_0_hsl(var(--grid-sticky-line))]';
-const GRID_FOOTER_FIRST_COLUMN_STICKY_CLASS = '[&>tr>td:first-child]:sticky [&>tr>td:first-child]:left-0 [&>tr>td:first-child]:z-30 [&>tr>td:first-child]:shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
-const GRID_FOOTER_LAST_COLUMN_STICKY_CLASS = '[&>tr>td:last-child]:sticky [&>tr>td:last-child]:right-0 [&>tr>td:last-child]:z-30 [&>tr>td:last-child]:shadow-[inset_1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
+const GRID_FOOTER_FIRST_COLUMN_STICKY_CLASS = '[&>tr>td:first-child]:sticky [&>tr>td:first-child]:left-0 [&>tr>td:first-child]:z-20 [&>tr>td:first-child]:shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
+const GRID_FOOTER_LAST_COLUMN_STICKY_CLASS = '[&>tr>td:last-child]:sticky [&>tr>td:last-child]:right-0 [&>tr>td:last-child]:z-20 [&>tr>td:last-child]:shadow-[inset_1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
 const GRID_TRAILING_SPACER_COLUMN_WIDTH = 40;
 const PENDING_COMMIT_FOCUS_MAX_ATTEMPTS = 1000;
 
@@ -376,6 +376,7 @@ export function DataGrid<TData>({
   const hasActionsColumn = actionsColumn != null;
   const hasRowLevelActions = Boolean(actionsColumn?.columnDef.meta?.containsButton);
   const showActionsColumn = hasActionsColumn && hasRowLevelActions;
+  const columnSizingState = table.getState().columnSizing;
   const showTrailingSpacerColumn = hasActionsColumn && !showActionsColumn;
   const renderableLeafColumns = React.useMemo(
     () => (showActionsColumn
@@ -393,7 +394,7 @@ export function DataGrid<TData>({
   }, [hasActionsColumn, renderableLeafColumns, showActionsColumn]);
   const contentColumnWidth = React.useMemo(
     () => renderableLeafColumns.reduce((sum, column) => sum + column.getSize(), 0),
-    [renderableLeafColumns],
+    [renderableLeafColumns, columnSizingState],
   );
   const totalColumnWidth = contentColumnWidth + (showTrailingSpacerColumn ? GRID_TRAILING_SPACER_COLUMN_WIDTH : 0);
   const isResizingColumn = Boolean(table.getState().columnSizingInfo?.isResizingColumn);
@@ -661,7 +662,7 @@ export function DataGrid<TData>({
     >
       <table className="min-w-full table-fixed caption-bottom text-xs" style={{ width: `${tableWidth}px` }}>
         <thead className={cn(
-          `z-30 ${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} shadow-[0_1px_0_0_hsl(var(--border))] [&_tr]:border-b-0`,
+          `z-20 ${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} shadow-[0_1px_0_0_hsl(var(--border))] [&_tr]:border-b-0`,
           GRID_HEADER_CELL_BORDERS_CLASS,
           fullView && 'sticky top-0',
         )}>
@@ -692,8 +693,8 @@ export function DataGrid<TData>({
                       canSort && 'cursor-pointer select-none',
                       canSort && !isResizingColumn && 'hover:bg-muted',
                       colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
-                      colIdx === 0 && stickyFirstColumn && `sticky left-0 z-40 ${GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS}`,
-                      isStickyActionsColumn && `${GRID_HEADER_TONE_CLASS} sticky right-0 z-40`,
+                      colIdx === 0 && stickyFirstColumn && `sticky left-0 z-20 ${GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS}`,
+                      isStickyActionsColumn && `${GRID_HEADER_TONE_CLASS} sticky right-0 z-20`,
                       meta?.headerClassName,
                     )}
                     onClick={(event) => {
@@ -805,7 +806,7 @@ export function DataGrid<TData>({
             stickyFirstColumn && GRID_FOOTER_FIRST_COLUMN_STICKY_CLASS,
             showActionsColumn && GRID_FOOTER_LAST_COLUMN_STICKY_CLASS,
             showTrailingSpacerColumn && '[&>tr>td:last-child]:w-[40px] [&>tr>td:last-child]:min-w-[40px] [&>tr>td:last-child]:max-w-[40px] [&>tr>td:last-child]:px-0',
-            fullView && 'sticky bottom-0 z-30',
+            fullView && 'sticky bottom-0 z-20',
           )}>
             {footer}
           </tfoot>
