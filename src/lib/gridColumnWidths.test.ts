@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeColumnWidths, snapColumnWidth } from '@/lib/gridColumnWidths';
+import { GRID_ACTIONS_COLUMN_WIDTH, sanitizeColumnWidths, snapColumnWidth } from '@/lib/gridColumnWidths';
 
 describe('gridColumnWidths', () => {
   it('snaps widths to 20px increments with a 60px minimum', () => {
@@ -14,7 +14,7 @@ describe('gridColumnWidths', () => {
     const defaults = {
       name: 240,
       amount: 120,
-      actions: 60,
+      actions: GRID_ACTIONS_COLUMN_WIDTH,
     };
 
     const sanitized = sanitizeColumnWidths(
@@ -31,7 +31,7 @@ describe('gridColumnWidths', () => {
     expect(sanitized).toEqual({
       name: 260,
       amount: 60,
-      actions: 60,
+      actions: GRID_ACTIONS_COLUMN_WIDTH,
     });
   });
 });

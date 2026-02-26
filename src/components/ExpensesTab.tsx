@@ -886,13 +886,15 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         key={`gh-${key}`}
         className={`${groupRowBgClass} ${groupRowTextClass} border-b-0 ${fullView ? 'sticky top-[36px] z-30' : ''}`}
       >
-        <td className={`${groupRowCellClass} ${groupRowTextCellClass} px-2 sticky left-0 z-30 shadow-[inset_0_1px_0_0_hsl(var(--category-group-row-bg)),inset_0_-1px_0_0_hsl(var(--category-group-row-bg)),inset_-1px_0_0_0_hsl(var(--grid-sticky-line))]`}>{getGroupLabel(key)}</td>
+        <td className={`${groupRowCellClass} ${groupRowTextCellClass} px-2 sticky left-0 z-30 relative shadow-[inset_0_1px_0_0_hsl(var(--category-group-row-bg)),inset_0_-1px_0_0_hsl(var(--category-group-row-bg))] after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-[hsl(var(--grid-sticky-line))]`}>{getGroupLabel(key)}</td>
         <td colSpan={4} className={groupRowCellClass} />
         <td className={`${groupRowCellClass} ${groupRowTextCellClass} text-right tabular-nums px-2`}>${Math.round(gMonthly)}</td>
         <td colSpan={4} className={groupRowCellClass} />
         <td className={`${groupRowCellClass} ${groupRowTextCellClass} text-right tabular-nums px-2`}>${Math.round(gFairX)}</td>
         <td className={`${groupRowCellClass} ${groupRowTextCellClass} text-right tabular-nums px-2`}>${Math.round(gFairY)}</td>
-        <td className={groupRowCellClass} />
+        <td
+          className={`${groupRowCellClass} sticky right-0 z-30 relative after:pointer-events-none after:absolute after:inset-y-0 after:left-0 after:w-px after:bg-[hsl(var(--grid-sticky-line))]`}
+        />
       </tr>
     );
   };

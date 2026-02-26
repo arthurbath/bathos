@@ -42,7 +42,9 @@ export const GRID_CONTROL_HOVER_BORDER_CLASS = 'border-transparent hover:border-
 const GRID_HEADER_CELL_BORDERS_CLASS = '[&>tr>th]:shadow-[inset_0_-1px_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line))]';
 const GRID_FOOTER_CELL_BORDERS_CLASS = '[&>tr>td]:shadow-[inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
 const GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS = 'shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line))]';
+const GRID_STICKY_LAST_COLUMN_DIVIDER_CLASS = 'shadow-[inset_1px_0_0_0_hsl(var(--grid-sticky-line))]';
 const GRID_FOOTER_FIRST_COLUMN_STICKY_CLASS = '[&>tr>td:first-child]:sticky [&>tr>td:first-child]:left-0 [&>tr>td:first-child]:z-30 [&>tr>td:first-child]:shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
+const GRID_FOOTER_LAST_COLUMN_STICKY_CLASS = '[&>tr>td:last-child]:sticky [&>tr>td:last-child]:right-0 [&>tr>td:last-child]:z-30 [&>tr>td:last-child]:shadow-[inset_1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]';
 const PENDING_COMMIT_FOCUS_MAX_ATTEMPTS = 1000;
 
 function scheduleInNextFrame(callback: () => void) {
@@ -366,11 +368,14 @@ export function DataGrid<TData>({
   const rows = table.getRowModel().rows;
   const coreRows = table.getCoreRowModel().rows;
   const visibleLeafColumns = table.getVisibleLeafColumns();
+  const hasActionsColumn = React.useMemo(
+    () => visibleLeafColumns.some((column) => column.id === GRID_ACTIONS_COLUMN_ID),
+    [visibleLeafColumns],
+  );
   const trailingFillColumnId = React.useMemo(() => {
-    const actionsColumn = visibleLeafColumns.find((column) => column.id === GRID_ACTIONS_COLUMN_ID);
-    if (actionsColumn) return actionsColumn.id;
+    if (hasActionsColumn) return GRID_ACTIONS_COLUMN_ID;
     return visibleLeafColumns.length > 0 ? visibleLeafColumns[visibleLeafColumns.length - 1]?.id ?? null : null;
-  }, [visibleLeafColumns]);
+  }, [hasActionsColumn, visibleLeafColumns]);
   const totalColumnWidth = table.getTotalSize();
   const isResizingColumn = Boolean(table.getState().columnSizingInfo?.isResizingColumn);
   const trailingExtraWidth = trailingFillColumnId
@@ -378,6 +383,12 @@ export function DataGrid<TData>({
     : 0;
   const tableWidth = totalColumnWidth + trailingExtraWidth;
   const hasFooter = Boolean(footer);
+  const bodyClassName = hasFooter
+    ? '[&_tr:last-child]:border-0'
+    : cn(
+        '[&_tr:last-child]:border-0 [&>tr:last-child>td]:shadow-[inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]',
+        hasActionsColumn && '[&>tr:last-child>td:last-child]:shadow-[inset_1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]',
+      );
   const sortableColumns = React.useMemo(
     () => visibleLeafColumns.filter((column) => column.getCanSort()),
     [visibleLeafColumns],
@@ -559,13 +570,14 @@ export function DataGrid<TData>({
       <tr
         key={row.id}
         className={cn(
-          'border-b transition-colors hover:bg-muted/50',
+          'group border-b bg-background transition-colors hover:bg-muted',
           highlightedRowId === row.id && 'data-grid-row-resorted',
         )}
       >
         {row.getVisibleCells().map((cell, colIdx) => {
           const meta = cell.column.columnDef.meta;
           const isActionsColumn = cell.column.id === GRID_ACTIONS_COLUMN_ID;
+          const isStickyActionsColumn = hasActionsColumn && isActionsColumn;
           const columnSize = cell.column.getSize();
           const fillsRemainingWidth = cell.column.id === trailingFillColumnId;
           const appliedColumnWidth = columnSize + (fillsRemainingWidth ? trailingExtraWidth : 0);
@@ -587,6 +599,8 @@ export function DataGrid<TData>({
                 colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
                 colIdx === 0 && stickyFirstColumn && 'sticky left-0 z-20',
                 colIdx === 0 && stickyFirstColumn && GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS,
+                isStickyActionsColumn && 'sticky right-0 z-20 bg-inherit',
+                isStickyActionsColumn && GRID_STICKY_LAST_COLUMN_DIVIDER_CLASS,
                 meta?.cellClassName,
               )}
               style={{
@@ -622,6 +636,7 @@ export function DataGrid<TData>({
               {hg.headers.map((header, colIdx) => {
                 const meta = header.column.columnDef.meta;
                 const isActionsColumn = header.column.id === GRID_ACTIONS_COLUMN_ID;
+                const isStickyActionsColumn = hasActionsColumn && isActionsColumn;
                 const sortState = header.column.getIsSorted();
                 const isAlphabeticalColumn = alphabeticalColumnIds.has(header.column.id);
                 const columnSize = header.getSize();
@@ -640,6 +655,7 @@ export function DataGrid<TData>({
                       canSort && !isResizingColumn && 'hover:bg-muted',
                       colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
                       colIdx === 0 && stickyFirstColumn && `sticky left-0 z-40 ${GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS}`,
+                      isStickyActionsColumn && `${GRID_HEADER_TONE_CLASS} sticky right-0 z-40 pointer-events-none`,
                       meta?.headerClassName,
                     )}
                     onClick={(event) => {
@@ -658,6 +674,13 @@ export function DataGrid<TData>({
                       maxWidth: `${appliedColumnWidth}px`,
                     }}
                   >
+                    {isStickyActionsColumn && (
+                      <span
+                        aria-hidden
+                        data-grid-sticky-right-rule="true"
+                        className="pointer-events-none absolute left-0 top-1/2 z-10 block h-6 w-px -translate-y-1/2 bg-[hsl(var(--grid-handle-line))]"
+                      />
+                    )}
                     {header.isPlaceholder ? null : (
                       <span className="inline-flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis">
                         {flexRender(header.column.columnDef.header, header.getContext())}
@@ -674,7 +697,7 @@ export function DataGrid<TData>({
                         type="button"
                         aria-label={`Resize ${header.column.id} column`}
                         className={cn(
-                          'group absolute -right-[5px] top-1/2 z-10 flex h-6 w-[10px] -translate-y-1/2 !cursor-col-resize touch-none select-none items-center justify-center',
+                          'group absolute -right-[5px] top-1/2 z-30 h-6 w-[10px] -translate-y-1/2 !cursor-col-resize touch-none select-none',
                         )}
                         onClick={(event) => {
                           event.preventDefault();
@@ -692,7 +715,8 @@ export function DataGrid<TData>({
                       >
                         <span
                           className={cn(
-                            'block h-6 w-px bg-[hsl(var(--grid-handle-line))] group-hover:bg-foreground',
+                            'pointer-events-none absolute inset-y-0 w-px bg-[hsl(var(--grid-handle-line))] group-hover:bg-foreground',
+                            'right-[4px]',
                             isResizing && 'bg-foreground',
                           )}
                         />
@@ -704,11 +728,7 @@ export function DataGrid<TData>({
             </tr>
           ))}
         </thead>
-        <tbody className={cn(
-          hasFooter
-            ? '[&_tr:last-child]:border-0'
-            : '[&_tr:last-child]:border-0 [&>tr:last-child>td]:shadow-[inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]',
-        )}>
+        <tbody className={bodyClassName}>
           {rows.length === 0 ? (
             <tr className="border-b">
               <td colSpan={table.getAllColumns().length} className={cn('px-1 py-8 text-center', GRID_READONLY_TEXT_CLASS)}>
@@ -733,6 +753,7 @@ export function DataGrid<TData>({
           <tfoot className={cn(
             `${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS} font-medium ${GRID_FOOTER_CELL_BORDERS_CLASS}`,
             stickyFirstColumn && GRID_FOOTER_FIRST_COLUMN_STICKY_CLASS,
+            hasActionsColumn && GRID_FOOTER_LAST_COLUMN_STICKY_CLASS,
             fullView && 'sticky bottom-0 z-30',
           )}>
             {footer}
