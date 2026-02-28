@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { LucideIcon } from 'lucide-react';
+import { shouldHandleWithBrowser } from '@/lib/navigation';
 
 interface MobileBottomNavItem {
   path: string;
@@ -12,9 +13,10 @@ interface MobileBottomNavProps {
   items: readonly MobileBottomNavItem[];
   isActive: (path: string) => boolean;
   onNavigate: (path: string) => void;
+  hrefForPath?: (path: string) => string;
 }
 
-export function MobileBottomNav({ items, isActive, onNavigate }: MobileBottomNavProps) {
+export function MobileBottomNav({ items, isActive, onNavigate, hrefForPath = (path) => path }: MobileBottomNavProps) {
   const [mounted, setMounted] = useState(false);
   const [viewportStyle, setViewportStyle] = useState<{ left: number; width: number; zoom: number } | null>(null);
   const baseDprRef = useRef(1);
@@ -74,19 +76,24 @@ export function MobileBottomNav({ items, isActive, onNavigate }: MobileBottomNav
       >
         {items.map(({ path, label, icon: Icon }) => {
           const active = isActive(path);
+          const href = hrefForPath(path);
 
           return (
-            <button
+            <a
               key={path}
-              type="button"
+              href={href}
               aria-label={label}
               aria-current={active ? 'page' : undefined}
-              onClick={() => onNavigate(path)}
+              onClick={(event) => {
+                if (shouldHandleWithBrowser(event)) return;
+                event.preventDefault();
+                onNavigate(path);
+              }}
               className={`inline-flex min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 py-1.5 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-primary/20 hover:text-foreground'}`}
             >
               <Icon className="h-4 w-4" />
               <span className="truncate">{label}</span>
-            </button>
+            </a>
           );
         })}
       </nav>

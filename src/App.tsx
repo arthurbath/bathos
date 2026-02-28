@@ -17,6 +17,7 @@ import AuthCallbackToasts from "@/platform/components/AuthCallbackToasts";
 import { isLikelyNetworkError } from "@/lib/networkErrors";
 import Index from "./pages/Index";
 import DrawersIndex from "@/modules/drawers/DrawersIndex";
+import GarageIndex from "@/modules/garage/GarageIndex";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -75,6 +76,13 @@ function AppRoutes() {
       <Route path="/drawers" element={<Navigate to="/drawers/plan" replace />} />
       <Route path="/drawers/plan" element={<DrawersIndex />} />
       <Route path="/drawers/config" element={<DrawersIndex />} />
+
+      {/* Garage module */}
+      <Route path="/garage" element={<Navigate to="/garage/due" replace />} />
+      <Route path="/garage/due" element={<GarageIndex />} />
+      <Route path="/garage/services" element={<GarageIndex />} />
+      <Route path="/garage/servicings" element={<GarageIndex />} />
+      <Route path="/garage/config" element={<GarageIndex />} />
 
       {/* Legacy routes */}
       <Route path="/incomes" element={<Navigate to="/budget/incomes" replace />} />

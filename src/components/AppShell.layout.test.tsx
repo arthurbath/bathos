@@ -92,6 +92,9 @@ const household: HouseholdData = {
   inviteCode: null,
   partnerX: "Partner A",
   partnerY: "Partner B",
+  wageGapAdjustmentEnabled: false,
+  partnerXWageCentsPerDollar: null,
+  partnerYWageCentsPerDollar: null,
   displayName: "You",
 };
 
@@ -118,7 +121,7 @@ function renderShell(pathname: string) {
             userId="user-1"
             onSignOut={async () => {}}
             onHouseholdRefetch={() => {}}
-            onUpdatePartnerNames={async () => {}}
+            onUpdatePartnerSettings={async () => {}}
           />
         </MemoryRouter>
       </QueryClientProvider>,

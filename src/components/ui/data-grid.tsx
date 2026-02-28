@@ -416,6 +416,7 @@ export function DataGrid<TData>({
     ? '[&_tr:last-child]:border-0'
     : cn(
         '[&_tr:last-child]:border-0 [&>tr:last-child>td]:shadow-[inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]',
+        stickyFirstColumn && '[&>tr:last-child>td:first-child]:shadow-[inset_-1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]',
         showActionsColumn && '[&>tr:last-child>td:last-child]:shadow-[inset_1px_0_0_0_hsl(var(--grid-sticky-line)),inset_0_-1px_0_0_hsl(var(--grid-sticky-line))]',
       );
   const sortableColumns = React.useMemo(
@@ -744,7 +745,7 @@ export function DataGrid<TData>({
                         type="button"
                         aria-label={`Resize ${header.column.id} column`}
                         className={cn(
-                          'group absolute top-1/2 z-30 h-6 w-[10px] -translate-y-1/2 !cursor-col-resize touch-none select-none',
+                          'data-grid-resize-handle group absolute top-1/2 z-30 h-6 w-[10px] -translate-y-1/2 !cursor-col-resize touch-none select-none',
                         )}
                         style={{ right: resizeHandleRight }}
                         onClick={(event) => {

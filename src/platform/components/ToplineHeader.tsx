@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { FeedbackDialog } from '@/platform/components/FeedbackDialog';
 import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
+import { handleClientSideLinkNavigation } from '@/lib/navigation';
 
 interface ToplineHeaderProps {
   title: string;
@@ -30,20 +31,24 @@ export function ToplineHeader({
       <div className={`mx-auto flex ${maxWidthClassName} items-center justify-between px-4 py-3`}>
         <div className="flex items-center gap-2">
           {showAppSwitcher && (
-            <Button variant="ghost" size="icon" onClick={() => navigate('/')} title="All apps">
-              <span className="grid h-4 w-4 grid-cols-3 gap-[2px]" aria-hidden="true">
-                {Array.from({ length: 9 }).map((_, idx) => (
-                  <span key={idx} className="block rounded-[1px] bg-current" />
-                ))}
-              </span>
+            <Button asChild variant="ghost" size="icon" title="All apps">
+              <a href="/" onClick={(event) => handleClientSideLinkNavigation(event, navigate, '/')}>
+                <span className="grid h-4 w-4 grid-cols-3 gap-[2px]" aria-hidden="true">
+                  {Array.from({ length: 9 }).map((_, idx) => (
+                    <span key={idx} className="block rounded-[1px] bg-current" />
+                  ))}
+                </span>
+              </a>
             </Button>
           )}
           <h1 className="text-lg font-bold tracking-tight text-foreground">{title}</h1>
         </div>
         <div className="flex items-center gap-1">
           {isAdmin && (
-            <Button variant="ghost" size="icon" onClick={() => navigate('/admin')} title="Administration">
-              <Shield className="h-4 w-4" />
+            <Button asChild variant="ghost" size="icon" title="Administration">
+              <a href="/admin" onClick={(event) => handleClientSideLinkNavigation(event, navigate, '/admin')}>
+                <Shield className="h-4 w-4" />
+              </a>
             </Button>
           )}
           <FeedbackDialog userId={userId} />
@@ -55,9 +60,11 @@ export function ToplineHeader({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-popover">
-              <DropdownMenuItem onClick={() => navigate('/account')}>
-                <User className="h-4 w-4 mr-2" />
-                Profile
+              <DropdownMenuItem asChild>
+                <a href="/account" onClick={(event) => handleClientSideLinkNavigation(event, navigate, '/account')}>
+                  <User className="h-4 w-4 mr-2" />
+                  Profile
+                </a>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => { void onSignOut(); }}>
                 <LogOut className="h-4 w-4 mr-2" />

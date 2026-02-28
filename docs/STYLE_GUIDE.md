@@ -69,14 +69,43 @@ Use lowercase for these words when they appear in the middle of a label:
   - Column headers are sortable for data columns (except the trailing actions column).
   - Column headers are resizable for all non-fixed data columns (including utility columns such as color swatches).
   - Minimum width for all columns is `60px`.
+  - Column resizing must snap in `20px` increments (`GRID_RESIZE_STEP`) for every DataGrid, in cards and full-view layouts.
+  - Column width preferences must persist via the shared `useGridColumnWidths` flow:
+    - cached in `localStorage` for immediate application on load
+    - synced to `bathos_user_settings.grid_column_widths` for cross-browser persistence
   - Use a trailing `actions` column with an ellipsis trigger (`MoreHorizontal`) and row actions in a dropdown menu.
   - Actions triggers participate in grid keyboard navigation: arrow/tab can focus the ellipsis button, Space/Enter opens its menu, and menu items remain keyboard-focusable/selectable via standard dropdown keyboard behavior.
-  - The trailing `actions` column uses the shared fixed width (`60px`) and the same right-edge button spacing used on Expenses/Incomes (`mr-[5px]` on the icon button).
+  - The trailing `actions` column uses the shared fixed width (`40px`) and the same right-edge button spacing used on Expenses/Incomes (`mr-[5px]` on the icon button).
   - If the grid is narrower than its container, assign all leftover width to the trailing `actions` column (do not distribute it across data columns).
   - Fields that support inline editing (for example Name) should be click-to-edit directly in-cell, rather than routed through an actions-menu rename flow.
   - Color swatch controls are treated as inputs: `h-7`, no extra margin, gray input border (`--grid-sticky-line`), standard input focus ring, keyboard/grid navigation focuses the swatch input without auto-opening the menu, and Space/Enter opens the swatch menu with focus landing on the selected swatch (or first swatch when none is selected).
   - New rows in a data-grid card are created from a `+` button in the card header that opens a modal form; do not use inline add rows above the grid.
+  - The standard DataGrid add button style is the compact green outline icon button used by Budget Expenses/Incomes: `variant="outline-success"`, `size="sm"`, `className="h-8 w-8 p-0"`, with a `Plus` icon and an `aria-label`.
   - Use column meta flags consistently: `containsEditableInput` for inline form controls, `containsButton` for button/menu cells, so shared grid padding and row-height rules are applied correctly.
+
+## Full-View Data Grid Convention
+
+- For dense operational tables (for example Budget Expenses), use the full-view grid pattern instead of a constrained card layout.
+- Full-view pattern requirements:
+  - Route-level container uses a `flex` + `min-h-0` layout so the grid can own available vertical space.
+  - Grid card uses the full-bleed shell treatment (`w-[100vw]`, centered transform, `rounded-none`, no side borders).
+  - `CardContent` wraps the grid with `flex-1 min-h-0`.
+  - `DataGrid` is rendered with `fullView` enabled, `maxHeight="none"`, and `className="h-full min-h-0"`.
+- Use this same pattern for new module tables that are primary workflow surfaces (not just summary cards).
+
+## Data Grid Filters Convention
+
+- When a data-grid card offers filter/grouping controls, use the Budget Expenses control pattern:
+  - Primary `Filters` button: `variant="outline"`, `size="sm"`, `className="h-8 gap-1.5"`, with `Filter` icon.
+  - Conditional clear button appears only when any filter/grouping is active:
+    - `variant="outline-warning"`, `size="sm"`, `className="h-8 w-8 p-0"`, `FilterX` icon, `aria-label="Clear filters and groupings"`.
+  - Keep filter edits in draft state inside the modal and apply on `Save`; `Clear` resets active controls immediately to defaults.
+
+## Grouped Grid Row Convention
+
+- When grouping is applied to a grid, group header rows should display label and row count in the first sticky cell as:
+  - `Group Label (N)`
+- Apply this consistently across modules so grouped tables expose comparable density and scanability.
 
 ## Form Modal Interaction
 
@@ -97,6 +126,13 @@ For dotted-underline tooltip text triggers, use the persistent interaction model
 - Hover, tap, or click opens the tooltip.
 - Repeated taps/clicks on the same trigger do not dismiss it.
 - Tooltip closes only when the pointer leaves the trigger text or when the user taps/clicks elsewhere in the UI.
+
+## Link Navigation Convention
+
+- In-app navigation links must behave like normal links for modified clicks:
+  - CMD/CTRL-click and middle-click open in a new tab.
+  - Plain left click uses client-side navigation.
+- Implement navigational UI using real anchors (`<a href="...">`) and intercept only plain left clicks for SPA routing.
 
 ## Shadows and Borders
 

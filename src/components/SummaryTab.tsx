@@ -6,6 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { DataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
 import { toMonthly, frequencyLabels, needsParam, fromMonthly } from '@/lib/frequency';
+import { computeFairShares, computeIncomeNormalization } from '@/lib/fairShare';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import {
   GRID_ACTIONS_COLUMN_ID,
@@ -26,6 +27,9 @@ interface SummaryTabProps {
   linkedAccounts: LinkedAccount[];
   partnerX: string;
   partnerY: string;
+  wageGapAdjustmentEnabled?: boolean;
+  partnerXWageCentsPerDollar?: number | null;
+  partnerYWageCentsPerDollar?: number | null;
   userId?: string;
 }
 
@@ -79,7 +83,17 @@ function overUnderToneClass(value: number) {
   return GRID_READONLY_TEXT_CLASS;
 }
 
-export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partnerY, userId }: SummaryTabProps) {
+export function SummaryTab({
+  incomes,
+  expenses,
+  linkedAccounts,
+  partnerX,
+  partnerY,
+  wageGapAdjustmentEnabled = false,
+  partnerXWageCentsPerDollar = null,
+  partnerYWageCentsPerDollar = null,
+  userId,
+}: SummaryTabProps) {
   const [hideFullSplits, setHideFullSplits] = useState(false);
   const [sorting, setSorting] = useState<SortingState>(() => {
     try {
@@ -110,20 +124,26 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
     [expenses],
   );
 
-  const { incomeX, incomeY, incomeRatioX } = useMemo(() => {
+  const { incomeX, incomeY } = useMemo(() => {
     const nextIncomeX = incomes
       .filter((i) => i.partner_label === 'X')
       .reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
     const nextIncomeY = incomes
       .filter((i) => i.partner_label === 'Y')
       .reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
-    const totalIncome = nextIncomeX + nextIncomeY;
     return {
       incomeX: nextIncomeX,
       incomeY: nextIncomeY,
-      incomeRatioX: totalIncome > 0 ? nextIncomeX / totalIncome : 0.5,
     };
   }, [incomes]);
+  const incomeNormalization = useMemo(() => computeIncomeNormalization(incomeX, incomeY, {
+    enabled: wageGapAdjustmentEnabled,
+    partnerXCentsPerDollar: partnerXWageCentsPerDollar,
+    partnerYCentsPerDollar: partnerYWageCentsPerDollar,
+  }), [incomeX, incomeY, partnerXWageCentsPerDollar, partnerYWageCentsPerDollar, wageGapAdjustmentEnabled]);
+  const incomeRatioX = incomeNormalization.incomeRatioX;
+  const incomeRatioY = incomeNormalization.incomeRatioY;
+  const isWageGapApplied = incomeNormalization.isWageGapApplied;
 
   const payerByLinkedAccountId = useMemo(
     () => new Map(linkedAccounts.map((a) => [a.id, a.owner_partner])),
@@ -139,13 +159,7 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
     const nextBreakdown: BreakdownRow[] = expenses
       .map((exp) => {
         const monthly = toMonthly(exp.amount, exp.frequency_type, exp.frequency_param ?? undefined);
-        const bx = exp.benefit_x / 100;
-        const by = 1 - bx;
-        const wx = bx * incomeRatioX;
-        const wy = by * (1 - incomeRatioX);
-        const tw = wx + wy || 1;
-        const fairX = monthly * (wx / tw);
-        const fairY = monthly * (wy / tw);
+        const { fairX, fairY } = computeFairShares(monthly, exp.benefit_x, incomeRatioX);
 
         nextTotalFairX += fairX;
         nextTotalFairY += fairY;
@@ -245,14 +259,19 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
         const benefitY = 1 - benefitX;
         const isEvenBenefitSplit = Math.abs(row.original.benefitX - 50) < 0.0001;
         const incomeXRatio = incomeRatioX;
-        const incomeYRatio = 1 - incomeXRatio;
+        const incomeYRatio = incomeRatioY;
         const weightX = benefitX * incomeXRatio;
         const weightY = benefitY * incomeYRatio;
         const totalWeight = weightX + weightY || 1;
         const normalizedShareX = weightX / totalWeight;
         const value = Number(getValue());
-        const hasSingleStep = !shouldShowNormalizationStep && (isSingleBeneficiary || isEvenBenefitSplit);
+        const renderedStepCount = (shouldShowNormalizationStep ? 1 : 0)
+          + (isWageGapApplied ? 1 : 0)
+          + ((isSingleBeneficiary || isEvenBenefitSplit) ? 1 : 4);
+        const hasSingleStep = renderedStepCount === 1;
         const stepPrefix = (step: number) => (hasSingleStep ? '' : `${step}. `);
+        const baseStep = shouldShowNormalizationStep ? 2 : 1;
+        const normalizedStep = isWageGapApplied ? baseStep + 1 : baseStep;
 
         return (
           <PersistentTooltipText
@@ -265,18 +284,23 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
                 {shouldShowNormalizationStep && (
                   <div>{stepPrefix(1)}Convert the original expense to its monthly equivalent: ${originalAmount.toFixed(2)} {frequencyDescription.toLowerCase()} converts to ${monthly.toFixed(2)} per month.</div>
                 )}
+                {isWageGapApplied && (
+                  <div>
+                    {stepPrefix(baseStep)}Apply wage gap normalization to income shares: {partnerX} ${Math.round(incomeNormalization.incomeX)} × {Math.round(incomeNormalization.partnerXFactor * 100)}% = ${Math.round(incomeNormalization.adjustedIncomeX)}, {partnerY} ${Math.round(incomeNormalization.incomeY)} × {Math.round(incomeNormalization.partnerYFactor * 100)}% = ${Math.round(incomeNormalization.adjustedIncomeY)}. Adjusted income ratios are {Math.round(incomeXRatio * 100)}% / {Math.round(incomeYRatio * 100)}%.
+                  </div>
+                )}
                 {isSingleBeneficiary ? (
-                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit split is {row.original.benefitX}/
+                  <div>{stepPrefix(normalizedStep)}Benefit split is {row.original.benefitX}/
                     {100 - row.original.benefitX}, so this expense is assigned entirely to {beneficiaryLabel}. {partnerX === beneficiaryLabel ? `${partnerX} gets 100% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).` : `${partnerX} gets 0% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).`}
                   </div>
                 ) : isEvenBenefitSplit ? (
-                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit is exactly 50/50, so just multiply the monthly amount by {partnerX}&apos;s income ratio: ${monthly.toFixed(2)} × {formatPercent(incomeXRatio)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                  <div>{stepPrefix(normalizedStep)}Benefit is exactly 50/50, so just multiply the monthly amount by {partnerX}&apos;s {isWageGapApplied ? 'wage gap-adjusted income ratio' : 'income ratio'}: ${monthly.toFixed(2)} × {formatPercent(incomeXRatio)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
                 ) : (
                   <>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Calculate {partnerX}&apos;s weight by combining benefit and income share: {(benefitX * 100).toFixed(1)}% × {(incomeXRatio * 100).toFixed(1)}% = {weightX.toFixed(4)}.</div>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 3 : 2)}Calculate total weight for both partners: {weightX.toFixed(4)} + {weightY.toFixed(4)} = {totalWeight.toFixed(4)}.</div>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 4 : 3)}Convert {partnerX}&apos;s weight to a fraction of the total: {weightX.toFixed(4)} / {totalWeight.toFixed(4)} = {(normalizedShareX * 100).toFixed(2)}%.</div>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 5 : 4)}Apply that fraction to the monthly amount: ${monthly.toFixed(2)} × {(normalizedShareX * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                    <div>{stepPrefix(normalizedStep)}Calculate {partnerX}&apos;s weight by combining benefit and {isWageGapApplied ? 'wage gap-adjusted income share' : 'income share'}: {(benefitX * 100).toFixed(1)}% × {(incomeXRatio * 100).toFixed(1)}% = {weightX.toFixed(4)}.</div>
+                    <div>{stepPrefix(normalizedStep + 1)}Calculate total weight for both partners: {weightX.toFixed(4)} + {weightY.toFixed(4)} = {totalWeight.toFixed(4)}.</div>
+                    <div>{stepPrefix(normalizedStep + 2)}Convert {partnerX}&apos;s weight to a fraction of the total: {weightX.toFixed(4)} / {totalWeight.toFixed(4)} = {(normalizedShareX * 100).toFixed(2)}%.</div>
+                    <div>{stepPrefix(normalizedStep + 3)}Apply that fraction to the monthly amount: ${monthly.toFixed(2)} × {(normalizedShareX * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
                   </>
                 )}
               </div>
@@ -306,14 +330,19 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
         const benefitY = 1 - benefitX;
         const isEvenBenefitSplit = Math.abs(row.original.benefitX - 50) < 0.0001;
         const incomeXRatio = incomeRatioX;
-        const incomeYRatio = 1 - incomeXRatio;
+        const incomeYRatio = incomeRatioY;
         const weightX = benefitX * incomeXRatio;
         const weightY = benefitY * incomeYRatio;
         const totalWeight = weightX + weightY || 1;
         const normalizedShareY = weightY / totalWeight;
         const value = Number(getValue());
-        const hasSingleStep = !shouldShowNormalizationStep && (isSingleBeneficiary || isEvenBenefitSplit);
+        const renderedStepCount = (shouldShowNormalizationStep ? 1 : 0)
+          + (isWageGapApplied ? 1 : 0)
+          + ((isSingleBeneficiary || isEvenBenefitSplit) ? 1 : 4);
+        const hasSingleStep = renderedStepCount === 1;
         const stepPrefix = (step: number) => (hasSingleStep ? '' : `${step}. `);
+        const baseStep = shouldShowNormalizationStep ? 2 : 1;
+        const normalizedStep = isWageGapApplied ? baseStep + 1 : baseStep;
 
         return (
           <PersistentTooltipText
@@ -326,18 +355,23 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
                 {shouldShowNormalizationStep && (
                   <div>{stepPrefix(1)}Convert the original expense to its monthly equivalent: ${originalAmount.toFixed(2)} {frequencyDescription.toLowerCase()} converts to ${monthly.toFixed(2)} per month.</div>
                 )}
+                {isWageGapApplied && (
+                  <div>
+                    {stepPrefix(baseStep)}Apply wage gap normalization to income shares: {partnerX} ${Math.round(incomeNormalization.incomeX)} × {Math.round(incomeNormalization.partnerXFactor * 100)}% = ${Math.round(incomeNormalization.adjustedIncomeX)}, {partnerY} ${Math.round(incomeNormalization.incomeY)} × {Math.round(incomeNormalization.partnerYFactor * 100)}% = ${Math.round(incomeNormalization.adjustedIncomeY)}. Adjusted income ratios are {Math.round(incomeXRatio * 100)}% / {Math.round(incomeYRatio * 100)}%.
+                  </div>
+                )}
                 {isSingleBeneficiary ? (
-                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit split is {row.original.benefitX}/
+                  <div>{stepPrefix(normalizedStep)}Benefit split is {row.original.benefitX}/
                     {100 - row.original.benefitX}, so this expense is assigned entirely to {beneficiaryLabel}. {partnerY === beneficiaryLabel ? `${partnerY} gets 100% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).` : `${partnerY} gets 0% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).`}
                   </div>
                 ) : isEvenBenefitSplit ? (
-                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit is exactly 50/50, so just multiply the monthly amount by {partnerY}&apos;s income ratio: ${monthly.toFixed(2)} × {formatPercent(incomeYRatio)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                  <div>{stepPrefix(normalizedStep)}Benefit is exactly 50/50, so just multiply the monthly amount by {partnerY}&apos;s {isWageGapApplied ? 'wage gap-adjusted income ratio' : 'income ratio'}: ${monthly.toFixed(2)} × {formatPercent(incomeYRatio)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
                 ) : (
                   <>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Calculate {partnerY}&apos;s weight by combining benefit and income share: {(benefitY * 100).toFixed(1)}% × {(incomeYRatio * 100).toFixed(1)}% = {weightY.toFixed(4)}.</div>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 3 : 2)}Calculate total weight for both partners: {weightX.toFixed(4)} + {weightY.toFixed(4)} = {totalWeight.toFixed(4)}.</div>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 4 : 3)}Convert {partnerY}&apos;s weight to a fraction of the total: {weightY.toFixed(4)} / {totalWeight.toFixed(4)} = {(normalizedShareY * 100).toFixed(2)}%.</div>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 5 : 4)}Apply that fraction to the monthly amount: ${monthly.toFixed(2)} × {(normalizedShareY * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                    <div>{stepPrefix(normalizedStep)}Calculate {partnerY}&apos;s weight by combining benefit and {isWageGapApplied ? 'wage gap-adjusted income share' : 'income share'}: {(benefitY * 100).toFixed(1)}% × {(incomeYRatio * 100).toFixed(1)}% = {weightY.toFixed(4)}.</div>
+                    <div>{stepPrefix(normalizedStep + 1)}Calculate total weight for both partners: {weightX.toFixed(4)} + {weightY.toFixed(4)} = {totalWeight.toFixed(4)}.</div>
+                    <div>{stepPrefix(normalizedStep + 2)}Convert {partnerY}&apos;s weight to a fraction of the total: {weightY.toFixed(4)} / {totalWeight.toFixed(4)} = {(normalizedShareY * 100).toFixed(2)}%.</div>
+                    <div>{stepPrefix(normalizedStep + 3)}Apply that fraction to the monthly amount: ${monthly.toFixed(2)} × {(normalizedShareY * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
                   </>
                 )}
               </div>
@@ -390,7 +424,7 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
       meta: { headerClassName: 'px-0', cellClassName: 'px-0' },
       cell: () => null,
     }),
-  ], [incomeRatioX, partnerX, partnerY]);
+  ], [incomeNormalization, incomeRatioX, incomeRatioY, isWageGapApplied, partnerX, partnerY]);
 
   const breakdownTable = useReactTable({
     data: filteredBreakdown,
@@ -441,9 +475,22 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
                   <td className="h-9 px-2 text-right tabular-nums">{$(paidByY)}</td>
                 </tr>
                 <tr className="border-b">
-                  <th className="h-9 px-2 text-left font-medium">Income Ratio</th>
+                  <th className="h-9 px-2 text-left font-medium">
+                    {wageGapAdjustmentEnabled ? (
+                      <PersistentTooltipText
+                        align="start"
+                        side="top"
+                        contentClassName="text-xs"
+                        content="Income ratios are normalized by wage gaps."
+                      >
+                        Income Ratio
+                      </PersistentTooltipText>
+                    ) : (
+                      'Income Ratio'
+                    )}
+                  </th>
                   <td className="h-9 px-2 text-right tabular-nums">{formatPercent(incomeRatioX)}</td>
-                  <td className="h-9 px-2 text-right tabular-nums">{formatPercent(1 - incomeRatioX)}</td>
+                  <td className="h-9 px-2 text-right tabular-nums">{formatPercent(incomeRatioY)}</td>
                 </tr>
                 <tr className="border-b">
                   <th className="h-9 px-2 text-left font-medium">
@@ -451,7 +498,9 @@ export function SummaryTab({ incomes, expenses, linkedAccounts, partnerX, partne
                       align="start"
                       side="top"
                       contentClassName="text-xs"
-                      content="Fair Share is totaled from each expense using both benefit split and income ratio."
+                      content={wageGapAdjustmentEnabled
+                        ? 'Fair Share is calculated by normalizing all expenses to their monthly values, then splitting them between the partners based on their benefit ratios and wage gap-normalized income ratios.'
+                        : 'Fair Share is calculated by normalizing all expenses to their monthly values, then splitting them between the partners based on their benefit ratios and income ratios.'}
                     >
                       Fair Share
                     </PersistentTooltipText>

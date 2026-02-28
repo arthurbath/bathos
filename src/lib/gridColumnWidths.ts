@@ -11,7 +11,9 @@ export type GridKey =
   | 'summary'
   | 'config_categories'
   | 'config_payment_methods'
-  | 'config_backups';
+  | 'config_backups'
+  | 'garage_services'
+  | 'garage_servicings';
 export type ColumnWidthMap = Record<string, number>;
 
 export const EXPENSES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
@@ -72,6 +74,27 @@ export const CONFIG_BACKUPS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
   [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
 };
 
+export const GARAGE_SERVICES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
+  name: 220,
+  type: 160,
+  every_miles: 120,
+  every_months: 140,
+  last_performed: 200,
+  monitoring: 120,
+  notes: 220,
+  [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
+};
+
+export const GARAGE_SERVICINGS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
+  service_date: 120,
+  odometer_miles: 120,
+  shop_name: 180,
+  outcomes: 140,
+  receipts: 100,
+  notes: 220,
+  [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
+};
+
 export const GRID_FIXED_COLUMNS: Record<GridKey, string[]> = {
   expenses: [GRID_ACTIONS_COLUMN_ID],
   incomes: [GRID_ACTIONS_COLUMN_ID],
@@ -79,6 +102,8 @@ export const GRID_FIXED_COLUMNS: Record<GridKey, string[]> = {
   config_categories: [GRID_ACTIONS_COLUMN_ID],
   config_payment_methods: [GRID_ACTIONS_COLUMN_ID],
   config_backups: [GRID_ACTIONS_COLUMN_ID],
+  garage_services: [GRID_ACTIONS_COLUMN_ID],
+  garage_servicings: [GRID_ACTIONS_COLUMN_ID],
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

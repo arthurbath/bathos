@@ -19,6 +19,7 @@ import { Plus, Trash2, MoreHorizontal } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { toMonthly, frequencyLabels, needsParam } from '@/lib/frequency';
 import { DataGrid, GridEditableCell, GridCurrencyCell, gridMenuTriggerProps, useDataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
+import { PersistentTooltipText } from '@/components/ui/tooltip';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import { GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH, INCOMES_GRID_DEFAULT_WIDTHS } from '@/lib/gridColumnWidths';
 import type { FrequencyType } from '@/types/fairshare';
@@ -41,6 +42,7 @@ interface IncomesTabProps {
   partnerY: string;
   userId?: string;
   pendingById?: Record<string, boolean>;
+  wageGapAdjustmentEnabled?: boolean;
   onAdd: (income: Omit<Income, 'id' | 'household_id'>) => Promise<void>;
   onUpdate: (id: string, updates: Partial<Omit<Income, 'id' | 'household_id'>>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
@@ -74,7 +76,7 @@ function PartnerCell({
     }} disabled={disabled}>
       <SelectTrigger
         disabled={disabled}
-        className={`h-7 border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
+        className={`h-7 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
         data-col={1}
@@ -116,7 +118,7 @@ function FrequencyCell({
       }} disabled={disabled}>
         <SelectTrigger
           disabled={disabled}
-          className={`h-7 min-w-0 border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
+          className={`h-7 min-w-0 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
           data-row={ctx?.rowIndex}
           data-row-id={ctx?.rowId}
           data-col={3}
@@ -186,7 +188,18 @@ function IncomeActionsCell({ income, onRemove, disabled = false }: { income: Inc
 
 // ─── Main Component ───
 
-export function IncomesTab({ incomes, partnerX, partnerY, userId, pendingById = {}, onAdd, onUpdate, onRemove, fullView = false }: IncomesTabProps) {
+export function IncomesTab({
+  incomes,
+  partnerX,
+  partnerY,
+  userId,
+  pendingById = {},
+  wageGapAdjustmentEnabled = false,
+  onAdd,
+  onUpdate,
+  onRemove,
+  fullView = false,
+}: IncomesTabProps) {
   const [addIncomeOpen, setAddIncomeOpen] = useState(false);
   const [savingIncome, setSavingIncome] = useState(false);
   const [newIncome, setNewIncome] = useState<NewIncomeDraft>(createDefaultIncomeDraft);
@@ -324,6 +337,7 @@ export function IncomesTab({ incomes, partnerX, partnerY, userId, pendingById = 
   const yTotal = incomes.filter(i => i.partner_label === 'Y').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
   const total = xTotal + yTotal;
   const ratioX = total > 0 ? (xTotal / total * 100) : 50;
+  const ratioTooltipText = 'These percentages are raw income ratios and are not adjusted for wage gaps. Wage gap-adjusted ratios appear on the Summary view.';
   const gridCardContentClassName = fullView ? 'px-0 pb-0 flex-1 min-h-0' : 'px-0 pb-2.5';
 
   return (
@@ -355,7 +369,23 @@ export function IncomesTab({ incomes, partnerX, partnerY, userId, pendingById = 
               <tr className={`${GRID_HEADER_TONE_CLASS} ${GRID_READONLY_TEXT_CLASS}`}>
                 <td className={`h-9 align-middle font-semibold text-xs ${GRID_HEADER_TONE_CLASS} px-2`}>Totals</td>
                 <td colSpan={3} className={`h-9 align-middle text-xs ${GRID_HEADER_TONE_CLASS} px-2`}>
-                  {partnerX} ${Math.round(xTotal)} ({ratioX.toFixed(0)}%) • {partnerY} ${Math.round(yTotal)} ({(100 - ratioX).toFixed(0)}%)
+                  {partnerX} ${Math.round(xTotal)} (
+                  {wageGapAdjustmentEnabled ? (
+                    <PersistentTooltipText align="start" side="top" contentClassName="text-xs" content={ratioTooltipText}>
+                      {`${ratioX.toFixed(0)}%`}
+                    </PersistentTooltipText>
+                  ) : (
+                    `${ratioX.toFixed(0)}%`
+                  )}
+                  ) • {partnerY} ${Math.round(yTotal)} (
+                  {wageGapAdjustmentEnabled ? (
+                    <PersistentTooltipText align="start" side="top" contentClassName="text-xs" content={ratioTooltipText}>
+                      {`${(100 - ratioX).toFixed(0)}%`}
+                    </PersistentTooltipText>
+                  ) : (
+                    `${(100 - ratioX).toFixed(0)}%`
+                  )}
+                  )
                 </td>
                 <td className={`h-9 align-middle text-right font-semibold tabular-nums text-xs ${GRID_HEADER_TONE_CLASS} px-2`}>${Math.round(total)}</td>
                 <td className={GRID_HEADER_TONE_CLASS} />

@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { PersistentTooltipText } from '@/components/ui/tooltip';
+import { Switch } from '@/components/ui/switch';
 import { Copy, Check, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
@@ -30,8 +32,17 @@ interface ConfigurationTabProps {
   expenses: Expense[];
   partnerX: string;
   partnerY: string;
+  wageGapAdjustmentEnabled: boolean;
+  partnerXWageCentsPerDollar: number | null;
+  partnerYWageCentsPerDollar: number | null;
   inviteCode: string | null;
-  onUpdatePartnerNames: (x: string, y: string) => Promise<void>;
+  onUpdatePartnerSettings: (input: {
+    partnerXName: string;
+    partnerYName: string;
+    wageGapAdjustmentEnabled: boolean;
+    partnerXWageCentsPerDollar: number | null;
+    partnerYWageCentsPerDollar: number | null;
+  }) => Promise<void>;
   onAddCategory: (name: string) => Promise<void>;
   onUpdateCategory: (id: string, name: string) => Promise<void>;
   onRemoveCategory: (id: string) => Promise<void>;
@@ -54,22 +65,90 @@ const paymentMethodColumnHelper = createColumnHelper<LinkedAccount>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
 const PAYMENT_METHOD_ACTIONS_NAV_COL = 3;
 
-function PartnerNamesCard({ partnerX, partnerY, onSave }: {
+function parseOptionalCents(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 100) return Number.NaN;
+  return Math.round(parsed * 100) / 100;
+}
+
+function formatCents(value: number | null): string {
+  return value == null ? '' : String(value);
+}
+
+function PartnersCard({ partnerX, partnerY, wageGapAdjustmentEnabled, partnerXWageCentsPerDollar, partnerYWageCentsPerDollar, onSave }: {
   partnerX: string;
   partnerY: string;
-  onSave: (x: string, y: string) => Promise<void>;
+  wageGapAdjustmentEnabled: boolean;
+  partnerXWageCentsPerDollar: number | null;
+  partnerYWageCentsPerDollar: number | null;
+  onSave: (input: {
+    partnerXName: string;
+    partnerYName: string;
+    wageGapAdjustmentEnabled: boolean;
+    partnerXWageCentsPerDollar: number | null;
+    partnerYWageCentsPerDollar: number | null;
+  }) => Promise<void>;
 }) {
   const [nameX, setNameX] = useState(partnerX);
   const [nameY, setNameY] = useState(partnerY);
+  const [wageGapEnabled, setWageGapEnabled] = useState(wageGapAdjustmentEnabled);
+  const [xCents, setXCents] = useState(formatCents(partnerXWageCentsPerDollar));
+  const [yCents, setYCents] = useState(formatCents(partnerYWageCentsPerDollar));
   const [saving, setSaving] = useState(false);
-  const dirty = nameX !== partnerX || nameY !== partnerY;
+
+  useEffect(() => {
+    setNameX(partnerX);
+    setNameY(partnerY);
+    setWageGapEnabled(wageGapAdjustmentEnabled);
+    setXCents(formatCents(partnerXWageCentsPerDollar));
+    setYCents(formatCents(partnerYWageCentsPerDollar));
+  }, [partnerX, partnerY, wageGapAdjustmentEnabled, partnerXWageCentsPerDollar, partnerYWageCentsPerDollar]);
+
+  const parsedXCents = parseOptionalCents(xCents);
+  const parsedYCents = parseOptionalCents(yCents);
+  const hasValidXCents = typeof parsedXCents === 'number' && Number.isFinite(parsedXCents);
+  const hasValidYCents = typeof parsedYCents === 'number' && Number.isFinite(parsedYCents);
+  const hasAtLeastOneWageGapValue = hasValidXCents || hasValidYCents;
+  const hasInvalidCents = Number.isNaN(parsedXCents) || Number.isNaN(parsedYCents);
+  const dirty = nameX !== partnerX
+    || nameY !== partnerY
+    || wageGapEnabled !== wageGapAdjustmentEnabled
+    || xCents !== formatCents(partnerXWageCentsPerDollar)
+    || yCents !== formatCents(partnerYWageCentsPerDollar);
 
   const handleSave = async () => {
+    const normalizedNameX = nameX.trim();
+    const normalizedNameY = nameY.trim();
+    if (!normalizedNameX || !normalizedNameY) return;
+    if (Number.isNaN(parsedXCents) || Number.isNaN(parsedYCents)) {
+      toast({
+        title: 'Invalid wage-gap value',
+        description: 'Use a value greater than 0 and at most 100 cents on the dollar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (wageGapEnabled && !hasAtLeastOneWageGapValue) {
+      toast({
+        title: 'Wage-gap value required',
+        description: 'Enter a valid wage-gap value for at least one partner when wage-gap adjustment is enabled.',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (!nameX.trim() || !nameY.trim()) return;
     setSaving(true);
     try {
-      await onSave(nameX.trim(), nameY.trim());
-      toast({ title: 'Partner names updated' });
+      await onSave({
+        partnerXName: normalizedNameX,
+        partnerYName: normalizedNameY,
+        wageGapAdjustmentEnabled: wageGapEnabled,
+        partnerXWageCentsPerDollar: parsedXCents,
+        partnerYWageCentsPerDollar: parsedYCents,
+      });
+      toast({ title: 'Partners updated' });
     } catch (e: any) {
       toast({ title: 'Failed to update', description: e.message, variant: 'destructive' });
     }
@@ -79,21 +158,76 @@ function PartnerNamesCard({ partnerX, partnerY, onSave }: {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Partner Names</CardTitle>
+        <CardTitle>Partners</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         <div className="flex items-end gap-3">
           <div className="flex-1 space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Partner A</label>
-            <Input value={nameX} onChange={e => setNameX(e.target.value)} placeholder="e.g. Alice" className="flex-1" />
+            <Input value={nameX} onChange={e => setNameX(e.target.value)} placeholder="e.g. Alex" className="flex-1" />
           </div>
           <div className="flex-1 space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Partner B</label>
-            <Input value={nameY} onChange={e => setNameY(e.target.value)} placeholder="e.g. Bob" className="flex-1" />
+            <Input value={nameY} onChange={e => setNameY(e.target.value)} placeholder="e.g. Blair" className="flex-1" />
           </div>
-          <Button onClick={handleSave} disabled={!dirty || saving || !nameX.trim() || !nameY.trim()}>
+        </div>
+        <div className="space-y-3 border-t pt-4">
+          <div className="flex items-center justify-end gap-3">
+            <PersistentTooltipText
+              side="top"
+              align="start"
+              contentClassName="[--tooltip-content-max-width:460px] text-xs"
+              content="Wage gaps are differences in pay for similar work that often affect women and other marginalized groups. If enabled, this adjusts one or both partner's income ratios by a cents-on-the-dollar value you provide. As of 2026, the most commonly cited gender wage gap estimate is about 82 cents on the dollar for women."
+            >
+              <Label htmlFor="wage-gap-adjustment" className="cursor-pointer">Adjust for Wage Gap</Label>
+            </PersistentTooltipText>
+            <Switch id="wage-gap-adjustment" checked={wageGapEnabled} onCheckedChange={setWageGapEnabled} />
+          </div>
+          {wageGapEnabled && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label htmlFor="partner-a-wage-gap" className="text-xs font-medium text-muted-foreground">{nameX.trim() || 'Partner A'} Wage Gap</label>
+                <div className="relative">
+                  <Input
+                    id="partner-a-wage-gap"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={xCents}
+                    onChange={(event) => setXCents(event.target.value)}
+                    className="pr-[4.75rem] text-right"
+                  />
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">¢ on the $</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="partner-b-wage-gap" className="text-xs font-medium text-muted-foreground">{nameY.trim() || 'Partner B'} Wage Gap</label>
+                <div className="relative">
+                  <Input
+                    id="partner-b-wage-gap"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={yCents}
+                    onChange={(event) => setYCents(event.target.value)}
+                    className="pr-[4.75rem] text-right"
+                  />
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">¢ on the $</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="border-t pt-3">
+          <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={!dirty || saving || !nameX.trim() || !nameY.trim() || hasInvalidCents || (wageGapEnabled && !hasAtLeastOneWageGapValue)}>
             {saving ? 'Saving…' : 'Save'}
           </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -158,7 +292,7 @@ function PaymentMethodOwnerCell({
     >
       <SelectTrigger
         disabled={disabled}
-        className={`h-7 w-full min-w-[92px] border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
+        className={`h-7 w-full min-w-[92px] border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
         data-col={2}
@@ -588,15 +722,22 @@ export function ConfigurationTab({
   categories, linkedAccounts, expenses,
   categoryPendingById = {},
   linkedAccountPendingById = {},
-  partnerX, partnerY, inviteCode,
-  onUpdatePartnerNames,
+  partnerX, partnerY, wageGapAdjustmentEnabled, partnerXWageCentsPerDollar, partnerYWageCentsPerDollar, inviteCode,
+  onUpdatePartnerSettings,
   onAddCategory, onUpdateCategory, onRemoveCategory, onReassignCategory, onUpdateCategoryColor,
   onAddLinkedAccount, onUpdateLinkedAccount, onRemoveLinkedAccount, onReassignLinkedAccount, onUpdateLinkedAccountColor,
   points, incomes, onSaveRestorePoint, onRemoveRestorePoint, onUpdateRestorePointNotes, onRestore,
 }: ConfigurationTabProps) {
   return (
     <div className="space-y-6">
-      <PartnerNamesCard partnerX={partnerX} partnerY={partnerY} onSave={onUpdatePartnerNames} />
+      <PartnersCard
+        partnerX={partnerX}
+        partnerY={partnerY}
+        wageGapAdjustmentEnabled={wageGapAdjustmentEnabled}
+        partnerXWageCentsPerDollar={partnerXWageCentsPerDollar}
+        partnerYWageCentsPerDollar={partnerYWageCentsPerDollar}
+        onSave={onUpdatePartnerSettings}
+      />
       <InviteCard inviteCode={inviteCode} />
       <ManagedListSection
         title="Categories"

@@ -7,7 +7,7 @@ import AuthPage from '@/platform/components/AuthPage';
 
 const Index = () => {
   const { user, loading: authLoading, isSigningOut, signOut } = useAuth();
-  const { household, loading: hhLoading, createHousehold, joinHousehold, updatePartnerNames, refetch } = useHouseholdData(user);
+  const { household, loading: hhLoading, createHousehold, joinHousehold, updatePartnerSettings, refetch } = useHouseholdData(user);
   const setupDisplayName = (user?.user_metadata?.display_name as string | undefined)?.trim() || user?.email || 'You';
 
   if (authLoading || hhLoading || isSigningOut) {
@@ -36,7 +36,7 @@ const Index = () => {
           userId={user.id}
           onSignOut={signOut}
           onHouseholdRefetch={refetch}
-          onUpdatePartnerNames={updatePartnerNames}
+          onUpdatePartnerSettings={updatePartnerSettings}
         />
       )}
     </>

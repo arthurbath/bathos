@@ -16,6 +16,9 @@ export interface HouseholdData {
   inviteCode: string | null;
   partnerX: string;
   partnerY: string;
+  wageGapAdjustmentEnabled: boolean;
+  partnerXWageCentsPerDollar: number | null;
+  partnerYWageCentsPerDollar: number | null;
   displayName: string;
 }
 
@@ -34,6 +37,9 @@ function toRpcHouseholdData(payload: Json): HouseholdData {
     inviteCode: typeof row.inviteCode === 'string' ? row.inviteCode : null,
     partnerX: typeof row.partnerX === 'string' ? row.partnerX : DEFAULT_PARTNER_X_NAME,
     partnerY: typeof row.partnerY === 'string' ? row.partnerY : DEFAULT_PARTNER_Y_NAME,
+    wageGapAdjustmentEnabled: row.wageGapAdjustmentEnabled === true,
+    partnerXWageCentsPerDollar: typeof row.partnerXWageCentsPerDollar === 'number' ? row.partnerXWageCentsPerDollar : null,
+    partnerYWageCentsPerDollar: typeof row.partnerYWageCentsPerDollar === 'number' ? row.partnerYWageCentsPerDollar : null,
     displayName: typeof row.displayName === 'string' ? row.displayName : 'You',
   };
 }
@@ -61,7 +67,7 @@ export function useHouseholdData(user: User | null) {
         supabaseRequest(async () =>
           await supabase
             .from('budget_households')
-            .select('id, name, invite_code, partner_x_name, partner_y_name')
+            .select('id, name, invite_code, partner_x_name, partner_y_name, wage_gap_adjustment_enabled, partner_x_wage_cents_per_dollar, partner_y_wage_cents_per_dollar')
             .eq('id', membership.household_id)
             .single(),
         ),
@@ -82,6 +88,9 @@ export function useHouseholdData(user: User | null) {
         inviteCode: household.invite_code ?? null,
         partnerX: household.partner_x_name ?? DEFAULT_PARTNER_X_NAME,
         partnerY: household.partner_y_name ?? DEFAULT_PARTNER_Y_NAME,
+        wageGapAdjustmentEnabled: household.wage_gap_adjustment_enabled ?? false,
+        partnerXWageCentsPerDollar: household.partner_x_wage_cents_per_dollar ?? null,
+        partnerYWageCentsPerDollar: household.partner_y_wage_cents_per_dollar ?? null,
         displayName: profile?.display_name ?? 'You',
       };
     } catch (error) {
@@ -134,19 +143,28 @@ export function useHouseholdData(user: User | null) {
     }
   }, [queryClient, queryKey, userId]);
 
-  const updatePartnerNames = useCallback(async (partnerXName: string, partnerYName: string) => {
+  const updatePartnerSettings = useCallback(async (input: {
+    partnerXName: string;
+    partnerYName: string;
+    wageGapAdjustmentEnabled: boolean;
+    partnerXWageCentsPerDollar: number | null;
+    partnerYWageCentsPerDollar: number | null;
+  }) => {
     if (!userId) throw new Error('Not authenticated');
 
     const currentHousehold = queryClient.getQueryData<HouseholdData | null>(queryKey);
     if (!currentHousehold) throw new Error('No household');
 
     try {
-      const payload = await withMutationTiming({ module: 'budget', action: 'household.updatePartnerNames' }, async () => {
+      const payload = await withMutationTiming({ module: 'budget', action: 'household.updatePartnerSettings' }, async () => {
         const data = await supabaseRequest(async () =>
-          await supabase.rpc('budget_update_partner_names', {
+          await supabase.rpc('budget_update_partner_settings', {
             _household_id: currentHousehold.householdId,
-            _partner_x_name: partnerXName,
-            _partner_y_name: partnerYName,
+            _partner_x_name: input.partnerXName,
+            _partner_y_name: input.partnerYName,
+            _wage_gap_adjustment_enabled: input.wageGapAdjustmentEnabled,
+            _partner_x_wage_cents_per_dollar: input.partnerXWageCentsPerDollar,
+            _partner_y_wage_cents_per_dollar: input.partnerYWageCentsPerDollar,
           }),
         );
         return data as Json;
@@ -164,7 +182,7 @@ export function useHouseholdData(user: User | null) {
     loading: !!userId && isLoading,
     createHousehold,
     joinHousehold,
-    updatePartnerNames,
+    updatePartnerSettings,
     refetch: async () => {
       await refetch();
     },

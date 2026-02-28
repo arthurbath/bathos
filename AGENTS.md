@@ -31,6 +31,11 @@ Split shared expenses fairly between two partners. Combines per-expense benefit 
 - **Theming**: All colors via CSS custom properties in `index.css` with HSL values. Use Tailwind semantic tokens, never raw color values in components.
 - **Dark mode**: Fully supported via CSS variable variants.
 - **Form modal keyboard policy**: For all form-style modals, support full Tab/Shift+Tab traversal through all controls; inputs edit directly on focus; focused Select triggers open with Space/Enter and are fully keyboard selectable; checkboxes retain focus after toggle so tab navigation continues naturally.
+- **DataGrid resize policy**: All DataGrids (card and full-view) must resize columns in 20px increments and must persist column widths through the shared localStorage + `bathos_user_settings.grid_column_widths` mechanism (`useGridColumnWidths`). The trailing actions/ellipsis column is a fixed-width special case: `40px`.
+- **DataGrid add-button policy**: Use the Budget-style compact green outline icon button for adding grid rows (`variant="outline-success"`, `size="sm"`, `className="h-8 w-8 p-0"`, plus icon, and an `aria-label`), opening a modal form.
+- **DataGrid filter-controls policy**: When grid cards expose filters/grouping, use the Budget Expenses control pair: `Filters` button (`variant="outline"`, `size="sm"`, `className="h-8 gap-1.5"`, `Filter` icon) plus a conditional clear button when active (`variant="outline-warning"`, `size="sm"`, `className="h-8 w-8 p-0"`, `FilterX` icon, clear-filters aria-label).
+- **Grouped DataGrid header policy**: For grouped tables, render the first group-header cell as `Label (count)` so row counts are visible in-situ for every group.
+- **Link behavior policy**: Any UI that navigates to another in-app route must be coded as a real link (`href`) and preserve default browser modified-click behavior (CMD/CTRL-click and middle-click open new tab); only plain left click should be intercepted for SPA navigation.
 
 ## Development Policies
 

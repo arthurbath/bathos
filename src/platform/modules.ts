@@ -1,10 +1,11 @@
-export type PlatformModuleId = 'budget' | 'drawers';
+export type PlatformModuleId = 'budget' | 'drawers' | 'garage';
 
 export interface PlatformModule {
   id: PlatformModuleId;
   name: string;
   description: string;
   launchPath: string;
+  adminOnly?: boolean;
 }
 
 const BUDGET_MODULE: PlatformModule = {
@@ -21,6 +22,19 @@ const DRAWERS_MODULE: PlatformModule = {
   launchPath: '/drawers/plan',
 };
 
-export function getAvailableModules(): PlatformModule[] {
-  return [BUDGET_MODULE, DRAWERS_MODULE];
+const GARAGE_MODULE: PlatformModule = {
+  id: 'garage',
+  name: 'Garage',
+  description: 'Track vehicle maintenance schedules, shop visits, and due services',
+  launchPath: '/garage/due',
+  adminOnly: true,
+};
+
+interface GetAvailableModulesOptions {
+  isAdmin?: boolean;
+}
+
+export function getAvailableModules(options?: GetAvailableModulesOptions): PlatformModule[] {
+  const modules = [BUDGET_MODULE, DRAWERS_MODULE, GARAGE_MODULE];
+  return modules.filter((module) => !module.adminOnly || options?.isAdmin);
 }

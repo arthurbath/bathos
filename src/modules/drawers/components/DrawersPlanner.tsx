@@ -17,6 +17,7 @@ import type { DrawerInstance, DrawerType, DrawersHouseholdData, DrawersUnit, Dra
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
+import { handleClientSideLinkNavigation } from '@/lib/navigation';
 
 interface DrawersPlannerProps {
   household: DrawersHouseholdData;
@@ -472,15 +473,15 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
             const fullPath = `${basePath}${path}`;
             const active = location.pathname === fullPath || (!basePath && location.pathname === path);
             return (
-              <button
+              <a
                 key={path}
-                type="button"
-                onClick={() => navigate(fullPath)}
+                href={fullPath}
+                onClick={(event) => handleClientSideLinkNavigation(event, navigate, fullPath)}
                 className={`inline-flex items-center justify-center gap-0 sm:gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${active ? 'bg-background text-foreground' : 'text-foreground hover:bg-background/50'}`}
               >
                 <Icon className="hidden h-4 w-4 sm:inline" />
                 <span>{label}</span>
-              </button>
+              </a>
             );
           })}
         </nav>
@@ -491,6 +492,7 @@ export function DrawersPlanner({ household, userId, onSignOut }: DrawersPlannerP
           const fullPath = `${basePath}${path}`;
           return location.pathname === fullPath || (!basePath && location.pathname === path);
         }}
+        hrefForPath={(path) => `${basePath}${path}`}
         onNavigate={(path) => navigate(`${basePath}${path}`)}
       />
 

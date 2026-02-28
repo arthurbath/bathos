@@ -304,30 +304,39 @@ export type Database = {
           id: string
           invite_code: string | null
           name: string
+          partner_x_wage_cents_per_dollar: number | null
           partner_x_color: string | null
           partner_x_name: string
+          partner_y_wage_cents_per_dollar: number | null
           partner_y_color: string | null
           partner_y_name: string
+          wage_gap_adjustment_enabled: boolean
         }
         Insert: {
           created_at?: string
           id?: string
           invite_code?: string | null
           name?: string
+          partner_x_wage_cents_per_dollar?: number | null
           partner_x_color?: string | null
           partner_x_name?: string
+          partner_y_wage_cents_per_dollar?: number | null
           partner_y_color?: string | null
           partner_y_name?: string
+          wage_gap_adjustment_enabled?: boolean
         }
         Update: {
           created_at?: string
           id?: string
           invite_code?: string | null
           name?: string
+          partner_x_wage_cents_per_dollar?: number | null
           partner_x_color?: string | null
           partner_x_name?: string
+          partner_y_wage_cents_per_dollar?: number | null
           partner_y_color?: string | null
           partner_y_name?: string
+          wage_gap_adjustment_enabled?: boolean
         }
         Relationships: []
       }
@@ -590,6 +599,278 @@ export type Database = {
           },
         ]
       }
+      garage_services: {
+        Row: {
+          cadence_type: Database["public"]["Enums"]["garage_cadence_type"]
+          created_at: string
+          every_miles: number | null
+          every_months: number | null
+          id: string
+          monitoring: boolean
+          name: string
+          notes: string | null
+          sort_order: number
+          type: Database["public"]["Enums"]["garage_service_type"]
+          updated_at: string
+          user_id: string
+          vehicle_id: string
+        }
+        Insert: {
+          cadence_type?: Database["public"]["Enums"]["garage_cadence_type"]
+          created_at?: string
+          every_miles?: number | null
+          every_months?: number | null
+          id?: string
+          monitoring?: boolean
+          name: string
+          notes?: string | null
+          sort_order?: number
+          type: Database["public"]["Enums"]["garage_service_type"]
+          updated_at?: string
+          user_id: string
+          vehicle_id: string
+        }
+        Update: {
+          cadence_type?: Database["public"]["Enums"]["garage_cadence_type"]
+          created_at?: string
+          every_miles?: number | null
+          every_months?: number | null
+          id?: string
+          monitoring?: boolean
+          name?: string
+          notes?: string | null
+          sort_order?: number
+          type?: Database["public"]["Enums"]["garage_service_type"]
+          updated_at?: string
+          user_id?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "garage_services_vehicle_fk"
+            columns: ["vehicle_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "garage_vehicles"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
+      garage_servicing_receipts: {
+        Row: {
+          created_at: string
+          filename: string
+          id: string
+          mime_type: string | null
+          servicing_id: string
+          size_bytes: number | null
+          storage_object_path: string
+          user_id: string
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          filename: string
+          id?: string
+          mime_type?: string | null
+          servicing_id: string
+          size_bytes?: number | null
+          storage_object_path: string
+          user_id: string
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          filename?: string
+          id?: string
+          mime_type?: string | null
+          servicing_id?: string
+          size_bytes?: number | null
+          storage_object_path?: string
+          user_id?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "garage_servicing_receipts_servicing_fk"
+            columns: ["servicing_id", "user_id", "vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "garage_servicings"
+            referencedColumns: ["id", "user_id", "vehicle_id"]
+          },
+          {
+            foreignKeyName: "garage_servicing_receipts_vehicle_fk"
+            columns: ["vehicle_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "garage_vehicles"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
+      garage_servicing_services: {
+        Row: {
+          created_at: string
+          id: string
+          service_id: string
+          servicing_id: string
+          status: Database["public"]["Enums"]["garage_service_status"]
+          user_id: string
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          service_id: string
+          servicing_id: string
+          status?: Database["public"]["Enums"]["garage_service_status"]
+          user_id: string
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          service_id?: string
+          servicing_id?: string
+          status?: Database["public"]["Enums"]["garage_service_status"]
+          user_id?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "garage_servicing_services_service_fk"
+            columns: ["service_id", "user_id", "vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "garage_services"
+            referencedColumns: ["id", "user_id", "vehicle_id"]
+          },
+          {
+            foreignKeyName: "garage_servicing_services_servicing_fk"
+            columns: ["servicing_id", "user_id", "vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "garage_servicings"
+            referencedColumns: ["id", "user_id", "vehicle_id"]
+          },
+          {
+            foreignKeyName: "garage_servicing_services_vehicle_fk"
+            columns: ["vehicle_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "garage_vehicles"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
+      garage_servicings: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          odometer_miles: number
+          service_date: string
+          shop_name: string | null
+          updated_at: string
+          user_id: string
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          odometer_miles: number
+          service_date: string
+          shop_name?: string | null
+          updated_at?: string
+          user_id: string
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          odometer_miles?: number
+          service_date?: string
+          shop_name?: string | null
+          updated_at?: string
+          user_id?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "garage_servicings_vehicle_fk"
+            columns: ["vehicle_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "garage_vehicles"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
+      garage_user_settings: {
+        Row: {
+          created_at: string
+          id: string
+          upcoming_days_default: number
+          upcoming_miles_default: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          upcoming_days_default?: number
+          upcoming_miles_default?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          upcoming_days_default?: number
+          upcoming_miles_default?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      garage_vehicles: {
+        Row: {
+          created_at: string
+          current_odometer_miles: number
+          id: string
+          in_service_date: string | null
+          is_active: boolean
+          make: string | null
+          model: string | null
+          model_year: number | null
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_odometer_miles?: number
+          id?: string
+          in_service_date?: string | null
+          is_active?: boolean
+          make?: string | null
+          model?: string | null
+          model_year?: number | null
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_odometer_miles?: number
+          id?: string
+          in_service_date?: string | null
+          is_active?: boolean
+          make?: string | null
+          model?: string | null
+          model_year?: number | null
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -625,6 +906,17 @@ export type Database = {
           _household_id: string
           _partner_x_name: string
           _partner_y_name: string
+        }
+        Returns: Json
+      }
+      budget_update_partner_settings: {
+        Args: {
+          _household_id: string
+          _partner_x_name: string
+          _partner_x_wage_cents_per_dollar: number | null
+          _partner_y_name: string
+          _partner_y_wage_cents_per_dollar: number | null
+          _wage_gap_adjustment_enabled: boolean
         }
         Returns: Json
       }
@@ -686,6 +978,9 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      garage_cadence_type: "recurring" | "no_interval"
+      garage_service_status: "performed" | "not_needed_yet" | "declined"
+      garage_service_type: "replacement" | "clean_lube" | "adjustment" | "check"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -814,6 +1109,9 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      garage_cadence_type: ["recurring", "no_interval"],
+      garage_service_status: ["performed", "not_needed_yet", "declined"],
+      garage_service_type: ["replacement", "clean_lube", "adjustment", "check"],
     },
   },
 } as const

@@ -28,6 +28,7 @@ import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import { EXPENSES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH } from '@/lib/gridColumnWidths';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { COLOR_LABELS, normalizePaletteColor } from '@/lib/colors';
+import { computeFairShares, computeIncomeNormalization } from '@/lib/fairShare';
 import type { FrequencyType } from '@/types/fairshare';
 import type { Expense } from '@/hooks/useExpenses';
 import type { Category } from '@/hooks/useCategories';
@@ -50,6 +51,9 @@ interface ExpensesTabProps {
   incomes: Income[];
   partnerX: string;
   partnerY: string;
+  wageGapAdjustmentEnabled?: boolean;
+  partnerXWageCentsPerDollar?: number | null;
+  partnerYWageCentsPerDollar?: number | null;
   userId?: string;
   pendingById?: Record<string, boolean>;
   onAdd: (expense: Omit<Expense, 'id' | 'household_id'>, id?: string) => Promise<void>;
@@ -142,7 +146,7 @@ function CategoryCell({ exp, categories, onChange, onAddNew, disabled = false }:
     }} disabled={disabled}>
       <SelectTrigger
         disabled={disabled}
-        className={`h-7 border-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm ${GRID_CONTROL_FOCUS_CLASS}`}
+        className={`h-7 border-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm ${GRID_CONTROL_FOCUS_CLASS}`}
         style={{ backgroundColor: normalizePaletteColor(categories.find(c => c.id === exp.category_id)?.color) || 'transparent' }}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
@@ -182,7 +186,7 @@ function ExpenseFrequencyCell({ exp, onChange, disabled = false }: { exp: Expens
       }} disabled={disabled}>
         <SelectTrigger
           disabled={disabled}
-          className={`h-7 min-w-0 border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
+          className={`h-7 min-w-0 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
           data-row={ctx?.rowIndex}
           data-row-id={ctx?.rowId}
           data-col={4}
@@ -224,7 +228,7 @@ function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, 
     }} disabled={disabled}>
       <SelectTrigger
         disabled={disabled}
-        className={`h-7 border-transparent hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm ${GRID_CONTROL_FOCUS_CLASS}`}
+        className={`h-7 border-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm ${GRID_CONTROL_FOCUS_CLASS}`}
         style={{ backgroundColor: normalizePaletteColor(linkedAccounts.find(la => la.id === exp.linked_account_id)?.color) || 'transparent' }}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
@@ -339,7 +343,25 @@ function ExpenseActionsCell({ name, onRemove, disabled = false }: { name: string
 
 // ─── Main Component ───
 
-export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, partnerX, partnerY, userId, pendingById = {}, onAdd, onUpdate, onRemove, onAddCategory, onAddLinkedAccount, fullView = false }: ExpensesTabProps) {
+export function ExpensesTab({
+  expenses,
+  categories,
+  linkedAccounts,
+  incomes,
+  partnerX,
+  partnerY,
+  wageGapAdjustmentEnabled = false,
+  partnerXWageCentsPerDollar = null,
+  partnerYWageCentsPerDollar = null,
+  userId,
+  pendingById = {},
+  onAdd,
+  onUpdate,
+  onRemove,
+  onAddCategory,
+  onAddLinkedAccount,
+  fullView = false,
+}: ExpensesTabProps) {
   const isMobile = useIsMobile();
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [newExpense, setNewExpense] = useState<NewExpenseDraft>(createDefaultExpenseDraft);
@@ -384,17 +406,19 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
   // Income ratio
   const incomeX = incomes.filter(i => i.partner_label === 'X').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
   const incomeY = incomes.filter(i => i.partner_label === 'Y').reduce((s, i) => s + toMonthly(i.amount, i.frequency_type, i.frequency_param ?? undefined), 0);
-  const totalIncome = incomeX + incomeY;
-  const incomeRatioX = totalIncome > 0 ? incomeX / totalIncome : 0.5;
+  const incomeNormalization = useMemo(() => computeIncomeNormalization(incomeX, incomeY, {
+    enabled: wageGapAdjustmentEnabled,
+    partnerXCentsPerDollar: partnerXWageCentsPerDollar,
+    partnerYCentsPerDollar: partnerYWageCentsPerDollar,
+  }), [incomeX, incomeY, partnerXWageCentsPerDollar, partnerYWageCentsPerDollar, wageGapAdjustmentEnabled]);
+  const incomeRatioX = incomeNormalization.incomeRatioX;
+  const incomeRatioY = incomeNormalization.incomeRatioY;
+  const isWageGapApplied = incomeNormalization.isWageGapApplied;
 
   const computeFairShare = (exp: Expense) => {
     const monthly = toMonthly(exp.amount, exp.frequency_type, exp.frequency_param ?? undefined);
-    const bx = exp.benefit_x / 100;
-    const by = 1 - bx;
-    const wx = bx * incomeRatioX;
-    const wy = by * (1 - incomeRatioX);
-    const tw = wx + wy || 1;
-    return { fairX: monthly * (wx / tw), fairY: monthly * (wy / tw), monthly };
+    const { fairX, fairY } = computeFairShares(monthly, exp.benefit_x, incomeRatioX);
+    return { fairX, fairY, monthly };
   };
 
   const payerByLinkedAccountId = useMemo(
@@ -402,11 +426,22 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     [linkedAccounts],
   );
 
-  const getDerivedPayer = useCallback((exp: Expense): 'X' | 'Y' | null => {
-    if (!exp.linked_account_id) return null;
-    const owner = payerByLinkedAccountId.get(exp.linked_account_id);
+  const getDerivedPayerByLinkedAccountId = useCallback((linkedAccountId: string | null): 'X' | 'Y' | null => {
+    if (!linkedAccountId) return null;
+    const owner = payerByLinkedAccountId.get(linkedAccountId);
     return owner === 'X' || owner === 'Y' ? owner : null;
   }, [payerByLinkedAccountId]);
+
+  const getDerivedPayer = useCallback((exp: Pick<Expense, 'linked_account_id'>): 'X' | 'Y' | null => (
+    getDerivedPayerByLinkedAccountId(exp.linked_account_id)
+  ), [getDerivedPayerByLinkedAccountId]);
+
+  const isVisibleWithCurrentPayerFilter = useCallback((linkedAccountId: string | null): boolean => {
+    const derivedPayer = getDerivedPayerByLinkedAccountId(linkedAccountId);
+    if (filterPayer === 'all') return true;
+    if (filterPayer === 'unassigned') return derivedPayer === null;
+    return derivedPayer === filterPayer;
+  }, [filterPayer, getDerivedPayerByLinkedAccountId]);
 
   const filteredExpenses = useMemo(() =>
     filterPayer === 'all'
@@ -465,16 +500,20 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     if (savingExpense) return;
     setSavingExpense(true);
     try {
-      if (filterPayer !== 'all') {
-        setFilterPayer('all');
-      }
       const payload: NewExpenseDraft = {
         ...newExpense,
         frequency_param: needsParam(newExpense.frequency_type) ? newExpense.frequency_param : null,
       };
+      const isVisibleInGrid = isVisibleWithCurrentPayerFilter(payload.linked_account_id);
       await onAdd(payload);
       setAddExpenseOpen(false);
       setNewExpense(createDefaultExpenseDraft());
+      if (!isVisibleInGrid) {
+        toast({
+          title: 'Expense added but hidden by filters',
+          description: 'The expense was added, but it is not visible because of the current filters.',
+        });
+      }
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
@@ -680,7 +719,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     columnHelper.accessor(r => r.exp.benefit_x, {
       id: 'benefit_x',
       header: () => (
-        <PersistentTooltipText side="bottom" content={`The percentage that ${partnerX} benefits from the expense`}>{partnerX} %</PersistentTooltipText>
+        <PersistentTooltipText side="bottom" content={`The percentage that ${partnerX} benefits from the expense`}>{partnerX} Benefit</PersistentTooltipText>
       ),
       size: EXPENSES_GRID_DEFAULT_WIDTHS.benefit_x,
       minSize: GRID_MIN_COLUMN_WIDTH,
@@ -697,7 +736,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
     columnHelper.accessor(r => 100 - r.exp.benefit_x, {
       id: 'benefit_y',
       header: () => (
-        <PersistentTooltipText side="bottom" content={`The percentage that ${partnerY} benefits from the expense`}>{partnerY} %</PersistentTooltipText>
+        <PersistentTooltipText side="bottom" content={`The percentage that ${partnerY} benefits from the expense`}>{partnerY} Benefit</PersistentTooltipText>
       ),
       size: EXPENSES_GRID_DEFAULT_WIDTHS.benefit_y,
       minSize: GRID_MIN_COLUMN_WIDTH,
@@ -730,14 +769,19 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         const benefitY = 1 - benefitX;
         const isEvenBenefitSplit = Math.abs(row.original.exp.benefit_x - 50) < 0.0001;
         const incomeXRatio = incomeRatioX;
-        const incomeYRatio = 1 - incomeXRatio;
+        const incomeYRatio = incomeRatioY;
         const weightX = benefitX * incomeXRatio;
         const weightY = benefitY * incomeYRatio;
         const totalWeight = weightX + weightY || 1;
         const normalizedShareX = weightX / totalWeight;
         const value = Number(getValue());
-        const hasSingleStep = !shouldShowNormalizationStep && (isSingleBeneficiary || isEvenBenefitSplit);
+        const renderedStepCount = (shouldShowNormalizationStep ? 1 : 0)
+          + (isWageGapApplied ? 1 : 0)
+          + ((isSingleBeneficiary || isEvenBenefitSplit) ? 1 : 4);
+        const hasSingleStep = renderedStepCount === 1;
         const stepPrefix = (step: number) => (hasSingleStep ? '' : `${step}. `);
+        const baseStep = shouldShowNormalizationStep ? 2 : 1;
+        const normalizedStep = isWageGapApplied ? baseStep + 1 : baseStep;
 
         return (
           <PersistentTooltipText
@@ -750,18 +794,23 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
                 {shouldShowNormalizationStep && (
                   <div>{stepPrefix(1)}Convert the original expense to its monthly equivalent: ${originalAmount.toFixed(2)} {frequencyDescription.toLowerCase()} converts to ${monthly.toFixed(2)} per month.</div>
                 )}
+                {isWageGapApplied && (
+                  <div>
+                    {stepPrefix(baseStep)}Apply wage gap normalization to income shares: {partnerX} ${Math.round(incomeNormalization.incomeX)} × {Math.round(incomeNormalization.partnerXFactor * 100)}% = ${Math.round(incomeNormalization.adjustedIncomeX)}, {partnerY} ${Math.round(incomeNormalization.incomeY)} × {Math.round(incomeNormalization.partnerYFactor * 100)}% = ${Math.round(incomeNormalization.adjustedIncomeY)}. Adjusted income ratios are {Math.round(incomeXRatio * 100)}% / {Math.round(incomeYRatio * 100)}%.
+                  </div>
+                )}
                 {isSingleBeneficiary ? (
-                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit split is {row.original.exp.benefit_x}/
+                  <div>{stepPrefix(normalizedStep)}Benefit split is {row.original.exp.benefit_x}/
                     {100 - row.original.exp.benefit_x}, so this expense is assigned entirely to {beneficiaryLabel}. {partnerX === beneficiaryLabel ? `${partnerX} gets 100% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).` : `${partnerX} gets 0% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).`}
                   </div>
                 ) : isEvenBenefitSplit ? (
-                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit is exactly 50/50, so just multiply the monthly amount by {partnerX}&apos;s income ratio: ${monthly.toFixed(2)} × {formatPercent(incomeXRatio)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                  <div>{stepPrefix(normalizedStep)}Benefit is exactly 50/50, so just multiply the monthly amount by {partnerX}&apos;s {isWageGapApplied ? 'wage gap-adjusted income ratio' : 'income ratio'}: ${monthly.toFixed(2)} × {formatPercent(incomeXRatio)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
                 ) : (
                   <>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Calculate {partnerX}&apos;s weight by combining benefit and income share: {(benefitX * 100).toFixed(1)}% × {(incomeXRatio * 100).toFixed(1)}% = {weightX.toFixed(4)}.</div>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 3 : 2)}Calculate total weight for both partners: {weightX.toFixed(4)} + {weightY.toFixed(4)} = {totalWeight.toFixed(4)}.</div>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 4 : 3)}Convert {partnerX}&apos;s weight to a fraction of the total: {weightX.toFixed(4)} / {totalWeight.toFixed(4)} = {(normalizedShareX * 100).toFixed(2)}%.</div>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 5 : 4)}Apply that fraction to the monthly amount: ${monthly.toFixed(2)} × {(normalizedShareX * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                    <div>{stepPrefix(normalizedStep)}Calculate {partnerX}&apos;s weight by combining benefit and {isWageGapApplied ? 'wage gap-adjusted income share' : 'income share'}: {(benefitX * 100).toFixed(1)}% × {(incomeXRatio * 100).toFixed(1)}% = {weightX.toFixed(4)}.</div>
+                    <div>{stepPrefix(normalizedStep + 1)}Calculate total weight for both partners: {weightX.toFixed(4)} + {weightY.toFixed(4)} = {totalWeight.toFixed(4)}.</div>
+                    <div>{stepPrefix(normalizedStep + 2)}Convert {partnerX}&apos;s weight to a fraction of the total: {weightX.toFixed(4)} / {totalWeight.toFixed(4)} = {(normalizedShareX * 100).toFixed(2)}%.</div>
+                    <div>{stepPrefix(normalizedStep + 3)}Apply that fraction to the monthly amount: ${monthly.toFixed(2)} × {(normalizedShareX * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
                   </>
                 )}
               </div>
@@ -791,14 +840,19 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         const benefitY = 1 - benefitX;
         const isEvenBenefitSplit = Math.abs(row.original.exp.benefit_x - 50) < 0.0001;
         const incomeXRatio = incomeRatioX;
-        const incomeYRatio = 1 - incomeXRatio;
+        const incomeYRatio = incomeRatioY;
         const weightX = benefitX * incomeXRatio;
         const weightY = benefitY * incomeYRatio;
         const totalWeight = weightX + weightY || 1;
         const normalizedShareY = weightY / totalWeight;
         const value = Number(getValue());
-        const hasSingleStep = !shouldShowNormalizationStep && (isSingleBeneficiary || isEvenBenefitSplit);
+        const renderedStepCount = (shouldShowNormalizationStep ? 1 : 0)
+          + (isWageGapApplied ? 1 : 0)
+          + ((isSingleBeneficiary || isEvenBenefitSplit) ? 1 : 4);
+        const hasSingleStep = renderedStepCount === 1;
         const stepPrefix = (step: number) => (hasSingleStep ? '' : `${step}. `);
+        const baseStep = shouldShowNormalizationStep ? 2 : 1;
+        const normalizedStep = isWageGapApplied ? baseStep + 1 : baseStep;
 
         return (
           <PersistentTooltipText
@@ -811,18 +865,23 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
                 {shouldShowNormalizationStep && (
                   <div>{stepPrefix(1)}Convert the original expense to its monthly equivalent: ${originalAmount.toFixed(2)} {frequencyDescription.toLowerCase()} converts to ${monthly.toFixed(2)} per month.</div>
                 )}
+                {isWageGapApplied && (
+                  <div>
+                    {stepPrefix(baseStep)}Apply wage gap normalization to income shares: {partnerX} ${Math.round(incomeNormalization.incomeX)} × {Math.round(incomeNormalization.partnerXFactor * 100)}% = ${Math.round(incomeNormalization.adjustedIncomeX)}, {partnerY} ${Math.round(incomeNormalization.incomeY)} × {Math.round(incomeNormalization.partnerYFactor * 100)}% = ${Math.round(incomeNormalization.adjustedIncomeY)}. Adjusted income ratios are {Math.round(incomeXRatio * 100)}% / {Math.round(incomeYRatio * 100)}%.
+                  </div>
+                )}
                 {isSingleBeneficiary ? (
-                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit split is {row.original.exp.benefit_x}/
+                  <div>{stepPrefix(normalizedStep)}Benefit split is {row.original.exp.benefit_x}/
                     {100 - row.original.exp.benefit_x}, so this expense is assigned entirely to {beneficiaryLabel}. {partnerY === beneficiaryLabel ? `${partnerY} gets 100% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).` : `${partnerY} gets 0% of ${monthly.toFixed(2)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).`}
                   </div>
                 ) : isEvenBenefitSplit ? (
-                  <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Benefit is exactly 50/50, so just multiply the monthly amount by {partnerY}&apos;s income ratio: ${monthly.toFixed(2)} × {formatPercent(incomeYRatio)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                  <div>{stepPrefix(normalizedStep)}Benefit is exactly 50/50, so just multiply the monthly amount by {partnerY}&apos;s {isWageGapApplied ? 'wage gap-adjusted income ratio' : 'income ratio'}: ${monthly.toFixed(2)} × {formatPercent(incomeYRatio)} = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
                 ) : (
                   <>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 2 : 1)}Calculate {partnerY}&apos;s weight by combining benefit and income share: {(benefitY * 100).toFixed(1)}% × {(incomeYRatio * 100).toFixed(1)}% = {weightY.toFixed(4)}.</div>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 3 : 2)}Calculate total weight for both partners: {weightX.toFixed(4)} + {weightY.toFixed(4)} = {totalWeight.toFixed(4)}.</div>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 4 : 3)}Convert {partnerY}&apos;s weight to a fraction of the total: {weightY.toFixed(4)} / {totalWeight.toFixed(4)} = {(normalizedShareY * 100).toFixed(2)}%.</div>
-                    <div>{stepPrefix(shouldShowNormalizationStep ? 5 : 4)}Apply that fraction to the monthly amount: ${monthly.toFixed(2)} × {(normalizedShareY * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
+                    <div>{stepPrefix(normalizedStep)}Calculate {partnerY}&apos;s weight by combining benefit and {isWageGapApplied ? 'wage gap-adjusted income share' : 'income share'}: {(benefitY * 100).toFixed(1)}% × {(incomeYRatio * 100).toFixed(1)}% = {weightY.toFixed(4)}.</div>
+                    <div>{stepPrefix(normalizedStep + 1)}Calculate total weight for both partners: {weightX.toFixed(4)} + {weightY.toFixed(4)} = {totalWeight.toFixed(4)}.</div>
+                    <div>{stepPrefix(normalizedStep + 2)}Convert {partnerY}&apos;s weight to a fraction of the total: {weightY.toFixed(4)} / {totalWeight.toFixed(4)} = {(normalizedShareY * 100).toFixed(2)}%.</div>
+                    <div>{stepPrefix(normalizedStep + 3)}Apply that fraction to the monthly amount: ${monthly.toFixed(2)} × {(normalizedShareY * 100).toFixed(2)}% = ${value.toFixed(2)} (displayed as ${Math.round(value)}).</div>
                   </>
                 )}
               </div>
@@ -850,7 +909,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         />
       ),
     }),
-  ], [categories, linkedAccounts, partnerX, partnerY, getDerivedPayer, incomeRatioX, pendingById]);
+  ], [categories, linkedAccounts, partnerX, partnerY, getDerivedPayer, incomeNormalization, incomeRatioX, incomeRatioY, isWageGapApplied, pendingById]);
 
   const table = useReactTable({
     data: computedData,
@@ -913,7 +972,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
         key={`gh-${key}`}
         className={`${groupRowBgClass} ${groupRowTextClass} border-b-0 ${fullView ? 'sticky top-[36px] z-30' : ''}`}
       >
-        <td className={`${groupRowCellClass} ${groupRowTextCellClass} px-2 sticky left-0 z-30 relative shadow-[inset_0_1px_0_0_hsl(var(--category-group-row-bg)),inset_0_-1px_0_0_hsl(var(--category-group-row-bg))] after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-[hsl(var(--grid-sticky-line))]`}>{getGroupLabel(key)}</td>
+        <td className={`${groupRowCellClass} ${groupRowTextCellClass} px-2 sticky left-0 z-30 relative shadow-[inset_0_1px_0_0_hsl(var(--category-group-row-bg)),inset_0_-1px_0_0_hsl(var(--category-group-row-bg))] after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-[hsl(var(--grid-sticky-line))]`}>{getGroupLabel(key)} ({groupRows.length})</td>
         <td colSpan={4} className={groupRowCellClass} />
         <td className={`${groupRowCellClass} ${groupRowTextCellClass} text-right tabular-nums px-2`}>
           <PersistentTooltipText
@@ -1188,7 +1247,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <DataGridAddFormLabel htmlFor="new-expense-benefit-x" tooltip={`The percentage that ${partnerX} benefits from the expense`}>
-                    {partnerX} %
+                    {partnerX} Benefit
                   </DataGridAddFormLabel>
                   <DataGridAddFormAffixInput
                     id="new-expense-benefit-x"
@@ -1205,7 +1264,7 @@ export function ExpensesTab({ expenses, categories, linkedAccounts, incomes, par
                 </div>
                 <div className="space-y-1.5">
                   <DataGridAddFormLabel htmlFor="new-expense-benefit-y" tooltip={`The percentage that ${partnerY} benefits from the expense`}>
-                    {partnerY} %
+                    {partnerY} Benefit
                   </DataGridAddFormLabel>
                   <DataGridAddFormAffixInput
                     id="new-expense-benefit-y"

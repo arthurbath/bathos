@@ -120,6 +120,19 @@
   display: none;
 }
 
+@media (pointer: coarse) {
+  /* Expand the touch hit target for column resize handles without changing visual size. */
+  .data-grid-resize-handle::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    right: -10px;
+    bottom: -8px;
+    left: -10px;
+    background: transparent;
+  }
+}
+
 @media (max-width: 767px) {
   input,
   textarea,

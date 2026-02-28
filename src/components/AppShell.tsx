@@ -22,16 +22,23 @@ import { getAvailableModules } from '@/platform/modules';
 import { budgetQueryKeys } from '@/hooks/budgetQueryKeys';
 import { withMutationTiming } from '@/lib/mutationTiming';
 import { supabaseRequest, showMutationError } from '@/lib/supabaseRequest';
+import { handleClientSideLinkNavigation } from '@/lib/navigation';
 
 interface AppShellProps {
   household: HouseholdData;
   userId: string;
   onSignOut: () => void;
   onHouseholdRefetch: () => void;
-  onUpdatePartnerNames: (x: string, y: string) => Promise<void>;
+  onUpdatePartnerSettings: (input: {
+    partnerXName: string;
+    partnerYName: string;
+    wageGapAdjustmentEnabled: boolean;
+    partnerXWageCentsPerDollar: number | null;
+    partnerYWageCentsPerDollar: number | null;
+  }) => Promise<void>;
 }
 
-export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onUpdatePartnerNames }: AppShellProps) {
+export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onUpdatePartnerSettings }: AppShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -180,15 +187,15 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
             const fullPath = `${basePath}${path}`;
             const active = location.pathname === fullPath || location.pathname === path;
             return (
-              <button
+              <a
                 key={path}
-                type="button"
-                onClick={() => navigate(fullPath)}
+                href={fullPath}
+                onClick={(event) => handleClientSideLinkNavigation(event, navigate, fullPath)}
                 className={`inline-flex items-center justify-center gap-0 sm:gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${active ? 'bg-background text-foreground' : 'text-foreground hover:bg-background/50'}`}
               >
                 <Icon className="hidden h-4 w-4 sm:inline" />
                 <span>{label}</span>
-              </button>
+              </a>
             );
           })}
         </nav>
@@ -199,6 +206,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
           const fullPath = `${basePath}${path}`;
           return location.pathname === fullPath || location.pathname === path;
         }}
+        hrefForPath={(path) => `${basePath}${path}`}
         onNavigate={(path) => navigate(`${basePath}${path}`)}
       />
 
@@ -210,11 +218,14 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
                 expenses={expenses}
                 categories={categories}
                 linkedAccounts={linkedAccounts}
-                incomes={incomes}
-                partnerX={household.partnerX}
-                partnerY={household.partnerY}
-                userId={userId}
-                onAdd={addExpense}
+              incomes={incomes}
+              partnerX={household.partnerX}
+              partnerY={household.partnerY}
+              wageGapAdjustmentEnabled={household.wageGapAdjustmentEnabled}
+              partnerXWageCentsPerDollar={household.partnerXWageCentsPerDollar}
+              partnerYWageCentsPerDollar={household.partnerYWageCentsPerDollar}
+              userId={userId}
+              onAdd={addExpense}
                 onUpdate={updateExpense}
                 onRemove={removeExpense}
                 pendingById={expensePendingById}
@@ -230,6 +241,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
                 incomes={incomes}
                 partnerX={household.partnerX}
                 partnerY={household.partnerY}
+                wageGapAdjustmentEnabled={household.wageGapAdjustmentEnabled}
                 userId={userId}
                 onAdd={addIncome}
                 onUpdate={updateIncome}
@@ -247,6 +259,7 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
               incomes={incomes}
               partnerX={household.partnerX}
               partnerY={household.partnerY}
+              wageGapAdjustmentEnabled={household.wageGapAdjustmentEnabled}
               userId={userId}
               onAdd={addIncome}
               onUpdate={updateIncome}
@@ -261,6 +274,9 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
               linkedAccounts={linkedAccounts}
               partnerX={household.partnerX}
               partnerY={household.partnerY}
+              wageGapAdjustmentEnabled={household.wageGapAdjustmentEnabled}
+              partnerXWageCentsPerDollar={household.partnerXWageCentsPerDollar}
+              partnerYWageCentsPerDollar={household.partnerYWageCentsPerDollar}
               userId={userId}
             />
           )}
@@ -272,8 +288,11 @@ export function AppShell({ household, userId, onSignOut, onHouseholdRefetch, onU
               expenses={expenses}
               partnerX={household.partnerX}
               partnerY={household.partnerY}
+              wageGapAdjustmentEnabled={household.wageGapAdjustmentEnabled}
+              partnerXWageCentsPerDollar={household.partnerXWageCentsPerDollar}
+              partnerYWageCentsPerDollar={household.partnerYWageCentsPerDollar}
               inviteCode={household.inviteCode}
-              onUpdatePartnerNames={onUpdatePartnerNames}
+              onUpdatePartnerSettings={onUpdatePartnerSettings}
               onAddCategory={addCategory}
               onUpdateCategory={updateCategory}
               onRemoveCategory={removeCategory}

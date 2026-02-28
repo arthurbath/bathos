@@ -6,6 +6,7 @@ import LauncherPage from '@/platform/components/LauncherPage';
 
 const mockNavigate = vi.fn();
 const mockAuthContext = vi.fn();
+const mockIsAdmin = vi.fn();
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -17,6 +18,10 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@/platform/contexts/AuthContext', () => ({
   useAuthContext: () => mockAuthContext(),
+}));
+
+vi.mock('@/platform/hooks/useIsAdmin', () => ({
+  useIsAdmin: (...args: unknown[]) => mockIsAdmin(...args),
 }));
 
 vi.mock('@/platform/components/ToplineHeader', () => ({
@@ -49,6 +54,7 @@ function cleanup(root: Root, container: HTMLElement) {
 describe('LauncherPage modules', () => {
   beforeEach(() => {
     mockNavigate.mockReset();
+    mockIsAdmin.mockReset();
   });
 
   it('shows Budget and Drawer Planner for signed-in users', () => {
@@ -57,13 +63,33 @@ describe('LauncherPage modules', () => {
       loading: false,
       signOut: vi.fn(),
     });
+    mockIsAdmin.mockReturnValue({ isAdmin: false, loading: false });
 
     const { container, root } = renderLauncher();
 
     try {
       expect(container.textContent).toContain('Budget');
       expect(container.textContent).toContain('Drawer Planner');
+      expect(container.textContent).not.toContain('Garage');
       expect(mockNavigate).not.toHaveBeenCalledWith('/budget/summary', { replace: true });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('shows Garage for admin users', () => {
+    mockAuthContext.mockReturnValue({
+      user: { id: 'user-1' },
+      loading: false,
+      signOut: vi.fn(),
+    });
+    mockIsAdmin.mockReturnValue({ isAdmin: true, loading: false });
+
+    const { container, root } = renderLauncher();
+
+    try {
+      expect(container.textContent).toContain('Garage');
+      expect(container.textContent).toContain('Admin');
     } finally {
       cleanup(root, container);
     }
@@ -75,6 +101,7 @@ describe('LauncherPage modules', () => {
       loading: false,
       signOut: vi.fn(),
     });
+    mockIsAdmin.mockReturnValue({ isAdmin: false, loading: false });
 
     const { container, root } = renderLauncher();
 

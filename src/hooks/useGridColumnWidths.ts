@@ -35,6 +35,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function mergeAllGridWidthRecords(...sources: unknown[]): Record<string, unknown> {
+  const merged: Record<string, unknown> = {};
+  for (const source of sources) {
+    if (!isRecord(source)) continue;
+    Object.assign(merged, source);
+  }
+  return merged;
+}
+
 function getGridColumnWidthsStorageKey(userId: string): string {
   return `${GRID_COLUMN_WIDTHS_STORAGE_KEY_PREFIX}:${userId}`;
 }
@@ -210,8 +219,13 @@ export function useGridColumnWidths({
       if (serialized !== lastPersistedWidthsRef.current) {
         lastPersistedWidthsRef.current = serialized;
         void (async () => {
-          const mergedGridWidths = mergeGridColumnWidths(
+          const latestCachedGridWidths = readCachedGridColumnWidths(userId);
+          const latestKnownGridWidths = mergeAllGridWidthRecords(
             widthsByGridRef.current,
+            latestCachedGridWidths,
+          );
+          const mergedGridWidths = mergeGridColumnWidths(
+            latestKnownGridWidths,
             gridKey,
             sanitizedWidths,
           );
