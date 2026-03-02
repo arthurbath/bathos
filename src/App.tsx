@@ -14,7 +14,6 @@ import AdminPage from "@/platform/components/AdminPage";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import TermsGate from "@/platform/components/TermsGate";
 import AuthCallbackToasts from "@/platform/components/AuthCallbackToasts";
-import AppHeadManager from "@/platform/components/AppHeadManager";
 import { isLikelyNetworkError } from "@/lib/networkErrors";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import Index from "./pages/Index";
@@ -107,7 +106,6 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <BrowserRouter>
-          <AppHeadManager />
           <AuthCallbackToasts />
           <TermsGate />
           <AppRoutes />

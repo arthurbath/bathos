@@ -77,26 +77,4 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  build: {
-    rollupOptions: {
-      input: {
-        main: path.resolve(__dirname, "index.html"),
-        budgetRoot: path.resolve(__dirname, "budget/index.html"),
-        budgetSummary: path.resolve(__dirname, "budget/summary/index.html"),
-        budgetIncomes: path.resolve(__dirname, "budget/incomes/index.html"),
-        budgetExpenses: path.resolve(__dirname, "budget/expenses/index.html"),
-        budgetConfig: path.resolve(__dirname, "budget/config/index.html"),
-        budgetRestore: path.resolve(__dirname, "budget/restore/index.html"),
-        drawersRoot: path.resolve(__dirname, "drawers/index.html"),
-        drawersPlan: path.resolve(__dirname, "drawers/plan/index.html"),
-        drawersConfig: path.resolve(__dirname, "drawers/config/index.html"),
-        garageRoot: path.resolve(__dirname, "garage/index.html"),
-        garageDue: path.resolve(__dirname, "garage/due/index.html"),
-        garageServices: path.resolve(__dirname, "garage/services/index.html"),
-        garageServicings: path.resolve(__dirname, "garage/servicings/index.html"),
-        garageConfig: path.resolve(__dirname, "garage/config/index.html"),
-        admin: path.resolve(__dirname, "admin/index.html"),
-      },
-    },
-  },
 }));

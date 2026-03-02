@@ -8,24 +8,12 @@ export function shouldHandleWithBrowser(event: MouseEvent<HTMLElement>): boolean
   return false;
 }
 
-function isSafariBrowser(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const userAgent = navigator.userAgent;
-  return /Safari\//.test(userAgent) && !/(Chrome|CriOS|EdgiOS|EdgA|FxiOS|OPR|OPT|Android)/.test(userAgent);
-}
-
-function shouldPreferBrowserNavigationForSafari(href: string): boolean {
-  if (!isSafariBrowser()) return false;
-  return href.startsWith('/');
-}
-
 export function handleClientSideLinkNavigation(
   event: MouseEvent<HTMLElement>,
   navigate: NavigateFunction,
   href: string,
 ) {
   if (shouldHandleWithBrowser(event)) return;
-  if (shouldPreferBrowserNavigationForSafari(href)) return;
   event.preventDefault();
   navigate(href);
 }
