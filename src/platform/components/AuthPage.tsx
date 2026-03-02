@@ -14,6 +14,7 @@ import { TermsDocument } from '@/platform/components/TermsDocument';
 import { isWeakOrLeakedPasswordError, WEAK_PASSWORD_MESSAGE } from '@/lib/authErrors';
 import { isPasswordValid } from '@/lib/passwordValidation';
 import { PasswordRequirements } from '@/components/PasswordRequirements';
+import { checkAuthRateLimit, formatRetryAfter } from '@/lib/authRateLimit';
 
 export default function AuthPage() {
   const { signIn, signUp } = useAuthContext();
@@ -43,6 +44,14 @@ export default function AuthPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    const rl = await checkAuthRateLimit('sign_in');
+    if (rl.rateLimited) {
+      toast({ title: 'Too many attempts', description: `Please wait ${formatRetryAfter(rl.retryAfterSeconds)} before trying again.`, variant: 'destructive' });
+      setLoading(false);
+      return;
+    }
+
     const { error } = await signIn(loginEmail, loginPassword);
     if (error) toast({ title: 'Login failed', description: error.message, variant: 'destructive' });
     setLoading(false);
@@ -55,6 +64,14 @@ export default function AuthPage() {
       return;
     }
     setLoading(true);
+
+    const rl = await checkAuthRateLimit('sign_up');
+    if (rl.rateLimited) {
+      toast({ title: 'Too many attempts', description: `Please wait ${formatRetryAfter(rl.retryAfterSeconds)} before trying again.`, variant: 'destructive' });
+      setLoading(false);
+      return;
+    }
+
     const { error } = await signUp(signupEmail, signupPassword, signupName, latestTermsVersion);
     if (error) {
       toast({

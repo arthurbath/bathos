@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthContext } from '@/platform/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { checkAuthRateLimit, formatRetryAfter } from '@/lib/authRateLimit';
 
 export default function ForgotPasswordPage() {
   const { resetPassword } = useAuthContext();
@@ -16,6 +17,14 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     if (!email.trim()) return;
     setLoading(true);
+
+    const rl = await checkAuthRateLimit('forgot_password');
+    if (rl.rateLimited) {
+      toast({ title: 'Too many attempts', description: `Please wait ${formatRetryAfter(rl.retryAfterSeconds)} before trying again.`, variant: 'destructive' });
+      setLoading(false);
+      return;
+    }
+
     const { error } = await resetPassword(email.trim().toLowerCase());
     if (error) {
       toast({ title: 'Failed to send reset email', description: error.message, variant: 'destructive' });
