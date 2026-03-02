@@ -7,17 +7,8 @@ const DEFAULT_TITLE = 'BathOS';
 const DEFAULT_ICON = '/favicon.png';
 const DEFAULT_APPLE_ICON = '/apple-touch-icon.png';
 
-/** iOS/macOS Safari ignores dynamic (Blob) manifests for "Add to Home Screen".
- *  By removing the manifest link entirely on these platforms, Safari falls back
- *  to plain-bookmark behaviour — capturing the current URL and document.title. */
-const IS_APPLE_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
-const MODULE_MANIFEST_MAP: Partial<Record<PlatformModuleId, string>> = {
-  budget: '/manifest-budget.json',
-  drawers: '/manifest-drawers.json',
-  garage: '/manifest-garage.json',
-  admin: '/manifest-admin.json',
-};
+const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID as string;
+const MANIFEST_FN_BASE = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/manifest`;
 
 function setLinkHref(rel: string, href: string) {
   const link = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
@@ -26,17 +17,10 @@ function setLinkHref(rel: string, href: string) {
   }
 }
 
-function setManifestLink(href: string | null) {
+function setManifestLink(href: string) {
   const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-  if (!link) return;
-
-  if (href) {
+  if (link) {
     link.href = href;
-    link.removeAttribute('data-removed');
-  } else {
-    // Remove manifest so Safari uses bookmark semantics
-    link.removeAttribute('href');
-    link.setAttribute('data-removed', 'true');
   }
 }
 
@@ -54,20 +38,12 @@ export function useDocumentHead() {
       const icon = mod.iconPath ?? DEFAULT_ICON;
       setLinkHref('icon', icon);
       setLinkHref('apple-touch-icon', icon);
-
-      if (IS_APPLE_SAFARI) {
-        // Remove manifest so iOS/macOS A2HS captures current URL + title
-        setManifestLink(null);
-      } else {
-        // Chrome/Edge/etc. respect the manifest for A2HS
-        const manifestPath = MODULE_MANIFEST_MAP[mod.id] ?? '/manifest.json';
-        setManifestLink(manifestPath);
-      }
+      setManifestLink(`${MANIFEST_FN_BASE}?module=${mod.id}`);
     } else {
       document.title = DEFAULT_TITLE;
       setLinkHref('icon', DEFAULT_ICON);
       setLinkHref('apple-touch-icon', DEFAULT_APPLE_ICON);
-      setManifestLink('/manifest.json');
+      setManifestLink(`${MANIFEST_FN_BASE}`);
     }
   }, [moduleId, location.pathname]);
 }
