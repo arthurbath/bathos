@@ -11,6 +11,14 @@ describe('resolveBrandingForPath', () => {
       appleTouchIconHref: '/module-budget.png',
       manifestHref: '/manifest-budget.json',
     });
+
+    expect(resolveBrandingForPath('/budget/expenses')).toEqual({
+      title: 'Budget',
+      appName: 'Budget',
+      iconHref: '/module-budget.png',
+      appleTouchIconHref: '/module-budget.png',
+      manifestHref: '/manifest-budget-expenses.json',
+    });
   });
 
   it('returns drawers metadata for drawers routes', () => {
@@ -22,6 +30,14 @@ describe('resolveBrandingForPath', () => {
       appleTouchIconHref: '/module-drawer-planner.png',
       manifestHref: '/manifest-drawers.json',
     });
+
+    expect(resolveBrandingForPath('/drawers/config')).toEqual({
+      title: 'Drawer Planner',
+      appName: 'Drawer Planner',
+      iconHref: '/module-drawer-planner.png',
+      appleTouchIconHref: '/module-drawer-planner.png',
+      manifestHref: '/manifest-drawers-config.json',
+    });
   });
 
   it('returns garage metadata for garage routes', () => {
@@ -32,6 +48,14 @@ describe('resolveBrandingForPath', () => {
       iconHref: '/module-garage.png',
       appleTouchIconHref: '/module-garage.png',
       manifestHref: '/manifest-garage.json',
+    });
+
+    expect(resolveBrandingForPath('/garage/services')).toEqual({
+      title: 'Garage',
+      appName: 'Garage',
+      iconHref: '/module-garage.png',
+      appleTouchIconHref: '/module-garage.png',
+      manifestHref: '/manifest-garage-services.json',
     });
   });
 
@@ -78,6 +102,16 @@ describe('resolveBrandingForPath', () => {
       iconHref: '/favicon.png',
       appleTouchIconHref: '/apple-touch-icon.png',
       manifestHref: '/manifest.json',
+    });
+  });
+
+  it('normalizes trailing slash routes', () => {
+    expect(resolveBrandingForPath('/budget/summary/')).toEqual({
+      title: 'Budget',
+      appName: 'Budget',
+      iconHref: '/module-budget.png',
+      appleTouchIconHref: '/module-budget.png',
+      manifestHref: '/manifest-budget.json',
     });
   });
 });

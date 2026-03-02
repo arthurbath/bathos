@@ -1,0 +1,18 @@
+{
+  "name": "Budget",
+  "short_name": "Budget",
+  "description": "Track your expenses, plan a monthly budget, and split costs fairly with housemates",
+  "start_url": "/budget",
+  "scope": "/budget/",
+  "display": "standalone",
+  "background_color": "#fcfcfc",
+  "theme_color": "#1f1f1f",
+  "icons": [
+    {
+      "src": "/module-budget.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
