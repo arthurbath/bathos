@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.admin-delete-users]
 verify_jwt = false
+
+[functions.check-auth-rate-limit]
+verify_jwt = false

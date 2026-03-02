@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      bathos_auth_rate_limits: {
+        Row: {
+          action_type: string
+          created_at: string
+          id: string
+          ip_address: string
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          id?: string
+          ip_address: string
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          id?: string
+          ip_address?: string
+        }
+        Relationships: []
+      }
       bathos_feedback: {
         Row: {
           context: string
@@ -940,6 +961,7 @@ export type Database = {
         }
         Returns: Json
       }
+      cleanup_old_bathos_auth_rate_limits: { Args: never; Returns: undefined }
       drawers_create_household_for_current_user: { Args: never; Returns: Json }
       drawers_delete_household: {
         Args: { _household_id: string }
