@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.check-auth-rate-limit]
 verify_jwt = false
+
+[functions.notify-new-signup]
+verify_jwt = false

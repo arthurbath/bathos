@@ -81,6 +81,10 @@ export default function AuthPage() {
       });
     } else {
       toast({ title: 'Check your email', description: 'We sent you a confirmation link.' });
+      // Fire-and-forget: notify admin of new signup
+      supabase.functions.invoke('notify-new-signup', {
+        body: { email: signupEmail, displayName: signupName },
+      }).catch((err) => console.error('Signup notification error:', err));
     }
     setLoading(false);
   };
