@@ -60,11 +60,29 @@ function menuItemLabels(container: HTMLElement) {
     .filter((label): label is string => Boolean(label));
 }
 
+function mockStandaloneMode(enabled: boolean) {
+  Object.defineProperty(window.navigator, 'standalone', {
+    configurable: true,
+    value: enabled,
+  });
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: enabled && query === '(display-mode: standalone)',
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })) as unknown as typeof window.matchMedia;
+}
+
 describe('ToplineHeader administration access placement', () => {
   beforeEach(() => {
     mockNavigate.mockReset();
     mockIsAdmin.mockReset();
     mockIsMobile.mockReset();
+    mockStandaloneMode(false);
   });
 
   it('shows admin icon in the topnav on desktop', () => {
@@ -103,6 +121,36 @@ describe('ToplineHeader administration access placement', () => {
       expect(labels[1]).toBe('Account');
       expect(labels[2]).toBe('Feedback');
       expect(labels[3]).toBe('Sign Out');
+    } finally {
+      unmount(root, container);
+    }
+  });
+});
+
+describe('ToplineHeader iOS standalone safe area', () => {
+  beforeEach(() => {
+    mockNavigate.mockReset();
+    mockIsAdmin.mockReset();
+    mockIsMobile.mockReset();
+    mockIsAdmin.mockReturnValue({ isAdmin: false, loading: false, resolved: true });
+    mockIsMobile.mockReturnValue(true);
+  });
+
+  it('adds top safe-area padding in iOS standalone mode', () => {
+    mockStandaloneMode(true);
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+    });
+
+    const { container, root } = mount(
+      <ToplineHeader title="Budget" userId="user-1" displayName="Art" onSignOut={vi.fn()} />,
+    );
+
+    try {
+      const header = container.querySelector('header');
+      expect(header).toBeTruthy();
+      expect(header?.className).toContain('pt-[env(safe-area-inset-top)]');
     } finally {
       unmount(root, container);
     }

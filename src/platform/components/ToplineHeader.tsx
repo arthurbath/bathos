@@ -38,9 +38,20 @@ export function ToplineHeader({
   const isMobile = useIsMobile();
   const moduleConfig = moduleId ? getModuleById(moduleId) : undefined;
   const ModuleIcon = moduleConfig?.icon;
+  const isIosStandalone =
+    (
+      (window.navigator as any).standalone === true ||
+      (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches)
+    ) &&
+    (
+      /iPad|iPhone|iPod/.test(window.navigator.userAgent) ||
+      (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1)
+    );
 
   return (
-    <header className="sticky top-0 z-[45] isolate border-b border-[hsl(var(--grid-sticky-line))] bg-card">
+    <header
+      className={`sticky top-0 z-[45] isolate border-b border-[hsl(var(--grid-sticky-line))] bg-card ${isIosStandalone ? 'pt-[env(safe-area-inset-top)]' : ''}`}
+    >
       <div className={`mx-auto flex ${maxWidthClassName} items-center justify-between gap-2 px-4 py-3`}>
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {backHref ? (
