@@ -6,13 +6,81 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
+
+    <script>
+      // Synchronously generate manifest with current path as start_url so iOS
+      // "Add to Home Screen" bookmarks the specific route (e.g. /budget/summary)
+      // instead of always opening "/". Must run BEFORE <link rel="manifest"> is parsed.
+      (function() {
+        var MODULE_META = {
+          budget:  { name: 'Budget',         icon: '/module-budget.png',          start: '/budget/summary' },
+          drawers: { name: 'Drawer Planner', icon: '/module-drawer-planner.png',  start: '/drawers/plan' },
+          garage:  { name: 'Garage',         icon: '/module-garage.png',          start: '/garage/due' },
+          admin:   { name: 'Administration', icon: '/module-administration.png',  start: '/admin' }
+        };
+
+        var firstSegment = location.pathname.split('/')[1];
+        var mod = firstSegment && MODULE_META[firstSegment] ? MODULE_META[firstSegment] : null;
+
+        var appName = mod ? mod.name : 'BathOS';
+        var iconPath = mod ? mod.icon : '/icon-192.png';
+        var startUrl = mod ? location.pathname : '/';
+
+        // Set document title synchronously
+        document.title = appName;
+
+        var manifest = {
+          name: appName,
+          short_name: appName,
+          description: 'A bunch of hyper-specific apps for Art and his friends',
+          start_url: startUrl,
+          display: 'standalone',
+          background_color: '#fcfcfc',
+          theme_color: '#1f1f1f',
+          icons: [{
+            src: iconPath,
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any maskable'
+          }, {
+            src: iconPath,
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable'
+          }]
+        };
+
+        var blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+        var link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = URL.createObjectURL(blob);
+        document.head.appendChild(link);
+
+        // Update apple-touch-icon elements with the module icon
+        if (mod) {
+          document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(function(el) {
+            el.href = mod.icon;
+          });
+        }
+      })();
+    </script>
+
     <title>BathOS</title>
     <meta name="description" content="A bunch of hyper-specific apps for Art and his friends" />
 
-    <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#1f1f1f" />
     <link rel="icon" type="image/png" href="/favicon.png" />
+
+    <!-- iOS App Icons with explicit sizes -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- iOS PWA meta tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="BathOS" />
 
     <meta property="og:title" content="BathOS" />
     <meta property="og:description" content="A bunch of hyper-specific apps for Art and his friends" />
