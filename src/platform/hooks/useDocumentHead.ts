@@ -38,12 +38,12 @@ export function useDocumentHead() {
       const icon = mod.iconPath ?? DEFAULT_ICON;
       setLinkHref('icon', icon);
       setLinkHref('apple-touch-icon', icon);
-      setManifestLink(`${MANIFEST_FN_BASE}?module=${mod.id}`);
+      setManifestLink(`${MANIFEST_FN_BASE}?module=${mod.id}&origin=${encodeURIComponent(window.location.origin)}`);
     } else {
       document.title = DEFAULT_TITLE;
       setLinkHref('icon', DEFAULT_ICON);
       setLinkHref('apple-touch-icon', DEFAULT_APPLE_ICON);
-      setManifestLink(`${MANIFEST_FN_BASE}`);
+      setManifestLink(`${MANIFEST_FN_BASE}?origin=${encodeURIComponent(window.location.origin)}`);
     }
   }, [moduleId, location.pathname]);
 }

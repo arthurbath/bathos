@@ -3,6 +3,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Content-Type': 'application/manifest+json',
   'Cache-Control': 'no-cache',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
 };
 
 /** Allowed module configs – prevents arbitrary values in the manifest. */
@@ -26,6 +27,7 @@ Deno.serve((req: Request) => {
 
   const url = new URL(req.url);
   const moduleId = url.searchParams.get('module');
+  const origin = url.searchParams.get('origin') ?? 'https://bath.garden';
   const cfg = moduleId && MODULES[moduleId] ? MODULES[moduleId] : DEFAULT;
 
   const manifest = {
@@ -37,8 +39,8 @@ Deno.serve((req: Request) => {
     background_color: '#fcfcfc',
     theme_color: '#1f1f1f',
     icons: [
-      { src: cfg.icon, sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
-      { src: cfg.icon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      { src: `${origin}${cfg.icon}`, sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+      { src: `${origin}${cfg.icon}`, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
     ],
   };
 
