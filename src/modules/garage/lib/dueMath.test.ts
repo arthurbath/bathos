@@ -132,4 +132,84 @@ describe('dueMath', () => {
     expect(item.remainingMonths).toBe(11);
     expect(item.bucket).toBe('not_due');
   });
+
+  it('includes last not-needed date when newer than last performed', () => {
+    const item = computeDueItems({
+      services: [makeService()],
+      servicings: [
+        makeServicing({
+          id: 'servicing-performed',
+          service_date: '2025-06-01',
+          outcomes: [{
+            id: 'outcome-performed',
+            user_id: 'user-1',
+            vehicle_id: 'vehicle-1',
+            servicing_id: 'servicing-performed',
+            service_id: 'service-1',
+            status: 'performed',
+            created_at: '2025-06-01T00:00:00Z',
+          }],
+        }),
+        makeServicing({
+          id: 'servicing-not-needed',
+          service_date: '2025-10-01',
+          outcomes: [{
+            id: 'outcome-not-needed',
+            user_id: 'user-1',
+            vehicle_id: 'vehicle-1',
+            servicing_id: 'servicing-not-needed',
+            service_id: 'service-1',
+            status: 'not_needed_yet',
+            created_at: '2025-10-01T00:00:00Z',
+          }],
+        }),
+      ],
+      vehicle: makeVehicle(),
+      defaults: { upcomingMiles: 1000, upcomingDays: 60 },
+      now: new Date('2026-02-27T12:00:00Z'),
+    })[0];
+
+    expect(item.lastPerformedDate).toBe('2025-06-01');
+    expect(item.lastConfirmedNotNeededDate).toBe('2025-10-01');
+  });
+
+  it('omits last not-needed date when older than last performed', () => {
+    const item = computeDueItems({
+      services: [makeService()],
+      servicings: [
+        makeServicing({
+          id: 'servicing-not-needed',
+          service_date: '2025-04-01',
+          outcomes: [{
+            id: 'outcome-not-needed',
+            user_id: 'user-1',
+            vehicle_id: 'vehicle-1',
+            servicing_id: 'servicing-not-needed',
+            service_id: 'service-1',
+            status: 'not_needed_yet',
+            created_at: '2025-04-01T00:00:00Z',
+          }],
+        }),
+        makeServicing({
+          id: 'servicing-performed',
+          service_date: '2025-06-01',
+          outcomes: [{
+            id: 'outcome-performed',
+            user_id: 'user-1',
+            vehicle_id: 'vehicle-1',
+            servicing_id: 'servicing-performed',
+            service_id: 'service-1',
+            status: 'performed',
+            created_at: '2025-06-01T00:00:00Z',
+          }],
+        }),
+      ],
+      vehicle: makeVehicle(),
+      defaults: { upcomingMiles: 1000, upcomingDays: 60 },
+      now: new Date('2026-02-27T12:00:00Z'),
+    })[0];
+
+    expect(item.lastPerformedDate).toBe('2025-06-01');
+    expect(item.lastConfirmedNotNeededDate).toBeNull();
+  });
 });

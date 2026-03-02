@@ -3,11 +3,10 @@ import { AppShell } from '@/components/AppShell';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAuth } from '@/hooks/useAuth';
 import { useHouseholdData } from '@/hooks/useHouseholdData';
-import { useProfileDisplayName } from '@/platform/hooks/useProfileDisplayName';
 import AuthPage from '@/platform/components/AuthPage';
 
 const Index = () => {
-  const { user, loading: authLoading, isSigningOut, signOut } = useAuth();
+  const { user, loading: authLoading, isSigningOut, signOut, displayName } = useAuth();
   const {
     household,
     loading: hhLoading,
@@ -26,7 +25,6 @@ const Index = () => {
     leaveHousehold,
     deleteHousehold,
   } = useHouseholdData(user);
-  const setupDisplayName = useProfileDisplayName(user?.id, user?.email ?? undefined);
 
   if (authLoading || hhLoading || isSigningOut) {
     return (
@@ -43,7 +41,7 @@ const Index = () => {
       {!household ? (
         <HouseholdSetup
           userId={user.id}
-          displayName={setupDisplayName}
+          displayName={displayName}
           onSignOut={signOut}
           onComplete={createHousehold}
           onJoin={joinHousehold}
@@ -52,6 +50,7 @@ const Index = () => {
         <AppShell
           household={household}
           userId={user.id}
+          displayName={displayName}
           userEmail={user.email ?? ''}
           onSignOut={signOut}
           onUpdatePartnerSettings={updatePartnerSettings}

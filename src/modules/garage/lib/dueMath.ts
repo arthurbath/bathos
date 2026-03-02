@@ -74,6 +74,32 @@ function findLastPerformedOutcome(
   return { serviceDate: bestDate, mileage: bestMileage };
 }
 
+function findLastNotNeededOutcomeDate(
+  serviceId: string,
+  servicings: GarageServicingWithRelations[],
+): string | null {
+  let bestDate: string | null = null;
+  let bestCreatedAt: string | null = null;
+
+  for (const servicing of servicings) {
+    const notNeeded = servicing.outcomes.find(
+      (outcome: GarageServicingService) => outcome.service_id === serviceId && outcome.status === 'not_needed_yet',
+    );
+    if (!notNeeded) continue;
+
+    const isNewer = !bestDate
+      || servicing.service_date > bestDate
+      || (servicing.service_date === bestDate && servicing.created_at > (bestCreatedAt ?? ''));
+
+    if (isNewer) {
+      bestDate = servicing.service_date;
+      bestCreatedAt = servicing.created_at;
+    }
+  }
+
+  return bestDate;
+}
+
 export function classifyDueBucket(args: {
   remainingMiles: number | null;
   remainingMonths: number | null;
@@ -115,6 +141,12 @@ export function computeDueItems(args: {
 
   return services.map((service) => {
     const lastPerformed = findLastPerformedOutcome(service.id, servicings);
+    const lastNotNeededDate = findLastNotNeededOutcomeDate(service.id, servicings);
+    const lastConfirmedNotNeededDate = lastNotNeededDate && (
+      !lastPerformed.serviceDate || lastNotNeededDate > lastPerformed.serviceDate
+    )
+      ? lastNotNeededDate
+      : null;
     const hasInterval = Boolean(service.every_miles || service.every_months);
 
     const mileageBaseline = lastPerformed.mileage ?? 0;
@@ -148,6 +180,7 @@ export function computeDueItems(args: {
       bucket,
       lastPerformedDate: lastPerformed.serviceDate,
       lastPerformedMileage: lastPerformed.mileage,
+      lastConfirmedNotNeededDate,
       remainingMiles,
       remainingMonths,
       dueMileage,

@@ -4,7 +4,7 @@ This file contains shared project conventions for any AI agent working on BathOS
 
 ## What is BathOS?
 
-BathOS is a shared household platform — a collection of small, focused tools ("modules") for people who live together. Each module lives on its own subdomain (e.g., `budget.bath.garden`) and handles one aspect of running a home. The platform root (`bath.garden`) serves the launcher and account management.
+BathOS is a shared household platform — a collection of small, focused tools ("modules") for people who live together. Modules are served with path-based routing (for example, `/budget/...`) and each handles one aspect of running a home.
 
 ## Architecture
 
@@ -12,12 +12,12 @@ BathOS is a shared household platform — a collection of small, focused tools (
 - **Module isolation**: Each module is self-contained under `src/modules/[name]/`. Removing a module should require only deleting its files, routes, DB tables, and launcher entry. Never import from one module into another.
 - **Shared code**: `src/platform/` (auth, layout, launcher), `src/components/ui/` (shadcn primitives), `src/lib/` (utilities)
 - **Database prefixes**: All tables use a namespace prefix — `bathos_` for platform tables, `budget_` for Budget, future modules use their own (e.g., `tracker_`)
-- **Routing**: Client-side subdomain detection via `useHostModule`. Path-based fallback (`/budget/...`) is used in development and preview environments.
+- **Routing**: Client-side module detection via `useHostModule` using the URL path prefix (`/budget/...`, `/drawers/...`, `/garage/...`).
 - **Security**: RLS on all tables. Admin roles in `bathos_user_roles`. SECURITY DEFINER functions for RLS checks to avoid recursion.
 
 ## Modules
 
-### Budget (`budget.bath.garden`)
+### Budget (`/budget/...`)
 Split shared expenses fairly between two partners. Combines per-expense benefit splits with relative monthly income to calculate each person's fair share. Features: spreadsheet-style data entry, category/payer/payment-method grouping, income tracking with flexible frequency, settlement summary, backup/restore points, partner invite codes.
 
 ## Style Guide
@@ -42,7 +42,7 @@ Split shared expenses fairly between two partners. Combines per-expense benefit 
 - **Evaluations**: Security, performance, and technology evaluations go in dated files (`docs/evaluations/YYYY-MM-DD_topic.md`). Never delete old evaluations — they serve as a decision log.
 - **README.md**: Keep updated whenever modules are added, changed, or removed. Only document modules visible to general users (not behind admin-only feature flags).
 - **Public `.env` policy**: This repository is public, and `.env` is intentionally committed for Lovable workflows. Treat `.env` as public and only store client-safe values there. Never commit secrets (for example: service role keys, SMTP passwords, API secrets, private tokens). Store real secrets in managed secret stores (Supabase/hosting environment secrets), not in the repo.
-- **Adding a module**: See `docs/MODULE_GUIDE.md` for the full checklist (namespace, tables, files, routes, launcher registration, subdomain).
+- **Adding a module**: See `docs/MODULE_GUIDE.md` for the full checklist (namespace, tables, files, routes, launcher registration).
 - **Testing**: Run existing tests before submitting changes. Write tests for new logic when practical.
 
 ## File References

@@ -28,6 +28,7 @@ import type { HouseholdMember } from '@/platform/households';
 interface AppShellProps {
   household: HouseholdData;
   userId: string;
+  displayName: string;
   userEmail: string;
   onSignOut: () => void;
   onUpdatePartnerSettings: (input: {
@@ -53,6 +54,7 @@ interface AppShellProps {
 export function AppShell({
   household,
   userId,
+  displayName,
   userEmail,
   onSignOut,
   onUpdatePartnerSettings,
@@ -212,7 +214,7 @@ export function AppShell({
         title="Budget"
         moduleId="budget"
         userId={userId}
-        displayName={household.displayName}
+        displayName={displayName}
         onSignOut={onSignOut}
         showAppSwitcher={showAppSwitcher}
       />

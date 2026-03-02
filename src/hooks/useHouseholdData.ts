@@ -64,22 +64,13 @@ export function useHouseholdData(user: User | null) {
 
       if (!membership) return null;
 
-      const [household, profile] = await Promise.all([
-        supabaseRequest(async () =>
-          await supabase
-            .from('budget_households')
-            .select('id, name, invite_code, partner_x_name, partner_y_name, wage_gap_adjustment_enabled, partner_x_wage_cents_per_dollar, partner_y_wage_cents_per_dollar')
-            .eq('id', membership.household_id)
-            .single(),
-        ),
-        supabaseRequest(async () =>
-          await supabase
-            .from('bathos_profiles')
-            .select('display_name')
-            .eq('id', userId)
-            .single(),
-        ),
-      ]);
+      const household = await supabaseRequest(async () =>
+        await supabase
+          .from('budget_households')
+          .select('id, name, invite_code, partner_x_name, partner_y_name, wage_gap_adjustment_enabled, partner_x_wage_cents_per_dollar, partner_y_wage_cents_per_dollar')
+          .eq('id', membership.household_id)
+          .single(),
+      );
 
       if (!household) return null;
 
@@ -92,7 +83,7 @@ export function useHouseholdData(user: User | null) {
         wageGapAdjustmentEnabled: household.wage_gap_adjustment_enabled ?? false,
         partnerXWageCentsPerDollar: household.partner_x_wage_cents_per_dollar ?? null,
         partnerYWageCentsPerDollar: household.partner_y_wage_cents_per_dollar ?? null,
-        displayName: profile?.display_name ?? 'You',
+        displayName: '',
       };
     } catch (error) {
       console.error('Failed to fetch household data:', error);

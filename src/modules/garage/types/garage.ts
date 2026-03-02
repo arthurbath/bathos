@@ -89,6 +89,7 @@ export interface GarageDueItem {
   bucket: GarageDueBucket;
   lastPerformedDate: string | null;
   lastPerformedMileage: number | null;
+  lastConfirmedNotNeededDate: string | null;
   remainingMiles: number | null;
   remainingMonths: number | null;
   dueMileage: number | null;

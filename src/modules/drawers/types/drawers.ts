@@ -9,7 +9,6 @@ export interface DrawersHouseholdData {
   householdId: string;
   householdName: string;
   inviteCode: string | null;
-  displayName: string;
 }
 
 export interface DrawersUnit {

@@ -84,9 +84,9 @@ export function ToplineHeader({
           {!isMobile && <FeedbackDialog userId={userId} />}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="clear" size="sm" className="h-9 w-9 p-0 sm:w-auto sm:px-3 sm:gap-1.5">
+              <Button variant="clear" size="sm" className="h-9 w-auto px-3 gap-1.5">
                 <User className="h-4 w-4" />
-                <span className="hidden text-sm sm:inline">{displayName}</span>
+                <span className="max-w-[100px] truncate text-sm">{displayName}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-popover">

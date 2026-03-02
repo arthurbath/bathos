@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -63,6 +64,10 @@ function getPrimaryDueReason(item: GarageDueItem): string {
   return formatMonthsStatus(remainingMonths);
 }
 
+function formatDisplayDate(dateIso: string): string {
+  return format(parseISO(dateIso), 'MMM yyyy');
+}
+
 function DueBucketCard({
   title,
   items,
@@ -105,15 +110,24 @@ function DueBucketCard({
                       <p>{getPrimaryDueReason(item)}</p>
                     </div>
                   </div>
-                  {showMonitoringToggle && (
+                  {(showMonitoringToggle || item.lastConfirmedNotNeededDate) && (
                     <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5 text-right">
-                      <Switch
-                        checked={monitoringDrafts[item.service.id] ?? item.service.monitoring}
-                        disabled={pendingMonitoringByServiceId[item.service.id] === true}
-                        onCheckedChange={(next) => onToggleMonitoring(item, next)}
-                        aria-label={`Toggle monitoring for ${item.service.name}`}
-                      />
-                      <span className="text-xs text-muted-foreground">Monitoring</span>
+                      {showMonitoringToggle && (
+                        <>
+                          <Switch
+                            checked={monitoringDrafts[item.service.id] ?? item.service.monitoring}
+                            disabled={pendingMonitoringByServiceId[item.service.id] === true}
+                            onCheckedChange={(next) => onToggleMonitoring(item, next)}
+                            aria-label={`Toggle monitoring for ${item.service.name}`}
+                          />
+                          <span className="text-xs text-muted-foreground">Monitoring</span>
+                        </>
+                      )}
+                      {item.lastConfirmedNotNeededDate && (
+                        <span className="max-w-[10rem] text-xs text-muted-foreground">
+                          Not needed: {formatDisplayDate(item.lastConfirmedNotNeededDate)}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

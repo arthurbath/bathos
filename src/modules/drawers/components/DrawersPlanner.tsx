@@ -23,6 +23,7 @@ import { HouseholdManagementPanel, type HouseholdMember } from '@/platform/house
 interface DrawersPlannerProps {
   household: DrawersHouseholdData;
   userId: string;
+  displayName: string;
   userEmail: string;
   onSignOut: () => Promise<void> | void;
   householdMembers: HouseholdMember[];
@@ -103,6 +104,7 @@ function getDesktopUnitGridWidth(cubbiesWide: number): string {
 export function DrawersPlanner({
   household,
   userId,
+  displayName,
   userEmail,
   onSignOut,
   householdMembers,
@@ -488,7 +490,7 @@ export function DrawersPlanner({
         title="Drawer Planner"
         moduleId="drawers"
         userId={userId}
-        displayName={household.displayName}
+        displayName={displayName}
         onSignOut={onSignOut}
         showAppSwitcher
       />

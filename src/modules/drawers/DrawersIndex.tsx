@@ -6,11 +6,10 @@ import { DrawersPlanner } from '@/modules/drawers/components/DrawersPlanner';
 import { useDrawersHouseholdData } from '@/modules/drawers/hooks/useDrawersHouseholdData';
 
 export default function DrawersIndex() {
-  const { user, loading: authLoading, isSigningOut, signOut } = useAuth();
+  const { user, loading: authLoading, isSigningOut, signOut, displayName } = useAuth();
   const {
     household,
     loading: householdLoading,
-    displayName,
     createHousehold,
     joinHousehold,
     householdMembers,
@@ -51,10 +50,11 @@ export default function DrawersIndex() {
   }
 
   return (
-    <DrawersPlanner
-      household={household}
-      userId={user.id}
-      userEmail={user.email ?? ''}
+      <DrawersPlanner
+        household={household}
+        userId={user.id}
+        displayName={displayName}
+        userEmail={user.email ?? ''}
       onSignOut={signOut}
       householdMembers={householdMembers}
       householdMembersLoading={householdMembersLoading}

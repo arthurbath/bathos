@@ -119,6 +119,7 @@ function renderShell(pathname: string) {
           <AppShell
             household={household}
             userId="user-1"
+            displayName="You"
             userEmail="user@example.com"
             onSignOut={async () => {}}
             onUpdatePartnerSettings={async () => {}}

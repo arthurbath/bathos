@@ -7,11 +7,16 @@ import { AuthProvider, useAuthContext } from '@/platform/contexts/AuthContext';
 const getSessionMock = vi.fn();
 const signOutMock = vi.fn();
 const unsubscribeMock = vi.fn();
+const maybeSingleMock = vi.fn();
+const eqMock = vi.fn();
+const selectMock = vi.fn();
+const fromMock = vi.fn();
 
 let authStateChangeHandler: ((event: string, session: any) => void) | null = null;
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
+    from: (...args: unknown[]) => fromMock(...args),
     auth: {
       onAuthStateChange: (callback: (event: string, session: any) => void) => {
         authStateChangeHandler = callback;
@@ -27,8 +32,8 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 function Consumer() {
-  const { user, loading } = useAuthContext();
-  return <div data-testid="state" data-user-id={user?.id ?? ''} data-loading={String(loading)} />;
+  const { user, loading, displayName } = useAuthContext();
+  return <div data-testid="state" data-user-id={user?.id ?? ''} data-loading={String(loading)} data-display-name={displayName} />;
 }
 
 function mount() {
@@ -88,6 +93,15 @@ describe('AuthProvider', () => {
     getSessionMock.mockReset();
     signOutMock.mockReset();
     unsubscribeMock.mockReset();
+    maybeSingleMock.mockReset();
+    eqMock.mockReset();
+    selectMock.mockReset();
+    fromMock.mockReset();
+
+    maybeSingleMock.mockResolvedValue({ data: { display_name: 'Art' }, error: null });
+    eqMock.mockReturnValue({ maybeSingle: maybeSingleMock });
+    selectMock.mockReturnValue({ eq: eqMock });
+    fromMock.mockReturnValue({ select: selectMock });
 
     getSessionMock.mockResolvedValue({
       data: {
@@ -107,6 +121,7 @@ describe('AuthProvider', () => {
       await waitForCondition(() => {
         expect(state?.getAttribute('data-loading')).toBe('false');
         expect(state?.getAttribute('data-user-id')).toBe('user-1');
+        expect(state?.getAttribute('data-display-name')).toBe('Art');
       });
 
       act(() => {

@@ -15,7 +15,7 @@ BathOS is a multi-module platform where each module is a self-contained applicat
    - `budget_` — Budget module tables
    - Future modules use their own prefix (e.g., `inventory_`, `tracker_`)
 
-4. **Subdomain routing**: Each module lives on its own subdomain (e.g., `budget.bath.garden`). The platform root (`bath.garden`) serves the launcher and account management. In development, path-based routing (`/budget/...`) is used as a fallback.
+4. **Path-based routing**: Each module lives under its own URL path prefix (for example, `/budget/...`, `/drawers/...`, `/garage/...`). The platform root (`/`) serves the launcher and account management.
 
 5. **Group entity isolation**: Each module has its own concept of a "group" (e.g., Budget has "households"). Group IDs are module-specific — sharing a group in one module does not grant access in another.
 

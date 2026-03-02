@@ -1,15 +1,10 @@
-import { Navigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAuth } from '@/hooks/useAuth';
-import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
-import { useProfileDisplayName } from '@/platform/hooks/useProfileDisplayName';
 import AuthPage from '@/platform/components/AuthPage';
 import { GarageShell } from '@/modules/garage/components/GarageShell';
 
 export default function GarageIndex() {
-  const { user, loading: authLoading, isSigningOut, signOut } = useAuth();
-  const { isAdmin, loading: roleLoading } = useIsAdmin(user?.id);
-  const displayName = useProfileDisplayName(user?.id, user?.email ?? undefined);
+  const { user, loading: authLoading, isSigningOut, signOut, displayName } = useAuth();
 
   if (authLoading || isSigningOut) {
     return (

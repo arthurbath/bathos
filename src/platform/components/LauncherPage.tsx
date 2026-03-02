@@ -9,15 +9,13 @@ import { getAvailableModules } from '@/platform/modules';
 import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
 import { Badge } from '@/components/ui/badge';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
-import { useProfileDisplayName } from '@/platform/hooks/useProfileDisplayName';
 import AuthPage from './AuthPage';
 
 export default function LauncherPage() {
-  const { user, loading, isSigningOut, signOut } = useAuthContext();
+  const { user, loading, isSigningOut, signOut, displayName } = useAuthContext();
   const { isAdmin, loading: roleLoading, resolved: roleResolved } = useIsAdmin(user?.id);
   const navigate = useNavigate();
   const modules = getAvailableModules({ isAdmin });
-  const displayName = useProfileDisplayName(user?.id, user?.email ?? undefined);
 
   useEffect(() => {
     // If there's only one module, skip the launcher and go straight to it

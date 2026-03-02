@@ -365,7 +365,7 @@ export function GarageConfigView({
                     >
                       <span className="truncate">{vehicleForm.in_service_date
                         ? format(parseDateInputValue(vehicleForm.in_service_date) ?? new Date(`${vehicleForm.in_service_date}T00:00:00`), 'MMMM d, yyyy')
-                        : 'Pick a date'}</span>
+                        : ''}</span>
                       <CalendarIcon className="ml-auto h-4 w-4 shrink-0" />
                     </Button>
                   </PopoverTrigger>

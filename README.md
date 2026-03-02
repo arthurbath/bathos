@@ -1,6 +1,6 @@
 # BathOS
 
-BathOS is a shared household platform — a collection of small, focused tools for people who live together. Each tool (called a **module**) lives on its own subdomain and handles one aspect of running a home.
+BathOS is a shared household platform — a collection of small, focused tools for people who live together. Each tool (called a **module**) lives under its own path prefix and handles one aspect of running a home.
 
 The platform is live at [bath.garden](https://bath.garden).
 
@@ -19,7 +19,7 @@ Split shared expenses fairly between two partners. The Budget module calculates 
 - Partner invite codes for joining an existing household
 - Household membership controls: view members, rotate invite code, remove members, leave household, and delete household
 
-Accessible at [budget.bath.garden](https://budget.bath.garden).
+Accessible at [bath.garden/budget/summary](https://bath.garden/budget/summary).
 
 ### Drawer Planner
 
@@ -32,7 +32,7 @@ Plan and label Kallax-style cubby layouts across one or more named units in a sh
 - Household invite code flow for sharing the same drawer layout
 - Household membership controls: view members, rotate invite code, remove members, leave household, and delete household
 
-Accessible at [drawers.bath.garden](https://drawers.bath.garden).
+Accessible at [bath.garden/drawers/plan](https://bath.garden/drawers/plan).
 
 ### Garage
 
@@ -44,14 +44,14 @@ Track vehicle maintenance schedules and service history for each user account. F
 - Service visit logging with outcomes and notes
 - Receipt attachment support for service records
 
-Accessible at [garage.bath.garden](https://garage.bath.garden).
+Accessible at [bath.garden/garage/due](https://bath.garden/garage/due).
 
 ## Development notes
 
 - Built with React, TypeScript, Vite, Tailwind CSS, and Supabase
 - Modules are isolated under `src/modules/[name]/` — removing one should not break another
 - Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`) for clarity
-- Subdomain routing is handled client-side; path-based fallback (`/budget/...`) is used in development
+- Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`)
 - See `docs/ARCHITECTURE.md` for structure, `docs/MODULE_GUIDE.md` for adding modules, and `docs/STYLE_GUIDE.md` for design conventions
 
 ### Dev Console Bridge (Safari + Vite)

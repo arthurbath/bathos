@@ -4,8 +4,8 @@
 
 Pick a short, lowercase name (e.g., `tracker`). This becomes:
 - The DB table prefix: `tracker_`
-- The subdomain: `tracker.bath.garden`
 - The file path: `src/modules/tracker/`
+- The path prefix: `/tracker/...`
 
 ## 2. Create database tables
 
@@ -63,11 +63,9 @@ Add path-based fallback routes in the platform root section:
 
 Add the module to the `MODULES` array in `LauncherPage.tsx`.
 
-## 6. Register the subdomain
+## 6. Register module path handling
 
-Add the `SUBDOMAIN_MODULE_MAP` entry in `useHostModule.ts`.
-
-Configure the subdomain in Lovable project settings (Settings > Domains).
+Add the module path mapping entry in `useHostModule.ts` so the module is detected from the first URL segment.
 
 ## 7. Module isolation rules
 

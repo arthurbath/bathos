@@ -15,7 +15,6 @@ import { isWeakOrLeakedPasswordError, WEAK_PASSWORD_MESSAGE } from '@/lib/authEr
 import { isPasswordValid } from '@/lib/passwordValidation';
 import { PasswordRequirements } from '@/components/PasswordRequirements';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
-import { getUserDisplayName } from '@/platform/lib/getUserDisplayName';
 import { useLocation } from 'react-router-dom';
 
 interface AccountPageLocationState {
@@ -31,7 +30,7 @@ function resolveBackHref(state: AccountPageLocationState | null): string {
 }
 
 export default function AccountPage() {
-  const { user, isSigningOut, signOut } = useAuthContext();
+  const { user, isSigningOut, signOut, displayName: authDisplayName, setDisplayName: setAuthDisplayName } = useAuthContext();
   const { isAdmin } = useIsAdmin(user?.id);
   const { toast } = useToast();
   const location = useLocation();
@@ -64,27 +63,25 @@ export default function AccountPage() {
   useEffect(() => {
     if (!user) return;
     setUserEmail(user.email ?? '');
-
-    supabase
-      .from('bathos_profiles')
-      .select('display_name')
-      .eq('id', user.id)
-      .single()
-      .then(({ data }) => {
-        if (data) setDisplayName(data.display_name);
-      });
   }, [user]);
+
+  useEffect(() => {
+    setDisplayName(authDisplayName);
+  }, [authDisplayName]);
 
   const handleSaveName = async () => {
     if (!user || !displayName.trim()) return;
+    const nextDisplayName = displayName.trim();
     setSavingName(true);
     const { error } = await supabase
       .from('bathos_profiles')
-      .update({ display_name: displayName.trim() })
+      .update({ display_name: nextDisplayName })
       .eq('id', user.id);
     if (error) {
       toast({ title: 'Failed to update name', description: error.message, variant: 'destructive' });
     } else {
+      setAuthDisplayName(nextDisplayName);
+      setDisplayName(nextDisplayName);
       toast({ title: 'Display name updated' });
       setEditingName(false);
     }
@@ -202,7 +199,7 @@ export default function AccountPage() {
       <ToplineHeader
         title="BathOS"
         userId={user.id}
-        displayName={displayName || getUserDisplayName(user)}
+        displayName={authDisplayName}
         onSignOut={signOut}
         backHref={backHref}
         maxWidthClassName="max-w-lg"

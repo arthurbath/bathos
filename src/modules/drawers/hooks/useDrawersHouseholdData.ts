@@ -10,7 +10,6 @@ import { withMutationTiming } from '@/lib/mutationTiming';
 interface UseDrawersHouseholdDataResult {
   household: DrawersHouseholdData | null;
   loading: boolean;
-  displayName: string;
   createHousehold: () => Promise<void>;
   joinHousehold: (inviteCode: string) => Promise<void>;
   householdMembers: HouseholdMember[];
@@ -44,13 +43,11 @@ function toRpcHouseholdData(payload: Json): DrawersHouseholdData {
     householdId,
     householdName: typeof row.householdName === 'string' ? row.householdName : 'My Drawer Household',
     inviteCode: typeof row.inviteCode === 'string' ? row.inviteCode : null,
-    displayName: typeof row.displayName === 'string' ? row.displayName : 'You',
   };
 }
 
 export function useDrawersHouseholdData(user: User | null, enabled: boolean): UseDrawersHouseholdDataResult {
   const [household, setHousehold] = useState<DrawersHouseholdData | null>(null);
-  const [displayName, setDisplayName] = useState('You');
   const [loading, setLoading] = useState(true);
   const userId = user?.id ?? null;
 
@@ -64,25 +61,13 @@ export function useDrawersHouseholdData(user: User | null, enabled: boolean): Us
     setLoading(true);
 
     try {
-      const [profile, membership] = await Promise.all([
-        supabaseRequest(async () =>
-          await supabase
-            .from('bathos_profiles')
-            .select('display_name')
-            .eq('id', userId)
-            .single(),
-        ),
-        supabaseRequest(async () =>
-          await supabase
-            .from('drawers_household_members')
-            .select('household_id')
-            .eq('user_id', userId)
-            .maybeSingle(),
-        ),
-      ]);
-
-      const nextDisplayName = profile?.display_name?.trim() || user.email || 'You';
-      setDisplayName(nextDisplayName);
+      const membership = await supabaseRequest(async () =>
+        await supabase
+          .from('drawers_household_members')
+          .select('household_id')
+          .eq('user_id', userId)
+          .maybeSingle(),
+      );
 
       if (!membership?.household_id) {
         setHousehold(null);
@@ -106,7 +91,6 @@ export function useDrawersHouseholdData(user: User | null, enabled: boolean): Us
         householdId: hh.id,
         householdName: hh.name,
         inviteCode: hh.invite_code,
-        displayName: nextDisplayName,
       });
     } catch (error) {
       console.error('Failed to fetch drawers household data', error);
@@ -114,7 +98,7 @@ export function useDrawersHouseholdData(user: User | null, enabled: boolean): Us
     } finally {
       setLoading(false);
     }
-  }, [enabled, user?.email, userId]);
+  }, [enabled, userId]);
 
   useEffect(() => {
     void fetchHousehold();
@@ -149,7 +133,6 @@ export function useDrawersHouseholdData(user: User | null, enabled: boolean): Us
       });
 
       const nextHousehold = toRpcHouseholdData(payload);
-      setDisplayName(nextHousehold.displayName);
       setHousehold(nextHousehold);
     } catch (error: unknown) {
       showMutationError(error);
@@ -174,7 +157,6 @@ export function useDrawersHouseholdData(user: User | null, enabled: boolean): Us
       });
 
       const nextHousehold = toRpcHouseholdData(payload);
-      setDisplayName(nextHousehold.displayName);
       setHousehold(nextHousehold);
     } catch (error: unknown) {
       showMutationError(error);
@@ -185,7 +167,6 @@ export function useDrawersHouseholdData(user: User | null, enabled: boolean): Us
   return {
     household,
     loading,
-    displayName,
     createHousehold,
     joinHousehold,
     householdMembers: householdManagement.members,
