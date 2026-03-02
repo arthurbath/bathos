@@ -9,6 +9,7 @@ export interface PlatformModule {
   description: string;
   launchPath: string;
   icon: LucideIcon;
+  iconPath?: string;
   adminOnly?: boolean;
 }
 
@@ -18,6 +19,7 @@ const BUDGET_MODULE: PlatformModule = {
   description: 'Track your expenses, plan a monthly budget, and split costs fairly with housemates',
   launchPath: '/budget/summary',
   icon: CircleDollarSign,
+  iconPath: '/module-budget.png',
 };
 
 const DRAWERS_MODULE: PlatformModule = {
@@ -26,6 +28,7 @@ const DRAWERS_MODULE: PlatformModule = {
   description: 'Plan grid-style shelving units and drawer arrangements',
   launchPath: '/drawers/plan',
   icon: ShelvingUnit,
+  iconPath: '/module-drawer-planner.png',
 };
 
 const GARAGE_MODULE: PlatformModule = {
@@ -34,6 +37,7 @@ const GARAGE_MODULE: PlatformModule = {
   description: 'Track vehicle maintenance schedules, shop visits, and due services',
   launchPath: '/garage/due',
   icon: CarFront,
+  iconPath: '/module-garage.png',
 };
 
 const ADMINISTRATION_MODULE: PlatformModule = {
@@ -42,6 +46,7 @@ const ADMINISTRATION_MODULE: PlatformModule = {
   description: 'Access administrative tools, diagnostics, and platform management',
   launchPath: '/admin',
   icon: Shield,
+  iconPath: '/module-administration.png',
   adminOnly: true,
 };
 

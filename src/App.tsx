@@ -14,6 +14,7 @@ import AdminPage from "@/platform/components/AdminPage";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import TermsGate from "@/platform/components/TermsGate";
 import AuthCallbackToasts from "@/platform/components/AuthCallbackToasts";
+import { useDocumentHead } from "@/platform/hooks/useDocumentHead";
 import { isLikelyNetworkError } from "@/lib/networkErrors";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import Index from "./pages/Index";
@@ -53,6 +54,11 @@ function DeferredNotFound() {
   }
 
   return <NotFound />;
+}
+
+function DocumentHead() {
+  useDocumentHead();
+  return null;
 }
 
 function AppRoutes() {
@@ -107,6 +113,7 @@ const App = () => (
       <AuthProvider>
         <BrowserRouter>
           <AuthCallbackToasts />
+          <DocumentHead />
           <TermsGate />
           <AppRoutes />
         </BrowserRouter>
