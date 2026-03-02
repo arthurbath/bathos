@@ -135,6 +135,14 @@ For dotted-underline tooltip text triggers, use the persistent interaction model
   - Plain left click uses client-side navigation.
 - Implement navigational UI using real anchors (`<a href="...">`) and intercept only plain left clicks for SPA routing.
 
+## Bookmark and App Icon Metadata Convention
+
+- Route metadata must be module-aware for bookmarking and install surfaces (for example iOS Home Screen and Safari Add to Dock).
+- On module routes, use the module name only as the page/app name (for example `Budget`, `Drawer Planner`, `Garage`, `Administration`), never `BathOS - <Module>`.
+- On module routes, use that module's dedicated icon asset from `public/` for app icon metadata (`icon`, `apple-touch-icon`, module manifest icons).
+- On gateway/platform routes (for example launcher, account, and other non-module pages), use `BathOS` as the page/app name and use the default BathOS icons/manifest.
+- Metadata must update on client-side route changes and reset correctly when navigating between module and platform routes.
+
 ## Shadows and Borders
 
 - Borders: 1px, using `border` token
