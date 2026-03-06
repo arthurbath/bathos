@@ -11,6 +11,7 @@ import ForgotPasswordPage from "@/platform/components/ForgotPasswordPage";
 import ResetPasswordPage from "@/platform/components/ResetPasswordPage";
 import TermsPage from "@/platform/components/TermsPage";
 import AdminPage from "@/platform/components/AdminPage";
+import HelpPage from "@/platform/components/HelpPage";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import TermsGate from "@/platform/components/TermsGate";
 import AuthCallbackToasts from "@/platform/components/AuthCallbackToasts";
@@ -66,11 +67,14 @@ function AppRoutes() {
     <PullToRefresh>
       <Routes>
         <Route path="/" element={<LauncherPage />} />
+        <Route path="/signin" element={<LauncherPage />} />
+        <Route path="/signup" element={<LauncherPage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/terms" element={<TermsPage />} />
+        <Route path="/help" element={<HelpPage />} />
 
         {/* Budget module */}
         <Route path="/budget" element={<Navigate to="/budget/summary" replace />} />

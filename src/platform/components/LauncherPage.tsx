@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAuthContext } from '@/platform/contexts/AuthContext';
 import { ArrowRight } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { getAvailableModules } from '@/platform/modules';
 import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
@@ -15,6 +15,7 @@ export default function LauncherPage() {
   const { user, loading, isSigningOut, signOut, displayName } = useAuthContext();
   const { isAdmin, loading: roleLoading, resolved: roleResolved } = useIsAdmin(user?.id);
   const navigate = useNavigate();
+  const location = useLocation();
   const modules = getAvailableModules({ isAdmin });
 
   useEffect(() => {
@@ -23,6 +24,16 @@ export default function LauncherPage() {
       navigate(modules[0].launchPath, { replace: true });
     }
   }, [loading, roleLoading, roleResolved, user, modules, navigate]);
+
+  // Redirect unauthenticated users to /signin (unless already on /signin or /signup)
+  useEffect(() => {
+    if (!loading && !isSigningOut && !user) {
+      const path = location.pathname;
+      if (path !== '/signin' && path !== '/signup') {
+        navigate('/signin', { replace: true });
+      }
+    }
+  }, [loading, isSigningOut, user, location.pathname, navigate]);
 
   if (loading || isSigningOut || (!!user && (!roleResolved || roleLoading))) {
     return (

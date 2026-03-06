@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export type AuthActionType = 'sign_in' | 'sign_up' | 'forgot_password';
+export type AuthActionType = 'sign_in' | 'sign_up' | 'forgot_password' | 'help_request';
 
 interface RateLimitResult {
   rateLimited: boolean;

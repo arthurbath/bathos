@@ -14,6 +14,7 @@ const RATE_LIMITS: Record<string, { maxAttempts: number; windowMinutes: number }
   sign_in: { maxAttempts: 10, windowMinutes: 1 },
   sign_up: { maxAttempts: 5, windowMinutes: 1 },
   forgot_password: { maxAttempts: 3, windowMinutes: 1 },
+  help_request: { maxAttempts: 3, windowMinutes: 5 },
 };
 
 function getClientIp(req: Request): string {

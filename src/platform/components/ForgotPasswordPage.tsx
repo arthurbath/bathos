@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthContext } from '@/platform/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { checkAuthRateLimit, formatRetryAfter } from '@/lib/authRateLimit';
+import GatewayFooter from '@/platform/components/GatewayFooter';
 
 export default function ForgotPasswordPage() {
   const { resetPassword } = useAuthContext();
@@ -36,51 +37,57 @@ export default function ForgotPasswordPage() {
 
   if (sent) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md text-center">
-          <CardHeader>
-            <CardTitle>Check your email</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              If an account exists for <strong>{email}</strong>, we sent password reset instructions.
-            </p>
-            <Button variant="outline" className="w-full" onClick={() => window.location.href = '/'}>
-              Back to sign in
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="flex min-h-screen flex-col bg-background">
+        <div className="flex flex-1 items-center justify-center p-4">
+          <Card className="w-full max-w-md text-center">
+            <CardHeader>
+              <CardTitle>Check your email</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                If an account exists for <strong>{email}</strong>, we sent password reset instructions.
+              </p>
+              <Button variant="outline" className="w-full" onClick={() => window.location.href = '/signin'}>
+                Back to sign in
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+        <GatewayFooter />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle>Forgot password</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              type="email"
-              placeholder="Enter your email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              autoFocus
-            />
-            <Button type="submit" className="w-full" disabled={loading || !email.trim()}>
-              {loading ? 'Sending...' : 'Send reset link'}
-            </Button>
-          </form>
-          <div className="mt-4 text-center">
-            <a href="/" className="text-sm text-muted-foreground hover:text-foreground underline">
-              Back to sign in
-            </a>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="flex min-h-screen flex-col bg-background">
+      <div className="flex flex-1 items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle>Forgot password</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <Input
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                autoFocus
+              />
+              <Button type="submit" className="w-full" disabled={loading || !email.trim()}>
+                {loading ? 'Sending...' : 'Send reset link'}
+              </Button>
+            </form>
+            <div className="mt-4 text-center">
+              <a href="/signin" className="text-sm text-muted-foreground hover:text-foreground underline">
+                Back to sign in
+              </a>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      <GatewayFooter />
     </div>
   );
 }

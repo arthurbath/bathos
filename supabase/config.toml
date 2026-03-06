@@ -15,5 +15,8 @@ verify_jwt = false
 [functions.notify-new-signup]
 verify_jwt = false
 
+[functions.submit-help-request]
+verify_jwt = false
+
 [functions.manifest]
 verify_jwt = false
