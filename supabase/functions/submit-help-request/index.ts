@@ -49,9 +49,10 @@ Deno.serve(async (req) => {
     if (supabaseUrl && serviceRoleKey) {
       const supabase = createClient(supabaseUrl, serviceRoleKey);
       await supabase.from("bathos_feedback").insert({
-        message: `[${email}] ${message.trim()}`,
+        email: email.toLowerCase().trim(),
+        message: message.trim(),
         context: "gateway",
-        user_id: "00000000-0000-0000-0000-000000000000",
+        user_id: null,
       });
     }
 

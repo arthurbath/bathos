@@ -6,6 +6,7 @@ import {
   Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import type { ModuleId } from '@/platform/hooks/useHostModule';
 import { useHostModule } from '@/platform/hooks/useHostModule';
@@ -36,6 +37,7 @@ export function FeedbackDialog({ userId, trigger }: FeedbackDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
   const moduleId = useHostModule();
   const feedbackContext = getFeedbackContext(moduleId, window.location.pathname);
 
@@ -63,7 +65,16 @@ export function FeedbackDialog({ userId, trigger }: FeedbackDialogProps) {
 
   const handleSubmit = async () => {
     const trimmed = message.trim();
+    const userEmail = user?.email?.trim() ?? '';
     if (!trimmed) return;
+    if (!userEmail) {
+      toast({
+        title: 'Failed to send feedback',
+        description: 'No email address is available for this account.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSending(true);
 
     try {
@@ -82,11 +93,13 @@ export function FeedbackDialog({ userId, trigger }: FeedbackDialogProps) {
       }
 
       // Save to DB
-      await supabase.from('bathos_feedback').insert({
+      const { error: insertErr } = await supabase.from('bathos_feedback').insert({
         user_id: userId,
+        email: userEmail,
         message: trimmed,
         context: feedbackContext,
       });
+      if (insertErr) throw insertErr;
 
       // Send email
       await supabase.functions.invoke('send-feedback-email', {

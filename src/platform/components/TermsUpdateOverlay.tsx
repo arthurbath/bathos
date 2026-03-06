@@ -56,13 +56,19 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
   };
 
   const handleSendFeedback = async () => {
-    if (!user || !feedbackMessage.trim()) return;
+    const userEmail = user?.email?.trim() ?? '';
+    if (!user || !feedbackMessage.trim() || !userEmail) return;
     setIsSendingFeedback(true);
     try {
       // Save to DB
       const { error } = await supabase
         .from('bathos_feedback')
-        .insert({ user_id: user.id, message: feedbackMessage.trim(), context: 'terms_update' });
+        .insert({
+          user_id: user.id,
+          email: userEmail,
+          message: feedbackMessage.trim(),
+          context: 'terms_update',
+        });
       if (error) throw error;
 
       // Send email notification

@@ -39,23 +39,26 @@ export type Database = {
         Row: {
           context: string
           created_at: string
+          email: string | null
           id: string
           message: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           context?: string
           created_at?: string
+          email?: string | null
           id?: string
           message: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           context?: string
           created_at?: string
+          email?: string | null
           id?: string
           message?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
