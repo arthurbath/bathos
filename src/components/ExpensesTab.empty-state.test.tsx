@@ -169,7 +169,10 @@ describe('ExpensesTab empty message', () => {
       budget_id: null,
       linked_account_id: null,
       value_type: 'monthly_averaged',
-      average_records: [{ year: 2026, month: 2, amount: 1000 }, { year: 2025, month: 12, amount: 900 }],
+      average_records: [
+        { year: 2026, month: 2, amount: 1000, date: '2026-02-10' },
+        { year: 2025, month: 12, amount: 900, date: '2025-12-28' },
+      ],
     };
 
     const { container, root } = renderExpensesTab({ expenses: [expense] });
@@ -203,6 +206,6 @@ describe('ExpensesTab empty message', () => {
     }, 'monthly_averaged', new Date('2026-03-02T12:00:00-08:00'));
 
     expect(converted.value_type).toBe('monthly_averaged');
-    expect(converted.average_records).toEqual([{ year: 2026, month: 3, amount: 0 }]);
+    expect(converted.average_records).toEqual([{ year: 2026, month: 3, amount: 0, date: '2026-03-01' }]);
   });
 });

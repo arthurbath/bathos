@@ -38,7 +38,7 @@ describe('RestoreTab snapshot payload', () => {
         partner_label: 'X',
         is_estimate: true,
         value_type: 'yearly_averaged',
-        average_records: [{ year: 2024, month: null, amount: 12000 }],
+        average_records: [{ year: 2024, month: null, amount: 12000, date: '2024-04-15' }],
       },
     ];
 
@@ -56,7 +56,7 @@ describe('RestoreTab snapshot payload', () => {
         linked_account_id: null,
         is_estimate: true,
         value_type: 'monthly_averaged',
-        average_records: [{ year: 2026, month: 2, amount: 950 }],
+        average_records: [{ year: 2026, month: 2, amount: 950, date: '2026-02-11' }],
       },
     ];
 
@@ -95,9 +95,9 @@ describe('RestoreTab snapshot payload', () => {
       const snapshot = captured?.snapshot as { incomes?: Array<Record<string, unknown>>; expenses?: Array<Record<string, unknown>> } | undefined;
       expect(snapshot?.incomes?.[0]?.is_estimate).toBe(true);
       expect(snapshot?.incomes?.[0]?.value_type).toBe('yearly_averaged');
-      expect(snapshot?.incomes?.[0]?.average_records).toEqual([{ year: 2024, month: null, amount: 12000 }]);
+      expect(snapshot?.incomes?.[0]?.average_records).toEqual([{ year: 2024, month: null, amount: 12000, date: '2024-04-15' }]);
       expect(snapshot?.expenses?.[0]?.value_type).toBe('monthly_averaged');
-      expect(snapshot?.expenses?.[0]?.average_records).toEqual([{ year: 2026, month: 2, amount: 950 }]);
+      expect(snapshot?.expenses?.[0]?.average_records).toEqual([{ year: 2026, month: 2, amount: 950, date: '2026-02-11' }]);
     } finally {
       unmount(root, container);
     }

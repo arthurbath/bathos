@@ -6,6 +6,7 @@ export interface BudgetAverageRecord {
   year: number;
   month: number | null;
   amount: number;
+  date?: string;
 }
 
 const VALUE_TYPES: BudgetValueType[] = ['simple', 'monthly_averaged', 'yearly_averaged'];
@@ -40,6 +41,32 @@ function normalizeAmount(raw: unknown): number | null {
   return parsed;
 }
 
+function normalizeDate(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+  const parsed = new Date(`${trimmed}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return trimmed;
+}
+
+function getDerivedPartsFromDate(value: string): { year: number; month: number } {
+  const [yearText, monthText] = value.split('-');
+  return {
+    year: Number(yearText),
+    month: Number(monthText),
+  };
+}
+
+function buildFallbackDate(
+  valueType: Exclude<BudgetValueType, 'simple'>,
+  year: number,
+  month: number | null,
+): string {
+  const resolvedMonth = valueType === 'monthly_averaged' ? (month ?? 1) : 1;
+  return `${String(year).padStart(4, '0')}-${String(resolvedMonth).padStart(2, '0')}-01`;
+}
+
 export function normalizeAverageRecords(
   raw: unknown,
   valueType: BudgetValueType,
@@ -50,18 +77,32 @@ export function normalizeAverageRecords(
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const row = item as Record<string, unknown>;
-    const year = normalizeYear(row.year);
+    const normalizedDate = normalizeDate(row.date);
     const amount = normalizeAmount(row.amount);
-    if (year == null || amount == null) continue;
+    if (amount == null) continue;
+
+    if (normalizedDate) {
+      const derived = getDerivedPartsFromDate(normalizedDate);
+      if (valueType === 'monthly_averaged') {
+        normalized.push({ year: derived.year, month: derived.month, amount, date: normalizedDate });
+        continue;
+      }
+
+      normalized.push({ year: derived.year, month: null, amount, date: normalizedDate });
+      continue;
+    }
+
+    const year = normalizeYear(row.year);
+    if (year == null) continue;
 
     if (valueType === 'monthly_averaged') {
       const month = normalizeMonth(row.month);
       if (month == null) continue;
-      normalized.push({ year, month, amount });
+      normalized.push({ year, month, amount, date: buildFallbackDate(valueType, year, month) });
       continue;
     }
 
-    normalized.push({ year, month: null, amount });
+    normalized.push({ year, month: null, amount, date: buildFallbackDate(valueType, year, null) });
   }
 
   return normalized;
@@ -119,6 +160,7 @@ export function convertAverageRecordsForValueType(
       year: record.year,
       month: null,
       amount: record.amount,
+      date: record.date ?? buildFallbackDate(fromType, record.year, record.month),
     }));
   }
 
@@ -127,6 +169,7 @@ export function convertAverageRecordsForValueType(
       year: record.year,
       month: 1,
       amount: record.amount,
+      date: record.date ?? buildFallbackDate(fromType, record.year, null),
     }));
   }
 
@@ -140,15 +183,15 @@ export function seedAverageRecordsFromSimpleAmount(
 ): BudgetAverageRecord[] {
   const year = currentDate.getFullYear();
   if (targetType === 'monthly_averaged') {
-    return [{ year, month: currentDate.getMonth() + 1, amount }];
+    return [{ year, month: currentDate.getMonth() + 1, amount, date: buildFallbackDate(targetType, year, currentDate.getMonth() + 1) }];
   }
-  return [{ year, month: null, amount }];
+  return [{ year, month: null, amount, date: buildFallbackDate(targetType, year, null) }];
 }
 
 export function sortAverageRecordsForEditor(records: BudgetAverageRecord[]): BudgetAverageRecord[] {
   return [...records].sort((left, right) => {
-    const leftDateKey = left.year * 100 + (left.month ?? 0);
-    const rightDateKey = right.year * 100 + (right.month ?? 0);
+    const leftDateKey = Number((left.date ?? buildFallbackDate(left.month == null ? 'yearly_averaged' : 'monthly_averaged', left.year, left.month)).replaceAll('-', ''));
+    const rightDateKey = Number((right.date ?? buildFallbackDate(right.month == null ? 'yearly_averaged' : 'monthly_averaged', right.year, right.month)).replaceAll('-', ''));
     if (rightDateKey !== leftDateKey) return rightDateKey - leftDateKey;
 
     return right.amount - left.amount;

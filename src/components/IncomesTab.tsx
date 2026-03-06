@@ -869,6 +869,10 @@ export function IncomesTab({
                 records={averageEditorState.records}
                 onChange={records => setAverageEditorState(prev => prev ? { ...prev, records } : prev)}
                 disabled={savingAverageEditor}
+                autoFocusAddButton
+                onSubmitFromAmountEnter={() => {
+                  void handleSaveAverageEditor();
+                }}
               />
             )}
           </DialogBody>
