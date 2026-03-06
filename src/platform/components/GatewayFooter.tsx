@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Heart } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { TermsDocument } from '@/platform/components/TermsDocument';
 
@@ -26,7 +27,7 @@ export default function GatewayFooter() {
               Help
             </Link>
           </div>
-          <span className="select-none">❤️ Art 2026</span>
+          <span className="select-none flex items-center gap-1"><Heart className="h-3 w-3 fill-current" /> Art 2026</span>
         </div>
       </footer>
 

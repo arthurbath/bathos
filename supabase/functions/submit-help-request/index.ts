@@ -43,6 +43,18 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Record to bathos_feedback table (unauthenticated, so use service role)
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (supabaseUrl && serviceRoleKey) {
+      const supabase = createClient(supabaseUrl, serviceRoleKey);
+      await supabase.from("bathos_feedback").insert({
+        message: `[${email}] ${message.trim()}`,
+        context: "gateway",
+        user_id: "00000000-0000-0000-0000-000000000000",
+      });
+    }
+
     // Send email via Resend
     const body = `Help request from: ${email}\n\n${message.trim()}`;
 
