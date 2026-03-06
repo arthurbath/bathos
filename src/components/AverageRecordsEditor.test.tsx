@@ -317,7 +317,9 @@ describe('AverageRecordsEditor', () => {
     );
 
     try {
-      expect(container.textContent).toContain("Don't count records from the current month in average");
+      expect(container.textContent).toContain('Count records from the current month toward average');
+      const checkbox = container.querySelector('button[role="checkbox"]') as HTMLButtonElement | null;
+      expect(checkbox?.getAttribute('aria-checked')).toBe('false');
       expect(container.textContent).toContain('Monthly average:');
       expect(container.textContent).toContain('$900.00');
       expect(container.textContent).toContain('from 1 included month');
@@ -339,8 +341,10 @@ describe('AverageRecordsEditor', () => {
     );
 
     try {
+      const checkbox = container.querySelector('button[role="checkbox"]') as HTMLButtonElement | null;
+      expect(checkbox?.getAttribute('aria-checked')).toBe('true');
       const tooltipTrigger = Array.from(container.querySelectorAll('[role="button"]'))
-        .find((element) => element.textContent?.includes("Don't count records from the current year in average")) as HTMLElement | undefined;
+        .find((element) => element.textContent?.includes('Count records from the current year toward average')) as HTMLElement | undefined;
       expect(tooltipTrigger).toBeTruthy();
 
       act(() => {

@@ -18,7 +18,8 @@ const CALENDAR_NAV_CLASS = "space-x-1 flex items-center";
 const CALENDAR_NAV_BUTTON_CLASS = "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100";
 const CALENDAR_NAV_PREV_CLASS = "absolute left-1";
 const CALENDAR_NAV_NEXT_CLASS = "absolute right-1";
-const CALENDAR_HEADER_BUTTON_CLASS = "inline-flex items-center justify-center rounded-md px-2 py-1 text-sm font-medium focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0";
+const CALENDAR_HEADER_CLASS = "inline-flex items-center justify-center rounded-md px-2 py-1 text-sm font-medium focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0";
+const CALENDAR_HEADER_BUTTON_CLASS = `${CALENDAR_HEADER_CLASS} border border-transparent bg-transparent text-white transition-colors hover:bg-primary/10 hover:text-primary`;
 
 function getFocusableDayRows(root: HTMLElement): HTMLButtonElement[][] {
   return Array.from(root.querySelectorAll("tbody tr"))
@@ -198,7 +199,7 @@ function MonthPicker({
     <div className={cn("p-3", CALENDAR_VIEWPORT_WIDTH_CLASS)} data-calendar-month-picker="true">
       <div className="space-y-4">
         <div className={CALENDAR_CAPTION_CLASS} data-calendar-month-picker-caption="true">
-          <div className={CALENDAR_HEADER_BUTTON_CLASS} data-calendar-month-picker-year-label="true">
+          <div className={CALENDAR_HEADER_CLASS} data-calendar-month-picker-year-label="true">
             {year}
           </div>
           <div className={CALENDAR_NAV_CLASS} data-calendar-month-picker-nav="true">

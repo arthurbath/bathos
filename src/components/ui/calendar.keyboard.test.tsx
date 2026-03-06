@@ -244,7 +244,9 @@ describe('Calendar keyboard navigation', () => {
       expect(monthPickerNav?.className).toBe(dayPickerNav?.className);
       expect(previousYearHeaderButton?.className).toBe(previousMonthButton?.className);
       expect(nextYearHeaderButton?.className).toBe(nextMonthButton?.className);
-      expect(yearLabel?.className).toBe(captionButton?.className);
+      expect(captionButton?.className).toContain('hover:bg-primary/10');
+      expect(captionButton?.className).toContain('hover:text-primary');
+      expect(yearLabel?.className).not.toBe(captionButton?.className);
     } finally {
       unmount(root, container);
     }
