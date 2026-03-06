@@ -1,8 +1,13 @@
 import { useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 
-const THRESHOLD = 80;
+export const PULL_TO_REFRESH_TRIGGER_DISTANCE = 120;
+const PULL_RESISTANCE = 0.4;
 const MAX_PULL = 200;
+
+type StandaloneNavigator = Navigator & {
+  standalone?: boolean;
+};
 
 /**
  * Pull-to-refresh wrapper that only activates in standalone (PWA) mode.
@@ -11,9 +16,11 @@ const MAX_PULL = 200;
 export function PullToRefresh({
   children,
   disabled,
+  onRefresh,
 }: {
   children: ReactNode;
   disabled?: boolean;
+  onRefresh?: () => void;
 }) {
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -23,7 +30,7 @@ export function PullToRefresh({
 
   useEffect(() => {
     const standalone =
-      (window.navigator as any).standalone === true ||
+      (window.navigator as StandaloneNavigator).standalone === true ||
       window.matchMedia('(display-mode: standalone)').matches;
     setIsStandalone(standalone);
   }, []);
@@ -51,7 +58,7 @@ export function PullToRefresh({
       if (!isPulling.current || refreshing) return;
       const delta = e.touches[0].clientY - touchStartY.current;
       if (delta > 0) {
-        setPullDistance(Math.min(delta * 0.5, MAX_PULL));
+        setPullDistance(Math.min(delta * PULL_RESISTANCE, MAX_PULL));
       } else {
         isPulling.current = false;
         setPullDistance(0);
@@ -64,19 +71,22 @@ export function PullToRefresh({
     if (!isPulling.current) return;
     isPulling.current = false;
 
-    if (pullDistance >= THRESHOLD && !refreshing) {
+    if (pullDistance >= PULL_TO_REFRESH_TRIGGER_DISTANCE && !refreshing) {
       setRefreshing(true);
-      window.location.reload();
+      onRefresh?.();
+      if (!onRefresh) {
+        window.location.reload();
+      }
     } else {
       setPullDistance(0);
     }
-  }, [pullDistance, refreshing]);
+  }, [onRefresh, pullDistance, refreshing]);
 
   if (!isStandalone) {
     return <>{children}</>;
   }
 
-  const progress = Math.min(pullDistance / THRESHOLD, 1);
+  const progress = Math.min(pullDistance / PULL_TO_REFRESH_TRIGGER_DISTANCE, 1);
   const showIndicator = pullDistance > 5 || refreshing;
 
   return (
