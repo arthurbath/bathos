@@ -27,7 +27,7 @@ export default function GatewayFooter() {
               Help
             </Link>
           </div>
-          <span className="select-none flex items-center gap-1"><Heart className="h-3 w-3 fill-current" /> Art 2026</span>
+          <span className="select-none flex items-center gap-1"><Heart className="h-3 w-3" /> Art 2026</span>
         </div>
       </footer>
 
