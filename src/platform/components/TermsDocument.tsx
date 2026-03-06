@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
-import termsMarkdown from '../../../docs/terms/1.0.0.md?raw';
+import termsMarkdown from '../../../docs/human/terms/1.0.0.md?raw';
 
 interface TermsDocumentProps {
   className?: string;

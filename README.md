@@ -53,7 +53,7 @@ Accessible at [bath.garden/garage/due](https://bath.garden/garage/due).
 - Modules are isolated under `src/modules/[name]/` — removing one should not break another
 - Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`) for clarity
 - Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`)
-- See `docs/ARCHITECTURE.md` for structure, `docs/MODULE_GUIDE.md` for adding modules, and `docs/STYLE_GUIDE.md` for design conventions
+- See `docs/agents/ARCHITECTURE.md` for structure, `docs/agents/MODULE_GUIDE.md` for adding modules, and `docs/human/STYLE_GUIDE.md` for design conventions
 
 ### Dev Console Bridge (Safari + Vite)
 

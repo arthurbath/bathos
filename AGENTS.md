@@ -40,15 +40,17 @@ Split shared expenses fairly between two partners. Combines per-expense benefit 
 
 ## Development Policies
 
-- **Evaluations**: Security, performance, and technology evaluations go in dated files (`docs/evaluations/YYYY-MM-DD_topic.md`). Never delete old evaluations — they serve as a decision log.
+- **Evaluations**: Security, performance, and technology evaluations go in dated files (`docs/agents/evaluations/YYYY-MM-DD_topic.md`). Never delete old evaluations — they serve as a decision log.
 - **README.md**: Keep updated whenever modules are added, changed, or removed. Only document modules visible to general users (not behind admin-only feature flags).
 - **Public `.env` policy**: This repository is public, and `.env` is intentionally committed for Lovable workflows. Treat `.env` as public and only store client-safe values there. Never commit secrets (for example: service role keys, SMTP passwords, API secrets, private tokens). Store real secrets in managed secret stores (Supabase/hosting environment secrets), not in the repo.
-- **Adding a module**: See `docs/MODULE_GUIDE.md` for the full checklist (namespace, tables, files, routes, launcher registration).
+- **Adding a module**: See `docs/agents/MODULE_GUIDE.md` for the full checklist (namespace, tables, files, routes, launcher registration).
 - **Testing**: Run existing tests before submitting changes. Write tests for new logic when practical.
 
 ## File References
 
-- `docs/ARCHITECTURE.md` — detailed architecture
-- `docs/MODULE_GUIDE.md` — step-by-step module creation
-- `docs/STYLE_GUIDE.md` — full design conventions
-- `docs/evaluations/` — decision log
+- `docs/agents/ARCHITECTURE.md` — detailed architecture
+- `docs/agents/MODULE_GUIDE.md` — step-by-step module creation
+- `docs/human/STYLE_GUIDE.md` — full design conventions
+- `docs/agents/evaluations/` — decision log
+- `docs/agents/plans/` — historical agent-authored implementation plans
+- `docs/human/terms/` — human-facing policy documents

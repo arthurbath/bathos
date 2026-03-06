@@ -44,7 +44,7 @@ src/
 
 ## Adding a Module
 
-See `/docs/MODULE_GUIDE.md`.
+See `/docs/agents/MODULE_GUIDE.md`.
 
 ## Security
 

@@ -1,6 +1,6 @@
 # Evaluations
 
-This folder contains dated security, performance, and technology evaluations. Each document records the analysis, decision, and any changes made.
+This folder contains dated agent-facing security, performance, and technology evaluations. Each document records the analysis, decision, and any changes made.
 
 ## Policy
 
