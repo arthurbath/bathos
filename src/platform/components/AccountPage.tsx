@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -30,7 +30,10 @@ function resolveBackHref(state: AccountPageLocationState | null): string {
 }
 
 export default function AccountPage() {
-  const { user, isSigningOut, signOut, displayName: authDisplayName, setDisplayName: setAuthDisplayName } = useAuthContext();
+  const {
+    user, isSigningOut, signOut, displayName: authDisplayName, setDisplayName: setAuthDisplayName,
+    passwordRecoveryDetected, clearPasswordRecovery,
+  } = useAuthContext();
   const { isAdmin } = useIsAdmin(user?.id);
   const { toast } = useToast();
   const location = useLocation();
@@ -44,14 +47,16 @@ export default function AccountPage() {
 
   const [userEmail, setUserEmail] = useState('');
   const [showChangeEmail, setShowChangeEmail] = useState(false);
-  const [showChangePassword, setShowChangePassword] = useState(false);
 
   // Change email form
   const [newEmail, setNewEmail] = useState('');
   const [emailPassword, setEmailPassword] = useState('');
   const [emailSubmitting, setEmailSubmitting] = useState(false);
 
-  // Change password form
+  // Change password (recovery-based flow)
+  const [sendingPasswordLink, setSendingPasswordLink] = useState(false);
+
+  // Forced change password modal (after recovery link click)
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
@@ -136,6 +141,28 @@ export default function AccountPage() {
     setEmailSubmitting(false);
   };
 
+  const handleRequestPasswordChange = async () => {
+    if (sendingPasswordLink || !userEmail) return;
+    setSendingPasswordLink(true);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
+      redirectTo: `${window.location.origin}/account`,
+    });
+
+    if (error) {
+      toast({ title: 'Failed to send password change link', description: error.message, variant: 'destructive' });
+      setSendingPasswordLink(false);
+      return;
+    }
+
+    toast({ title: 'Password change link sent', description: 'Check your email, then sign back in via the link.' });
+
+    // Brief delay so user sees the toast before sign-out redirects
+    setTimeout(() => {
+      signOut();
+    }, 1500);
+  };
+
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (passwordSubmitting || !newPassword) return;
@@ -157,7 +184,7 @@ export default function AccountPage() {
       });
     } else {
       toast({ title: 'Password updated' });
-      setShowChangePassword(false);
+      clearPasswordRecovery();
       setNewPassword('');
       setConfirmPassword('');
     }
@@ -274,8 +301,13 @@ export default function AccountPage() {
               <Button variant="outline" className="w-full" onClick={signOut} disabled={isSigningOut}>
                 Sign Out
               </Button>
-              <Button variant="outline" className="w-full" onClick={() => setShowChangePassword(true)}>
-                Change Password
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleRequestPasswordChange}
+                disabled={sendingPasswordLink}
+              >
+                {sendingPasswordLink ? 'Sending...' : 'Change Password'}
               </Button>
               <Button variant="outline" className="w-full" onClick={() => setShowChangeEmail(true)}>
                 Change Email
@@ -328,9 +360,6 @@ export default function AccountPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Change Email</DialogTitle>
-            <DialogDescription>
-              Enter your current password and new email. Confirmation links will be sent to both addresses.
-            </DialogDescription>
           </DialogHeader>
           <form id="change-email-form" onSubmit={handleChangeEmail}>
             <DialogBody className="space-y-4 pb-6">
@@ -357,15 +386,30 @@ export default function AccountPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Change Password Dialog */}
-      <Dialog open={showChangePassword} onOpenChange={setShowChangePassword}>
-        <DialogContent className="sm:max-w-md">
+      {/* Forced Change Password Dialog (after recovery link) */}
+      <Dialog open={passwordRecoveryDetected} onOpenChange={() => { /* non-dismissable */ }}>
+        <DialogContent
+          className="sm:max-w-md"
+          hideClose
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Change Password</DialogTitle>
-            <DialogDescription>Enter a new password for your account.</DialogDescription>
           </DialogHeader>
-          <form id="change-password-form" onSubmit={handleChangePassword}>
+          <form id="change-password-form" onSubmit={handleChangePassword} autoComplete="on">
             <DialogBody className="space-y-4 pb-6">
+              {/* Hidden email field for password manager association */}
+              <input
+                type="email"
+                autoComplete="username"
+                value={userEmail}
+                readOnly
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
               <div>
                 <label className="text-sm font-medium mb-1 block">New Password</label>
                 <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} minLength={8} autoComplete="new-password" autoFocus />
@@ -377,8 +421,7 @@ export default function AccountPage() {
               </div>
             </DialogBody>
             <DialogFooter className="mb-0 pt-6">
-              <Button type="button" variant="outline" onClick={() => setShowChangePassword(false)}>Cancel</Button>
-              <Button type="submit" disabled={passwordSubmitting || !isPasswordValid(newPassword) || !confirmPassword}>
+              <Button type="submit" className="w-full" disabled={passwordSubmitting || !isPasswordValid(newPassword) || !confirmPassword}>
                 {passwordSubmitting ? 'Updating...' : 'Update Password'}
               </Button>
             </DialogFooter>
