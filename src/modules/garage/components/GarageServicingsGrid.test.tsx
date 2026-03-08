@@ -287,7 +287,7 @@ describe('GarageServicingsGrid servicing dialog', () => {
         expect(onAddServicing).toHaveBeenCalledTimes(1);
       });
 
-      expect(onAddServicing.mock.calls[0]?.[0].receipt_files).toEqual([fileB]);
+      expect(onAddServicing.mock.calls[0]![0].receipt_files).toEqual([fileB]);
     } finally {
       unmount(root, container);
     }
