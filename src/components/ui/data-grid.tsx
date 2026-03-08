@@ -831,7 +831,7 @@ export function DataGrid<TData>({
   return (
     <div
       ref={containerRef}
-      className={cn('overflow-auto data-grid-scroll-hidden', fullView && 'h-full min-h-0', className)}
+      className={cn('w-full min-w-0 overflow-auto data-grid-scroll-hidden', fullView && 'h-full min-h-0', className)}
       style={{ maxHeight: fullView ? 'none' : maxHeight }}
     >
       <table className="min-w-full table-fixed caption-bottom text-xs" style={{ width: `${tableWidth}px` }}>
@@ -1006,7 +1006,12 @@ function isNumberEntryKey(e: React.KeyboardEvent<HTMLInputElement>) {
   return isPrintableEntryKey(e) && /^[0-9.-]$/.test(e.key);
 }
 
-function formatGridNumberDisplay(rawValue: string): string {
+export type GridNumberDisplayFormat = 'grouped' | 'plain';
+
+export function formatGridNumberDisplay(
+  rawValue: string,
+  format: GridNumberDisplayFormat = 'grouped',
+): string {
   const trimmed = rawValue.trim();
   if (!trimmed) return '';
 
@@ -1015,6 +1020,8 @@ function formatGridNumberDisplay(rawValue: string): string {
 
   const parsed = Number(normalized);
   if (!Number.isFinite(parsed)) return rawValue;
+
+  if (format === 'plain') return normalized;
 
   return parsed.toLocaleString('en-US', { maximumFractionDigits: 20 });
 }
@@ -1055,11 +1062,13 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
   );
 }
 
-export function GridEditableCell({ value, onChange, navCol, type = 'text', className, placeholder, cellId, disabled = false, deleteResetValue }: {
+export function GridEditableCell({ value, onChange, navCol, type = 'text', inputMode, numberDisplayFormat = 'grouped', className, placeholder, cellId, disabled = false, deleteResetValue }: {
   value: string | number;
   onChange: (v: string) => void | Promise<unknown>;
   navCol: number;
   type?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
+  numberDisplayFormat?: GridNumberDisplayFormat;
   className?: string;
   placeholder?: string;
   cellId?: string;
@@ -1080,7 +1089,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
   const awaitingAsyncCommitRef = useRef(false);
   const showFormattedNumber = type === 'number' && !editing;
   const inputType = showFormattedNumber ? 'text' : type;
-  const inputValue = showFormattedNumber ? formatGridNumberDisplay(local) : local;
+  const inputValue = showFormattedNumber ? formatGridNumberDisplay(local, numberDisplayFormat) : local;
 
   useEffect(() => {
     valueRef.current = String(value);
@@ -1177,7 +1186,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', class
       value={inputValue}
       readOnly={!editing}
       disabled={disabled}
-      inputMode={type === 'number' ? 'decimal' : undefined}
+      inputMode={inputMode ?? (type === 'number' ? 'decimal' : undefined)}
       placeholder={placeholder}
       data-row={ctx?.rowIndex}
       data-row-id={ctx?.rowId}

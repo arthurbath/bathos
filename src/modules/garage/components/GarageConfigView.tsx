@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingState, useReactTable } from '@tanstack/react-table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,11 +8,19 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Pencil, Trash2, CalendarIcon } from 'lucide-react';
+import { DataGrid, GridEditableCell, gridMenuTriggerProps, gridNavProps, useDataGrid } from '@/components/ui/data-grid';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { CalendarIcon, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
+import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
+import { GARAGE_VEHICLES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS } from '@/lib/gridColumnWidths';
 import { cn } from '@/lib/utils';
 import type { GarageUserSettings, GarageVehicle } from '@/modules/garage/types/garage';
+
+const columnHelper = createColumnHelper<GarageVehicle>();
+const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
+const VEHICLE_ACTIONS_NAV_COL = 6;
 
 interface GarageConfigViewProps {
   vehicles: GarageVehicle[];
@@ -88,20 +97,129 @@ function getCalendarMonthForDateInput(value: string): Date {
   return new Date(today.getFullYear(), today.getMonth(), 1);
 }
 
-function formatVehicleLabel(vehicle: GarageVehicle): string {
-  const year = vehicle.model_year ? String(vehicle.model_year) : 'Unknown year';
-  const make = vehicle.make?.trim() || 'Unknown make';
-  const model = vehicle.model?.trim() || 'Unknown model';
-  return `${year} ${make} ${model}`;
+function normalizeVehicleName(value: string, fallback: string): string {
+  const trimmed = value.trim();
+  return trimmed || fallback;
 }
 
-function formatVehicleMileage(miles: number): string {
-  if (miles >= 10_000) {
-    const thousands = miles / 1_000;
-    const compact = Number.isInteger(thousands) ? String(thousands) : thousands.toFixed(1).replace(/\.0$/, '');
-    return `${compact}k miles`;
-  }
-  return `${miles.toLocaleString()} miles`;
+function normalizeOptionalText(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function normalizeNonNegativeNumber(value: string): number {
+  return Math.max(0, toNumberOrNull(value) ?? 0);
+}
+
+function isDeleteResetKey(event: Pick<React.KeyboardEvent<HTMLElement>, 'key' | 'altKey' | 'ctrlKey' | 'metaKey'>) {
+  return (
+    (event.key === 'Backspace' || event.key === 'Delete')
+    && !event.altKey
+    && !event.ctrlKey
+    && !event.metaKey
+  );
+}
+
+function VehicleDateCell({
+  value,
+  navCol,
+  onChange,
+}: {
+  value: string | null;
+  navCol: number;
+  onChange: (value: string | null) => void | Promise<unknown>;
+}) {
+  const ctx = useDataGrid();
+  const [open, setOpen] = useState(false);
+  const parsedDate = parseDateInputValue(value ?? '');
+  const [visibleMonth, setVisibleMonth] = useState<Date>(() => getCalendarMonthForDateInput(value ?? ''));
+
+  useEffect(() => {
+    if (!open) return;
+    setVisibleMonth(getCalendarMonthForDateInput(value ?? ''));
+  }, [open, value]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-grid-focus-only="true"
+          {...gridNavProps(ctx, navCol)}
+          onKeyDown={(event) => {
+            if (ctx?.onCellKeyDown(event)) return;
+            if (value && isDeleteResetKey(event)) {
+              event.preventDefault();
+              ctx?.onCellCommit(navCol);
+              void onChange(null);
+              return;
+            }
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            setOpen(true);
+          }}
+          className={cn(
+            'inline-flex h-7 w-full items-center justify-start gap-1 rounded-md border border-transparent bg-transparent px-1 text-left text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 hover:border-[hsl(var(--grid-sticky-line))]',
+            GRID_CONTROL_FOCUS_CLASS,
+            !value && 'text-muted-foreground',
+          )}
+        >
+          <span className="truncate">{parsedDate ? format(parsedDate, 'MMM d, yyyy') : 'None'}</span>
+          <CalendarIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-foreground opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <Calendar
+          mode="single"
+          selected={parsedDate}
+          month={visibleMonth}
+          onMonthChange={setVisibleMonth}
+          onSelect={(date) => {
+            const nextValue = date ? toDateInputValue(date) : null;
+            if (nextValue !== value) {
+              ctx?.onCellCommit(navCol);
+              void onChange(nextValue);
+            }
+            setOpen(false);
+          }}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function VehicleActionsCell({
+  vehicle,
+  onDelete,
+}: {
+  vehicle: GarageVehicle;
+  onDelete: (vehicle: GarageVehicle) => void;
+}) {
+  const ctx = useDataGrid();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className={`float-right mr-[5px] h-7 w-7 ${GRID_CONTROL_FOCUS_CLASS}`}
+          aria-label={`Actions for ${vehicle.name}`}
+          {...gridMenuTriggerProps(ctx, VEHICLE_ACTIONS_NAV_COL)}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="bg-popover">
+        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(vehicle)}>
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export function GarageConfigView({
@@ -123,6 +241,7 @@ export function GarageConfigView({
     days: initialDays,
   }));
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
@@ -135,27 +254,24 @@ export function GarageConfigView({
 
   const [deleteTarget, setDeleteTarget] = useState<GarageVehicle | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const {
+    columnSizing,
+    columnSizingInfo,
+    columnResizingEnabled,
+    onColumnSizingChange,
+    onColumnSizingInfoChange,
+  } = useGridColumnWidths({
+    userId: vehicles[0]?.user_id ?? settings?.user_id,
+    gridKey: 'garage_vehicles',
+    defaults: GARAGE_VEHICLES_GRID_DEFAULT_WIDTHS,
+    fixedColumnIds: GRID_FIXED_COLUMNS.garage_vehicles,
+  });
 
   const openAddVehicle = useCallback(() => {
     setVehicleForm(emptyVehicleState());
     setInServicePickerOpen(false);
     setFormOpen(true);
   }, []);
-
-  const openEditVehicle = (vehicle: GarageVehicle) => {
-    setVehicleForm({
-      id: vehicle.id,
-      name: vehicle.name,
-      make: vehicle.make ?? '',
-      model: vehicle.model ?? '',
-      model_year: vehicle.model_year ? String(vehicle.model_year) : '',
-      in_service_date: vehicle.in_service_date ?? '',
-      current_odometer_miles: String(vehicle.current_odometer_miles),
-      is_active: vehicle.is_active,
-    });
-    setInServicePickerOpen(false);
-    setFormOpen(true);
-  };
 
   const saveVehicle = async () => {
     const name = vehicleForm.name.trim();
@@ -248,10 +364,132 @@ export function GarageConfigView({
   const thresholdsMiles = Math.max(0, Number(settingsMiles) || 0);
   const thresholdsDays = Math.max(0, Math.round((Number(settingsMonths) || 0) * DAYS_PER_MONTH));
   const thresholdsChanged = thresholdsMiles !== initialThresholds.miles || thresholdsDays !== initialThresholds.days;
+  const columns = useMemo(
+    () => [
+      columnHelper.accessor('name', {
+        header: 'Name',
+        size: 180,
+        minSize: 120,
+        meta: { containsEditableInput: true },
+        cell: ({ row }) => (
+          <GridEditableCell
+            value={row.original.name}
+            navCol={0}
+            onChange={(value) => onUpdateVehicle(row.original.id, { name: normalizeVehicleName(value, row.original.name) })}
+          />
+        ),
+      }),
+      columnHelper.accessor((row) => row.make ?? '', {
+        id: 'make',
+        header: 'Make',
+        size: 150,
+        minSize: 110,
+        meta: { containsEditableInput: true },
+        cell: ({ row }) => (
+          <GridEditableCell
+            value={row.original.make ?? ''}
+            navCol={1}
+            deleteResetValue=""
+            onChange={(value) => onUpdateVehicle(row.original.id, { make: normalizeOptionalText(value) })}
+          />
+        ),
+      }),
+      columnHelper.accessor((row) => row.model ?? '', {
+        id: 'model',
+        header: 'Model',
+        size: 150,
+        minSize: 90,
+        meta: { containsEditableInput: true },
+        cell: ({ row }) => (
+          <GridEditableCell
+            value={row.original.model ?? ''}
+            navCol={2}
+            deleteResetValue=""
+            onChange={(value) => onUpdateVehicle(row.original.id, { model: normalizeOptionalText(value) })}
+          />
+        ),
+      }),
+      columnHelper.accessor((row) => row.model_year ?? '', {
+        id: 'model_year',
+        header: 'Model Year',
+        size: 120,
+        minSize: 90,
+        meta: { containsEditableInput: true },
+        cell: ({ row }) => (
+          <GridEditableCell
+            value={row.original.model_year ?? ''}
+            navCol={3}
+            type="number"
+            inputMode="numeric"
+            numberDisplayFormat="plain"
+            deleteResetValue=""
+            onChange={(value) => onUpdateVehicle(row.original.id, { model_year: toNumberOrNull(value) })}
+          />
+        ),
+      }),
+      columnHelper.accessor((row) => row.in_service_date ?? '', {
+        id: 'in_service_date',
+        header: 'In-service Date',
+        size: 150,
+        minSize: 120,
+        meta: { containsEditableInput: true },
+        cell: ({ row }) => (
+          <VehicleDateCell
+            value={row.original.in_service_date}
+            navCol={4}
+            onChange={(value) => onUpdateVehicle(row.original.id, { in_service_date: value })}
+          />
+        ),
+      }),
+      columnHelper.accessor('current_odometer_miles', {
+        header: 'Current Mileage',
+        size: 150,
+        minSize: 110,
+        meta: { containsEditableInput: true },
+        cell: ({ row }) => (
+          <GridEditableCell
+            value={row.original.current_odometer_miles}
+            navCol={5}
+            type="number"
+            inputMode="decimal"
+            deleteResetValue="0"
+            onChange={(value) => onUpdateVehicle(row.original.id, { current_odometer_miles: normalizeNonNegativeNumber(value) })}
+          />
+        ),
+      }),
+      columnHelper.display({
+        id: 'actions',
+        header: '',
+        enableSorting: false,
+        enableResizing: false,
+        size: 40,
+        minSize: 40,
+        maxSize: 40,
+        meta: { headerClassName: 'px-0', cellClassName: 'px-0', containsButton: true },
+        cell: ({ row }) => (
+          <VehicleActionsCell vehicle={row.original} onDelete={setDeleteTarget} />
+        ),
+      }),
+    ],
+    [onUpdateVehicle],
+  );
+  const table = useReactTable({
+    data: vehicles,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    state: { sorting, columnSizing, columnSizingInfo },
+    onSortingChange: setSorting,
+    onColumnSizingChange,
+    onColumnSizingInfoChange,
+    enableColumnResizing: columnResizingEnabled,
+    enableSortingRemoval: false,
+    columnResizeMode: 'onChange',
+  });
 
   return (
-    <div className="grid gap-4">
-      <Card>
+    <div className="grid min-w-0 grid-cols-1 gap-4">
+      <Card className="min-w-0">
         <CardHeader>
           <CardTitle>Thresholds for <em>Upcoming</em></CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -275,39 +513,21 @@ export function GarageConfigView({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="min-w-0">
         <CardHeader className="flex flex-row items-center justify-between gap-4">
           <CardTitle>Vehicles</CardTitle>
           <Button type="button" variant="outline-success" size="sm" className="h-8 w-8 p-0" aria-label="Add vehicle" onClick={openAddVehicle}>
-            +
+            <Plus className="h-4 w-4" />
           </Button>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {vehicles.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No vehicles yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {vehicles.map((vehicle) => (
-                <div key={vehicle.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{vehicle.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatVehicleLabel(vehicle)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{formatVehicleMileage(vehicle.current_odometer_miles)}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button type="button" size="sm" variant="outline" onClick={() => openEditVehicle(vehicle)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button type="button" size="sm" variant="outline-destructive" onClick={() => setDeleteTarget(vehicle)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        <CardContent className="min-w-0 overflow-hidden px-0 pb-2.5">
+          <div className="min-w-0 overflow-hidden">
+            <DataGrid
+              table={table}
+              maxHeight="none"
+              emptyMessage={vehicles.length === 0 ? 'No vehicles yet.' : 'No vehicles'}
+            />
+          </div>
         </CardContent>
       </Card>
 

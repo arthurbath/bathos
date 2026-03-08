@@ -1,16 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuthContext } from '@/platform/contexts/AuthContext';
 import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Switch } from '@/components/ui/switch';
 import { ArrowLeft, Shield } from 'lucide-react';
 import * as Sentry from '@sentry/react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { supabaseRequest } from '@/lib/supabaseRequest';
+import {
+  getDefaultGridWidthsOnlyColumnErrorMessage,
+  isMissingDefaultGridWidthsOnlyColumnError,
+  readCachedDefaultGridColumnWidthsOnly,
+  writeCachedDefaultGridColumnWidthsOnly,
+} from '@/lib/gridColumnWidthPreferences';
 import NotFound from '@/pages/NotFound';
 
 export default function AdminPage() {
@@ -22,6 +31,59 @@ export default function AdminPage() {
   const [confirmEmail, setConfirmEmail] = useState('');
   const [emailPendingDelete, setEmailPendingDelete] = useState<string | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [defaultGridWidthsOnly, setDefaultGridWidthsOnly] = useState(
+    () => readCachedDefaultGridColumnWidthsOnly(user?.id),
+  );
+  const [gridWidthSettingLoading, setGridWidthSettingLoading] = useState(false);
+  const [gridWidthSettingSaving, setGridWidthSettingSaving] = useState(false);
+
+  useEffect(() => {
+    const nextCachedValue = readCachedDefaultGridColumnWidthsOnly(user?.id);
+    setDefaultGridWidthsOnly(nextCachedValue);
+
+    if (!user?.id || !isAdmin) {
+      setGridWidthSettingLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setGridWidthSettingLoading(true);
+
+    void (async () => {
+      try {
+        const data = await supabaseRequest(async () =>
+          await supabase
+            .from('bathos_user_settings')
+            .select('use_default_grid_column_widths')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+        );
+        if (cancelled) return;
+
+        const enabled = data?.use_default_grid_column_widths === true;
+        setDefaultGridWidthsOnly(enabled);
+        writeCachedDefaultGridColumnWidthsOnly(user.id, enabled);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Failed to load default grid width setting:', error);
+        if (isMissingDefaultGridWidthsOnlyColumnError(error)) {
+          toast({
+            title: 'Grid Width Review unavailable',
+            description: getDefaultGridWidthsOnlyColumnErrorMessage(),
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setGridWidthSettingLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, user?.id]);
 
   const handleSentryTest = async () => {
     if (!hasSentryDsn) {
@@ -102,6 +164,44 @@ export default function AdminPage() {
     }
   };
 
+  const handleDefaultGridWidthsOnlyChange = async (checked: boolean) => {
+    if (!user?.id) return;
+
+    setDefaultGridWidthsOnly(checked);
+    writeCachedDefaultGridColumnWidthsOnly(user.id, checked);
+    setGridWidthSettingSaving(true);
+
+    try {
+      await supabaseRequest(async () =>
+        await supabase
+          .from('bathos_user_settings')
+          .upsert(
+            [{
+              user_id: user.id,
+              use_default_grid_column_widths: checked,
+            }],
+            { onConflict: 'user_id' },
+          ),
+      );
+    } catch (error) {
+      console.error('Failed to save default grid width setting:', error);
+      setDefaultGridWidthsOnly(!checked);
+      writeCachedDefaultGridColumnWidthsOnly(user.id, !checked);
+      const description = isMissingDefaultGridWidthsOnlyColumnError(error)
+        ? getDefaultGridWidthsOnlyColumnErrorMessage()
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
+      toast({
+        title: 'Failed to save setting',
+        description,
+        variant: 'destructive',
+      });
+    } finally {
+      setGridWidthSettingSaving(false);
+    }
+  };
+
   if (loading || (!!user && (!roleResolved || roleLoading))) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -127,6 +227,28 @@ export default function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-6 space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Grid Width Review</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="default-grid-widths-only">Show default data grid column widths only</Label>
+                <p className="text-xs text-muted-foreground">
+                  Disables grid column resizing for your current admin account and ignores saved width preferences.
+                </p>
+              </div>
+              <Switch
+                id="default-grid-widths-only"
+                checked={defaultGridWidthsOnly}
+                onCheckedChange={handleDefaultGridWidthsOnlyChange}
+                disabled={gridWidthSettingLoading || gridWidthSettingSaving}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>User Management</CardTitle>

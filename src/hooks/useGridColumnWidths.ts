@@ -13,6 +13,11 @@ import {
   type ColumnWidthMap,
   type GridKey,
 } from '@/lib/gridColumnWidths';
+import {
+  isMissingDefaultGridWidthsOnlyColumnError,
+  readCachedDefaultGridColumnWidthsOnly,
+  writeCachedDefaultGridColumnWidthsOnly,
+} from '@/lib/gridColumnWidthPreferences';
 
 const EMPTY_COLUMN_SIZING_INFO: ColumnSizingInfoState = {
   startOffset: null,
@@ -93,11 +98,16 @@ export function useGridColumnWidths({
   defaults,
   fixedColumnIds = [],
 }: UseGridColumnWidthsOptions) {
+  const cachedDefaultWidthsOnly = readCachedDefaultGridColumnWidthsOnly(userId);
   const fixedColumnIdsKey = useMemo(
     () => fixedColumnIds.slice().sort().join('|'),
     [fixedColumnIds],
   );
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(() => {
+    if (cachedDefaultWidthsOnly) {
+      return sanitizeColumnWidths(undefined, defaults, fixedColumnIds);
+    }
+
     const cachedGridWidths = readCachedGridColumnWidths(userId);
     return sanitizeColumnWidths(cachedGridWidths[gridKey], defaults, fixedColumnIds);
   });
@@ -105,6 +115,7 @@ export function useGridColumnWidths({
     EMPTY_COLUMN_SIZING_INFO,
   );
   const [loaded, setLoaded] = useState(false);
+  const [defaultWidthsOnly, setDefaultWidthsOnly] = useState(cachedDefaultWidthsOnly);
   const widthsByGridRef = useRef<Record<string, unknown>>(
     readCachedGridColumnWidths(userId),
   );
@@ -114,13 +125,18 @@ export function useGridColumnWidths({
   useEffect(() => {
     let cancelled = false;
     const cachedAllGridWidths = readCachedGridColumnWidths(userId);
-    const optimisticSizing = sanitizeColumnWidths(
-      cachedAllGridWidths[gridKey],
-      defaults,
-      fixedColumnIds,
-    );
+    const cachedDefaultWidthsOnlyValue = readCachedDefaultGridColumnWidthsOnly(userId);
+    const optimisticSizing = cachedDefaultWidthsOnlyValue
+      ? sanitizeColumnWidths(undefined, defaults, fixedColumnIds)
+      : sanitizeColumnWidths(
+          cachedAllGridWidths[gridKey],
+          defaults,
+          fixedColumnIds,
+        );
 
     setColumnSizing(optimisticSizing);
+    setDefaultWidthsOnly(cachedDefaultWidthsOnlyValue);
+    setColumnSizingInfo(EMPTY_COLUMN_SIZING_INFO);
     setLoaded(false);
     widthsByGridRef.current = cachedAllGridWidths;
     lastPersistedWidthsRef.current = JSON.stringify(optimisticSizing);
@@ -134,16 +150,64 @@ export function useGridColumnWidths({
 
     void (async () => {
       const cachedAllGridWidthsSerialized = JSON.stringify(cachedAllGridWidths);
-      let data: { grid_column_widths: unknown } | null = null;
+      let data: {
+        grid_column_widths: unknown;
+        use_default_grid_column_widths: boolean | null;
+      } | null = null;
       try {
         data = await supabaseRequest(async () =>
           await supabase
             .from('bathos_user_settings')
-            .select('grid_column_widths')
+            .select('grid_column_widths, use_default_grid_column_widths')
             .eq('user_id', userId)
             .maybeSingle(),
         );
       } catch (error) {
+        if (isMissingDefaultGridWidthsOnlyColumnError(error)) {
+          try {
+            const fallbackData = await supabaseRequest(async () =>
+              await supabase
+                .from('bathos_user_settings')
+                .select('grid_column_widths')
+                .eq('user_id', userId)
+                .maybeSingle(),
+            );
+            if (cancelled) return;
+
+            const fallbackGridWidths =
+              fallbackData?.grid_column_widths &&
+              typeof fallbackData.grid_column_widths === 'object' &&
+              !Array.isArray(fallbackData.grid_column_widths)
+                ? (fallbackData.grid_column_widths as Record<string, unknown>)
+                : {};
+
+            if (JSON.stringify(fallbackGridWidths) !== cachedAllGridWidthsSerialized) {
+              writeCachedGridColumnWidths(userId, fallbackGridWidths);
+            }
+
+            writeCachedDefaultGridColumnWidthsOnly(userId, false);
+            widthsByGridRef.current = fallbackGridWidths;
+            setDefaultWidthsOnly(false);
+            const fallbackSizing = sanitizeColumnWidths(
+              fallbackGridWidths[gridKey],
+              defaults,
+              fixedColumnIds,
+            );
+            setColumnSizing(fallbackSizing);
+            setColumnSizingInfo(EMPTY_COLUMN_SIZING_INFO);
+            lastPersistedWidthsRef.current = JSON.stringify(fallbackSizing);
+            setLoaded(true);
+            return;
+          } catch (fallbackError) {
+            if (cancelled) return;
+            console.error(
+              'Failed to load grid column widths after missing-column fallback:',
+              fallbackError,
+            );
+            setLoaded(true);
+            return;
+          }
+        }
         if (cancelled) return;
         console.error('Failed to load grid column widths:', error);
         setLoaded(true);
@@ -158,18 +222,24 @@ export function useGridColumnWidths({
         !Array.isArray(data.grid_column_widths)
           ? (data.grid_column_widths as Record<string, unknown>)
           : {};
+      const nextDefaultWidthsOnly = data?.use_default_grid_column_widths === true;
 
       if (JSON.stringify(rawAllGridWidths) !== cachedAllGridWidthsSerialized) {
         writeCachedGridColumnWidths(userId, rawAllGridWidths);
       }
+      writeCachedDefaultGridColumnWidthsOnly(userId, nextDefaultWidthsOnly);
 
       widthsByGridRef.current = rawAllGridWidths;
-      const loadedSizing = sanitizeColumnWidths(
-        rawAllGridWidths[gridKey],
-        defaults,
-        fixedColumnIds,
-      );
+      setDefaultWidthsOnly(nextDefaultWidthsOnly);
+      const loadedSizing = nextDefaultWidthsOnly
+        ? sanitizeColumnWidths(undefined, defaults, fixedColumnIds)
+        : sanitizeColumnWidths(
+            rawAllGridWidths[gridKey],
+            defaults,
+            fixedColumnIds,
+          );
       setColumnSizing(loadedSizing);
+      setColumnSizingInfo(EMPTY_COLUMN_SIZING_INFO);
       lastPersistedWidthsRef.current = JSON.stringify(loadedSizing);
       setLoaded(true);
     })();
@@ -181,6 +251,7 @@ export function useGridColumnWidths({
 
   const onColumnSizingChange = useCallback<OnChangeFn<ColumnSizingState>>(
     (updater) => {
+      if (defaultWidthsOnly) return;
       setColumnSizing((current) => {
         const next = applyUpdater(updater, current);
         return sanitizeColumnWidths(
@@ -190,20 +261,34 @@ export function useGridColumnWidths({
         );
       });
     },
-    [defaults, fixedColumnIds],
+    [defaultWidthsOnly, defaults, fixedColumnIds],
   );
 
   const onColumnSizingInfoChange = useCallback<OnChangeFn<ColumnSizingInfoState>>(
     (updater) => {
+      if (defaultWidthsOnly) {
+        setColumnSizingInfo(EMPTY_COLUMN_SIZING_INFO);
+        return;
+      }
       setColumnSizingInfo((current) => applyUpdater(updater, current));
     },
-    [],
+    [defaultWidthsOnly],
   );
+
+  useEffect(() => {
+    if (!defaultWidthsOnly) return;
+
+    setColumnSizing(sanitizeColumnWidths(undefined, defaults, fixedColumnIds));
+    setColumnSizingInfo(EMPTY_COLUMN_SIZING_INFO);
+    lastPersistedWidthsRef.current = JSON.stringify(
+      sanitizeColumnWidths(undefined, defaults, fixedColumnIds),
+    );
+  }, [defaultWidthsOnly, defaults, fixedColumnIds, fixedColumnIdsKey]);
 
   useEffect(() => {
     const isResizing = Boolean(columnSizingInfo.isResizingColumn);
 
-    if (!loaded || !userId) {
+    if (!loaded || !userId || defaultWidthsOnly) {
       wasResizingRef.current = isResizing;
       return;
     }
@@ -261,11 +346,13 @@ export function useGridColumnWidths({
     gridKey,
     loaded,
     userId,
+    defaultWidthsOnly,
   ]);
 
   return {
     columnSizing,
     columnSizingInfo,
+    columnResizingEnabled: !defaultWidthsOnly,
     onColumnSizingChange,
     onColumnSizingInfoChange,
   };

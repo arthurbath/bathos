@@ -59,6 +59,11 @@ type NumberRowData = {
   amount: number;
 };
 
+type YearRowData = {
+  id: string;
+  year: number;
+};
+
 type AsyncNoteRowData = {
   id: string;
   note: string;
@@ -797,6 +802,46 @@ function NumberFormattingHarness() {
   return <DataGrid table={table} />;
 }
 
+function YearFormattingHarness() {
+  const [rows, setRows] = React.useState<YearRowData[]>([
+    { id: "row-a", year: 2024 },
+  ]);
+  const yearColumnHelper = createColumnHelper<YearRowData>();
+  const columns = React.useMemo(
+    () => [
+      yearColumnHelper.accessor("year", {
+        id: "year",
+        header: "Year",
+        cell: ({ row, getValue }) => (
+          <GridEditableCell
+            value={getValue()}
+            navCol={0}
+            type="number"
+            inputMode="numeric"
+            numberDisplayFormat="plain"
+            onChange={(next) => {
+              const parsed = Number(next);
+              if (Number.isFinite(parsed)) {
+                setRows((prev) => prev.map((entry) => (entry.id === row.original.id ? { ...entry, year: parsed } : entry)));
+              }
+            }}
+          />
+        ),
+      }),
+    ],
+    [yearColumnHelper],
+  );
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return <DataGrid table={table} />;
+}
+
 function AsyncTextCommitHarness({ saveDelayMs = 250 }: { saveDelayMs?: number }) {
   const [rows, setRows] = React.useState<AsyncNoteRowData[]>([
     { id: "row-a", note: "Initial note" },
@@ -985,7 +1030,11 @@ async function dispatchEnter(input: HTMLInputElement) {
 
 async function dispatchEnterOnElement(element: HTMLElement) {
   await act(async () => {
-    element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    element.dispatchEvent(event);
+    if (!event.defaultPrevented && element instanceof HTMLButtonElement) {
+      element.click();
+    }
   });
 }
 
@@ -1714,6 +1763,29 @@ describe("DataGrid number formatting", () => {
         expect(input!.getAttribute("data-grid-editing")).toBe("false");
         expect(input!.type).toBe("text");
         expect(input!.value).toBe("12,000");
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("shows years without thousand separators in both display and editing mode", async () => {
+    const { container, root } = mount(<YearFormattingHarness />);
+    try {
+      const getLiveInput = () => container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      const initialInput = getLiveInput();
+      expect(initialInput).not.toBeNull();
+      expect(initialInput!.getAttribute("data-grid-editing")).toBe("false");
+      expect(initialInput!.type).toBe("text");
+      expect(initialInput!.value).toBe("2024");
+
+      await startEditing(initialInput!);
+      await waitForCondition(() => {
+        const input = getLiveInput();
+        expect(input).not.toBeNull();
+        expect(input!.getAttribute("data-grid-editing")).toBe("true");
+        expect(input!.type).toBe("number");
+        expect(input!.value).toBe("2024");
       });
     } finally {
       unmount(root, container);

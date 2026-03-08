@@ -132,6 +132,7 @@ export type Database = {
           id: string
           theme: string
           updated_at: string
+          use_default_grid_column_widths: boolean
           user_id: string
         }
         Insert: {
@@ -140,6 +141,7 @@ export type Database = {
           id?: string
           theme?: string
           updated_at?: string
+          use_default_grid_column_widths?: boolean
           user_id: string
         }
         Update: {
@@ -148,6 +150,7 @@ export type Database = {
           id?: string
           theme?: string
           updated_at?: string
+          use_default_grid_column_widths?: boolean
           user_id?: string
         }
         Relationships: []

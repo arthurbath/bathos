@@ -199,6 +199,7 @@ export function GarageServicesGrid({
   const {
     columnSizing,
     columnSizingInfo,
+    columnResizingEnabled,
     onColumnSizingChange,
     onColumnSizingInfoChange,
   } = useGridColumnWidths({
@@ -462,6 +463,7 @@ export function GarageServicesGrid({
     onSortingChange: setSorting,
     onColumnSizingChange,
     onColumnSizingInfoChange,
+    enableColumnResizing: columnResizingEnabled,
     enableSortingRemoval: false,
     columnResizeMode: 'onChange',
   });

@@ -379,6 +379,7 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
   const {
     columnSizing,
     columnSizingInfo,
+    columnResizingEnabled,
     onColumnSizingChange,
     onColumnSizingInfoChange,
   } = useGridColumnWidths({
@@ -559,7 +560,7 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
     columns,
     defaultColumn: { minSize: GRID_MIN_COLUMN_WIDTH },
     state: { sorting, columnSizing, columnSizingInfo },
-    enableColumnResizing: true,
+    enableColumnResizing: columnResizingEnabled,
     onSortingChange: setSorting,
     onColumnSizingChange,
     onColumnSizingInfoChange,

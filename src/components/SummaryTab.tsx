@@ -110,6 +110,7 @@ export function SummaryTab({
   const {
     columnSizing,
     columnSizingInfo,
+    columnResizingEnabled,
     onColumnSizingChange,
     onColumnSizingInfoChange,
   } = useGridColumnWidths({
@@ -431,7 +432,7 @@ export function SummaryTab({
     columns,
     defaultColumn: { minSize: GRID_MIN_COLUMN_WIDTH },
     state: { sorting, columnSizing, columnSizingInfo },
-    enableColumnResizing: true,
+    enableColumnResizing: columnResizingEnabled,
     onSortingChange: setSorting,
     onColumnSizingChange,
     onColumnSizingInfoChange,

@@ -12,6 +12,7 @@ export type GridKey =
   | 'config_categories'
   | 'config_payment_methods'
   | 'config_backups'
+  | 'garage_vehicles'
   | 'garage_services'
   | 'garage_servicings';
 export type ColumnWidthMap = Record<string, number>;
@@ -33,8 +34,8 @@ export const EXPENSES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
 };
 
 export const INCOMES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
-  name: 240,
-  partner_label: 200,
+  name: 220,
+  partner_label: 160,
   amount: 120,
   estimate: 80,
   frequency_type: 220,
@@ -76,13 +77,23 @@ export const CONFIG_BACKUPS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
 };
 
 export const GARAGE_SERVICES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
-  name: 220,
+  name: 240,
   type: 160,
   every_miles: 120,
   every_months: 140,
-  last_performed: 200,
+  last_performed: 220,
   monitoring: 120,
-  notes: 220,
+  notes: 240,
+  [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
+};
+
+export const GARAGE_VEHICLES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
+  name: 120,
+  make: 130,
+  model: 90,
+  model_year: 100,
+  in_service_date: 130,
+  current_odometer_miles: 130,
   [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
 };
 
@@ -92,7 +103,7 @@ export const GARAGE_SERVICINGS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
   shop_name: 180,
   outcomes: 140,
   receipts: 100,
-  notes: 220,
+  notes: 240,
   [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
 };
 
@@ -103,6 +114,7 @@ export const GRID_FIXED_COLUMNS: Record<GridKey, string[]> = {
   config_categories: [GRID_ACTIONS_COLUMN_ID],
   config_payment_methods: [GRID_ACTIONS_COLUMN_ID],
   config_backups: [GRID_ACTIONS_COLUMN_ID],
+  garage_vehicles: [GRID_ACTIONS_COLUMN_ID],
   garage_services: [GRID_ACTIONS_COLUMN_ID],
   garage_servicings: [GRID_ACTIONS_COLUMN_ID],
 };
