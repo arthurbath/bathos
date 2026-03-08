@@ -3,7 +3,7 @@ import { createColumnHelper, getCoreRowModel, getSortedRowModel, type Row, type 
 import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { DataGrid, GridCheckboxCell, GridEditableCell, gridMenuTriggerProps, gridSelectTriggerProps, useDataGrid } from '@/components/ui/data-grid';
+import { DataGrid, GridCheckboxCell, GridEditableCell, GridSelectValue, gridMenuTriggerProps, gridSelectTriggerProps, useDataGrid } from '@/components/ui/data-grid';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -63,7 +63,7 @@ function ServiceTypeCell({
         className={`h-7 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
         {...gridSelectTriggerProps(ctx, 1)}
       >
-        <SelectValue />
+        <GridSelectValue />
       </SelectTrigger>
       <SelectContent>
         {GARAGE_SERVICE_TYPE_OPTIONS.map((option) => (

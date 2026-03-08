@@ -8,7 +8,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { DataGrid, GridEditableCell, gridMenuTriggerProps, gridNavProps, useDataGrid } from '@/components/ui/data-grid';
+import { DataGrid, GridEditableCell, GRID_NULL_PLACEHOLDER, gridMenuTriggerProps, gridNavProps, useDataGrid } from '@/components/ui/data-grid';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { CalendarIcon, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -21,6 +21,8 @@ import type { GarageUserSettings, GarageVehicle } from '@/modules/garage/types/g
 const columnHelper = createColumnHelper<GarageVehicle>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
 const VEHICLE_ACTIONS_NAV_COL = 6;
+const VEHICLE_MODEL_YEAR_MIN = 1900;
+const VEHICLE_MODEL_YEAR_MAX = 2200;
 
 interface GarageConfigViewProps {
   vehicles: GarageVehicle[];
@@ -102,6 +104,42 @@ function normalizeVehicleName(value: string, fallback: string): string {
   return trimmed || fallback;
 }
 
+function parseVehicleModelYear(value: string): { status: 'empty' | 'invalid' | 'valid'; value: number | null } {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { status: 'empty', value: null };
+  }
+
+  const parsed = toNumberOrNull(trimmed);
+  if (
+    parsed === null
+    || parsed < VEHICLE_MODEL_YEAR_MIN
+    || parsed > VEHICLE_MODEL_YEAR_MAX
+  ) {
+    return { status: 'invalid', value: null };
+  }
+
+  return { status: 'valid', value: parsed };
+}
+
+function normalizeVehicleModelYear(value: string, fallback: number | null): number | null {
+  const parsed = parseVehicleModelYear(value);
+  return parsed.status === 'valid' ? parsed.value : fallback;
+}
+
+function normalizeVehicleModelYearInput(value: string, fallback: number | null): string {
+  const normalized = normalizeVehicleModelYear(value, fallback);
+  return normalized == null ? '' : String(normalized);
+}
+
+function showVehicleModelYearRangeToast() {
+  toast({
+    title: 'Invalid model year',
+    description: `Model year must be between ${VEHICLE_MODEL_YEAR_MIN} and ${VEHICLE_MODEL_YEAR_MAX}.`,
+    variant: 'destructive',
+  });
+}
+
 function normalizeOptionalText(value: string): string | null {
   const trimmed = value.trim();
   return trimmed || null;
@@ -164,7 +202,7 @@ function VehicleDateCell({
             !value && 'text-muted-foreground',
           )}
         >
-          <span className="truncate">{parsedDate ? format(parsedDate, 'MMM d, yyyy') : 'None'}</span>
+          <span className="truncate">{parsedDate ? format(parsedDate, 'MMM d, yyyy') : GRID_NULL_PLACEHOLDER}</span>
           <CalendarIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-foreground opacity-50" />
         </button>
       </PopoverTrigger>
@@ -274,13 +312,24 @@ export function GarageConfigView({
   }, []);
 
   const saveVehicle = async () => {
+    const isAddingVehicle = !vehicleForm.id;
     const name = vehicleForm.name.trim();
     if (!name) {
       toast({ title: 'Vehicle name required', variant: 'destructive' });
       return;
     }
 
-    const modelYear = toNumberOrNull(vehicleForm.model_year);
+    const parsedModelYear = parseVehicleModelYear(vehicleForm.model_year);
+    if (isAddingVehicle && parsedModelYear.status === 'empty') {
+      toast({ title: 'Model year required', variant: 'destructive' });
+      return;
+    }
+    if (parsedModelYear.status === 'invalid') {
+      showVehicleModelYearRangeToast();
+      return;
+    }
+    const modelYear = parsedModelYear.value;
+
     const odometer = Math.max(0, toNumberOrNull(vehicleForm.current_odometer_miles) ?? 0);
 
     setFormBusy(true);
@@ -375,6 +424,13 @@ export function GarageConfigView({
           <GridEditableCell
             value={row.original.name}
             navCol={0}
+            normalizeOnCommit={(value) => {
+              const normalized = normalizeVehicleName(value, row.original.name);
+              if (!value.trim()) {
+                toast({ title: 'Name is required', variant: 'destructive' });
+              }
+              return normalized;
+            }}
             onChange={(value) => onUpdateVehicle(row.original.id, { name: normalizeVehicleName(value, row.original.name) })}
           />
         ),
@@ -422,8 +478,18 @@ export function GarageConfigView({
             type="number"
             inputMode="numeric"
             numberDisplayFormat="plain"
-            deleteResetValue=""
-            onChange={(value) => onUpdateVehicle(row.original.id, { model_year: toNumberOrNull(value) })}
+            normalizeOnCommit={(value) => {
+              const parsed = parseVehicleModelYear(value);
+              if (parsed.status === 'invalid') {
+                showVehicleModelYearRangeToast();
+              }
+              const normalized = normalizeVehicleModelYearInput(value, row.original.model_year);
+              if (parsed.status === 'empty') {
+                toast({ title: 'Model year is required', variant: 'destructive' });
+              }
+              return normalized;
+            }}
+            onChange={(value) => onUpdateVehicle(row.original.id, { model_year: normalizeVehicleModelYear(value, row.original.model_year) })}
           />
         ),
       }),
@@ -453,6 +519,7 @@ export function GarageConfigView({
             type="number"
             inputMode="decimal"
             deleteResetValue="0"
+            normalizeOnCommit={(value) => String(normalizeNonNegativeNumber(value))}
             onChange={(value) => onUpdateVehicle(row.original.id, { current_odometer_miles: normalizeNonNegativeNumber(value) })}
           />
         ),
@@ -560,7 +627,7 @@ export function GarageConfigView({
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="garage-vehicle-year">Model Year</Label>
-                <Input id="garage-vehicle-year" type="number" inputMode="numeric" value={vehicleForm.model_year} onChange={(event) => setVehicleForm((prev) => ({ ...prev, model_year: event.target.value }))} />
+                <Input id="garage-vehicle-year" type="number" inputMode="numeric" required={!vehicleForm.id} value={vehicleForm.model_year} onChange={(event) => setVehicleForm((prev) => ({ ...prev, model_year: event.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="garage-vehicle-date">In-service Date</Label>

@@ -23,7 +23,7 @@ import { DataGridAddFormAffixInput } from '@/components/ui/data-grid-add-form-af
 import { Plus, Trash2, MoreHorizontal, Filter, FilterX } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { FREQUENCY_OPTIONS, toMonthly, frequencyLabels, needsParam, fromMonthly } from '@/lib/frequency';
-import { DataGrid, GridCheckboxCell, GridEditableCell, GridCurrencyCell, GridPercentCell, gridMenuTriggerProps, gridNavProps, gridSelectTriggerProps, useDataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
+import { DataGrid, GridCheckboxCell, GridEditableCell, GridCurrencyCell, GridPercentCell, GridSelectValue, gridMenuTriggerProps, gridNavProps, gridSelectTriggerProps, useDataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import { EXPENSES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH } from '@/lib/gridColumnWidths';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -233,7 +233,7 @@ function CategoryCell({ exp, categories, onChange, onAddNew, disabled = false }:
           },
         })}
       >
-        <SelectValue />
+        <GridSelectValue />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="_none">—</SelectItem>
@@ -265,7 +265,7 @@ function ExpenseFrequencyCell({ exp, onChange, disabled = false }: { exp: Expens
           className={`h-7 min-w-0 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
           {...gridSelectTriggerProps(ctx, 4, { disabled })}
         >
-          <SelectValue />
+          <GridSelectValue />
         </SelectTrigger>
       <SelectContent>
           {FREQUENCY_OPTIONS.map(f => <SelectItem key={f} value={f}>{frequencyLabels[f]}</SelectItem>)}
@@ -303,9 +303,9 @@ function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, 
           },
         })}
       >
-        <SelectValue>
+        <GridSelectValue>
           {exp.linked_account_id ? linkedAccounts.find(la => la.id === exp.linked_account_id)?.name ?? '—' : '—'}
-        </SelectValue>
+        </GridSelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="_none">—</SelectItem>

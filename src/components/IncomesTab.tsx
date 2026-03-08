@@ -25,6 +25,7 @@ import {
   GridEditableCell,
   GridCurrencyCell,
   GridCheckboxCell,
+  GridSelectValue,
   gridMenuTriggerProps,
   gridNavProps,
   gridSelectTriggerProps,
@@ -169,7 +170,7 @@ function PartnerCell({
         className={`h-7 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
         {...gridSelectTriggerProps(ctx, 1, { disabled })}
       >
-        <SelectValue />
+        <GridSelectValue />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="X">{partnerX}</SelectItem>
@@ -204,7 +205,7 @@ function FrequencyCell({
           className={`h-7 min-w-0 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
           {...gridSelectTriggerProps(ctx, 4, { disabled })}
         >
-          <SelectValue />
+          <GridSelectValue />
         </SelectTrigger>
         <SelectContent>
           {FREQUENCY_OPTIONS.map(f => <SelectItem key={f} value={f}>{frequencyLabels[f]}</SelectItem>)}

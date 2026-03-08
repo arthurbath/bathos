@@ -5,8 +5,8 @@ import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingSta
 import { describe, expect, it, vi } from "vitest";
 import { ColorPicker } from "@/components/ManagedListSection";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DataGrid, GridCheckboxCell, GridEditableCell, gridMenuTriggerProps, gridNavProps, gridSelectTriggerProps, useDataGrid } from "@/components/ui/data-grid";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { DataGrid, GridCheckboxCell, GridCurrencyCell, GridEditableCell, GridPercentCell, GridSelectValue, gridMenuTriggerProps, gridNavProps, gridSelectTriggerProps, useDataGrid } from "@/components/ui/data-grid";
 
 if (typeof HTMLElement !== "undefined" && typeof HTMLElement.prototype.scrollIntoView !== "function") {
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
@@ -81,6 +81,14 @@ type DeleteResetRowData = {
   zeroableNumber: number;
   protectedNumber: number | null;
   checked: boolean;
+};
+
+type NullPlaceholderRowData = {
+  id: string;
+  optionalText: string | null;
+  optionalAmount: number | null;
+  optionalPercent: number | null;
+  owner: "X" | "Y" | null;
 };
 
 
@@ -560,7 +568,7 @@ function GridSelectHarness() {
               <SelectTrigger
                 {...gridSelectTriggerProps(ctx, 0)}
               >
-                <SelectValue />
+                <GridSelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="X">X</SelectItem>
@@ -618,10 +626,10 @@ function NullableGridSelectHarness() {
                   },
                 })}
               >
-                <SelectValue />
+                <GridSelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="_none">None</SelectItem>
+                <SelectItem value="_none">—</SelectItem>
                 <SelectItem value="X">X</SelectItem>
                 <SelectItem value="Y">Y</SelectItem>
               </SelectContent>
@@ -752,6 +760,96 @@ function DeleteResetHarness() {
       }),
     ],
     [deleteResetColumnHelper],
+  );
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return <DataGrid table={table} />;
+}
+
+function NullPlaceholderHarness() {
+  const [rows] = React.useState<NullPlaceholderRowData[]>([
+    {
+      id: "row-a",
+      optionalText: null,
+      optionalAmount: null,
+      optionalPercent: null,
+      owner: null,
+    },
+  ]);
+  const placeholderColumnHelper = createColumnHelper<NullPlaceholderRowData>();
+  const columns = React.useMemo(
+    () => [
+      placeholderColumnHelper.accessor("optionalText", {
+        id: "optionalText",
+        header: "Optional Text",
+        cell: ({ getValue }) => (
+          <GridEditableCell
+            value={getValue()}
+            navCol={0}
+            onChange={() => {}}
+          />
+        ),
+      }),
+      placeholderColumnHelper.accessor("optionalAmount", {
+        id: "optionalAmount",
+        header: "Optional Amount",
+        cell: ({ getValue }) => (
+          <GridCurrencyCell
+            value={getValue()}
+            navCol={1}
+            onChange={() => {}}
+          />
+        ),
+      }),
+      placeholderColumnHelper.accessor("optionalPercent", {
+        id: "optionalPercent",
+        header: "Optional Percent",
+        cell: ({ getValue }) => (
+          <GridPercentCell
+            value={getValue()}
+            navCol={2}
+            onChange={() => {}}
+          />
+        ),
+      }),
+      placeholderColumnHelper.accessor("owner", {
+        id: "owner",
+        header: "Owner",
+        cell: ({ getValue }) => {
+          const ctx = useDataGrid();
+          return (
+            <Select value={getValue() ?? undefined} onValueChange={() => {}}>
+              <SelectTrigger {...gridSelectTriggerProps(ctx, 3)}>
+                <GridSelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="X">X</SelectItem>
+                <SelectItem value="Y">Y</SelectItem>
+              </SelectContent>
+            </Select>
+          );
+        },
+      }),
+      placeholderColumnHelper.display({
+        id: "customPlaceholder",
+        header: "Custom Placeholder",
+        cell: () => (
+          <GridEditableCell
+            value={null}
+            navCol={4}
+            placeholder="Custom"
+            onChange={() => {}}
+          />
+        ),
+      }),
+    ],
+    [placeholderColumnHelper],
   );
 
   const table = useReactTable({
@@ -1692,7 +1790,7 @@ describe("DataGrid delete reset behavior", () => {
       await waitForCondition(() => {
         const liveTrigger = container.querySelector<HTMLElement>('[data-row-id="row-a"][data-col="0"]');
         expect(liveTrigger).not.toBeNull();
-        expect(liveTrigger?.textContent).toContain("None");
+        expect(liveTrigger?.textContent).toContain("—");
       });
     } finally {
       unmount(root, container);
@@ -1725,6 +1823,27 @@ describe("DataGrid delete reset behavior", () => {
         expect(liveRequiredText!.value).toBe("Required name");
         expect(liveProtectedNumber!.value).toBe("7");
       });
+    } finally {
+      unmount(root, container);
+    }
+  });
+});
+
+describe("DataGrid null placeholders", () => {
+  it("uses an em dash by default for null grid input states and still allows overrides", () => {
+    const { container, root } = mount(<NullPlaceholderHarness />);
+    try {
+      const textInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      const currencyInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="1"]');
+      const percentInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="2"]');
+      const selectTrigger = container.querySelector<HTMLElement>('[data-row-id="row-a"][data-col="3"]');
+      const customInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="4"]');
+
+      expect(textInput?.getAttribute("placeholder")).toBe("—");
+      expect(currencyInput?.getAttribute("placeholder")).toBe("—");
+      expect(percentInput?.getAttribute("placeholder")).toBe("—");
+      expect(selectTrigger?.textContent).toContain("—");
+      expect(customInput?.getAttribute("placeholder")).toBe("Custom");
     } finally {
       unmount(root, container);
     }

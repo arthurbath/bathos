@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-table';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { SelectValue } from '@/components/ui/select';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GRID_ACTIONS_COLUMN_ID } from '@/lib/gridColumnWidths';
@@ -37,6 +38,8 @@ export function useDataGrid() { return useContext(DataGridCtx); }
 
 export const GRID_HEADER_TONE_CLASS = 'bg-border';
 export const GRID_READONLY_TEXT_CLASS = 'text-[hsl(var(--grid-text))]';
+// Shared null-state affordance for grid controls. Override per cell only when a more specific prompt is necessary.
+export const GRID_NULL_PLACEHOLDER = '—';
 // Use on button controls rendered inside grid cells to match hover border treatment of other grid inputs.
 export const GRID_CONTROL_HOVER_BORDER_CLASS = 'border-transparent hover:border-[hsl(var(--grid-sticky-line))]';
 // Header/footer cell borders and sticky first-column divider are baseline grid affordances in both card and full-view layouts.
@@ -1062,8 +1065,18 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
   );
 }
 
-export function GridEditableCell({ value, onChange, navCol, type = 'text', inputMode, numberDisplayFormat = 'grouped', className, placeholder, cellId, disabled = false, deleteResetValue }: {
-  value: string | number;
+type GridInputValue = string | number | null | undefined;
+
+function normalizeGridInputValue(value: GridInputValue) {
+  return value == null ? '' : String(value);
+}
+
+export function GridSelectValue({ placeholder = GRID_NULL_PLACEHOLDER, ...props }: React.ComponentProps<typeof SelectValue>) {
+  return <SelectValue placeholder={placeholder} {...props} />;
+}
+
+export function GridEditableCell({ value, onChange, navCol, type = 'text', inputMode, numberDisplayFormat = 'grouped', className, placeholder, cellId, disabled = false, deleteResetValue, normalizeOnCommit }: {
+  value: GridInputValue;
   onChange: (v: string) => void | Promise<unknown>;
   navCol: number;
   type?: string;
@@ -1074,16 +1087,18 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
   cellId?: string;
   disabled?: boolean;
   deleteResetValue?: string;
+  normalizeOnCommit?: (value: string) => string;
 }) {
   const ctx = useDataGrid();
-  const [local, setLocal] = useState(String(value));
+  const normalizedValue = normalizeGridInputValue(value);
+  const [local, setLocal] = useState(normalizedValue);
   const [editing, setEditing] = useState(false);
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
   const pointerDownRef = useRef(false);
   const suppressBlurCommitRef = useRef(false);
-  const editStartValueRef = useRef(String(value));
-  const valueRef = useRef(String(value));
+  const editStartValueRef = useRef(normalizedValue);
+  const valueRef = useRef(normalizedValue);
   const pendingCommittedValueRef = useRef<string | null>(null);
   const commitBaseValueRef = useRef<string | null>(null);
   const awaitingAsyncCommitRef = useRef(false);
@@ -1092,11 +1107,11 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
   const inputValue = showFormattedNumber ? formatGridNumberDisplay(local, numberDisplayFormat) : local;
 
   useEffect(() => {
-    valueRef.current = String(value);
-  }, [value]);
+    valueRef.current = normalizedValue;
+  }, [normalizedValue]);
 
   useEffect(() => {
-    const nextValue = String(value);
+    const nextValue = normalizedValue;
     const pendingCommittedValue = pendingCommittedValueRef.current;
     const commitBaseValue = commitBaseValueRef.current;
 
@@ -1123,17 +1138,30 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
       setLocal(nextValue);
       if (!editing) editStartValueRef.current = nextValue;
     }
-  }, [value, focused, editing]);
+  }, [normalizedValue, focused, editing]);
 
   const commitValue = (nextValue: string) => {
     if (disabled) return;
-    const currentValue = String(value);
-    if (nextValue !== currentValue) {
-      setLocal(nextValue);
-      pendingCommittedValueRef.current = nextValue;
+    const currentValue = normalizedValue;
+    const committedValue = normalizeOnCommit ? normalizeOnCommit(nextValue) : nextValue;
+
+    if (committedValue === currentValue) {
+      awaitingAsyncCommitRef.current = false;
+      pendingCommittedValueRef.current = null;
+      commitBaseValueRef.current = null;
+      if (nextValue !== currentValue) {
+        setLocal(committedValue);
+        editStartValueRef.current = committedValue;
+      }
+      return;
+    }
+
+    if (committedValue !== currentValue) {
+      setLocal(committedValue);
+      pendingCommittedValueRef.current = committedValue;
       commitBaseValueRef.current = currentValue;
       ctx?.onCellCommit(navCol);
-      const maybePendingChange = onChange(nextValue);
+      const maybePendingChange = onChange(committedValue);
       if (isPromiseLike(maybePendingChange)) {
         awaitingAsyncCommitRef.current = true;
         void Promise.resolve(maybePendingChange).then(() => {
@@ -1187,7 +1215,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
       readOnly={!editing}
       disabled={disabled}
       inputMode={inputMode ?? (type === 'number' ? 'decimal' : undefined)}
-      placeholder={placeholder}
+      placeholder={placeholder ?? GRID_NULL_PLACEHOLDER}
       data-row={ctx?.rowIndex}
       data-row-id={ctx?.rowId}
       data-col={navCol}
@@ -1317,33 +1345,35 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
   );
 }
 
-export function GridCurrencyCell({ value, onChange, navCol, className, disabled = false, deleteResetValue }: {
-  value: number;
+export function GridCurrencyCell({ value, onChange, navCol, className, disabled = false, deleteResetValue, placeholder }: {
+  value: GridInputValue;
   onChange: (v: string) => void | Promise<unknown>;
   navCol: number;
   className?: string;
   disabled?: boolean;
   deleteResetValue?: string;
+  placeholder?: string;
 }) {
   const ctx = useDataGrid();
-  const [local, setLocal] = useState(String(value));
+  const normalizedValue = normalizeGridInputValue(value);
+  const [local, setLocal] = useState(normalizedValue);
   const [editing, setEditing] = useState(false);
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
   const pointerDownRef = useRef(false);
   const suppressBlurCommitRef = useRef(false);
-  const editStartValueRef = useRef(String(value));
-  const valueRef = useRef(String(value));
+  const editStartValueRef = useRef(normalizedValue);
+  const valueRef = useRef(normalizedValue);
   const pendingCommittedValueRef = useRef<string | null>(null);
   const commitBaseValueRef = useRef<string | null>(null);
   const awaitingAsyncCommitRef = useRef(false);
 
   useEffect(() => {
-    valueRef.current = String(value);
-  }, [value]);
+    valueRef.current = normalizedValue;
+  }, [normalizedValue]);
 
   useEffect(() => {
-    const nextValue = String(value);
+    const nextValue = normalizedValue;
     const pendingCommittedValue = pendingCommittedValueRef.current;
     const commitBaseValue = commitBaseValueRef.current;
 
@@ -1370,11 +1400,11 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
       setLocal(nextValue);
       if (!editing) editStartValueRef.current = nextValue;
     }
-  }, [value, focused, editing]);
+  }, [normalizedValue, focused, editing]);
 
   const commitValue = (nextValue: string) => {
     if (disabled) return;
-    const currentValue = String(value);
+    const currentValue = normalizedValue;
     if (nextValue !== currentValue) {
       setLocal(nextValue);
       pendingCommittedValueRef.current = nextValue;
@@ -1436,6 +1466,7 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
         value={local}
         readOnly={!editing}
         disabled={disabled}
+        placeholder={placeholder ?? GRID_NULL_PLACEHOLDER}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
         data-col={navCol}
@@ -1577,33 +1608,35 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
   );
 }
 
-export function GridPercentCell({ value, onChange, navCol, className, disabled = false, deleteResetValue }: {
-  value: number;
+export function GridPercentCell({ value, onChange, navCol, className, disabled = false, deleteResetValue, placeholder }: {
+  value: GridInputValue;
   onChange: (v: string) => void | Promise<unknown>;
   navCol: number;
   className?: string;
   disabled?: boolean;
   deleteResetValue?: string;
+  placeholder?: string;
 }) {
   const ctx = useDataGrid();
-  const [local, setLocal] = useState(String(value));
+  const normalizedValue = normalizeGridInputValue(value);
+  const [local, setLocal] = useState(normalizedValue);
   const [editing, setEditing] = useState(false);
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
   const pointerDownRef = useRef(false);
   const suppressBlurCommitRef = useRef(false);
-  const editStartValueRef = useRef(String(value));
-  const valueRef = useRef(String(value));
+  const editStartValueRef = useRef(normalizedValue);
+  const valueRef = useRef(normalizedValue);
   const pendingCommittedValueRef = useRef<string | null>(null);
   const commitBaseValueRef = useRef<string | null>(null);
   const awaitingAsyncCommitRef = useRef(false);
 
   useEffect(() => {
-    valueRef.current = String(value);
-  }, [value]);
+    valueRef.current = normalizedValue;
+  }, [normalizedValue]);
 
   useEffect(() => {
-    const nextValue = String(value);
+    const nextValue = normalizedValue;
     const pendingCommittedValue = pendingCommittedValueRef.current;
     const commitBaseValue = commitBaseValueRef.current;
 
@@ -1630,11 +1663,11 @@ export function GridPercentCell({ value, onChange, navCol, className, disabled =
       setLocal(nextValue);
       if (!editing) editStartValueRef.current = nextValue;
     }
-  }, [value, focused, editing]);
+  }, [normalizedValue, focused, editing]);
 
   const commitValue = (nextValue: string) => {
     if (disabled) return;
-    const currentValue = String(value);
+    const currentValue = normalizedValue;
     if (nextValue !== currentValue) {
       setLocal(nextValue);
       pendingCommittedValueRef.current = nextValue;
@@ -1698,6 +1731,7 @@ export function GridPercentCell({ value, onChange, navCol, className, disabled =
         max={100}
         readOnly={!editing}
         disabled={disabled}
+        placeholder={placeholder ?? GRID_NULL_PLACEHOLDER}
         data-row={ctx?.rowIndex}
         data-row-id={ctx?.rowId}
         data-col={navCol}
