@@ -44,6 +44,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // before auth state settles. Ignore this transient event to prevent route jumps.
         if (event === 'TOKEN_REFRESHED' && !session) return;
 
+        if (event === 'PASSWORD_RECOVERY') {
+          setPasswordRecoveryDetected(true);
+        }
+
         if (event === 'SIGNED_OUT') {
           const hadAuthenticatedSession = hasSeenAuthenticatedSessionRef.current;
           hasSeenAuthenticatedSessionRef.current = false;
