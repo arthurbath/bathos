@@ -54,6 +54,7 @@ export default function AccountPage() {
   const [emailSubmitting, setEmailSubmitting] = useState(false);
 
   // Change password (recovery-based flow)
+  const [showChangePasswordConfirm, setShowChangePasswordConfirm] = useState(false);
   const [sendingPasswordLink, setSendingPasswordLink] = useState(false);
 
   // Forced change password modal (after recovery link click)
