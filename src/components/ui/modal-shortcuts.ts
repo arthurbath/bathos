@@ -95,7 +95,7 @@ export const getModalKeyDownHandler = (
     | React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>["onKeyDown"],
 ) => {
   return (event: React.KeyboardEvent<HTMLElement>) => {
-    onKeyDown?.(event);
+    (onKeyDown as ((event: React.KeyboardEvent<HTMLElement>) => void) | undefined)?.(event);
     if (event.defaultPrevented) return;
 
     const content = event.currentTarget;
