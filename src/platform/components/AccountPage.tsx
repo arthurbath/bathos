@@ -402,7 +402,7 @@ export default function AccountPage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium">New Email</label>
-                <Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} autoComplete="email" autoFocus />
+                <Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} autoComplete="new-email" autoFocus />
               </div>
             </DialogBody>
             <DialogFooter className="mb-0 pt-6">
