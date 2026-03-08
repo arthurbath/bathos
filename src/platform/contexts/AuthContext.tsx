@@ -171,6 +171,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDisplayNameState(nextDisplayName.trim());
   };
 
+  const clearPasswordRecovery = () => setPasswordRecoveryDetected(false);
+
   return (
     <AuthContext.Provider value={{ user, session, displayName, loading, isSigningOut, setDisplayName, signUp, signIn, signOut, resetPassword }}>
       {children}
