@@ -28,10 +28,14 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+interface DialogContentProps extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
+  hideClose?: boolean;
+}
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, onOpenAutoFocus, onKeyDown, ...props }, ref) => {
+  DialogContentProps
+>(({ className, children, onOpenAutoFocus, onKeyDown, hideClose, ...props }, ref) => {
   const handleOpenAutoFocus = getModalOpenAutoFocusHandler(onOpenAutoFocus);
   const handleKeyDown = getModalKeyDownHandler(onKeyDown);
 
