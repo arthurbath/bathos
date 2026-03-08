@@ -16,11 +16,18 @@ import { checkAuthRateLimit, formatRetryAfter } from '@/lib/authRateLimit';
 import GatewayPageLayout from '@/platform/components/GatewayPageLayout';
 
 export default function AuthPage() {
-  const { signIn, signUp } = useAuthContext();
+  const { signIn, signUp, session } = useAuthContext();
   const { toast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+
+  // Redirect authenticated users to the launcher
+  useEffect(() => {
+    if (session) {
+      navigate('/', { replace: true });
+    }
+  }, [session, navigate]);
 
   // Derive active tab from route
   const activeTab = location.pathname === '/signup' ? 'signup' : 'login';
