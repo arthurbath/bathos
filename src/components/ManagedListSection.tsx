@@ -42,6 +42,10 @@ interface ManagedListSectionProps {
 const managedItemColumnHelper = createColumnHelper<ManagedItem>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unexpected error';
+}
+
 function ColorPicker({
   color,
   onChange,
@@ -347,34 +351,24 @@ export function ManagedListSection({
       }
       setName('');
       setAddDialogOpen(false);
-    } catch (e: any) {
-      toast({ title: `Error adding ${singularLabel}`, description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: `Error adding ${singularLabel}`, description: getErrorMessage(error), variant: 'destructive' });
     }
     setAdding(false);
   };
 
-  const handleRename = async (id: string, nextRaw: string) => {
+  const handleRename = useCallback(async (id: string, nextRaw: string) => {
     const nextName = nextRaw.trim();
     const currentName = items.find((item) => item.id === id)?.name ?? '';
     if (!nextName || nextName === currentName) return;
     try {
       await onUpdate(id, nextName);
-    } catch (e: any) {
-      toast({ title: 'Error renaming', description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: 'Error renaming', description: getErrorMessage(error), variant: 'destructive' });
     }
-  };
+  }, [items, onUpdate]);
 
-  const handleDeleteClick = (item: ManagedItem) => {
-    const count = getUsageCount(item.id);
-    if (count > 0 && onReassign) {
-      setDeleteTarget(item);
-      setReassignTo('_none');
-      return;
-    }
-    void doDelete(item.id);
-  };
-
-  const doDelete = async (id: string) => {
+  const doDelete = useCallback(async (id: string) => {
     try {
       const item = items.find((entry) => entry.id === id);
       if (item && onRestoreItem) {
@@ -390,10 +384,20 @@ export function ManagedListSection({
         });
       }
       await onRemove(id);
-    } catch (e: any) {
-      toast({ title: 'Error removing', description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: 'Error removing', description: getErrorMessage(error), variant: 'destructive' });
     }
-  };
+  }, [dataGridHistory, historyKey, items, onRemove, onRestoreItem]);
+
+  const handleDeleteClick = useCallback((item: ManagedItem) => {
+    const count = getUsageCount(item.id);
+    if (count > 0 && onReassign) {
+      setDeleteTarget(item);
+      setReassignTo('_none');
+      return;
+    }
+    void doDelete(item.id);
+  }, [doDelete, getUsageCount, onReassign]);
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget || !onReassign) return;
@@ -420,8 +424,8 @@ export function ManagedListSection({
         await onRemove(deleteTarget.id);
       }
       setDeleteTarget(null);
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });
     }
   };
 

@@ -576,11 +576,11 @@ export function ExpensesTab({
   const incomeRatioY = incomeNormalization.incomeRatioY;
   const isWageGapApplied = incomeNormalization.isWageGapApplied;
 
-  const computeFairShare = (exp: Expense) => {
+  const computeFairShare = useCallback((exp: Expense) => {
     const monthly = toMonthly(exp.amount, exp.frequency_type, exp.frequency_param ?? undefined);
     const { fairX, fairY } = computeFairShares(monthly, exp.benefit_x, incomeRatioX);
     return { fairX, fairY, monthly };
-  };
+  }, [incomeRatioX]);
 
   const payerByLinkedAccountId = useMemo(
     () => new Map(linkedAccounts.map((a) => [a.id, a.owner_partner])),
@@ -597,29 +597,27 @@ export function ExpensesTab({
     getDerivedPayerByLinkedAccountId(exp.linked_account_id)
   ), [getDerivedPayerByLinkedAccountId]);
 
-  const isVisibleWithCurrentPayerFilter = useCallback((linkedAccountId: string | null): boolean => {
-    const derivedPayer = getDerivedPayerByLinkedAccountId(linkedAccountId);
+  const isVisibleWithCurrentPayerFilter = useCallback((derivedPayer: 'X' | 'Y' | null): boolean => {
     if (filterPayer === 'all') return true;
     if (filterPayer === 'unassigned') return derivedPayer === null;
     return derivedPayer === filterPayer;
-  }, [filterPayer, getDerivedPayerByLinkedAccountId]);
+  }, [filterPayer]);
   const hasNameFilter = normalizeNameFilterValue(filterName).length > 0;
-  const isVisibleWithCurrentFilters = useCallback((expense: Pick<Expense, 'name' | 'linked_account_id'>): boolean => (
-    matchesNameFilter(expense.name, filterName) && isVisibleWithCurrentPayerFilter(expense.linked_account_id)
-  ), [filterName, isVisibleWithCurrentPayerFilter]);
+  const isVisibleWithCurrentFilters = useCallback((
+    expense: Pick<Expense, 'name' | 'linked_account_id'>,
+    options?: { derivedPayer?: 'X' | 'Y' | null },
+  ): boolean => (
+    matchesNameFilter(expense.name, filterName)
+    && isVisibleWithCurrentPayerFilter(options?.derivedPayer ?? getDerivedPayer(expense))
+  ), [filterName, getDerivedPayer, isVisibleWithCurrentPayerFilter]);
 
   const filteredExpenses = useMemo(
-    () => expenses.filter((expense) => {
-      if (!matchesNameFilter(expense.name, filterName)) return false;
-      if (filterPayer === 'all') return true;
-      if (filterPayer === 'unassigned') return getDerivedPayer(expense) === null;
-      return getDerivedPayer(expense) === filterPayer;
-    }),
-    [expenses, filterName, filterPayer, getDerivedPayer],
+    () => expenses.filter((expense) => isVisibleWithCurrentFilters(expense)),
+    [expenses, isVisibleWithCurrentFilters],
   );
   const computedData: ComputedRow[] = useMemo(() =>
     filteredExpenses.map(exp => ({ exp, ...computeFairShare(exp) })),
-    [filteredExpenses, incomeRatioX],
+    [computeFairShare, filteredExpenses],
   );
   const emptyExpensesMessage = expenses.length === 0
     ? 'No expenses yet. Click "Add" to start.'
@@ -665,7 +663,7 @@ export function ExpensesTab({
     setAddDialog(type);
   };
 
-  const openAverageEditor = (
+  const openAverageEditor = useCallback((
     expense: Expense,
     targetValueType: AveragedValueType,
     currentPeriodHandling: BudgetCurrentPeriodHandling,
@@ -679,7 +677,7 @@ export function ExpensesTab({
       records: sortAverageRecordsForEditor(records),
       title,
     });
-  };
+  }, []);
 
   const handleNewExpenseTypeChange = (nextType: BudgetValueType) => {
     setNewExpense((previous) => applyNewExpenseTypeToDraft(previous, nextType));
@@ -737,7 +735,31 @@ export function ExpensesTab({
     setSavingExpense(false);
   };
 
-  const handleUpdate = (id: string, field: string, value: string) => {
+  const updateExpenseAndNotifyIfHidden = useCallback(async (
+    id: string,
+    updates: Partial<Omit<Expense, 'id' | 'household_id'>>,
+    options?: { nextDerivedPayer?: 'X' | 'Y' | null },
+  ) => {
+    const currentExpense = expenses.find((expense) => expense.id === id);
+    const nextExpense = currentExpense ? { ...currentExpense, ...updates } : null;
+    const shouldNotifyHiddenByFilters = Boolean(
+      currentExpense
+      && nextExpense
+      && isVisibleWithCurrentFilters(currentExpense)
+      && !isVisibleWithCurrentFilters(nextExpense, { derivedPayer: options?.nextDerivedPayer })
+    );
+
+    await onUpdate(id, updates);
+
+    if (shouldNotifyHiddenByFilters) {
+      toast({
+        title: 'Expense updated but hidden by filters',
+        description: 'The expense was updated, and it is no longer visible because of the current filters.',
+      });
+    }
+  }, [expenses, isVisibleWithCurrentFilters, onUpdate]);
+
+  const handleUpdate = useCallback((id: string, field: string, value: string) => {
     const updates: Record<string, unknown> = {};
     if (field === 'name') updates.name = value;
     else if (field === 'amount') updates.amount = Number(value) || 0;
@@ -747,20 +769,20 @@ export function ExpensesTab({
     else if (field === 'linked_account_id') {
       updates.linked_account_id = value === '_none' ? null : value;
     } else updates[field] = value;
-    return onUpdate(id, updates as Partial<Omit<Expense, 'id' | 'household_id'>>).catch((error: unknown) => {
+    return updateExpenseAndNotifyIfHidden(id, updates as Partial<Omit<Expense, 'id' | 'household_id'>>).catch((error: unknown) => {
       toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
       throw error;
     });
-  };
+  }, [updateExpenseAndNotifyIfHidden]);
 
-  const handleToggleEstimate = (id: string, checked: boolean) => {
+  const handleToggleEstimate = useCallback((id: string, checked: boolean) => {
     return onUpdate(id, { is_estimate: checked }).catch((error: unknown) => {
       toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
       throw error;
     });
-  };
+  }, [onUpdate]);
 
-  const handleRemove = async (expense: Expense) => {
+  const handleRemove = useCallback(async (expense: Expense) => {
     const payload: Omit<Expense, 'id' | 'household_id'> = {
       name: expense.name,
       amount: expense.amount,
@@ -791,9 +813,9 @@ export function ExpensesTab({
     } catch (error: unknown) {
       toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });
     }
-  };
+  }, [dataGridHistory, onAdd, onRemove]);
 
-  const handleConvert = (expense: Expense, targetType: BudgetValueType) => {
+  const handleConvert = useCallback((expense: Expense, targetType: BudgetValueType) => {
     if (targetType === expense.value_type) return;
 
     if (targetType === 'simple') {
@@ -826,7 +848,7 @@ export function ExpensesTab({
       records,
       `Convert ${expense.name} to ${targetType === 'monthly_averaged' ? 'Monthly Averaged' : 'Yearly Averaged'} Expense`,
     );
-  };
+  }, [openAverageEditor]);
 
   const handleSaveAverageEditor = async () => {
     if (!averageEditorState || savingAverageEditor) return;
@@ -882,7 +904,7 @@ export function ExpensesTab({
         await onAddCategory(newItemName.trim(), newItemColor, newCategoryId);
         if (addSource?.field === 'category_id') {
           if (addSource.type === 'existing_expense') {
-            await onUpdate(addSource.expenseId, { category_id: newCategoryId });
+            await updateExpenseAndNotifyIfHidden(addSource.expenseId, { category_id: newCategoryId });
           } else {
             setNewExpense(prev => ({ ...prev, category_id: newCategoryId }));
           }
@@ -892,7 +914,11 @@ export function ExpensesTab({
         await onAddLinkedAccount(newItemName.trim(), newItemOwner, newItemColor, newLinkedAccountId);
         if (addSource?.field === 'linked_account_id') {
           if (addSource.type === 'existing_expense') {
-            await onUpdate(addSource.expenseId, { linked_account_id: newLinkedAccountId });
+            await updateExpenseAndNotifyIfHidden(
+              addSource.expenseId,
+              { linked_account_id: newLinkedAccountId },
+              { nextDerivedPayer: newItemOwner },
+            );
           } else {
             setNewExpense(prev => ({ ...prev, linked_account_id: newLinkedAccountId }));
           }
@@ -1261,7 +1287,7 @@ export function ExpensesTab({
         />
       ),
     }),
-  ], [categories, linkedAccounts, partnerX, partnerY, getDerivedPayer, incomeNormalization, incomeRatioX, incomeRatioY, isWageGapApplied, pendingById]);
+  ], [categories, linkedAccounts, openAverageEditor, partnerX, partnerY, getDerivedPayer, handleConvert, handleRemove, handleToggleEstimate, handleUpdate, incomeNormalization, incomeRatioX, incomeRatioY, isWageGapApplied, pendingById]);
 
   const table = useReactTable({
     data: computedData,
@@ -1293,7 +1319,7 @@ export function ExpensesTab({
     };
   }, [groupBy, getDerivedPayer]);
 
-  const getGroupLabel = (key: string): string => {
+  const getGroupLabel = useCallback((key: string): string => {
     if (key === '_ungrouped') return 'Uncategorized';
     switch (groupBy) {
       case 'category': return categories.find(c => c.id === key)?.name ?? 'Uncategorized';
@@ -1302,13 +1328,13 @@ export function ExpensesTab({
       case 'payment_method': return linkedAccounts.find(la => la.id === key)?.name ?? 'Uncategorized';
       default: return '';
     }
-  };
+  }, [categories, groupBy, linkedAccounts, partnerX, partnerY]);
 
   const groupOrder = useMemo(() => {
     if (groupBy !== 'category' && groupBy !== 'payer' && groupBy !== 'payment_method') return undefined;
     return (aKey: string, bKey: string) =>
       getGroupLabel(aKey).localeCompare(getGroupLabel(bKey), undefined, { sensitivity: 'base', numeric: true });
-  }, [groupBy, categories, linkedAccounts, partnerX, partnerY]);
+  }, [getGroupLabel, groupBy]);
 
   const renderGroupHeader = (key: string, groupRows: Row<ComputedRow>[]) => {
     const gMonthly = groupRows.reduce((s, r) => s + r.original.monthly, 0);

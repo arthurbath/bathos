@@ -8,6 +8,15 @@ import { fromMonthly } from '@/lib/frequency';
 import type { Expense } from '@/hooks/useExpenses';
 import type { LinkedAccount } from '@/hooks/useLinkedAccounts';
 
+const { toastMock } = vi.hoisted(() => ({
+  toastMock: vi.fn(),
+}));
+
+vi.mock('@/hooks/use-toast', () => ({
+  toast: toastMock,
+  useToast: () => ({ toast: toastMock }),
+}));
+
 if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.scrollIntoView !== 'function') {
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
     configurable: true,
@@ -39,25 +48,52 @@ function renderExpensesTab({
 
   act(() => {
     root.render(
-      <TooltipProvider>
-        <ExpensesTab
-          expenses={expenses}
-          categories={[]}
-          linkedAccounts={linkedAccounts}
-          incomes={[]}
-          partnerX="Partner X"
-          partnerY="Partner Y"
-          onAdd={async () => {}}
-          onUpdate={onUpdate}
-          onRemove={async () => {}}
-          onAddCategory={async () => {}}
-          onAddLinkedAccount={async () => {}}
-        />
-      </TooltipProvider>,
+      <TestHarness
+        expenses={expenses}
+        linkedAccounts={linkedAccounts}
+        onUpdate={onUpdate}
+      />,
     );
   });
 
   return { container, root };
+}
+
+function TestHarness({
+  expenses,
+  linkedAccounts,
+  onUpdate,
+}: {
+  expenses: Expense[];
+  linkedAccounts: LinkedAccount[];
+  onUpdate: (id: string, updates: Partial<Omit<Expense, 'id' | 'household_id'>>) => Promise<void>;
+}) {
+  const [currentExpenses, setCurrentExpenses] = React.useState(expenses);
+
+  const handleUpdate = React.useCallback(async (id: string, updates: Partial<Omit<Expense, 'id' | 'household_id'>>) => {
+    await onUpdate(id, updates);
+    setCurrentExpenses((previous) => previous.map((expense) => (
+      expense.id === id ? { ...expense, ...updates } : expense
+    )));
+  }, [onUpdate]);
+
+  return (
+    <TooltipProvider>
+      <ExpensesTab
+        expenses={currentExpenses}
+        categories={[]}
+        linkedAccounts={linkedAccounts}
+        incomes={[]}
+        partnerX="Partner X"
+        partnerY="Partner Y"
+        onAdd={async () => {}}
+        onUpdate={handleUpdate}
+        onRemove={async () => {}}
+        onAddCategory={async () => {}}
+        onAddLinkedAccount={async () => {}}
+      />
+    </TooltipProvider>
+  );
 }
 
 function unmount(root: Root, container: HTMLElement) {
@@ -137,6 +173,7 @@ describe('ExpensesTab empty message', () => {
   beforeEach(() => {
     localStorage.clear();
     document.body.innerHTML = '';
+    toastMock.mockReset();
   });
 
   it('shows the setup message when there are no expenses at all', () => {
@@ -435,6 +472,53 @@ describe('ExpensesTab empty message', () => {
       });
 
       expect(onUpdate).toHaveBeenCalledTimes(1);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('shows a toast when an edited expense is hidden by active filters', async () => {
+    const expense: Expense = {
+      id: 'expense-1',
+      name: 'Rent',
+      amount: 1200,
+      frequency_type: 'monthly',
+      frequency_param: null,
+      benefit_x: 50,
+      category_id: null,
+      household_id: 'household-1',
+      is_estimate: false,
+      budget_id: null,
+      linked_account_id: null,
+      value_type: 'simple',
+      current_period_handling: CPH,
+      average_records: [],
+    };
+
+    const onUpdate = vi.fn(async () => {});
+    const { container, root } = renderExpensesTab({
+      expenses: [expense],
+      filterName: 'rent',
+      onUpdate,
+    });
+
+    try {
+      const input = container.querySelector<HTMLInputElement>('input[data-row-id="expense-1"][data-col="0"]');
+      expect(input).toBeTruthy();
+
+      await startEditing(input!);
+      await dispatchInputChange(input!, 'Utilities');
+      await dispatchEnter(input!);
+
+      await waitForCondition(() => {
+        expect(getVisibleExpenseNames(container)).toEqual([]);
+        expect(toastMock).toHaveBeenCalledWith({
+          title: 'Expense updated but hidden by filters',
+          description: 'The expense was updated, and it is no longer visible because of the current filters.',
+        });
+      });
+
+      expect(onUpdate).toHaveBeenCalledWith('expense-1', { name: 'Utilities' });
     } finally {
       unmount(root, container);
     }

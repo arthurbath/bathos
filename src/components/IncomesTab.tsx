@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -405,7 +405,7 @@ export function IncomesTab({
     setAddIncomeOpen(true);
   };
 
-  const openAverageEditor = (
+  const openAverageEditor = useCallback((
     income: Income,
     targetValueType: AveragedValueType,
     currentPeriodHandling: BudgetCurrentPeriodHandling,
@@ -419,7 +419,7 @@ export function IncomesTab({
       records: sortAverageRecordsForEditor(records),
       title,
     });
-  };
+  }, []);
 
   const handleNewIncomeTypeChange = (nextType: BudgetValueType) => {
     setNewIncome((previous) => applyNewIncomeTypeToDraft(previous, nextType));
@@ -471,7 +471,7 @@ export function IncomesTab({
     setSavingIncome(false);
   };
 
-  const handleUpdate = (id: string, field: string, value: string) => {
+  const handleUpdate = useCallback((id: string, field: string, value: string) => {
     const updates: Record<string, unknown> = {};
     if (field === 'name') updates.name = value;
     else if (field === 'amount') updates.amount = Number(value) || 0;
@@ -481,16 +481,16 @@ export function IncomesTab({
       toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
       throw error;
     });
-  };
+  }, [onUpdate]);
 
-  const handleToggleEstimate = (id: string, next: boolean) => {
+  const handleToggleEstimate = useCallback((id: string, next: boolean) => {
     return onUpdate(id, { is_estimate: next }).catch((error: unknown) => {
       toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
       throw error;
     });
-  };
+  }, [onUpdate]);
 
-  const handleRemove = async (income: Income) => {
+  const handleRemove = useCallback(async (income: Income) => {
     const payload: Omit<Income, 'id' | 'household_id'> = {
       name: income.name,
       amount: income.amount,
@@ -518,9 +518,9 @@ export function IncomesTab({
     } catch (error: unknown) {
       toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });
     }
-  };
+  }, [dataGridHistory, onAdd, onRemove]);
 
-  const handleConvert = (income: Income, targetType: BudgetValueType) => {
+  const handleConvert = useCallback((income: Income, targetType: BudgetValueType) => {
     if (targetType === income.value_type) return;
 
     if (targetType === 'simple') {
@@ -550,7 +550,7 @@ export function IncomesTab({
       records,
       `Convert ${income.name} to ${targetType === 'monthly_averaged' ? 'Monthly Averaged' : 'Yearly Averaged'} Income`,
     );
-  };
+  }, [openAverageEditor]);
 
   const handleSaveAverageEditor = async () => {
     if (!averageEditorState || savingAverageEditor) return;
@@ -693,7 +693,7 @@ export function IncomesTab({
         />
       ),
     }),
-  ], [partnerX, partnerY, pendingById]);
+  ], [handleConvert, handleRemove, handleToggleEstimate, handleUpdate, openAverageEditor, partnerX, partnerY, pendingById]);
 
   const table = useReactTable({
     data: incomes,

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { User, Session } from '@supabase/supabase-js';
+import type { AuthError, Session, User } from '@supabase/supabase-js';
 
 interface AuthContextValue {
   user: User | null;
@@ -11,10 +11,10 @@ interface AuthContextValue {
   passwordRecoveryDetected: boolean;
   setDisplayName: (nextDisplayName: string) => void;
   clearPasswordRecovery: () => void;
-  signUp: (email: string, password: string, displayName: string, termsVersion?: string) => Promise<{ error: any }>;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, displayName: string, termsVersion?: string) => Promise<{ error: AuthError | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<{ error: any }>;
+  resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);

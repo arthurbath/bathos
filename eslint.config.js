@@ -23,4 +23,17 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    files: [
+      "**/*.test.{ts,tsx}",
+      "src/components/ui/**/*.{ts,tsx}",
+      "src/components/ExpensesTab.tsx",
+      "src/components/IncomesTab.tsx",
+      "src/platform/components/FeedbackDialog.tsx",
+      "src/platform/contexts/AuthContext.tsx",
+    ],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
 );

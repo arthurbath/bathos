@@ -22,6 +22,10 @@ interface ToplineHeaderProps {
   titleAccessory?: ReactNode;
 }
 
+type StandaloneNavigator = Navigator & {
+  standalone?: boolean;
+};
+
 export function ToplineHeader({
   title,
   moduleId,
@@ -38,9 +42,10 @@ export function ToplineHeader({
   const isMobile = useIsMobile();
   const moduleConfig = moduleId ? getModuleById(moduleId) : undefined;
   const ModuleIcon = moduleConfig?.icon;
+  const standaloneNavigator = window.navigator as StandaloneNavigator;
   const isIosStandalone =
     (
-      (window.navigator as any).standalone === true ||
+      standaloneNavigator.standalone === true ||
       (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches)
     ) &&
     (

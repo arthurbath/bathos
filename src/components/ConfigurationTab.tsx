@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useState, type ComponentPropsWithoutRef, type KeyboardEventHandler, type MouseEventHandler, type PointerEventHandler } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useState, type ComponentPropsWithoutRef, type KeyboardEventHandler, type MouseEventHandler, type PointerEventHandler } from 'react';
 import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingState, useReactTable } from '@tanstack/react-table';
 import { ManagedListSection, ColorPicker } from '@/components/ManagedListSection';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -93,6 +93,10 @@ function formatCents(value: number | null): string {
   return value == null ? '' : String(value);
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unexpected error';
+}
+
 function PartnersCard({ partnerX, partnerY, wageGapAdjustmentEnabled, partnerXWageCentsPerDollar, partnerYWageCentsPerDollar, onSave }: {
   partnerX: string;
   partnerY: string;
@@ -165,8 +169,8 @@ function PartnersCard({ partnerX, partnerY, wageGapAdjustmentEnabled, partnerXWa
         partnerYWageCentsPerDollar: parsedYCents,
       });
       toast({ title: 'Partners updated' });
-    } catch (e: any) {
-      toast({ title: 'Failed to update', description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: 'Failed to update', description: getErrorMessage(error), variant: 'destructive' });
     }
     setSaving(false);
   };
@@ -263,7 +267,7 @@ function PaymentMethodOwnerCell({
   partnerX: string;
   partnerY: string;
   disabled: boolean;
-  onChange: (owner: string) => void;
+  onChange: (owner: LinkedAccount['owner_partner']) => void | Promise<unknown>;
 }) {
   const ctx = useDataGrid();
 
@@ -271,13 +275,14 @@ function PaymentMethodOwnerCell({
     <Select
       value={account.owner_partner}
       onValueChange={(value) => {
+        const nextOwner = value as LinkedAccount['owner_partner'];
         const historyEntryId = ctx?.registerCellHistoryEntry({
           col: 2,
           undo: () => onChange(account.owner_partner),
-          redo: () => onChange(value),
+          redo: () => onChange(nextOwner),
         });
         ctx?.onCellCommit(2);
-        const maybePendingChange = onChange(value);
+        const maybePendingChange = onChange(nextOwner);
         if (maybePendingChange && typeof maybePendingChange === 'object' && 'catch' in maybePendingChange && typeof maybePendingChange.catch === 'function') {
           void maybePendingChange.catch(() => {
             ctx?.invalidateCellHistoryEntry(historyEntryId);
@@ -403,7 +408,10 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
     fixedColumnIds: GRID_FIXED_COLUMNS.config_payment_methods,
   });
 
-  const getUsageCount = (id: string) => expenses.filter(e => e.linked_account_id === id).length;
+  const getUsageCount = useCallback(
+    (id: string) => expenses.filter(e => e.linked_account_id === id).length,
+    [expenses],
+  );
 
   const handleAdd = async () => {
     const nextName = name.trim();
@@ -425,32 +433,32 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
       setName('');
       setOwnerPartner('X');
       setAddDialogOpen(false);
-    } catch (e: any) {
-      toast({ title: 'Error adding payment method', description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: 'Error adding payment method', description: getErrorMessage(error), variant: 'destructive' });
     }
     setAdding(false);
   };
 
-  const handleRename = async (id: string, nextRaw: string) => {
+  const handleRename = useCallback(async (id: string, nextRaw: string) => {
     const nextName = nextRaw.trim();
     const current = linkedAccounts.find(item => item.id === id)?.name ?? '';
     if (!nextName || nextName === current) return;
     try {
       await onUpdate(id, { name: nextName });
-    } catch (e: any) {
-      toast({ title: 'Error renaming', description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: 'Error renaming', description: getErrorMessage(error), variant: 'destructive' });
     }
-  };
+  }, [linkedAccounts, onUpdate]);
 
-  const handleOwnerChange = async (id: string, newOwner: string) => {
+  const handleOwnerChange = useCallback(async (id: string, newOwner: LinkedAccount['owner_partner']) => {
     try {
       await onUpdate(id, { owner_partner: newOwner });
-    } catch (e: any) {
-      toast({ title: 'Error updating owner', description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: 'Error updating owner', description: getErrorMessage(error), variant: 'destructive' });
     }
-  };
+  }, [onUpdate]);
 
-  const handleDeleteClick = (item: LinkedAccount) => {
+  const handleDeleteClick = useCallback((item: LinkedAccount) => {
     if (pendingById[item.id]) return;
     const count = getUsageCount(item.id);
     if (count > 0) {
@@ -468,8 +476,8 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
       },
       redoFocusTarget: null,
     });
-    void onRemove(item.id).catch((e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' }));
-  };
+    void onRemove(item.id).catch((error: unknown) => toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' }));
+  }, [dataGridHistory, getUsageCount, onAdd, onRemove, pendingById]);
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
@@ -488,8 +496,8 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
       });
       await onReassign(deleteTarget.id, reassignTo === '_none' ? null : reassignTo);
       setDeleteTarget(null);
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });
     }
   };
 

@@ -356,6 +356,128 @@ function AsyncSelectCommitHarness({ saveDelayMs = 80 }: { saveDelayMs?: number }
   return <DataGrid table={table} />;
 }
 
+function MenuTriggerCell({ onTriggerClick }: { onTriggerClick: () => void }) {
+  const ctx = useDataGrid();
+
+  return (
+    <button
+      type="button"
+      data-row={ctx?.rowIndex}
+      data-row-id={ctx?.rowId}
+      data-col={1}
+      aria-haspopup="menu"
+      onMouseDown={ctx?.onCellMouseDown}
+      onKeyDown={ctx?.onCellKeyDown}
+      onClick={onTriggerClick}
+    >
+      ...
+    </button>
+  );
+}
+
+function FocusOnlyAmountCell({ onOpen }: { onOpen: () => void }) {
+  const ctx = useDataGrid();
+
+  return (
+    <button
+      type="button"
+      data-grid-focus-only="true"
+      aria-label="Edit averaged records for Alpha"
+      onClick={onOpen}
+      {...gridNavProps(ctx, 1)}
+    >
+      123
+    </button>
+  );
+}
+
+function DropdownMenuCell() {
+  const ctx = useDataGrid();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" {...gridMenuTriggerProps(ctx, 1)}>
+          ...
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem>Delete</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function GridSelectCell({
+  value,
+  onChange,
+}: {
+  value: SelectRowData["owner"];
+  onChange: (next: SelectRowData["owner"]) => void;
+}) {
+  const ctx = useDataGrid();
+
+  return (
+    <Select value={value} onValueChange={(next) => onChange(next as SelectRowData["owner"])}>
+      <SelectTrigger {...gridSelectTriggerProps(ctx, 0)}>
+        <GridSelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="X">X</SelectItem>
+        <SelectItem value="Y">Y</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+function NullableGridSelectCell({
+  value,
+  onChange,
+  onDeleteReset,
+}: {
+  value: NullableSelectRowData["owner"];
+  onChange: (next: NullableSelectRowData["owner"]) => void;
+  onDeleteReset: () => void;
+}) {
+  const ctx = useDataGrid();
+
+  return (
+    <Select
+      value={value ?? "_none"}
+      onValueChange={(next) => onChange(next === "_none" ? null : (next as Exclude<NullableSelectRowData["owner"], null>))}
+    >
+      <SelectTrigger
+        {...gridSelectTriggerProps(ctx, 0, {
+          onDeleteReset,
+        })}
+      >
+        <GridSelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="_none">—</SelectItem>
+        <SelectItem value="X">X</SelectItem>
+        <SelectItem value="Y">Y</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+function NullPlaceholderOwnerCell({ value }: { value: NullPlaceholderRowData["owner"] }) {
+  const ctx = useDataGrid();
+
+  return (
+    <Select value={value ?? undefined} onValueChange={() => {}}>
+      <SelectTrigger {...gridSelectTriggerProps(ctx, 3)}>
+        <GridSelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="X">X</SelectItem>
+        <SelectItem value="Y">Y</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
 function MenuTriggerHarness({ onTriggerClick }: { onTriggerClick: () => void }) {
   const [rows] = React.useState<MenuRowData[]>([
     { id: "row-a", name: "Alpha" },
@@ -379,23 +501,7 @@ function MenuTriggerHarness({ onTriggerClick }: { onTriggerClick: () => void }) 
         id: "actions",
         header: "Actions",
         meta: { containsButton: true },
-        cell: () => {
-          const ctx = useDataGrid();
-          return (
-            <button
-              type="button"
-              data-row={ctx?.rowIndex}
-              data-row-id={ctx?.rowId}
-              data-col={1}
-              aria-haspopup="menu"
-              onMouseDown={ctx?.onCellMouseDown}
-              onKeyDown={ctx?.onCellKeyDown}
-              onClick={onTriggerClick}
-            >
-              ...
-            </button>
-          );
-        },
+        cell: () => <MenuTriggerCell onTriggerClick={onTriggerClick} />,
       }),
     ],
     [menuColumnHelper, onTriggerClick],
@@ -434,20 +540,7 @@ function FocusOnlyButtonHarness({ onOpen }: { onOpen: () => void }) {
         id: "amount",
         header: "Amount",
         meta: { containsButton: true },
-        cell: () => {
-          const ctx = useDataGrid();
-          return (
-            <button
-              type="button"
-              data-grid-focus-only="true"
-              aria-label="Edit averaged records for Alpha"
-              onClick={onOpen}
-              {...gridNavProps(ctx, 1)}
-            >
-              123
-            </button>
-          );
-        },
+        cell: () => <FocusOnlyAmountCell onOpen={onOpen} />,
       }),
     ],
     [buttonColumnHelper, onOpen],
@@ -486,21 +579,7 @@ function DropdownMenuHarness() {
         id: "actions",
         header: "Actions",
         meta: { containsButton: true },
-        cell: () => {
-          const ctx = useDataGrid();
-          return (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button type="button" {...gridMenuTriggerProps(ctx, 1)}>
-                  ...
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem>Delete</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          );
-        },
+        cell: () => <DropdownMenuCell />,
       }),
     ],
     [menuColumnHelper],
@@ -558,27 +637,14 @@ function GridSelectHarness() {
       selectColumnHelper.accessor("owner", {
         id: "owner",
         header: "Owner",
-        cell: ({ row, getValue }) => {
-          const ctx = useDataGrid();
-          return (
-            <Select
-              value={getValue()}
-              onValueChange={(next) => {
-                setRows((prev) => prev.map((entry) => (entry.id === row.original.id ? { ...entry, owner: next as "X" | "Y" } : entry)));
-              }}
-            >
-              <SelectTrigger
-                {...gridSelectTriggerProps(ctx, 0)}
-              >
-                <GridSelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="X">X</SelectItem>
-                <SelectItem value="Y">Y</SelectItem>
-              </SelectContent>
-            </Select>
-          );
-        },
+        cell: ({ row, getValue }) => (
+          <GridSelectCell
+            value={getValue()}
+            onChange={(next) => {
+              setRows((prev) => prev.map((entry) => (entry.id === row.original.id ? { ...entry, owner: next } : entry)));
+            }}
+          />
+        ),
       }),
     ],
     [selectColumnHelper],
@@ -604,40 +670,25 @@ function NullableGridSelectHarness() {
       selectColumnHelper.accessor("owner", {
         id: "owner",
         header: "Owner",
-        cell: ({ row, getValue }) => {
-          const ctx = useDataGrid();
-          return (
-            <Select
-              value={getValue() ?? "_none"}
-              onValueChange={(next) => {
-                setRows((prev) => prev.map((entry) => (
-                  entry.id === row.original.id
-                    ? { ...entry, owner: next === "_none" ? null : (next as "X" | "Y") }
-                    : entry
-                )));
-              }}
-            >
-              <SelectTrigger
-                {...gridSelectTriggerProps(ctx, 0, {
-                  onDeleteReset: () => {
-                    setRows((prev) => prev.map((entry) => (
-                      entry.id === row.original.id
-                        ? { ...entry, owner: null }
-                        : entry
-                    )));
-                  },
-                })}
-              >
-                <GridSelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">—</SelectItem>
-                <SelectItem value="X">X</SelectItem>
-                <SelectItem value="Y">Y</SelectItem>
-              </SelectContent>
-            </Select>
-          );
-        },
+        cell: ({ row, getValue }) => (
+          <NullableGridSelectCell
+            value={getValue()}
+            onChange={(next) => {
+              setRows((prev) => prev.map((entry) => (
+                entry.id === row.original.id
+                  ? { ...entry, owner: next }
+                  : entry
+              )));
+            }}
+            onDeleteReset={() => {
+              setRows((prev) => prev.map((entry) => (
+                entry.id === row.original.id
+                  ? { ...entry, owner: null }
+                  : entry
+              )));
+            }}
+          />
+        ),
       }),
     ],
     [selectColumnHelper],
@@ -823,20 +874,7 @@ function NullPlaceholderHarness() {
       placeholderColumnHelper.accessor("owner", {
         id: "owner",
         header: "Owner",
-        cell: ({ getValue }) => {
-          const ctx = useDataGrid();
-          return (
-            <Select value={getValue() ?? undefined} onValueChange={() => {}}>
-              <SelectTrigger {...gridSelectTriggerProps(ctx, 3)}>
-                <GridSelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="X">X</SelectItem>
-                <SelectItem value="Y">Y</SelectItem>
-              </SelectContent>
-            </Select>
-          );
-        },
+        cell: ({ getValue }) => <NullPlaceholderOwnerCell value={getValue()} />,
       }),
       placeholderColumnHelper.display({
         id: "customPlaceholder",

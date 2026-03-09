@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createColumnHelper, getCoreRowModel, getSortedRowModel, type Row, type SortingState, useReactTable } from '@tanstack/react-table';
 import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -52,7 +52,7 @@ function ServiceTypeCell({
   onChange,
 }: {
   value: GarageServiceType;
-  onChange: (next: GarageServiceType) => void;
+  onChange: (next: GarageServiceType) => void | Promise<unknown>;
 }) {
   const ctx = useDataGrid();
 
@@ -274,15 +274,19 @@ export function GarageServicesGrid({
     );
   };
 
-  const hasInterval = (service: GarageService) => Boolean(service.every_miles || service.every_months);
-  const filteredServices = useMemo(() => {
-    return services.filter((service) => {
-      if (!matchesNameFilter(service.name, nameFilter)) return false;
-      if (cadenceFilter === 'all') return true;
-      if (cadenceFilter === 'recurring') return hasInterval(service);
-      return !hasInterval(service);
-    });
-  }, [cadenceFilter, nameFilter, services]);
+  const hasInterval = useCallback((service: Pick<GarageService, 'every_miles' | 'every_months'>) => (
+    Boolean(service.every_miles || service.every_months)
+  ), []);
+  const isVisibleWithCurrentFilters = useCallback((service: Pick<GarageService, 'name' | 'every_miles' | 'every_months'>) => {
+    if (!matchesNameFilter(service.name, nameFilter)) return false;
+    if (cadenceFilter === 'all') return true;
+    if (cadenceFilter === 'recurring') return hasInterval(service);
+    return !hasInterval(service);
+  }, [cadenceFilter, hasInterval, nameFilter]);
+  const filteredServices = useMemo(
+    () => services.filter((service) => isVisibleWithCurrentFilters(service)),
+    [isVisibleWithCurrentFilters, services],
+  );
 
   const latestOutcomeByServiceId = useMemo(() => {
     const byService = new Map<string, { status: GarageServiceStatus; serviceDate: string; mileage: number; createdAt: string }>();
@@ -314,6 +318,29 @@ export function GarageServicesGrid({
     return byService;
   }, [servicings]);
 
+  const updateServiceAndNotifyIfHidden = useCallback(async (
+    id: string,
+    updates: Partial<Omit<GarageService, 'id' | 'user_id' | 'vehicle_id' | 'created_at'>>,
+  ) => {
+    const currentService = services.find((service) => service.id === id);
+    const nextService = currentService ? { ...currentService, ...updates } : null;
+    const shouldNotifyHiddenByFilters = Boolean(
+      currentService
+      && nextService
+      && isVisibleWithCurrentFilters(currentService)
+      && !isVisibleWithCurrentFilters(nextService)
+    );
+
+    await onUpdateService(id, updates);
+
+    if (shouldNotifyHiddenByFilters) {
+      toast({
+        title: 'Service updated but hidden by filters',
+        description: 'The service was updated, and it is no longer visible because of the current filters.',
+      });
+    }
+  }, [isVisibleWithCurrentFilters, onUpdateService, services]);
+
   const columns = useMemo(
     () => [
       columnHelper.accessor('name', {
@@ -325,7 +352,7 @@ export function GarageServicesGrid({
           <GridEditableCell
             value={row.original.name}
             onChange={(value) => {
-              return onUpdateService(row.original.id, { name: value.trim() || row.original.name });
+              return updateServiceAndNotifyIfHidden(row.original.id, { name: value.trim() || row.original.name });
             }}
             navCol={0}
           />
@@ -340,7 +367,7 @@ export function GarageServicesGrid({
           <ServiceTypeCell
             value={row.original.type}
             onChange={(value) => {
-              void onUpdateService(row.original.id, { type: value });
+              return updateServiceAndNotifyIfHidden(row.original.id, { type: value });
             }}
           />
         ),
@@ -354,7 +381,7 @@ export function GarageServicesGrid({
           <GridEditableCell
             value={row.original.every_miles ?? ''}
             onChange={(value) => {
-              return onUpdateService(row.original.id, { every_miles: normalizePositiveInt(value) });
+              return updateServiceAndNotifyIfHidden(row.original.id, { every_miles: normalizePositiveInt(value) });
             }}
             type="number"
             navCol={2}
@@ -371,7 +398,7 @@ export function GarageServicesGrid({
           <GridEditableCell
             value={row.original.every_months ?? ''}
             onChange={(value) => {
-              return onUpdateService(row.original.id, { every_months: normalizePositiveInt(value) });
+              return updateServiceAndNotifyIfHidden(row.original.id, { every_months: normalizePositiveInt(value) });
             }}
             type="number"
             navCol={3}
@@ -424,7 +451,7 @@ export function GarageServicesGrid({
           <MonitoringCell
             value={row.original.monitoring}
             onChange={(value) => {
-              return onUpdateService(row.original.id, { monitoring: value });
+              return updateServiceAndNotifyIfHidden(row.original.id, { monitoring: value });
             }}
             navCol={5}
           />
@@ -439,7 +466,7 @@ export function GarageServicesGrid({
           <GridEditableCell
             value={row.original.notes ?? ''}
             onChange={(value) => {
-              return onUpdateService(row.original.id, { notes: value.trim() || null });
+              return updateServiceAndNotifyIfHidden(row.original.id, { notes: value.trim() || null });
             }}
             navCol={6}
             deleteResetValue=""
@@ -486,7 +513,7 @@ export function GarageServicesGrid({
         ),
       }),
     ],
-    [dataGridHistory, latestOutcomeByServiceId, onAddService, onDeleteService, onUpdateService],
+    [dataGridHistory, latestOutcomeByServiceId, onAddService, onDeleteService, updateServiceAndNotifyIfHidden],
   );
 
   const table = useReactTable({

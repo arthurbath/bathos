@@ -399,7 +399,7 @@ function Calendar({ className, classNames, showOutsideDays = true, onKeyDownCapt
             ),
             ...components,
           }}
-          {...(props as any)}
+          {...props}
         />
       )}
     </div>

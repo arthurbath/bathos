@@ -1,6 +1,7 @@
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import type { Session } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuthContext } from '@/platform/contexts/AuthContext';
 
@@ -12,13 +13,13 @@ const eqMock = vi.fn();
 const selectMock = vi.fn();
 const fromMock = vi.fn();
 
-let authStateChangeHandler: ((event: string, session: any) => void) | null = null;
+let authStateChangeHandler: ((event: string, session: Session | null) => void) | null = null;
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
     from: (...args: unknown[]) => fromMock(...args),
     auth: {
-      onAuthStateChange: (callback: (event: string, session: any) => void) => {
+      onAuthStateChange: (callback: (event: string, session: Session | null) => void) => {
         authStateChangeHandler = callback;
         return { data: { subscription: { unsubscribe: unsubscribeMock } } };
       },

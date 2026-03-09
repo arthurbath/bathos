@@ -1,9 +1,18 @@
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GarageServicesGrid } from '@/modules/garage/components/GarageServicesGrid';
 import type { GarageService, GarageServicingWithRelations } from '@/modules/garage/types/garage';
+
+const { toastMock } = vi.hoisted(() => ({
+  toastMock: vi.fn(),
+}));
+
+vi.mock('@/hooks/use-toast', () => ({
+  toast: toastMock,
+  useToast: () => ({ toast: toastMock }),
+}));
 
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   Object.defineProperty(window, 'matchMedia', {
@@ -29,6 +38,70 @@ function mount(ui: React.ReactElement) {
     root.render(ui);
   });
   return { container, root };
+}
+
+function renderStatefulGarageServicesGrid({
+  services,
+  servicings = [],
+  vehicleName = 'Test Car',
+  fullView = false,
+  onUpdateService = async () => {},
+}: {
+  services: GarageService[];
+  servicings?: GarageServicingWithRelations[];
+  vehicleName?: string;
+  fullView?: boolean;
+  onUpdateService?: (id: string, updates: Partial<Omit<GarageService, 'id' | 'user_id' | 'vehicle_id' | 'created_at'>>) => Promise<void>;
+}) {
+  return mount(
+    <StatefulGarageServicesGrid
+      services={services}
+      servicings={servicings}
+      vehicleName={vehicleName}
+      fullView={fullView}
+      onUpdateService={onUpdateService}
+    />,
+  );
+}
+
+function StatefulGarageServicesGrid({
+  services,
+  servicings,
+  vehicleName,
+  fullView,
+  onUpdateService,
+}: {
+  services: GarageService[];
+  servicings: GarageServicingWithRelations[];
+  vehicleName: string;
+  fullView: boolean;
+  onUpdateService: (id: string, updates: Partial<Omit<GarageService, 'id' | 'user_id' | 'vehicle_id' | 'created_at'>>) => Promise<void>;
+}) {
+  const [currentServices, setCurrentServices] = React.useState(services);
+
+  const handleUpdateService = React.useCallback(async (
+    id: string,
+    updates: Partial<Omit<GarageService, 'id' | 'user_id' | 'vehicle_id' | 'created_at'>>,
+  ) => {
+    await onUpdateService(id, updates);
+    setCurrentServices((previous) => previous.map((service) => (
+      service.id === id ? { ...service, ...updates } : service
+    )));
+  }, [onUpdateService]);
+
+  return (
+    <GarageServicesGrid
+      userId=""
+      services={currentServices}
+      servicings={servicings}
+      loading={false}
+      vehicleName={vehicleName}
+      fullView={fullView}
+      onAddService={async () => currentServices[0]!}
+      onUpdateService={handleUpdateService}
+      onDeleteService={async () => {}}
+    />
+  );
 }
 
 function unmount(root: Root, container: HTMLElement) {
@@ -62,6 +135,22 @@ async function dispatchInputChange(input: HTMLInputElement, value: string) {
   await act(async () => {
     setValue?.call(input, value);
     input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+async function startEditing(input: HTMLInputElement) {
+  await act(async () => {
+    input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    input.focus();
+  });
+  await waitForCondition(() => {
+    expect(input.getAttribute('data-grid-editing')).toBe('true');
+  });
+}
+
+async function dispatchEnter(input: HTMLInputElement) {
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   });
 }
 
@@ -120,6 +209,7 @@ describe('GarageServicesGrid focus scrolling', () => {
   beforeEach(() => {
     localStorage.clear();
     document.body.innerHTML = '';
+    toastMock.mockReset();
   });
 
   it('uses decimal keyboard hints for cadence inputs in the add-service dialog', async () => {
@@ -395,6 +485,55 @@ describe('GarageServicesGrid focus scrolling', () => {
       await waitForCondition(() => {
         expect(getVisibleServiceNames(container)).toEqual(['Brake Inspection']);
       });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('shows a toast when an edited service is hidden by active filters', async () => {
+    localStorage.setItem('garage_services_nameFilter', 'oil');
+
+    const services: GarageService[] = [
+      {
+        id: 'service-1',
+        user_id: 'user-1',
+        vehicle_id: 'vehicle-1',
+        name: 'Oil Change',
+        type: 'replacement',
+        monitoring: true,
+        cadence_type: 'recurring',
+        every_miles: 5000,
+        every_months: 6,
+        sort_order: 0,
+        notes: null,
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+
+    const onUpdateService = vi.fn(async () => {});
+    const { container, root } = renderStatefulGarageServicesGrid({
+      services,
+      onUpdateService,
+    });
+
+    try {
+      const input = container.querySelector<HTMLInputElement>('tbody input[data-col="0"]');
+      expect(input).toBeTruthy();
+
+      await startEditing(input!);
+      await dispatchInputChange(input!, 'Brake Service');
+      await dispatchEnter(input!);
+
+      await waitForCondition(() => {
+        expect(getVisibleServiceNames(container)).toEqual([]);
+        expect(toastMock).toHaveBeenCalledWith({
+          title: 'Service updated but hidden by filters',
+          description: 'The service was updated, and it is no longer visible because of the current filters.',
+        });
+      });
+
+      expect(onUpdateService).toHaveBeenCalledWith('service-1', { name: 'Brake Service' });
     } finally {
       unmount(root, container);
     }

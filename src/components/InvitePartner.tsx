@@ -54,6 +54,10 @@ interface JoinHouseholdProps {
   onJoin: (code: string) => Promise<void>;
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unexpected error';
+}
+
 export function JoinHouseholdSetup({ onJoin }: JoinHouseholdProps) {
   const [code, setCode] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -65,8 +69,8 @@ export function JoinHouseholdSetup({ onJoin }: JoinHouseholdProps) {
     setLoading(true);
     try {
       await onJoin(code.trim());
-    } catch (e: any) {
-      toast({ title: 'Failed to join', description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: 'Failed to join', description: getErrorMessage(error), variant: 'destructive' });
     }
     setLoading(false);
   };

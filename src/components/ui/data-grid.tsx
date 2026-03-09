@@ -15,8 +15,7 @@ import { useDataGridHistory } from '@/components/ui/data-grid-history';
 
 // ─── Column Meta Augmentation ───
 declare module '@tanstack/react-table' {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  interface ColumnMeta<TData extends unknown, TValue> {
+  interface ColumnMeta<TData, TValue> {
     headerClassName?: string;
     cellClassName?: string;
     containsEditableInput?: boolean;
@@ -740,8 +739,11 @@ export function DataGrid<TData>({
       : null;
   }, [hasActionsColumn, renderableLeafColumns, showActionsColumn, showTrailingSpacerColumn]);
   const contentColumnWidth = React.useMemo(
-    () => renderableLeafColumns.reduce((sum, column) => sum + column.getSize(), 0),
-    [renderableLeafColumns, columnSizingState],
+    () => renderableLeafColumns.reduce((sum, column) => {
+      const widthOverride = columnSizingState[column.id];
+      return sum + (typeof widthOverride === 'number' ? widthOverride : column.getSize());
+    }, 0),
+    [columnSizingState, renderableLeafColumns],
   );
   const totalColumnWidth = contentColumnWidth + (showTrailingSpacerColumn ? GRID_TRAILING_SPACER_COLUMN_WIDTH : 0);
   const isResizingColumn = Boolean(table.getState().columnSizingInfo?.isResizingColumn);

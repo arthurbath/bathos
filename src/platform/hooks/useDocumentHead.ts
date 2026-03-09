@@ -51,7 +51,7 @@ function updateManifest(name: string, startUrl: string, iconPath: string) {
 }
 
 function setAppleWebAppTitle(title: string) {
-  let meta = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
   if (meta) {
     meta.content = title;
   }

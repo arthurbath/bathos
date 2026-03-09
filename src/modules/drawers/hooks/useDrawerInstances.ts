@@ -16,6 +16,9 @@ interface AddDrawerTarget {
 
 const CREATE_DRAWER_PENDING_KEY = '__create_drawer__';
 
+type SupabaseRpcName = Parameters<typeof supabase.rpc>[0];
+type SupabaseRpcArgs = NonNullable<Parameters<typeof supabase.rpc>[1]>;
+
 function isMissingRpcFunctionError(error: unknown, functionName: string): boolean {
   if (!error || typeof error !== 'object') return false;
 
@@ -42,6 +45,10 @@ function compareByCreatedAtAndId(a: DrawerInstance, b: DrawerInstance): number {
   const bCreatedAt = b.created_at ?? '';
   if (aCreatedAt !== bCreatedAt) return aCreatedAt.localeCompare(bCreatedAt);
   return a.id.localeCompare(b.id);
+}
+
+function callRpc(functionName: string, args: Record<string, unknown>) {
+  return supabase.rpc(functionName as SupabaseRpcName, args as SupabaseRpcArgs);
 }
 
 function applyMoveToLimboState(drawers: DrawerInstance[], drawerId: string): DrawerInstance[] {
@@ -202,10 +209,10 @@ export function useDrawerInstances(householdId: string) {
     args: Record<string, unknown>,
     fallback?: { fn: string; args: Record<string, unknown> },
   ) => {
-    const primary = await retryOnLikelyNetworkError(async () => await supabase.rpc(fn as any, args));
+    const primary = await retryOnLikelyNetworkError(async () => await callRpc(fn, args));
     if (!primary.error) return primary;
     if (!fallback || !isMissingRpcFunctionError(primary.error, fn)) return primary;
-    return await retryOnLikelyNetworkError(async () => await supabase.rpc(fallback.fn as any, fallback.args));
+    return await retryOnLikelyNetworkError(async () => await callRpc(fallback.fn, fallback.args));
   }, []);
 
   const fetch = useCallback(async () => {

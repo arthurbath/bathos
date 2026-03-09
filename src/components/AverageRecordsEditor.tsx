@@ -82,7 +82,7 @@ function DateRecordPicker({
   useEffect(() => {
     if (!open) return;
     setVisibleMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
-  }, [open, selectedDateKey]);
+  }, [open, selectedDate]);
 
   const scheduleTriggerFocusRestore = () => {
     window.setTimeout(() => {

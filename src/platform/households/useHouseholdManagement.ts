@@ -28,6 +28,13 @@ interface UseHouseholdManagementResult {
   deleteHousehold: () => Promise<void>;
 }
 
+type SupabaseRpcName = Parameters<typeof supabase.rpc>[0];
+type SupabaseRpcArgs = NonNullable<Parameters<typeof supabase.rpc>[1]>;
+
+function callRpc(functionName: string, args: Record<string, unknown>) {
+  return supabase.rpc(functionName as SupabaseRpcName, args as SupabaseRpcArgs);
+}
+
 function toMember(row: unknown): HouseholdMember {
   if (!row || typeof row !== 'object' || Array.isArray(row)) {
     throw new Error('Unexpected member payload.');
@@ -114,7 +121,7 @@ export function useHouseholdManagement({
     setMembersLoading(true);
     try {
       const rows = await supabaseRequest(async () =>
-        await supabase.rpc(adapter.rpc.listMembers as any, {
+        await callRpc(adapter.rpc.listMembers, {
           _household_id: householdId,
         }),
       );
@@ -144,7 +151,7 @@ export function useHouseholdManagement({
     try {
       const payload = await withMutationTiming({ module: adapter.module, action: 'household.rotateInviteCode' }, async () => {
         const data = await supabaseRequest(async () =>
-          await supabase.rpc(adapter.rpc.rotateInviteCode as any, {
+          await callRpc(adapter.rpc.rotateInviteCode, {
             _household_id: householdId,
           }),
         );
@@ -169,7 +176,7 @@ export function useHouseholdManagement({
     try {
       const payload = await withMutationTiming({ module: adapter.module, action: 'household.removeMember' }, async () => {
         const data = await supabaseRequest(async () =>
-          await supabase.rpc(adapter.rpc.removeMember as any, {
+          await callRpc(adapter.rpc.removeMember, {
             _household_id: householdId,
             _member_user_id: memberUserId,
           }),
@@ -196,7 +203,7 @@ export function useHouseholdManagement({
     try {
       await withMutationTiming({ module: adapter.module, action: 'household.leave' }, async () => {
         await supabaseRequest(async () =>
-          await supabase.rpc(adapter.rpc.leaveHousehold as any, {
+          await callRpc(adapter.rpc.leaveHousehold, {
             _household_id: householdId,
           }),
         );
@@ -221,7 +228,7 @@ export function useHouseholdManagement({
     try {
       await withMutationTiming({ module: adapter.module, action: 'household.delete' }, async () => {
         await supabaseRequest(async () =>
-          await supabase.rpc(adapter.rpc.deleteHousehold as any, {
+          await callRpc(adapter.rpc.deleteHousehold, {
             _household_id: householdId,
           }),
         );

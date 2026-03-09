@@ -20,6 +20,10 @@ interface CategoriesTabProps {
   onReassignExpenses: (oldCategoryId: string, newCategoryId: string | null) => Promise<void>;
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unexpected error';
+}
+
 export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove, onReassignExpenses }: CategoriesTabProps) {
   const [name, setName] = useState('');
   const [adding, setAdding] = useState(false);
@@ -35,8 +39,8 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
     try {
       await onAdd(name.trim());
       setName('');
-    } catch (e: any) {
-      toast({ title: 'Error adding category', description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: 'Error adding category', description: getErrorMessage(error), variant: 'destructive' });
     }
     setAdding(false);
   };
@@ -51,8 +55,8 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
     if (editingId && editValue.trim() && editValue.trim() !== categories.find(c => c.id === editingId)?.name) {
       try {
         await onUpdate(editingId, editValue.trim());
-      } catch (e: any) {
-        toast({ title: 'Error renaming', description: e.message, variant: 'destructive' });
+      } catch (error: unknown) {
+        toast({ title: 'Error renaming', description: getErrorMessage(error), variant: 'destructive' });
       }
     }
     setEditingId(null);
@@ -71,8 +75,8 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
   const doDelete = async (id: string) => {
     try {
       await onRemove(id);
-    } catch (e: any) {
-      toast({ title: 'Error removing category', description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: 'Error removing category', description: getErrorMessage(error), variant: 'destructive' });
     }
   };
 
@@ -82,8 +86,8 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
       await onReassignExpenses(deleteTarget.id, reassignTo === '_none' ? null : reassignTo);
       await onRemove(deleteTarget.id);
       setDeleteTarget(null);
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });
     }
   };
 
