@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
-import { CarFront, CircleDollarSign, ShelvingUnit, Shield } from 'lucide-react';
+import { CarFront, CircleDollarSign, Dumbbell, ShelvingUnit, Shield } from 'lucide-react';
 
-export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'admin';
+export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'exercise' | 'admin';
 
 export interface PlatformModule {
   id: PlatformModuleId;
@@ -40,6 +40,16 @@ const GARAGE_MODULE: PlatformModule = {
   iconPath: '/module-garage.png',
 };
 
+const EXERCISE_MODULE: PlatformModule = {
+  id: 'exercise',
+  name: 'Exercise',
+  description: 'Define exercises, build routines, and run through them one step at a time',
+  launchPath: '/exercise/run',
+  icon: Dumbbell,
+  iconPath: '/module-exercise.png',
+  adminOnly: true,
+};
+
 const ADMINISTRATION_MODULE: PlatformModule = {
   id: 'admin',
   name: 'Administration',
@@ -50,7 +60,7 @@ const ADMINISTRATION_MODULE: PlatformModule = {
   adminOnly: true,
 };
 
-const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, DRAWERS_MODULE, GARAGE_MODULE, ADMINISTRATION_MODULE];
+const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, DRAWERS_MODULE, GARAGE_MODULE, EXERCISE_MODULE, ADMINISTRATION_MODULE];
 
 interface GetAvailableModulesOptions {
   isAdmin?: boolean;

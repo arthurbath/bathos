@@ -40,10 +40,12 @@ Never use colors purely for decoration. Every color must carry meaning.
 Use Title Case for:
 
 - Buttons
+- Card Titles
 - Input Labels
 - Dropdown Menu Options
 - Modal Titles
 - Section Titles
+- Form modal headers should normally contain only the title. Do not add subtext beneath a modal heading unless the task explicitly calls for it.
 
 Use lowercase for these words when they appear in the middle of a label:
 `a`, `an`, `and`, `as`, `at`, `by`, `for`, `from`, `if`, `in`, `n` (for "and"), `o` (for "of"), `of`, `on`, `or`, `tha` (for "the"), `the`, `to`, `wit` (for "with"), `with`.

@@ -1,0 +1,23 @@
+{
+  "name": "Exercise",
+  "short_name": "Exercise",
+  "description": "Define exercises, build routines, and run through them one step at a time",
+  "start_url": "/exercise/run",
+  "display": "standalone",
+  "background_color": "#fcfcfc",
+  "theme_color": "#1f1f1f",
+  "icons": [
+    {
+      "src": "/module-exercise.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/module-exercise.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

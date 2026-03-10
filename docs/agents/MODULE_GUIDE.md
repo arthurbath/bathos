@@ -38,6 +38,11 @@ src/modules/tracker/
   types/         — TypeScript interfaces
 ```
 
+Before considering a new module UI complete, do a convention pass against `AGENTS.md` and `docs/human/STYLE_GUIDE.md`:
+- Button labels, card titles, modal titles, input labels, and section titles use Title Case
+- Form modal headers do not include descriptive subtext unless the task explicitly asks for it
+- Card headings should use the shared `CardTitle` styling without local downsizing overrides
+
 ## 4. Register routes
 
 In `src/App.tsx`, add a new module case in `AppRoutes`:

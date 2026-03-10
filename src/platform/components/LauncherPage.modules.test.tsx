@@ -83,7 +83,7 @@ describe('LauncherPage modules', () => {
     }
   });
 
-  it('shows Garage for admin users', () => {
+  it('shows Exercise and Administration for admin users', () => {
     mockAuthContext.mockReturnValue({
       user: { id: 'user-1' },
       loading: false,
@@ -95,6 +95,7 @@ describe('LauncherPage modules', () => {
 
     try {
       expect(container.textContent).toContain('Garage');
+      expect(container.textContent).toContain('Exercise');
       expect(container.textContent).toContain('Administration');
       expect(container.textContent).toContain('Admin');
     } finally {

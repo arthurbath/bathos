@@ -15,9 +15,10 @@ describe('getAvailableModules', () => {
   it('includes garage for admins', () => {
     const modules = getAvailableModules({ isAdmin: true });
 
-    expect(modules).toHaveLength(4);
-    expect(modules.map(module => module.id)).toEqual(['budget', 'drawers', 'garage', 'admin']);
+    expect(modules).toHaveLength(5);
+    expect(modules.map(module => module.id)).toEqual(['budget', 'drawers', 'garage', 'exercise', 'admin']);
     expect(modules[2].launchPath).toBe('/garage/due');
-    expect(modules[3].launchPath).toBe('/admin');
+    expect(modules[3].launchPath).toBe('/exercise/run');
+    expect(modules[4].launchPath).toBe('/admin');
   });
 });

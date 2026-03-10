@@ -27,6 +27,8 @@ Split shared expenses fairly between two partners. Combines per-expense benefit 
 - **Typography**: Inter with system-ui fallback. No custom display fonts.
 - **Icons**: Lucide React only. Inline SVGs, no image files, no emoji. Use sparingly.
 - **Voice**: Pragmatic and neutral. No exclamation points. No marketing language. Prefer self-evident UI over helper text.
+- **Label casing**: Buttons, card titles, modal titles, input labels, and section titles use Title Case.
+- **Modal headers**: Form-style modals use a title-only header by default. Do not add modal header subtext unless the task explicitly asks for it.
 - **Layout**: Mobile-first. `max-w-5xl` for data views, `max-w-lg` for forms.
 - **Theming**: All colors via CSS custom properties in `index.css` with HSL values. Use Tailwind semantic tokens, never raw color values in components.
 - **Theme mode**: BathOS is dark-only. Do not introduce light-mode variants or runtime theme switching.

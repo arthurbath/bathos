@@ -644,6 +644,102 @@ export type Database = {
           },
         ]
       }
+      exercise_definitions: {
+        Row: {
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          name: string
+          rep_count: number | null
+          updated_at: string
+          user_id: string
+          weight_delta_lbs: number | null
+          weight_lbs: number | null
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          name: string
+          rep_count?: number | null
+          updated_at?: string
+          user_id: string
+          weight_delta_lbs?: number | null
+          weight_lbs?: number | null
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          name?: string
+          rep_count?: number | null
+          updated_at?: string
+          user_id?: string
+          weight_delta_lbs?: number | null
+          weight_lbs?: number | null
+        }
+        Relationships: []
+      }
+      exercise_routine_items: {
+        Row: {
+          exercise_definition_id: string
+          id: string
+          routine_id: string
+          sort_order: number
+        }
+        Insert: {
+          exercise_definition_id: string
+          id?: string
+          routine_id: string
+          sort_order?: number
+        }
+        Update: {
+          exercise_definition_id?: string
+          id?: string
+          routine_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercise_routine_items_exercise_definition_id_fkey"
+            columns: ["exercise_definition_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_routine_items_routine_id_fkey"
+            columns: ["routine_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_routines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exercise_routines: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       garage_services: {
         Row: {
           cadence_type: Database["public"]["Enums"]["garage_cadence_type"]
