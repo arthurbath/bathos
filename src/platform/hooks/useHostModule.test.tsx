@@ -33,7 +33,7 @@ afterEach(() => {
 
 describe('useHostModule', () => {
   it('detects the exercise module from the URL path', () => {
-    window.history.replaceState({}, '', '/exercise/run');
+    window.history.replaceState({}, '', '/exercise/routines');
 
     const { container, root } = renderHarness();
     try {

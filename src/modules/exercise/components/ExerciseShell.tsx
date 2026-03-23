@@ -1,11 +1,10 @@
 import { useEffect } from 'react';
-import { Dumbbell, ListOrdered, Play } from 'lucide-react';
+import { Dumbbell, ListOrdered } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import { CARD_PAGE_BOTTOM_PADDING_CLASS, FULL_VIEW_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
 import { ExerciseDefinitionsView } from '@/modules/exercise/components/ExerciseDefinitionsView';
-import { ExerciseRunView } from '@/modules/exercise/components/ExerciseRunView';
 import { ExerciseRoutinesView } from '@/modules/exercise/components/ExerciseRoutinesView';
 import { useExerciseDefinitions } from '@/modules/exercise/hooks/useExerciseDefinitions';
 import { useExerciseRoutines } from '@/modules/exercise/hooks/useExerciseRoutines';
@@ -39,14 +38,13 @@ export function ExerciseShell({ userId, displayName, onSignOut }: ExerciseShellP
   } = useExerciseRoutines(userId);
 
   const navItems = [
-    { path: '/run', label: 'Run', icon: Play },
     { path: '/routines', label: 'Routines', icon: ListOrdered },
     { path: '/exercises', label: 'Exercises', icon: Dumbbell },
   ] as const;
 
   useEffect(() => {
     if (location.pathname === '/exercise' || location.pathname === '/exercise/') {
-      navigate(`${basePath}/run`, { replace: true });
+      navigate(`${basePath}/routines`, { replace: true });
     }
   }, [basePath, location.pathname, navigate]);
 
@@ -58,7 +56,6 @@ export function ExerciseShell({ userId, displayName, onSignOut }: ExerciseShellP
     );
   }
 
-  const isRunRoute = location.pathname.endsWith('/run') || location.pathname === `${basePath}` || location.pathname === `${basePath}/`;
   const isRoutinesRoute = location.pathname.endsWith('/routines');
   const isExercisesRoute = location.pathname.endsWith('/exercises');
   const isFullViewGridRoute = isExercisesRoute;
@@ -75,7 +72,7 @@ export function ExerciseShell({ userId, displayName, onSignOut }: ExerciseShellP
       />
 
       <div className="mx-auto hidden w-full max-w-5xl px-4 pt-6 md:block">
-        <nav className="grid w-full grid-cols-3 gap-0.5 rounded-lg border border-[hsl(var(--grid-sticky-line))] bg-[hsl(var(--switch-off))] p-1 text-muted-foreground">
+        <nav className="grid w-full grid-cols-2 gap-0.5 rounded-lg border border-[hsl(var(--grid-sticky-line))] bg-[hsl(var(--switch-off))] p-1 text-muted-foreground">
           {navItems.map(({ path, label, icon: Icon }) => {
             const fullPath = `${basePath}${path}`;
             const active = location.pathname === fullPath || location.pathname === path;
@@ -109,15 +106,6 @@ export function ExerciseShell({ userId, displayName, onSignOut }: ExerciseShellP
         </main>
       ) : (
         <main className={`mx-auto max-w-5xl space-y-4 px-4 pt-4 md:pt-6 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
-          {isRunRoute ? (
-            <ExerciseRunView
-              basePath={basePath}
-              definitions={definitions}
-              routines={routines}
-              onUpdateDefinition={updateDefinition}
-            />
-          ) : null}
-
           {isRoutinesRoute ? (
             <ExerciseRoutinesView
               definitions={definitions}

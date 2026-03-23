@@ -41,12 +41,18 @@ function buildRoutine(id: string, name: string, exerciseDefinitionIds: string[])
   };
 }
 
-function Harness() {
-  const [definitions, setDefinitions] = useState<ExerciseDefinition[]>([
+function Harness({
+  initialDefinitions = [
     buildDefinition('exercise-1', 'Push-up', { rep_count: 10 }),
     buildDefinition('exercise-2', 'Plank', { duration_seconds: 30 }),
-  ]);
-  const [routines, setRoutines] = useState<ExerciseRoutineWithItems[]>([]);
+  ],
+  initialRoutines = [],
+}: {
+  initialDefinitions?: ExerciseDefinition[];
+  initialRoutines?: ExerciseRoutineWithItems[];
+}) {
+  const [definitions, setDefinitions] = useState<ExerciseDefinition[]>(initialDefinitions);
+  const [routines, setRoutines] = useState<ExerciseRoutineWithItems[]>(initialRoutines);
 
   const addDefinition = async (input: ExerciseDefinitionInput, id?: string) => {
     setDefinitions((current) => [
@@ -144,6 +150,66 @@ async function click(element: Element | null) {
   });
 }
 
+function installFakeAlarmAudio() {
+  class FakeAudioParam {
+    exponentialRampToValueAtTime = vi.fn();
+    setValueAtTime = vi.fn();
+  }
+
+  class FakeGainNode {
+    connect = vi.fn();
+    disconnect = vi.fn();
+    gain = new FakeAudioParam();
+  }
+
+  class FakeOscillatorNode {
+    connect = vi.fn();
+    frequency = new FakeAudioParam();
+    start = vi.fn();
+    stop = vi.fn();
+    type: OscillatorType = 'sine';
+  }
+
+  class FakeAudioContext {
+    currentTime = 0;
+    destination = {} as AudioDestinationNode;
+    state: AudioContextState = 'suspended';
+
+    close = vi.fn(async () => {
+      this.state = 'closed';
+    });
+
+    createGain() {
+      return new FakeGainNode() as unknown as GainNode;
+    }
+
+    createOscillator() {
+      return new FakeOscillatorNode() as unknown as OscillatorNode;
+    }
+
+    resume = vi.fn(async () => {
+      this.state = 'running';
+    });
+
+    suspend = vi.fn(async () => {
+      this.state = 'suspended';
+    });
+  }
+
+  const audioSession = { type: 'auto' as const };
+  Object.defineProperty(window, 'AudioContext', {
+    configurable: true,
+    value: FakeAudioContext,
+    writable: true,
+  });
+  Object.defineProperty(navigator, 'audioSession', {
+    configurable: true,
+    value: audioSession,
+  });
+
+  return { audioSession };
+}
+
 async function dispatchInputChange(input: HTMLInputElement, value: string) {
   const valueSetter = Object.getOwnPropertyDescriptor(input, 'value')?.set;
   const prototypeSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')?.set;
@@ -154,8 +220,25 @@ async function dispatchInputChange(input: HTMLInputElement, value: string) {
   });
 }
 
+async function swipeLeft(element: Element | null) {
+  if (!element) return;
+  await act(async () => {
+    element.dispatchEvent(new TouchEvent('touchstart', {
+      bubbles: true,
+      changedTouches: [{ clientX: 180 }] as unknown as TouchList,
+    }));
+    element.dispatchEvent(new TouchEvent('touchend', {
+      bubbles: true,
+      changedTouches: [{ clientX: 80 }] as unknown as TouchList,
+    }));
+  });
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
+  Reflect.deleteProperty(window, 'AudioContext');
+  Reflect.deleteProperty(navigator, 'audioSession');
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -175,7 +258,6 @@ describe('ExerciseRoutinesView', () => {
 
       await click(container.querySelector('button[aria-label="Add Push-up to routine"]'));
       await click(container.querySelector('button[aria-label="Add Plank to routine"]'));
-
       expect(container.textContent).toContain('1. Push-up');
       expect(container.textContent).toContain('2. Plank');
 
@@ -219,7 +301,7 @@ describe('ExerciseRoutinesView', () => {
 
       await waitForCondition(() => {
         expect(container.textContent).not.toContain('Morning routine');
-        expect(container.textContent).toContain('Routines');
+        expect(container.textContent).toContain('Add Routine');
       });
     } finally {
       unmount(root, container);
@@ -229,7 +311,11 @@ describe('ExerciseRoutinesView', () => {
   it('removes deleted exercises from saved routines', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    const { container, root } = mount(<Harness />);
+    const { container, root } = mount(<Harness initialDefinitions={[
+      buildDefinition('exercise-1', 'Push-up', { rep_count: 10 }),
+      buildDefinition('exercise-2', 'Plank', { duration_seconds: 30 }),
+      buildDefinition('exercise-3', 'Deadlift', { weight_lbs: 225, weight_delta_lbs: 10 }),
+    ]} />);
 
     try {
       const addRoutineButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Add Routine'));
@@ -255,6 +341,114 @@ describe('ExerciseRoutinesView', () => {
         expect(container.textContent).toContain('No exercises in this routine yet');
         expect(container.textContent).not.toContain('1. Push-up');
       });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('pages through routine cards and shows detailed exercise fields', async () => {
+    const { container, root } = mount(<Harness initialDefinitions={[
+      buildDefinition('exercise-1', 'Push-up', { rep_count: 10 }),
+      buildDefinition('exercise-2', 'Plank', { duration_seconds: 30 }),
+      buildDefinition('exercise-3', 'Deadlift', { weight_lbs: 225, weight_delta_lbs: 10 }),
+    ]} />);
+
+    try {
+      await click(Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Add Routine')) ?? null);
+
+      const nameInput = container.querySelector('#exercise-routine-name') as HTMLInputElement | null;
+      if (nameInput) await dispatchInputChange(nameInput, 'Detailed set');
+
+      await click(container.querySelector('button[aria-label="Add Push-up to routine"]'));
+      await click(container.querySelector('button[aria-label="Add Plank to routine"]'));
+      await click(container.querySelector('button[aria-label="Add Deadlift to routine"]'));
+
+      await click(Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Save Routine') ?? null);
+
+      await waitForCondition(() => {
+        expect(container.textContent).toContain('Detailed set');
+        expect(container.textContent).toContain('1. Push-up');
+        expect(container.textContent).toContain('Reps: 10');
+        expect(container.textContent).not.toContain('Duration: Not Set');
+        expect(container.textContent).not.toContain('Weight: Not Set');
+        expect(container.textContent).not.toContain('Range: Not Set');
+        expect(container.textContent).toContain('2. Plank');
+        expect(container.textContent).toContain('Duration: 00:30');
+        expect(container.querySelector('button[aria-label="Start 00:30 timer for Plank"]')).toBeTruthy();
+        expect(container.textContent).toContain('3. Deadlift');
+        expect(container.textContent).toContain('Weight: 225+/-10 lb');
+        expect(container.textContent).not.toContain('Range: +/- 10 lb');
+      });
+
+      const viewport = container.querySelector('[data-testid="exercise-routine-card-viewport"]');
+      await swipeLeft(viewport);
+
+      await waitForCondition(() => {
+        expect(container.textContent).toContain('Create a new routine from the last card in the stack.');
+      });
+
+      await click(container.querySelector('button[aria-label="Next routine card"]'));
+
+      await waitForCondition(() => {
+        expect(container.textContent).toContain('Detailed set');
+      });
+
+      await click(container.querySelector('button[aria-label="Previous routine card"]'));
+
+      await waitForCondition(() => {
+        expect(container.textContent).toContain('Create a new routine from the last card in the stack.');
+      });
+
+      await click(container.querySelector('button[aria-label="Previous routine card"]'));
+
+      await waitForCondition(() => {
+        expect(container.textContent).toContain('Detailed set');
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('starts a duration timer, enters alarm mode, and restores the audio session when dismissed', async () => {
+    vi.useFakeTimers();
+    const { audioSession } = installFakeAlarmAudio();
+
+    const { container, root } = mount(<Harness
+      initialDefinitions={[
+        buildDefinition('exercise-1', 'Push-up', { rep_count: 10 }),
+        buildDefinition('exercise-2', 'Plank', { duration_seconds: 30 }),
+      ]}
+      initialRoutines={[
+        buildRoutine('routine-1', 'Timed set', ['exercise-2']),
+      ]}
+    />);
+
+    try {
+      await click(container.querySelector('button[aria-label="Start 00:30 timer for Plank"]'));
+
+      expect(document.body.textContent).toContain('Plank');
+      expect(document.body.textContent).toContain('Running 00:30 timer.');
+      expect(document.body.textContent).toContain('00:30');
+
+      await act(async () => {
+        vi.advanceTimersByTime(1500);
+      });
+
+      expect(document.body.textContent).toContain('00:29');
+
+      await act(async () => {
+        vi.advanceTimersByTime(29_000);
+        await Promise.resolve();
+      });
+
+      expect(document.body.textContent).toContain('Time elapsed. The alarm will continue until you dismiss it.');
+      expect(document.body.textContent).toContain('Dismiss Timer');
+      expect(audioSession.type).toBe('transient-solo');
+
+      await click(Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent === 'Dismiss Timer') ?? null);
+
+      expect(document.body.textContent).not.toContain('Time elapsed. The alarm will continue until you dismiss it.');
+      expect(audioSession.type).toBe('auto');
     } finally {
       unmount(root, container);
     }

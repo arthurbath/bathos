@@ -35,9 +35,9 @@ function renderComponent() {
 
   act(() => {
     root.render(
-      <MemoryRouter initialEntries={['/exercise/run']}>
+      <MemoryRouter initialEntries={['/exercise/routines']}>
         <Routes>
-          <Route path="/exercise/run" element={<ExerciseIndex />} />
+          <Route path="/exercise/routines" element={<ExerciseIndex />} />
         </Routes>
       </MemoryRouter>,
     );

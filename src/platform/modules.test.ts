@@ -18,7 +18,7 @@ describe('getAvailableModules', () => {
     expect(modules).toHaveLength(5);
     expect(modules.map(module => module.id)).toEqual(['budget', 'drawers', 'garage', 'exercise', 'admin']);
     expect(modules[2].launchPath).toBe('/garage/due');
-    expect(modules[3].launchPath).toBe('/exercise/run');
+    expect(modules[3].launchPath).toBe('/exercise/routines');
     expect(modules[4].launchPath).toBe('/admin');
   });
 });

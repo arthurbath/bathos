@@ -44,7 +44,7 @@ const EXERCISE_MODULE: PlatformModule = {
   id: 'exercise',
   name: 'Exercise',
   description: 'Define exercises, build routines, and run through them one step at a time',
-  launchPath: '/exercise/run',
+  launchPath: '/exercise/routines',
   icon: Dumbbell,
   iconPath: '/module-exercise.png',
   adminOnly: true,

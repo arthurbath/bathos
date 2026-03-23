@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight, Play, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { ExerciseDefinitionDialog } from '@/modules/exercise/components/ExerciseDefinitionDialog';
-import { moveRoutineExercise, summarizeExerciseDefinition } from '@/modules/exercise/lib/exercise';
+import { formatDurationMs, formatDurationSeconds, formatWeightLbs, moveRoutineExercise, summarizeExerciseDefinition } from '@/modules/exercise/lib/exercise';
 import type {
   ExerciseDefinition,
   ExerciseDefinitionInput,
@@ -18,6 +18,185 @@ interface RoutineDraft {
   id: string | null;
   name: string;
   exerciseDefinitionIds: string[];
+}
+
+type AudioSessionType = 'ambient' | 'auto' | 'play-and-record' | 'playback' | 'transient' | 'transient-solo';
+
+interface AudioSessionHandle {
+  type: AudioSessionType;
+}
+
+interface AlarmAudioController {
+  alarmIntervalId: number | null;
+  audioContext: AudioContext | null;
+  previousSessionType: AudioSessionType | null;
+  requestId: number;
+  warmedUp: boolean;
+}
+
+interface ActiveDurationTimer {
+  alarmActive: boolean;
+  durationSeconds: number;
+  endsAtMs: number;
+  exerciseName: string;
+}
+
+const TIMER_COUNTDOWN_TICK_MS = 250;
+const TIMER_ALARM_REPEAT_MS = 1250;
+const TIMER_AUDIO_SESSION_PREFERENCES: AudioSessionType[] = ['transient-solo', 'playback'];
+
+function getAudioContextConstructor(): (new () => AudioContext) | null {
+  if (typeof window === 'undefined') return null;
+  const audioWindow = window as Window & typeof globalThis & {
+    webkitAudioContext?: new () => AudioContext;
+  };
+  return audioWindow.AudioContext ?? audioWindow.webkitAudioContext ?? null;
+}
+
+function getNavigatorAudioSession(): AudioSessionHandle | null {
+  if (typeof navigator === 'undefined') return null;
+  const audioNavigator = navigator as Navigator & {
+    audioSession?: AudioSessionHandle;
+  };
+  return audioNavigator.audioSession ?? null;
+}
+
+function warmUpAlarmAudioContext(context: AudioContext) {
+  const startAt = context.currentTime + 0.01;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+
+  oscillator.type = 'sine';
+  oscillator.frequency.setValueAtTime(440, startAt);
+  gain.gain.setValueAtTime(0.00001, startAt);
+
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(startAt);
+  oscillator.stop(startAt + 0.02);
+  window.setTimeout(() => gain.disconnect(), 120);
+}
+
+function scheduleAlarmBeep(context: AudioContext, frequency: number, startAt: number, durationSeconds: number) {
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+
+  oscillator.type = 'square';
+  oscillator.frequency.setValueAtTime(frequency, startAt);
+  gain.gain.setValueAtTime(0.0001, startAt);
+  gain.gain.exponentialRampToValueAtTime(0.18, startAt + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + durationSeconds);
+
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(startAt);
+  oscillator.stop(startAt + durationSeconds);
+  window.setTimeout(() => gain.disconnect(), Math.ceil((durationSeconds + 0.1) * 1000));
+}
+
+function playAlarmPattern(context: AudioContext) {
+  const startAt = context.currentTime + 0.01;
+  scheduleAlarmBeep(context, 1120, startAt, 0.18);
+  scheduleAlarmBeep(context, 860, startAt + 0.28, 0.18);
+}
+
+async function ensureAlarmAudioReady(controller: AlarmAudioController): Promise<AudioContext | null> {
+  const AudioContextConstructor = getAudioContextConstructor();
+  if (!AudioContextConstructor) return null;
+
+  if (!controller.audioContext || controller.audioContext.state === 'closed') {
+    controller.audioContext = new AudioContextConstructor();
+    controller.warmedUp = false;
+  }
+
+  const context = controller.audioContext;
+  if (context.state === 'suspended') {
+    await context.resume();
+  }
+
+  if (!controller.warmedUp) {
+    warmUpAlarmAudioContext(context);
+    controller.warmedUp = true;
+  }
+
+  return context;
+}
+
+function activateAlarmAudioSession(controller: AlarmAudioController) {
+  const audioSession = getNavigatorAudioSession();
+  if (!audioSession) return;
+
+  if (controller.previousSessionType == null) {
+    controller.previousSessionType = audioSession.type ?? 'auto';
+  }
+
+  for (const sessionType of TIMER_AUDIO_SESSION_PREFERENCES) {
+    try {
+      audioSession.type = sessionType;
+      return;
+    } catch {
+      continue;
+    }
+  }
+}
+
+function restoreAlarmAudioSession(controller: AlarmAudioController) {
+  const audioSession = getNavigatorAudioSession();
+  const previousSessionType = controller.previousSessionType;
+  controller.previousSessionType = null;
+
+  if (!audioSession || previousSessionType == null) return;
+
+  try {
+    audioSession.type = previousSessionType;
+  } catch {
+    // Ignore restore failures. Unsupported browsers simply stay on their default session policy.
+  }
+}
+
+function suspendAlarmAudioContext(controller: AlarmAudioController) {
+  const context = controller.audioContext;
+  if (!context || context.state !== 'running') return;
+  void context.suspend().catch(() => undefined);
+}
+
+function stopAlarmLoop(controller: AlarmAudioController) {
+  controller.requestId += 1;
+
+  if (controller.alarmIntervalId != null) {
+    window.clearInterval(controller.alarmIntervalId);
+    controller.alarmIntervalId = null;
+  }
+
+  restoreAlarmAudioSession(controller);
+  suspendAlarmAudioContext(controller);
+}
+
+async function startAlarmLoop(controller: AlarmAudioController) {
+  stopAlarmLoop(controller);
+  const requestId = controller.requestId;
+
+  const context = await ensureAlarmAudioReady(controller);
+  if (!context || controller.requestId !== requestId) return;
+
+  activateAlarmAudioSession(controller);
+  playAlarmPattern(context);
+
+  controller.alarmIntervalId = window.setInterval(() => {
+    void ensureAlarmAudioReady(controller).then((readyContext) => {
+      if (!readyContext || controller.requestId !== requestId) return;
+      playAlarmPattern(readyContext);
+    });
+  }, TIMER_ALARM_REPEAT_MS);
+}
+
+function disposeAlarmAudio(controller: AlarmAudioController) {
+  stopAlarmLoop(controller);
+
+  if (!controller.audioContext || controller.audioContext.state === 'closed') return;
+  void controller.audioContext.close().catch(() => undefined);
+  controller.audioContext = null;
+  controller.warmedUp = false;
 }
 
 interface ExerciseRoutinesViewProps {
@@ -53,11 +232,22 @@ export function ExerciseRoutinesView({
     () => new Map(definitions.map((definition) => [definition.id, definition])),
     [definitions],
   );
+  const touchStartXRef = useRef<number | null>(null);
   const [draft, setDraft] = useState<RoutineDraft | null>(null);
   const [savingRoutine, setSavingRoutine] = useState(false);
   const [definitionDialogOpen, setDefinitionDialogOpen] = useState(false);
   const [editingDefinition, setEditingDefinition] = useState<ExerciseDefinition | null>(null);
   const [savingDefinition, setSavingDefinition] = useState(false);
+  const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const alarmAudioRef = useRef<AlarmAudioController>({
+    alarmIntervalId: null,
+    audioContext: null,
+    previousSessionType: null,
+    requestId: 0,
+    warmedUp: false,
+  });
+  const [activeTimer, setActiveTimer] = useState<ActiveDurationTimer | null>(null);
+  const [timerNowMs, setTimerNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     setDraft((current) => {
@@ -69,6 +259,54 @@ export function ExerciseRoutinesView({
       return { ...current, exerciseDefinitionIds: nextExerciseDefinitionIds };
     });
   }, [definitionsById]);
+
+  const slideCount = routines.length + 1;
+  const activeRoutine = activeCardIndex < routines.length ? routines[activeCardIndex] ?? null : null;
+  const showingAddRoutineCard = activeCardIndex === routines.length;
+
+  useEffect(() => {
+    setActiveCardIndex((current) => Math.min(current, slideCount - 1));
+  }, [slideCount]);
+
+  useEffect(() => {
+    if (!activeTimer || activeTimer.alarmActive) return undefined;
+
+    if (activeTimer.endsAtMs <= Date.now()) {
+      setActiveTimer((current) => current && !current.alarmActive ? { ...current, alarmActive: true } : current);
+      return undefined;
+    }
+
+    setTimerNowMs(Date.now());
+    const countdownIntervalId = window.setInterval(() => {
+      setTimerNowMs(Date.now());
+    }, TIMER_COUNTDOWN_TICK_MS);
+    const alarmTimeoutId = window.setTimeout(() => {
+      setTimerNowMs(Date.now());
+      setActiveTimer((current) => current && !current.alarmActive ? { ...current, alarmActive: true } : current);
+    }, Math.max(0, activeTimer.endsAtMs - Date.now()));
+
+    return () => {
+      window.clearInterval(countdownIntervalId);
+      window.clearTimeout(alarmTimeoutId);
+    };
+  }, [activeTimer]);
+
+  useEffect(() => {
+    const alarmAudio = alarmAudioRef.current;
+    if (!activeTimer?.alarmActive) return undefined;
+
+    void startAlarmLoop(alarmAudio);
+    return () => {
+      stopAlarmLoop(alarmAudio);
+    };
+  }, [activeTimer?.alarmActive]);
+
+  useEffect(() => {
+    const alarmAudio = alarmAudioRef.current;
+    return () => {
+      disposeAlarmAudio(alarmAudio);
+    };
+  }, []);
 
   const handleSaveRoutine = async () => {
     if (!draft) return;
@@ -139,26 +377,69 @@ export function ExerciseRoutinesView({
     setDefinitionDialogOpen(true);
   };
 
+  const goToPreviousCard = () => {
+    if (slideCount <= 1) return;
+    setActiveCardIndex((current) => current === 0 ? slideCount - 1 : current - 1);
+  };
+
+  const goToNextCard = () => {
+    if (slideCount <= 1) return;
+    setActiveCardIndex((current) => current === slideCount - 1 ? 0 : current + 1);
+  };
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    touchStartXRef.current = event.changedTouches[0]?.clientX ?? null;
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const touchStartX = touchStartXRef.current;
+    const touchEndX = event.changedTouches[0]?.clientX ?? null;
+    touchStartXRef.current = null;
+    if (touchStartX == null || touchEndX == null) return;
+
+    const deltaX = touchEndX - touchStartX;
+    if (Math.abs(deltaX) < 40) return;
+    if (deltaX < 0) {
+      goToNextCard();
+      return;
+    }
+    goToPreviousCard();
+  };
+
+  const dismissTimer = () => {
+    stopAlarmLoop(alarmAudioRef.current);
+    setActiveTimer(null);
+  };
+
+  const startDurationTimer = (definition: ExerciseDefinition) => {
+    if (definition.duration_seconds == null) return;
+
+    stopAlarmLoop(alarmAudioRef.current);
+    const nowMs = Date.now();
+    setTimerNowMs(nowMs);
+    setActiveTimer({
+      alarmActive: false,
+      durationSeconds: definition.duration_seconds,
+      endsAtMs: nowMs + (definition.duration_seconds * 1000),
+      exerciseName: definition.name,
+    });
+
+    void ensureAlarmAudioReady(alarmAudioRef.current);
+  };
+
+  const activeTimerRemainingMs = activeTimer
+    ? activeTimer.alarmActive
+      ? 0
+      : Math.max(0, activeTimer.endsAtMs - timerNowMs)
+    : 0;
+
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <CardTitle className="text-xl">Routines</CardTitle>
-            <CardDescription>Build ordered lists of exercises and keep editing them without leaving the draft.</CardDescription>
-          </div>
-          <Button type="button" onClick={() => setDraft(createRoutineDraft())}>
-            <Plus className="h-4 w-4" />
-            Add Routine
-          </Button>
-        </CardHeader>
-      </Card>
-
       {draft ? (
         <Card>
           <CardHeader className="space-y-1">
             <CardTitle className="text-lg">{draft.id ? 'Edit Routine' : 'New Routine'}</CardTitle>
-            <CardDescription>Empty routines can be saved, but only routines with exercises are runnable.</CardDescription>
+            <CardDescription>Save empty routines now and fill in the exercise order later.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
@@ -174,7 +455,7 @@ export function ExerciseRoutinesView({
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-sm font-medium">Routine Order</h3>
-                <Badge variant="outline">{draft.exerciseDefinitionIds.length} exercise{draft.exerciseDefinitionIds.length === 1 ? '' : 's'}</Badge>
+                <p className="text-sm text-muted-foreground">{draft.exerciseDefinitionIds.length} exercise{draft.exerciseDefinitionIds.length === 1 ? '' : 's'}</p>
               </div>
 
               {draft.exerciseDefinitionIds.length === 0 ? (
@@ -311,27 +592,57 @@ export function ExerciseRoutinesView({
         </Card>
       ) : null}
 
-      {routines.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {routines.map((routine) => (
-            <Card key={routine.id}>
+      <section className="mx-auto w-[calc(100vw-2rem)] min-w-0 max-w-2xl space-y-3">
+        <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 rounded-full"
+              aria-label="Previous routine card"
+              onClick={goToPreviousCard}
+              disabled={slideCount <= 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 rounded-full"
+              aria-label="Next routine card"
+              onClick={goToNextCard}
+              disabled={slideCount <= 1}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+        </div>
+
+        <div
+          data-testid="exercise-routine-card-viewport"
+          className="w-full max-w-full min-w-0"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {activeRoutine ? (
+            <Card className="w-full max-w-full overflow-hidden">
               <CardHeader className="space-y-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-lg">{routine.name}</CardTitle>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <CardTitle className="text-lg">{activeRoutine.name}</CardTitle>
                     <CardDescription>
-                      {routine.items.length > 0
-                        ? `${routine.items.length} exercise${routine.items.length === 1 ? '' : 's'}`
+                      {activeRoutine.items.length > 0
+                        ? `${activeRoutine.items.length} exercise${activeRoutine.items.length === 1 ? '' : 's'}`
                         : 'No exercises in this routine yet'}
                     </CardDescription>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 sm:justify-end">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      aria-label={`Edit Routine ${routine.name}`}
-                      onClick={() => setDraft(createRoutineDraft(routine))}
+                      aria-label={`Edit Routine ${activeRoutine.name}`}
+                      onClick={() => setDraft(createRoutineDraft(activeRoutine))}
                     >
                       Edit
                     </Button>
@@ -339,31 +650,106 @@ export function ExerciseRoutinesView({
                       type="button"
                       variant="outline-destructive"
                       size="sm"
-                      aria-label={`Delete routine ${routine.name}`}
-                      onClick={() => { void handleDeleteRoutine(routine); }}
+                      aria-label={`Delete routine ${activeRoutine.name}`}
+                      onClick={() => { void handleDeleteRoutine(activeRoutine); }}
                     >
                       Delete
                     </Button>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                {routine.items.length > 0 ? routine.items.map((item, index) => {
-                  const definition = definitionsById.get(item.exercise_definition_id);
-                  if (!definition) return null;
-                  return (
-                    <Badge key={`${item.id}-${index}`} variant="outline">
-                      {index + 1}. {definition.name}
-                    </Badge>
-                  );
-                }) : (
-                  <p className="text-sm text-muted-foreground">This routine can be edited, but it will not appear in Run until it has at least one exercise.</p>
+              <CardContent>
+                {activeRoutine.items.length > 0 ? (
+                  <div className="space-y-3">
+                    {activeRoutine.items.map((item, index) => {
+                      const definition = definitionsById.get(item.exercise_definition_id);
+                      if (!definition) {
+                        return (
+                          <div key={`${item.id}-${index}`} className="rounded-md border border-[hsl(var(--grid-sticky-line))] px-3 py-3">
+                            <p className="font-medium">{index + 1}. Exercise Unavailable</p>
+                            <p className="mt-1 text-sm text-muted-foreground">This exercise definition no longer exists.</p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div key={`${item.id}-${index}`} className="rounded-md border border-[hsl(var(--grid-sticky-line))] px-3 py-3">
+                          <p className="font-medium break-words">{index + 1}. {definition.name}</p>
+                          {(() => {
+                            const metadata = [
+                              definition.rep_count != null ? {
+                                id: 'reps',
+                                value: <p>Reps: {definition.rep_count}</p>,
+                              } : null,
+                              definition.duration_seconds != null ? {
+                                id: 'duration',
+                                value: (
+                                  <div className="flex items-center gap-2">
+                                    <span>Duration: {formatDurationSeconds(definition.duration_seconds)}</span>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 w-7 p-0"
+                                      aria-label={`Start ${formatDurationSeconds(definition.duration_seconds)} timer for ${definition.name}`}
+                                      onClick={() => startDurationTimer(definition)}
+                                    >
+                                      <Play className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                ),
+                              } : null,
+                              definition.weight_lbs != null ? {
+                                id: 'weight',
+                                value: (
+                                  <p>
+                                    Weight: {formatWeightLbs(definition.weight_lbs)}
+                                    {definition.weight_delta_lbs != null && definition.weight_delta_lbs !== 0 ? `+/-${formatWeightLbs(definition.weight_delta_lbs)}` : ''} lb
+                                  </p>
+                                ),
+                              } : null,
+                              definition.weight_lbs == null && definition.weight_delta_lbs != null && definition.weight_delta_lbs !== 0 ? {
+                                id: 'range',
+                                value: <p>Range: +/- {formatWeightLbs(definition.weight_delta_lbs)} lb</p>,
+                              } : null,
+                            ].filter((value): value is { id: string; value: ReactNode } => value != null);
+
+                            return metadata.length > 0 ? (
+                              <div className="mt-2 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                                {metadata.map((metadataItem) => (
+                                  <div key={metadataItem.id}>{metadataItem.value}</div>
+                                ))}
+                              </div>
+                            ) : null;
+                          })()}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">This routine is empty. Add exercises to define the order.</p>
                 )}
               </CardContent>
             </Card>
-          ))}
+          ) : null}
+
+          {showingAddRoutineCard ? (
+            <Card className="h-full w-full max-w-full overflow-hidden">
+              <CardHeader className="space-y-2">
+                <CardTitle className="text-lg">Add Routine</CardTitle>
+                <CardDescription>Create a new routine from the last card in the stack.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">Build a new ordered routine, then page back to review it.</p>
+                <Button type="button" onClick={() => setDraft(createRoutineDraft())}>
+                  <Plus className="h-4 w-4" />
+                  Add Routine
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
-      ) : null}
+      </section>
 
       <ExerciseDefinitionDialog
         open={definitionDialogOpen}
@@ -378,6 +764,32 @@ export function ExerciseRoutinesView({
         definition={editingDefinition}
         title={editingDefinition ? 'Edit Exercise' : 'Add Exercise'}
       />
+
+      <Dialog open={activeTimer != null} onOpenChange={(open) => { if (!open) dismissTimer(); }}>
+        <DialogContent hideClose className="max-w-sm gap-5 shadow-none">
+          <DialogHeader className="space-y-1 text-left">
+            <DialogTitle>{activeTimer?.exerciseName ?? 'Exercise Timer'}</DialogTitle>
+            <DialogDescription>
+              {activeTimer?.alarmActive
+                ? 'Time elapsed. The alarm will continue until you dismiss it.'
+                : `Running ${activeTimer ? formatDurationSeconds(activeTimer.durationSeconds) : '00:00'} timer.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-md border border-[hsl(var(--grid-sticky-line))] px-4 py-6 text-center">
+            <p className="text-sm font-medium text-muted-foreground">Remaining</p>
+            <p className="mt-2 text-5xl font-semibold tabular-nums" role="timer" aria-live="off">
+              {formatDurationMs(activeTimerRemainingMs)}
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" onClick={dismissTimer}>
+              {activeTimer?.alarmActive ? 'Dismiss Timer' : 'Cancel Timer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

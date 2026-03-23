@@ -117,8 +117,8 @@ function AppRoutes() {
         <Route path="/garage/config" element={<GarageIndex />} />
 
         {/* Exercise module */}
-        <Route path="/exercise" element={<Navigate to="/exercise/run" replace />} />
-        <Route path="/exercise/run" element={<ExerciseIndex />} />
+        <Route path="/exercise" element={<Navigate to="/exercise/routines" replace />} />
+        <Route path="/exercise/run" element={<Navigate to="/exercise/routines" replace />} />
         <Route path="/exercise/routines" element={<ExerciseIndex />} />
         <Route path="/exercise/exercises" element={<ExerciseIndex />} />
 
