@@ -24,6 +24,8 @@ import Index from "./pages/Index";
 import DrawersIndex from "@/modules/drawers/DrawersIndex";
 import GarageIndex from "@/modules/garage/GarageIndex";
 import ExerciseIndex from "@/modules/exercise/ExerciseIndex";
+import EstimatorIndex from "@/modules/estimator/EstimatorIndex";
+import EstimatorRoomPage from "@/modules/estimator/EstimatorRoomPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -121,6 +123,10 @@ function AppRoutes() {
         <Route path="/exercise/run" element={<Navigate to="/exercise/routines" replace />} />
         <Route path="/exercise/routines" element={<ExerciseIndex />} />
         <Route path="/exercise/exercises" element={<ExerciseIndex />} />
+
+        {/* Ticket Estimator module */}
+        <Route path="/estimator" element={<EstimatorIndex />} />
+        <Route path="/estimator/rooms/:roomToken" element={<EstimatorRoomPage />} />
 
         {/* Legacy routes */}
         <Route path="/incomes" element={<Navigate to="/budget/incomes" replace />} />

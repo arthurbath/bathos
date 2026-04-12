@@ -20,7 +20,7 @@ const ACCEPTED_TYPES = [
 const ACCEPT_STRING = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.txt';
 
 interface FeedbackDialogProps {
-  userId: string;
+  userId?: string;
   trigger?: ReactNode;
 }
 
@@ -40,6 +40,9 @@ export function FeedbackDialog({ userId, trigger }: FeedbackDialogProps) {
   const { user } = useAuth();
   const moduleId = useHostModule();
   const feedbackContext = getFeedbackContext(moduleId, window.location.pathname);
+  const activeUserId = user?.id ?? userId ?? null;
+  const activeUserEmail = user?.email?.trim() || null;
+  const canAttachFile = Boolean(activeUserId);
 
   const reset = () => {
     setMessage('');
@@ -65,24 +68,15 @@ export function FeedbackDialog({ userId, trigger }: FeedbackDialogProps) {
 
   const handleSubmit = async () => {
     const trimmed = message.trim();
-    const userEmail = user?.email?.trim() ?? '';
     if (!trimmed) return;
-    if (!userEmail) {
-      toast({
-        title: 'Failed to send feedback',
-        description: 'No email address is available for this account.',
-        variant: 'destructive',
-      });
-      return;
-    }
     setSending(true);
 
     try {
       let fileUrl: string | undefined;
 
-      if (file) {
+      if (file && activeUserId) {
         const ext = file.name.split('.').pop();
-        const path = `${userId}/${Date.now()}_feedback.${ext}`;
+        const path = `${activeUserId}/${Date.now()}_feedback.${ext}`;
         const { error: uploadErr } = await supabase.storage
           .from('feedback-attachments')
           .upload(path, file);
@@ -96,8 +90,8 @@ export function FeedbackDialog({ userId, trigger }: FeedbackDialogProps) {
       const { data: insertedFeedback, error: insertErr } = await supabase
         .from('bathos_feedback')
         .insert({
-          user_id: userId,
-          email: userEmail,
+          user_id: activeUserId,
+          email: activeUserEmail,
           message: trimmed,
           context: feedbackContext,
         })
@@ -106,14 +100,16 @@ export function FeedbackDialog({ userId, trigger }: FeedbackDialogProps) {
       if (insertErr) throw insertErr;
 
       // Send email
-      await supabase.functions.invoke('send-feedback-email', {
+      const { error: invokeError } = await supabase.functions.invoke('send-feedback-email', {
         body: {
           message: trimmed,
           context: feedbackContext,
           submitted_at: insertedFeedback.created_at,
           file_url: fileUrl,
+          email: activeUserEmail,
         },
       });
+      if (invokeError) throw invokeError;
 
       toast({ title: 'Feedback sent' });
       reset();
@@ -161,37 +157,39 @@ export function FeedbackDialog({ userId, trigger }: FeedbackDialogProps) {
             </p>
           </div>
 
-          <div>
-            {file ? (
-              <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="truncate">{file.name}</span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-6 w-6 ml-auto"
-                  onClick={() => { setFile(null); if (fileRef.current) fileRef.current.value = ''; }}
-                >
-                  <X className="h-3 w-3" />
+          {canAttachFile ? (
+            <div>
+              {file ? (
+                <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                  <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="truncate">{file.name}</span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-6 w-6 ml-auto"
+                    onClick={() => { setFile(null); if (fileRef.current) fileRef.current.value = ''; }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="outline" onClick={() => fileRef.current?.click()}>
+                  <Paperclip className="h-3.5 w-3.5 mr-1.5" />
+                  Attach File
                 </Button>
-              </div>
-            ) : (
-              <Button variant="outline" onClick={() => fileRef.current?.click()}>
-                <Paperclip className="h-3.5 w-3.5 mr-1.5" />
-                Attach File
-              </Button>
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              accept={ACCEPT_STRING}
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              PNG, JPEG, GIF, WebP, PDF, or TXT — max 5 MB
-            </p>
-          </div>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept={ACCEPT_STRING}
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                PNG, JPEG, GIF, WebP, PDF, or TXT — max 5 MB
+              </p>
+            </div>
+          ) : null}
         </DialogBody>
 
         <DialogFooter>

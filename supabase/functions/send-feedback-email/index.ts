@@ -72,34 +72,31 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Authenticate
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const token = authHeader.replace("Bearer ", "");
-  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-  if (claimsError || !claimsData?.claims) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const userEmail = claimsData.claims.email as string;
-
   try {
-    const { message, context, submitted_at, file_url } = await req.json();
+    const authHeader = req.headers.get("Authorization");
+    const token = authHeader?.startsWith("Bearer ")
+      ? authHeader.replace("Bearer ", "")
+      : null;
+    let claimedEmail: string | null = null;
+
+    if (token) {
+      try {
+        const authClient = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_ANON_KEY")!,
+          { global: { headers: { Authorization: `Bearer ${token}` } } }
+        );
+        const { data: claimsData } = await authClient.auth.getClaims(token);
+        const rawClaimedEmail = claimsData?.claims?.email;
+        claimedEmail = typeof rawClaimedEmail === "string" && rawClaimedEmail.trim().length > 0
+          ? rawClaimedEmail.trim().toLowerCase()
+          : null;
+      } catch (error) {
+        console.warn("Unable to resolve feedback sender email from auth token:", error);
+      }
+    }
+
+    const { message, context, submitted_at, file_url, email } = await req.json();
 
     if (!message || typeof message !== "string" || message.trim().length === 0) {
       return new Response(JSON.stringify({ error: "Message is required" }), {
@@ -115,6 +112,10 @@ Deno.serve(async (req) => {
       });
     }
 
+    const providedEmail = typeof email === "string" && email.trim().length > 0
+      ? email.trim().toLowerCase()
+      : null;
+    const senderEmail = claimedEmail ?? providedEmail;
     const prettyContext = prettifyContext(context);
     const prettySubmittedAt = prettifySubmittedAt(submitted_at);
 
@@ -135,7 +136,7 @@ Deno.serve(async (req) => {
 
     // Build email body
     let body = [
-      `Email: ${userEmail}`,
+      `Email: ${senderEmail ?? "Anonymous"}`,
       `Context: ${prettyContext}`,
       `Submitted: ${prettySubmittedAt}`,
       "",
@@ -156,6 +157,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: "BathOS <webmaster@bath.garden>",
         to: ["webmaster@bath.garden"],
+        ...(senderEmail ? { reply_to: senderEmail } : {}),
         subject: "BathOS Feedback",
         text: body,
       }),

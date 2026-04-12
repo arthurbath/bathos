@@ -42,4 +42,15 @@ describe('useHostModule', () => {
       cleanup(root, container);
     }
   });
+
+  it('detects the estimator module from the URL path', () => {
+    window.history.replaceState({}, '', '/estimator/rooms/123456789012345678');
+
+    const { container, root } = renderHarness();
+    try {
+      expect(container.querySelector('[data-testid="module-id"]')?.textContent).toBe('estimator');
+    } finally {
+      cleanup(root, container);
+    }
+  });
 });

@@ -47,12 +47,25 @@ Track vehicle maintenance schedules and service history for each user account. F
 
 Accessible at [bath.garden/garage/due](https://bath.garden/garage/due).
 
+### Ticket Estimator
+
+Run lightweight planning-poker style estimation rooms without requiring BathOS accounts. Features include:
+
+- Public room creation with required room names
+- Shareable direct room links
+- Browser-local room identities with changeable nicknames
+- Ticket stacks with explicit reordering and current-ticket selection
+- Concealed voting with T-shirt (`XXS`-`XXL+`) or Fibonacci (`1`-`21+`) sizing
+- Presence indicators, member kick controls, and revealed vote history for past participants
+
+Accessible at [bath.garden/estimator](https://bath.garden/estimator).
+
 ## Development notes
 
 - Built with React, TypeScript, Vite, Tailwind CSS, and Supabase
 - Modules are isolated under `src/modules/[name]/` — removing one should not break another
-- Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`) for clarity
-- Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`)
+- Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`, `estimator_`) for clarity
+- Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`, `/estimator/...`)
 - See `docs/agents/ARCHITECTURE.md` for structure, `docs/agents/MODULE_GUIDE.md` for adding modules, and `docs/human/STYLE_GUIDE.md` for design conventions
 
 ### Dev Console Bridge (Safari + Vite)

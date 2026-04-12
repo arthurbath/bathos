@@ -644,6 +644,189 @@ export type Database = {
           },
         ]
       }
+      estimator_room_members: {
+        Row: {
+          created_at: string
+          id: string
+          kicked_at: string | null
+          kicked_by_member_id: string | null
+          last_seen_at: string
+          member_secret_hash: string
+          nickname: string
+          room_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kicked_at?: string | null
+          kicked_by_member_id?: string | null
+          last_seen_at?: string
+          member_secret_hash: string
+          nickname: string
+          room_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kicked_at?: string | null
+          kicked_by_member_id?: string | null
+          last_seen_at?: string
+          member_secret_hash?: string
+          nickname?: string
+          room_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimator_room_members_kicked_by_member_id_fkey"
+            columns: ["kicked_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "estimator_room_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimator_room_members_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "estimator_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimator_rooms: {
+        Row: {
+          created_at: string
+          current_ticket_id: string | null
+          id: string
+          join_code: string
+          name: string | null
+          room_token: string
+          updated_at: string
+          voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
+        }
+        Insert: {
+          created_at?: string
+          current_ticket_id?: string | null
+          id?: string
+          join_code: string
+          name?: string | null
+          room_token: string
+          updated_at?: string
+          voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
+        }
+        Update: {
+          created_at?: string
+          current_ticket_id?: string | null
+          id?: string
+          join_code?: string
+          name?: string | null
+          room_token?: string
+          updated_at?: string
+          voting_mode?: Database["public"]["Enums"]["estimator_voting_mode"]
+        }
+        Relationships: []
+      }
+      estimator_tickets: {
+        Row: {
+          created_at: string
+          id: string
+          official_size_rank: string | null
+          revealed_at: string | null
+          room_id: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          official_size_rank?: string | null
+          revealed_at?: string | null
+          room_id: string
+          sort_order: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          official_size_rank?: string | null
+          revealed_at?: string | null
+          room_id?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimator_tickets_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "estimator_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimator_votes: {
+        Row: {
+          created_at: string
+          id: string
+          member_id: string
+          nickname_snapshot: string
+          room_id: string
+          ticket_id: string
+          updated_at: string
+          vote_value: string
+          voted_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          member_id: string
+          nickname_snapshot: string
+          room_id: string
+          ticket_id: string
+          updated_at?: string
+          vote_value: string
+          voted_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          member_id?: string
+          nickname_snapshot?: string
+          room_id?: string
+          ticket_id?: string
+          updated_at?: string
+          vote_value?: string
+          voted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimator_votes_member_room_fk"
+            columns: ["member_id", "room_id"]
+            isOneToOne: false
+            referencedRelation: "estimator_room_members"
+            referencedColumns: ["id", "room_id"]
+          },
+          {
+            foreignKeyName: "estimator_votes_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "estimator_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimator_votes_ticket_room_fk"
+            columns: ["ticket_id", "room_id"]
+            isOneToOne: false
+            referencedRelation: "estimator_tickets"
+            referencedColumns: ["id", "room_id"]
+          },
+        ]
+      }
       exercise_definitions: {
         Row: {
           created_at: string
@@ -1127,6 +1310,240 @@ export type Database = {
         }
         Returns: Json
       }
+      estimator_add_ticket: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _title: string
+        }
+        Returns: Json
+      }
+      estimator_cast_vote: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _ticket_id: string
+          _vote_value: string
+        }
+        Returns: Json
+      }
+      estimator_clear_ticket_official_size: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _ticket_id: string
+        }
+        Returns: Json
+      }
+      estimator_create_room: {
+        Args: {
+          _name: string | null
+          _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
+        }
+        Returns: Json
+      }
+      estimator_get_room_snapshot: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+        }
+        Returns: Json
+      }
+      estimator_vote_label_from_rank: {
+        Args: {
+          _vote_rank: string
+          _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
+        }
+        Returns: string
+      }
+      estimator_vote_rank_from_label: {
+        Args: {
+          _vote_value: string
+          _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
+        }
+        Returns: string
+      }
+      estimator_is_vote_value_allowed: {
+        Args: {
+          _vote_value: string
+          _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
+        }
+        Returns: boolean
+      }
+      estimator_join_or_resume_room: {
+        Args: {
+          _member_id: string | null
+          _member_secret: string | null
+          _nickname: string | null
+          _room_token: string
+        }
+        Returns: Json
+      }
+      estimator_kick_room_member: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _target_member_id: string
+        }
+        Returns: Json
+      }
+      estimator_move_ticket: {
+        Args: {
+          _direction: string
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _ticket_id: string
+        }
+        Returns: Json
+      }
+      estimator_reorder_ticket: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _target_sort_order: number
+          _ticket_id: string
+        }
+        Returns: Json
+      }
+      estimator_reopen_ticket_voting: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _ticket_id: string
+        }
+        Returns: Json
+      }
+      estimator_reset_ticket_voting: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _ticket_id: string
+        }
+        Returns: Json
+      }
+      estimator_normalize_join_code: {
+        Args: { _join_code: string }
+        Returns: string
+      }
+      estimator_normalize_room_token: {
+        Args: { _room_token: string }
+        Returns: string
+      }
+      estimator_random_join_code: {
+        Args: { _length: number }
+        Returns: string
+      }
+      estimator_random_numeric_token: {
+        Args: { _length: number }
+        Returns: string
+      }
+      estimator_remove_ticket: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _ticket_id: string
+        }
+        Returns: Json
+      }
+      estimator_rename_room: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _name: string | null
+          _room_token: string
+        }
+        Returns: Json
+      }
+      estimator_rename_room_member: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _nickname: string
+          _room_token: string
+        }
+        Returns: Json
+      }
+      estimator_resolve_join_code: {
+        Args: { _join_code: string }
+        Returns: string
+      }
+      estimator_reveal_ticket_votes: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _ticket_id: string
+        }
+        Returns: Json
+      }
+      estimator_room_heartbeat: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+        }
+        Returns: Json
+      }
+      estimator_set_current_ticket: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _ticket_id: string
+        }
+        Returns: Json
+      }
+      estimator_set_ticket_official_size: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _ticket_id: string
+          _vote_value: string
+        }
+        Returns: Json
+      }
+      estimator_set_room_voting_mode: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
+        }
+        Returns: Json
+      }
+      estimator_update_ticket_title: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _ticket_id: string
+          _title: string
+        }
+        Returns: Json
+      }
+      estimator_validate_room_member: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+        }
+        Returns: {
+          member_id: string
+          member_nickname: string
+          room_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1174,6 +1591,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      estimator_voting_mode: "ballpark" | "fibonacci"
       garage_cadence_type: "recurring" | "no_interval"
       garage_service_status: "performed" | "not_needed_yet" | "declined"
       garage_service_type: "replacement" | "clean_lube" | "adjustment" | "check"

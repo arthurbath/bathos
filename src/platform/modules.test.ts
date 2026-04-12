@@ -12,13 +12,14 @@ describe('getAvailableModules', () => {
     expect(modules[2].launchPath).toBe('/garage/due');
   });
 
-  it('includes garage for admins', () => {
+  it('includes admin-only modules for admins', () => {
     const modules = getAvailableModules({ isAdmin: true });
 
-    expect(modules).toHaveLength(5);
-    expect(modules.map(module => module.id)).toEqual(['budget', 'drawers', 'garage', 'exercise', 'admin']);
+    expect(modules).toHaveLength(6);
+    expect(modules.map(module => module.id)).toEqual(['budget', 'drawers', 'garage', 'estimator', 'exercise', 'admin']);
     expect(modules[2].launchPath).toBe('/garage/due');
-    expect(modules[3].launchPath).toBe('/exercise/routines');
-    expect(modules[4].launchPath).toBe('/admin');
+    expect(modules[3].launchPath).toBe('/estimator');
+    expect(modules[4].launchPath).toBe('/exercise/routines');
+    expect(modules[5].launchPath).toBe('/admin');
   });
 });
