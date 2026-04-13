@@ -364,84 +364,13 @@ export function ExerciseRoutinesView({
 
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-medium">Order</h3>
-                <p className="text-sm text-muted-foreground">{draft.exerciseDefinitionIds.length} exercise{draft.exerciseDefinitionIds.length === 1 ? '' : 's'}</p>
-              </div>
-
-              {draft.exerciseDefinitionIds.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Use Type to Find to add exercises.</p>
-              ) : (
-                <div className="space-y-2">
-                  {draft.exerciseDefinitionIds.map((exerciseDefinitionId, index) => {
-                    const definition = definitionsById.get(exerciseDefinitionId);
-                    if (!definition) return null;
-                    return (
-                      <div key={`${exerciseDefinitionId}-${index}`} className="flex items-center justify-between gap-3 rounded-md border border-[hsl(var(--grid-sticky-line))] px-3 py-2">
-                        <div className="min-w-0">
-                          <p className="font-medium">{index + 1}. {definition.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {summarizeExerciseDefinition(definition).join(' • ') || 'Name only'}
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            aria-label={`Move ${definition.name} up`}
-                            onClick={() => setDraft((current) => current ? {
-                              ...current,
-                              exerciseDefinitionIds: moveRoutineExercise(current.exerciseDefinitionIds, index, -1),
-                            } : current)}
-                            disabled={index === 0}
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            aria-label={`Move ${definition.name} down`}
-                            onClick={() => setDraft((current) => current ? {
-                              ...current,
-                              exerciseDefinitionIds: moveRoutineExercise(current.exerciseDefinitionIds, index, 1),
-                            } : current)}
-                            disabled={index === draft.exerciseDefinitionIds.length - 1}
-                          >
-                            <ArrowDown className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline-destructive"
-                            size="icon"
-                            className="h-8 w-8"
-                            aria-label={`Remove ${definition.name} from routine`}
-                            onClick={() => setDraft((current) => current ? {
-                              ...current,
-                              exerciseDefinitionIds: current.exerciseDefinitionIds.filter((_, candidateIndex) => candidateIndex !== index),
-                            } : current)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            <section className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
                 <h3 className="text-sm font-medium">Exercise Library</h3>
                 <Button type="button" variant="outline" size="sm" onClick={() => openCreateDefinition()}>New Exercise</Button>
               </div>
 
               <div className="max-w-xl space-y-2">
                 <label htmlFor="exercise-routine-definition-search" className="text-sm font-medium">Type to Find</label>
-                <Popover open={exercisePickerOpen} onOpenChange={setExercisePickerOpen}>
+                <Popover open={exercisePickerOpen} onOpenChange={(open) => { if (!open && document.activeElement === exercisePickerInputRef.current) return; setExercisePickerOpen(open); }}>
                   <PopoverPrimitive.Anchor asChild>
                     <div>
                       <Input
@@ -531,6 +460,77 @@ export function ExerciseRoutinesView({
                   </PopoverContent>
                 </Popover>
               </div>
+            </section>
+
+            <section className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-medium">Order</h3>
+                <p className="text-sm text-muted-foreground">{draft.exerciseDefinitionIds.length} exercise{draft.exerciseDefinitionIds.length === 1 ? '' : 's'}</p>
+              </div>
+
+              {draft.exerciseDefinitionIds.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Use Type to Find to add exercises.</p>
+              ) : (
+                <div className="space-y-2">
+                  {draft.exerciseDefinitionIds.map((exerciseDefinitionId, index) => {
+                    const definition = definitionsById.get(exerciseDefinitionId);
+                    if (!definition) return null;
+                    return (
+                      <div key={`${exerciseDefinitionId}-${index}`} className="flex items-center justify-between gap-3 rounded-md border border-[hsl(var(--grid-sticky-line))] px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="font-medium">{index + 1}. {definition.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {summarizeExerciseDefinition(definition).join(' • ') || 'Name only'}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            aria-label={`Move ${definition.name} up`}
+                            onClick={() => setDraft((current) => current ? {
+                              ...current,
+                              exerciseDefinitionIds: moveRoutineExercise(current.exerciseDefinitionIds, index, -1),
+                            } : current)}
+                            disabled={index === 0}
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            aria-label={`Move ${definition.name} down`}
+                            onClick={() => setDraft((current) => current ? {
+                              ...current,
+                              exerciseDefinitionIds: moveRoutineExercise(current.exerciseDefinitionIds, index, 1),
+                            } : current)}
+                            disabled={index === draft.exerciseDefinitionIds.length - 1}
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline-destructive"
+                            size="icon"
+                            className="h-8 w-8"
+                            aria-label={`Remove ${definition.name} from routine`}
+                            onClick={() => setDraft((current) => current ? {
+                              ...current,
+                              exerciseDefinitionIds: current.exerciseDefinitionIds.filter((_, candidateIndex) => candidateIndex !== index),
+                            } : current)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </section>
 
             <div className="flex flex-wrap justify-end gap-2">

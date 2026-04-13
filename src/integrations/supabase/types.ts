@@ -1343,7 +1343,7 @@ export type Database = {
       }
       estimator_create_room: {
         Args: {
-          _name: string | null
+          _name: string
           _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
         }
         Returns: Json
@@ -1356,20 +1356,6 @@ export type Database = {
         }
         Returns: Json
       }
-      estimator_vote_label_from_rank: {
-        Args: {
-          _vote_rank: string
-          _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
-        }
-        Returns: string
-      }
-      estimator_vote_rank_from_label: {
-        Args: {
-          _vote_value: string
-          _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
-        }
-        Returns: string
-      }
       estimator_is_vote_value_allowed: {
         Args: {
           _vote_value: string
@@ -1379,9 +1365,9 @@ export type Database = {
       }
       estimator_join_or_resume_room: {
         Args: {
-          _member_id: string | null
-          _member_secret: string | null
-          _nickname: string | null
+          _member_id?: string
+          _member_secret?: string
+          _nickname?: string
           _room_token: string
         }
         Returns: Json
@@ -1405,34 +1391,6 @@ export type Database = {
         }
         Returns: Json
       }
-      estimator_reorder_ticket: {
-        Args: {
-          _member_id: string
-          _member_secret: string
-          _room_token: string
-          _target_sort_order: number
-          _ticket_id: string
-        }
-        Returns: Json
-      }
-      estimator_reopen_ticket_voting: {
-        Args: {
-          _member_id: string
-          _member_secret: string
-          _room_token: string
-          _ticket_id: string
-        }
-        Returns: Json
-      }
-      estimator_reset_ticket_voting: {
-        Args: {
-          _member_id: string
-          _member_secret: string
-          _room_token: string
-          _ticket_id: string
-        }
-        Returns: Json
-      }
       estimator_normalize_join_code: {
         Args: { _join_code: string }
         Returns: string
@@ -1441,10 +1399,7 @@ export type Database = {
         Args: { _room_token: string }
         Returns: string
       }
-      estimator_random_join_code: {
-        Args: { _length: number }
-        Returns: string
-      }
+      estimator_random_join_code: { Args: { _length: number }; Returns: string }
       estimator_random_numeric_token: {
         Args: { _length: number }
         Returns: string
@@ -1462,7 +1417,7 @@ export type Database = {
         Args: {
           _member_id: string
           _member_secret: string
-          _name: string | null
+          _name: string
           _room_token: string
         }
         Returns: Json
@@ -1473,6 +1428,34 @@ export type Database = {
           _member_secret: string
           _nickname: string
           _room_token: string
+        }
+        Returns: Json
+      }
+      estimator_reopen_ticket_voting: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _ticket_id: string
+        }
+        Returns: Json
+      }
+      estimator_reorder_ticket: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _target_sort_order: number
+          _ticket_id: string
+        }
+        Returns: Json
+      }
+      estimator_reset_ticket_voting: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _ticket_id: string
         }
         Returns: Json
       }
@@ -1506,6 +1489,15 @@ export type Database = {
         }
         Returns: Json
       }
+      estimator_set_room_voting_mode: {
+        Args: {
+          _member_id: string
+          _member_secret: string
+          _room_token: string
+          _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
+        }
+        Returns: Json
+      }
       estimator_set_ticket_official_size: {
         Args: {
           _member_id: string
@@ -1513,15 +1505,6 @@ export type Database = {
           _room_token: string
           _ticket_id: string
           _vote_value: string
-        }
-        Returns: Json
-      }
-      estimator_set_room_voting_mode: {
-        Args: {
-          _member_id: string
-          _member_secret: string
-          _room_token: string
-          _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
         }
         Returns: Json
       }
@@ -1546,6 +1529,20 @@ export type Database = {
           member_nickname: string
           room_id: string
         }[]
+      }
+      estimator_vote_label_from_rank: {
+        Args: {
+          _vote_rank: string
+          _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
+        }
+        Returns: string
+      }
+      estimator_vote_rank_from_label: {
+        Args: {
+          _vote_value: string
+          _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
+        }
+        Returns: string
       }
       has_role: {
         Args: {
@@ -1726,6 +1723,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      estimator_voting_mode: ["ballpark", "fibonacci"],
       garage_cadence_type: ["recurring", "no_interval"],
       garage_service_status: ["performed", "not_needed_yet", "declined"],
       garage_service_type: ["replacement", "clean_lube", "adjustment", "check"],
