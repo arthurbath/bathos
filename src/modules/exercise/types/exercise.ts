@@ -4,6 +4,7 @@ export interface ExerciseDefinition {
   name: string;
   rep_count: number | null;
   duration_seconds: number | null;
+  distance_miles: number | null;
   weight_lbs: number | null;
   weight_delta_lbs: number | null;
   created_at: string;
@@ -33,6 +34,7 @@ export interface ExerciseDefinitionInput {
   name: string;
   rep_count: number | null;
   duration_seconds: number | null;
+  distance_miles: number | null;
   weight_lbs: number | null;
   weight_delta_lbs: number | null;
 }
@@ -48,6 +50,8 @@ export interface ExerciseDefinitionFormState {
   repCount: string;
   hasDuration: boolean;
   duration: string;
+  hasDistance: boolean;
+  distance: string;
   hasWeight: boolean;
   weight: string;
   hasWeightDelta: boolean;

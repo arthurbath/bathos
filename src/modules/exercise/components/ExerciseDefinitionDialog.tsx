@@ -18,9 +18,10 @@ import type { ExerciseDefinition, ExerciseDefinitionInput, ExerciseDefinitionFor
 interface ExerciseDefinitionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (input: ExerciseDefinitionInput) => Promise<void>;
+  onSubmit: (input: ExerciseDefinitionInput) => Promise<void | ExerciseDefinition>;
   pending?: boolean;
   definition?: ExerciseDefinition | null;
+  initialName?: string;
   title: string;
 }
 
@@ -30,14 +31,20 @@ export function ExerciseDefinitionDialog({
   onSubmit,
   pending = false,
   definition,
+  initialName,
   title,
 }: ExerciseDefinitionDialogProps) {
   const [formState, setFormState] = useState<ExerciseDefinitionFormState>(() => createExerciseDefinitionFormState(definition));
 
   useEffect(() => {
     if (!open) return;
-    setFormState(createExerciseDefinitionFormState(definition));
-  }, [definition, open]);
+    const nextFormState = createExerciseDefinitionFormState(definition);
+    setFormState(
+      !definition && initialName?.trim()
+        ? { ...nextFormState, name: initialName.trim() }
+        : nextFormState,
+    );
+  }, [definition, initialName, open]);
 
   const setPartial = (updates: Partial<ExerciseDefinitionFormState>) => {
     setFormState((current) => ({ ...current, ...updates }));
@@ -125,6 +132,32 @@ export function ExerciseDefinitionDialog({
                   value={formState.duration}
                   onChange={(event) => setPartial({ duration: event.target.value })}
                   placeholder="05:00"
+                />
+              </div>
+            ) : null}
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="exercise-definition-has-distance"
+                checked={formState.hasDistance}
+                onCheckedChange={(checked) => setPartial({
+                  hasDistance: checked === true,
+                  distance: checked === true ? formState.distance : '',
+                })}
+              />
+              <Label htmlFor="exercise-definition-has-distance">Track Distance</Label>
+            </div>
+            {formState.hasDistance ? (
+              <div className="space-y-2">
+                <Label htmlFor="exercise-definition-distance">Distance (mi)</Label>
+                <Input
+                  id="exercise-definition-distance"
+                  inputMode="decimal"
+                  value={formState.distance}
+                  onChange={(event) => setPartial({ distance: event.target.value })}
+                  placeholder="1"
                 />
               </div>
             ) : null}

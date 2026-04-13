@@ -48,6 +48,8 @@ export function useExerciseDefinitions(userId: string | undefined) {
         sortDefinitions([...(current ?? []), inserted as ExerciseDefinition]),
       );
 
+      return inserted as ExerciseDefinition;
+
     } catch (error) {
       showMutationError(error);
       throw error;

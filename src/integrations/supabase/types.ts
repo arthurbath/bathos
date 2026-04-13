@@ -830,6 +830,7 @@ export type Database = {
       exercise_definitions: {
         Row: {
           created_at: string
+          distance_miles: number | null
           duration_seconds: number | null
           id: string
           name: string
@@ -841,6 +842,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          distance_miles?: number | null
           duration_seconds?: number | null
           id?: string
           name: string
@@ -852,6 +854,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          distance_miles?: number | null
           duration_seconds?: number | null
           id?: string
           name?: string

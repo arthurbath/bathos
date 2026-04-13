@@ -22,8 +22,16 @@ function parseOptionalNonNegativeNumber(raw: string, label: string): number {
   return parsed;
 }
 
-export function formatWeightLbs(value: number): string {
+function formatDecimal(value: number): string {
   return trimTrailingZeroes(value.toFixed(2));
+}
+
+export function formatWeightLbs(value: number): string {
+  return formatDecimal(value);
+}
+
+export function formatDistanceMiles(value: number): string {
+  return formatDecimal(value);
 }
 
 export function formatDurationSeconds(value: number): string {
@@ -64,6 +72,8 @@ export function createExerciseDefinitionFormState(definition?: ExerciseDefinitio
     repCount: definition?.rep_count != null ? String(definition.rep_count) : '',
     hasDuration: definition?.duration_seconds != null,
     duration: definition?.duration_seconds != null ? formatDurationSeconds(definition.duration_seconds) : '',
+    hasDistance: definition?.distance_miles != null,
+    distance: definition?.distance_miles != null ? formatDistanceMiles(definition.distance_miles) : '',
     hasWeight: definition?.weight_lbs != null,
     weight: definition?.weight_lbs != null ? formatWeightLbs(definition.weight_lbs) : '',
     hasWeightDelta: definition?.weight_delta_lbs != null,
@@ -79,6 +89,7 @@ export function normalizeExerciseDefinitionFormState(state: ExerciseDefinitionFo
 
   const rep_count = state.hasReps ? Math.round(parseOptionalPositiveNumber(state.repCount, 'Reps')) : null;
   const duration_seconds = state.hasDuration ? parseDurationInput(state.duration) : null;
+  const distance_miles = state.hasDistance ? parseOptionalPositiveNumber(state.distance, 'Distance') : null;
   const weight_lbs = state.hasWeight ? parseOptionalPositiveNumber(state.weight, 'Weight') : null;
   const weight_delta_lbs = state.hasWeightDelta
     ? parseOptionalNonNegativeNumber(state.weightDelta, 'Weight range')
@@ -92,6 +103,7 @@ export function normalizeExerciseDefinitionFormState(state: ExerciseDefinitionFo
     name,
     rep_count,
     duration_seconds,
+    distance_miles,
     weight_lbs,
     weight_delta_lbs,
   };
@@ -113,6 +125,9 @@ export function summarizeExerciseDefinition(definition: ExerciseDefinition): str
   }
   if (definition.duration_seconds != null) {
     parts.push(formatDurationSeconds(definition.duration_seconds));
+  }
+  if (definition.distance_miles != null) {
+    parts.push(`${formatDistanceMiles(definition.distance_miles)} mi`);
   }
   const weight = formatExerciseWeight(definition);
   if (weight) {

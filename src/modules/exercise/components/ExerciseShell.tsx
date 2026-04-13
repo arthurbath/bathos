@@ -112,7 +112,6 @@ export function ExerciseShell({ userId, displayName, onSignOut }: ExerciseShellP
               routines={routines}
               onAddDefinition={addDefinition}
               onUpdateDefinition={updateDefinition}
-              onRemoveDefinition={removeDefinition}
               onAddRoutine={addRoutine}
               onUpdateRoutine={updateRoutine}
               onRemoveRoutine={removeRoutine}

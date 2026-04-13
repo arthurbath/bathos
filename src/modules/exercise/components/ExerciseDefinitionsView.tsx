@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useMemo, useState, type ComponentPropsWithoutRef, type KeyboardEventHandler, type MouseEventHandler, type PointerEventHandler } from 'react';
 import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingState, useReactTable } from '@tanstack/react-table';
-import { MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DataGrid, GridEditableCell, gridMenuTriggerProps, useDataGrid } from '@/components/ui/data-grid';
@@ -15,6 +15,7 @@ import {
   GRID_MIN_COLUMN_WIDTH,
 } from '@/lib/gridColumnWidths';
 import {
+  formatDistanceMiles,
   formatDurationSeconds,
   formatWeightLbs,
   parseDurationInput,
@@ -25,7 +26,7 @@ import type { ExerciseDefinition, ExerciseDefinitionInput } from '@/modules/exer
 interface ExerciseDefinitionsViewProps {
   userId?: string;
   definitions: ExerciseDefinition[];
-  onAddDefinition: (input: ExerciseDefinitionInput, id?: string) => Promise<void>;
+  onAddDefinition: (input: ExerciseDefinitionInput, id?: string) => Promise<void | ExerciseDefinition>;
   onUpdateDefinition: (id: string, input: ExerciseDefinitionInput) => Promise<void>;
   onRemoveDefinition: (id: string) => Promise<void>;
   fullView?: boolean;
@@ -40,6 +41,7 @@ function toDefinitionInput(definition: ExerciseDefinition): ExerciseDefinitionIn
     name: definition.name,
     rep_count: definition.rep_count,
     duration_seconds: definition.duration_seconds,
+    distance_miles: definition.distance_miles,
     weight_lbs: definition.weight_lbs,
     weight_delta_lbs: definition.weight_delta_lbs,
   };
@@ -87,13 +89,17 @@ function formatDurationCellValue(value: number | null): string {
   return value == null ? '' : formatDurationSeconds(value);
 }
 
+function formatDistanceCellValue(value: number | null): string {
+  return value == null ? '' : formatDistanceMiles(value);
+}
+
 function formatWeightCellValue(value: number | null): string {
   return value == null ? '' : formatWeightLbs(value);
 }
 
 type ExerciseFieldKey = keyof Pick<
   ExerciseDefinitionInput,
-  'name' | 'rep_count' | 'duration_seconds' | 'weight_lbs' | 'weight_delta_lbs'
+  'name' | 'rep_count' | 'duration_seconds' | 'distance_miles' | 'weight_lbs' | 'weight_delta_lbs'
 >;
 
 type ExerciseActionsTriggerProps = ComponentPropsWithoutRef<typeof Button> & {
@@ -162,7 +168,6 @@ export function ExerciseDefinitionsView({
 }: ExerciseDefinitionsViewProps) {
   const dataGridHistory = useDataGridHistory();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingDefinition, setEditingDefinition] = useState<ExerciseDefinition | null>(null);
   const [saving, setSaving] = useState(false);
   const [sorting, setSorting] = useState<SortingState>(() => {
     if (typeof window === 'undefined') return [{ id: 'name', desc: false }];
@@ -193,12 +198,6 @@ export function ExerciseDefinitionsView({
   });
 
   const openForCreate = useCallback(() => {
-    setEditingDefinition(null);
-    setDialogOpen(true);
-  }, []);
-
-  const openForEdit = useCallback((definition: ExerciseDefinition) => {
-    setEditingDefinition(definition);
     setDialogOpen(true);
   }, []);
 
@@ -223,6 +222,10 @@ export function ExerciseDefinitionsView({
 
     if (field === 'duration_seconds') {
       next.duration_seconds = rawValue.trim() ? parseDurationInput(rawValue) : null;
+    }
+
+    if (field === 'distance_miles') {
+      next.distance_miles = parseOptionalPositiveDecimal(rawValue, 'Distance');
     }
 
     if (field === 'weight_lbs') {
@@ -263,17 +266,6 @@ export function ExerciseDefinitionsView({
 
   const handleSave = async (input: ExerciseDefinitionInput) => {
     setSaving(true);
-    if (editingDefinition) {
-      try {
-        await onUpdateDefinition(editingDefinition.id, input);
-        setDialogOpen(false);
-        setEditingDefinition(null);
-      } finally {
-        setSaving(false);
-      }
-      return;
-    }
-
     const definitionId = crypto.randomUUID();
     const historyEntryId = dataGridHistory?.recordHistoryEntry({
       undo: () => onRemoveDefinition(definitionId),
@@ -381,6 +373,27 @@ export function ExerciseDefinitionsView({
         />
       ),
     }),
+    columnHelper.accessor('distance_miles', {
+      id: 'distance_miles',
+      header: 'Distance (mi)',
+      size: EXERCISE_DEFINITIONS_GRID_DEFAULT_WIDTHS.distance_miles,
+      minSize: GRID_MIN_COLUMN_WIDTH,
+      meta: { headerClassName: 'text-right', containsEditableInput: true },
+      cell: ({ row }) => (
+        <GridEditableCell
+          value={formatDistanceCellValue(row.original.distance_miles)}
+          navCol={3}
+          type="number"
+          inputMode="decimal"
+          className="!text-right"
+          placeholder="Miles"
+          cellId={row.original.id}
+          deleteResetValue=""
+          normalizeOnCommit={(value) => value.trim()}
+          onChange={(value) => handleInlineUpdate(row.original, 'distance_miles', value)}
+        />
+      ),
+    }),
     columnHelper.accessor('weight_lbs', {
       id: 'weight_lbs',
       header: 'Weight (lb)',
@@ -390,7 +403,7 @@ export function ExerciseDefinitionsView({
       cell: ({ row }) => (
         <GridEditableCell
           value={formatWeightCellValue(row.original.weight_lbs)}
-          navCol={3}
+          navCol={4}
           type="number"
           inputMode="decimal"
           className="!text-right"
@@ -411,7 +424,7 @@ export function ExerciseDefinitionsView({
       cell: ({ row }) => (
         <GridEditableCell
           value={formatWeightCellValue(row.original.weight_delta_lbs)}
-          navCol={4}
+          navCol={5}
           type="number"
           inputMode="decimal"
           className="!text-right"
@@ -435,13 +448,9 @@ export function ExerciseDefinitionsView({
       cell: ({ row }) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <ExerciseActionsTrigger navCol={5} ariaLabel={`Actions for ${row.original.name}`} />
+            <ExerciseActionsTrigger navCol={6} ariaLabel={`Actions for ${row.original.name}`} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-popover">
-            <DropdownMenuItem onClick={() => openForEdit(row.original)}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => { void handleDelete(row.original); }}
               className="text-destructive focus:text-destructive"
@@ -453,7 +462,7 @@ export function ExerciseDefinitionsView({
         </DropdownMenu>
       ),
     }),
-  ], [handleDelete, handleInlineUpdate, openForEdit]);
+  ], [handleDelete, handleInlineUpdate]);
 
   const table = useReactTable({
     data: definitions,
@@ -504,16 +513,11 @@ export function ExerciseDefinitionsView({
 
       <ExerciseDefinitionDialog
         open={dialogOpen}
-        onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) {
-            setEditingDefinition(null);
-          }
-        }}
+        onOpenChange={setDialogOpen}
         onSubmit={handleSave}
         pending={saving}
-        definition={editingDefinition}
-        title={editingDefinition ? 'Edit Exercise' : 'Add Exercise'}
+        definition={null}
+        title="Add Exercise"
       />
     </div>
   );

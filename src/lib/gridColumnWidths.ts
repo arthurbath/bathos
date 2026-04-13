@@ -81,6 +81,7 @@ export const EXERCISE_DEFINITIONS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
   name: 120,
   rep_count: 60,
   duration_seconds: 80,
+  distance_miles: 100,
   weight_lbs: 80,
   weight_delta_lbs: 140,
   [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,

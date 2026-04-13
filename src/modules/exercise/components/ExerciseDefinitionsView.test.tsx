@@ -12,6 +12,7 @@ function buildDefinition(id: string, name: string, overrides: Partial<ExerciseDe
     name,
     rep_count: null,
     duration_seconds: null,
+    distance_miles: null,
     weight_lbs: null,
     weight_delta_lbs: null,
     created_at: '2026-03-09T00:00:00.000Z',
@@ -108,13 +109,33 @@ async function dispatchInputChange(input: HTMLInputElement, value: string) {
   });
 }
 
+async function startEditing(input: HTMLInputElement) {
+  await act(async () => {
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+  await waitForCondition(() => {
+    expect(input.getAttribute('data-grid-editing')).toBe('true');
+  });
+}
+
+async function dispatchEnter(input: HTMLInputElement) {
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+}
+
+function getGridInput(container: HTMLElement, column: number) {
+  return container.querySelector<HTMLInputElement>(`input[data-col="${column}"]`);
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
   vi.restoreAllMocks();
 });
 
 describe('ExerciseDefinitionsView', () => {
-  it('supports adding, editing, and deleting exercises', async () => {
+  it('supports adding, inline editing, and deleting exercises', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     const { container, root } = mount(<Harness />);
@@ -140,6 +161,7 @@ describe('ExerciseDefinitionsView', () => {
       await waitForCondition(() => {
         expect(container.textContent).toContain('Reps');
         expect(container.textContent).toContain('Duration');
+        expect(container.textContent).toContain('Distance (mi)');
         const nameCells = Array.from(container.querySelectorAll('input[data-col="0"]')) as HTMLInputElement[];
         const durationCells = Array.from(container.querySelectorAll('input[data-col="2"]')) as HTMLInputElement[];
         expect(nameCells.some((input) => input.value === 'Plank')).toBe(true);
@@ -151,28 +173,49 @@ describe('ExerciseDefinitionsView', () => {
 
       await waitForCondition(() => {
         const menu = document.body.querySelector('[role="menu"]');
-        expect(menu?.textContent).toContain('Edit');
         expect(menu?.textContent).toContain('Delete');
+        expect(menu?.textContent).not.toContain('Edit');
       });
 
-      const editButton = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) => item.textContent?.includes('Edit'));
-      await click(editButton ?? null);
+      await click(document.body);
 
-      const editNameInput = document.body.querySelector('#exercise-definition-title') as HTMLInputElement | null;
-      const weightToggle = document.body.querySelector('#exercise-definition-has-weight') as HTMLButtonElement | null;
-      if (editNameInput) await dispatchInputChange(editNameInput, 'Weighted plank');
-      await click(weightToggle);
+      const nameInputCell = getGridInput(container, 0);
+      const distanceInputCell = getGridInput(container, 3);
+      const weightInputCell = getGridInput(container, 4);
+      expect(nameInputCell).toBeTruthy();
+      expect(distanceInputCell).toBeTruthy();
+      expect(weightInputCell).toBeTruthy();
 
-      const weightInput = document.body.querySelector('#exercise-definition-weight') as HTMLInputElement | null;
-      if (weightInput) await dispatchInputChange(weightInput, '25');
+      await startEditing(nameInputCell!);
+      await dispatchInputChange(nameInputCell!, 'Weighted plank');
+      await dispatchEnter(nameInputCell!);
 
-      const secondSaveButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent === 'Save');
-      await click(secondSaveButton ?? null);
+      await waitForCondition(() => {
+        expect(getGridInput(container, 0)?.value).toBe('Weighted plank');
+      });
+
+      const liveDistanceInputCell = getGridInput(container, 3);
+      expect(liveDistanceInputCell).toBeTruthy();
+      await startEditing(liveDistanceInputCell!);
+      await dispatchInputChange(liveDistanceInputCell!, '1.5');
+      await dispatchEnter(liveDistanceInputCell!);
+
+      await waitForCondition(() => {
+        expect(getGridInput(container, 3)?.value).toBe('1.5');
+      });
+
+      const liveWeightInputCell = getGridInput(container, 4);
+      expect(liveWeightInputCell).toBeTruthy();
+      await startEditing(liveWeightInputCell!);
+      await dispatchInputChange(liveWeightInputCell!, '25');
+      await dispatchEnter(liveWeightInputCell!);
 
       await waitForCondition(() => {
         const nameCells = Array.from(container.querySelectorAll('input[data-col="0"]')) as HTMLInputElement[];
-        const weightCells = Array.from(container.querySelectorAll('input[data-col="3"]')) as HTMLInputElement[];
+        const distanceCells = Array.from(container.querySelectorAll('input[data-col="3"]')) as HTMLInputElement[];
+        const weightCells = Array.from(container.querySelectorAll('input[data-col="4"]')) as HTMLInputElement[];
         expect(nameCells.some((input) => input.value === 'Weighted plank')).toBe(true);
+        expect(distanceCells.some((input) => input.value === '1.5')).toBe(true);
         expect(weightCells.some((input) => input.value === '25')).toBe(true);
       });
 
