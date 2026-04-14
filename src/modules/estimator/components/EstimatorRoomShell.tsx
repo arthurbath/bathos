@@ -15,7 +15,7 @@ import { ESTIMATOR_SHARED_VOTE_MASKS, getEstimatorVoteOptions } from '@/modules/
 import { extractEstimatorTicketTitlesFromCsv } from '@/modules/estimator/lib/csv';
 import type {
   EstimatorRoomSnapshot,
-  EstimatorRoomMember,
+  EstimatorActiveMember,
   EstimatorTicketSummary,
   EstimatorVoteValue,
   EstimatorVotingMode,
@@ -152,7 +152,7 @@ function MemberActionsMenu({
   onKickMember,
 }: {
   disabled: boolean;
-  member: EstimatorRoomMember;
+  member: EstimatorActiveMember;
   onRenameSelf: () => void;
   onKickMember: () => void;
 }) {

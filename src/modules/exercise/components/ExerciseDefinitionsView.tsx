@@ -27,7 +27,7 @@ interface ExerciseDefinitionsViewProps {
   userId?: string;
   definitions: ExerciseDefinition[];
   onAddDefinition: (input: ExerciseDefinitionInput, id?: string) => Promise<void | ExerciseDefinition>;
-  onUpdateDefinition: (id: string, input: ExerciseDefinitionInput) => Promise<void>;
+  onUpdateDefinition: (id: string, input: ExerciseDefinitionInput) => Promise<void | ExerciseDefinition>;
   onRemoveDefinition: (id: string) => Promise<void>;
   fullView?: boolean;
 }
@@ -281,7 +281,6 @@ export function ExerciseDefinitionsView({
     try {
       await onAddDefinition(input, definitionId);
       setDialogOpen(false);
-      setEditingDefinition(null);
     } catch (error) {
       dataGridHistory?.invalidateHistoryEntry(historyEntryId);
       throw error;

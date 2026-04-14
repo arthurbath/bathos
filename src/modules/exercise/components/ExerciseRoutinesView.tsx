@@ -14,6 +14,7 @@ import { formatDistanceMiles, formatDurationMs, formatDurationSeconds, formatWei
 import type {
   ExerciseDefinition,
   ExerciseDefinitionInput,
+  ExerciseRoutine,
   ExerciseRoutineInput,
   ExerciseRoutineWithItems,
 } from '@/modules/exercise/types/exercise';
@@ -42,8 +43,8 @@ interface ExerciseRoutinesViewProps {
   definitions: ExerciseDefinition[];
   routines: ExerciseRoutineWithItems[];
   onAddDefinition: (input: ExerciseDefinitionInput, id?: string) => Promise<void | ExerciseDefinition>;
-  onUpdateDefinition: (id: string, input: ExerciseDefinitionInput) => Promise<void>;
-  onAddRoutine: (input: ExerciseRoutineInput) => Promise<void>;
+  onUpdateDefinition: (id: string, input: ExerciseDefinitionInput) => Promise<void | ExerciseDefinition>;
+  onAddRoutine: (input: ExerciseRoutineInput) => Promise<void | ExerciseRoutine>;
   onUpdateRoutine: (id: string, input: ExerciseRoutineInput) => Promise<void>;
   onRemoveRoutine: (id: string) => Promise<void>;
 }
@@ -676,7 +677,7 @@ export function ExerciseRoutinesView({
                                   id: 'range',
                                   value: <p>Range: +/- {formatWeightLbs(definition.weight_delta_lbs)} lb</p>,
                                 } : null,
-                              ].filter((value): value is { id: string; value: ReactNode } => value != null);
+                              ].filter((value): value is { id: string; value: JSX.Element } => value != null);
 
                               return metadata.length > 0 ? (
                                 <div className="mt-2 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">

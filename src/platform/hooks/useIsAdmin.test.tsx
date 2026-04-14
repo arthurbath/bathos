@@ -16,14 +16,14 @@ const queryBuilder = {
 queryBuilder.select.mockImplementation(() => queryBuilder);
 queryBuilder.eq.mockImplementation(() => queryBuilder);
 
-const fromMock = vi.fn(() => queryBuilder);
+const fromMock = vi.fn((_table: string) => queryBuilder);
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
     auth: {
       getUser: (...args: unknown[]) => getUserMock(...args),
     },
-    from: (...args: unknown[]) => fromMock(...args),
+    from: (table: string) => fromMock(table),
   },
 }));
 
