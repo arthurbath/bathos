@@ -152,7 +152,7 @@ function MemberActionsMenu({
   onKickMember,
 }: {
   disabled: boolean;
-  member: EstimatorRoomMember;
+  member: EstimatorActiveMember;
   onRenameSelf: () => void;
   onKickMember: () => void;
 }) {

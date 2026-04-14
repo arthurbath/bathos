@@ -281,7 +281,6 @@ export function ExerciseDefinitionsView({
     try {
       await onAddDefinition(input, definitionId);
       setDialogOpen(false);
-      setEditingDefinition(null);
     } catch (error) {
       dataGridHistory?.invalidateHistoryEntry(historyEntryId);
       throw error;
