@@ -23,7 +23,7 @@ vi.mock('@/integrations/supabase/client', () => ({
     auth: {
       getUser: (...args: unknown[]) => getUserMock(...args),
     },
-    from: (...args: [string]) => fromMock(...args),
+    from: (table: string) => fromMock(table),
   },
 }));
 
