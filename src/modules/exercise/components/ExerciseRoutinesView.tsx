@@ -42,8 +42,8 @@ interface ExerciseRoutinesViewProps {
   definitions: ExerciseDefinition[];
   routines: ExerciseRoutineWithItems[];
   onAddDefinition: (input: ExerciseDefinitionInput, id?: string) => Promise<void | ExerciseDefinition>;
-  onUpdateDefinition: (id: string, input: ExerciseDefinitionInput) => Promise<void>;
-  onAddRoutine: (input: ExerciseRoutineInput) => Promise<void>;
+  onUpdateDefinition: (id: string, input: ExerciseDefinitionInput) => Promise<void | ExerciseDefinition>;
+  onAddRoutine: (input: ExerciseRoutineInput) => Promise<void | ExerciseRoutine>;
   onUpdateRoutine: (id: string, input: ExerciseRoutineInput) => Promise<void>;
   onRemoveRoutine: (id: string) => Promise<void>;
 }

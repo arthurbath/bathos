@@ -27,7 +27,7 @@ interface ExerciseDefinitionsViewProps {
   userId?: string;
   definitions: ExerciseDefinition[];
   onAddDefinition: (input: ExerciseDefinitionInput, id?: string) => Promise<void | ExerciseDefinition>;
-  onUpdateDefinition: (id: string, input: ExerciseDefinitionInput) => Promise<void>;
+  onUpdateDefinition: (id: string, input: ExerciseDefinitionInput) => Promise<void | ExerciseDefinition>;
   onRemoveDefinition: (id: string) => Promise<void>;
   fullView?: boolean;
 }
