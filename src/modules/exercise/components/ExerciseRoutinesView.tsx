@@ -364,13 +364,8 @@ export function ExerciseRoutinesView({
             </div>
 
             <section className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-medium">Exercise Library</h3>
-                <Button type="button" variant="outline" size="sm" onClick={() => openCreateDefinition()}>New Exercise</Button>
-              </div>
-
               <div className="max-w-xl space-y-2">
-                <label htmlFor="exercise-routine-definition-search" className="text-sm font-medium">Type to Find</label>
+                <label htmlFor="exercise-routine-definition-search" className="text-sm font-medium">Add Exercises</label>
                 <Popover open={exercisePickerOpen} onOpenChange={(open) => { if (!open && document.activeElement === exercisePickerInputRef.current) return; setExercisePickerOpen(open); }}>
                   <PopoverPrimitive.Anchor asChild>
                     <div>
