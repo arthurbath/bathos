@@ -14,6 +14,7 @@ import { formatDistanceMiles, formatDurationMs, formatDurationSeconds, formatWei
 import type {
   ExerciseDefinition,
   ExerciseDefinitionInput,
+  ExerciseRoutine,
   ExerciseRoutineInput,
   ExerciseRoutineWithItems,
 } from '@/modules/exercise/types/exercise';
