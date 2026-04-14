@@ -98,7 +98,7 @@ interface RequestOptions {
  * Returns `data` directly on success.  Throws the error on permanent failure.
  */
 export async function supabaseRequest<T>(
-  operation: () => Promise<SupabaseResult<T>>,
+  operation: () => PromiseLike<SupabaseResult<T>>,
   options?: RequestOptions,
 ): Promise<T> {
   const maxAttempts = Math.max(1, options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);

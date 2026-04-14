@@ -53,7 +53,7 @@ function ColorPicker({
   navCol,
 }: {
   color: string | null | undefined;
-  onChange: (c: string | null) => void;
+  onChange: (c: string | null) => void | Promise<void>;
   disabled?: boolean;
   navCol?: number;
 }) {
