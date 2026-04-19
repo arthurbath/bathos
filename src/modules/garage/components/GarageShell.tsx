@@ -210,9 +210,12 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
                   <SelectValue placeholder="Select vehicle" />
                 </SelectTrigger>
                 <SelectContent>
-                  {vehicles.map((vehicle) => (
-                    <SelectItem key={vehicle.id} value={vehicle.id}>{vehicle.name}</SelectItem>
-                  ))}
+                  {vehicles
+                    .slice()
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((vehicle) => (
+                      <SelectItem key={vehicle.id} value={vehicle.id}>{vehicle.name}</SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
