@@ -41,6 +41,7 @@ Track vehicle maintenance schedules and service history for each user account. F
 
 - Vehicle profiles with odometer and in-service date tracking
 - Configurable recurring maintenance services by miles and/or months
+- CSV bulk import for services with a downloadable template and overwrite preview
 - Due and upcoming service views based on mileage and time intervals
 - Service visit logging with outcomes and notes
 - Receipt attachment support for service records

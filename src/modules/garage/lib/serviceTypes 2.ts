@@ -7,6 +7,9 @@ export const GARAGE_SERVICE_TYPE_OPTIONS: Array<{ value: GarageServiceType; labe
   { value: 'check', label: 'Check' },
 ];
 
-export function getGarageServiceTypeLabel(value: GarageServiceType): string {
+export const GARAGE_EMPTY_SERVICE_TYPE_LABEL = '—';
+
+export function getGarageServiceTypeLabel(value: GarageServiceType | null): string {
+  if (value === null) return GARAGE_EMPTY_SERVICE_TYPE_LABEL;
   return GARAGE_SERVICE_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }

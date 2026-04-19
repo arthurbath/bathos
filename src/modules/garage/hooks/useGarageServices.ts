@@ -1,8 +1,10 @@
 import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 import { supabaseRequest, showMutationError } from '@/lib/supabaseRequest';
 import type { GarageService, GarageServiceType } from '@/modules/garage/types/garage';
+import type { GarageServiceImportRpcRow } from '@/modules/garage/lib/serviceImport';
 
 function garageServicesQueryKey(userId: string | undefined, vehicleId: string | null | undefined) {
   return ['garage', 'services', userId, vehicleId] as const;
@@ -38,7 +40,7 @@ export function useGarageServices(userId: string | undefined, vehicleId: string 
   const addService = useCallback(async (input: {
     id?: string;
     name: string;
-    type: GarageServiceType;
+    type?: GarageServiceType | null;
     every_miles?: number | null;
     every_months?: number | null;
     monitoring?: boolean;
@@ -56,8 +58,8 @@ export function useGarageServices(userId: string | undefined, vehicleId: string 
             id: input.id,
             user_id: userId,
             vehicle_id: vehicleId,
-            name: input.name,
-            type: input.type,
+            name: input.name.trim(),
+            type: input.type ?? null,
             cadence_type: deriveCadenceType(input.every_miles ?? null, input.every_months ?? null),
             every_miles: input.every_miles ?? null,
             every_months: input.every_months ?? null,
@@ -84,12 +86,16 @@ export function useGarageServices(userId: string | undefined, vehicleId: string 
       const nextEveryMiles = updates.every_miles ?? current?.every_miles ?? null;
       const nextEveryMonths = updates.every_months ?? current?.every_months ?? null;
       const updatedAt = new Date().toISOString();
+      const nextUpdates = {
+        ...updates,
+        name: typeof updates.name === 'string' ? updates.name.trim() : updates.name,
+      };
 
       await supabaseRequest(async () =>
         await supabase
           .from('garage_services')
           .update({
-            ...updates,
+            ...nextUpdates,
             cadence_type: deriveCadenceType(nextEveryMiles, nextEveryMonths),
             updated_at: updatedAt,
           })
@@ -103,6 +109,23 @@ export function useGarageServices(userId: string | undefined, vehicleId: string 
       throw error;
     }
   }, [queryClient, queryKey, refetch, userId, vehicleId]);
+
+  const importServices = useCallback(async (rows: GarageServiceImportRpcRow[]) => {
+    if (!userId || !vehicleId) throw new Error('No active vehicle selected.');
+
+    try {
+      await supabaseRequest(async () =>
+        await supabase.rpc('garage_import_services_csv', {
+          _vehicle_id: vehicleId,
+          _rows: rows as Json,
+        }),
+      );
+      await refetch();
+    } catch (error) {
+      showMutationError(error);
+      throw error;
+    }
+  }, [refetch, userId, vehicleId]);
 
   const removeService = useCallback(async (serviceId: string) => {
     if (!userId || !vehicleId) throw new Error('No active vehicle selected.');
@@ -128,6 +151,7 @@ export function useGarageServices(userId: string | undefined, vehicleId: string 
     loading: !!userId && !!vehicleId && isLoading,
     addService,
     updateService,
+    importServices,
     removeService,
     refetch: async () => {
       await queryClient.invalidateQueries({ queryKey: ['garage', 'services', userId, vehicleId] });

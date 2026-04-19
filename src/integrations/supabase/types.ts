@@ -937,7 +937,7 @@ export type Database = {
           name: string
           notes: string | null
           sort_order: number
-          type: Database["public"]["Enums"]["garage_service_type"]
+          type: Database["public"]["Enums"]["garage_service_type"] | null
           updated_at: string
           user_id: string
           vehicle_id: string
@@ -952,7 +952,7 @@ export type Database = {
           name: string
           notes?: string | null
           sort_order?: number
-          type: Database["public"]["Enums"]["garage_service_type"]
+          type?: Database["public"]["Enums"]["garage_service_type"] | null
           updated_at?: string
           user_id: string
           vehicle_id: string
@@ -967,7 +967,7 @@ export type Database = {
           name?: string
           notes?: string | null
           sort_order?: number
-          type?: Database["public"]["Enums"]["garage_service_type"]
+          type?: Database["public"]["Enums"]["garage_service_type"] | null
           updated_at?: string
           user_id?: string
           vehicle_id?: string
@@ -1543,6 +1543,10 @@ export type Database = {
           _voting_mode: Database["public"]["Enums"]["estimator_voting_mode"]
         }
         Returns: string
+      }
+      garage_import_services_csv: {
+        Args: { _rows: Json; _vehicle_id: string }
+        Returns: Json
       }
       has_role: {
         Args: {

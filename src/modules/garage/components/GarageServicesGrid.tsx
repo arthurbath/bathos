@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createColumnHelper, getCoreRowModel, getSortedRowModel, type Row, type SortingState, useReactTable } from '@tanstack/react-table';
 import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,19 +10,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Ban, CheckCheck, Filter, FilterX, MoreHorizontal, Plus, SkipForward, Trash2 } from 'lucide-react';
+import { Ban, CheckCheck, Download, FileSpreadsheet, Filter, FilterX, MoreHorizontal, Plus, SkipForward, Trash2, Upload } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import { GARAGE_SERVICES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS } from '@/lib/gridColumnWidths';
 import type { GarageService, GarageServiceStatus, GarageServiceType, GarageServicingWithRelations } from '@/modules/garage/types/garage';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { GARAGE_SERVICE_TYPE_OPTIONS, getGarageServiceTypeLabel } from '@/modules/garage/lib/serviceTypes';
+import {
+  buildGarageServiceImportPreview,
+  buildGarageServiceTemplateCsv,
+  type GarageServiceImportPreview,
+} from '@/modules/garage/lib/serviceImport';
+import { validateGarageServiceName } from '@/modules/garage/lib/serviceNames';
+import {
+  GARAGE_EMPTY_SERVICE_TYPE_LABEL,
+  GARAGE_SERVICE_TYPE_OPTIONS,
+  getGarageServiceTypeLabel,
+} from '@/modules/garage/lib/serviceTypes';
 
 const columnHelper = createColumnHelper<GarageService>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
 const SERVICE_ACTIONS_NAV_COL = 7;
 const GARAGE_SERVICES_HISTORY_KEY = 'garage_services';
+const EMPTY_SERVICE_TYPE_SELECT_VALUE = '__none__';
 type GroupByOption = 'none' | 'type';
 type CadenceFilterOption = 'all' | 'recurring' | 'one_off';
 
@@ -47,24 +58,35 @@ function formatMileageInThousands(value: number): string {
   return `${Math.round(value / 1000)}k`;
 }
 
+function isCsvFile(file: File) {
+  const normalizedFileName = file.name.toLowerCase();
+  return (
+    normalizedFileName.endsWith('.csv')
+    || file.type === 'text/csv'
+    || file.type === 'application/vnd.ms-excel'
+  );
+}
+
 function ServiceTypeCell({
   value,
   onChange,
 }: {
-  value: GarageServiceType;
-  onChange: (next: GarageServiceType) => void | Promise<unknown>;
+  value: GarageServiceType | null;
+  onChange: (next: GarageServiceType | null) => void | Promise<unknown>;
 }) {
   const ctx = useDataGrid();
+  const selectedValue = value ?? EMPTY_SERVICE_TYPE_SELECT_VALUE;
 
   return (
-    <Select value={value} onValueChange={(next) => {
+    <Select value={selectedValue} onValueChange={(next) => {
+      const nextValue = next === EMPTY_SERVICE_TYPE_SELECT_VALUE ? null : next as GarageServiceType;
       const historyEntryId = ctx?.registerCellHistoryEntry({
         col: 1,
         undo: () => onChange(value),
-        redo: () => onChange(next as GarageServiceType),
+        redo: () => onChange(nextValue),
       });
       ctx?.onCellCommit(1);
-      const maybePendingChange = onChange(next as GarageServiceType);
+      const maybePendingChange = onChange(nextValue);
       if (maybePendingChange && typeof maybePendingChange === 'object' && 'catch' in maybePendingChange && typeof maybePendingChange.catch === 'function') {
         void maybePendingChange.catch(() => {
           ctx?.invalidateCellHistoryEntry(historyEntryId);
@@ -73,11 +95,14 @@ function ServiceTypeCell({
     }}>
       <SelectTrigger
         className={`h-7 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
-        {...gridSelectTriggerProps(ctx, 1)}
+        {...gridSelectTriggerProps(ctx, 1, {
+          onDeleteReset: value === null ? undefined : () => onChange(null),
+        })}
       >
-        <GridSelectValue />
+        <GridSelectValue placeholder={GARAGE_EMPTY_SERVICE_TYPE_LABEL} />
       </SelectTrigger>
       <SelectContent>
+        <SelectItem value={EMPTY_SERVICE_TYPE_SELECT_VALUE}>{GARAGE_EMPTY_SERVICE_TYPE_LABEL}</SelectItem>
         {GARAGE_SERVICE_TYPE_OPTIONS.map((option) => (
           <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
         ))}
@@ -169,7 +194,7 @@ interface GarageServicesGridProps {
   onAddService: (input: {
     id?: string;
     name: string;
-    type: GarageServiceType;
+    type?: GarageServiceType | null;
     every_miles?: number | null;
     every_months?: number | null;
     monitoring?: boolean;
@@ -177,6 +202,7 @@ interface GarageServicesGridProps {
     sort_order?: number;
   }) => Promise<GarageService>;
   onUpdateService: (id: string, updates: Partial<Omit<GarageService, 'id' | 'user_id' | 'vehicle_id' | 'created_at'>>) => Promise<void>;
+  onImportServices: (rows: GarageServiceImportPreview['rowsToImport']) => Promise<void>;
   onDeleteService: (id: string) => Promise<void>;
 }
 
@@ -189,6 +215,7 @@ export function GarageServicesGrid({
   fullView = false,
   onAddService,
   onUpdateService,
+  onImportServices,
   onDeleteService,
 }: GarageServicesGridProps) {
   const dataGridHistory = useDataGridHistory();
@@ -197,11 +224,19 @@ export function GarageServicesGrid({
   const [saving, setSaving] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [addName, setAddName] = useState('');
-  const [addType, setAddType] = useState<GarageServiceType>('replacement');
+  const [addType, setAddType] = useState<GarageServiceType | null>(null);
   const [addMiles, setAddMiles] = useState('');
   const [addMonths, setAddMonths] = useState('');
   const [addNotes, setAddNotes] = useState('');
   const [viewControlsOpen, setViewControlsOpen] = useState(false);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importValidationBusy, setImportValidationBusy] = useState(false);
+  const [importPreview, setImportPreview] = useState<GarageServiceImportPreview | null>(null);
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+  const [invalidNameWarning, setInvalidNameWarning] = useState<string | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const [nameFilter, setNameFilter] = useState(() => localStorage.getItem('garage_services_nameFilter') ?? '');
   const [cadenceFilter, setCadenceFilter] = useState<CadenceFilterOption>(() => (localStorage.getItem('garage_services_cadenceFilter') as CadenceFilterOption) || 'all');
   const [groupBy, setGroupBy] = useState<GroupByOption>(() => (localStorage.getItem('garage_services_groupBy') as GroupByOption) || 'none');
@@ -227,7 +262,7 @@ export function GarageServicesGrid({
   useEffect(() => {
     if (!addOpen) {
       setAddName('');
-      setAddType('replacement');
+      setAddType(null);
       setAddMiles('');
       setAddMonths('');
       setAddNotes('');
@@ -243,7 +278,7 @@ export function GarageServicesGrid({
     localStorage.setItem('garage_services_cadenceFilter', cadenceFilter);
   }, [cadenceFilter]);
 
-  const getTypeLabel = (value: GarageServiceType) => getGarageServiceTypeLabel(value);
+  const getTypeLabel = (value: GarageServiceType | null) => getGarageServiceTypeLabel(value);
 
   const getGroupKey = (service: GarageService) => {
     if (groupBy === 'type') return getTypeLabel(service.type);
@@ -287,6 +322,7 @@ export function GarageServicesGrid({
     () => services.filter((service) => isVisibleWithCurrentFilters(service)),
     [isVisibleWithCurrentFilters, services],
   );
+  const addNameError = validateGarageServiceName(addName, services);
 
   const latestOutcomeByServiceId = useMemo(() => {
     const byService = new Map<string, { status: GarageServiceStatus; serviceDate: string; mileage: number; createdAt: string }>();
@@ -317,6 +353,98 @@ export function GarageServicesGrid({
 
     return byService;
   }, [servicings]);
+
+  const resetImportState = useCallback(() => {
+    setImportPreview(null);
+    setImportFileName(null);
+    setImportValidationBusy(false);
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = '';
+    }
+  }, []);
+
+  const handleDownloadTemplate = useCallback(() => {
+    const blob = new Blob([buildGarageServiceTemplateCsv()], { type: 'text/csv;charset=utf-8' });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = 'garage-services-template.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  }, []);
+
+  const validateImportFile = useCallback(async (file: File) => {
+    if (!isCsvFile(file)) {
+      toast({
+        title: 'CSV File Required',
+        description: 'Please choose a CSV file to import services.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setImportValidationBusy(true);
+    try {
+      const csvText = await file.text();
+      const preview = buildGarageServiceImportPreview(csvText, services);
+      setImportPreview(preview);
+      setImportFileName(file.name);
+    } catch (error) {
+      setImportPreview(null);
+      setImportFileName(file.name);
+      toast({
+        title: 'Failed to Validate CSV',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setImportValidationBusy(false);
+    }
+  }, [services]);
+
+  const handleImportFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0] ?? null;
+    event.currentTarget.value = '';
+    if (!selectedFile) {
+      resetImportState();
+      return;
+    }
+
+    void validateImportFile(selectedFile);
+  }, [resetImportState, validateImportFile]);
+
+  const handleConfirmImport = useCallback(async () => {
+    if (!importPreview || importPreview.rowsToImport.length === 0) return;
+
+    setImportBusy(true);
+    try {
+      await onImportServices(importPreview.rowsToImport);
+      setImportOpen(false);
+      resetImportState();
+      toast({
+        title: 'Services imported',
+        description: `Added ${importPreview.additions.length} and updated ${importPreview.updates.length} service${importPreview.rowsToImport.length === 1 ? '' : 's'}.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Failed to Import Services',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setImportBusy(false);
+    }
+  }, [importPreview, onImportServices, resetImportState]);
+
+  const handleImportDialogChange = useCallback((open: boolean) => {
+    if (importBusy) return;
+    setImportOpen(open);
+    if (!open) {
+      resetImportState();
+    }
+  }, [importBusy, resetImportState]);
 
   const updateServiceAndNotifyIfHidden = useCallback(async (
     id: string,
@@ -352,7 +480,13 @@ export function GarageServicesGrid({
           <GridEditableCell
             value={row.original.name}
             onChange={(value) => {
-              return updateServiceAndNotifyIfHidden(row.original.id, { name: value.trim() || row.original.name });
+              const trimmed = value.trim();
+              const error = validateGarageServiceName(trimmed, services, row.original.id);
+              if (error) {
+                setInvalidNameWarning(error);
+                return;
+              }
+              return updateServiceAndNotifyIfHidden(row.original.id, { name: trimmed });
             }}
             navCol={0}
           />
@@ -513,7 +647,7 @@ export function GarageServicesGrid({
         ),
       }),
     ],
-    [dataGridHistory, latestOutcomeByServiceId, onAddService, onDeleteService, updateServiceAndNotifyIfHidden],
+    [dataGridHistory, latestOutcomeByServiceId, onAddService, onDeleteService, services, updateServiceAndNotifyIfHidden],
   );
 
   const table = useReactTable({
@@ -532,8 +666,8 @@ export function GarageServicesGrid({
 
   const submitAdd = async () => {
     const name = addName.trim();
-    if (!name) {
-      toast({ title: 'Service name required', variant: 'destructive' });
+    if (addNameError) {
+      toast({ title: 'Invalid service name', description: addNameError, variant: 'destructive' });
       return;
     }
 
@@ -683,6 +817,31 @@ export function GarageServicesGrid({
           >
             <Plus className="h-4 w-4" />
           </Button>
+          <DropdownMenu open={headerMenuOpen} onOpenChange={setHeaderMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 p-0"
+                aria-label="Services menu"
+                disabled={loading || deleteBusy}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-popover">
+              <DropdownMenuItem
+                onClick={() => {
+                  setHeaderMenuOpen(false);
+                  setImportOpen(true);
+                }}
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Bulk Import from CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CardHeader>
       <CardContent className={gridCardContentClassName}>
@@ -700,7 +859,7 @@ export function GarageServicesGrid({
       </CardContent>
 
       <Dialog open={viewControlsOpen} onOpenChange={setViewControlsOpen}>
-        <DialogContent className="w-screen max-w-none rounded-none sm:w-full sm:max-w-sm sm:rounded-lg">
+        <DialogContent aria-describedby={undefined} className="w-screen max-w-none rounded-none sm:w-full sm:max-w-sm sm:rounded-lg">
           <DialogHeader>
             <DialogTitle>Filters & View Settings</DialogTitle>
           </DialogHeader>
@@ -752,8 +911,213 @@ export function GarageServicesGrid({
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={invalidNameWarning !== null} onOpenChange={(open) => {
+        if (!open) setInvalidNameWarning(null);
+      }}>
+        <AlertDialogContent className="rounded-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Invalid Service Name</AlertDialogTitle>
+            <AlertDialogDescription>{invalidNameWarning}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setInvalidNameWarning(null)}>
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={importOpen} onOpenChange={handleImportDialogChange}>
+        <DialogContent aria-describedby={undefined} className="max-h-[85vh] max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg">
+          <DialogHeader>
+            <DialogTitle>Bulk Import Services to {vehicleName}</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="min-h-0 space-y-4 overflow-y-auto">
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>Upload a CSV spreadsheet of services containing exactly these columns in this order:</p>
+              <div className="overflow-x-auto rounded-md border">
+                <table className="min-w-full border-collapse text-sm">
+                  <tbody>
+                    <tr className="bg-muted/30">
+                      <td className="border px-3 py-2 font-medium text-foreground">Name</td>
+                      <td className="border px-3 py-2 font-medium text-foreground">Type</td>
+                      <td className="border px-3 py-2 font-medium text-foreground">Every (Miles)</td>
+                      <td className="border px-3 py-2 font-medium text-foreground">Every (Months)</td>
+                      <td className="border px-3 py-2 font-medium text-foreground">Monitoring</td>
+                      <td className="border px-3 py-2 font-medium text-foreground">Notes</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>Rows import only when every included value is formatted exactly as required.</p>
+              <p>If a row&apos;s Name matches an existing service, that existing service will be overwritten.</p>
+            </div>
+
+            <div className="rounded-md border p-3 text-sm">
+              <p className="font-medium text-foreground">Required Formatting</p>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
+                <li><span className="font-medium text-foreground">Name</span>: Required, non-blank, and unique within the uploaded CSV.</li>
+                <li><span className="font-medium text-foreground">Type</span>: Blank, "Replacement", "Clean/Lube", "Adjustment", or "Check".</li>
+                <li><span className="font-medium text-foreground">Every (Miles)</span>: Blank or a positive whole number.</li>
+                <li><span className="font-medium text-foreground">Every (Months)</span>: Blank or a positive whole number.</li>
+                <li><span className="font-medium text-foreground">Monitoring</span>: Blank, "TRUE", or "FALSE".</li>
+                <li><span className="font-medium text-foreground">Notes</span>: Blank or free text.</li>
+              </ol>
+            </div>
+
+            <Input
+              ref={importFileInputRef}
+              id="garage-service-import-file"
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleImportFileChange}
+              disabled={importBusy}
+              className="hidden"
+            />
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <Button type="button" variant="outline" onClick={handleDownloadTemplate}>
+                <Download className="mr-2 h-4 w-4" />
+                Download Template CSV
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => importFileInputRef.current?.click()}
+                disabled={importBusy}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                {importFileName ? 'Upload Different CSV' : 'Upload CSV'}
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {importFileName
+                  ? (importValidationBusy ? `Validating ${importFileName}…` : importFileName)
+                  : 'No file selected'}
+              </span>
+            </div>
+
+            {importPreview && (
+              <div className="space-y-4">
+                {(importPreview.additions.length > 0
+                  || importPreview.updates.length > 0
+                  || importPreview.invalidRows.length > 0
+                  || importPreview.ignoredDuplicateRows.length > 0
+                  || importPreview.ignoredHeaders.length > 0) && (
+                  <div className="rounded-md border p-3">
+                    <p className="text-sm font-medium text-foreground">If you confirm this import</p>
+                    <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                      {importPreview.additions.length > 0 && (
+                        <li>{importPreview.additions.length} new service{importPreview.additions.length === 1 ? '' : 's'} will be added to {vehicleName}.</li>
+                      )}
+                      {importPreview.updates.length > 0 && (
+                        <li>{importPreview.updates.length} existing service{importPreview.updates.length === 1 ? '' : 's'} in {vehicleName} will be updated.</li>
+                      )}
+                      {importPreview.invalidRows.length > 0 && (
+                        <li>{importPreview.invalidRows.length} invalid row{importPreview.invalidRows.length === 1 ? '' : 's'} will be skipped.</li>
+                      )}
+                      {importPreview.ignoredDuplicateRows.length > 0 && (
+                        <li>{importPreview.ignoredDuplicateRows.length} earlier duplicate row{importPreview.ignoredDuplicateRows.length === 1 ? '' : 's'} will be ignored in favor of a later row.</li>
+                      )}
+                      {importPreview.ignoredHeaders.length > 0 && (
+                        <li>{importPreview.ignoredHeaders.length} unmatched header{importPreview.ignoredHeaders.length === 1 ? '' : 's'} will be ignored.</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+
+                {importPreview.additions.length > 0 && (
+                  <div className="rounded-md border p-3">
+                  <p className="text-sm font-medium text-foreground">New Services</p>
+                  <div className="mt-2 space-y-2">
+                    {importPreview.additions.map((row) => (
+                      <div key={`add-${row.rowNumber}`} className="rounded border px-3 py-2 text-sm">
+                        <p className="font-medium">
+                          {row.name} <span className="text-xs font-normal text-muted-foreground">(CSV row {row.rowNumber})</span>
+                        </p>
+                        <p className="mt-1 text-muted-foreground">{row.fieldSummaries.join(' · ')}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                )}
+
+                {importPreview.updates.length > 0 && (
+                  <div className="rounded-md border p-3">
+                  <p className="text-sm font-medium text-foreground">Updated Services</p>
+                  <div className="mt-2 space-y-2">
+                    {importPreview.updates.map((row) => (
+                      <div key={`update-${row.rowNumber}`} className="rounded border px-3 py-2 text-sm">
+                        <p className="font-medium">
+                          {row.name} <span className="text-xs font-normal text-muted-foreground">(CSV row {row.rowNumber})</span>
+                        </p>
+                        <p className="mt-1 text-muted-foreground">{row.fieldSummaries.join(' · ')}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                )}
+
+                {importPreview.invalidRows.length > 0 && (
+                  <div className="rounded-md border p-3">
+                  <p className="text-sm font-medium text-foreground">Invalid Rows</p>
+                  <div className="mt-2 space-y-2">
+                    {importPreview.invalidRows.map((row) => (
+                      <div key={`invalid-${row.rowNumber}`} className="rounded border px-3 py-2 text-sm">
+                        <p className="font-medium">
+                          {row.name || `Row ${row.rowNumber}`} <span className="text-xs font-normal text-muted-foreground">(CSV row {row.rowNumber})</span>
+                        </p>
+                        <p className="mt-1 text-muted-foreground">{row.reasons.join(' ')}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                )}
+
+                {importPreview.ignoredDuplicateRows.length > 0 && (
+                  <div className="rounded-md border p-3">
+                  <p className="text-sm font-medium text-foreground">Earlier Duplicate Rows</p>
+                  <div className="mt-2 space-y-2">
+                    {importPreview.ignoredDuplicateRows.map((row) => (
+                      <div key={`duplicate-${row.rowNumber}`} className="rounded border px-3 py-2 text-sm">
+                        <p className="font-medium">
+                          {row.name || `Row ${row.rowNumber}`} <span className="text-xs font-normal text-muted-foreground">(CSV row {row.rowNumber})</span>
+                        </p>
+                        <p className="mt-1 text-muted-foreground">Ignored because CSV row {row.replacedByRowNumber} uses the same Name and later rows win.</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                )}
+
+                {importPreview.ignoredHeaders.length > 0 && (
+                  <div className="rounded-md border p-3">
+                  <p className="text-sm font-medium text-foreground">Ignored Headers</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{importPreview.ignoredHeaders.join(', ')}</p>
+                </div>
+                )}
+              </div>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => handleImportDialogChange(false)} disabled={importBusy}>
+              Cancel
+            </Button>
+            <Button
+              data-dialog-confirm="true"
+              type="button"
+              onClick={() => {
+                void handleConfirmImport();
+              }}
+              disabled={!importPreview || importPreview.rowsToImport.length === 0 || importBusy || importValidationBusy}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {importBusy ? 'Importing…' : 'Import Services'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={addOpen} onOpenChange={(open) => !saving && setAddOpen(open)}>
-        <DialogContent className="max-w-lg rounded-lg">
+        <DialogContent aria-describedby={undefined} className="max-w-lg rounded-lg">
           <DialogHeader>
             <DialogTitle>Add Service</DialogTitle>
           </DialogHeader>
@@ -761,12 +1125,19 @@ export function GarageServicesGrid({
             <div className="space-y-2">
               <Label htmlFor="garage-service-name">Name</Label>
               <Input id="garage-service-name" value={addName} onChange={(event) => setAddName(event.target.value)} placeholder="Oil Change" />
+              {addNameError && (
+                <p className="text-sm text-destructive">{addNameError}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select value={addType} onValueChange={(value) => setAddType(value as GarageServiceType)}>
+              <Select
+                value={addType ?? EMPTY_SERVICE_TYPE_SELECT_VALUE}
+                onValueChange={(value) => setAddType(value === EMPTY_SERVICE_TYPE_SELECT_VALUE ? null : value as GarageServiceType)}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={EMPTY_SERVICE_TYPE_SELECT_VALUE}>{GARAGE_EMPTY_SERVICE_TYPE_LABEL}</SelectItem>
                   {GARAGE_SERVICE_TYPE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                   ))}
@@ -790,7 +1161,7 @@ export function GarageServicesGrid({
           </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setAddOpen(false)} disabled={saving}>Cancel</Button>
-            <Button data-dialog-confirm="true" type="button" onClick={() => { void submitAdd(); }} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+            <Button data-dialog-confirm="true" type="button" onClick={() => { void submitAdd(); }} disabled={saving || !!addNameError}>{saving ? 'Saving…' : 'Save'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

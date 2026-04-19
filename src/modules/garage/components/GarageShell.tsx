@@ -93,6 +93,7 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
     loading: servicesLoading,
     addService,
     updateService,
+    importServices,
     removeService,
   } = useGarageServices(userId, selectedVehicle?.id);
 
@@ -277,6 +278,7 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
                   fullView
                   onAddService={addService}
                   onUpdateService={updateService}
+                  onImportServices={importServices}
                   onDeleteService={removeService}
                 />
               </div>

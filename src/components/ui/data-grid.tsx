@@ -141,6 +141,7 @@ export function gridSelectTriggerProps(
     'data-row': ctx?.rowIndex,
     'data-row-id': ctx?.rowId,
     'data-col': navCol,
+    'data-grid-select-trigger': 'true',
     onMouseDown: ctx?.onCellMouseDown,
     onPointerDown: ctx?.onCellPointerDown,
     onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {

@@ -32,7 +32,7 @@ export interface GarageService {
   user_id: string;
   vehicle_id: string;
   name: string;
-  type: GarageServiceType;
+  type: GarageServiceType | null;
   monitoring: boolean;
   cadence_type: GarageCadenceType;
   every_miles: number | null;

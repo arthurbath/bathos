@@ -18,13 +18,18 @@ import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import { GARAGE_SERVICINGS_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS } from '@/lib/gridColumnWidths';
 import { cn } from '@/lib/utils';
-import { GARAGE_SERVICE_TYPE_OPTIONS, getGarageServiceTypeLabel } from '@/modules/garage/lib/serviceTypes';
+import {
+  GARAGE_EMPTY_SERVICE_TYPE_LABEL,
+  GARAGE_SERVICE_TYPE_OPTIONS,
+  getGarageServiceTypeLabel,
+} from '@/modules/garage/lib/serviceTypes';
 import type {
   GarageService,
   GarageServiceType,
   GarageServiceStatus,
   GarageServicingWithRelations,
 } from '@/modules/garage/types/garage';
+import { validateGarageServiceName } from '@/modules/garage/lib/serviceNames';
 
 const columnHelper = createColumnHelper<GarageServicingWithRelations>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
@@ -36,6 +41,7 @@ const SERVICE_OUTCOME_OPTIONS: Array<{ value: GarageServiceStatus; label: string
   { value: 'not_needed_yet', label: 'Not Needed Yet' },
   { value: 'declined', label: 'Declined' },
 ];
+const EMPTY_SERVICE_TYPE_SELECT_VALUE = '__none__';
 
 type OutcomeDraftValue = GarageServiceStatus;
 
@@ -289,7 +295,7 @@ interface GarageServicingsGridProps {
   onOpenReceipt: (storagePath: string) => Promise<void>;
   onAddService: (input: {
     name: string;
-    type: GarageServiceType;
+    type?: GarageServiceType | null;
     every_miles?: number | null;
     every_months?: number | null;
     monitoring?: boolean;
@@ -347,7 +353,7 @@ export function GarageServicingsGrid({
   const [addServiceDialogOpen, setAddServiceDialogOpen] = useState(false);
   const [addServiceBusy, setAddServiceBusy] = useState(false);
   const [addServiceName, setAddServiceName] = useState('');
-  const [addServiceType, setAddServiceType] = useState<GarageServiceType>('replacement');
+  const [addServiceType, setAddServiceType] = useState<GarageServiceType | null>(null);
   const [addServiceMiles, setAddServiceMiles] = useState('');
   const [addServiceMonths, setAddServiceMonths] = useState('');
   const [addServiceNotes, setAddServiceNotes] = useState('');
@@ -426,6 +432,7 @@ export function GarageServicingsGrid({
     }
     return Array.from(byId.values());
   }, [services, sessionAddedServices]);
+  const addServiceNameError = validateGarageServiceName(addServiceName, availableServices);
 
   const servicesById = useMemo(() => {
     const map = new Map<string, GarageService>();
@@ -461,7 +468,7 @@ export function GarageServicingsGrid({
     const query = servicePickerQuery.trim().toLowerCase();
     if (!query) return addableServices;
     return addableServices.filter((service) => {
-      const haystack = `${service.name} ${service.type} ${getGarageServiceTypeLabel(service.type)}`.toLowerCase();
+      const haystack = `${service.name} ${service.type ?? ''} ${getGarageServiceTypeLabel(service.type)}`.toLowerCase();
       return haystack.includes(query);
     });
   }, [addableServices, servicePickerQuery]);
@@ -530,7 +537,7 @@ export function GarageServicingsGrid({
   const openAddServiceDialog = useCallback((seedName: string) => {
     setServicePickerOpen(false);
     setAddServiceName(seedName);
-    setAddServiceType('replacement');
+    setAddServiceType(null);
     setAddServiceMiles('');
     setAddServiceMonths('');
     setAddServiceNotes('');
@@ -539,8 +546,8 @@ export function GarageServicingsGrid({
 
   const submitAddService = useCallback(async () => {
     const name = addServiceName.trim();
-    if (!name) {
-      toast({ title: 'Service name required', variant: 'destructive' });
+    if (addServiceNameError) {
+      toast({ title: 'Invalid service name', description: addServiceNameError, variant: 'destructive' });
       return;
     }
 
@@ -575,7 +582,7 @@ export function GarageServicingsGrid({
     } finally {
       setAddServiceBusy(false);
     }
-  }, [addServiceMonths, addServiceMiles, addServiceName, addServiceNotes, addServiceOutcome, addServiceType, onAddService]);
+  }, [addServiceMonths, addServiceMiles, addServiceName, addServiceNameError, addServiceNotes, addServiceOutcome, addServiceType, onAddService]);
 
   const removeServiceOutcome = useCallback((serviceId: string) => {
     setFormState((prev) => {
@@ -936,7 +943,7 @@ export function GarageServicingsGrid({
         setDialogOpen(open);
         if (!open) setServiceDatePickerOpen(false);
       }}>
-        <DialogContent className="max-h-[85vh] max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg">
+        <DialogContent aria-describedby={undefined} className="max-h-[85vh] max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg">
           <DialogHeader>
             <DialogTitle>{formState.id ? 'Servicing Detail' : 'Add Servicing'}</DialogTitle>
           </DialogHeader>
@@ -1415,7 +1422,7 @@ export function GarageServicingsGrid({
       </Dialog>
 
       <Dialog open={addServiceDialogOpen} onOpenChange={(open) => !addServiceBusy && setAddServiceDialogOpen(open)}>
-        <DialogContent className="max-w-lg rounded-lg">
+        <DialogContent aria-describedby={undefined} className="max-w-lg rounded-lg">
           <DialogHeader>
             <DialogTitle>Add Service</DialogTitle>
           </DialogHeader>
@@ -1428,12 +1435,19 @@ export function GarageServicingsGrid({
                 onChange={(event) => setAddServiceName(event.target.value)}
                 placeholder="Oil Change"
               />
+              {addServiceNameError && (
+                <p className="text-sm text-destructive">{addServiceNameError}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select value={addServiceType} onValueChange={(value) => setAddServiceType(value as GarageServiceType)}>
+              <Select
+                value={addServiceType ?? EMPTY_SERVICE_TYPE_SELECT_VALUE}
+                onValueChange={(value) => setAddServiceType(value === EMPTY_SERVICE_TYPE_SELECT_VALUE ? null : value as GarageServiceType)}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={EMPTY_SERVICE_TYPE_SELECT_VALUE}>{GARAGE_EMPTY_SERVICE_TYPE_LABEL}</SelectItem>
                   {GARAGE_SERVICE_TYPE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                   ))}
@@ -1474,7 +1488,7 @@ export function GarageServicingsGrid({
           </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setAddServiceDialogOpen(false)} disabled={addServiceBusy}>Cancel</Button>
-            <Button data-dialog-confirm="true" type="button" onClick={() => { void submitAddService(); }} disabled={addServiceBusy}>{addServiceBusy ? 'Saving…' : 'Save'}</Button>
+            <Button data-dialog-confirm="true" type="button" onClick={() => { void submitAddService(); }} disabled={addServiceBusy || !!addServiceNameError}>{addServiceBusy ? 'Saving…' : 'Save'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
