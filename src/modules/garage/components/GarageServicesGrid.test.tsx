@@ -571,7 +571,7 @@ describe('GarageServicesGrid focus scrolling', () => {
       name: 'Brake Service',
       type: null,
       monitoring: false,
-      cadence_type: 'no_interval',
+      cadence_type: 'no_interval' as const,
       every_miles: null,
       every_months: null,
       sort_order: 1,
