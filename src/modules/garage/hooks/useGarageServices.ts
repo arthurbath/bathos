@@ -117,7 +117,7 @@ export function useGarageServices(userId: string | undefined, vehicleId: string 
       await supabaseRequest(async () =>
         await supabase.rpc('garage_import_services_csv', {
           _vehicle_id: vehicleId,
-          _rows: rows as Json,
+          _rows: rows as unknown as Json,
         }),
       );
       await refetch();
