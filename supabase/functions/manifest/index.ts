@@ -9,7 +9,7 @@ const corsHeaders = {
 /** Allowed module configs – prevents arbitrary values in the manifest. */
 const MODULES: Record<string, { name: string; icon: string; startUrl: string }> = {
   budget:  { name: 'Budget',          icon: '/module-budget.png',          startUrl: '/budget/summary' },
-  drawers: { name: 'Drawer Planner',  icon: '/module-drawer-planner.png',  startUrl: '/drawers/plan' },
+  drawers: { name: 'Drawers',         icon: '/module-drawers.png',         startUrl: '/drawers/plan' },
   garage:  { name: 'Garage',          icon: '/module-garage.png',          startUrl: '/garage/due' },
   exercise:{ name: 'Exercise',        icon: '/module-exercise.png',        startUrl: '/exercise/run' },
   admin:   { name: 'Administration',  icon: '/module-administration.png',  startUrl: '/admin' },

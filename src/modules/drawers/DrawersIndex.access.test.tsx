@@ -24,8 +24,8 @@ vi.mock('@/modules/drawers/components/DrawersHouseholdSetup', () => ({
   DrawersHouseholdSetup: () => <div data-testid="drawers-setup" />,
 }));
 
-vi.mock('@/modules/drawers/components/DrawersPlanner', () => ({
-  DrawersPlanner: () => <div data-testid="drawers-planner" />,
+vi.mock('@/modules/drawers/components/DrawersView', () => ({
+  DrawersView: () => <div data-testid="drawers-view" />,
 }));
 
 function renderComponent() {
@@ -86,7 +86,7 @@ describe('DrawersIndex access', () => {
     }
   });
 
-  it('shows planner for signed-in users with a drawers household', () => {
+  it('shows drawers view for signed-in users with a drawers household', () => {
     mockAuth.mockReturnValue({
       user: { id: 'user-1' },
       loading: false,
@@ -119,7 +119,7 @@ describe('DrawersIndex access', () => {
 
     const { container, root } = renderComponent();
     try {
-      expect(container.querySelector('[data-testid="drawers-planner"]')).toBeTruthy();
+      expect(container.querySelector('[data-testid="drawers-view"]')).toBeTruthy();
     } finally {
       cleanup(root, container);
     }

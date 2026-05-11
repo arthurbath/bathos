@@ -8,7 +8,7 @@ import { ColorPicker } from "@/components/ManagedListSection";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DataGridHistoryProvider, useDataGridHistory } from "@/components/ui/data-grid-history";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
-import { DataGrid, GridCheckboxCell, GridCurrencyCell, GridEditableCell, GridPercentCell, GridSelectValue, gridMenuTriggerProps, gridNavProps, gridSelectTriggerProps, useDataGrid } from "@/components/ui/data-grid";
+import { DataGrid, GridCheckboxCell, GridCurrencyCell, GridEditableCell, GridPercentCell, GridSelectValue, GridUrlCell, gridMenuTriggerProps, gridNavProps, gridSelectTriggerProps, useDataGrid } from "@/components/ui/data-grid";
 
 if (typeof HTMLElement !== "undefined" && typeof HTMLElement.prototype.scrollIntoView !== "function") {
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
@@ -21,6 +21,12 @@ type RowData = {
   id: string;
   name: string;
   note: string;
+};
+
+type UrlRowData = {
+  id: string;
+  name: string;
+  url: string;
 };
 
 type ConditionalRowData = {
@@ -95,8 +101,57 @@ type NullPlaceholderRowData = {
 
 
 const columnHelper = createColumnHelper<RowData>();
+const urlColumnHelper = createColumnHelper<UrlRowData>();
 const asyncNoteColumnHelper = createColumnHelper<AsyncNoteRowData>();
 const asyncCheckboxColumnHelper = createColumnHelper<AsyncCheckboxRowData>();
+
+function UrlGridHarness() {
+  const [rows, setRows] = React.useState<UrlRowData[]>([
+    { id: "row-a", name: "Alpha", url: "https://example.com/a" },
+    { id: "row-b", name: "Bravo", url: "https://example.com/b" },
+  ]);
+
+  const updateRow = React.useCallback((id: string, field: "name" | "url", value: string) => {
+    setRows((prev) => prev.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
+  }, []);
+
+  const columns = React.useMemo(
+    () => [
+      urlColumnHelper.accessor("name", {
+        id: "name",
+        header: "Name",
+        cell: ({ row, getValue }) => (
+          <GridEditableCell
+            value={getValue()}
+            navCol={0}
+            onChange={(value) => updateRow(row.original.id, "name", value)}
+          />
+        ),
+      }),
+      urlColumnHelper.accessor("url", {
+        id: "url",
+        header: "URL",
+        cell: ({ row, getValue }) => (
+          <GridUrlCell
+            value={getValue()}
+            navCol={1}
+            onChange={(value) => updateRow(row.original.id, "url", value)}
+          />
+        ),
+      }),
+    ],
+    [updateRow],
+  );
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return <DataGrid table={table} />;
+}
 
 function SortableGridHarness({ initialSorting, onUpdate }: { initialSorting: SortingState; onUpdate?: () => void }) {
   const [rows, setRows] = React.useState<RowData[]>([
@@ -1398,7 +1453,7 @@ async function dispatchHistoryShortcut({
   });
 }
 
-async function dispatchArrow(input: HTMLInputElement, key: "ArrowUp" | "ArrowDown") {
+async function dispatchArrow(input: HTMLInputElement, key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight") {
   await act(async () => {
     input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
   });
@@ -1485,6 +1540,58 @@ describe("DataGrid focus after commit resort", () => {
       await waitForCondition(() => {
         expect(input!.getAttribute("data-grid-editing")).toBe("true");
         expect(input!.readOnly).toBe(false);
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("keeps URL cells keyboard-navigable until enter starts editing", async () => {
+    const { container, root } = mount(<UrlGridHarness />);
+    try {
+      const nameInput = findInputByValue(container, "Alpha");
+      expect(nameInput).not.toBeNull();
+      await startEditing(nameInput!);
+      await dispatchTab(nameInput!);
+
+      await waitForCondition(() => {
+        const active = document.activeElement as HTMLInputElement | null;
+        expect(active?.value).toBe("https://example.com/a");
+        expect(active?.getAttribute("data-grid-editing")).toBe("false");
+        expect(active?.readOnly).toBe(true);
+      });
+
+      const firstUrlInput = document.activeElement as HTMLInputElement;
+      await dispatchArrow(firstUrlInput, "ArrowDown");
+
+      await waitForCondition(() => {
+        const active = document.activeElement as HTMLInputElement | null;
+        expect(active?.value).toBe("https://example.com/b");
+        expect(active?.getAttribute("data-grid-editing")).toBe("false");
+        expect(active?.readOnly).toBe(true);
+      });
+
+      const secondUrlInput = document.activeElement as HTMLInputElement;
+      await dispatchEnter(secondUrlInput);
+
+      await waitForCondition(() => {
+        expect(secondUrlInput.getAttribute("data-grid-editing")).toBe("true");
+        expect(secondUrlInput.readOnly).toBe(false);
+        expect(secondUrlInput.selectionStart).toBe(0);
+        expect(secondUrlInput.selectionEnd).toBe(secondUrlInput.value.length);
+      });
+
+      await dispatchArrow(secondUrlInput, "ArrowUp");
+      expect(document.activeElement).toBe(secondUrlInput);
+
+      await dispatchInputChange(secondUrlInput, "https://example.com/replaced");
+      await dispatchEnter(secondUrlInput);
+
+      await waitForCondition(() => {
+        const updatedInput = findInputByValue(container, "https://example.com/replaced");
+        expect(updatedInput).not.toBeNull();
+        expect(updatedInput?.getAttribute("data-grid-editing")).toBe("false");
+        expect(updatedInput?.readOnly).toBe(true);
       });
     } finally {
       unmount(root, container);

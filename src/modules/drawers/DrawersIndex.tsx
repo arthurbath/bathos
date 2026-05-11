@@ -2,7 +2,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAuth } from '@/hooks/useAuth';
 import AuthPage from '@/platform/components/AuthPage';
 import { DrawersHouseholdSetup } from '@/modules/drawers/components/DrawersHouseholdSetup';
-import { DrawersPlanner } from '@/modules/drawers/components/DrawersPlanner';
+import { DrawersView } from '@/modules/drawers/components/DrawersView';
 import { useDrawersHouseholdData } from '@/modules/drawers/hooks/useDrawersHouseholdData';
 
 export default function DrawersIndex() {
@@ -50,7 +50,7 @@ export default function DrawersIndex() {
   }
 
   return (
-      <DrawersPlanner
+      <DrawersView
         household={household}
         userId={user.id}
         displayName={displayName}

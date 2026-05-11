@@ -6,6 +6,7 @@
  * - /garage/* → 'garage'
  * - /exercise/* → 'exercise'
  * - /estimator/* → 'estimator'
+ * - /wardrobe/* → 'wardrobe'
  * - everything else → null (platform root)
  */
 
@@ -15,9 +16,10 @@ const PATH_MODULE_MAP: Record<string, string> = {
   garage: 'garage',
   exercise: 'exercise',
   estimator: 'estimator',
+  wardrobe: 'wardrobe',
 };
 
-export type ModuleId = 'budget' | 'drawers' | 'garage' | 'exercise' | 'estimator' | null;
+export type ModuleId = 'budget' | 'drawers' | 'garage' | 'exercise' | 'estimator' | 'wardrobe' | null;
 
 export function useHostModule(): ModuleId {
   const firstSegment = window.location.pathname.split('/')[1];

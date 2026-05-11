@@ -1,4 +1,4 @@
--- Add configurable frame color for Drawer Planner units.
+-- Add configurable frame color for Drawers units.
 ALTER TABLE public.drawers_units
 ADD COLUMN IF NOT EXISTS frame_color text;
 

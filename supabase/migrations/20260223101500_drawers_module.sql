@@ -1,4 +1,4 @@
--- Drawer Planner beta module schema
+-- Drawers beta module schema
 
 CREATE TABLE public.drawers_households (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

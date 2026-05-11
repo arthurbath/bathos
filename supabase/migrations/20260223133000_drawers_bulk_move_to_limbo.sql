@@ -1,4 +1,4 @@
--- Drawer Planner: bulk move all cubby drawers in a unit to limbo in one transaction
+-- Drawers: bulk move all cubby drawers in a unit to limbo in one transaction
 
 CREATE OR REPLACE FUNCTION public.move_drawers_unit_drawers_to_limbo(_unit_id uuid)
 RETURNS integer

@@ -6,9 +6,10 @@ import {
   type Row,
 } from '@tanstack/react-table';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { SelectValue } from '@/components/ui/select';
-import { ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUp, ArrowDown, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GRID_ACTIONS_COLUMN_ID } from '@/lib/gridColumnWidths';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
@@ -1555,6 +1556,350 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
       }}
       className={cn(CELL_INPUT_CLASS, !editing && 'caret-transparent', 'disabled:opacity-60 disabled:cursor-not-allowed', className)}
     />
+  );
+}
+
+export function validateHttpUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return 'Please enter a valid URL that begins with http:// or https://.';
+  }
+  const hasControlCharacter = Array.from(trimmed).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
+  });
+  if (/[\s<>"'`{}|\\^]/.test(trimmed) || hasControlCharacter) {
+    return 'Please enter a valid URL.';
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return 'Please enter a valid URL that begins with http:// or https://.';
+    }
+  } catch {
+    return 'Please enter a valid URL.';
+  }
+  return null;
+}
+
+export function GridUrlCell({
+  value,
+  onChange,
+  navCol,
+  className,
+  disabled = false,
+  placeholder,
+  validateUrl = validateHttpUrl,
+  onInvalidUrl,
+}: {
+  value: GridInputValue;
+  onChange: (v: string) => void | Promise<unknown>;
+  navCol: number;
+  className?: string;
+  disabled?: boolean;
+  placeholder?: string;
+  validateUrl?: (value: string) => string | null;
+  onInvalidUrl?: (message: string) => void;
+}) {
+  const ctx = useDataGrid();
+  const normalizedValue = normalizeGridInputValue(value);
+  const [local, setLocal] = useState(normalizedValue);
+  const [editing, setEditing] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+  const pointerDownRef = useRef(false);
+  const suppressBlurCommitRef = useRef(false);
+  const editStartValueRef = useRef(normalizedValue);
+  const valueRef = useRef(normalizedValue);
+  const pendingCommittedValueRef = useRef<string | null>(null);
+  const commitBaseValueRef = useRef<string | null>(null);
+  const awaitingAsyncCommitRef = useRef(false);
+  const openButtonNavCol = navCol + 0.1;
+  const canOpen = normalizedValue.trim().length > 0 && validateUrl(normalizedValue) === null;
+
+  useEffect(() => {
+    valueRef.current = normalizedValue;
+  }, [normalizedValue]);
+
+  useEffect(() => {
+    const nextValue = normalizedValue;
+    const pendingCommittedValue = pendingCommittedValueRef.current;
+    const commitBaseValue = commitBaseValueRef.current;
+
+    if (pendingCommittedValue !== null) {
+      if (!awaitingAsyncCommitRef.current && nextValue === pendingCommittedValue) {
+        pendingCommittedValueRef.current = null;
+        commitBaseValueRef.current = null;
+        setLocal(nextValue);
+        editStartValueRef.current = nextValue;
+        return;
+      }
+      if (!awaitingAsyncCommitRef.current && commitBaseValue !== null && nextValue !== commitBaseValue) {
+        pendingCommittedValueRef.current = null;
+        commitBaseValueRef.current = null;
+        setLocal(nextValue);
+        editStartValueRef.current = nextValue;
+      }
+      return;
+    }
+
+    if (!focused || !editing) {
+      setLocal(nextValue);
+      if (!editing) editStartValueRef.current = nextValue;
+    }
+  }, [normalizedValue, focused, editing]);
+
+  const commitValue = (nextValue: string) => {
+    if (disabled) return false;
+    const committedValue = nextValue.trim();
+    const validationMessage = validateUrl(committedValue);
+    if (validationMessage) {
+      onInvalidUrl?.(validationMessage);
+      setLocal(normalizedValue);
+      editStartValueRef.current = normalizedValue;
+      return false;
+    }
+
+    const currentValue = normalizedValue;
+    if (committedValue === currentValue) {
+      setLocal(committedValue);
+      editStartValueRef.current = committedValue;
+      return true;
+    }
+
+    setLocal(committedValue);
+    pendingCommittedValueRef.current = committedValue;
+    commitBaseValueRef.current = currentValue;
+    const historyEntryId = ctx?.registerCellHistoryEntry({
+      col: navCol,
+      undo: () => onChange(currentValue),
+      redo: () => onChange(committedValue),
+    });
+    ctx?.onCellCommit(navCol);
+    const maybePendingChange = onChange(committedValue);
+    if (isPromiseLike(maybePendingChange)) {
+      awaitingAsyncCommitRef.current = true;
+      void Promise.resolve(maybePendingChange).then(() => {
+        awaitingAsyncCommitRef.current = false;
+        const pendingValue = pendingCommittedValueRef.current;
+        if (pendingValue === null) return;
+        const latestValue = valueRef.current;
+        const commitBaseValue = commitBaseValueRef.current;
+        if (latestValue === pendingValue) {
+          pendingCommittedValueRef.current = null;
+          commitBaseValueRef.current = null;
+          return;
+        }
+        if (commitBaseValue !== null && latestValue !== commitBaseValue) {
+          pendingCommittedValueRef.current = null;
+          commitBaseValueRef.current = null;
+          setLocal(latestValue);
+          editStartValueRef.current = latestValue;
+        }
+      }).catch(() => {
+        awaitingAsyncCommitRef.current = false;
+        ctx?.invalidateCellHistoryEntry(historyEntryId);
+        const rollbackValue = commitBaseValueRef.current ?? valueRef.current;
+        pendingCommittedValueRef.current = null;
+        commitBaseValueRef.current = null;
+        setLocal(rollbackValue);
+        editStartValueRef.current = rollbackValue;
+      });
+    } else {
+      awaitingAsyncCommitRef.current = false;
+    }
+    return true;
+  };
+
+  const startEditingAndSelect = () => {
+    if (!editing) {
+      editStartValueRef.current = local;
+    }
+    setEditing(true);
+    scheduleInNextFrame(() => ref.current?.select());
+  };
+
+  const startEditingWithKey = (key: string) => {
+    if (!editing) {
+      editStartValueRef.current = local;
+    }
+    setEditing(true);
+    setLocal(key);
+    scheduleInNextFrame(() => focusInputAtEnd(ref.current));
+  };
+
+  const stopEditing = () => {
+    setEditing(false);
+    scheduleInNextFrame(() => focusInputAtStart(ref.current));
+  };
+
+  const handlePressStart = () => {
+    pointerDownRef.current = true;
+    startEditingAndSelect();
+  };
+
+  const openUrl = () => {
+    const url = normalizedValue.trim();
+    const validationMessage = validateUrl(url);
+    if (validationMessage) {
+      onInvalidUrl?.(validationMessage);
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  return (
+    <div className="flex min-w-[120px] items-center gap-1">
+      <Input
+        ref={ref}
+        type="url"
+        value={local}
+        readOnly={!editing}
+        disabled={disabled}
+        placeholder={placeholder ?? GRID_NULL_PLACEHOLDER}
+        data-row={ctx?.rowIndex}
+        data-row-id={ctx?.rowId}
+        data-col={navCol}
+        data-grid-editing={editing ? 'true' : 'false'}
+        onChange={(event) => { if (editing) setLocal(event.target.value); }}
+        onMouseDown={() => {
+          if (disabled) return;
+          ctx?.onCellMouseDown();
+          handlePressStart();
+        }}
+        onPointerDown={(event) => {
+          if (disabled) return;
+          if (event.pointerType === 'mouse') return;
+          ctx?.onCellPointerDown();
+          handlePressStart();
+        }}
+        onFocus={() => {
+          if (disabled) return;
+          setFocused(true);
+          if (!pointerDownRef.current) {
+            setEditing(false);
+            scheduleInNextFrame(() => setInputCaretAtStart(ref.current));
+          }
+          pointerDownRef.current = false;
+        }}
+        onBlur={() => {
+          if (suppressBlurCommitRef.current) {
+            suppressBlurCommitRef.current = false;
+          } else if (editing) {
+            commitValue(local);
+          }
+          setFocused(false);
+          setEditing(false);
+          pointerDownRef.current = false;
+        }}
+        onKeyDown={(event) => {
+          if (disabled) return;
+          if (!ctx) {
+            if (!editing) {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                startEditingAndSelect();
+                return;
+              }
+              if (isPrintableEntryKey(event)) {
+                event.preventDefault();
+                startEditingWithKey(event.key);
+              }
+              return;
+            }
+
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              if (commitValue(local)) stopEditing();
+              return;
+            }
+
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              awaitingAsyncCommitRef.current = false;
+              pendingCommittedValueRef.current = null;
+              commitBaseValueRef.current = null;
+              setLocal(editStartValueRef.current);
+              stopEditing();
+            }
+            return;
+          }
+
+          if (!editing) {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              startEditingAndSelect();
+              return;
+            }
+            if (isPrintableEntryKey(event)) {
+              event.preventDefault();
+              startEditingWithKey(event.key);
+              return;
+            }
+            ctx.onCellKeyDown(event);
+            return;
+          }
+
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            if (commitValue(local)) stopEditing();
+            return;
+          }
+
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            awaitingAsyncCommitRef.current = false;
+            pendingCommittedValueRef.current = null;
+            commitBaseValueRef.current = null;
+            setLocal(editStartValueRef.current);
+            stopEditing();
+            return;
+          }
+
+          if (event.key === 'Tab') {
+            suppressBlurCommitRef.current = true;
+            const committed = commitValue(local);
+            if (!committed) {
+              event.preventDefault();
+              suppressBlurCommitRef.current = false;
+              scheduleInNextFrame(() => ref.current?.select());
+              return;
+            }
+            const moved = ctx.onCellKeyDown(event);
+            if (!moved) suppressBlurCommitRef.current = false;
+          }
+        }}
+        className={cn(CELL_INPUT_CLASS, !editing && 'caret-transparent', '!min-w-0 flex-1', className)}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="h-7 w-7 shrink-0 border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))]"
+        aria-label="Open URL"
+        disabled={disabled || !canOpen}
+        data-row={ctx?.rowIndex}
+        data-row-id={ctx?.rowId}
+        data-col={openButtonNavCol}
+        data-grid-focus-only="true"
+        onMouseDown={ctx?.onCellMouseDown}
+        onPointerDown={ctx?.onCellPointerDown}
+        onClick={openUrl}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openUrl();
+            return;
+          }
+          if (isGridNavigationKey(event.key)) {
+            ctx?.onCellKeyDown(event);
+          }
+        }}
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+      </Button>
+    </div>
   );
 }
 

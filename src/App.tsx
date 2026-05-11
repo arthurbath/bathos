@@ -24,6 +24,7 @@ import Index from "./pages/Index";
 import DrawersIndex from "@/modules/drawers/DrawersIndex";
 import GarageIndex from "@/modules/garage/GarageIndex";
 import ExerciseIndex from "@/modules/exercise/ExerciseIndex";
+import WardrobeIndex from "@/modules/wardrobe/WardrobeIndex";
 import EstimatorIndex from "@/modules/estimator/EstimatorIndex";
 import EstimatorRoomPage from "@/modules/estimator/EstimatorRoomPage";
 import NotFound from "./pages/NotFound";
@@ -106,7 +107,7 @@ function AppRoutes() {
         <Route path="/budget/config" element={<Index />} />
         <Route path="/budget/restore" element={<Navigate to="/budget/config" replace />} />
 
-        {/* Drawer Planner module */}
+        {/* Drawers module */}
         <Route path="/drawers" element={<Navigate to="/drawers/plan" replace />} />
         <Route path="/drawers/plan" element={<DrawersIndex />} />
         <Route path="/drawers/config" element={<DrawersIndex />} />
@@ -123,6 +124,10 @@ function AppRoutes() {
         <Route path="/exercise/run" element={<Navigate to="/exercise/routines" replace />} />
         <Route path="/exercise/routines" element={<ExerciseIndex />} />
         <Route path="/exercise/exercises" element={<ExerciseIndex />} />
+
+        {/* Wardrobe module */}
+        <Route path="/wardrobe" element={<Navigate to="/wardrobe/items" replace />} />
+        <Route path="/wardrobe/items" element={<WardrobeIndex />} />
 
         {/* Ticket Estimator module */}
         <Route path="/estimator" element={<EstimatorIndex />} />

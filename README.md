@@ -22,7 +22,7 @@ Split shared expenses fairly between two partners. The Budget module calculates 
 
 Accessible at [bath.garden/budget/summary](https://bath.garden/budget/summary).
 
-### Drawer Planner
+### Drawers
 
 Plan and label Kallax-style cubby layouts across one or more named units in a shared household space. Features include:
 
@@ -61,12 +61,24 @@ Run lightweight planning-poker style estimation rooms without requiring BathOS a
 
 Accessible at [bath.garden/estimator](https://bath.garden/estimator).
 
+### Wardrobe
+
+Track clothing items for a personal wardrobe. Features include:
+
+- Full-width data grid for wardrobe item records
+- Optional category and status fields with predefined system values
+- Status filtering and grouping by category, brand, or status
+- URL field validation with open-link support
+- Row duplication and deletion from the item actions menu
+
+Accessible at [bath.garden/wardrobe/items](https://bath.garden/wardrobe/items).
+
 ## Development notes
 
 - Built with React, TypeScript, Vite, Tailwind CSS, and Supabase
 - Modules are isolated under `src/modules/[name]/` — removing one should not break another
-- Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`, `estimator_`) for clarity
-- Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`, `/estimator/...`)
+- Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`, `estimator_`, `wardrobe_`) for clarity
+- Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`, `/estimator/...`, `/wardrobe/...`)
 - See `docs/agents/ARCHITECTURE.md` for structure, `docs/agents/MODULE_GUIDE.md` for adding modules, and `docs/human/STYLE_GUIDE.md` for design conventions
 
 ### Dev Console Bridge (Safari + Vite)

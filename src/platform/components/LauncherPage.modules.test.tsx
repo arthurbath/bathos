@@ -62,7 +62,7 @@ describe('LauncherPage modules', () => {
     mockIsAdmin.mockReset();
   });
 
-  it('shows Budget, Drawer Planner, Garage, and Ticket Estimator for signed-in users', () => {
+  it('shows general modules with Wardrobe beneath Ticket Estimator for signed-in users', () => {
     mockAuthContext.mockReturnValue({
       user: { id: 'user-1' },
       loading: false,
@@ -74,10 +74,15 @@ describe('LauncherPage modules', () => {
 
     try {
       expect(container.textContent).toContain('Budget');
-      expect(container.textContent).toContain('Drawer Planner');
+      expect(container.textContent).toContain('Drawers');
       expect(container.textContent).toContain('Garage');
       expect(container.textContent).toContain('Ticket Estimator');
+      expect(container.textContent).toContain('Wardrobe');
       expect(container.textContent).not.toContain('Administration');
+      const moduleLabels = Array.from(container.querySelectorAll('a')).map((link) => link.textContent ?? '');
+      expect(moduleLabels.map((label) => (
+        ['Budget', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe'].find((moduleName) => label.includes(moduleName))
+      )).filter(Boolean)).toEqual(['Budget', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe']);
       expect(mockNavigate).not.toHaveBeenCalledWith('/budget/summary', { replace: true });
     } finally {
       cleanup(root, container);
@@ -97,9 +102,14 @@ describe('LauncherPage modules', () => {
     try {
       expect(container.textContent).toContain('Garage');
       expect(container.textContent).toContain('Ticket Estimator');
+      expect(container.textContent).toContain('Wardrobe');
       expect(container.textContent).toContain('Exercise');
       expect(container.textContent).toContain('Administration');
       expect(container.textContent).toContain('Admin');
+      const moduleLabels = Array.from(container.querySelectorAll('a')).map((link) => link.textContent ?? '');
+      expect(moduleLabels.map((label) => (
+        ['Budget', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe', 'Exercise', 'Administration'].find((moduleName) => label.includes(moduleName))
+      )).filter(Boolean)).toEqual(['Budget', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe', 'Exercise', 'Administration']);
     } finally {
       cleanup(root, container);
     }

@@ -21,7 +21,7 @@ import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import { HouseholdManagementPanel, type HouseholdMember } from '@/platform/households';
 import { CARD_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
 
-interface DrawersPlannerProps {
+interface DrawersViewProps {
   household: DrawersHouseholdData;
   userId: string;
   displayName: string;
@@ -102,7 +102,7 @@ function getDesktopUnitGridWidth(cubbiesWide: number): string {
   return `${clampedWidth * cubbySizePx + (clampedWidth - 1) * cubbyGapPx}px`;
 }
 
-export function DrawersPlanner({
+export function DrawersView({
   household,
   userId,
   displayName,
@@ -119,14 +119,14 @@ export function DrawersPlanner({
   onRemoveHouseholdMember,
   onLeaveHousehold,
   onDeleteHousehold,
-}: DrawersPlannerProps) {
+}: DrawersViewProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
-  const isPlannerRoute = location.pathname.endsWith('/plan');
+  const isDrawersRoute = location.pathname.endsWith('/plan');
   const isConfigRoute = location.pathname.endsWith('/config');
   const drawersNavItems = [
-    { path: '/plan', icon: LayoutGrid, label: 'Planner' },
+    { path: '/plan', icon: LayoutGrid, label: 'Plan' },
     { path: '/config', icon: Settings, label: 'Config' },
   ] as const;
 
@@ -285,7 +285,7 @@ export function DrawersPlanner({
       toast({
         title: 'Failed to save unit',
         description: colorMigrationMissing
-          ? 'Unit color requires the latest Drawer Planner migration. Apply migrations, then try again.'
+          ? 'Unit color requires the latest Drawers migration. Apply migrations, then try again.'
           : errorMessage,
         variant: 'destructive',
       });
@@ -488,7 +488,7 @@ export function DrawersPlanner({
   return (
     <div className="min-h-screen bg-background">
       <ToplineHeader
-        title="Drawer Planner"
+        title="Drawers"
         moduleId="drawers"
         userId={userId}
         displayName={displayName}
@@ -525,7 +525,7 @@ export function DrawersPlanner({
         onNavigate={(path) => navigate(`${basePath}${path}`)}
       />
 
-      {isPlannerRoute && (
+      {isDrawersRoute && (
       <main className={`mx-auto max-w-5xl px-4 pt-6 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
         <div className="mb-4 space-y-4">
           <div className="space-y-4">
@@ -688,8 +688,9 @@ export function DrawersPlanner({
               <div className="flex items-center justify-between gap-2">
                 <CardTitle>Unassigned Drawers</CardTitle>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline-success" onClick={() => openAddDrawerDialog(null)} disabled={creatingDrawer || heldDrawerPending}>
-                    + Drawer
+                  <Button variant="outline-success" className="gap-1.5" onClick={() => openAddDrawerDialog(null)} disabled={creatingDrawer || heldDrawerPending}>
+                    <Plus className="h-4 w-4" />
+                    Drawer
                   </Button>
                 </div>
               </div>
@@ -742,7 +743,7 @@ export function DrawersPlanner({
       {isConfigRoute && (
       <main className={`mx-auto max-w-5xl px-4 pt-6 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
         <HouseholdManagementPanel
-          moduleName="Drawer Planner"
+          moduleName="Drawers"
           userEmail={userEmail}
           inviteCode={household.inviteCode}
           members={householdMembers}

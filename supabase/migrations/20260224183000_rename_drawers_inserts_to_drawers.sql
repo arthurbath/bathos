@@ -1,4 +1,4 @@
--- Rename Drawer Planner insert-oriented schema objects to drawer-oriented names.
+-- Rename Drawers insert-oriented schema objects to drawer-oriented names.
 -- Safe to run on both existing and fresh environments.
 
 DO $$

@@ -13,6 +13,7 @@ export type GridKey =
   | 'config_payment_methods'
   | 'config_backups'
   | 'exercise_definitions'
+  | 'wardrobe_items'
   | 'garage_vehicles'
   | 'garage_services'
   | 'garage_servicings';
@@ -98,6 +99,19 @@ export const GARAGE_SERVICES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
   [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
 };
 
+export const WARDROBE_ITEMS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
+  name: 180,
+  category: 140,
+  brand: 160,
+  model: 260,
+  color: 140,
+  size: 100,
+  link_url: 160,
+  status: 180,
+  notes: 260,
+  [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
+};
+
 export const GARAGE_VEHICLES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
   name: 120,
   make: 130,
@@ -126,6 +140,7 @@ export const GRID_FIXED_COLUMNS: Record<GridKey, string[]> = {
   config_payment_methods: [GRID_ACTIONS_COLUMN_ID],
   config_backups: [GRID_ACTIONS_COLUMN_ID],
   exercise_definitions: [GRID_ACTIONS_COLUMN_ID],
+  wardrobe_items: [GRID_ACTIONS_COLUMN_ID],
   garage_vehicles: [GRID_ACTIONS_COLUMN_ID],
   garage_services: [GRID_ACTIONS_COLUMN_ID],
   garage_servicings: [GRID_ACTIONS_COLUMN_ID],

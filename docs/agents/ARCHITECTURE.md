@@ -32,11 +32,15 @@ src/
       components/
       hooks/
       types/
-    drawers/           — Drawer Planner module
+    drawers/           — Drawers module
       components/
       hooks/
       types/
     estimator/         — Ticket Estimator public-room module
+    wardrobe/          — Wardrobe module
+      components/
+      hooks/
+      types/
   components/ui/       — shadcn/ui primitives (shared)
   lib/                 — shared utilities
   integrations/        — Supabase client and types
@@ -52,5 +56,5 @@ See `/docs/agents/MODULE_GUIDE.md`.
 - Row Level Security (RLS) is enforced on all tables
 - Admin roles are stored in `bathos_user_roles`, never in client-side storage
 - The `has_role()` function uses SECURITY DEFINER to avoid RLS recursion
-- Each module's data is isolated by its group membership check function
+- Each module's data is isolated by module-specific RLS, using either group membership or per-user ownership checks
 - Public modules should avoid permissive anonymous table reads; expose narrow `SECURITY DEFINER` RPCs instead when anonymous access is required

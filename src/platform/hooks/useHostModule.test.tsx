@@ -53,4 +53,15 @@ describe('useHostModule', () => {
       cleanup(root, container);
     }
   });
+
+  it('detects the wardrobe module from the URL path', () => {
+    window.history.replaceState({}, '', '/wardrobe/items');
+
+    const { container, root } = renderHarness();
+    try {
+      expect(container.querySelector('[data-testid="module-id"]')?.textContent).toBe('wardrobe');
+    } finally {
+      cleanup(root, container);
+    }
+  });
 });

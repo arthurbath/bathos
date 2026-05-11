@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
-import { Calculator, CarFront, CircleDollarSign, Dumbbell, ShelvingUnit, Shield } from 'lucide-react';
+import { Calculator, CarFront, CircleDollarSign, Dumbbell, ShelvingUnit, Shield, Shirt } from 'lucide-react';
 
-export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'estimator' | 'exercise' | 'admin';
+export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'estimator' | 'exercise' | 'wardrobe' | 'admin';
 
 export interface PlatformModule {
   id: PlatformModuleId;
@@ -24,11 +24,11 @@ const BUDGET_MODULE: PlatformModule = {
 
 const DRAWERS_MODULE: PlatformModule = {
   id: 'drawers',
-  name: 'Drawer Planner',
+  name: 'Drawers',
   description: 'Plan grid-style shelving units and drawer arrangements',
   launchPath: '/drawers/plan',
   icon: ShelvingUnit,
-  iconPath: '/module-drawer-planner.png',
+  iconPath: '/module-drawers.png',
 };
 
 const GARAGE_MODULE: PlatformModule = {
@@ -59,6 +59,15 @@ const EXERCISE_MODULE: PlatformModule = {
   adminOnly: true,
 };
 
+const WARDROBE_MODULE: PlatformModule = {
+  id: 'wardrobe',
+  name: 'Wardrobe',
+  description: 'Track wardrobe items, sizing, links, and item status',
+  launchPath: '/wardrobe/items',
+  icon: Shirt,
+  iconPath: '/module-wardrobe.png',
+};
+
 const ADMINISTRATION_MODULE: PlatformModule = {
   id: 'admin',
   name: 'Administration',
@@ -69,7 +78,7 @@ const ADMINISTRATION_MODULE: PlatformModule = {
   adminOnly: true,
 };
 
-const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, DRAWERS_MODULE, GARAGE_MODULE, ESTIMATOR_MODULE, EXERCISE_MODULE, ADMINISTRATION_MODULE];
+const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, DRAWERS_MODULE, GARAGE_MODULE, ESTIMATOR_MODULE, WARDROBE_MODULE, EXERCISE_MODULE, ADMINISTRATION_MODULE];
 
 interface GetAvailableModulesOptions {
   isAdmin?: boolean;

@@ -926,6 +926,54 @@ export type Database = {
         }
         Relationships: []
       }
+      wardrobe_items: {
+        Row: {
+          brand: string | null
+          category: Database["public"]["Enums"]["wardrobe_category"] | null
+          color: string | null
+          created_at: string
+          id: string
+          link_url: string | null
+          model: string | null
+          name: string | null
+          notes: string | null
+          size: string | null
+          status: Database["public"]["Enums"]["wardrobe_status"] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          brand?: string | null
+          category?: Database["public"]["Enums"]["wardrobe_category"] | null
+          color?: string | null
+          created_at?: string
+          id?: string
+          link_url?: string | null
+          model?: string | null
+          name?: string | null
+          notes?: string | null
+          size?: string | null
+          status?: Database["public"]["Enums"]["wardrobe_status"] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          brand?: string | null
+          category?: Database["public"]["Enums"]["wardrobe_category"] | null
+          color?: string | null
+          created_at?: string
+          id?: string
+          link_url?: string | null
+          model?: string | null
+          name?: string | null
+          notes?: string | null
+          size?: string | null
+          status?: Database["public"]["Enums"]["wardrobe_status"] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       garage_services: {
         Row: {
           cadence_type: Database["public"]["Enums"]["garage_cadence_type"]
@@ -1573,7 +1621,7 @@ export type Database = {
       }
       move_drawers_drawer: {
         Args: {
-          _insert_id: string
+          _drawer_id: string
           _target_unit_id: string
           _target_x: number
           _target_y: number
@@ -1581,6 +1629,19 @@ export type Database = {
         Returns: undefined
       }
       move_drawers_drawer_to_limbo: {
+        Args: { _drawer_id: string }
+        Returns: undefined
+      }
+      move_drawers_insert: {
+        Args: {
+          _insert_id: string
+          _target_unit_id: string
+          _target_x: number
+          _target_y: number
+        }
+        Returns: undefined
+      }
+      move_drawers_insert_to_limbo: {
         Args: { _insert_id: string }
         Returns: undefined
       }
@@ -1599,6 +1660,15 @@ export type Database = {
       garage_cadence_type: "recurring" | "no_interval"
       garage_service_status: "performed" | "not_needed_yet" | "declined"
       garage_service_type: "replacement" | "clean_lube" | "adjustment" | "check"
+      wardrobe_category: "tops" | "bottoms" | "footwear" | "outerwear" | "underwear" | "accessories"
+      wardrobe_status:
+        | "active"
+        | "needs_modulation"
+        | "endangered"
+        | "seeking_replacement"
+        | "pending_removal"
+        | "costume"
+        | "removed"
     }
     CompositeTypes: {
       [_ in never]: never

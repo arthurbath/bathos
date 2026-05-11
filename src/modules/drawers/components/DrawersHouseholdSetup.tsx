@@ -18,14 +18,14 @@ export function DrawersHouseholdSetup({
 }: DrawersHouseholdSetupProps) {
   return (
     <HouseholdSetupCard
-      moduleTitle="Drawer Planner"
+      moduleTitle="Drawers"
       moduleId="drawers"
       userId={userId}
       displayName={displayName}
       onSignOut={onSignOut}
       onCreate={onCreate}
       onJoin={onJoin}
-      setupTitle="Drawer Planner Setup"
+      setupTitle="Drawers Setup"
       setupDescription="Create a new drawer household or join one using an invite code."
       createButtonLabel="Create Drawer Household"
       joinButtonLabel="Join Household"

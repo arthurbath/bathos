@@ -212,7 +212,9 @@ export function useDrawerInstances(householdId: string) {
     const primary = await retryOnLikelyNetworkError(async () => await callRpc(fn, args));
     if (!primary.error) return primary;
     if (!fallback || !isMissingRpcFunctionError(primary.error, fn)) return primary;
-    return await retryOnLikelyNetworkError(async () => await callRpc(fallback.fn, fallback.args));
+    const legacy = await retryOnLikelyNetworkError(async () => await callRpc(fallback.fn, fallback.args));
+    if (legacy.error && isMissingRpcFunctionError(legacy.error, fallback.fn)) return primary;
+    return legacy;
   }, []);
 
   const fetch = useCallback(async () => {
