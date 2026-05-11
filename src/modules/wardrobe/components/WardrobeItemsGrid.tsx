@@ -701,7 +701,7 @@ export function WardrobeItemsGrid({
                 label="Statuses"
                 options={STATUS_FILTER_OPTIONS}
                 selectedValues={statusFilter}
-                onSelectedValuesChange={setStatusFilter}
+                onSelectedValuesChange={(values) => setStatusFilter(values as StatusFilterValue[])}
                 allLabel="All Statuses"
                 noneLabel="No Statuses"
                 triggerClassName="w-44"
@@ -781,7 +781,7 @@ export function WardrobeItemsGrid({
                 label="Statuses"
                 options={STATUS_FILTER_OPTIONS}
                 selectedValues={draftStatusFilter}
-                onSelectedValuesChange={setDraftStatusFilter}
+                onSelectedValuesChange={(values) => setDraftStatusFilter(values as StatusFilterValue[])}
                 allLabel="All Statuses"
                 noneLabel="No Statuses"
                 triggerClassName="h-9 w-full"
