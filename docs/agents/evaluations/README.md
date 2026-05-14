@@ -14,4 +14,5 @@ This folder contains dated agent-facing security, performance, and technology ev
 
 | Date | File | Topic |
 |---|---|---|
+| 2026-05-14 | `2026-05-14_supabase_data_api_grants.md` | Supabase Data API explicit grants rollout evaluation |
 | 2026-02-17 | `2026-02-17_data-grid-evaluation.md` | Data grid library evaluation (TanStack Table recommended) |
