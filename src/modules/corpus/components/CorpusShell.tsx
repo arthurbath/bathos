@@ -22,9 +22,9 @@ export function CorpusShell({ userId, displayName, onSignOut }: CorpusShellProps
   const navigate = useNavigate();
   const location = useLocation();
   const basePath = useModuleBasePath();
-  const { tags, loading: tagsLoading, addTag, updateTag, removeTag } = useCorpusTags(userId);
+  const { tags, loading: tagsLoading } = useCorpusTags(userId);
   const { documents, loading: documentsLoading, addDocument, updateDocument, setDocumentTags, removeDocument } = useCorpusDocuments(userId);
-  const { tokens, loading: tokensLoading, newToken, clearNewToken, createToken, revokeToken, hideToken } = useCorpusAccessTokens(userId);
+  const { tokens, loading: tokensLoading, newToken, clearNewToken, createToken, revokeToken } = useCorpusAccessTokens(userId);
   const navItems = [
     { path: '/documents', label: 'Documents', icon: FileText },
     { path: '/config', label: 'Config', icon: Settings },
@@ -75,18 +75,11 @@ export function CorpusShell({ userId, displayName, onSignOut }: CorpusShellProps
       <main className={isFullViewGridRoute ? `flex w-full flex-1 min-h-0 flex-col ${getFullViewPageTopPaddingClass(true)} ${FULL_VIEW_PAGE_BOTTOM_PADDING_CLASS}` : 'w-full'}>
         {isConfigRoute ? (
           <CorpusConfigView
-            userId={userId}
-            tags={tags}
-            documents={documents}
             tokens={tokens}
             newToken={newToken}
             onClearNewToken={clearNewToken}
-            onAddTag={addTag}
-            onUpdateTag={updateTag}
-            onDeleteTag={removeTag}
             onCreateToken={createToken}
             onRevokeToken={revokeToken}
-            onHideToken={hideToken}
           />
         ) : (
           <div className="flex-1 min-h-0">

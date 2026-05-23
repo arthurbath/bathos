@@ -1,199 +1,75 @@
-import { useMemo, useState } from 'react';
-import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingState, useReactTable } from '@tanstack/react-table';
-import { EyeOff, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Copy, Plus } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CopyInputGroup } from '@/components/ui/copy-input-group';
-import { DataGrid, GridEditableCell, gridMenuTriggerProps, useDataGrid } from '@/components/ui/data-grid';
+import { CopyInputGroup, copyTextToClipboard } from '@/components/ui/copy-input-group';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
-import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
-import { CORPUS_TAGS_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS } from '@/lib/gridColumnWidths';
-import type { CorpusAccessToken, CorpusDocument, CorpusTag } from '@/modules/corpus/types/corpus';
+import type { CorpusAccessToken } from '@/modules/corpus/types/corpus';
 
 interface CorpusConfigViewProps {
-  userId: string;
-  tags: CorpusTag[];
-  documents: CorpusDocument[];
   tokens: CorpusAccessToken[];
   newToken: string | null;
   onClearNewToken: () => void;
-  onAddTag: (name: string, description?: string | null) => Promise<CorpusTag>;
-  onUpdateTag: (id: string, updates: { name?: string; description?: string | null }) => Promise<CorpusTag>;
-  onDeleteTag: (id: string) => Promise<void>;
   onCreateToken: (name: string) => Promise<string>;
   onRevokeToken: (id: string) => Promise<void>;
-  onHideToken: (id: string) => Promise<void>;
 }
 
-const tagColumnHelper = createColumnHelper<CorpusTag>();
 const MCP_URL = 'https://rsqfokyqntmtdejfwmjs.supabase.co/functions/v1/corpus-mcp';
+
+const EXAMPLE_INSTRUCTIONS = `You have access to my BathOS Corpus MCP server. Corpus contains documents I have selected as reusable context for writing, editing, formatting, reasoning, and answering on my behalf.
+
+Use Corpus automatically when I ask you to write, rewrite, edit, summarize, generate titles or naming options, apply my conventions, write in my voice, use a professional/personal/technical tone, write about me or my work, or avoid patterns I dislike.
+
+Available Corpus tools:
+- list_tags: List the fixed Corpus tags and document counts.
+- search: Search documents by title, body text, source filename, and tags. Use query, tags, and limit.
+- fetch: Fetch the full content of one document by id. Use this after search returns a relevant result.
+- get_context_bundle: Retrieve a task-focused bundle using one of these intents: write_in_voice, apply_conventions, professional_tone, personal_tone, technical_tone, biography, avoid_antipatterns, reference, or template.
+- get_style_profile: Retrieve a compact writing-style profile when the task is broadly about my voice, conventions, tone, or preferences.
+
+Corpus tag meanings:
+- Anti-patterns: Phrases, tones, structures, and habits to avoid.
+- Biography: Documents that describe who I am.
+- Domain Knowledge: Reusable subject-matter context.
+- Instructions: General instructions, preferences, rules, and reusable guidance.
+- Personal Tone Example: Examples of personal, informal writing.
+- Professional Tone Example: Examples of workplace writing.
+- Reference Material: Source material to consult when answering or drafting.
+- Style Conventions: Spelling, grammar, formatting, naming, and usage conventions.
+- Technical Tone Example: Examples of technical writing.
+- Template: Reusable structures, formats, and boilerplate.
+
+Retrieval workflow:
+1. For writing and content-generation tasks, call get_context_bundle with the closest intent and a short query from the request.
+2. If a narrower lookup is needed, call search with relevant query terms and tag filters.
+3. Inspect returned titles, excerpts, and tags.
+4. Call fetch for the most relevant documents before drafting from them.
+5. Prefer explicit Instructions and Style Conventions over inferred patterns from examples.
+6. Apply Anti-patterns as negative guidance.
+7. Do not quote or reveal private Corpus content unless I explicitly ask you to.
+8. If Corpus is unavailable, say so briefly and proceed only if the task can still be handled safely.`;
 
 function formatDate(value: string | null) {
   if (!value) return 'Never';
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
-function TagActionsCell({ tag, onDelete }: { tag: CorpusTag; onDelete: (tag: CorpusTag) => void }) {
-  const ctx = useDataGrid();
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
-          type="button"
-          className="float-right mr-[5px] h-7 w-7"
-          aria-label={`Actions for ${tag.name}`}
-          {...gridMenuTriggerProps(ctx, 3)}
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="bg-popover">
-        <DropdownMenuItem onClick={() => onDelete(tag)} className="text-destructive focus:text-destructive">
-          <Trash2 className="mr-2 h-4 w-4" />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 export function CorpusConfigView({
-  userId,
-  tags,
-  documents,
   tokens,
   newToken,
   onClearNewToken,
-  onAddTag,
-  onUpdateTag,
-  onDeleteTag,
   onCreateToken,
   onRevokeToken,
-  onHideToken,
 }: CorpusConfigViewProps) {
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }]);
-  const [addTagOpen, setAddTagOpen] = useState(false);
-  const [tagName, setTagName] = useState('');
-  const [tagDescription, setTagDescription] = useState('');
-  const [savingTag, setSavingTag] = useState(false);
-  const [deleteTagTarget, setDeleteTagTarget] = useState<CorpusTag | null>(null);
   const [createTokenOpen, setCreateTokenOpen] = useState(false);
   const [tokenName, setTokenName] = useState('');
   const [creatingToken, setCreatingToken] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<CorpusAccessToken | null>(null);
-  const [hideTarget, setHideTarget] = useState<CorpusAccessToken | null>(null);
-
-  const {
-    columnSizing,
-    columnSizingInfo,
-    columnResizingEnabled,
-    onColumnSizingChange,
-    onColumnSizingInfoChange,
-  } = useGridColumnWidths({
-    userId,
-    gridKey: 'corpus_tags',
-    defaults: CORPUS_TAGS_GRID_DEFAULT_WIDTHS,
-    fixedColumnIds: GRID_FIXED_COLUMNS.corpus_tags,
-  });
-
-  const usageByTagId = useMemo(() => {
-    const usage: Record<string, number> = {};
-    for (const document of documents) {
-      for (const tag of document.tags) {
-        usage[tag.id] = (usage[tag.id] ?? 0) + 1;
-      }
-    }
-    return usage;
-  }, [documents]);
-
-  const columns = useMemo(
-    () => [
-      tagColumnHelper.accessor('name', {
-        header: 'Name',
-        size: CORPUS_TAGS_GRID_DEFAULT_WIDTHS.name,
-        minSize: 160,
-        meta: { containsEditableInput: true },
-        cell: ({ row }) => (
-          <GridEditableCell
-            value={row.original.name}
-            navCol={0}
-            onChange={(value) => onUpdateTag(row.original.id, { name: value })}
-          />
-        ),
-      }),
-      tagColumnHelper.accessor('description', {
-        header: 'Description',
-        size: CORPUS_TAGS_GRID_DEFAULT_WIDTHS.description,
-        minSize: 220,
-        meta: { containsEditableInput: true },
-        cell: ({ row }) => (
-          <GridEditableCell
-            value={row.original.description ?? ''}
-            navCol={1}
-            deleteResetValue=""
-            onChange={(value) => onUpdateTag(row.original.id, { description: value.trim() || null })}
-          />
-        ),
-      }),
-      tagColumnHelper.accessor((row) => usageByTagId[row.id] ?? 0, {
-        id: 'documents',
-        header: 'Documents',
-        size: CORPUS_TAGS_GRID_DEFAULT_WIDTHS.documents,
-        minSize: 100,
-        meta: { headerClassName: 'text-right', cellClassName: 'text-right tabular-nums text-xs' },
-        cell: ({ getValue }) => getValue(),
-      }),
-      tagColumnHelper.display({
-        id: 'actions',
-        header: '',
-        enableSorting: false,
-        enableResizing: false,
-        size: CORPUS_TAGS_GRID_DEFAULT_WIDTHS.actions,
-        minSize: CORPUS_TAGS_GRID_DEFAULT_WIDTHS.actions,
-        maxSize: CORPUS_TAGS_GRID_DEFAULT_WIDTHS.actions,
-        meta: { headerClassName: 'px-0', cellClassName: 'px-0', containsButton: true },
-        cell: ({ row }) => <TagActionsCell tag={row.original} onDelete={setDeleteTagTarget} />,
-      }),
-    ],
-    [onUpdateTag, usageByTagId],
-  );
-
-  const table = useReactTable({
-    data: tags,
-    columns,
-    state: { sorting, columnSizing, columnSizingInfo },
-    enableColumnResizing: columnResizingEnabled,
-    onSortingChange: setSorting,
-    onColumnSizingChange,
-    onColumnSizingInfoChange,
-    columnResizeMode: 'onChange',
-    getRowId: (row) => row.id,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
-
-  const addTag = async () => {
-    if (savingTag) return;
-    setSavingTag(true);
-    try {
-      await onAddTag(tagName, tagDescription.trim() || null);
-      setAddTagOpen(false);
-      setTagName('');
-      setTagDescription('');
-    } catch (error) {
-      toast({ title: 'Failed to Add Tag', description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
-    } finally {
-      setSavingTag(false);
-    }
-  };
 
   const createToken = async () => {
     if (creatingToken) return;
@@ -218,22 +94,24 @@ export function CorpusConfigView({
     setTokenName('');
     setCreateTokenOpen(false);
   };
+
+  const copyExampleInstructions = async () => {
+    try {
+      await copyTextToClipboard(EXAMPLE_INSTRUCTIONS);
+      toast({ title: 'Copied to Clipboard' });
+    } catch (error) {
+      toast({
+        title: 'Copy Failed',
+        description: error instanceof Error ? error.message : 'Unable to write to clipboard.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const hasTokens = tokens.length > 0;
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4">
-          <CardTitle>Tags</CardTitle>
-          <Button type="button" variant="outline-success" size="sm" className="h-8 w-8 p-0" aria-label="Add tag" onClick={() => setAddTagOpen(true)}>
-            <Plus className="h-4 w-4" />
-          </Button>
-        </CardHeader>
-        <CardContent className="px-0 pb-2.5">
-          <DataGrid table={table} historyKey="corpus_tags" maxHeight="none" stickyFirstColumn={false} emptyMessage="No tags yet." />
-        </CardContent>
-      </Card>
-
+    <div className="mx-auto w-full max-w-5xl space-y-4 px-4 pb-[calc(env(safe-area-inset-bottom)+5.25rem)] pt-4 md:pb-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4">
           <CardTitle>MCP Access</CardTitle>
@@ -280,31 +158,17 @@ export function CorpusConfigView({
                     <div className="truncate text-sm font-medium">{token.name}</div>
                     <div className="text-xs text-muted-foreground">
                       Created {formatDate(token.created_at)} · Last Used {formatDate(token.last_used_at)}
-                      {token.revoked_at ? ` · Revoked ${formatDate(token.revoked_at)}` : ''}
                     </div>
                   </div>
-                  {token.revoked_at ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1.5"
-                      onClick={() => setHideTarget(token)}
-                    >
-                      <EyeOff className="h-4 w-4" />
-                      Hide
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline-destructive"
-                      size="sm"
-                      className="h-8"
-                      onClick={() => setRevokeTarget(token)}
-                    >
-                      Revoke
-                    </Button>
-                  )}
+                  <Button
+                    type="button"
+                    variant="outline-destructive"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setRevokeTarget(token)}
+                  >
+                    Revoke
+                  </Button>
                 </div>
                 ))}
               </div>
@@ -313,29 +177,29 @@ export function CorpusConfigView({
         </CardContent>
       </Card>
 
-      <Dialog open={addTagOpen} onOpenChange={(open) => !savingTag && setAddTagOpen(open)}>
-        <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>Add Tag</DialogTitle>
-          </DialogHeader>
-          <DialogBody className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="corpus-tag-name">Name</Label>
-              <Input id="corpus-tag-name" value={tagName} onChange={(event) => setTagName(event.target.value)} autoFocus />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="corpus-tag-description">Description</Label>
-              <Textarea id="corpus-tag-description" value={tagDescription} onChange={(event) => setTagDescription(event.target.value)} />
-            </div>
-          </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={savingTag} onClick={() => setAddTagOpen(false)}>Cancel</Button>
-            <Button data-dialog-confirm="true" type="button" variant="outline-success" disabled={savingTag || !tagName.trim()} onClick={() => void addTag()}>
-              {savingTag ? 'Saving...' : 'Add'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <CardTitle>Example Instructions</CardTitle>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={() => void copyExampleInstructions()}
+          >
+            <Copy className="h-4 w-4" />
+            Copy
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            readOnly
+            value={EXAMPLE_INSTRUCTIONS}
+            className="min-h-[520px] resize-y font-mono text-xs leading-relaxed"
+            aria-label="Example Instructions"
+          />
+        </CardContent>
+      </Card>
 
       <Dialog open={createTokenOpen} onOpenChange={(open) => !creatingToken && (open ? openCreateTokenDialog() : closeCreateTokenDialog())}>
         <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
@@ -373,12 +237,12 @@ export function CorpusConfigView({
               Copy or write down this token now. It will not be shown again, but you can revoke it at any time from the MCP Access list.
             </p>
             <div className="space-y-2">
-              <Label htmlFor="corpus-token-mcp-url">MCP URL</Label>
-              <CopyInputGroup id="corpus-token-mcp-url" readOnly value={MCP_URL} aria-label="MCP URL" buttonAriaLabel="Copy MCP URL" />
+              <Label htmlFor="corpus-new-token">Token</Label>
+              <CopyInputGroup id="corpus-new-token" readOnly value={newToken ?? ''} aria-label="Token" buttonAriaLabel="Copy Token" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="corpus-new-token">New Token</Label>
-              <CopyInputGroup id="corpus-new-token" readOnly value={newToken ?? ''} aria-label="New Token" buttonAriaLabel="Copy New Token" />
+              <Label htmlFor="corpus-token-mcp-url">MCP URL</Label>
+              <CopyInputGroup id="corpus-token-mcp-url" readOnly value={MCP_URL} aria-label="MCP URL" buttonAriaLabel="Copy MCP URL" />
             </div>
           </DialogBody>
           <DialogFooter>
@@ -387,33 +251,11 @@ export function CorpusConfigView({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deleteTagTarget} onOpenChange={(open) => !open && setDeleteTagTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete "{deleteTagTarget?.name}"?</AlertDialogTitle>
-            <AlertDialogDescription>Documents will keep their content but lose this tag.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (!deleteTagTarget) return;
-                void onDeleteTag(deleteTagTarget.id);
-                setDeleteTagTarget(null);
-              }}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       <AlertDialog open={!!revokeTarget} onOpenChange={(open) => !open && setRevokeTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke "{revokeTarget?.name}"?</AlertDialogTitle>
-            <AlertDialogDescription>Agents using this token will lose access to Corpus.</AlertDialogDescription>
+            <AlertDialogDescription>Agents using this token will lose access to Corpus, and the token will be deleted from this list.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -426,27 +268,6 @@ export function CorpusConfigView({
               }}
             >
               Revoke
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!hideTarget} onOpenChange={(open) => !open && setHideTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Hide "{hideTarget?.name}"?</AlertDialogTitle>
-            <AlertDialogDescription>This revoked token will be removed from this list. It will remain revoked and cannot be used.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (!hideTarget) return;
-                void onHideToken(hideTarget.id);
-                setHideTarget(null);
-              }}
-            >
-              Hide
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

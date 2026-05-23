@@ -64,6 +64,7 @@ const CORPUS_MODULE: PlatformModule = {
   description: 'Manage personal writing samples, style rules, and MCP-ready reference documents',
   launchPath: '/corpus/documents',
   icon: BookOpenText,
+  iconPath: '/module-corpus.png',
 };
 
 const ADMINISTRATION_MODULE: PlatformModule = {

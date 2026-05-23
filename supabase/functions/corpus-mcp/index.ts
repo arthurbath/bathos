@@ -18,6 +18,7 @@ type JsonRpcRequest = {
 type CorpusTag = {
   id: string;
   name: string;
+  description?: string | null;
 };
 
 type CorpusDocument = {
@@ -135,8 +136,44 @@ async function listTools(id: JsonRpcRequest["id"]) {
         },
       },
       {
+        name: "list_tags",
+        description: "List the authenticated user's Corpus tags and document counts.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "get_context_bundle",
+        description: "Return documents for a writing or reference intent using the prescribed Corpus tag vocabulary.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            intent: {
+              type: "string",
+              enum: [
+                "write_in_voice",
+                "apply_conventions",
+                "professional_tone",
+                "personal_tone",
+                "technical_tone",
+                "biography",
+                "avoid_antipatterns",
+                "reference",
+                "template",
+              ],
+            },
+            query: { type: "string" },
+            limit: { type: "number", minimum: 1, maximum: 20 },
+          },
+          required: ["intent"],
+          additionalProperties: false,
+        },
+      },
+      {
         name: "get_style_profile",
-        description: "Return a compact style profile assembled from documents tagged as tone examples, professional tone, technical tone, personal tone, or conventions.",
+        description: "Return a compact style profile assembled from documents tagged as instructions, conventions, tone examples, biography, or anti-patterns.",
         inputSchema: {
           type: "object",
           properties: { limit: { type: "number", minimum: 1, maximum: 20 } },
@@ -145,6 +182,36 @@ async function listTools(id: JsonRpcRequest["id"]) {
       },
     ],
   });
+}
+
+async function listTags(userId: string) {
+  const { data: tags, error: tagsError } = await supabaseAdmin
+    .from("corpus_tags")
+    .select("id, name, description")
+    .eq("user_id", userId)
+    .order("name", { ascending: true });
+  if (tagsError) throw tagsError;
+
+  const { data: documentTags, error: documentTagsError } = await supabaseAdmin
+    .from("corpus_document_tags")
+    .select("tag_id")
+    .eq("user_id", userId);
+  if (documentTagsError) throw documentTagsError;
+
+  const counts = new Map<string, number>();
+  for (const row of documentTags ?? []) {
+    const tagId = typeof row.tag_id === "string" ? row.tag_id : "";
+    if (tagId) counts.set(tagId, (counts.get(tagId) ?? 0) + 1);
+  }
+
+  return {
+    tags: ((tags ?? []) as CorpusTag[]).map((tag) => ({
+      id: tag.id,
+      name: tag.name,
+      description: tag.description,
+      document_count: counts.get(tag.id) ?? 0,
+    })),
+  };
 }
 
 async function searchDocuments(userId: string, args: Record<string, unknown>) {
@@ -183,6 +250,75 @@ async function searchDocuments(userId: string, args: Record<string, unknown>) {
   return { documents: documents.map(summarizeDocument) };
 }
 
+const CONTEXT_INTENT_TAGS: Record<string, string[]> = {
+  write_in_voice: [
+    "Instructions",
+    "Style Conventions",
+    "Professional Tone Example",
+    "Personal Tone Example",
+    "Technical Tone Example",
+    "Anti-patterns",
+  ],
+  apply_conventions: ["Instructions", "Style Conventions", "Anti-patterns"],
+  professional_tone: ["Instructions", "Style Conventions", "Professional Tone Example", "Anti-patterns"],
+  personal_tone: ["Instructions", "Style Conventions", "Personal Tone Example", "Anti-patterns"],
+  technical_tone: ["Instructions", "Style Conventions", "Technical Tone Example", "Domain Knowledge", "Reference Material", "Anti-patterns"],
+  biography: ["Biography", "Instructions"],
+  avoid_antipatterns: ["Anti-patterns"],
+  reference: ["Reference Material", "Domain Knowledge", "Instructions"],
+  template: ["Template", "Style Conventions", "Instructions"],
+};
+
+function documentMatchesQuery(document: CorpusDocument, query: string) {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) return true;
+  const tagNames = documentTags(document);
+  return (
+    document.title.toLocaleLowerCase().includes(normalizedQuery)
+    || document.content.toLocaleLowerCase().includes(normalizedQuery)
+    || (document.source_filename ?? "").toLocaleLowerCase().includes(normalizedQuery)
+    || tagNames.some((tag) => tag.toLocaleLowerCase().includes(normalizedQuery))
+  );
+}
+
+function scoreDocumentForTags(document: CorpusDocument, targetTags: Set<string>, query: string) {
+  const tagScore = documentTags(document).filter((tag) => targetTags.has(tag.toLocaleLowerCase())).length * 10;
+  const queryScore = query && documentMatchesQuery(document, query) ? 5 : 0;
+  return tagScore + queryScore;
+}
+
+async function getContextBundle(userId: string, args: Record<string, unknown>) {
+  const intent = typeof args.intent === "string" ? args.intent : "";
+  const tagNames = CONTEXT_INTENT_TAGS[intent];
+  if (!tagNames) throw new Error("Unsupported context intent.");
+
+  const query = typeof args.query === "string" ? args.query.trim() : "";
+  const limit = Math.min(Math.max(Number(args.limit) || 8, 1), 20);
+  const targetTags = new Set(tagNames.map((tag) => tag.toLocaleLowerCase()));
+
+  const { data, error } = await supabaseAdmin
+    .from("corpus_documents")
+    .select("id, title, content, content_type, source_filename, created_at, updated_at, corpus_document_tags(tag:corpus_tags(id, name))")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+
+  const documents = ((data ?? []) as CorpusDocument[])
+    .map((document) => ({ document, score: scoreDocumentForTags(document, targetTags, query) }))
+    .filter(({ document, score }) => score > 0 && documentMatchesQuery(document, query))
+    .sort((left, right) => right.score - left.score || Date.parse(right.document.updated_at) - Date.parse(left.document.updated_at))
+    .slice(0, limit)
+    .map(({ document }) => summarizeDocument(document));
+
+  return {
+    intent,
+    tags: tagNames,
+    guidance: "Use fetch for any returned document that appears relevant before drafting. Apply Anti-patterns as negative guidance.",
+    documents,
+  };
+}
+
 async function fetchDocument(userId: string, args: Record<string, unknown>) {
   const id = typeof args.id === "string" ? args.id : "";
   if (!id) throw new Error("Document id is required.");
@@ -210,16 +346,16 @@ async function getStyleProfile(userId: string, args: Record<string, unknown>) {
   if (error) throw error;
 
   const styleTags = new Set([
-    "tone example",
-    "professional tone",
-    "technical tone",
-    "personal tone",
-    "conventions",
-    "style",
-    "voice",
-    "prose",
-    "professional",
-    "technical",
+    "anti-patterns",
+    "biography",
+    "domain knowledge",
+    "instructions",
+    "personal tone example",
+    "professional tone example",
+    "reference material",
+    "style conventions",
+    "technical tone example",
+    "template",
   ]);
   const documents = ((data ?? []) as CorpusDocument[])
     .filter((document) => documentTags(document).some((tag) => styleTags.has(tag.toLocaleLowerCase())))
@@ -290,6 +426,8 @@ Deno.serve(async (req: Request) => {
   try {
     if (toolName === "search") return rpcResult(body.id, toolContent(await searchDocuments(userId, args)));
     if (toolName === "fetch") return rpcResult(body.id, toolContent(await fetchDocument(userId, args)));
+    if (toolName === "list_tags") return rpcResult(body.id, toolContent(await listTags(userId)));
+    if (toolName === "get_context_bundle") return rpcResult(body.id, toolContent(await getContextBundle(userId, args)));
     if (toolName === "get_style_profile") return rpcResult(body.id, toolContent(await getStyleProfile(userId, args)));
     return rpcError(body.id, -32602, "Unknown tool.");
   } catch (error) {

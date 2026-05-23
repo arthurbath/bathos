@@ -9,6 +9,7 @@ describe('getAvailableModules', () => {
     expect(modules.map(module => module.id)).toEqual(['budget', 'corpus', 'drawers', 'garage', 'estimator', 'wardrobe']);
     expect(modules[0].launchPath).toBe('/budget/summary');
     expect(modules[1].launchPath).toBe('/corpus/documents');
+    expect(modules[1].iconPath).toBe('/module-corpus.png');
     expect(modules[2].launchPath).toBe('/drawers/plan');
     expect(modules[3].launchPath).toBe('/garage/due');
     expect(modules[4].launchPath).toBe('/estimator');
@@ -22,6 +23,7 @@ describe('getAvailableModules', () => {
     expect(modules).toHaveLength(7);
     expect(modules.map(module => module.id)).toEqual(['budget', 'corpus', 'drawers', 'garage', 'estimator', 'wardrobe', 'admin']);
     expect(modules[1].launchPath).toBe('/corpus/documents');
+    expect(modules[1].iconPath).toBe('/module-corpus.png');
     expect(modules[3].launchPath).toBe('/garage/due');
     expect(modules[4].launchPath).toBe('/estimator');
     expect(modules[5].launchPath).toBe('/wardrobe/items');

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingState, useReactTable } from '@tanstack/react-table';
-import { FileUp, FilterX, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Download, FileUp, Filter, FilterX, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,10 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { LabelWithAside } from '@/components/ui/label-with-aside';
 import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from '@/hooks/use-toast';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import { CORPUS_DOCUMENTS_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS } from '@/lib/gridColumnWidths';
@@ -29,6 +32,7 @@ interface CorpusDocumentsViewProps {
 
 const columnHelper = createColumnHelper<CorpusDocument>();
 const HISTORY_KEY = 'corpus_documents';
+const CREATE_NEW_DOCUMENT_VALUE = '_create_new';
 
 function titleFromFilename(fileName: string) {
   return fileName.replace(/\.(md|markdown|txt)$/i, '').trim() || fileName;
@@ -37,6 +41,24 @@ function titleFromFilename(fileName: string) {
 function formatDate(value: string | null) {
   if (!value) return 'Never';
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+}
+
+function filenameFromTitle(title: string) {
+  const sanitized = title
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .slice(0, 120)
+    .trim();
+  return `${sanitized || 'corpus-document'}.md`;
+}
+
+function messageFromError(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
+
+function fileFailureMessage(fileName: string, error: unknown) {
+  return `${fileName}: ${messageFromError(error)}`;
 }
 
 function TagCell({
@@ -65,11 +87,15 @@ function TagCell({
 function ActionsCell({
   document,
   onEdit,
+  onOverwrite,
+  onDownload,
   onDelete,
   navCol,
 }: {
   document: CorpusDocument;
   onEdit: (document: CorpusDocument) => void;
+  onOverwrite: (document: CorpusDocument) => void;
+  onDownload: (document: CorpusDocument) => void;
   onDelete: (document: CorpusDocument) => void;
   navCol: number;
 }) {
@@ -93,6 +119,14 @@ function ActionsCell({
           <Pencil className="mr-2 h-4 w-4" />
           Edit Content
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onOverwrite(document)}>
+          <FileUp className="mr-2 h-4 w-4" />
+          Overwrite
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onDownload(document)}>
+          <Download className="mr-2 h-4 w-4" />
+          Download
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => onDelete(document)} className="text-destructive focus:text-destructive">
           <Trash2 className="mr-2 h-4 w-4" />
           Delete
@@ -113,15 +147,27 @@ export function CorpusDocumentsView({
   onDeleteDocument,
 }: CorpusDocumentsViewProps) {
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const overwriteInputRef = useRef<HTMLInputElement | null>(null);
+  const bulkOverwriteInputRef = useRef<HTMLInputElement | null>(null);
+  const overwriteTargetRef = useRef<CorpusDocument | null>(null);
+  const isMobile = useIsMobile();
   const [sorting, setSorting] = useState<SortingState>([{ id: 'updated_at', desc: true }]);
   const [query, setQuery] = useState('');
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
+  const [viewControlsOpen, setViewControlsOpen] = useState(false);
+  const [draftQuery, setDraftQuery] = useState('');
+  const [draftSelectedTagFilters, setDraftSelectedTagFilters] = useState<string[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingDocument, setEditingDocument] = useState<CorpusDocument | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftContent, setDraftContent] = useState('');
   const [draftTagIds, setDraftTagIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [overwriting, setOverwriting] = useState(false);
+  const [bulkOverwriteOpen, setBulkOverwriteOpen] = useState(false);
+  const [bulkOverwriteFiles, setBulkOverwriteFiles] = useState<File[]>([]);
+  const [bulkOverwriteMappings, setBulkOverwriteMappings] = useState<Record<number, string>>({});
+  const [bulkOverwriting, setBulkOverwriting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CorpusDocument | null>(null);
   const hasTags = tags.length > 0;
 
@@ -129,6 +175,7 @@ export function CorpusDocumentsView({
     if (hasTags) return;
     setSelectedTagFilters([]);
     setDraftTagIds([]);
+    setDraftSelectedTagFilters([]);
   }, [hasTags]);
 
   const {
@@ -152,12 +199,7 @@ export function CorpusDocumentsView({
         if (!selectedTagFilters.every((tagId) => documentTagIds.has(tagId))) return false;
       }
       if (!normalizedQuery) return true;
-      return (
-        document.title.toLocaleLowerCase().includes(normalizedQuery)
-        || document.content.toLocaleLowerCase().includes(normalizedQuery)
-        || (document.source_filename ?? '').toLocaleLowerCase().includes(normalizedQuery)
-        || document.tags.some((tag) => tag.name.toLocaleLowerCase().includes(normalizedQuery))
-      );
+      return document.title.toLocaleLowerCase().includes(normalizedQuery);
     });
   }, [documents, hasTags, query, selectedTagFilters]);
 
@@ -167,6 +209,25 @@ export function CorpusDocumentsView({
     setDraftContent('');
     setDraftTagIds([]);
     setEditorOpen(true);
+  };
+
+  const openViewControlsModal = () => {
+    setDraftQuery(query);
+    setDraftSelectedTagFilters(selectedTagFilters);
+    setViewControlsOpen(true);
+  };
+
+  const applyViewControls = () => {
+    setQuery(draftQuery);
+    setSelectedTagFilters(draftSelectedTagFilters);
+    setViewControlsOpen(false);
+  };
+
+  const clearFilters = () => {
+    setQuery('');
+    setSelectedTagFilters([]);
+    setDraftQuery('');
+    setDraftSelectedTagFilters([]);
   };
 
   const openExistingEditor = (document: CorpusDocument) => {
@@ -212,17 +273,184 @@ export function CorpusDocumentsView({
     if (supportedFiles.length !== files.length) {
       toast({ title: 'Some Files Were Skipped', description: 'Corpus accepts MD and TXT files only.', variant: 'destructive' });
     }
+    const failedFiles: string[] = [];
     for (const file of supportedFiles) {
-      const content = await file.text();
-      await onAddDocument({
-        title: titleFromFilename(file.name),
-        content,
-        content_type: 'markdown',
-        source_filename: file.name,
-        tagIds: [],
-      });
+      try {
+        const content = await file.text();
+        await onAddDocument({
+          title: titleFromFilename(file.name),
+          content,
+          content_type: 'markdown',
+          source_filename: file.name,
+          tagIds: [],
+        });
+      } catch (error) {
+        failedFiles.push(fileFailureMessage(file.name, error));
+      }
     }
     if (uploadInputRef.current) uploadInputRef.current.value = '';
+    if (failedFiles.length > 0) {
+      toast({
+        title: failedFiles.length === 1 ? 'Failed to Upload File' : 'Some Files Failed to Upload',
+        description: failedFiles.slice(0, 3).join('\n'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const autoMapBulkOverwriteFiles = (files: File[]) => {
+    const claimedDocumentIds = new Set<string>();
+    const nextMappings: Record<number, string> = {};
+
+    files.forEach((file, index) => {
+      const title = titleFromFilename(file.name);
+      const match = documents.find((document) => document.title === title && !claimedDocumentIds.has(document.id));
+      if (match) {
+        claimedDocumentIds.add(match.id);
+        nextMappings[index] = match.id;
+      } else {
+        nextMappings[index] = CREATE_NEW_DOCUMENT_VALUE;
+      }
+    });
+
+    return nextMappings;
+  };
+
+  const openBulkOverwritePicker = () => {
+    if (bulkOverwriteInputRef.current) bulkOverwriteInputRef.current.value = '';
+    bulkOverwriteInputRef.current?.click();
+  };
+
+  const prepareBulkOverwrite = (files: FileList | null) => {
+    if (!files?.length) return;
+    const selectedFiles = Array.from(files);
+    const supportedFiles = selectedFiles.filter((file) => /\.(md|markdown|txt)$/i.test(file.name));
+    if (supportedFiles.length !== selectedFiles.length) {
+      toast({ title: 'Some Files Were Skipped', description: 'Corpus accepts MD and TXT files only.', variant: 'destructive' });
+    }
+    if (supportedFiles.length === 0) {
+      if (bulkOverwriteInputRef.current) bulkOverwriteInputRef.current.value = '';
+      return;
+    }
+
+    setBulkOverwriteFiles(supportedFiles);
+    setBulkOverwriteMappings(autoMapBulkOverwriteFiles(supportedFiles));
+    setBulkOverwriteOpen(true);
+  };
+
+  const closeBulkOverwriteDialog = () => {
+    if (bulkOverwriting) return;
+    setBulkOverwriteOpen(false);
+    setBulkOverwriteFiles([]);
+    setBulkOverwriteMappings({});
+    if (bulkOverwriteInputRef.current) bulkOverwriteInputRef.current.value = '';
+  };
+
+  const setBulkOverwriteMapping = (index: number, value: string) => {
+    setBulkOverwriteMappings((current) => ({ ...current, [index]: value }));
+  };
+
+  const applyBulkOverwrite = async () => {
+    if (bulkOverwriting || bulkOverwriteFiles.length === 0) return;
+
+    setBulkOverwriting(true);
+    let overwrittenCount = 0;
+    let createdCount = 0;
+    let activeFileName = '';
+    try {
+      for (let index = 0; index < bulkOverwriteFiles.length; index += 1) {
+        const file = bulkOverwriteFiles[index];
+        activeFileName = file.name;
+        const content = await file.text();
+        const title = titleFromFilename(file.name);
+        const mapping = bulkOverwriteMappings[index] ?? CREATE_NEW_DOCUMENT_VALUE;
+
+        if (mapping === CREATE_NEW_DOCUMENT_VALUE) {
+          await onAddDocument({
+            title,
+            content,
+            content_type: 'markdown',
+            source_filename: file.name,
+            tagIds: [],
+          });
+          createdCount += 1;
+        } else {
+          await onUpdateDocument(mapping, {
+            title,
+            content,
+            content_type: 'markdown',
+          });
+          overwrittenCount += 1;
+        }
+      }
+
+      setBulkOverwriteOpen(false);
+      setBulkOverwriteFiles([]);
+      setBulkOverwriteMappings({});
+      if (bulkOverwriteInputRef.current) bulkOverwriteInputRef.current.value = '';
+      toast({
+        title: 'Bulk Overwrite Complete',
+        description: `${overwrittenCount} overwritten · ${createdCount} created`,
+      });
+    } catch (error) {
+      toast({ title: 'Bulk Overwrite Failed', description: activeFileName ? fileFailureMessage(activeFileName, error) : messageFromError(error), variant: 'destructive' });
+    } finally {
+      setBulkOverwriting(false);
+    }
+  };
+
+  const openOverwritePicker = (document: CorpusDocument) => {
+    overwriteTargetRef.current = document;
+    if (overwriteInputRef.current) overwriteInputRef.current.value = '';
+    overwriteInputRef.current?.click();
+  };
+
+  const overwriteDocumentFromFile = async (files: FileList | null) => {
+    const target = overwriteTargetRef.current;
+    const file = files?.[0] ?? null;
+    if (!target || !file) {
+      overwriteTargetRef.current = null;
+      return;
+    }
+    if (!/\.(md|markdown|txt)$/i.test(file.name)) {
+      toast({ title: 'File Was Skipped', description: 'Corpus accepts MD and TXT files only.', variant: 'destructive' });
+      overwriteTargetRef.current = null;
+      if (overwriteInputRef.current) overwriteInputRef.current.value = '';
+      return;
+    }
+
+    setOverwriting(true);
+    try {
+      const content = await file.text();
+      await onUpdateDocument(target.id, {
+        content,
+        content_type: 'markdown',
+      });
+      toast({ title: 'Document Overwritten' });
+    } catch (error) {
+      toast({ title: 'Failed to Overwrite Document', description: fileFailureMessage(file.name, error), variant: 'destructive' });
+    } finally {
+      setOverwriting(false);
+      overwriteTargetRef.current = null;
+      if (overwriteInputRef.current) overwriteInputRef.current.value = '';
+    }
+  };
+
+  const downloadDocument = (corpusDocument: CorpusDocument) => {
+    try {
+      const blob = new Blob([corpusDocument.content], { type: 'text/markdown;charset=utf-8' });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = window.document.createElement('a');
+      link.href = objectUrl;
+      link.download = filenameFromTitle(corpusDocument.title);
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      toast({ title: 'Download Started' });
+    } catch (error) {
+      toast({ title: 'Download Failed', description: error instanceof Error ? error.message : 'Unable to prepare the download.', variant: 'destructive' });
+    }
   };
 
   const columns = useMemo(
@@ -281,7 +509,16 @@ export function CorpusDocumentsView({
         minSize: CORPUS_DOCUMENTS_GRID_DEFAULT_WIDTHS.actions,
         maxSize: CORPUS_DOCUMENTS_GRID_DEFAULT_WIDTHS.actions,
         meta: { headerClassName: 'px-0', cellClassName: 'px-0', containsButton: true },
-        cell: ({ row }) => <ActionsCell document={row.original} onEdit={openExistingEditor} onDelete={setDeleteTarget} navCol={hasTags ? 4 : 3} />,
+        cell: ({ row }) => (
+          <ActionsCell
+            document={row.original}
+            onEdit={openExistingEditor}
+            onOverwrite={openOverwritePicker}
+            onDownload={downloadDocument}
+            onDelete={setDeleteTarget}
+            navCol={hasTags ? 4 : 3}
+          />
+        ),
       }),
     ],
     [hasTags, onSetDocumentTags, onUpdateDocument, tags],
@@ -306,42 +543,65 @@ export function CorpusDocumentsView({
 
   return (
     <>
-      <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2 rounded-none border-x-0 border-t-0 md:border-t">
+      <Card className="max-w-none w-[100vw] relative left-1/2 -translate-x-1/2 rounded-none border-x-0 h-full min-h-0 flex flex-col border-t-0 border-b-0 md:border-t">
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
           <CardTitle>Documents</CardTitle>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search"
-              className="h-8 w-36 text-xs sm:w-40"
-              aria-label="Search Documents"
-            />
-            {hasTags && (
-              <MultiSelectFilter
-                label="Tags"
-                options={tags.map((tag) => ({ value: tag.id, label: tag.name }))}
-                selectedValues={selectedTagFilters}
-                onSelectedValuesChange={setSelectedTagFilters}
-                allLabel="All Tags"
-                noneLabel="No Tags"
-                triggerClassName="w-36 sm:w-44"
-              />
+            {isMobile ? (
+              <>
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" onClick={openViewControlsModal}>
+                  <Filter className="h-4 w-4" />
+                  Filters
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline-warning"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={clearFilters}
+                  disabled={!hasFilters}
+                  aria-label="Clear filters"
+                >
+                  <FilterX className="h-4 w-4" />
+                </Button>
+              </>
+            ) : (
+              <>
+                <Input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Document Name"
+                  className="h-8 w-40 text-sm"
+                  aria-label="Document Name"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                />
+                {hasTags && (
+                  <MultiSelectFilter
+                    label="Tags"
+                    options={tags.map((tag) => ({ value: tag.id, label: tag.name }))}
+                    selectedValues={selectedTagFilters}
+                    onSelectedValuesChange={setSelectedTagFilters}
+                    allLabel="All Tags"
+                    noneLabel="No Tags"
+                    triggerClassName="w-44"
+                  />
+                )}
+                <Button
+                  type="button"
+                  variant="outline-warning"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={clearFilters}
+                  disabled={!hasFilters}
+                  aria-label="Clear filters"
+                >
+                  <FilterX className="h-4 w-4" />
+                </Button>
+              </>
             )}
-            <Button
-              type="button"
-              variant="outline-warning"
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={() => {
-                setQuery('');
-                setSelectedTagFilters([]);
-              }}
-              disabled={!hasFilters}
-              aria-label="Clear filters"
-            >
-              <FilterX className="h-4 w-4" />
-            </Button>
             <input
               ref={uploadInputRef}
               type="file"
@@ -350,13 +610,44 @@ export function CorpusDocumentsView({
               className="hidden"
               onChange={(event) => void uploadFiles(event.target.files)}
             />
-            <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => uploadInputRef.current?.click()}>
-              <FileUp className="h-4 w-4" />
-              Upload
-            </Button>
-            <Button type="button" variant="outline-success" size="sm" className="h-8 w-8 p-0" aria-label="Add document" onClick={openNewEditor}>
-              <Plus className="h-4 w-4" />
-            </Button>
+            <input
+              ref={overwriteInputRef}
+              type="file"
+              accept=".md,.markdown,.txt,text/markdown,text/plain"
+              className="hidden"
+              disabled={overwriting}
+              onChange={(event) => void overwriteDocumentFromFile(event.target.files)}
+            />
+            <input
+              ref={bulkOverwriteInputRef}
+              type="file"
+              accept=".md,.markdown,.txt,text/markdown,text/plain"
+              multiple
+              className="hidden"
+              disabled={bulkOverwriting}
+              onChange={(event) => prepareBulkOverwrite(event.target.files)}
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline-success" size="sm" className="h-8 w-8 p-0" aria-label="Add document">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-popover">
+                <DropdownMenuItem onClick={openNewEditor}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => uploadInputRef.current?.click()}>
+                  <FileUp className="mr-2 h-4 w-4" />
+                  Upload
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={openBulkOverwritePicker}>
+                  <FileUp className="mr-2 h-4 w-4" />
+                  Bulk Overwrite
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </CardHeader>
         <CardContent className="px-0 pb-0 flex-1 min-h-0">
@@ -370,6 +661,107 @@ export function CorpusDocumentsView({
           />
         </CardContent>
       </Card>
+
+      <Dialog open={viewControlsOpen} onOpenChange={setViewControlsOpen}>
+        <DialogContent aria-describedby={undefined} className="w-screen max-w-none rounded-none sm:w-full sm:max-w-sm sm:rounded-lg">
+          <DialogHeader>
+            <DialogTitle>Filters</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="corpus-documents-filter-query">Name</Label>
+              <Input
+                id="corpus-documents-filter-query"
+                value={draftQuery}
+                onChange={(event) => setDraftQuery(event.target.value)}
+                placeholder="Document Name"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="text-sm"
+              />
+            </div>
+            {hasTags && (
+              <div className="space-y-1.5">
+                <Label>Tags</Label>
+                <MultiSelectFilter
+                  label="Tags"
+                  options={tags.map((tag) => ({ value: tag.id, label: tag.name }))}
+                  selectedValues={draftSelectedTagFilters}
+                  onSelectedValuesChange={setDraftSelectedTagFilters}
+                  allLabel="All Tags"
+                  noneLabel="No Tags"
+                  triggerClassName="h-9 w-full"
+                />
+              </div>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setViewControlsOpen(false)}>
+              Cancel
+            </Button>
+            <Button data-dialog-confirm="true" type="button" onClick={applyViewControls}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkOverwriteOpen} onOpenChange={(open) => (open ? setBulkOverwriteOpen(true) : closeBulkOverwriteDialog())}>
+        <DialogContent aria-describedby={undefined} className="w-screen max-w-none rounded-none sm:w-full sm:max-w-2xl sm:rounded-lg">
+          <DialogHeader>
+            <DialogTitle>Bulk Overwrite</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-3">
+            <div className="overflow-hidden rounded-md border border-[hsl(var(--grid-sticky-line))]">
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] border-b border-[hsl(var(--grid-sticky-line))] bg-muted/30 text-xs font-medium text-muted-foreground">
+                <div className="px-3 py-2">Uploaded File</div>
+                <div className="px-3 py-2">Overwrite Target</div>
+              </div>
+              <div className="max-h-[50vh] overflow-y-auto">
+                {bulkOverwriteFiles.map((file, index) => {
+                  const selectedDocumentIds = new Set(
+                    Object.entries(bulkOverwriteMappings)
+                      .filter(([entryIndex, value]) => Number(entryIndex) !== index && value !== CREATE_NEW_DOCUMENT_VALUE)
+                      .map(([, value]) => value),
+                  );
+                  const currentValue = bulkOverwriteMappings[index] ?? CREATE_NEW_DOCUMENT_VALUE;
+
+                  return (
+                    <div key={`${file.name}-${file.lastModified}-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center border-b border-[hsl(var(--grid-sticky-line))] last:border-b-0">
+                      <div className="min-w-0 truncate px-3 py-2 text-sm">{file.name}</div>
+                      <div className="px-3 py-2">
+                        <Select value={currentValue} onValueChange={(value) => setBulkOverwriteMapping(index, value)}>
+                          <SelectTrigger className="h-9 w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={CREATE_NEW_DOCUMENT_VALUE}>Create New Document</SelectItem>
+                            {documents
+                              .filter((document) => document.id === currentValue || !selectedDocumentIds.has(document.id))
+                              .map((document) => (
+                                <SelectItem key={document.id} value={document.id}>{document.title}</SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={bulkOverwriting} onClick={closeBulkOverwriteDialog}>
+              Cancel
+            </Button>
+            <Button data-dialog-confirm="true" type="button" variant="outline-success" disabled={bulkOverwriting || bulkOverwriteFiles.length === 0} onClick={() => void applyBulkOverwrite()}>
+              {bulkOverwriting ? 'Saving...' : 'Apply'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editorOpen} onOpenChange={(open) => !saving && setEditorOpen(open)}>
         <DialogContent aria-describedby={undefined} className="w-screen max-w-none rounded-none sm:w-full sm:max-w-3xl sm:rounded-lg">
@@ -396,7 +788,7 @@ export function CorpusDocumentsView({
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="corpus-document-content">Content (Markdown Supported)</Label>
+              <LabelWithAside htmlFor="corpus-document-content" aside="Markdown Supported">Content</LabelWithAside>
               <MarkdownSyntaxTextarea
                 id="corpus-document-content"
                 value={draftContent}

@@ -14,7 +14,7 @@ interface CopyInputGroupProps extends Omit<React.ComponentProps<typeof Input>, "
   buttonAriaLabel?: string;
 }
 
-async function copyTextToClipboard(value: string) {
+export async function copyTextToClipboard(value: string) {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(value);

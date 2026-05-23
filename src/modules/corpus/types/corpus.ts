@@ -38,5 +38,4 @@ export interface CorpusAccessToken {
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
-  hidden_at: string | null;
 }
