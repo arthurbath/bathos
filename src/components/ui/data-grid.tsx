@@ -38,6 +38,7 @@ interface DataGridContextValue {
     redo: () => void | Promise<unknown>;
   }) => string | null;
   invalidateCellHistoryEntry: (entryId: string | null | undefined) => void;
+  restoreCellFocus: (col: number) => void;
 }
 
 const DataGridCtx = createContext<DataGridContextValue | null>(null);
@@ -1017,6 +1018,9 @@ export function DataGrid<TData>({
                 },
                 invalidateCellHistoryEntry: (entryId) => {
                   dataGridHistory?.invalidateHistoryEntry(entryId);
+                },
+                restoreCellFocus: (col) => {
+                  restoreFocus({ rowId: row.id, col });
                 },
               }}>
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}

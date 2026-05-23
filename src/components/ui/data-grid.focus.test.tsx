@@ -7,6 +7,7 @@ import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom
 import { ColorPicker } from "@/components/ManagedListSection";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DataGridHistoryProvider, useDataGridHistory } from "@/components/ui/data-grid-history";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { DataGrid, GridCheckboxCell, GridCurrencyCell, GridEditableCell, GridPercentCell, GridSelectValue, GridUrlCell, gridMenuTriggerProps, gridNavProps, gridSelectTriggerProps, useDataGrid } from "@/components/ui/data-grid";
 
@@ -55,6 +56,11 @@ type ColorRowData = {
 type SelectRowData = {
   id: string;
   owner: "X" | "Y";
+};
+
+type MultiSelectRowData = {
+  id: string;
+  tags: string[];
 };
 
 type NullableSelectRowData = {
@@ -485,6 +491,33 @@ function GridSelectCell({
   );
 }
 
+function GridMultiSelectCell({
+  value,
+  onChange,
+}: {
+  value: MultiSelectRowData["tags"];
+  onChange: (next: MultiSelectRowData["tags"]) => void | Promise<void>;
+}) {
+  const ctx = useDataGrid();
+
+  return (
+    <MultiSelectFilter
+      label="Tags"
+      options={[
+        { value: "personal", label: "Tone Example: Personal" },
+        { value: "professional", label: "Tone Example: Professional" },
+        { value: "technical", label: "Tone Example: Technical" },
+      ]}
+      selectedValues={value}
+      onSelectedValuesChange={onChange}
+      deferSelectionUntilClose
+      showBulkActions={false}
+      triggerProps={gridSelectTriggerProps(ctx, 0)}
+      onRestoreTriggerFocus={ctx ? () => ctx.restoreCellFocus(0) : undefined}
+    />
+  );
+}
+
 function NullableGridSelectCell({
   value,
   onChange,
@@ -713,6 +746,59 @@ function GridSelectHarness() {
   });
 
   return <DataGrid table={table} />;
+}
+
+function GridMultiSelectHarness({ simulateAsyncRefetch = false }: { simulateAsyncRefetch?: boolean }) {
+  const [rows, setRows] = React.useState<MultiSelectRowData[]>([
+    { id: "row-a", tags: ["personal"] },
+  ]);
+  const multiSelectColumnHelper = createColumnHelper<MultiSelectRowData>();
+  const columns = React.useMemo(
+    () => [
+      multiSelectColumnHelper.display({
+        id: "tags",
+        header: "Tags",
+        meta: { containsButton: true },
+        cell: ({ row }) => (
+          <GridMultiSelectCell
+            value={row.original.tags}
+            onChange={(next) => {
+              setRows((prev) => prev.map((entry) => (
+                entry.id === row.original.id
+                  ? { ...entry, tags: next }
+                  : entry
+              )));
+              if (!simulateAsyncRefetch) return undefined;
+
+              return new Promise<void>((resolve) => {
+                window.setTimeout(() => {
+                  if (document.activeElement instanceof HTMLElement) {
+                    document.activeElement.blur();
+                  }
+                  setRows((prev) => prev.map((entry) => (
+                    entry.id === row.original.id
+                      ? { ...entry, tags: [...next] }
+                      : entry
+                  )));
+                  resolve();
+                }, 40);
+              });
+            }}
+          />
+        ),
+      }),
+    ],
+    [multiSelectColumnHelper, simulateAsyncRefetch],
+  );
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return <DataGrid table={table} historyKey="multi-select-grid" />;
 }
 
 function NullableGridSelectHarness() {
@@ -2283,6 +2369,56 @@ describe("DataGrid escape cancellation", () => {
       await dispatchEscapeOnElement(focusedOption);
       await waitForCondition(() => {
         expect(document.querySelector<HTMLElement>('[role="listbox"]')).toBeNull();
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-row-id")).toBe("row-a");
+        expect(active?.getAttribute("data-col")).toBe("0");
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("returns focus to a data-grid multi-select trigger after committing with Enter", async () => {
+    const { container, root } = mount(<GridMultiSelectHarness simulateAsyncRefetch />);
+    try {
+      const trigger = container.querySelector<HTMLElement>('button[data-row-id="row-a"][data-col="0"]');
+      expect(trigger).not.toBeNull();
+
+      await act(async () => {
+        trigger!.focus();
+      });
+      await dispatchEnterOnElement(trigger!);
+      await waitForCondition(() => {
+        const menuItem = document.querySelector<HTMLElement>('[role="menuitemcheckbox"]');
+        expect(menuItem).not.toBeNull();
+      });
+
+      const professionalItem = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]'))
+        .find((item) => item.textContent?.includes("Professional"));
+      expect(professionalItem).not.toBeNull();
+
+      await act(async () => {
+        professionalItem!.click();
+      });
+      await waitForCondition(() => {
+        expect(professionalItem!.getAttribute("aria-checked")).toBe("true");
+      });
+
+      await act(async () => {
+        professionalItem!.focus();
+      });
+      await dispatchEnterOnElement(professionalItem!);
+      await waitForCondition(() => {
+        expect(document.querySelector<HTMLElement>('[role="menuitemcheckbox"]')).toBeNull();
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-row-id")).toBe("row-a");
+        expect(active?.getAttribute("data-col")).toBe("0");
+        expect(active?.textContent).toContain("2 Tags");
+      });
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 80));
+      });
+      await waitForCondition(() => {
         const active = document.activeElement as HTMLElement | null;
         expect(active?.getAttribute("data-row-id")).toBe("row-a");
         expect(active?.getAttribute("data-col")).toBe("0");

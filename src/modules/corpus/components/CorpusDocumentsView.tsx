@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingState, useReactTable } from '@tanstack/react-table';
-import { Download, FileUp, Filter, FilterX, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Download, FileText, FileUp, Filter, FilterX, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DataGrid, GridEditableCell, gridMenuTriggerProps, useDataGrid } from '@/components/ui/data-grid';
+import { DataGrid, GridEditableCell, gridMenuTriggerProps, gridSelectTriggerProps, useDataGrid } from '@/components/ui/data-grid';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -26,13 +26,68 @@ interface CorpusDocumentsViewProps {
   loading: boolean;
   onAddDocument: (input: CorpusDocumentInput, id?: string) => Promise<CorpusDocument>;
   onUpdateDocument: (id: string, updates: CorpusDocumentUpdate) => Promise<CorpusDocument>;
-  onSetDocumentTags: (documentId: string, tagIds: string[]) => Promise<void>;
+  onSetDocumentTags: (documentId: string, tagIds: string[], optimisticTags?: CorpusTag[]) => Promise<void>;
   onDeleteDocument: (id: string) => Promise<void>;
 }
 
 const columnHelper = createColumnHelper<CorpusDocument>();
 const HISTORY_KEY = 'corpus_documents';
 const CREATE_NEW_DOCUMENT_VALUE = '_create_new';
+const OPEN_DOCUMENT_NAV_COL = 0.5;
+const SORTING_STORAGE_KEY = 'corpus_documents_sorting';
+const QUERY_STORAGE_KEY = 'corpus_documents_filterName';
+const TAG_FILTERS_STORAGE_KEY = 'corpus_documents_tagFilters';
+const SORTABLE_COLUMN_IDS = new Set(['title', 'characters', 'updated_at']);
+
+function getDefaultSorting(): SortingState {
+  return [{ id: 'updated_at', desc: true }];
+}
+
+function readStoredSorting(): SortingState {
+  try {
+    const raw = localStorage.getItem(SORTING_STORAGE_KEY);
+    if (!raw) return getDefaultSorting();
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return getDefaultSorting();
+    const validSorting = parsed.filter((entry): entry is { id: string; desc: boolean } => {
+      if (typeof entry !== 'object' || entry === null) return false;
+      const candidate = entry as { id?: unknown; desc?: unknown };
+      return typeof candidate.id === 'string'
+        && SORTABLE_COLUMN_IDS.has(candidate.id)
+        && typeof candidate.desc === 'boolean';
+    });
+    return validSorting.length > 0 ? validSorting : getDefaultSorting();
+  } catch {
+    return getDefaultSorting();
+  }
+}
+
+function readStoredText(key: string) {
+  try {
+    return localStorage.getItem(key) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function readStoredStringArray(key: string) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function retainKnownValues(values: string[], knownValues: Set<string>) {
+  return values.filter((value) => knownValues.has(value));
+}
+
+function stringArraysEqual(left: string[], right: string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
 
 function titleFromFilename(fileName: string) {
   return fileName.replace(/\.(md|markdown|txt)$/i, '').trim() || fileName;
@@ -65,11 +120,14 @@ function TagCell({
   tags,
   options,
   onChange,
+  navCol,
 }: {
   tags: CorpusTag[];
   options: CorpusTag[];
-  onChange: (tagIds: string[]) => void;
+  onChange: (tagIds: string[]) => void | Promise<void>;
+  navCol: number;
 }) {
+  const ctx = useDataGrid();
   const selectedIds = tags.map((tag) => tag.id);
   return (
     <MultiSelectFilter
@@ -80,6 +138,10 @@ function TagCell({
       allLabel={selectedIds.length === options.length ? 'All Tags' : undefined}
       noneLabel="No Tags"
       triggerClassName="h-7 w-full justify-between border-transparent bg-transparent px-1 text-xs hover:border-[hsl(var(--grid-sticky-line))]"
+      showBulkActions={false}
+      deferSelectionUntilClose
+      triggerProps={gridSelectTriggerProps(ctx, navCol)}
+      onRestoreTriggerFocus={ctx ? () => ctx.restoreCellFocus(navCol) : undefined}
     />
   );
 }
@@ -136,6 +198,39 @@ function ActionsCell({
   );
 }
 
+function TitleCell({
+  document,
+  onTitleChange,
+  onOpenDocument,
+}: {
+  document: CorpusDocument;
+  onTitleChange: (value: string) => void;
+  onOpenDocument: (document: CorpusDocument) => void;
+}) {
+  const ctx = useDataGrid();
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <GridEditableCell
+        value={document.title}
+        navCol={0}
+        onChange={onTitleChange}
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 shrink-0 text-muted-foreground/80 hover:text-foreground"
+        aria-label={`Open document for ${document.title}`}
+        title="Open Document"
+        onClick={() => onOpenDocument(document)}
+        {...gridMenuTriggerProps(ctx, OPEN_DOCUMENT_NAV_COL)}
+      >
+        <FileText className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
+
 export function CorpusDocumentsView({
   userId,
   documents,
@@ -151,9 +246,9 @@ export function CorpusDocumentsView({
   const bulkOverwriteInputRef = useRef<HTMLInputElement | null>(null);
   const overwriteTargetRef = useRef<CorpusDocument | null>(null);
   const isMobile = useIsMobile();
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'updated_at', desc: true }]);
-  const [query, setQuery] = useState('');
-  const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
+  const [sorting, setSorting] = useState<SortingState>(() => readStoredSorting());
+  const [query, setQuery] = useState(() => readStoredText(QUERY_STORAGE_KEY));
+  const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>(() => readStoredStringArray(TAG_FILTERS_STORAGE_KEY));
   const [viewControlsOpen, setViewControlsOpen] = useState(false);
   const [draftQuery, setDraftQuery] = useState('');
   const [draftSelectedTagFilters, setDraftSelectedTagFilters] = useState<string[]>([]);
@@ -170,13 +265,42 @@ export function CorpusDocumentsView({
   const [bulkOverwriting, setBulkOverwriting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CorpusDocument | null>(null);
   const hasTags = tags.length > 0;
+  const tagIdSignature = useMemo(() => tags.map((tag) => tag.id).join('\u0000'), [tags]);
 
   useEffect(() => {
-    if (hasTags) return;
-    setSelectedTagFilters([]);
-    setDraftTagIds([]);
-    setDraftSelectedTagFilters([]);
-  }, [hasTags]);
+    localStorage.setItem(SORTING_STORAGE_KEY, JSON.stringify(sorting));
+  }, [sorting]);
+
+  useEffect(() => {
+    localStorage.setItem(QUERY_STORAGE_KEY, query);
+  }, [query]);
+
+  useEffect(() => {
+    localStorage.setItem(TAG_FILTERS_STORAGE_KEY, JSON.stringify(selectedTagFilters));
+  }, [selectedTagFilters]);
+
+  useEffect(() => {
+    if (!hasTags) {
+      setSelectedTagFilters((current) => (current.length === 0 ? current : []));
+      setDraftTagIds((current) => (current.length === 0 ? current : []));
+      setDraftSelectedTagFilters((current) => (current.length === 0 ? current : []));
+      return;
+    }
+
+    const knownTagIds = new Set(tagIdSignature.split('\u0000').filter(Boolean));
+    setSelectedTagFilters((current) => {
+      const next = retainKnownValues(current, knownTagIds);
+      return stringArraysEqual(current, next) ? current : next;
+    });
+    setDraftTagIds((current) => {
+      const next = retainKnownValues(current, knownTagIds);
+      return stringArraysEqual(current, next) ? current : next;
+    });
+    setDraftSelectedTagFilters((current) => {
+      const next = retainKnownValues(current, knownTagIds);
+      return stringArraysEqual(current, next) ? current : next;
+    });
+  }, [hasTags, tagIdSignature]);
 
   const {
     columnSizing,
@@ -249,7 +373,11 @@ export function CorpusDocumentsView({
           content_type: 'markdown',
         });
         if (hasTags) {
-          await onSetDocumentTags(editingDocument.id, draftTagIds);
+          await onSetDocumentTags(
+            editingDocument.id,
+            draftTagIds,
+            tags.filter((tag) => draftTagIds.includes(tag.id)),
+          );
         }
       } else {
         await onAddDocument({
@@ -461,10 +589,10 @@ export function CorpusDocumentsView({
         minSize: 160,
         meta: { containsEditableInput: true },
         cell: ({ row }) => (
-          <GridEditableCell
-            value={row.original.title}
-            navCol={0}
-            onChange={(value) => onUpdateDocument(row.original.id, { title: value })}
+          <TitleCell
+            document={row.original}
+            onTitleChange={(value) => onUpdateDocument(row.original.id, { title: value })}
+            onOpenDocument={openExistingEditor}
           />
         ),
       }),
@@ -480,7 +608,12 @@ export function CorpusDocumentsView({
                 <TagCell
                   tags={row.original.tags}
                   options={tags}
-                  onChange={(tagIds) => void onSetDocumentTags(row.original.id, tagIds)}
+                  onChange={(tagIds) => onSetDocumentTags(
+                    row.original.id,
+                    tagIds,
+                    tags.filter((tag) => tagIds.includes(tag.id)),
+                  )}
+                  navCol={1}
                 />
               ),
             }),
@@ -784,6 +917,7 @@ export function CorpusDocumentsView({
                   allLabel="All Tags"
                   noneLabel="No Tags"
                   triggerClassName="h-9 w-full"
+                  showBulkActions={false}
                 />
               </div>
             )}

@@ -23,13 +23,14 @@ const MCP_URL = 'https://rsqfokyqntmtdejfwmjs.supabase.co/functions/v1/corpus-mc
 
 const EXAMPLE_INSTRUCTIONS = `You have access to my BathOS Corpus MCP server. Corpus contains documents I have selected as reusable context for writing, editing, formatting, reasoning, and answering on my behalf.
 
-Use Corpus automatically when I ask you to write, rewrite, edit, summarize, generate titles or naming options, apply my conventions, write in my voice, use a professional/personal/technical tone, write about me or my work, or avoid patterns I dislike.
+Use Corpus automatically when I ask you to write, rewrite, edit, copyedit, review text for errors, summarize, generate titles or naming options, apply my conventions, check spelling/grammar/punctuation/formatting, write in my voice, use a professional/personal/prose/technical tone, write about me or my work, answer questions about personal details from my life that you do not already know, or avoid patterns I dislike.
 
 Available Corpus tools:
 - list_tags: List the fixed Corpus tags and document counts.
 - search: Search documents by title, body text, source filename, and tags. Use query, tags, and limit.
 - fetch: Fetch the full content of one document by id. Use this after search returns a relevant result.
-- get_context_bundle: Retrieve a task-focused bundle using one of these intents: write_in_voice, apply_conventions, professional_tone, personal_tone, technical_tone, biography, avoid_antipatterns, reference, or template.
+- get_context_bundle: Retrieve a task-focused bundle using one of these intents: write_in_voice, apply_conventions, style_review, professional_tone, personal_tone, prose_tone, technical_tone, biography, avoid_antipatterns, reference, or template.
+- get_style_conventions: Retrieve authoritative Style Conventions, Instructions, and Anti-patterns for grammar, spelling, punctuation, formatting, copyediting, naming, and style-compliance review.
 - get_style_profile: Retrieve a compact writing-style profile when the task is broadly about my voice, conventions, tone, or preferences.
 
 Corpus tag meanings:
@@ -37,22 +38,25 @@ Corpus tag meanings:
 - Biography: Documents that describe who I am.
 - Domain Knowledge: Reusable subject-matter context.
 - Instructions: General instructions, preferences, rules, and reusable guidance.
-- Personal Tone Example: Examples of personal, informal writing.
-- Professional Tone Example: Examples of workplace writing.
 - Reference Material: Source material to consult when answering or drafting.
-- Style Conventions: Spelling, grammar, formatting, naming, and usage conventions.
-- Technical Tone Example: Examples of technical writing.
+- Style Conventions: Spelling, grammar, formatting, naming, and usage conventions. Treat these as authoritative for style review and copyediting.
 - Template: Reusable structures, formats, and boilerplate.
+- Tone Example: Personal: Examples of personal, informal writing.
+- Tone Example: Professional: Examples of workplace writing.
+- Tone Example: Prose: Examples of polished prose writing.
+- Tone Example: Technical: Examples of technical writing.
 
 Retrieval workflow:
-1. For writing and content-generation tasks, call get_context_bundle with the closest intent and a short query from the request.
-2. If a narrower lookup is needed, call search with relevant query terms and tag filters.
-3. Inspect returned titles, excerpts, and tags.
-4. Call fetch for the most relevant documents before drafting from them.
-5. Prefer explicit Instructions and Style Conventions over inferred patterns from examples.
-6. Apply Anti-patterns as negative guidance.
-7. Do not quote or reveal private Corpus content unless I explicitly ask you to.
-8. If Corpus is unavailable, say so briefly and proceed only if the task can still be handled safely.`;
+1. For grammar, spelling, punctuation, formatting, copyediting, naming, style-review, convention-compliance, or "does this violate my preferences?" tasks, call get_style_conventions or get_context_bundle with intent style_review before reviewing. Fetch returned Style Conventions documents first and use them as the authority.
+2. For writing and content-generation tasks, call get_context_bundle with the closest intent and a short query from the request.
+3. If I ask about something personal from my life and you do not have specific memory or context, search Corpus before answering. Prioritize Reference Material, Biography, and Domain Knowledge when looking for that context.
+4. If a narrower lookup is needed, call search with relevant query terms and tag filters.
+5. Inspect returned titles, excerpts, and tags.
+6. Call fetch for the most relevant documents before drafting, editing, or reviewing from them.
+7. Prefer explicit Instructions and Style Conventions over inferred patterns from examples.
+8. Apply Anti-patterns as negative guidance.
+9. Do not quote or reveal private Corpus content unless I explicitly ask you to.
+10. If Corpus is unavailable, say so briefly and proceed only if the task can still be handled safely.`;
 
 function formatDate(value: string | null) {
   if (!value) return 'Never';

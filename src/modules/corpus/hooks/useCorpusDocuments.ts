@@ -26,6 +26,10 @@ function sortDocuments(documents: CorpusDocument[]) {
   return [...documents].sort((left, right) => right.updated_at.localeCompare(left.updated_at));
 }
 
+function sortTags(tags: CorpusTag[]) {
+  return [...tags].sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
+}
+
 function normalizeTitle(title: string) {
   const trimmed = title.trim();
   if (!trimmed) throw new Error('Title is required.');
@@ -138,17 +142,32 @@ export function useCorpusDocuments(userId: string | undefined) {
     }
   }, [queryClient, queryKey, userId]);
 
-  const setDocumentTags = useCallback(async (documentId: string, tagIds: string[]) => {
+  const setDocumentTags = useCallback(async (documentId: string, tagIds: string[], optimisticTags?: CorpusTag[]) => {
     if (!userId) throw new Error('You must be signed in.');
+
+    const previousDocuments = queryClient.getQueryData<CorpusDocument[]>(queryKey);
+    if (optimisticTags) {
+      await queryClient.cancelQueries({ queryKey });
+      queryClient.setQueryData<CorpusDocument[]>(queryKey, (current) =>
+        (current ?? []).map((document) => (
+          document.id === documentId
+            ? { ...document, tags: sortTags(optimisticTags) }
+            : document
+        )),
+      );
+    }
 
     try {
       await replaceDocumentTags(userId, documentId, tagIds);
       await refreshDocuments();
     } catch (error) {
+      if (optimisticTags && previousDocuments) {
+        queryClient.setQueryData(queryKey, previousDocuments);
+      }
       showMutationError(error);
       throw error;
     }
-  }, [refreshDocuments, userId]);
+  }, [queryClient, queryKey, refreshDocuments, userId]);
 
   const removeDocument = useCallback(async (id: string) => {
     if (!userId) throw new Error('You must be signed in.');
