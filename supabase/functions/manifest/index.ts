@@ -12,6 +12,7 @@ const MODULES: Record<string, { name: string; icon: string; startUrl: string }> 
   drawers: { name: 'Drawers',         icon: '/module-drawers.png',         startUrl: '/drawers/plan' },
   garage:  { name: 'Garage',          icon: '/module-garage.png',          startUrl: '/garage/due' },
   exercise:{ name: 'Exercise',        icon: '/module-exercise.png',        startUrl: '/exercise/run' },
+  corpus:  { name: 'Corpus',          icon: '/icon-192.png',               startUrl: '/corpus/documents' },
   admin:   { name: 'Administration',  icon: '/module-administration.png',  startUrl: '/admin' },
 };
 

@@ -1198,6 +1198,156 @@ export type Database = {
         }
         Relationships: []
       }
+      corpus_access_tokens: {
+        Row: {
+          created_at: string
+          hidden_at: string | null
+          id: string
+          last_used_at: string | null
+          name: string
+          revoked_at: string | null
+          token_hash: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          hidden_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          name: string
+          revoked_at?: string | null
+          token_hash: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          hidden_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          name?: string
+          revoked_at?: string | null
+          token_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      corpus_document_tags: {
+        Row: {
+          created_at: string
+          document_id: string
+          tag_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_id: string
+          tag_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          document_id?: string
+          tag_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "corpus_document_tags_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "corpus_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "corpus_document_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "corpus_tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      corpus_documents: {
+        Row: {
+          content: string
+          content_type: string
+          created_at: string
+          id: string
+          source_filename: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          content_type?: string
+          created_at?: string
+          id?: string
+          source_filename?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          content_type?: string
+          created_at?: string
+          id?: string
+          source_filename?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      corpus_settings: {
+        Row: {
+          created_at: string
+          default_tags_created: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          default_tags_created?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          default_tags_created?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      corpus_tags: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       wardrobe_items: {
         Row: {
           brand: string | null

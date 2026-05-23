@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
-import { Calculator, CarFront, CircleDollarSign, Dumbbell, ShelvingUnit, Shield, Shirt } from 'lucide-react';
+import { BookOpenText, Calculator, CarFront, CircleDollarSign, Dumbbell, ShelvingUnit, Shield, Shirt } from 'lucide-react';
 
-export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'estimator' | 'exercise' | 'wardrobe' | 'admin';
+export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'estimator' | 'exercise' | 'wardrobe' | 'corpus' | 'admin';
 
 export interface PlatformModule {
   id: PlatformModuleId;
@@ -68,6 +68,14 @@ const WARDROBE_MODULE: PlatformModule = {
   iconPath: '/module-wardrobe.png',
 };
 
+const CORPUS_MODULE: PlatformModule = {
+  id: 'corpus',
+  name: 'Corpus',
+  description: 'Manage personal writing samples, style rules, and MCP-ready reference documents',
+  launchPath: '/corpus/documents',
+  icon: BookOpenText,
+};
+
 const ADMINISTRATION_MODULE: PlatformModule = {
   id: 'admin',
   name: 'Administration',
@@ -78,7 +86,7 @@ const ADMINISTRATION_MODULE: PlatformModule = {
   adminOnly: true,
 };
 
-const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, DRAWERS_MODULE, GARAGE_MODULE, ESTIMATOR_MODULE, WARDROBE_MODULE, EXERCISE_MODULE, ADMINISTRATION_MODULE];
+const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, CORPUS_MODULE, DRAWERS_MODULE, GARAGE_MODULE, ESTIMATOR_MODULE, WARDROBE_MODULE, EXERCISE_MODULE, ADMINISTRATION_MODULE];
 
 interface GetAvailableModulesOptions {
   isAdmin?: boolean;

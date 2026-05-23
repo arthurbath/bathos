@@ -64,4 +64,15 @@ describe('useHostModule', () => {
       cleanup(root, container);
     }
   });
+
+  it('detects the corpus module from the URL path', () => {
+    window.history.replaceState({}, '', '/corpus/documents');
+
+    const { container, root } = renderHarness();
+    try {
+      expect(container.querySelector('[data-testid="module-id"]')?.textContent).toBe('corpus');
+    } finally {
+      cleanup(root, container);
+    }
+  });
 });

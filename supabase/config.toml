@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.manifest]
 verify_jwt = false
+
+[functions.corpus-mcp]
+verify_jwt = false

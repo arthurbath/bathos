@@ -73,12 +73,24 @@ Track clothing items for a personal wardrobe. Features include:
 
 Accessible at [bath.garden/wardrobe/items](https://bath.garden/wardrobe/items).
 
+### Corpus
+
+Manage personal writing samples and style-reference documents for authenticated agent access. Features include:
+
+- Markdown-aware document upload for MD and TXT files
+- Direct document creation and Markdown-aware text editing
+- User-managed tags with seeded defaults for tone examples, conventions, instructions, dictionary entries, personal context, and anti-patterns
+- Tag and text search across documents
+- Revocable bearer tokens for the read-only Corpus MCP endpoint
+
+Accessible at [bath.garden/corpus/documents](https://bath.garden/corpus/documents).
+
 ## Development notes
 
 - Built with React, TypeScript, Vite, Tailwind CSS, and Supabase
 - Modules are isolated under `src/modules/[name]/` — removing one should not break another
-- Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`, `estimator_`, `wardrobe_`) for clarity
-- Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`, `/estimator/...`, `/wardrobe/...`)
+- Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`, `estimator_`, `wardrobe_`, `corpus_`) for clarity
+- Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`, `/estimator/...`, `/wardrobe/...`, `/corpus/...`)
 - See `docs/agents/ARCHITECTURE.md` for structure, `docs/agents/MODULE_GUIDE.md` for adding modules, and `docs/human/STYLE_GUIDE.md` for design conventions
 
 ### Dev Console Bridge (Safari + Vite)

@@ -62,7 +62,7 @@ describe('LauncherPage modules', () => {
     mockIsAdmin.mockReset();
   });
 
-  it('shows general modules with Wardrobe beneath Ticket Estimator for signed-in users', () => {
+  it('shows general modules with Corpus beneath Budget for signed-in users', () => {
     mockAuthContext.mockReturnValue({
       user: { id: 'user-1' },
       loading: false,
@@ -74,6 +74,7 @@ describe('LauncherPage modules', () => {
 
     try {
       expect(container.textContent).toContain('Budget');
+      expect(container.textContent).toContain('Corpus');
       expect(container.textContent).toContain('Drawers');
       expect(container.textContent).toContain('Garage');
       expect(container.textContent).toContain('Ticket Estimator');
@@ -81,8 +82,8 @@ describe('LauncherPage modules', () => {
       expect(container.textContent).not.toContain('Administration');
       const moduleLabels = Array.from(container.querySelectorAll('a')).map((link) => link.textContent ?? '');
       expect(moduleLabels.map((label) => (
-        ['Budget', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe'].find((moduleName) => label.includes(moduleName))
-      )).filter(Boolean)).toEqual(['Budget', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe']);
+        ['Budget', 'Corpus', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe'].find((moduleName) => label.includes(moduleName))
+      )).filter(Boolean)).toEqual(['Budget', 'Corpus', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe']);
       expect(mockNavigate).not.toHaveBeenCalledWith('/budget/summary', { replace: true });
     } finally {
       cleanup(root, container);
@@ -101,6 +102,7 @@ describe('LauncherPage modules', () => {
 
     try {
       expect(container.textContent).toContain('Garage');
+      expect(container.textContent).toContain('Corpus');
       expect(container.textContent).toContain('Ticket Estimator');
       expect(container.textContent).toContain('Wardrobe');
       expect(container.textContent).toContain('Exercise');
@@ -108,8 +110,8 @@ describe('LauncherPage modules', () => {
       expect(container.textContent).toContain('Admin');
       const moduleLabels = Array.from(container.querySelectorAll('a')).map((link) => link.textContent ?? '');
       expect(moduleLabels.map((label) => (
-        ['Budget', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe', 'Exercise', 'Administration'].find((moduleName) => label.includes(moduleName))
-      )).filter(Boolean)).toEqual(['Budget', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe', 'Exercise', 'Administration']);
+        ['Budget', 'Corpus', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe', 'Exercise', 'Administration'].find((moduleName) => label.includes(moduleName))
+      )).filter(Boolean)).toEqual(['Budget', 'Corpus', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe', 'Exercise', 'Administration']);
     } finally {
       cleanup(root, container);
     }
