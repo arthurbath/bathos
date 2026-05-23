@@ -23,7 +23,6 @@ import { DataGridHistoryProvider } from "@/components/ui/data-grid-history";
 import Index from "./pages/Index";
 import DrawersIndex from "@/modules/drawers/DrawersIndex";
 import GarageIndex from "@/modules/garage/GarageIndex";
-import ExerciseIndex from "@/modules/exercise/ExerciseIndex";
 import WardrobeIndex from "@/modules/wardrobe/WardrobeIndex";
 import EstimatorIndex from "@/modules/estimator/EstimatorIndex";
 import EstimatorRoomPage from "@/modules/estimator/EstimatorRoomPage";
@@ -119,12 +118,6 @@ function AppRoutes() {
         <Route path="/garage/services" element={<GarageIndex />} />
         <Route path="/garage/servicings" element={<GarageIndex />} />
         <Route path="/garage/config" element={<GarageIndex />} />
-
-        {/* Exercise module */}
-        <Route path="/exercise" element={<Navigate to="/exercise/routines" replace />} />
-        <Route path="/exercise/run" element={<Navigate to="/exercise/routines" replace />} />
-        <Route path="/exercise/routines" element={<ExerciseIndex />} />
-        <Route path="/exercise/exercises" element={<ExerciseIndex />} />
 
         {/* Wardrobe module */}
         <Route path="/wardrobe" element={<Navigate to="/wardrobe/items" replace />} />

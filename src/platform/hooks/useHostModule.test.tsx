@@ -32,17 +32,6 @@ afterEach(() => {
 });
 
 describe('useHostModule', () => {
-  it('detects the exercise module from the URL path', () => {
-    window.history.replaceState({}, '', '/exercise/routines');
-
-    const { container, root } = renderHarness();
-    try {
-      expect(container.querySelector('[data-testid="module-id"]')?.textContent).toBe('exercise');
-    } finally {
-      cleanup(root, container);
-    }
-  });
-
   it('detects the estimator module from the URL path', () => {
     window.history.replaceState({}, '', '/estimator/rooms/123456789012345678');
 

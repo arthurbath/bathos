@@ -90,7 +90,7 @@ describe('LauncherPage modules', () => {
     }
   });
 
-  it('shows Exercise and Administration for admin users', () => {
+  it('shows Administration for admin users', () => {
     mockAuthContext.mockReturnValue({
       user: { id: 'user-1' },
       loading: false,
@@ -105,13 +105,12 @@ describe('LauncherPage modules', () => {
       expect(container.textContent).toContain('Corpus');
       expect(container.textContent).toContain('Ticket Estimator');
       expect(container.textContent).toContain('Wardrobe');
-      expect(container.textContent).toContain('Exercise');
       expect(container.textContent).toContain('Administration');
       expect(container.textContent).toContain('Admin');
       const moduleLabels = Array.from(container.querySelectorAll('a')).map((link) => link.textContent ?? '');
       expect(moduleLabels.map((label) => (
-        ['Budget', 'Corpus', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe', 'Exercise', 'Administration'].find((moduleName) => label.includes(moduleName))
-      )).filter(Boolean)).toEqual(['Budget', 'Corpus', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe', 'Exercise', 'Administration']);
+        ['Budget', 'Corpus', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe', 'Administration'].find((moduleName) => label.includes(moduleName))
+      )).filter(Boolean)).toEqual(['Budget', 'Corpus', 'Drawers', 'Garage', 'Ticket Estimator', 'Wardrobe', 'Administration']);
     } finally {
       cleanup(root, container);
     }

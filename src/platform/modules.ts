@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
-import { BookOpenText, Calculator, CarFront, CircleDollarSign, Dumbbell, ShelvingUnit, Shield, Shirt } from 'lucide-react';
+import { BookOpenText, Calculator, CarFront, CircleDollarSign, ShelvingUnit, Shield, Shirt } from 'lucide-react';
 
-export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'estimator' | 'exercise' | 'wardrobe' | 'corpus' | 'admin';
+export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'estimator' | 'wardrobe' | 'corpus' | 'admin';
 
 export interface PlatformModule {
   id: PlatformModuleId;
@@ -49,16 +49,6 @@ const ESTIMATOR_MODULE: PlatformModule = {
   iconPath: '/module-estimator.png',
 };
 
-const EXERCISE_MODULE: PlatformModule = {
-  id: 'exercise',
-  name: 'Exercise',
-  description: 'Define exercises, build routines, and run through them one step at a time',
-  launchPath: '/exercise/routines',
-  icon: Dumbbell,
-  iconPath: '/module-exercise.png',
-  adminOnly: true,
-};
-
 const WARDROBE_MODULE: PlatformModule = {
   id: 'wardrobe',
   name: 'Wardrobe',
@@ -86,7 +76,7 @@ const ADMINISTRATION_MODULE: PlatformModule = {
   adminOnly: true,
 };
 
-const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, CORPUS_MODULE, DRAWERS_MODULE, GARAGE_MODULE, ESTIMATOR_MODULE, WARDROBE_MODULE, EXERCISE_MODULE, ADMINISTRATION_MODULE];
+const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, CORPUS_MODULE, DRAWERS_MODULE, GARAGE_MODULE, ESTIMATOR_MODULE, WARDROBE_MODULE, ADMINISTRATION_MODULE];
 
 interface GetAvailableModulesOptions {
   isAdmin?: boolean;
