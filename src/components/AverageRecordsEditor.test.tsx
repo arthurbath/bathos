@@ -258,6 +258,54 @@ describe('AverageRecordsEditor', () => {
     }
   });
 
+  it('pages the calendar month while a monthly record datepicker is open', async () => {
+    function Harness() {
+      const [records, setRecords] = React.useState<BudgetAverageRecord[]>([
+        { year: 2026, month: 3, amount: 100, date: '2026-03-02' },
+      ]);
+      return (
+        <AverageRecordsEditor
+          valueType="monthly_averaged"
+          records={records}
+          onChange={setRecords}
+        />
+      );
+    }
+
+    const { container, root } = mount(<Harness />);
+
+    try {
+      const trigger = Array.from(container.querySelectorAll('button'))
+        .find((button) => button.textContent?.includes('Mar 2, 2026')) as HTMLButtonElement | undefined;
+      act(() => {
+        trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      await flushUi();
+
+      const nextMonthButton = document.body.querySelector('button[name="next-month"]') as HTMLButtonElement | null;
+      expect(nextMonthButton).toBeTruthy();
+
+      act(() => {
+        nextMonthButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      await flushUi();
+
+      expect(document.body.textContent).toContain('April 2026');
+
+      const previousMonthButton = document.body.querySelector('button[name="previous-month"]') as HTMLButtonElement | null;
+      expect(previousMonthButton).toBeTruthy();
+
+      act(() => {
+        previousMonthButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      await flushUi();
+
+      expect(document.body.textContent).toContain('March 2026');
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it('returns focus to the datepicker trigger after selecting a date', async () => {
     function Harness() {
       const [records, setRecords] = React.useState<BudgetAverageRecord[]>([

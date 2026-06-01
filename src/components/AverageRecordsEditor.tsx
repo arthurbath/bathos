@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarIcon, Minus, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -73,11 +73,20 @@ function DateRecordPicker({
   onChange: (date: Date) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const selectedDate = getRecordDate(record, valueType);
+  const recordDate = record.date;
+  const recordMonth = record.month;
+  const recordYear = record.year;
+  const selectedDate = useMemo(
+    () => {
+      const parsed = parseDateInputValue(recordDate);
+      if (parsed) return parsed;
+      return new Date(recordYear, valueType === 'monthly_averaged' ? ((recordMonth ?? 1) - 1) : 0, 1);
+    },
+    [recordDate, recordMonth, recordYear, valueType],
+  );
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const shouldRestoreFocusRef = useRef(false);
-  const selectedDateKey = record.date ?? `${record.year}-${record.month ?? 1}`;
 
   useEffect(() => {
     if (!open) return;
