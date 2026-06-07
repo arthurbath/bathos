@@ -2,7 +2,7 @@
 
 BathOS is a shared household platform — a collection of small, focused tools for people who live together. Each tool (called a **module**) lives under its own path prefix and handles one aspect of running a home.
 
-The platform is live at [bath.garden](https://bath.garden).
+The platform is live at [os.bath.garden](https://os.bath.garden).
 
 ## Modules
 
@@ -20,7 +20,7 @@ Split shared expenses fairly between two partners. The Budget module calculates 
 - Partner invite codes for joining an existing household
 - Household membership controls: view members, rotate invite code, remove members, leave household, and delete household
 
-Accessible at [bath.garden/budget/summary](https://bath.garden/budget/summary).
+Accessible at [os.bath.garden/budget/summary](https://os.bath.garden/budget/summary).
 
 ### Drawers
 
@@ -33,7 +33,7 @@ Plan and label Kallax-style cubby layouts across one or more named units in a sh
 - Household invite code flow for sharing the same drawer layout
 - Household membership controls: view members, rotate invite code, remove members, leave household, and delete household
 
-Accessible at [bath.garden/drawers/plan](https://bath.garden/drawers/plan).
+Accessible at [os.bath.garden/drawers/plan](https://os.bath.garden/drawers/plan).
 
 ### Garage
 
@@ -46,7 +46,7 @@ Track vehicle maintenance schedules and service history for each user account. F
 - Service visit logging with outcomes and notes
 - Receipt attachment support for service records
 
-Accessible at [bath.garden/garage/due](https://bath.garden/garage/due).
+Accessible at [os.bath.garden/garage/due](https://os.bath.garden/garage/due).
 
 ### Ticket Estimator
 
@@ -59,7 +59,7 @@ Run lightweight planning-poker style estimation rooms without requiring BathOS a
 - Concealed voting with T-shirt (`XXS`-`XXL+`) or Fibonacci (`1`-`21+`) sizing
 - Presence indicators, member kick controls, and revealed vote history for past participants
 
-Accessible at [bath.garden/estimator](https://bath.garden/estimator).
+Accessible at [os.bath.garden/estimator](https://os.bath.garden/estimator).
 
 ### Wardrobe
 
@@ -71,7 +71,7 @@ Track clothing items for a personal wardrobe. Features include:
 - URL field validation with open-link support
 - Row duplication and deletion from the item actions menu
 
-Accessible at [bath.garden/wardrobe/items](https://bath.garden/wardrobe/items).
+Accessible at [os.bath.garden/wardrobe/items](https://os.bath.garden/wardrobe/items).
 
 ### Corpus
 
@@ -83,7 +83,7 @@ Manage personal writing samples and style-reference documents for authenticated 
 - Tag and text search across documents
 - Revocable bearer tokens for the read-only Corpus MCP endpoint
 
-Accessible at [bath.garden/corpus/documents](https://bath.garden/corpus/documents).
+Accessible at [os.bath.garden/corpus/documents](https://os.bath.garden/corpus/documents).
 
 ## Development notes
 

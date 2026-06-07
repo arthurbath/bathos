@@ -28,7 +28,7 @@ Deno.serve((req: Request) => {
 
   const url = new URL(req.url);
   const moduleId = url.searchParams.get('module');
-  const origin = url.searchParams.get('origin') ?? 'https://bath.garden';
+  const origin = url.searchParams.get('origin') ?? 'https://os.bath.garden';
   const cfg = moduleId && MODULES[moduleId] ? MODULES[moduleId] : DEFAULT;
 
   const manifest = {

@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { PRODUCTION_SENTRY_HOST, shouldEnableSentry } from "@/platform/sentry";
+import { PRODUCTION_SENTRY_HOSTS, shouldEnableSentry } from "@/platform/sentry";
 
 describe("shouldEnableSentry", () => {
-  it("enables Sentry on the production bath.garden host", () => {
-    expect(shouldEnableSentry("https://example@sentry.io/123", PRODUCTION_SENTRY_HOST)).toBe(true);
+  it("enables Sentry on production BathOS hosts", () => {
+    PRODUCTION_SENTRY_HOSTS.forEach((host) => {
+      expect(shouldEnableSentry("https://example@sentry.io/123", host)).toBe(true);
+    });
   });
 
   it("disables Sentry when the DSN is missing", () => {
-    expect(shouldEnableSentry(undefined, PRODUCTION_SENTRY_HOST)).toBe(false);
+    expect(shouldEnableSentry(undefined, "os.bath.garden")).toBe(false);
   });
 
   it("disables Sentry on non-production hosts", () => {

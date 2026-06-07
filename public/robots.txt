@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://bath.garden/sitemap.xml
+Sitemap: https://os.bath.garden/sitemap.xml
