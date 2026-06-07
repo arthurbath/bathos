@@ -694,7 +694,7 @@ export function WardrobeItemsGrid({
                 autoCorrect="off"
                 autoCapitalize="none"
                 spellCheck={false}
-                className="h-8 w-36 text-xs"
+                className="h-8 w-36"
                 aria-label="Name"
               />
               <MultiSelectFilter
@@ -707,7 +707,7 @@ export function WardrobeItemsGrid({
                 triggerClassName="w-44"
               />
               <Select value={groupBy} onValueChange={(value) => setGroupBy(value as GroupByOption)}>
-                <SelectTrigger className="h-8 w-44 text-xs"><GridSelectValue placeholder="Group By…" /></SelectTrigger>
+                <SelectTrigger className="h-8 w-44"><GridSelectValue placeholder="Group By…" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No Grouping</SelectItem>
                   <SelectItem value="category">Group by Category</SelectItem>
