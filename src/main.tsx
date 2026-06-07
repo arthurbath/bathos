@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { installClientConsoleMirror } from "./platform/dev/clientConsoleMirror";
-import { shouldEnableSentry } from "./platform/sentry";
+import { isIgnorableBrowserAbort, shouldEnableSentry } from "./platform/sentry";
 import "./index.css";
 
 if (import.meta.env.DEV) {
@@ -56,6 +56,10 @@ if (shouldInitSentry) {
     environment: "production",
     sendDefaultPii: false,
     debug: import.meta.env.DEV,
+    beforeSend(event, hint) {
+      if (isIgnorableBrowserAbort(event, hint)) return null;
+      return event;
+    },
   });
 
   const shouldTriggerSentryTest = new URLSearchParams(window.location.search).get("sentry_test") === "1";
