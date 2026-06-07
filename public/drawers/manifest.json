@@ -1,0 +1,23 @@
+{
+  "name": "Drawers",
+  "short_name": "Drawers",
+  "description": "Plan grid-style shelving units and drawer arrangements",
+  "start_url": "/drawers/plan",
+  "display": "standalone",
+  "background_color": "#fcfcfc",
+  "theme_color": "#1f1f1f",
+  "icons": [
+    {
+      "src": "/module-drawers.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/module-drawers.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
