@@ -247,7 +247,7 @@ function WardrobeActionsCell({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <AlertDialogContent className="rounded-lg">
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Wardrobe Item</AlertDialogTitle>
         </AlertDialogHeader>
@@ -758,7 +758,7 @@ export function WardrobeItemsGrid({
       </CardContent>
 
       <Dialog open={viewControlsOpen} onOpenChange={setViewControlsOpen}>
-        <DialogContent aria-describedby={undefined} className="w-screen max-w-none rounded-none sm:w-full sm:max-w-sm sm:rounded-lg">
+        <DialogContent aria-describedby={undefined} className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Filters & View Settings</DialogTitle>
           </DialogHeader>
@@ -814,7 +814,7 @@ export function WardrobeItemsGrid({
       </Dialog>
 
       <Dialog open={addOpen} onOpenChange={(open) => !saving && setAddOpen(open)}>
-        <DialogContent aria-describedby={undefined} className="max-w-lg rounded-lg">
+        <DialogContent aria-describedby={undefined} className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Wardrobe Item</DialogTitle>
           </DialogHeader>

@@ -243,7 +243,7 @@ function ServicingActionsCell({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <AlertDialogContent className="rounded-lg">
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete servicing</AlertDialogTitle>
         </AlertDialogHeader>
@@ -945,7 +945,7 @@ export function GarageServicingsGrid({
         setDialogOpen(open);
         if (!open) setServiceDatePickerOpen(false);
       }}>
-        <DialogContent aria-describedby={undefined} className="max-h-[85vh] max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg">
+        <DialogContent aria-describedby={undefined} className="max-h-[85vh] max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
           <DialogHeader>
             <DialogTitle>{formState.id ? 'Servicing Detail' : 'Add Servicing'}</DialogTitle>
           </DialogHeader>
@@ -1424,7 +1424,7 @@ export function GarageServicingsGrid({
       </Dialog>
 
       <Dialog open={addServiceDialogOpen} onOpenChange={(open) => !addServiceBusy && setAddServiceDialogOpen(open)}>
-        <DialogContent aria-describedby={undefined} className="max-w-lg rounded-lg">
+        <DialogContent aria-describedby={undefined} className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Service</DialogTitle>
           </DialogHeader>

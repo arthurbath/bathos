@@ -111,7 +111,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 max-sm:items-start max-sm:p-0">
           <div className="absolute inset-0 cursor-pointer bg-black/50" onClick={() => setShowFeedbackModal(false)} />
           <div
-            className="relative w-full max-w-md overflow-hidden rounded-lg border bg-card shadow-lg max-sm:fixed max-sm:left-0 max-sm:right-0 max-sm:top-[var(--bathos-modal-vv-top,0px)] max-sm:grid max-sm:h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-w-none max-sm:grid-rows-[auto_minmax(0,1fr)_auto] max-sm:rounded-none"
+            className="relative w-full max-w-md overflow-hidden rounded-lg border bg-card shadow-lg max-sm:fixed max-sm:left-0 max-sm:right-0 max-sm:top-[calc(var(--bathos-modal-vv-top,0px)+env(safe-area-inset-top,0px))] max-sm:grid max-sm:h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-w-none max-sm:grid-rows-[auto_minmax(0,1fr)_auto]"
             style={modalViewportStyle}
             onKeyDown={(event) => {
               if (!isCommandEnter(event)) return;
@@ -162,7 +162,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
         <div className="fixed inset-0 z-[92] flex items-center justify-center p-4 max-sm:items-start max-sm:p-0">
           <div className="absolute inset-0 cursor-pointer bg-black/50" onClick={() => setShowTermsModal(false)} />
           <div
-            className="relative grid h-[90vh] w-full max-w-4xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border bg-card shadow-lg max-sm:fixed max-sm:left-0 max-sm:right-0 max-sm:top-[var(--bathos-modal-vv-top,0px)] max-sm:h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-w-none max-sm:rounded-none"
+            className="relative grid h-[90vh] w-full max-w-4xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border bg-card shadow-lg max-sm:fixed max-sm:left-0 max-sm:right-0 max-sm:top-[calc(var(--bathos-modal-vv-top,0px)+env(safe-area-inset-top,0px))] max-sm:h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-w-none"
             style={modalViewportStyle}
             onKeyDown={(event) => {
               if (!isCommandEnter(event)) return;
@@ -187,7 +187,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
 
       {/* Main Overlay */}
       <div
-        className="relative w-full max-w-md overflow-hidden rounded-lg border bg-card shadow-lg max-sm:fixed max-sm:left-0 max-sm:right-0 max-sm:top-[var(--bathos-modal-vv-top,0px)] max-sm:grid max-sm:h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-w-none max-sm:grid-rows-[auto_minmax(0,1fr)_auto] max-sm:rounded-none"
+        className="relative w-full max-w-md overflow-hidden rounded-lg border bg-card shadow-lg max-sm:fixed max-sm:left-0 max-sm:right-0 max-sm:top-[calc(var(--bathos-modal-vv-top,0px)+env(safe-area-inset-top,0px))] max-sm:grid max-sm:h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-w-none max-sm:grid-rows-[auto_minmax(0,1fr)_auto]"
         style={modalViewportStyle}
         onKeyDown={(event) => {
           if (!isCommandEnter(event)) return;

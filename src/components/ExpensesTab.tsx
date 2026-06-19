@@ -1793,7 +1793,7 @@ export function ExpensesTab({
       </AlertDialog>
 
       <Dialog open={viewControlsOpen} onOpenChange={setViewControlsOpen}>
-        <DialogContent className="w-screen max-w-none rounded-none sm:w-full sm:max-w-sm sm:rounded-lg">
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Filters & View Settings</DialogTitle>
           </DialogHeader>

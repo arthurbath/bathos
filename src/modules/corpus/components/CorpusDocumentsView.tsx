@@ -796,7 +796,7 @@ export function CorpusDocumentsView({
       </Card>
 
       <Dialog open={viewControlsOpen} onOpenChange={setViewControlsOpen}>
-        <DialogContent aria-describedby={undefined} className="w-screen max-w-none rounded-none sm:w-full sm:max-w-sm sm:rounded-lg">
+        <DialogContent aria-describedby={undefined} className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Filters</DialogTitle>
           </DialogHeader>
@@ -842,7 +842,7 @@ export function CorpusDocumentsView({
       </Dialog>
 
       <Dialog open={bulkOverwriteOpen} onOpenChange={(open) => (open ? setBulkOverwriteOpen(true) : closeBulkOverwriteDialog())}>
-        <DialogContent aria-describedby={undefined} className="w-screen max-w-none rounded-none sm:w-full sm:max-w-2xl sm:rounded-lg">
+        <DialogContent aria-describedby={undefined} className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Bulk Overwrite</DialogTitle>
           </DialogHeader>
@@ -897,7 +897,7 @@ export function CorpusDocumentsView({
       </Dialog>
 
       <Dialog open={editorOpen} onOpenChange={(open) => !saving && setEditorOpen(open)}>
-        <DialogContent aria-describedby={undefined} className="w-screen max-w-none rounded-none sm:w-full sm:max-w-3xl sm:rounded-lg">
+        <DialogContent aria-describedby={undefined} className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editingDocument ? 'Edit Document' : 'Add Document'}</DialogTitle>
           </DialogHeader>

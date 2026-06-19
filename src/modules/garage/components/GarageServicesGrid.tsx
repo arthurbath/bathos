@@ -163,7 +163,7 @@ function ServiceActionsCell({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <AlertDialogContent className="rounded-lg">
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete service</AlertDialogTitle>
         </AlertDialogHeader>
@@ -861,7 +861,7 @@ export function GarageServicesGrid({
       </CardContent>
 
       <Dialog open={viewControlsOpen} onOpenChange={setViewControlsOpen}>
-        <DialogContent aria-describedby={undefined} className="w-screen max-w-none rounded-none sm:w-full sm:max-w-sm sm:rounded-lg">
+        <DialogContent aria-describedby={undefined} className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Filters & View Settings</DialogTitle>
           </DialogHeader>
@@ -916,7 +916,7 @@ export function GarageServicesGrid({
       <AlertDialog open={invalidNameWarning !== null} onOpenChange={(open) => {
         if (!open) setInvalidNameWarning(null);
       }}>
-        <AlertDialogContent className="rounded-lg">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Invalid Service Name</AlertDialogTitle>
           </AlertDialogHeader>
@@ -932,7 +932,7 @@ export function GarageServicesGrid({
       </AlertDialog>
 
       <Dialog open={importOpen} onOpenChange={handleImportDialogChange}>
-        <DialogContent aria-describedby={undefined} className="max-h-[85vh] max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg">
+        <DialogContent aria-describedby={undefined} className="max-h-[85vh] max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Bulk Import Services to {vehicleName}</DialogTitle>
           </DialogHeader>
@@ -1121,7 +1121,7 @@ export function GarageServicesGrid({
       </Dialog>
 
       <Dialog open={addOpen} onOpenChange={(open) => !saving && setAddOpen(open)}>
-        <DialogContent aria-describedby={undefined} className="max-w-lg rounded-lg">
+        <DialogContent aria-describedby={undefined} className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Service</DialogTitle>
           </DialogHeader>

@@ -475,8 +475,12 @@ describe("Modal focus conventions", () => {
         expect(body).not.toBeNull();
         expect(content?.style.getPropertyValue("--bathos-modal-vv-height")).toBe("412px");
         expect(content?.style.getPropertyValue("--bathos-modal-vv-top")).toBe("24px");
+        expect(content?.className).toContain("rounded-lg");
+        expect(content?.className).not.toContain("rounded-none");
         expect(content?.className).toContain("max-sm:!animate-none");
-        expect(content?.className).toContain("max-sm:h-[var(--bathos-modal-vv-height,100dvh)]");
+        expect(content?.className).toContain("max-sm:top-[calc(var(--bathos-modal-vv-top,0px)+env(safe-area-inset-top,0px))]");
+        expect(content?.className).toContain("max-sm:h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))]");
+        expect(content?.className).toContain("max-sm:max-h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))]");
         expect(content?.className).toContain("max-sm:max-w-none");
         expect(body?.className).toContain("overflow-y-auto");
       });

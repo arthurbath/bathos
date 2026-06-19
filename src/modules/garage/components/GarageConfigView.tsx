@@ -641,7 +641,7 @@ export function GarageConfigView({
           setFormOpen(open);
         }}
       >
-        <DialogContent className="max-w-lg rounded-lg">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{vehicleForm.id ? 'Edit Vehicle' : 'Add Vehicle'}</DialogTitle>
           </DialogHeader>
@@ -721,7 +721,7 @@ export function GarageConfigView({
       </Dialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent className="rounded-lg">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Vehicle</AlertDialogTitle>
           </AlertDialogHeader>
