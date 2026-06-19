@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
 import { PersistentTooltipText } from '@/components/ui/tooltip';
 import { Switch } from '@/components/ui/switch';
 import { MoreHorizontal, Plus, Trash2 } from 'lucide-react';
@@ -687,7 +688,7 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
           <DialogBody className="space-y-3">
             <DialogDescription>Add a new payment method and assign an owner partner.</DialogDescription>
             <div className="space-y-1.5">
-              <Label htmlFor="new-payment-method-name">Name</Label>
+              <DataGridAddFormLabel htmlFor="new-payment-method-name" required>Name</DataGridAddFormLabel>
               <Input
                 id="new-payment-method-name"
                 value={name}

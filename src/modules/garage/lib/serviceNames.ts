@@ -1,5 +1,7 @@
 import type { GarageService } from '@/modules/garage/types/garage';
 
+export const GARAGE_SERVICE_NAME_REQUIRED_ERROR = 'Name is required.';
+
 export function trimGarageServiceName(value: string) {
   return value.trim();
 }
@@ -15,7 +17,7 @@ export function validateGarageServiceName(
 ) {
   const trimmed = trimGarageServiceName(rawValue);
   if (!trimmed) {
-    return 'Name is required.';
+    return GARAGE_SERVICE_NAME_REQUIRED_ERROR;
   }
 
   const normalized = normalizeGarageServiceName(trimmed);

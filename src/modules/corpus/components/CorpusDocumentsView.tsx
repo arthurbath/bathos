@@ -9,6 +9,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
 import { LabelWithAside } from '@/components/ui/label-with-aside';
 import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -956,7 +957,7 @@ export function CorpusDocumentsView({
           </DialogHeader>
           <DialogBody className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="corpus-document-title">Title</Label>
+              <DataGridAddFormLabel htmlFor="corpus-document-title" required>Title</DataGridAddFormLabel>
               <Input id="corpus-document-title" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} />
             </div>
             {hasTags && (

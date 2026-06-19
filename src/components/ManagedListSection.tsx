@@ -8,6 +8,7 @@ import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, Dia
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
+import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { MoreHorizontal, Plus, Trash2, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
@@ -596,7 +597,7 @@ export function ManagedListSection({
           </DialogHeader>
           <DialogBody className="space-y-2">
             <DialogDescription>{description}</DialogDescription>
-            <Label htmlFor={`${title.toLowerCase().replace(/\s+/g, '-')}-name`}>Name</Label>
+            <DataGridAddFormLabel htmlFor={`${title.toLowerCase().replace(/\s+/g, '-')}-name`} required>Name</DataGridAddFormLabel>
             <Input
               id={`${title.toLowerCase().replace(/\s+/g, '-')}-name`}
               placeholder={`New ${singularLabel} name`}

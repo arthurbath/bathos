@@ -9,6 +9,7 @@ interface DataGridAddFormLabelProps {
   htmlFor?: string;
   className?: string;
   tooltipTabStop?: boolean;
+  required?: boolean;
 }
 
 /**
@@ -21,13 +22,15 @@ export function DataGridAddFormLabel({
   htmlFor,
   className,
   tooltipTabStop = true,
+  required = false,
 }: DataGridAddFormLabelProps) {
   const label = (
     <Label
       htmlFor={htmlFor}
-      className={cn(className)}
+      className={cn(required && 'inline-flex items-center gap-1', className)}
     >
-      {children}
+      <span>{children}</span>
+      {required && <span className="text-destructive" aria-hidden="true">*</span>}
     </Label>
   );
 

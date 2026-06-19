@@ -8,6 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -30,7 +31,7 @@ import type {
   GarageServiceStatus,
   GarageServicingWithRelations,
 } from '@/modules/garage/types/garage';
-import { validateGarageServiceName } from '@/modules/garage/lib/serviceNames';
+import { GARAGE_SERVICE_NAME_REQUIRED_ERROR, validateGarageServiceName } from '@/modules/garage/lib/serviceNames';
 
 const columnHelper = createColumnHelper<GarageServicingWithRelations>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
@@ -456,6 +457,7 @@ export function GarageServicingsGrid({
     return Array.from(byId.values());
   }, [services, sessionAddedServices]);
   const addServiceNameError = validateGarageServiceName(addServiceName, availableServices);
+  const addServiceNameValidationMessage = addServiceNameError === GARAGE_SERVICE_NAME_REQUIRED_ERROR ? null : addServiceNameError;
 
   const servicesById = useMemo(() => {
     const map = new Map<string, GarageService>();
@@ -986,7 +988,7 @@ export function GarageServicingsGrid({
           >
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="garage-servicing-date">Date</Label>
+                <DataGridAddFormLabel htmlFor="garage-servicing-date" required>Date</DataGridAddFormLabel>
                 <Popover
                   open={serviceDatePickerOpen}
                   onOpenChange={(nextOpen) => {
@@ -1451,15 +1453,18 @@ export function GarageServicingsGrid({
           </DialogHeader>
           <DialogBody className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="garage-servicing-add-service-name">Name</Label>
+              <DataGridAddFormLabel htmlFor="garage-servicing-add-service-name" required>Name</DataGridAddFormLabel>
               <Input
                 id="garage-servicing-add-service-name"
                 value={addServiceName}
                 onChange={(event) => setAddServiceName(event.target.value)}
                 placeholder="Oil Change"
+                required
+                aria-invalid={addServiceNameValidationMessage ? true : undefined}
+                aria-describedby={addServiceNameValidationMessage ? 'garage-servicing-add-service-name-error' : undefined}
               />
-              {addServiceNameError && (
-                <p className="text-sm text-destructive">{addServiceNameError}</p>
+              {addServiceNameValidationMessage && (
+                <p id="garage-servicing-add-service-name-error" className="text-sm text-destructive">{addServiceNameValidationMessage}</p>
               )}
             </div>
             <div className="space-y-2">

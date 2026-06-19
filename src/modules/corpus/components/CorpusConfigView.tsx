@@ -7,6 +7,7 @@ import { CopyInputGroup, copyTextToClipboard } from '@/components/ui/copy-input-
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import type { CorpusAccessToken } from '@/modules/corpus/types/corpus';
@@ -212,7 +213,7 @@ export function CorpusConfigView({
           </DialogHeader>
           <DialogBody className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="corpus-token-name">Name</Label>
+              <DataGridAddFormLabel htmlFor="corpus-token-name" required>Name</DataGridAddFormLabel>
               <Input
                 id="corpus-token-name"
                 value={tokenName}

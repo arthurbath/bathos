@@ -1915,7 +1915,7 @@ export function ExpensesTab({
           <DialogHeader><DialogTitle>{dialogTitle}</DialogTitle></DialogHeader>
           <DialogBody className="space-y-3 shadow-[inset_0_5px_6px_-6px_hsl(var(--foreground)/0.25),inset_0_-5px_6px_-6px_hsl(var(--foreground)/0.25)]">
             <div className="space-y-1.5">
-              <Label htmlFor="new-item-name">Name</Label>
+              <DataGridAddFormLabel htmlFor="new-item-name" required>Name</DataGridAddFormLabel>
               <Input id="new-item-name" value={newItemName} onChange={e => setNewItemName(e.target.value)} autoFocus disabled={savingItem} onKeyDown={e => { if (e.key === 'Enter' && !savingItem) handleSaveNewItem(); }} />
             </div>
             <div className="space-y-1.5">

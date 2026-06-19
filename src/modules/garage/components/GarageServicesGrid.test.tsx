@@ -604,6 +604,8 @@ describe('GarageServicesGrid focus scrolling', () => {
 
       const nameInput = document.body.querySelector<HTMLInputElement>('#garage-service-name');
       expect(nameInput).toBeTruthy();
+      expect(document.body.textContent).not.toContain('Name is required.');
+      expect(document.body.querySelector('label[for="garage-service-name"]')?.textContent).toBe('Name*');
       await dispatchInputChange(nameInput!, 'Brake Service');
 
       const saveButton = document.body.querySelector<HTMLButtonElement>('button[data-dialog-confirm="true"]');

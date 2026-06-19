@@ -94,6 +94,7 @@ Use lowercase for these words when they appear in the middle of a label:
   - Color swatch controls are treated as inputs: `h-7`, no extra margin, gray input border (`--grid-sticky-line`), standard input focus ring, keyboard/grid navigation focuses the swatch input without auto-opening the menu, and Space/Enter opens the swatch menu with focus landing on the selected swatch (or first swatch when none is selected).
   - New rows in a data-grid card are created from a `+` button in the card header that opens a modal form; do not use inline add rows above the grid.
   - The standard DataGrid add button style is the compact green outline icon button used by Budget Expenses/Incomes: `variant="outline-success"`, `size="sm"`, `className="h-8 w-8 p-0"`, with a `Plus` icon and an `aria-label`.
+  - Required fields in DataGrid add/edit modals show a red asterisk immediately to the right of the field label. If the confirm action is disabled until required fields are complete, do not show required-field validation text on initial modal open; reserve inline validation messages for actionable problems such as duplicates, invalid formats, or failed submit attempts.
   - Use column meta flags consistently: `containsEditableInput` for inline form controls, `containsButton` for button/menu cells, so shared grid padding and row-height rules are applied correctly.
 
 ## Full-View Data Grid Convention

@@ -9,6 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Ban, CheckCheck, Download, FileSpreadsheet, Filter, FilterX, MoreHorizontal, Plus, SkipForward, Trash2, Upload } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
@@ -23,7 +24,7 @@ import {
   buildGarageServiceTemplateCsv,
   type GarageServiceImportPreview,
 } from '@/modules/garage/lib/serviceImport';
-import { validateGarageServiceName } from '@/modules/garage/lib/serviceNames';
+import { GARAGE_SERVICE_NAME_REQUIRED_ERROR, validateGarageServiceName } from '@/modules/garage/lib/serviceNames';
 import {
   GARAGE_EMPTY_SERVICE_TYPE_LABEL,
   GARAGE_SERVICE_TYPE_OPTIONS,
@@ -390,6 +391,7 @@ export function GarageServicesGrid({
     [isVisibleWithCurrentFilters, services],
   );
   const addNameError = validateGarageServiceName(addName, services);
+  const addNameValidationMessage = addNameError === GARAGE_SERVICE_NAME_REQUIRED_ERROR ? null : addNameError;
 
   const latestOutcomeByServiceId = useMemo(() => {
     const byService = new Map<string, { status: GarageServiceStatus; serviceDate: string; mileage: number; createdAt: string }>();
@@ -1192,10 +1194,18 @@ export function GarageServicesGrid({
           </DialogHeader>
           <DialogBody className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="garage-service-name">Name</Label>
-              <Input id="garage-service-name" value={addName} onChange={(event) => setAddName(event.target.value)} placeholder="Oil Change" />
-              {addNameError && (
-                <p className="text-sm text-destructive">{addNameError}</p>
+              <DataGridAddFormLabel htmlFor="garage-service-name" required>Name</DataGridAddFormLabel>
+              <Input
+                id="garage-service-name"
+                value={addName}
+                onChange={(event) => setAddName(event.target.value)}
+                placeholder="Oil Change"
+                required
+                aria-invalid={addNameValidationMessage ? true : undefined}
+                aria-describedby={addNameValidationMessage ? 'garage-service-name-error' : undefined}
+              />
+              {addNameValidationMessage && (
+                <p id="garage-service-name-error" className="text-sm text-destructive">{addNameValidationMessage}</p>
               )}
             </div>
             <div className="space-y-2">

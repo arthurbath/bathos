@@ -233,7 +233,7 @@ describe('GarageServicingsGrid servicing dialog', () => {
       const labels = Array.from(dialog.querySelectorAll('label')).map((label) => label.textContent?.trim() ?? '');
       const mileageInput = dialog.querySelector('#garage-servicing-mileage') as HTMLInputElement | null;
 
-      expect(labels).toEqual(['Date', 'Mileage', 'Shop', 'Service Outcomes', 'Receipts', 'Notes']);
+      expect(labels).toEqual(['Date*', 'Mileage', 'Shop', 'Service Outcomes', 'Receipts', 'Notes']);
       expect(mileageInput?.inputMode).toBe('decimal');
     } finally {
       unmount(root, container);

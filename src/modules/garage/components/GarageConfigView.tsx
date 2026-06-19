@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
@@ -669,7 +670,7 @@ export function GarageConfigView({
           </DialogHeader>
           <DialogBody className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="garage-vehicle-name">Name</Label>
+              <DataGridAddFormLabel htmlFor="garage-vehicle-name" required>Name</DataGridAddFormLabel>
               <Input id="garage-vehicle-name" value={vehicleForm.name} onChange={(event) => setVehicleForm((prev) => ({ ...prev, name: event.target.value }))} />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -684,7 +685,7 @@ export function GarageConfigView({
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="garage-vehicle-year">Model Year</Label>
+                <DataGridAddFormLabel htmlFor="garage-vehicle-year" required={!vehicleForm.id}>Model Year</DataGridAddFormLabel>
                 <Input id="garage-vehicle-year" type="number" inputMode="numeric" required={!vehicleForm.id} value={vehicleForm.model_year} onChange={(event) => setVehicleForm((prev) => ({ ...prev, model_year: event.target.value }))} />
               </div>
               <div className="space-y-2">
