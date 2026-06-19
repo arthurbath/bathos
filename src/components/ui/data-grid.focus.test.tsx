@@ -1159,6 +1159,60 @@ function AsyncTextCommitHarness({ saveDelayMs = 250 }: { saveDelayMs?: number })
   return <DataGrid table={table} />;
 }
 
+function AsyncTwoTextCommitHarness({ saveDelayMs = 80 }: { saveDelayMs?: number }) {
+  const [rows, setRows] = React.useState<RowData[]>([
+    { id: "row-a", name: "Alpha", note: "Apple" },
+  ]);
+
+  const updateRow = React.useCallback((id: string, field: "name" | "note", value: string) => (
+    new Promise<void>((resolve) => {
+      window.setTimeout(() => {
+        setRows((prev) => prev.map((entry) => (
+          entry.id === id ? { ...entry, [field]: value } : entry
+        )));
+        resolve();
+      }, saveDelayMs);
+    })
+  ), [saveDelayMs]);
+
+  const columns = React.useMemo(
+    () => [
+      columnHelper.accessor("name", {
+        id: "name",
+        header: "Name",
+        cell: ({ row, getValue }) => (
+          <GridEditableCell
+            value={getValue()}
+            navCol={0}
+            onChange={(value) => updateRow(row.original.id, "name", value)}
+          />
+        ),
+      }),
+      columnHelper.accessor("note", {
+        id: "note",
+        header: "Note",
+        cell: ({ row, getValue }) => (
+          <GridEditableCell
+            value={getValue()}
+            navCol={1}
+            onChange={(value) => updateRow(row.original.id, "note", value)}
+          />
+        ),
+      }),
+    ],
+    [updateRow],
+  );
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return <DataGrid table={table} />;
+}
+
 function AsyncCheckboxCommitHarness({ saveDelayMs = 250 }: { saveDelayMs?: number }) {
   const [rows, setRows] = React.useState<AsyncCheckboxRowData[]>([
     { id: "row-a", monitoring: false },
@@ -2706,6 +2760,44 @@ describe("DataGrid async commit display", () => {
         expect(active?.getAttribute("data-col")).toBe("0");
         const liveInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
         expect(liveInput?.value).toBe("Focus preserved note");
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("keeps pointer focus on the clicked cell after a previous text cell finishes saving", async () => {
+    const { container, root } = mount(<AsyncTwoTextCommitHarness />);
+    try {
+      const nameInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      const noteInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="1"]');
+      expect(nameInput).not.toBeNull();
+      expect(noteInput).not.toBeNull();
+
+      await startEditing(nameInput!);
+      await dispatchInputChange(nameInput!, "Updated Alpha");
+      await act(async () => {
+        noteInput!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        noteInput!.focus();
+      });
+
+      await waitForCondition(() => {
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-row-id")).toBe("row-a");
+        expect(active?.getAttribute("data-col")).toBe("1");
+        expect(active?.getAttribute("data-grid-editing")).toBe("true");
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
+      });
+
+      await waitForCondition(() => {
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-row-id")).toBe("row-a");
+        expect(active?.getAttribute("data-col")).toBe("1");
+        const liveNameInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+        expect(liveNameInput?.value).toBe("Updated Alpha");
       });
     } finally {
       unmount(root, container);

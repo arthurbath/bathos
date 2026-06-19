@@ -891,9 +891,22 @@ export function DataGrid<TData>({
     let retryTimer: number | null = null;
     const restoreFocus = () => {
       if (cancelled) return;
-      if (!containerRef.current) {
+      const container = containerRef.current;
+      if (!container) {
         pendingCommitFocusRef.current = null;
         return;
+      }
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && container.contains(active)) {
+        const activeCell = active.closest<HTMLElement>('[data-row-id][data-col]');
+        if (activeCell && container.contains(activeCell)) {
+          const activeRowId = activeCell.dataset.rowId;
+          const activeCol = Number(activeCell.dataset.col);
+          if (activeRowId && !Number.isNaN(activeCol) && (activeRowId !== pending.rowId || activeCol !== pending.col)) {
+            pendingCommitFocusRef.current = null;
+            return;
+          }
+        }
       }
       const focused = focusCellByRowId(pending.rowId, pending.col);
       if (focused) {
