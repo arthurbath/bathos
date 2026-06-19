@@ -2807,6 +2807,7 @@ describe("DataGrid async commit display", () => {
         const active = document.activeElement as HTMLElement | null;
         expect(active?.getAttribute("data-row-id")).toBe("row-a");
         expect(active?.getAttribute("data-col")).toBe("1");
+        expect(active?.getAttribute("data-grid-editing")).toBe("true");
         const liveNameInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
         expect(liveNameInput?.value).toBe("Updated Alpha");
       });
@@ -2844,6 +2845,7 @@ describe("DataGrid async commit display", () => {
         const active = document.activeElement as HTMLElement | null;
         expect(active?.getAttribute("data-row-id")).toBe("row-a");
         expect(active?.getAttribute("data-col")).toBe("1");
+        expect(active?.getAttribute("data-grid-editing")).toBe("true");
         const liveNameInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
         expect(liveNameInput?.value).toBe("Updated Alpha");
       });

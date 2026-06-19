@@ -29,8 +29,8 @@ interface DataGridContextValue {
   rowIndex: number;
   rowId: string;
   onCellKeyDown: (e: React.KeyboardEvent<HTMLElement>) => boolean;
-  onCellMouseDown: (col?: number | React.MouseEvent<HTMLElement>) => void;
-  onCellPointerDown: (col?: number | React.PointerEvent<HTMLElement>) => void;
+  onCellMouseDown: (col?: number | React.MouseEvent<HTMLElement>, options?: GridPointerFocusOptions) => void;
+  onCellPointerDown: (col?: number | React.PointerEvent<HTMLElement>, options?: GridPointerFocusOptions) => void;
   onCellCommit: (col: number) => void;
   registerCellHistoryEntry: (options: {
     col: number;
@@ -43,6 +43,14 @@ interface DataGridContextValue {
 
 const DataGridCtx = createContext<DataGridContextValue | null>(null);
 export function useDataGrid() { return useContext(DataGridCtx); }
+
+interface GridPointerFocusOptions {
+  preserveEditing?: boolean;
+}
+
+interface GridFocusOptions {
+  preserveEditing?: boolean;
+}
 
 export const GRID_HEADER_TONE_CLASS = 'bg-border';
 export const GRID_READONLY_TEXT_CLASS = 'text-[hsl(var(--grid-text))]';
@@ -61,6 +69,7 @@ const GRID_FOOTER_LAST_COLUMN_STICKY_CLASS = '[&>tr>td:last-child]:sticky [&>tr>
 const GRID_TRAILING_SPACER_COLUMN_WIDTH = 40;
 const GRID_TRAILING_SPACER_COLUMN_ID = '__grid_trailing_spacer__';
 const PENDING_COMMIT_FOCUS_MAX_ATTEMPTS = 1000;
+const GRID_RESTORE_EDITING_EVENT = 'data-grid-restore-editing';
 
 function scheduleInNextFrame(callback: () => void) {
   if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
@@ -165,6 +174,13 @@ interface GridNavTarget {
   row: number;
   col: number;
   rowId: string | null;
+  preserveEditing?: boolean;
+}
+
+interface PendingCommitFocusTarget {
+  rowId: string;
+  col: number;
+  preserveEditing?: boolean;
 }
 
 interface StickyViewportInsets {
@@ -457,7 +473,7 @@ function useGridNav(
     return active === target || (active instanceof HTMLElement && target.contains(active));
   }, []);
 
-  const focusCellElement = useCallback((target: HTMLElement) => {
+  const focusCellElement = useCallback((target: HTMLElement, options?: GridFocusOptions) => {
     if (isCellTemporarilyUnfocusable(target)) return false;
 
     const role = target.getAttribute('role');
@@ -475,6 +491,10 @@ function useGridNav(
     }
 
     const wasAlreadyFocused = isTargetFocused(target);
+    if (options?.preserveEditing && target instanceof HTMLInputElement) {
+      target.dataset.gridRestoreEditing = 'true';
+      target.dispatchEvent(new Event(GRID_RESTORE_EDITING_EVENT));
+    }
     focusElementWithoutScroll(target);
     const focused = isTargetFocused(target);
 
@@ -485,17 +505,17 @@ function useGridNav(
     return focused;
   }, [isCellTemporarilyUnfocusable, isTargetFocused, scrollCellIntoView]);
 
-  const focusCell = useCallback((row: number, col: number) => {
+  const focusCell = useCallback((row: number, col: number, options?: GridFocusOptions) => {
     const cells = getEditableCells();
     const target = cells.find(el => Number(el.dataset.row) === row && Number(el.dataset.col) === col);
-    if (target) return focusCellElement(target);
+    if (target) return focusCellElement(target, options);
     return false;
   }, [focusCellElement, getEditableCells]);
 
-  const focusCellByRowId = useCallback((rowId: string, col: number) => {
+  const focusCellByRowId = useCallback((rowId: string, col: number, options?: GridFocusOptions) => {
     const cells = getEditableCells();
     const target = cells.find(el => el.dataset.rowId === rowId && Number(el.dataset.col) === col);
-    if (target) return focusCellElement(target);
+    if (target) return focusCellElement(target, options);
     return false;
   }, [focusCellElement, getEditableCells]);
 
@@ -549,8 +569,8 @@ function useGridNav(
     let tries = 0;
     const tryFocus = () => {
       const focused =
-        (target.rowId ? focusCellByRowId(target.rowId, target.col) : false) ||
-        focusCell(target.row, target.col);
+        (target.rowId ? focusCellByRowId(target.rowId, target.col, target) : false) ||
+        focusCell(target.row, target.col, target);
 
       if (focused || tries >= attempts) return;
       tries += 1;
@@ -690,8 +710,8 @@ export function DataGrid<TData>({
   const [containerWidth, setContainerWidth] = useState(0);
   const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
   const lastCommittedRowIdRef = useRef<string | null>(null);
-  const pendingCommitFocusRef = useRef<{ rowId: string; col: number } | null>(null);
-  const pointerFocusTargetRef = useRef<{ rowId: string; col: number } | null>(null);
+  const pendingCommitFocusRef = useRef<PendingCommitFocusTarget | null>(null);
+  const pointerFocusTargetRef = useRef<PendingCommitFocusTarget | null>(null);
   const previousRowPositionsRef = useRef<Map<string, number>>(new Map());
   const previousGroupKeysRef = useRef<Map<string, string | null>>(new Map());
   const clearHighlightTimerRef = useRef<number | null>(null);
@@ -915,7 +935,7 @@ export function DataGrid<TData>({
           }
         }
       }
-      const focused = focusCellByRowId(pending.rowId, pending.col);
+      const focused = focusCellByRowId(pending.rowId, pending.col, pending);
       if (focused) {
         pendingCommitFocusRef.current = null;
         return;
@@ -1021,16 +1041,16 @@ export function DataGrid<TData>({
                 rowIndex: currentRow,
                 rowId: row.id,
                 onCellKeyDown,
-                onCellMouseDown: (col) => {
+                onCellMouseDown: (col, options) => {
                   onCellMouseDown();
                   if (typeof col === 'number' && Number.isFinite(col)) {
-                    pointerFocusTargetRef.current = { rowId: row.id, col };
+                    pointerFocusTargetRef.current = { rowId: row.id, col, preserveEditing: options?.preserveEditing };
                   }
                 },
-                onCellPointerDown: (col) => {
+                onCellPointerDown: (col, options) => {
                   onCellPointerDown();
                   if (typeof col === 'number' && Number.isFinite(col)) {
-                    pointerFocusTargetRef.current = { rowId: row.id, col };
+                    pointerFocusTargetRef.current = { rowId: row.id, col, preserveEditing: options?.preserveEditing };
                   }
                 },
                 onCellCommit: (col) => markRowCommitted(row.id, col),
@@ -1354,6 +1374,20 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
   const inputValue = showFormattedNumber ? formatGridNumberDisplay(local, numberDisplayFormat) : local;
 
   useEffect(() => {
+    const input = ref.current;
+    if (!input) return;
+    const restoreEditing = () => {
+      if (disabled) return;
+      editStartValueRef.current = local;
+      setEditing(true);
+      scheduleInNextFrame(() => focusInputAtEnd(ref.current));
+    };
+
+    input.addEventListener(GRID_RESTORE_EDITING_EVENT, restoreEditing);
+    return () => input.removeEventListener(GRID_RESTORE_EDITING_EVENT, restoreEditing);
+  }, [disabled, local]);
+
+  useEffect(() => {
     valueRef.current = normalizedValue;
   }, [normalizedValue]);
 
@@ -1478,18 +1512,24 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
       onPointerDown={e => {
         if (disabled) return;
         if (e.pointerType === 'mouse') return;
-        ctx?.onCellPointerDown(navCol);
+        ctx?.onCellPointerDown(navCol, { preserveEditing: true });
         handlePressStart();
       }}
       onMouseDown={() => {
         if (disabled) return;
-        ctx?.onCellMouseDown(navCol);
+        ctx?.onCellMouseDown(navCol, { preserveEditing: true });
         handlePressStart();
       }}
       onFocus={() => {
         if (disabled) return;
         setFocused(true);
-        if (!pointerDownRef.current) {
+        const shouldRestoreEditing = ref.current?.dataset.gridRestoreEditing === 'true';
+        if (shouldRestoreEditing) {
+          delete ref.current?.dataset.gridRestoreEditing;
+          editStartValueRef.current = local;
+          setEditing(true);
+          scheduleInNextFrame(() => focusInputAtEnd(ref.current));
+        } else if (!pointerDownRef.current) {
           setEditing(false);
           scheduleInNextFrame(() => setInputCaretAtStart(ref.current));
         }
@@ -1662,6 +1702,20 @@ export function GridUrlCell({
   }, [normalizedValue]);
 
   useEffect(() => {
+    const input = ref.current;
+    if (!input) return;
+    const restoreEditing = () => {
+      if (disabled) return;
+      editStartValueRef.current = local;
+      setEditing(true);
+      scheduleInNextFrame(() => input.select());
+    };
+
+    input.addEventListener(GRID_RESTORE_EDITING_EVENT, restoreEditing);
+    return () => input.removeEventListener(GRID_RESTORE_EDITING_EVENT, restoreEditing);
+  }, [disabled, local]);
+
+  useEffect(() => {
     const nextValue = normalizedValue;
     const pendingCommittedValue = pendingCommittedValueRef.current;
     const commitBaseValue = commitBaseValueRef.current;
@@ -1804,19 +1858,25 @@ export function GridUrlCell({
         onChange={(event) => { if (editing) setLocal(event.target.value); }}
         onMouseDown={() => {
           if (disabled) return;
-          ctx?.onCellMouseDown(navCol);
+          ctx?.onCellMouseDown(navCol, { preserveEditing: true });
           handlePressStart();
         }}
         onPointerDown={(event) => {
           if (disabled) return;
           if (event.pointerType === 'mouse') return;
-          ctx?.onCellPointerDown(navCol);
+          ctx?.onCellPointerDown(navCol, { preserveEditing: true });
           handlePressStart();
         }}
         onFocus={() => {
           if (disabled) return;
           setFocused(true);
-          if (!pointerDownRef.current) {
+          const shouldRestoreEditing = ref.current?.dataset.gridRestoreEditing === 'true';
+          if (shouldRestoreEditing) {
+            delete ref.current?.dataset.gridRestoreEditing;
+            editStartValueRef.current = local;
+            setEditing(true);
+            scheduleInNextFrame(() => ref.current?.select());
+          } else if (!pointerDownRef.current) {
             setEditing(false);
             scheduleInNextFrame(() => setInputCaretAtStart(ref.current));
           }
@@ -1970,6 +2030,20 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
   }, [normalizedValue]);
 
   useEffect(() => {
+    const input = ref.current;
+    if (!input) return;
+    const restoreEditing = () => {
+      if (disabled) return;
+      editStartValueRef.current = local;
+      setEditing(true);
+      scheduleInNextFrame(() => focusInputAtEnd(ref.current));
+    };
+
+    input.addEventListener(GRID_RESTORE_EDITING_EVENT, restoreEditing);
+    return () => input.removeEventListener(GRID_RESTORE_EDITING_EVENT, restoreEditing);
+  }, [disabled, local]);
+
+  useEffect(() => {
     const nextValue = normalizedValue;
     const pendingCommittedValue = pendingCommittedValueRef.current;
     const commitBaseValue = commitBaseValueRef.current;
@@ -2078,17 +2152,26 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
         onPointerDown={e => {
           if (disabled) return;
           if (e.pointerType === 'mouse') return;
-          ctx?.onCellPointerDown(navCol);
+          ctx?.onCellPointerDown(navCol, { preserveEditing: true });
           handlePressStart();
         }}
         onMouseDown={() => {
           if (disabled) return;
-          ctx?.onCellMouseDown(navCol);
+          ctx?.onCellMouseDown(navCol, { preserveEditing: true });
           handlePressStart();
         }}
         onFocus={() => {
           if (disabled) return;
           setFocused(true);
+          const shouldRestoreEditing = ref.current?.dataset.gridRestoreEditing === 'true';
+          if (shouldRestoreEditing) {
+            delete ref.current?.dataset.gridRestoreEditing;
+            editStartValueRef.current = local;
+            setEditing(true);
+            scheduleInNextFrame(() => focusInputAtEnd(ref.current));
+            pointerDownRef.current = false;
+            return;
+          }
           if (pointerDownRef.current) {
             pointerDownRef.current = false;
             if (!editing) {
@@ -2239,6 +2322,20 @@ export function GridPercentCell({ value, onChange, navCol, className, disabled =
   }, [normalizedValue]);
 
   useEffect(() => {
+    const input = ref.current;
+    if (!input) return;
+    const restoreEditing = () => {
+      if (disabled) return;
+      editStartValueRef.current = local;
+      setEditing(true);
+      scheduleInNextFrame(() => focusInputAtEnd(ref.current));
+    };
+
+    input.addEventListener(GRID_RESTORE_EDITING_EVENT, restoreEditing);
+    return () => input.removeEventListener(GRID_RESTORE_EDITING_EVENT, restoreEditing);
+  }, [disabled, local]);
+
+  useEffect(() => {
     const nextValue = normalizedValue;
     const pendingCommittedValue = pendingCommittedValueRef.current;
     const commitBaseValue = commitBaseValueRef.current;
@@ -2349,18 +2446,24 @@ export function GridPercentCell({ value, onChange, navCol, className, disabled =
         onPointerDown={e => {
           if (disabled) return;
           if (e.pointerType === 'mouse') return;
-          ctx?.onCellPointerDown(navCol);
+          ctx?.onCellPointerDown(navCol, { preserveEditing: true });
           handlePressStart();
         }}
         onMouseDown={() => {
           if (disabled) return;
-          ctx?.onCellMouseDown(navCol);
+          ctx?.onCellMouseDown(navCol, { preserveEditing: true });
           handlePressStart();
         }}
         onFocus={() => {
           if (disabled) return;
           setFocused(true);
-          if (!pointerDownRef.current) {
+          const shouldRestoreEditing = ref.current?.dataset.gridRestoreEditing === 'true';
+          if (shouldRestoreEditing) {
+            delete ref.current?.dataset.gridRestoreEditing;
+            editStartValueRef.current = local;
+            setEditing(true);
+            scheduleInNextFrame(() => focusInputAtEnd(ref.current));
+          } else if (!pointerDownRef.current) {
             setEditing(false);
             scheduleInNextFrame(() => setInputCaretAtStart(ref.current));
           }
