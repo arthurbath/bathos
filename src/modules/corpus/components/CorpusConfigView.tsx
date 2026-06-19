@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Copy, Plus } from 'lucide-react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CopyInputGroup, copyTextToClipboard } from '@/components/ui/copy-input-group';
@@ -259,8 +259,10 @@ export function CorpusConfigView({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke "{revokeTarget?.name}"?</AlertDialogTitle>
-            <AlertDialogDescription>Agents using this token will lose access to Corpus, and the token will be deleted from this list.</AlertDialogDescription>
           </AlertDialogHeader>
+          <AlertDialogBody>
+            <AlertDialogDescription>Agents using this token will lose access to Corpus, and the token will be deleted from this list.</AlertDialogDescription>
+          </AlertDialogBody>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction

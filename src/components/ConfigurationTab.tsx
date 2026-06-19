@@ -671,10 +671,10 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add payment method</DialogTitle>
-            <DialogDescription>Add a new payment method and assign an owner partner.</DialogDescription>
+            <DialogTitle>Add Payment Method</DialogTitle>
           </DialogHeader>
           <DialogBody className="space-y-3">
+            <DialogDescription>Add a new payment method and assign an owner partner.</DialogDescription>
             <div className="space-y-1.5">
               <Label htmlFor="new-payment-method-name">Name</Label>
               <Input
@@ -728,11 +728,11 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete "{deleteTarget?.name}"?</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-2">
             <DialogDescription>
               {affectedCount} expense{affectedCount !== 1 ? 's' : ''} use this. Choose where to reassign:
             </DialogDescription>
-          </DialogHeader>
-          <DialogBody className="space-y-2">
             <Label>Reassign To</Label>
             <Select value={reassignTo} onValueChange={setReassignTo}>
               <SelectTrigger><SelectValue /></SelectTrigger>

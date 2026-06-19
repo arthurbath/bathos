@@ -52,12 +52,12 @@ export function DeleteAccountDialog({ isOpen, onOpenChange }: DeleteAccountDialo
     <AlertDialog open={isOpen} onOpenChange={handleOpenChange}>
       <AlertDialogContent className="max-w-md z-[90]">
         <AlertDialogHeader>
-          <AlertDialogTitle className="text-destructive">Delete account</AlertDialogTitle>
+          <AlertDialogTitle className="text-destructive">Delete Account</AlertDialogTitle>
+        </AlertDialogHeader>
+        <AlertDialogBody className="space-y-4">
           <AlertDialogDescription>
             This action cannot be undone. All your data will be permanently removed. Type your email address to confirm.
           </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogBody>
           <Input
             value={confirmText}
             onChange={e => setConfirmText(e.target.value)}
@@ -77,7 +77,7 @@ export function DeleteAccountDialog({ isOpen, onOpenChange }: DeleteAccountDialo
             disabled={confirmText.toLowerCase() !== userEmail.toLowerCase() || isDeleting}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {isDeleting ? 'Deleting...' : 'Delete account'}
+            {isDeleting ? 'Deleting...' : 'Delete Account'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

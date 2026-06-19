@@ -1,6 +1,7 @@
 import type * as React from "react";
 import type * as DialogPrimitive from "@radix-ui/react-dialog";
 import type * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
+import { isMobileViewport } from "@/components/ui/modal-viewport";
 
 const MODAL_FOCUSABLE_SELECTOR = [
   'input:not([type="hidden"]):not([disabled])',
@@ -59,6 +60,11 @@ export const getModalOpenAutoFocusHandler = (
 
     const content = event.currentTarget;
     event.preventDefault();
+    if (isMobileViewport()) {
+      content.focus();
+      return;
+    }
+
     const focusTarget =
       content.querySelector<HTMLElement>(MODAL_FORM_CONTROL_SELECTOR) ??
       content.querySelector<HTMLElement>(MODAL_CONFIRM_SELECTOR) ??

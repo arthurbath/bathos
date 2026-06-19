@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DataGrid, GridEditableCell, gridMenuTriggerProps, useDataGrid } from '@/components/ui/data-grid';
 import { Input } from '@/components/ui/input';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Trash2, RotateCcw, MoreHorizontal, Plus } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -370,10 +370,10 @@ export function RestoreTab({
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Create backup</DialogTitle>
-            <DialogDescription>Save a snapshot of your current categories, payment methods, incomes, and expenses.</DialogDescription>
+            <DialogTitle>Create Backup</DialogTitle>
           </DialogHeader>
           <DialogBody className="space-y-2">
+            <DialogDescription>Save a snapshot of your current categories, payment methods, incomes, and expenses.</DialogDescription>
             <Label htmlFor="backup-notes">Notes</Label>
             <Input
               id="backup-notes"
@@ -412,10 +412,12 @@ export function RestoreTab({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Restore snapshot from {restoreTarget ? formatTimestamp(restoreTarget.created_at) : ''}?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogBody>
             <AlertDialogDescription>
               This will replace all your current categories, incomes, and expenses with the data from this snapshot. This action cannot be undone.
             </AlertDialogDescription>
-          </AlertDialogHeader>
+          </AlertDialogBody>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => void handleConfirmRestore()}>Restore</AlertDialogAction>

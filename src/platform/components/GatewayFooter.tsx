@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Heart } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { TermsDocument } from '@/platform/components/TermsDocument';
 
 export default function GatewayFooter() {
@@ -35,13 +35,13 @@ export default function GatewayFooter() {
       </footer>
 
       <Dialog open={showTerms} onOpenChange={setShowTerms}>
-        <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-4xl flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="shrink-0 border-b px-6 py-4 pb-4">
+        <DialogContent className="max-w-4xl gap-0 p-0 sm:h-[90vh] sm:max-h-[90vh]">
+          <DialogHeader className="border-b px-6 py-4 pb-4">
             <DialogTitle>Terms of Service and Privacy Policy</DialogTitle>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 md:px-8 md:py-6">
+          <DialogBody className="border-y-0 px-6 py-4 md:px-8 md:py-6">
             <TermsDocument className="text-sm md:text-[15px]" />
-          </div>
+          </DialogBody>
         </DialogContent>
       </Dialog>
     </>

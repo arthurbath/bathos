@@ -582,9 +582,9 @@ export function ManagedListSection({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add {singularLabel}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-2">
+            <DialogDescription>{description}</DialogDescription>
             <Label htmlFor={`${title.toLowerCase().replace(/\s+/g, '-')}-name`}>Name</Label>
             <Input
               id={`${title.toLowerCase().replace(/\s+/g, '-')}-name`}
@@ -623,11 +623,11 @@ export function ManagedListSection({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete "{deleteTarget?.name}"?</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-2">
             <DialogDescription>
               {affectedCount} expense{affectedCount !== 1 ? 's' : ''} use this. Choose where to reassign:
             </DialogDescription>
-          </DialogHeader>
-          <DialogBody className="space-y-2">
             <Label>Reassign To</Label>
             <Select value={reassignTo} onValueChange={setReassignTo}>
               <SelectTrigger><SelectValue /></SelectTrigger>

@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -47,6 +47,25 @@ function unmount(root: Root, container: HTMLElement) {
     root.unmount();
   });
   container.remove();
+}
+
+function setWindowInnerWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: width,
+  });
+}
+
+function setWindowVisualViewport(height: number, offsetTop = 0) {
+  Object.defineProperty(window, "visualViewport", {
+    configurable: true,
+    value: {
+      height,
+      offsetTop,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    },
+  });
 }
 
 async function waitForCondition(assertion: () => void, timeoutMs = 1500) {
@@ -148,6 +167,42 @@ function DialogWithSettingsHarness() {
         <DialogFooter>
           <Button type="button" variant="outline" data-testid="cancel">Cancel</Button>
           <Button type="button" data-dialog-confirm="true" data-testid="confirm">Delete</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DialogMobileFocusHarness() {
+  return (
+    <Dialog open onOpenChange={() => {}}>
+      <DialogContent data-testid="mobile-dialog-content" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>Mobile Form</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <Input data-testid="mobile-input" placeholder="Name" />
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" data-dialog-confirm="true">Save</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DialogViewportHarness() {
+  return (
+    <Dialog open onOpenChange={() => {}}>
+      <DialogContent data-testid="viewport-dialog-content" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>Viewport Form</DialogTitle>
+        </DialogHeader>
+        <DialogBody data-testid="viewport-dialog-body">
+          <Input placeholder="Name" />
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" data-dialog-confirm="true">Save</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -297,6 +352,14 @@ function SheetSubmitShortcutHarness() {
 }
 
 describe("Modal focus conventions", () => {
+  afterEach(() => {
+    setWindowInnerWidth(1024);
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: undefined,
+    });
+  });
+
   it("focuses confirm action when alert dialog has no inputs", async () => {
     const { container, root } = mount(<AlertDialogNoInputHarness />);
     try {
@@ -381,6 +444,41 @@ describe("Modal focus conventions", () => {
     try {
       await waitForCondition(() => {
         expect(bodyNode).toBeInstanceOf(HTMLDivElement);
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("keeps focus on dialog content on mobile open to avoid forcing the software keyboard", async () => {
+    setWindowInnerWidth(390);
+    const { container, root } = mount(<DialogMobileFocusHarness />);
+    try {
+      await waitForCondition(() => {
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-testid")).toBe("mobile-dialog-content");
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("applies visual viewport sizing and no-animation mobile classes to dialog content", async () => {
+    setWindowVisualViewport(412, 24);
+    const { container, root } = mount(<DialogViewportHarness />);
+    try {
+      await waitForCondition(() => {
+        const content = document.querySelector<HTMLElement>('[data-testid="viewport-dialog-content"]');
+        const body = document.querySelector<HTMLElement>('[data-testid="viewport-dialog-body"]');
+
+        expect(content).not.toBeNull();
+        expect(body).not.toBeNull();
+        expect(content?.style.getPropertyValue("--bathos-modal-vv-height")).toBe("412px");
+        expect(content?.style.getPropertyValue("--bathos-modal-vv-top")).toBe("24px");
+        expect(content?.className).toContain("max-sm:!animate-none");
+        expect(content?.className).toContain("max-sm:h-[var(--bathos-modal-vv-height,100dvh)]");
+        expect(content?.className).toContain("max-sm:max-w-none");
+        expect(body?.className).toContain("overflow-y-auto");
       });
     } finally {
       unmount(root, container);

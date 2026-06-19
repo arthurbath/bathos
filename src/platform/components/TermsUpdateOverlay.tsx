@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useModalViewportStyle } from '@/components/ui/modal-viewport';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { TermsDocument } from './TermsDocument';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,6 +35,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { user, signOut } = useAuth();
   const { toast } = useToast();
+  const modalViewportStyle = useModalViewportStyle();
 
   useEffect(() => {
     const original = document.body.style.overflow;
@@ -101,15 +103,16 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
   const isOverLimit = charCount > MAX_CHARS;
 
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 max-sm:items-start max-sm:p-0">
       <div className="absolute inset-0 bg-background/98 backdrop-blur-md" />
 
       {/* Feedback Modal */}
       {showFeedbackModal && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 max-sm:items-start max-sm:p-0">
           <div className="absolute inset-0 cursor-pointer bg-black/50" onClick={() => setShowFeedbackModal(false)} />
           <div
-            className="relative w-full max-w-md overflow-hidden rounded-lg border bg-card shadow-lg"
+            className="relative w-full max-w-md overflow-hidden rounded-lg border bg-card shadow-lg max-sm:fixed max-sm:left-0 max-sm:right-0 max-sm:top-[var(--bathos-modal-vv-top,0px)] max-sm:grid max-sm:h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-w-none max-sm:grid-rows-[auto_minmax(0,1fr)_auto] max-sm:rounded-none"
+            style={modalViewportStyle}
             onKeyDown={(event) => {
               if (!isCommandEnter(event)) return;
               event.preventDefault();
@@ -120,7 +123,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
             <div className="px-6 py-5 border-b">
               <h2 className="text-lg font-semibold text-center">Feedback</h2>
             </div>
-            <div className="px-6 py-5 space-y-3">
+            <div className="space-y-3 px-6 py-5 max-sm:min-h-0 max-sm:overflow-y-auto">
               <p className="text-sm text-muted-foreground">
                 Have a question or feedback about the updated terms? Send a message to the webmaster.
               </p>
@@ -156,10 +159,11 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
 
       {/* Terms Modal */}
       {showTermsModal && (
-        <div className="fixed inset-0 z-[92] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[92] flex items-center justify-center p-4 max-sm:items-start max-sm:p-0">
           <div className="absolute inset-0 cursor-pointer bg-black/50" onClick={() => setShowTermsModal(false)} />
           <div
-            className="relative flex h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border bg-card shadow-lg"
+            className="relative grid h-[90vh] w-full max-w-4xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border bg-card shadow-lg max-sm:fixed max-sm:left-0 max-sm:right-0 max-sm:top-[var(--bathos-modal-vv-top,0px)] max-sm:h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-w-none max-sm:rounded-none"
+            style={modalViewportStyle}
             onKeyDown={(event) => {
               if (!isCommandEnter(event)) return;
               event.preventDefault();
@@ -183,7 +187,8 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
 
       {/* Main Overlay */}
       <div
-        className="relative w-full max-w-md overflow-hidden rounded-lg border bg-card shadow-lg"
+        className="relative w-full max-w-md overflow-hidden rounded-lg border bg-card shadow-lg max-sm:fixed max-sm:left-0 max-sm:right-0 max-sm:top-[var(--bathos-modal-vv-top,0px)] max-sm:grid max-sm:h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-w-none max-sm:grid-rows-[auto_minmax(0,1fr)_auto] max-sm:rounded-none"
+        style={modalViewportStyle}
         onKeyDown={(event) => {
           if (!isCommandEnter(event)) return;
           event.preventDefault();
@@ -193,7 +198,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
         <div className="px-6 py-5 border-b">
           <h2 className="text-lg font-semibold text-center">Terms & Privacy Update</h2>
         </div>
-        <div className="px-6 py-5 space-y-4">
+        <div className="space-y-4 px-6 py-5 max-sm:min-h-0 max-sm:overflow-y-auto">
           <p className="text-muted-foreground text-sm text-center">
             The{' '}
             <button

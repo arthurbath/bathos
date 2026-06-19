@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Hourglass, MoreHorizontal, Pencil, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -864,16 +864,18 @@ export function EstimatorRoomShell({
           <DialogHeader>
             <DialogTitle>Rename Member</DialogTitle>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handleRenameSelf}>
-            <div className="space-y-2">
-              <Label htmlFor="estimator-rename-self">Nickname</Label>
-              <Input
-                id="estimator-rename-self"
-                value={renameSelfValue}
-                onChange={(event) => setRenameSelfValue(event.target.value)}
-                autoFocus
-              />
-            </div>
+          <form className="contents" onSubmit={handleRenameSelf}>
+            <DialogBody>
+              <div className="space-y-2">
+                <Label htmlFor="estimator-rename-self">Nickname</Label>
+                <Input
+                  id="estimator-rename-self"
+                  value={renameSelfValue}
+                  onChange={(event) => setRenameSelfValue(event.target.value)}
+                  autoFocus
+                />
+              </div>
+            </DialogBody>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setRenameSelfOpen(false)}>
                 Cancel
@@ -891,28 +893,28 @@ export function EstimatorRoomShell({
           <DialogHeader>
             <DialogTitle>Reset Voting</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <DialogBody>
             <p className="text-sm text-muted-foreground">
               This will clear every vote for the current ticket and reopen voting.
             </p>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setConfirmResetOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                disabled={pendingAction !== null || !currentTicket}
-                onClick={() => {
-                  if (!currentTicket) return;
-                  void onResetVoting(currentTicket.id);
-                  setConfirmResetOpen(false);
-                }}
-              >
-                Reset Voting
-              </Button>
-            </DialogFooter>
-          </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmResetOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={pendingAction !== null || !currentTicket}
+              onClick={() => {
+                if (!currentTicket) return;
+                void onResetVoting(currentTicket.id);
+                setConfirmResetOpen(false);
+              }}
+            >
+              Reset Voting
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -921,27 +923,27 @@ export function EstimatorRoomShell({
           <DialogHeader>
             <DialogTitle>Reset Tickets</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <DialogBody>
             <p className="text-sm text-muted-foreground">
               This will delete every ticket in the room and clear the votes attached to those tickets.
             </p>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setConfirmResetTicketsOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                disabled={pendingAction !== null || snapshot.tickets.length === 0}
-                onClick={() => {
-                  void onResetTickets();
-                  setConfirmResetTicketsOpen(false);
-                }}
-              >
-                Reset Tickets
-              </Button>
-            </DialogFooter>
-          </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmResetTicketsOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={pendingAction !== null || snapshot.tickets.length === 0}
+              onClick={() => {
+                void onResetTickets();
+                setConfirmResetTicketsOpen(false);
+              }}
+            >
+              Reset Tickets
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -958,46 +960,48 @@ export function EstimatorRoomShell({
           <DialogHeader>
             <DialogTitle>Import Tickets</DialogTitle>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handleImportTickets}>
-            <div className="space-y-2">
-              <Label htmlFor="estimator-ticket-import-file">CSV File</Label>
-              <Input
-                ref={importFileInputRef}
-                id="estimator-ticket-import-file"
-                type="file"
-                accept=".csv,text/csv"
-                onChange={handleImportFileChange}
-                className="sr-only"
-                tabIndex={-1}
-              />
-              <div className="flex min-w-0 items-center gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="shrink-0"
-                  onClick={() => importFileInputRef.current?.click()}
-                  disabled={pendingAction !== null}
-                >
-                  Choose File
-                </Button>
-                {importFile ? (
-                  <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-                    {importFile.name}
-                  </span>
-                ) : null}
+          <form className="contents" onSubmit={handleImportTickets}>
+            <DialogBody className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="estimator-ticket-import-file">CSV File</Label>
+                <Input
+                  ref={importFileInputRef}
+                  id="estimator-ticket-import-file"
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleImportFileChange}
+                  className="sr-only"
+                  tabIndex={-1}
+                />
+                <div className="flex min-w-0 items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => importFileInputRef.current?.click()}
+                    disabled={pendingAction !== null}
+                  >
+                    Choose File
+                  </Button>
+                  {importFile ? (
+                    <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                      {importFile.name}
+                    </span>
+                  ) : null}
+                </div>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="estimator-ticket-import-column">Ticket Name Column</Label>
-              <Input
-                id="estimator-ticket-import-column"
-                value={importColumnName}
-                onChange={(event) => setImportColumnName(event.target.value)}
-                placeholder="Name"
-                autoFocus
-              />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="estimator-ticket-import-column">Ticket Name Column</Label>
+                <Input
+                  id="estimator-ticket-import-column"
+                  value={importColumnName}
+                  onChange={(event) => setImportColumnName(event.target.value)}
+                  placeholder="Name"
+                  autoFocus
+                />
+              </div>
+            </DialogBody>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setImportOpen(false)}>
@@ -1021,16 +1025,18 @@ export function EstimatorRoomShell({
           <DialogHeader>
             <DialogTitle>Rename Ticket</DialogTitle>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handleRenameTicket}>
-            <div className="space-y-2">
-              <Label htmlFor="estimator-edit-ticket-title">Ticket Title</Label>
-              <Input
-                id="estimator-edit-ticket-title"
-                value={editingTicketValue}
-                onChange={(event) => setEditingTicketValue(event.target.value)}
-                autoFocus
-              />
-            </div>
+          <form className="contents" onSubmit={handleRenameTicket}>
+            <DialogBody>
+              <div className="space-y-2">
+                <Label htmlFor="estimator-edit-ticket-title">Ticket Title</Label>
+                <Input
+                  id="estimator-edit-ticket-title"
+                  value={editingTicketValue}
+                  onChange={(event) => setEditingTicketValue(event.target.value)}
+                  autoFocus
+                />
+              </div>
+            </DialogBody>
             <DialogFooter>
               <Button
                 type="button"

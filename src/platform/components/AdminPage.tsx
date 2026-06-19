@@ -353,11 +353,11 @@ export default function AdminPage() {
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive">Delete user account</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogBody className="space-y-4">
             <AlertDialogDescription>
               This action cannot be undone. Type <span className="font-medium">{emailPendingDelete}</span> to confirm deletion.
             </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogBody>
             <Input
               value={confirmEmail}
               onChange={(e) => setConfirmEmail(e.target.value)}

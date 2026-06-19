@@ -177,11 +177,11 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete "{deleteTarget?.name}"?</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-2">
             <DialogDescription>
               {affectedCount} expense{affectedCount !== 1 ? 's' : ''} use this category. Choose where to reassign them:
             </DialogDescription>
-          </DialogHeader>
-          <DialogBody className="space-y-2">
             <Label>Reassign To</Label>
             <Select value={reassignTo} onValueChange={setReassignTo}>
               <SelectTrigger><SelectValue /></SelectTrigger>

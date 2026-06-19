@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
 import { DataGridAddFormAffixInput } from '@/components/ui/data-grid-add-form-affix-input';
@@ -337,8 +337,10 @@ function IncomeActionsCell({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete income</AlertDialogTitle>
-          <AlertDialogDescription>Are you sure you want to delete &ldquo;{income.name}&rdquo;? This action cannot be undone.</AlertDialogDescription>
         </AlertDialogHeader>
+        <AlertDialogBody>
+          <AlertDialogDescription>Are you sure you want to delete &ldquo;{income.name}&rdquo;? This action cannot be undone.</AlertDialogDescription>
+        </AlertDialogBody>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => onRemove(income)}>Delete</AlertDialogAction>
@@ -979,10 +981,12 @@ export function IncomesTab({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Convert to simple income?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogBody>
             <AlertDialogDescription>
               This keeps the current averaged amount and removes the contributing records. The converted income will be marked as estimated.
             </AlertDialogDescription>
-          </AlertDialogHeader>
+          </AlertDialogBody>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={savingConvertToSimple}>Cancel</AlertDialogCancel>
             <AlertDialogAction

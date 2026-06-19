@@ -330,11 +330,11 @@ export default function AccountPage() {
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Delete Account</AlertDialogTitle>
+                  </AlertDialogHeader>
+                  <AlertDialogBody className="space-y-4">
                     <AlertDialogDescription>
                       This action cannot be undone. All your data will be permanently removed. Type your email address to confirm.
                     </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogBody>
                     <Input
                       value={deleteConfirmText}
                       onChange={e => setDeleteConfirmText(e.target.value)}
@@ -368,10 +368,12 @@ export default function AccountPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Change Password</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogBody>
             <AlertDialogDescription>
               A password change link will be sent to your email address. You will be signed out and must click the link to set a new password.
             </AlertDialogDescription>
-          </AlertDialogHeader>
+          </AlertDialogBody>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={sendingPasswordLink}>Cancel</AlertDialogCancel>
             <AlertDialogAction
@@ -390,7 +392,7 @@ export default function AccountPage() {
           <DialogHeader>
             <DialogTitle>Change Email</DialogTitle>
           </DialogHeader>
-          <form id="change-email-form" onSubmit={handleChangeEmail}>
+          <form id="change-email-form" className="contents" onSubmit={handleChangeEmail}>
             <DialogBody className="space-y-4 pb-6">
               <div>
                 <label className="mb-1 block text-sm font-medium">Current Email</label>
@@ -427,7 +429,7 @@ export default function AccountPage() {
           <DialogHeader>
             <DialogTitle>Change Password</DialogTitle>
           </DialogHeader>
-          <form id="change-password-form" onSubmit={handleChangePassword} autoComplete="on">
+          <form id="change-password-form" className="contents" onSubmit={handleChangePassword} autoComplete="on">
             <DialogBody className="space-y-4 pb-6">
               {/* Hidden email field for password manager association */}
               <input

@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -472,8 +472,10 @@ function ExpenseActionsCell({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete expense</AlertDialogTitle>
-          <AlertDialogDescription>Are you sure you want to delete &ldquo;{expense.name}&rdquo;? This action cannot be undone.</AlertDialogDescription>
         </AlertDialogHeader>
+        <AlertDialogBody>
+          <AlertDialogDescription>Are you sure you want to delete &ldquo;{expense.name}&rdquo;? This action cannot be undone.</AlertDialogDescription>
+        </AlertDialogBody>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={onRemove}>Delete</AlertDialogAction>
@@ -1496,7 +1498,8 @@ export function ExpensesTab({
         }}
       >
         <DialogContent
-          className={`sm:max-w-lg max-h-[calc(100dvh-2rem)] flex flex-col ${savingExpense ? '[&>button]:pointer-events-none [&>button]:opacity-50' : ''}`}
+          aria-describedby={undefined}
+          className={`sm:max-w-lg ${savingExpense ? '[&>button]:pointer-events-none [&>button]:opacity-50' : ''}`}
           onInteractOutside={(event) => {
             event.preventDefault();
           }}
@@ -1510,7 +1513,7 @@ export function ExpensesTab({
                 id="new-expense-name"
                 value={newExpense.name}
                 onChange={e => setNewExpense(prev => ({ ...prev, name: e.target.value }))}
-                autoFocus
+                autoFocus={!isMobile}
                 disabled={savingExpense}
               />
             </div>
@@ -1768,10 +1771,12 @@ export function ExpensesTab({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Convert to simple expense?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogBody>
             <AlertDialogDescription>
               This keeps the current averaged amount and removes the contributing records. The converted expense will be marked as estimated.
             </AlertDialogDescription>
-          </AlertDialogHeader>
+          </AlertDialogBody>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={savingConvertToSimple}>Cancel</AlertDialogCancel>
             <AlertDialogAction

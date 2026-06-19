@@ -772,6 +772,8 @@ export function DrawersView({
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Unit</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogBody className="space-y-2">
             {pendingUnitHasDrawers ? (
               <AlertDialogDescription>
                 Choose what to do with drawers currently in {unitPendingDelete?.name || 'this unit'}.
@@ -781,9 +783,8 @@ export function DrawersView({
                 Delete {unitPendingDelete?.name || 'this unit'}?
               </AlertDialogDescription>
             )}
-          </AlertDialogHeader>
-          {pendingUnitHasDrawers && (
-            <AlertDialogBody className="space-y-2">
+            {pendingUnitHasDrawers && (
+              <>
               <Button
                 type="button"
                 variant={deleteMode === 'move' ? 'default' : 'outline'}
@@ -800,8 +801,9 @@ export function DrawersView({
               >
                 Delete Drawers
               </Button>
-            </AlertDialogBody>
-          )}
+              </>
+            )}
+          </AlertDialogBody>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
@@ -901,13 +903,13 @@ export function DrawersView({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{addDrawerTarget ? 'Add Drawer to Cubby' : 'Add Drawer to Limbo'}</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-4">
             {addDrawerTarget && (
               <DialogDescription>
                 {`Create a new drawer for ${addTargetUnit?.name || 'selected unit'} cubby (${addDrawerTarget.cubbyX}, ${addDrawerTarget.cubbyY}).`}
               </DialogDescription>
             )}
-          </DialogHeader>
-          <DialogBody>
             <form id="add-drawer-form" onSubmit={handleAddDrawer} className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="modalDrawerLabel">Label</Label>

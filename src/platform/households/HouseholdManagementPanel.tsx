@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -319,10 +320,12 @@ export function HouseholdManagementPanel({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Remove Member</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
             <DialogDescription>
               Remove {removeTarget ? memberLabel(removeTarget) : 'this member'} from this household? This will rotate the invite code.
             </DialogDescription>
-          </DialogHeader>
+          </DialogBody>
           <DialogFooter>
             <Button
               type="button"
@@ -349,10 +352,12 @@ export function HouseholdManagementPanel({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Leave Household</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
             <DialogDescription>
               Leave this household? You will lose access until re-invited.
             </DialogDescription>
-          </DialogHeader>
+          </DialogBody>
           <DialogFooter>
             <Button
               type="button"
@@ -389,11 +394,11 @@ export function HouseholdManagementPanel({
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive">Delete Household</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogBody className="space-y-4">
             <AlertDialogDescription>
               This action cannot be undone. Type your email address to confirm household deletion.
             </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogBody>
             <Input
               value={deleteConfirmText}
               onChange={(event) => setDeleteConfirmText(event.target.value)}

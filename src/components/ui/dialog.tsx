@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { getModalKeyDownHandler, getModalOpenAutoFocusHandler } from "@/components/ui/modal-shortcuts";
+import { useModalViewportStyle } from "@/components/ui/modal-viewport";
 
 const Dialog = DialogPrimitive.Root;
 
@@ -35,9 +36,10 @@ interface DialogContentProps extends React.ComponentPropsWithoutRef<typeof Dialo
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(({ className, children, onOpenAutoFocus, onKeyDown, hideClose, ...props }, ref) => {
+>(({ className, children, onOpenAutoFocus, onKeyDown, hideClose, style, ...props }, ref) => {
   const handleOpenAutoFocus = getModalOpenAutoFocusHandler(onOpenAutoFocus);
   const handleKeyDown = getModalKeyDownHandler(onKeyDown);
+  const viewportStyle = useModalViewportStyle(style);
 
   return (
     <DialogPortal>
@@ -47,9 +49,11 @@ const DialogContent = React.forwardRef<
         onOpenAutoFocus={handleOpenAutoFocus}
         onKeyDown={handleKeyDown}
         className={cn(
-          "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+          "fixed left-[50%] top-[50%] z-50 max-h-[calc(100dvh-2rem)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
           className,
+          "grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden max-sm:left-0 max-sm:right-0 max-sm:top-[var(--bathos-modal-vv-top,0px)] max-sm:h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-h-[var(--bathos-modal-vv-height,100dvh)] max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:!animate-none max-sm:!duration-0 max-sm:!transition-none max-sm:data-[state=closed]:!animate-none max-sm:data-[state=open]:!animate-none",
         )}
+        style={viewportStyle}
         {...props}
       >
         {children}
@@ -74,7 +78,8 @@ const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("-mx-6 border-y border-border px-6 pt-2 pb-[25px]", className)}
+      data-dialog-body="true"
+      className={cn("-mx-6 min-h-0 overflow-y-auto border-y border-border px-6 pt-2 pb-[25px]", className)}
       {...props}
     />
   ),
