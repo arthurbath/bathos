@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/data-grid';
 import { PersistentTooltipText } from '@/components/ui/tooltip';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
+import { EMPTY_GRID_VIEW_FILTERS, sanitizeSortingState, useGridViewPreferences } from '@/hooks/useGridViewPreferences';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import { GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH, INCOMES_GRID_DEFAULT_WIDTHS } from '@/lib/gridColumnWidths';
 import type { FrequencyType } from '@/types/fairshare';
@@ -132,6 +133,7 @@ const columnHelper = createColumnHelper<Income>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
 const INCOME_ACTIONS_NAV_COL = 6;
 const INCOMES_HISTORY_KEY = 'incomes';
+const INCOMES_DEFAULT_SORTING: SortingState = [{ id: 'name', desc: false }];
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unexpected error';
@@ -383,9 +385,22 @@ export function IncomesTab({
   } | null>(null);
   const [savingConvertToSimple, setSavingConvertToSimple] = useState(false);
 
-  const [sorting, setSorting] = useState<SortingState>(() => {
-    try { const s = localStorage.getItem('incomes_sorting'); return s ? JSON.parse(s) : [{ id: 'name', desc: false }]; }
-    catch { return [{ id: 'name', desc: false }]; }
+  const { sorting, setSorting } = useGridViewPreferences({
+    userId,
+    gridKey: 'incomes',
+    defaultFilters: EMPTY_GRID_VIEW_FILTERS,
+    defaultSorting: INCOMES_DEFAULT_SORTING,
+    sanitizeSorting: (raw) => sanitizeSortingState(raw, INCOMES_DEFAULT_SORTING),
+    getLegacyPreferences: () => ({
+      sorting: (() => {
+        try {
+          const raw = localStorage.getItem('incomes_sorting');
+          return raw ? JSON.parse(raw) : INCOMES_DEFAULT_SORTING;
+        } catch {
+          return INCOMES_DEFAULT_SORTING;
+        }
+      })(),
+    }),
   });
   useEffect(() => { localStorage.setItem('incomes_sorting', JSON.stringify(sorting)); }, [sorting]);
 

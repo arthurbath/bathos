@@ -12,6 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { MoreHorizontal, Plus, Trash2, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
+import { EMPTY_GRID_VIEW_FILTERS, sanitizeSortingState, useGridViewPreferences } from '@/hooks/useGridViewPreferences';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import { COLOR_SWATCHES, normalizePaletteColor } from '@/lib/colors';
 import { CONFIG_CATEGORIES_GRID_DEFAULT_WIDTHS, GRID_ACTIONS_COLUMN_ID, GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH } from '@/lib/gridColumnWidths';
@@ -41,6 +42,7 @@ interface ManagedListSectionProps {
 
 const managedItemColumnHelper = createColumnHelper<ManagedItem>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
+const MANAGED_LIST_DEFAULT_SORTING: SortingState = [{ id: 'name', desc: false }];
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Unexpected error';
@@ -300,14 +302,23 @@ export function ManagedListSection({
     () => `config_${title.toLowerCase().replace(/\s+/g, '_')}_sorting`,
     [title],
   );
-  const [sorting, setSorting] = useState<SortingState>(() => {
-    if (typeof window === 'undefined') return [{ id: 'name', desc: false }];
-    try {
-      const raw = window.localStorage.getItem(sortingStorageKey);
-      return raw ? JSON.parse(raw) : [{ id: 'name', desc: false }];
-    } catch {
-      return [{ id: 'name', desc: false }];
-    }
+  const { sorting, setSorting } = useGridViewPreferences({
+    userId,
+    gridKey: 'config_categories',
+    defaultFilters: EMPTY_GRID_VIEW_FILTERS,
+    defaultSorting: MANAGED_LIST_DEFAULT_SORTING,
+    sanitizeSorting: (raw) => sanitizeSortingState(raw, MANAGED_LIST_DEFAULT_SORTING),
+    getLegacyPreferences: () => ({
+      sorting: (() => {
+        if (typeof window === 'undefined') return MANAGED_LIST_DEFAULT_SORTING;
+        try {
+          const raw = window.localStorage.getItem(sortingStorageKey);
+          return raw ? JSON.parse(raw) : MANAGED_LIST_DEFAULT_SORTING;
+        } catch {
+          return MANAGED_LIST_DEFAULT_SORTING;
+        }
+      })(),
+    }),
   });
   useEffect(() => {
     if (typeof window === 'undefined') return;

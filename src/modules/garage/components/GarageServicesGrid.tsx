@@ -13,6 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, Ale
 import { Ban, CheckCheck, Download, FileSpreadsheet, Filter, FilterX, MoreHorizontal, Plus, SkipForward, Trash2, Upload } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
+import { sanitizeSortingState, useGridViewPreferences } from '@/hooks/useGridViewPreferences';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import { GARAGE_SERVICES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS } from '@/lib/gridColumnWidths';
 import type { GarageService, GarageServiceStatus, GarageServiceType, GarageServicingWithRelations } from '@/modules/garage/types/garage';
@@ -36,6 +37,19 @@ const GARAGE_SERVICES_HISTORY_KEY = 'garage_services';
 const EMPTY_SERVICE_TYPE_SELECT_VALUE = '__none__';
 type GroupByOption = 'none' | 'type';
 type CadenceFilterOption = 'all' | 'recurring' | 'one_off';
+interface GarageServicesGridFilters {
+  nameFilter: string;
+  cadenceFilter: CadenceFilterOption;
+  groupBy: GroupByOption;
+}
+const GARAGE_SERVICES_GROUP_BY_VALUES = new Set<GroupByOption>(['none', 'type']);
+const GARAGE_SERVICES_CADENCE_FILTER_VALUES = new Set<CadenceFilterOption>(['all', 'recurring', 'one_off']);
+const GARAGE_SERVICES_DEFAULT_FILTERS: GarageServicesGridFilters = {
+  nameFilter: '',
+  cadenceFilter: 'all',
+  groupBy: 'none',
+};
+const GARAGE_SERVICES_DEFAULT_SORTING: SortingState = [{ id: 'name', desc: false }];
 
 function normalizeNameFilterValue(value: string) {
   return value.trim().toLocaleLowerCase();
@@ -44,6 +58,20 @@ function normalizeNameFilterValue(value: string) {
 function matchesNameFilter(name: string, filterValue: string) {
   const normalizedFilter = normalizeNameFilterValue(filterValue);
   return normalizedFilter.length === 0 || name.toLocaleLowerCase().includes(normalizedFilter);
+}
+
+function sanitizeGarageServicesFilters(raw: unknown): GarageServicesGridFilters {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return GARAGE_SERVICES_DEFAULT_FILTERS;
+  const candidate = raw as Partial<GarageServicesGridFilters>;
+  return {
+    nameFilter: typeof candidate.nameFilter === 'string' ? candidate.nameFilter : '',
+    cadenceFilter: candidate.cadenceFilter && GARAGE_SERVICES_CADENCE_FILTER_VALUES.has(candidate.cadenceFilter)
+      ? candidate.cadenceFilter
+      : 'all',
+    groupBy: candidate.groupBy && GARAGE_SERVICES_GROUP_BY_VALUES.has(candidate.groupBy)
+      ? candidate.groupBy
+      : 'none',
+  };
 }
 
 function normalizePositiveInt(value: string): number | null {
@@ -239,15 +267,49 @@ export function GarageServicesGrid({
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [invalidNameWarning, setInvalidNameWarning] = useState<string | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [nameFilter, setNameFilter] = useState(() => localStorage.getItem('garage_services_nameFilter') ?? '');
-  const [cadenceFilter, setCadenceFilter] = useState<CadenceFilterOption>(() => (localStorage.getItem('garage_services_cadenceFilter') as CadenceFilterOption) || 'all');
-  const [groupBy, setGroupBy] = useState<GroupByOption>(() => (localStorage.getItem('garage_services_groupBy') as GroupByOption) || 'none');
+  const {
+    filters: viewFilters,
+    setFilters: setViewFilters,
+    sorting,
+    setSorting,
+  } = useGridViewPreferences<GarageServicesGridFilters>({
+    userId,
+    gridKey: 'garage_services',
+    defaultFilters: GARAGE_SERVICES_DEFAULT_FILTERS,
+    defaultSorting: GARAGE_SERVICES_DEFAULT_SORTING,
+    sanitizeFilters: sanitizeGarageServicesFilters,
+    sanitizeSorting: (raw) => sanitizeSortingState(raw, GARAGE_SERVICES_DEFAULT_SORTING),
+    getLegacyPreferences: () => ({
+      filters: {
+        nameFilter: localStorage.getItem('garage_services_nameFilter') ?? '',
+        cadenceFilter: localStorage.getItem('garage_services_cadenceFilter') ?? 'all',
+        groupBy: localStorage.getItem('garage_services_groupBy') ?? 'none',
+      },
+      sorting: (() => {
+        try {
+          const raw = localStorage.getItem('garage_services_sorting');
+          return raw ? JSON.parse(raw) : GARAGE_SERVICES_DEFAULT_SORTING;
+        } catch {
+          return GARAGE_SERVICES_DEFAULT_SORTING;
+        }
+      })(),
+    }),
+  });
+  const { nameFilter, cadenceFilter, groupBy } = viewFilters;
+  const setNameFilter = useCallback((nameFilter: string) => {
+    setViewFilters((current) => ({ ...current, nameFilter }));
+  }, [setViewFilters]);
+  const setCadenceFilter = useCallback((cadenceFilter: CadenceFilterOption) => {
+    setViewFilters((current) => ({ ...current, cadenceFilter }));
+  }, [setViewFilters]);
+  const setGroupBy = useCallback((groupBy: GroupByOption) => {
+    setViewFilters((current) => ({ ...current, groupBy }));
+  }, [setViewFilters]);
   const [draftNameFilter, setDraftNameFilter] = useState(nameFilter);
   const [draftCadenceFilter, setDraftCadenceFilter] = useState<CadenceFilterOption>(cadenceFilter);
   const [draftGroupBy, setDraftGroupBy] = useState<GroupByOption>(groupBy);
   const hasActiveViewControls = normalizeNameFilterValue(nameFilter).length > 0 || groupBy !== 'none' || cadenceFilter !== 'all';
 
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }]);
   const {
     columnSizing,
     columnSizingInfo,
@@ -279,6 +341,9 @@ export function GarageServicesGrid({
   useEffect(() => {
     localStorage.setItem('garage_services_cadenceFilter', cadenceFilter);
   }, [cadenceFilter]);
+  useEffect(() => {
+    localStorage.setItem('garage_services_sorting', JSON.stringify(sorting));
+  }, [sorting]);
 
   const getTypeLabel = (value: GarageServiceType | null) => getGarageServiceTypeLabel(value);
 

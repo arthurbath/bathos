@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
+import { EMPTY_GRID_VIEW_FILTERS, sanitizeSortingState, useGridViewPreferences } from '@/hooks/useGridViewPreferences';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import type { Category } from '@/hooks/useCategories';
 import { RestoreTab } from '@/components/RestoreTab';
@@ -80,6 +81,7 @@ const paymentMethodColumnHelper = createColumnHelper<LinkedAccount>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
 const PAYMENT_METHOD_ACTIONS_NAV_COL = 3;
 const PAYMENT_METHODS_HISTORY_KEY = 'config_payment_methods';
+const PAYMENT_METHODS_DEFAULT_SORTING: SortingState = [{ id: 'name', desc: false }];
 
 function parseOptionalCents(raw: string): number | null {
   const trimmed = raw.trim();
@@ -381,14 +383,23 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
   const [deleteTarget, setDeleteTarget] = useState<LinkedAccount | null>(null);
   const [reassignTo, setReassignTo] = useState('_none');
 
-  const [sorting, setSorting] = useState<SortingState>(() => {
-    if (typeof window === 'undefined') return [{ id: 'name', desc: false }];
-    try {
-      const raw = window.localStorage.getItem('config_payment_methods_sorting');
-      return raw ? JSON.parse(raw) : [{ id: 'name', desc: false }];
-    } catch {
-      return [{ id: 'name', desc: false }];
-    }
+  const { sorting, setSorting } = useGridViewPreferences({
+    userId,
+    gridKey: 'config_payment_methods',
+    defaultFilters: EMPTY_GRID_VIEW_FILTERS,
+    defaultSorting: PAYMENT_METHODS_DEFAULT_SORTING,
+    sanitizeSorting: (raw) => sanitizeSortingState(raw, PAYMENT_METHODS_DEFAULT_SORTING),
+    getLegacyPreferences: () => ({
+      sorting: (() => {
+        if (typeof window === 'undefined') return PAYMENT_METHODS_DEFAULT_SORTING;
+        try {
+          const raw = window.localStorage.getItem('config_payment_methods_sorting');
+          return raw ? JSON.parse(raw) : PAYMENT_METHODS_DEFAULT_SORTING;
+        } catch {
+          return PAYMENT_METHODS_DEFAULT_SORTING;
+        }
+      })(),
+    }),
   });
   useEffect(() => {
     if (typeof window === 'undefined') return;

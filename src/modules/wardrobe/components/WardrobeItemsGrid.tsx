@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/u
 import { toast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
+import { sanitizeSortingState, useGridViewPreferences } from '@/hooks/useGridViewPreferences';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import { GRID_FIXED_COLUMNS, WARDROBE_ITEMS_GRID_DEFAULT_WIDTHS } from '@/lib/gridColumnWidths';
 import {
@@ -29,6 +30,11 @@ import type { WardrobeCategory, WardrobeItem, WardrobeItemInput, WardrobeItemUpd
 
 type GroupByOption = 'none' | 'category' | 'brand' | 'status';
 type StatusFilterValue = WardrobeStatus | '__none__';
+interface WardrobeGridFilters {
+  nameFilter: string;
+  statusFilter: StatusFilterValue[];
+  groupBy: GroupByOption;
+}
 
 interface WardrobeItemsGridProps {
   userId: string;
@@ -56,6 +62,13 @@ const STATUS_FILTER_OPTIONS = [
   { value: EMPTY_STATUS_SELECT_VALUE, label: 'No Status', color: null },
 ];
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus:ring-ring/65 focus-visible:ring-offset-0';
+const WARDROBE_GROUP_BY_VALUES = new Set<GroupByOption>(['none', 'category', 'brand', 'status']);
+const WARDROBE_DEFAULT_FILTERS: WardrobeGridFilters = {
+  nameFilter: '',
+  statusFilter: ALL_STATUS_FILTER_VALUES,
+  groupBy: 'none',
+};
+const WARDROBE_DEFAULT_SORTING: SortingState = [];
 
 function normalizeNameFilterValue(value: string) {
   return value.trim().toLocaleLowerCase();
@@ -82,13 +95,29 @@ function parseStatusFilter(raw: string | null): StatusFilterValue[] {
   if (!raw) return ALL_STATUS_FILTER_VALUES;
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return ALL_STATUS_FILTER_VALUES;
-    const allowed = new Set(ALL_STATUS_FILTER_VALUES);
-    const values = parsed.filter((value): value is StatusFilterValue => typeof value === 'string' && allowed.has(value as StatusFilterValue));
-    return values.length === 0 && parsed.length > 0 ? ALL_STATUS_FILTER_VALUES : values;
+    return sanitizeStatusFilterValues(parsed);
   } catch {
     return ALL_STATUS_FILTER_VALUES;
   }
+}
+
+function sanitizeStatusFilterValues(raw: unknown): StatusFilterValue[] {
+  if (!Array.isArray(raw)) return ALL_STATUS_FILTER_VALUES;
+  const allowed = new Set(ALL_STATUS_FILTER_VALUES);
+  const values = raw.filter((value): value is StatusFilterValue => typeof value === 'string' && allowed.has(value as StatusFilterValue));
+  return values.length === 0 && raw.length > 0 ? ALL_STATUS_FILTER_VALUES : values;
+}
+
+function sanitizeWardrobeFilters(raw: unknown): WardrobeGridFilters {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return WARDROBE_DEFAULT_FILTERS;
+  const candidate = raw as Partial<WardrobeGridFilters>;
+  return {
+    nameFilter: typeof candidate.nameFilter === 'string' ? candidate.nameFilter : '',
+    statusFilter: sanitizeStatusFilterValues(candidate.statusFilter),
+    groupBy: candidate.groupBy && WARDROBE_GROUP_BY_VALUES.has(candidate.groupBy)
+      ? candidate.groupBy
+      : 'none',
+  };
 }
 
 function createEmptyDraft(): WardrobeItemInput {
@@ -286,21 +315,48 @@ export function WardrobeItemsGrid({
   const [saving, setSaving] = useState(false);
   const [rowActionBusy, setRowActionBusy] = useState(false);
   const [draft, setDraft] = useState<WardrobeItemInput>(() => createEmptyDraft());
-  const [nameFilter, setNameFilter] = useState(() => localStorage.getItem('wardrobe_items_nameFilter') ?? '');
-  const [statusFilter, setStatusFilter] = useState<StatusFilterValue[]>(() => parseStatusFilter(localStorage.getItem(STATUS_FILTER_STORAGE_KEY)));
-  const [groupBy, setGroupBy] = useState<GroupByOption>(() => (localStorage.getItem('wardrobe_items_groupBy') as GroupByOption) || 'none');
+  const {
+    filters: viewFilters,
+    setFilters: setViewFilters,
+    sorting,
+    setSorting,
+  } = useGridViewPreferences<WardrobeGridFilters>({
+    userId,
+    gridKey: 'wardrobe_items',
+    defaultFilters: WARDROBE_DEFAULT_FILTERS,
+    defaultSorting: WARDROBE_DEFAULT_SORTING,
+    sanitizeFilters: sanitizeWardrobeFilters,
+    sanitizeSorting: (raw) => sanitizeSortingState(raw, WARDROBE_DEFAULT_SORTING),
+    getLegacyPreferences: () => ({
+      filters: {
+        nameFilter: localStorage.getItem('wardrobe_items_nameFilter') ?? '',
+        statusFilter: parseStatusFilter(localStorage.getItem(STATUS_FILTER_STORAGE_KEY)),
+        groupBy: localStorage.getItem('wardrobe_items_groupBy') ?? 'none',
+      },
+      sorting: (() => {
+        try {
+          const raw = localStorage.getItem('wardrobe_items_sorting');
+          return raw ? JSON.parse(raw) : WARDROBE_DEFAULT_SORTING;
+        } catch {
+          return WARDROBE_DEFAULT_SORTING;
+        }
+      })(),
+    }),
+  });
+  const { nameFilter, statusFilter, groupBy } = viewFilters;
+  const setNameFilter = useCallback((nameFilter: string) => {
+    setViewFilters((current) => ({ ...current, nameFilter }));
+  }, [setViewFilters]);
+  const setStatusFilter = useCallback((statusFilter: StatusFilterValue[]) => {
+    setViewFilters((current) => ({ ...current, statusFilter }));
+  }, [setViewFilters]);
+  const setGroupBy = useCallback((groupBy: GroupByOption) => {
+    setViewFilters((current) => ({ ...current, groupBy }));
+  }, [setViewFilters]);
   const [viewControlsOpen, setViewControlsOpen] = useState(false);
   const [draftNameFilter, setDraftNameFilter] = useState('');
   const [draftStatusFilter, setDraftStatusFilter] = useState<StatusFilterValue[]>(ALL_STATUS_FILTER_VALUES);
   const [draftGroupBy, setDraftGroupBy] = useState<GroupByOption>('none');
-  const [sorting, setSorting] = useState<SortingState>(() => {
-    try {
-      const raw = localStorage.getItem('wardrobe_items_sorting');
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
 
   useEffect(() => { localStorage.setItem('wardrobe_items_nameFilter', nameFilter); }, [nameFilter]);
   useEffect(() => { localStorage.setItem(STATUS_FILTER_STORAGE_KEY, JSON.stringify(statusFilter)); }, [statusFilter]);

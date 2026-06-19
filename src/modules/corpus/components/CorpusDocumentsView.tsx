@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
 import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingState, useReactTable } from '@tanstack/react-table';
 import { Download, FileText, FileUp, Filter, FilterX, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from '@/hooks/use-toast';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
+import { useGridViewPreferences } from '@/hooks/useGridViewPreferences';
 import { CORPUS_DOCUMENTS_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS } from '@/lib/gridColumnWidths';
 import { MarkdownSyntaxTextarea } from '@/modules/corpus/components/MarkdownSyntaxTextarea';
 import type { CorpusDocument, CorpusDocumentInput, CorpusDocumentUpdate, CorpusTag } from '@/modules/corpus/types/corpus';
@@ -38,9 +39,29 @@ const SORTING_STORAGE_KEY = 'corpus_documents_sorting';
 const QUERY_STORAGE_KEY = 'corpus_documents_filterName';
 const TAG_FILTERS_STORAGE_KEY = 'corpus_documents_tagFilters';
 const SORTABLE_COLUMN_IDS = new Set(['title', 'characters', 'updated_at']);
+interface CorpusDocumentsGridFilters {
+  query: string;
+  selectedTagFilters: string[];
+}
+const CORPUS_DOCUMENTS_DEFAULT_FILTERS: CorpusDocumentsGridFilters = {
+  query: '',
+  selectedTagFilters: [],
+};
 
 function getDefaultSorting(): SortingState {
   return [{ id: 'updated_at', desc: true }];
+}
+
+function readStoredSortingFromValue(raw: unknown): SortingState {
+  if (!Array.isArray(raw)) return getDefaultSorting();
+  const validSorting = raw.filter((entry): entry is { id: string; desc: boolean } => {
+    if (typeof entry !== 'object' || entry === null) return false;
+    const candidate = entry as { id?: unknown; desc?: unknown };
+    return typeof candidate.id === 'string'
+      && SORTABLE_COLUMN_IDS.has(candidate.id)
+      && typeof candidate.desc === 'boolean';
+  });
+  return validSorting.length > 0 ? validSorting : getDefaultSorting();
 }
 
 function readStoredSorting(): SortingState {
@@ -48,15 +69,7 @@ function readStoredSorting(): SortingState {
     const raw = localStorage.getItem(SORTING_STORAGE_KEY);
     if (!raw) return getDefaultSorting();
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return getDefaultSorting();
-    const validSorting = parsed.filter((entry): entry is { id: string; desc: boolean } => {
-      if (typeof entry !== 'object' || entry === null) return false;
-      const candidate = entry as { id?: unknown; desc?: unknown };
-      return typeof candidate.id === 'string'
-        && SORTABLE_COLUMN_IDS.has(candidate.id)
-        && typeof candidate.desc === 'boolean';
-    });
-    return validSorting.length > 0 ? validSorting : getDefaultSorting();
+    return readStoredSortingFromValue(parsed);
   } catch {
     return getDefaultSorting();
   }
@@ -79,6 +92,17 @@ function readStoredStringArray(key: string) {
   } catch {
     return [];
   }
+}
+
+function sanitizeCorpusDocumentsFilters(raw: unknown): CorpusDocumentsGridFilters {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return CORPUS_DOCUMENTS_DEFAULT_FILTERS;
+  const candidate = raw as Partial<CorpusDocumentsGridFilters>;
+  return {
+    query: typeof candidate.query === 'string' ? candidate.query : '',
+    selectedTagFilters: Array.isArray(candidate.selectedTagFilters)
+      ? candidate.selectedTagFilters.filter((value): value is string => typeof value === 'string')
+      : [],
+  };
 }
 
 function retainKnownValues(values: string[], knownValues: Set<string>) {
@@ -246,9 +270,38 @@ export function CorpusDocumentsView({
   const bulkOverwriteInputRef = useRef<HTMLInputElement | null>(null);
   const overwriteTargetRef = useRef<CorpusDocument | null>(null);
   const isMobile = useIsMobile();
-  const [sorting, setSorting] = useState<SortingState>(() => readStoredSorting());
-  const [query, setQuery] = useState(() => readStoredText(QUERY_STORAGE_KEY));
-  const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>(() => readStoredStringArray(TAG_FILTERS_STORAGE_KEY));
+  const {
+    filters: viewFilters,
+    setFilters: setViewFilters,
+    sorting,
+    setSorting,
+  } = useGridViewPreferences<CorpusDocumentsGridFilters>({
+    userId,
+    gridKey: 'corpus_documents',
+    defaultFilters: CORPUS_DOCUMENTS_DEFAULT_FILTERS,
+    defaultSorting: getDefaultSorting(),
+    sanitizeFilters: sanitizeCorpusDocumentsFilters,
+    sanitizeSorting: readStoredSortingFromValue,
+    getLegacyPreferences: () => ({
+      filters: {
+        query: readStoredText(QUERY_STORAGE_KEY),
+        selectedTagFilters: readStoredStringArray(TAG_FILTERS_STORAGE_KEY),
+      },
+      sorting: readStoredSorting(),
+    }),
+  });
+  const { query, selectedTagFilters } = viewFilters;
+  const setQuery = useCallback((query: string) => {
+    setViewFilters((current) => ({ ...current, query }));
+  }, [setViewFilters]);
+  const setSelectedTagFilters = useCallback((updater: SetStateAction<string[]>) => {
+    setViewFilters((current) => ({
+      ...current,
+      selectedTagFilters: typeof updater === 'function'
+        ? (updater as (previous: string[]) => string[])(current.selectedTagFilters)
+        : updater,
+    }));
+  }, [setViewFilters]);
   const [viewControlsOpen, setViewControlsOpen] = useState(false);
   const [draftQuery, setDraftQuery] = useState('');
   const [draftSelectedTagFilters, setDraftSelectedTagFilters] = useState<string[]>([]);
@@ -300,7 +353,7 @@ export function CorpusDocumentsView({
       const next = retainKnownValues(current, knownTagIds);
       return stringArraysEqual(current, next) ? current : next;
     });
-  }, [hasTags, tagIdSignature]);
+  }, [hasTags, setSelectedTagFilters, tagIdSignature]);
 
   const {
     columnSizing,

@@ -8,6 +8,7 @@ import { DataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/co
 import { toMonthly, frequencyLabels, needsParam, fromMonthly } from '@/lib/frequency';
 import { computeFairShares, computeIncomeNormalization } from '@/lib/fairShare';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
+import { sanitizeSortingState, useGridViewPreferences } from '@/hooks/useGridViewPreferences';
 import {
   GRID_ACTIONS_COLUMN_ID,
   GRID_ACTIONS_COLUMN_WIDTH,
@@ -52,6 +53,23 @@ type BreakdownRow = {
   overUnderY: number;
 };
 
+interface SummaryGridFilters {
+  hideFullSplits: boolean;
+}
+
+const SUMMARY_DEFAULT_FILTERS: SummaryGridFilters = {
+  hideFullSplits: false,
+};
+const SUMMARY_DEFAULT_SORTING: SortingState = [{ id: 'name', desc: false }];
+
+function sanitizeSummaryFilters(raw: unknown): SummaryGridFilters {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return SUMMARY_DEFAULT_FILTERS;
+  const candidate = raw as Partial<SummaryGridFilters>;
+  return {
+    hideFullSplits: candidate.hideFullSplits === true,
+  };
+}
+
 const breakdownColumnHelper = createColumnHelper<BreakdownRow>();
 
 function formatFrequencyDescription(type: FrequencyType, param: number | null) {
@@ -94,15 +112,39 @@ export function SummaryTab({
   partnerYWageCentsPerDollar = null,
   userId,
 }: SummaryTabProps) {
-  const [hideFullSplits, setHideFullSplits] = useState(false);
-  const [sorting, setSorting] = useState<SortingState>(() => {
-    try {
-      const raw = localStorage.getItem('summary_sorting');
-      return raw ? JSON.parse(raw) : [{ id: 'name', desc: false }];
-    } catch {
-      return [{ id: 'name', desc: false }];
-    }
+  const {
+    filters: viewFilters,
+    setFilters: setViewFilters,
+    sorting,
+    setSorting,
+  } = useGridViewPreferences<SummaryGridFilters>({
+    userId,
+    gridKey: 'summary',
+    defaultFilters: SUMMARY_DEFAULT_FILTERS,
+    defaultSorting: SUMMARY_DEFAULT_SORTING,
+    sanitizeFilters: sanitizeSummaryFilters,
+    sanitizeSorting: (raw) => sanitizeSortingState(raw, SUMMARY_DEFAULT_SORTING),
+    getLegacyPreferences: () => ({
+      filters: {
+        hideFullSplits: localStorage.getItem('summary_hideFullSplits') === 'true',
+      },
+      sorting: (() => {
+        try {
+          const raw = localStorage.getItem('summary_sorting');
+          return raw ? JSON.parse(raw) : SUMMARY_DEFAULT_SORTING;
+        } catch {
+          return SUMMARY_DEFAULT_SORTING;
+        }
+      })(),
+    }),
   });
+  const hideFullSplits = viewFilters.hideFullSplits;
+  const setHideFullSplits = (hideFullSplits: boolean) => {
+    setViewFilters((current) => ({ ...current, hideFullSplits }));
+  };
+  useEffect(() => {
+    localStorage.setItem('summary_hideFullSplits', hideFullSplits ? 'true' : 'false');
+  }, [hideFullSplits]);
   useEffect(() => {
     localStorage.setItem('summary_sorting', JSON.stringify(sorting));
   }, [sorting]);

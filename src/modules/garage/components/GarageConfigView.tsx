@@ -14,6 +14,7 @@ import { CalendarIcon, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
+import { EMPTY_GRID_VIEW_FILTERS, sanitizeSortingState, useGridViewPreferences } from '@/hooks/useGridViewPreferences';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import { GARAGE_VEHICLES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS } from '@/lib/gridColumnWidths';
 import { cn } from '@/lib/utils';
@@ -23,6 +24,7 @@ const columnHelper = createColumnHelper<GarageVehicle>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
 const VEHICLE_ACTIONS_NAV_COL = 6;
 const GARAGE_VEHICLES_HISTORY_KEY = 'garage_vehicles';
+const GARAGE_VEHICLES_DEFAULT_SORTING: SortingState = [{ id: 'name', desc: false }];
 const VEHICLE_MODEL_YEAR_MIN = 1900;
 const VEHICLE_MODEL_YEAR_MAX = 2200;
 
@@ -303,7 +305,27 @@ export function GarageConfigView({
     days: initialDays,
   }));
   const [settingsSaving, setSettingsSaving] = useState(false);
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }]);
+  const gridUserId = vehicles[0]?.user_id ?? settings?.user_id;
+  const { sorting, setSorting } = useGridViewPreferences({
+    userId: gridUserId,
+    gridKey: 'garage_vehicles',
+    defaultFilters: EMPTY_GRID_VIEW_FILTERS,
+    defaultSorting: GARAGE_VEHICLES_DEFAULT_SORTING,
+    sanitizeSorting: (raw) => sanitizeSortingState(raw, GARAGE_VEHICLES_DEFAULT_SORTING),
+    getLegacyPreferences: () => ({
+      sorting: (() => {
+        try {
+          const raw = localStorage.getItem('garage_vehicles_sorting');
+          return raw ? JSON.parse(raw) : GARAGE_VEHICLES_DEFAULT_SORTING;
+        } catch {
+          return GARAGE_VEHICLES_DEFAULT_SORTING;
+        }
+      })(),
+    }),
+  });
+  useEffect(() => {
+    localStorage.setItem('garage_vehicles_sorting', JSON.stringify(sorting));
+  }, [sorting]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
@@ -323,7 +345,7 @@ export function GarageConfigView({
     onColumnSizingChange,
     onColumnSizingInfoChange,
   } = useGridColumnWidths({
-    userId: vehicles[0]?.user_id ?? settings?.user_id,
+    userId: gridUserId,
     gridKey: 'garage_vehicles',
     defaults: GARAGE_VEHICLES_GRID_DEFAULT_WIDTHS,
     fixedColumnIds: GRID_FIXED_COLUMNS.garage_vehicles,

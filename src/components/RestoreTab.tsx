@@ -11,6 +11,7 @@ import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, Dia
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
+import { EMPTY_GRID_VIEW_FILTERS, sanitizeSortingState, useGridViewPreferences } from '@/hooks/useGridViewPreferences';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import type { RestorePoint } from '@/hooks/useRestorePoints';
 import type { Income } from '@/hooks/useIncomes';
@@ -37,6 +38,7 @@ interface RestoreTabProps {
 const restorePointColumnHelper = createColumnHelper<RestorePoint>();
 const BACKUP_ACTIONS_NAV_COL = 2;
 const RESTORE_POINTS_HISTORY_KEY = 'config_backups';
+const RESTORE_POINTS_DEFAULT_SORTING: SortingState = [{ id: 'timestamp', desc: true }];
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
 
 const BackupActionsTrigger = forwardRef<HTMLButtonElement, ComponentPropsWithoutRef<typeof Button>>(function BackupActionsTrigger({
@@ -112,14 +114,23 @@ export function RestoreTab({
   const [restoreTarget, setRestoreTarget] = useState<RestorePoint | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RestorePoint | null>(null);
 
-  const [sorting, setSorting] = useState<SortingState>(() => {
-    if (typeof window === 'undefined') return [{ id: 'timestamp', desc: true }];
-    try {
-      const raw = window.localStorage.getItem('config_backups_sorting');
-      return raw ? JSON.parse(raw) : [{ id: 'timestamp', desc: true }];
-    } catch {
-      return [{ id: 'timestamp', desc: true }];
-    }
+  const { sorting, setSorting } = useGridViewPreferences({
+    userId,
+    gridKey: 'config_backups',
+    defaultFilters: EMPTY_GRID_VIEW_FILTERS,
+    defaultSorting: RESTORE_POINTS_DEFAULT_SORTING,
+    sanitizeSorting: (raw) => sanitizeSortingState(raw, RESTORE_POINTS_DEFAULT_SORTING),
+    getLegacyPreferences: () => ({
+      sorting: (() => {
+        if (typeof window === 'undefined') return RESTORE_POINTS_DEFAULT_SORTING;
+        try {
+          const raw = window.localStorage.getItem('config_backups_sorting');
+          return raw ? JSON.parse(raw) : RESTORE_POINTS_DEFAULT_SORTING;
+        } catch {
+          return RESTORE_POINTS_DEFAULT_SORTING;
+        }
+      })(),
+    }),
   });
   useEffect(() => {
     if (typeof window === 'undefined') return;

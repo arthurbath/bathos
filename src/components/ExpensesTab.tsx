@@ -25,6 +25,7 @@ import { toast } from '@/hooks/use-toast';
 import { FREQUENCY_OPTIONS, toMonthly, frequencyLabels, needsParam, fromMonthly } from '@/lib/frequency';
 import { DataGrid, GridCheckboxCell, GridEditableCell, GridCurrencyCell, GridPercentCell, GridSelectValue, gridMenuTriggerProps, gridNavProps, gridSelectTriggerProps, useDataGrid, GRID_HEADER_TONE_CLASS, GRID_READONLY_TEXT_CLASS } from '@/components/ui/data-grid';
 import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
+import { sanitizeSortingState, useGridViewPreferences } from '@/hooks/useGridViewPreferences';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import { EXPENSES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH } from '@/lib/gridColumnWidths';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -78,6 +79,12 @@ interface ExpensesTabProps {
 }
 
 type GroupByOption = 'none' | 'category' | 'estimated' | 'payer' | 'payment_method';
+type PayerFilter = 'all' | 'X' | 'Y' | 'unassigned';
+interface ExpensesGridFilters {
+  filterName: string;
+  filterPayer: PayerFilter;
+  groupBy: GroupByOption;
+}
 type AddSource =
   | { type: 'existing_expense'; expenseId: string; field: 'category_id' | 'linked_account_id' }
   | { type: 'new_expense'; field: 'category_id' | 'linked_account_id' };
@@ -106,6 +113,14 @@ const columnHelper = createColumnHelper<ComputedRow>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
 const EXPENSE_ACTIONS_NAV_COL = 12;
 const EXPENSES_HISTORY_KEY = 'expenses';
+const EXPENSES_DEFAULT_FILTERS: ExpensesGridFilters = {
+  filterName: '',
+  filterPayer: 'all',
+  groupBy: 'none',
+};
+const EXPENSES_DEFAULT_SORTING: SortingState = [{ id: 'name', desc: false }];
+const EXPENSES_PAYER_FILTER_VALUES = new Set<PayerFilter>(['all', 'X', 'Y', 'unassigned']);
+const EXPENSES_GROUP_BY_VALUES = new Set<GroupByOption>(['none', 'category', 'estimated', 'payer', 'payment_method']);
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unexpected error';
@@ -118,6 +133,20 @@ function normalizeNameFilterValue(value: string) {
 function matchesNameFilter(name: string, filterValue: string) {
   const normalizedFilter = normalizeNameFilterValue(filterValue);
   return normalizedFilter.length === 0 || name.toLocaleLowerCase().includes(normalizedFilter);
+}
+
+function sanitizeExpensesFilters(raw: unknown): ExpensesGridFilters {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return EXPENSES_DEFAULT_FILTERS;
+  const candidate = raw as Partial<ExpensesGridFilters>;
+  return {
+    filterName: typeof candidate.filterName === 'string' ? candidate.filterName : '',
+    filterPayer: candidate.filterPayer && EXPENSES_PAYER_FILTER_VALUES.has(candidate.filterPayer)
+      ? candidate.filterPayer
+      : 'all',
+    groupBy: candidate.groupBy && EXPENSES_GROUP_BY_VALUES.has(candidate.groupBy)
+      ? candidate.groupBy
+      : 'none',
+  };
 }
 
 function DropdownOptionColorSwatch({ color }: { color?: string | null }) {
@@ -532,21 +561,48 @@ export function ExpensesTab({
   } | null>(null);
   const [savingConvertToSimple, setSavingConvertToSimple] = useState(false);
 
-  type PayerFilter = 'all' | 'X' | 'Y' | 'unassigned';
-  const [filterName, setFilterName] = useState(() => localStorage.getItem('expenses_filterName') ?? '');
-  const [filterPayer, setFilterPayer] = useState<PayerFilter>(() => {
-    const stored = localStorage.getItem('expenses_filterPayer');
-    return stored === 'X' || stored === 'Y' || stored === 'unassigned' || stored === 'all' ? stored : 'all';
+  const {
+    filters: viewFilters,
+    setFilters: setViewFilters,
+    sorting,
+    setSorting,
+  } = useGridViewPreferences<ExpensesGridFilters>({
+    userId,
+    gridKey: 'expenses',
+    defaultFilters: EXPENSES_DEFAULT_FILTERS,
+    defaultSorting: EXPENSES_DEFAULT_SORTING,
+    sanitizeFilters: sanitizeExpensesFilters,
+    sanitizeSorting: (raw) => sanitizeSortingState(raw, EXPENSES_DEFAULT_SORTING),
+    getLegacyPreferences: () => ({
+      filters: {
+        filterName: localStorage.getItem('expenses_filterName') ?? '',
+        filterPayer: localStorage.getItem('expenses_filterPayer') ?? 'all',
+        groupBy: localStorage.getItem('expenses_groupBy') ?? 'none',
+      },
+      sorting: (() => {
+        try {
+          const raw = localStorage.getItem('expenses_sorting');
+          return raw ? JSON.parse(raw) : EXPENSES_DEFAULT_SORTING;
+        } catch {
+          return EXPENSES_DEFAULT_SORTING;
+        }
+      })(),
+    }),
   });
-  const [groupBy, setGroupBy] = useState<GroupByOption>(() => (localStorage.getItem('expenses_groupBy') as GroupByOption) || 'none');
+  const { filterName, filterPayer, groupBy } = viewFilters;
+  const setFilterName = useCallback((filterName: string) => {
+    setViewFilters((current) => ({ ...current, filterName }));
+  }, [setViewFilters]);
+  const setFilterPayer = useCallback((filterPayer: PayerFilter) => {
+    setViewFilters((current) => ({ ...current, filterPayer }));
+  }, [setViewFilters]);
+  const setGroupBy = useCallback((groupBy: GroupByOption) => {
+    setViewFilters((current) => ({ ...current, groupBy }));
+  }, [setViewFilters]);
   const [viewControlsOpen, setViewControlsOpen] = useState(false);
   const [draftFilterName, setDraftFilterName] = useState('');
   const [draftFilterPayer, setDraftFilterPayer] = useState<PayerFilter>('all');
   const [draftGroupBy, setDraftGroupBy] = useState<GroupByOption>('none');
-  const [sorting, setSorting] = useState<SortingState>(() => {
-    try { const s = localStorage.getItem('expenses_sorting'); return s ? JSON.parse(s) : [{ id: 'name', desc: false }]; }
-    catch { return [{ id: 'name', desc: false }]; }
-  });
 
   useEffect(() => { localStorage.setItem('expenses_filterName', filterName); }, [filterName]);
   useEffect(() => { localStorage.setItem('expenses_filterPayer', filterPayer); }, [filterPayer]);
