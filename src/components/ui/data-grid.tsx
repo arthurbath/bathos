@@ -29,8 +29,8 @@ interface DataGridContextValue {
   rowIndex: number;
   rowId: string;
   onCellKeyDown: (e: React.KeyboardEvent<HTMLElement>) => boolean;
-  onCellMouseDown: () => void;
-  onCellPointerDown: () => void;
+  onCellMouseDown: (col?: number | React.MouseEvent<HTMLElement>) => void;
+  onCellPointerDown: (col?: number | React.PointerEvent<HTMLElement>) => void;
   onCellCommit: (col: number) => void;
   registerCellHistoryEntry: (options: {
     col: number;
@@ -81,8 +81,8 @@ export function gridNavProps(ctx: DataGridContextValue | null, navCol: number): 
     'data-row-id': ctx?.rowId,
     'data-col': navCol,
     onKeyDown: ctx?.onCellKeyDown,
-    onMouseDown: ctx?.onCellMouseDown,
-    onPointerDown: ctx?.onCellPointerDown,
+    onMouseDown: () => ctx?.onCellMouseDown(navCol),
+    onPointerDown: () => ctx?.onCellPointerDown(navCol),
   };
 }
 
@@ -96,8 +96,8 @@ export function gridMenuTriggerProps(
     'data-row-id': ctx?.rowId,
     'data-col': navCol,
     'data-grid-focus-only': 'true',
-    onMouseDown: ctx?.onCellMouseDown,
-    onPointerDown: ctx?.onCellPointerDown,
+    onMouseDown: () => ctx?.onCellMouseDown(navCol),
+    onPointerDown: () => ctx?.onCellPointerDown(navCol),
     onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
       if (
         event.key === 'Tab' ||
@@ -144,8 +144,8 @@ export function gridSelectTriggerProps(
     'data-row-id': ctx?.rowId,
     'data-col': navCol,
     'data-grid-select-trigger': 'true',
-    onMouseDown: ctx?.onCellMouseDown,
-    onPointerDown: ctx?.onCellPointerDown,
+    onMouseDown: () => ctx?.onCellMouseDown(navCol),
+    onPointerDown: () => ctx?.onCellPointerDown(navCol),
     onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
       if (!ctx) return;
       const expanded = event.currentTarget.getAttribute('aria-expanded') === 'true';
@@ -691,6 +691,7 @@ export function DataGrid<TData>({
   const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
   const lastCommittedRowIdRef = useRef<string | null>(null);
   const pendingCommitFocusRef = useRef<{ rowId: string; col: number } | null>(null);
+  const pointerFocusTargetRef = useRef<{ rowId: string; col: number } | null>(null);
   const previousRowPositionsRef = useRef<Map<string, number>>(new Map());
   const previousGroupKeysRef = useRef<Map<string, string | null>>(new Map());
   const clearHighlightTimerRef = useRef<number | null>(null);
@@ -791,7 +792,13 @@ export function DataGrid<TData>({
 
   const markRowCommitted = useCallback((rowId: string, col: number) => {
     lastCommittedRowIdRef.current = rowId;
-    pendingCommitFocusRef.current = { rowId, col };
+    const pointerFocusTarget = pointerFocusTargetRef.current;
+    pointerFocusTargetRef.current = null;
+    pendingCommitFocusRef.current = pointerFocusTarget && (
+      pointerFocusTarget.rowId !== rowId || pointerFocusTarget.col !== col
+    )
+      ? pointerFocusTarget
+      : { rowId, col };
   }, []);
 
   const groups = React.useMemo(() => {
@@ -936,7 +943,12 @@ export function DataGrid<TData>({
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
       if (target.dataset.row == null || target.dataset.col == null) return;
-      if (consumePointerInitiatedFocus()) return;
+      if (consumePointerInitiatedFocus()) {
+        scheduleInNextFrame(() => {
+          pointerFocusTargetRef.current = null;
+        });
+        return;
+      }
       scheduleInNextFrame(() => scrollCellIntoView(target));
     };
 
@@ -1009,8 +1021,18 @@ export function DataGrid<TData>({
                 rowIndex: currentRow,
                 rowId: row.id,
                 onCellKeyDown,
-                onCellMouseDown,
-                onCellPointerDown,
+                onCellMouseDown: (col) => {
+                  onCellMouseDown();
+                  if (typeof col === 'number' && Number.isFinite(col)) {
+                    pointerFocusTargetRef.current = { rowId: row.id, col };
+                  }
+                },
+                onCellPointerDown: (col) => {
+                  onCellPointerDown();
+                  if (typeof col === 'number' && Number.isFinite(col)) {
+                    pointerFocusTargetRef.current = { rowId: row.id, col };
+                  }
+                },
                 onCellCommit: (col) => markRowCommitted(row.id, col),
                 registerCellHistoryEntry: ({ col, undo, redo }) => {
                   if (!dataGridHistory) return null;
@@ -1456,12 +1478,12 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
       onPointerDown={e => {
         if (disabled) return;
         if (e.pointerType === 'mouse') return;
-        ctx?.onCellPointerDown();
+        ctx?.onCellPointerDown(navCol);
         handlePressStart();
       }}
       onMouseDown={() => {
         if (disabled) return;
-        ctx?.onCellMouseDown();
+        ctx?.onCellMouseDown(navCol);
         handlePressStart();
       }}
       onFocus={() => {
@@ -1782,13 +1804,13 @@ export function GridUrlCell({
         onChange={(event) => { if (editing) setLocal(event.target.value); }}
         onMouseDown={() => {
           if (disabled) return;
-          ctx?.onCellMouseDown();
+          ctx?.onCellMouseDown(navCol);
           handlePressStart();
         }}
         onPointerDown={(event) => {
           if (disabled) return;
           if (event.pointerType === 'mouse') return;
-          ctx?.onCellPointerDown();
+          ctx?.onCellPointerDown(navCol);
           handlePressStart();
         }}
         onFocus={() => {
@@ -1900,8 +1922,8 @@ export function GridUrlCell({
         data-row-id={ctx?.rowId}
         data-col={openButtonNavCol}
         data-grid-focus-only="true"
-        onMouseDown={ctx?.onCellMouseDown}
-        onPointerDown={ctx?.onCellPointerDown}
+        onMouseDown={() => ctx?.onCellMouseDown(openButtonNavCol)}
+        onPointerDown={() => ctx?.onCellPointerDown(openButtonNavCol)}
         onClick={openUrl}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
@@ -2056,12 +2078,12 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
         onPointerDown={e => {
           if (disabled) return;
           if (e.pointerType === 'mouse') return;
-          ctx?.onCellPointerDown();
+          ctx?.onCellPointerDown(navCol);
           handlePressStart();
         }}
         onMouseDown={() => {
           if (disabled) return;
-          ctx?.onCellMouseDown();
+          ctx?.onCellMouseDown(navCol);
           handlePressStart();
         }}
         onFocus={() => {
@@ -2327,12 +2349,12 @@ export function GridPercentCell({ value, onChange, navCol, className, disabled =
         onPointerDown={e => {
           if (disabled) return;
           if (e.pointerType === 'mouse') return;
-          ctx?.onCellPointerDown();
+          ctx?.onCellPointerDown(navCol);
           handlePressStart();
         }}
         onMouseDown={() => {
           if (disabled) return;
-          ctx?.onCellMouseDown();
+          ctx?.onCellMouseDown(navCol);
           handlePressStart();
         }}
         onFocus={() => {
@@ -2551,7 +2573,7 @@ export function GridCheckboxCell({ checked, onChange, navCol, className, disable
       data-row={ctx?.rowIndex}
       data-row-id={ctx?.rowId}
       data-col={navCol}
-      onMouseDown={ctx?.onCellMouseDown}
+      onMouseDown={() => ctx?.onCellMouseDown(navCol)}
       onCheckedChange={(next) => {
         commit(next === true);
       }}

@@ -1159,10 +1159,17 @@ function AsyncTextCommitHarness({ saveDelayMs = 250 }: { saveDelayMs?: number })
   return <DataGrid table={table} />;
 }
 
-function AsyncTwoTextCommitHarness({ saveDelayMs = 80 }: { saveDelayMs?: number }) {
+function AsyncTwoTextCommitHarness({
+  saveDelayMs = 80,
+  remountTargetCellOnSave = false,
+}: {
+  saveDelayMs?: number;
+  remountTargetCellOnSave?: boolean;
+}) {
   const [rows, setRows] = React.useState<RowData[]>([
     { id: "row-a", name: "Alpha", note: "Apple" },
   ]);
+  const [targetCellVersion, setTargetCellVersion] = React.useState(0);
 
   const updateRow = React.useCallback((id: string, field: "name" | "note", value: string) => (
     new Promise<void>((resolve) => {
@@ -1170,10 +1177,13 @@ function AsyncTwoTextCommitHarness({ saveDelayMs = 80 }: { saveDelayMs?: number 
         setRows((prev) => prev.map((entry) => (
           entry.id === id ? { ...entry, [field]: value } : entry
         )));
+        if (remountTargetCellOnSave && field === "name") {
+          setTargetCellVersion((current) => current + 1);
+        }
         resolve();
       }, saveDelayMs);
     })
-  ), [saveDelayMs]);
+  ), [remountTargetCellOnSave, saveDelayMs]);
 
   const columns = React.useMemo(
     () => [
@@ -1193,6 +1203,7 @@ function AsyncTwoTextCommitHarness({ saveDelayMs = 80 }: { saveDelayMs?: number 
         header: "Note",
         cell: ({ row, getValue }) => (
           <GridEditableCell
+            key={`note-${targetCellVersion}`}
             value={getValue()}
             navCol={1}
             onChange={(value) => updateRow(row.original.id, "note", value)}
@@ -1200,7 +1211,7 @@ function AsyncTwoTextCommitHarness({ saveDelayMs = 80 }: { saveDelayMs?: number 
         ),
       }),
     ],
-    [updateRow],
+    [targetCellVersion, updateRow],
   );
 
   const table = useReactTable({
@@ -2786,6 +2797,43 @@ describe("DataGrid async commit display", () => {
         expect(active?.getAttribute("data-row-id")).toBe("row-a");
         expect(active?.getAttribute("data-col")).toBe("1");
         expect(active?.getAttribute("data-grid-editing")).toBe("true");
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
+      });
+
+      await waitForCondition(() => {
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-row-id")).toBe("row-a");
+        expect(active?.getAttribute("data-col")).toBe("1");
+        const liveNameInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+        expect(liveNameInput?.value).toBe("Updated Alpha");
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("restores pointer focus to the clicked cell when save refresh remounts that cell", async () => {
+    const { container, root } = mount(<AsyncTwoTextCommitHarness remountTargetCellOnSave />);
+    try {
+      const nameInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      const noteInput = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="1"]');
+      expect(nameInput).not.toBeNull();
+      expect(noteInput).not.toBeNull();
+
+      await startEditing(nameInput!);
+      await dispatchInputChange(nameInput!, "Updated Alpha");
+      await act(async () => {
+        noteInput!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        noteInput!.focus();
+      });
+
+      await waitForCondition(() => {
+        const active = document.activeElement as HTMLElement | null;
+        expect(active?.getAttribute("data-row-id")).toBe("row-a");
+        expect(active?.getAttribute("data-col")).toBe("1");
       });
 
       await act(async () => {
