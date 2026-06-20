@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const FEEDBACK_TIME_ZONE = "America/Los_Angeles";
+const GENERIC_SEND_ERROR = "Unable to send feedback right now.";
 
 function toTitleCase(value: string): string {
   return value
@@ -66,7 +67,8 @@ Deno.serve(async (req) => {
 
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   if (!RESEND_API_KEY) {
-    return new Response(JSON.stringify({ error: "RESEND_API_KEY not configured" }), {
+    console.error("RESEND_API_KEY not configured");
+    return new Response(JSON.stringify({ error: GENERIC_SEND_ERROR }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -167,7 +169,7 @@ Deno.serve(async (req) => {
 
     if (!resendRes.ok) {
       console.error("Resend API error:", JSON.stringify(resendData));
-      throw new Error(`Resend API failed [${resendRes.status}]: ${JSON.stringify(resendData)}`);
+      throw new Error("Resend API failed");
     }
 
     return new Response(JSON.stringify({ success: true }), {
@@ -176,8 +178,7 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error("Error sending feedback email:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: GENERIC_SEND_ERROR }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -11,7 +11,7 @@ interface AuthContextValue {
   passwordRecoveryDetected: boolean;
   setDisplayName: (nextDisplayName: string) => void;
   clearPasswordRecovery: () => void;
-  signUp: (email: string, password: string, displayName: string, termsVersion?: string) => Promise<{ error: AuthError | null }>;
+  signUp: (email: string, password: string, displayName: string, termsVersion?: string) => Promise<{ error: AuthError | null; session: Session | null }>;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
@@ -120,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user?.id]);
 
   const signUp = async (email: string, password: string, displayName: string, termsVersion?: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -131,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       },
     });
-    return { error };
+    return { error, session: data.session };
   };
 
   const signIn = async (email: string, password: string) => {

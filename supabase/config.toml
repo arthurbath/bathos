@@ -13,7 +13,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.notify-new-signup]
-verify_jwt = false
+verify_jwt = true
 
 [functions.submit-help-request]
 verify_jwt = false

@@ -1,3 +1,5 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -6,6 +8,8 @@ const corsHeaders = {
 
 const ADMIN_EMAIL = "art@bath.garden";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
 
 interface SignupNotificationRequest {
   email: string;
@@ -27,7 +31,36 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { email, displayName }: SignupNotificationRequest = await req.json();
+    const authHeader = req.headers.get("Authorization");
+    const token = authHeader?.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length)
+      : null;
+
+    if (!token || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const { data: userData, error: userError } = await authClient.auth.getUser(token);
+    if (userError || !userData.user?.email) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const body = (await req.json()) as Partial<SignupNotificationRequest>;
+    const email = userData.user.email;
+    const rawDisplayName = typeof userData.user.user_metadata?.display_name === "string"
+      ? userData.user.user_metadata.display_name
+      : body.displayName;
+    const displayName = typeof rawDisplayName === "string" ? rawDisplayName.trim() : "";
 
     if (!email || !displayName) {
       return new Response(

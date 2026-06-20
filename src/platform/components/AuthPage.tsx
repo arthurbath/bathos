@@ -86,7 +86,7 @@ export default function AuthPage() {
       return;
     }
 
-    const { error } = await signUp(signupEmail, signupPassword, signupName, latestTermsVersion);
+    const { error, session: signupSession } = await signUp(signupEmail, signupPassword, signupName, latestTermsVersion);
     if (error) {
       toast({
         title: 'Sign up failed',
@@ -95,9 +95,11 @@ export default function AuthPage() {
       });
     } else {
       toast({ title: 'Check your email', description: 'We sent you a confirmation link.' });
-      supabase.functions.invoke('notify-new-signup', {
-        body: { email: signupEmail, displayName: signupName },
-      }).catch((err) => console.error('Signup notification error:', err));
+      if (signupSession) {
+        supabase.functions.invoke('notify-new-signup', {
+          body: { displayName: signupName },
+        }).catch((err) => console.error('Signup notification error:', err));
+      }
     }
     setLoading(false);
   };
