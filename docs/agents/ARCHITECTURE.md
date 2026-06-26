@@ -2,7 +2,7 @@
 
 ## Overview
 
-BathOS is a multi-module platform where each module is a self-contained application sharing a unified design language and database infrastructure. Most modules currently use the shared authentication system, but public modules can opt into anonymous access with their own secure room/session model.
+BathOS is a multi-module platform where each module is a self-contained application sharing a unified design language and database infrastructure. Modules currently use the shared authentication system.
 
 ## Core Principles
 
@@ -15,7 +15,7 @@ BathOS is a multi-module platform where each module is a self-contained applicat
    - `budget_` — Budget module tables
    - Future modules use their own prefix (e.g., `inventory_`, `tracker_`)
 
-4. **Path-based routing**: Each module lives under its own URL path prefix (for example, `/budget/...`, `/drawers/...`, `/garage/...`, `/estimator/...`). The platform root (`/`) serves the launcher and account management, while public modules can expose direct entry routes under their own prefixes.
+4. **Path-based routing**: Each module lives under its own URL path prefix (for example, `/budget/...`, `/drawers/...`, `/garage/...`, `/wardrobe/...`). The platform root (`/`) serves the launcher and account management.
 
 5. **Group entity isolation**: Each module has its own concept of a "group" (e.g., Budget has "households"). Group IDs are module-specific — sharing a group in one module does not grant access in another.
 
@@ -36,7 +36,10 @@ src/
       components/
       hooks/
       types/
-    estimator/         — Ticket Estimator public-room module
+    garage/            — Garage maintenance module
+      components/
+      hooks/
+      types/
     wardrobe/          — Wardrobe module
       components/
       hooks/

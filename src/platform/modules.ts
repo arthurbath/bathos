@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
-import { BookOpenText, Calculator, CarFront, CircleDollarSign, ShelvingUnit, Shield, Shirt } from 'lucide-react';
+import { CarFront, CircleDollarSign, ShelvingUnit, Shield, Shirt } from 'lucide-react';
 
-export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'estimator' | 'wardrobe' | 'corpus' | 'admin';
+export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'wardrobe' | 'admin';
 
 export interface PlatformModule {
   id: PlatformModuleId;
@@ -40,15 +40,6 @@ const GARAGE_MODULE: PlatformModule = {
   iconPath: '/module-garage.png',
 };
 
-const ESTIMATOR_MODULE: PlatformModule = {
-  id: 'estimator',
-  name: 'Ticket Estimator',
-  description: 'Create a public room and estimate tickets together',
-  launchPath: '/estimator',
-  icon: Calculator,
-  iconPath: '/module-estimator.png',
-};
-
 const WARDROBE_MODULE: PlatformModule = {
   id: 'wardrobe',
   name: 'Wardrobe',
@@ -56,15 +47,6 @@ const WARDROBE_MODULE: PlatformModule = {
   launchPath: '/wardrobe/items',
   icon: Shirt,
   iconPath: '/module-wardrobe.png',
-};
-
-const CORPUS_MODULE: PlatformModule = {
-  id: 'corpus',
-  name: 'Corpus',
-  description: 'Manage personal writing samples, style rules, and MCP-ready reference documents',
-  launchPath: '/corpus/documents',
-  icon: BookOpenText,
-  iconPath: '/module-corpus.png',
 };
 
 const ADMINISTRATION_MODULE: PlatformModule = {
@@ -77,7 +59,7 @@ const ADMINISTRATION_MODULE: PlatformModule = {
   adminOnly: true,
 };
 
-const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, CORPUS_MODULE, DRAWERS_MODULE, GARAGE_MODULE, ESTIMATOR_MODULE, WARDROBE_MODULE, ADMINISTRATION_MODULE];
+const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, DRAWERS_MODULE, GARAGE_MODULE, WARDROBE_MODULE, ADMINISTRATION_MODULE];
 
 interface GetAvailableModulesOptions {
   isAdmin?: boolean;

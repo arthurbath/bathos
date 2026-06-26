@@ -15,9 +15,7 @@ export type GridKey =
   | 'wardrobe_items'
   | 'garage_vehicles'
   | 'garage_services'
-  | 'garage_servicings'
-  | 'corpus_documents'
-  | 'corpus_tags';
+  | 'garage_servicings';
 export type ColumnWidthMap = Record<string, number>;
 
 export const EXPENSES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
@@ -103,21 +101,6 @@ export const WARDROBE_ITEMS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
   [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
 };
 
-export const CORPUS_DOCUMENTS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
-  title: 260,
-  tags: 260,
-  characters: 120,
-  updated_at: 220,
-  [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
-};
-
-export const CORPUS_TAGS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
-  name: 220,
-  description: 420,
-  documents: 120,
-  [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
-};
-
 export const GARAGE_VEHICLES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
   name: 120,
   make: 130,
@@ -149,8 +132,6 @@ export const GRID_FIXED_COLUMNS: Record<GridKey, string[]> = {
   garage_vehicles: [GRID_ACTIONS_COLUMN_ID],
   garage_services: [GRID_ACTIONS_COLUMN_ID],
   garage_servicings: [GRID_ACTIONS_COLUMN_ID],
-  corpus_documents: [GRID_ACTIONS_COLUMN_ID],
-  corpus_tags: [GRID_ACTIONS_COLUMN_ID],
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

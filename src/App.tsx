@@ -24,9 +24,6 @@ import Index from "./pages/Index";
 import DrawersIndex from "@/modules/drawers/DrawersIndex";
 import GarageIndex from "@/modules/garage/GarageIndex";
 import WardrobeIndex from "@/modules/wardrobe/WardrobeIndex";
-import EstimatorIndex from "@/modules/estimator/EstimatorIndex";
-import EstimatorRoomPage from "@/modules/estimator/EstimatorRoomPage";
-import CorpusIndex from "@/modules/corpus/CorpusIndex";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -122,15 +119,6 @@ function AppRoutes() {
         {/* Wardrobe module */}
         <Route path="/wardrobe" element={<Navigate to="/wardrobe/items" replace />} />
         <Route path="/wardrobe/items" element={<WardrobeIndex />} />
-
-        {/* Corpus module */}
-        <Route path="/corpus" element={<Navigate to="/corpus/documents" replace />} />
-        <Route path="/corpus/documents" element={<CorpusIndex />} />
-        <Route path="/corpus/config" element={<CorpusIndex />} />
-
-        {/* Ticket Estimator module */}
-        <Route path="/estimator" element={<EstimatorIndex />} />
-        <Route path="/estimator/rooms/:roomToken" element={<EstimatorRoomPage />} />
 
         {/* Legacy routes */}
         <Route path="/incomes" element={<Navigate to="/budget/incomes" replace />} />

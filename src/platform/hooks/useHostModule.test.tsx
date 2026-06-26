@@ -32,17 +32,6 @@ afterEach(() => {
 });
 
 describe('useHostModule', () => {
-  it('detects the estimator module from the URL path', () => {
-    window.history.replaceState({}, '', '/estimator/rooms/123456789012345678');
-
-    const { container, root } = renderHarness();
-    try {
-      expect(container.querySelector('[data-testid="module-id"]')?.textContent).toBe('estimator');
-    } finally {
-      cleanup(root, container);
-    }
-  });
-
   it('detects the wardrobe module from the URL path', () => {
     window.history.replaceState({}, '', '/wardrobe/items');
 
@@ -54,12 +43,12 @@ describe('useHostModule', () => {
     }
   });
 
-  it('detects the corpus module from the URL path', () => {
+  it('returns none for retired module paths', () => {
     window.history.replaceState({}, '', '/corpus/documents');
 
     const { container, root } = renderHarness();
     try {
-      expect(container.querySelector('[data-testid="module-id"]')?.textContent).toBe('corpus');
+      expect(container.querySelector('[data-testid="module-id"]')?.textContent).toBe('none');
     } finally {
       cleanup(root, container);
     }
