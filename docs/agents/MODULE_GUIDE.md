@@ -1,5 +1,13 @@
 # Adding a New Module to BathOS
 
+## 0. Start an OpenSpec change
+
+Before implementing a new module, create an OpenSpec change with `/opsx:propose <module-name>` or `openspec new change <module-name>`.
+
+The change should identify the module namespace, routes, database prefix, launcher registration, shared UI/platform dependencies, and expected tests. Keep specs focused on the new module's observable behavior and any shared conventions it changes. Do not backfill specs for unrelated modules.
+
+When the module lands, run `npm run spec:validate` and archive the OpenSpec change so its durable behavior specs merge into `openspec/specs/`.
+
 ## 1. Choose a namespace
 
 Pick a short, lowercase name (e.g., `tracker`). This becomes:

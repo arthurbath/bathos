@@ -45,6 +45,9 @@ Split shared expenses fairly between two partners. Combines per-expense benefit 
 
 ## Development Policies
 
+- **OpenSpec workflow**: BathOS uses OpenSpec as the change-contract layer. Non-trivial product, behavior, UI paradigm, shared component, routing, auth, data, Supabase, or database work requires an OpenSpec change before implementation. Start unclear work with `/opsx:explore`, start scoped implementation with `/opsx:propose <change-id>`, implement from `/opsx:apply`, keep artifacts current when discoveries change behavior, validate with `npm run spec:validate`, and archive completed changes with `/opsx:archive` or `openspec archive <change-id> --yes`.
+- **OpenSpec scope**: Do not bulk-backfill specs for untouched existing modules. Create or update specs piecemeal as modules, views, shared components, or global paradigms are touched. Existing docs remain source material; durable behavior contracts live in `openspec/specs/`. Future broad implementation plans should use `openspec/changes/`; `docs/agents/plans/` is historical.
+- **OpenSpec skip policy**: Trivial typo, comment, docs-only, or tooling-only changes may skip OpenSpec only with an explicit "no spec impact" note in the final response or change summary.
 - **Evaluations**: Security, performance, and technology evaluations go in dated files (`docs/agents/evaluations/YYYY-MM-DD_topic.md`). Never delete old evaluations — they serve as a decision log.
 - **README.md**: Keep updated whenever modules are added, changed, or removed. Only document modules visible to general users (not behind admin-only feature flags).
 - **Public `.env` policy**: This repository is public, and `.env` is intentionally committed for Lovable workflows. Treat `.env` as public and only store client-safe values there. Never commit secrets (for example: service role keys, SMTP passwords, API secrets, private tokens). Store real secrets in managed secret stores (Supabase/hosting environment secrets), not in the repo.
@@ -58,9 +61,13 @@ Split shared expenses fairly between two partners. Combines per-expense benefit 
 - `npm run test:watch` — Run Vitest in watch mode during iterative work.
 - `npm run lint` — Run ESLint across the repo.
 - `npm run build` — Produce a production build with Vite.
+- `npm run spec:validate` — Validate OpenSpec changes and durable specs.
 
 ## File References
 
+- `openspec/config.yaml` — OpenSpec BathOS context and artifact rules
+- `openspec/changes/` — active OpenSpec proposals, specs, designs, and tasks
+- `openspec/specs/` — durable behavior specs grown from archived changes
 - `docs/agents/ARCHITECTURE.md` — detailed architecture
 - `docs/agents/MODULE_GUIDE.md` — step-by-step module creation
 - `docs/human/STYLE_GUIDE.md` — full design conventions

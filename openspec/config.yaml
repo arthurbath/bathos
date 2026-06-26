@@ -1,0 +1,33 @@
+schema: spec-driven
+
+context: |
+  BathOS is a shared household platform built with React, TypeScript, Vite, Tailwind CSS, and Supabase. It is organized as isolated modules under src/modules/[name]/ with shared platform code in src/platform/, shared UI primitives in src/components/ui/, and shared utilities in src/lib/.
+
+  Module isolation is a core invariant: never import from one module into another. Shared behavior belongs in platform, UI, or lib code. Database tables use namespace prefixes such as bathos_, budget_, drawers_, garage_, wardrobe_, estimator_, and corpus_. Supabase tables must use RLS, and public/anonymous flows should use narrow SECURITY DEFINER RPCs instead of permissive table access.
+
+  BathOS uses black-and-white minimalism with semantic colors only, dark-only theming, Inter/system typography, Lucide icons, Title Case labels/titles, and pragmatic neutral UI copy. Do not add decorative gradients, decorative shadows, emoji, image icons, light-mode variants, or marketing language.
+
+  Shared UI conventions are durable behavior contracts. Form-style modals use title-only headers by default, red asterisks for required labels, full keyboard traversal, and no initial required-field inline errors when Save is disabled. DataGrids use shared keyboard navigation, focus restoration, delete/backspace reset conventions, column-width persistence, async-save display behavior, compact green add buttons, standard filter controls, and grouped header counts.
+
+  Use OpenSpec incrementally. Do not bulk-backfill behavior specs for untouched existing modules. For new work, create or update specs only for capabilities affected by the change, and archive completed changes so durable specs grow from real implementation.
+
+rules:
+  proposal:
+    - Identify touched BathOS modules, shared components, Supabase objects, platform areas, and expected blast radius.
+    - State whether the change creates a new capability, modifies an existing OpenSpec capability, or has no spec-level behavior impact.
+    - Use existing AGENTS.md, docs/human/STYLE_GUIDE.md, docs/agents/ARCHITECTURE.md, and docs/agents/MODULE_GUIDE.md as source context, but keep durable behavior contracts in openspec/specs/.
+    - Do not propose broad backfill specs for existing modules unless the user explicitly asks for a backfill pass.
+  specs:
+    - Specify observable user/system behavior with testable SHALL/MUST requirements and concrete scenarios.
+    - Avoid implementation trivia unless it is a public contract, shared paradigm, data contract, route contract, permission rule, or migration expectation.
+    - Shared/global behavior changes must include scenarios for every affected module family or explain why a module is unaffected.
+    - Module specs must preserve BathOS module isolation and call out any shared UI/platform/database dependency.
+  design:
+    - Include design.md when a change crosses modules, changes shared UI/platform behavior, alters Supabase schema/RLS/RPC behavior, adds a dependency, or introduces migration/security/performance risk.
+    - Document compatibility, rollback, and migration expectations for Supabase or route changes.
+    - Treat public .env values as client-safe only; never design around committed secrets.
+  tasks:
+    - Include OpenSpec validation with openspec validate --all --strict.
+    - Include the relevant BathOS validation command(s): npm run lint, npm run build, npm run test, or targeted Vitest runs depending on blast radius.
+    - Include a step to sync/archive OpenSpec changes so openspec/specs/ stays current when implementation is complete.
+    - Keep tasks small, ordered by dependency, and scoped to the proposal.

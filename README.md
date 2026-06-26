@@ -66,6 +66,7 @@ Accessible at [os.bath.garden/wardrobe/items](https://os.bath.garden/wardrobe/it
 - Modules are isolated under `src/modules/[name]/` — removing one should not break another
 - Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`, `wardrobe_`) for clarity
 - Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`, `/wardrobe/...`)
+- OpenSpec is used for non-trivial behavior, UI paradigm, shared component, routing, auth, data, and database changes; validate specs with `npm run spec:validate`
 - See `docs/agents/ARCHITECTURE.md` for structure, `docs/agents/MODULE_GUIDE.md` for adding modules, and `docs/human/STYLE_GUIDE.md` for design conventions
 
 ### Dev Console Bridge (Safari + Vite)
