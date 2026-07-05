@@ -53,7 +53,7 @@ const WARDROBE_MODULE: PlatformModule = {
 const SNAKE_MODULE: PlatformModule = {
   id: 'snake',
   name: 'Snake',
-  description: 'Track snake weight records and ball python growth expectations',
+  description: 'Track the growth of your ball python',
   launchPath: '/snake/weights',
   icon: SnakeIcon,
   iconPath: '/module-snake.png',

@@ -1,7 +1,7 @@
 {
   "name": "Snake",
   "short_name": "Snake",
-  "description": "Track snake weight records and ball python growth expectations",
+  "description": "Track the growth of your ball python",
   "start_url": "/snake/weights",
   "display": "standalone",
   "background_color": "#fcfcfc",
