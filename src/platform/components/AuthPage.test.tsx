@@ -106,4 +106,30 @@ describe('AuthPage redirect after sign-in', () => {
       cleanup(root, container);
     }
   });
+
+  it('preserves the next param when switching tabs', () => {
+    mockAuthContext.mockReturnValue({
+      session: null,
+      signIn: vi.fn(),
+      signUp: vi.fn(),
+    });
+
+    const { root, container } = renderAt('/signin?next=%2F.lovable%2Foauth%2Fconsent%3Fid%3D123');
+
+    try {
+      const signupTab = Array.from(container.querySelectorAll('[role="tab"]')).find(
+        (tab) => tab.textContent?.includes('Sign Up'),
+      );
+      expect(signupTab).toBeTruthy();
+      act(() => {
+        signupTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/signup?next=%2F.lovable%2Foauth%2Fconsent%3Fid%3D123',
+        { replace: true },
+      );
+    } finally {
+      cleanup(root, container);
+    }
+  });
 });
