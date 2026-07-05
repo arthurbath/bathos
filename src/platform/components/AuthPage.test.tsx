@@ -29,6 +29,20 @@ vi.mock('@/components/PasswordRequirements', () => ({
   PasswordRequirements: () => <div data-testid="password-requirements" />,
 }));
 
+let capturedOnValueChange: ((value: string) => void) | null = null;
+
+vi.mock('@/components/ui/tabs', () => ({
+  Tabs: ({ children, value, onValueChange }: { children: React.ReactNode; value: string; onValueChange?: (value: string) => void }) => {
+    capturedOnValueChange = onValueChange ?? null;
+    return <div data-testid="tabs" data-value={value}>{children}</div>;
+  },
+  TabsContent: ({ children, value }: { children: React.ReactNode; value: string }) => <div data-testid={`tabs-content-${value}`}>{children}</div>,
+  TabsList: ({ children }: { children: React.ReactNode }) => <div role="tablist">{children}</div>,
+  TabsTrigger: ({ children, value }: { children: React.ReactNode; value: string }) => (
+    <button role="tab" data-value={value}>{children}</button>
+  ),
+}));
+
 function renderAt(initialEntry: string) {
   const container = document.createElement('div');
   document.body.appendChild(container);
