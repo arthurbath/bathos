@@ -1327,19 +1327,17 @@ export type Database = {
         Args: { _unit_id: string }
         Returns: number
       }
-      snake_create_household_for_current_user: { Args: never; Returns: Json }
-      snake_delete_household: {
-        Args: { _household_id: string }
-        Returns: Json
+      resize_drawers_unit: {
+        Args: { _new_h: number; _new_w: number; _unit_id: string }
+        Returns: undefined
       }
+      snake_create_household_for_current_user: { Args: never; Returns: Json }
+      snake_delete_household: { Args: { _household_id: string }; Returns: Json }
       snake_join_household_for_current_user: {
         Args: { _invite_code: string }
         Returns: Json
       }
-      snake_leave_household: {
-        Args: { _household_id: string }
-        Returns: Json
-      }
+      snake_leave_household: { Args: { _household_id: string }; Returns: Json }
       snake_list_household_members: {
         Args: { _household_id: string }
         Returns: {
@@ -1357,10 +1355,6 @@ export type Database = {
       snake_rotate_household_invite_code: {
         Args: { _household_id: string }
         Returns: Json
-      }
-      resize_drawers_unit: {
-        Args: { _new_h: number; _new_w: number; _unit_id: string }
-        Returns: undefined
       }
     }
     Enums: {
