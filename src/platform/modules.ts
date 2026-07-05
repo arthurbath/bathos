@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
-import { CarFront, CircleDollarSign, ShelvingUnit, Shield, Shirt } from 'lucide-react';
+import { CarFront, CircleDollarSign, ShelvingUnit, Shield, Shirt, Worm } from 'lucide-react';
 
-export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'wardrobe' | 'admin';
+export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'snake' | 'wardrobe' | 'admin';
 
 export interface PlatformModule {
   id: PlatformModuleId;
@@ -49,6 +49,15 @@ const WARDROBE_MODULE: PlatformModule = {
   iconPath: '/module-wardrobe.png',
 };
 
+const SNAKE_MODULE: PlatformModule = {
+  id: 'snake',
+  name: 'Snake',
+  description: 'Track snake weight records and ball python growth expectations',
+  launchPath: '/snake/weights',
+  icon: Worm,
+  iconPath: '/module-snake.png',
+};
+
 const ADMINISTRATION_MODULE: PlatformModule = {
   id: 'admin',
   name: 'Administration',
@@ -59,7 +68,7 @@ const ADMINISTRATION_MODULE: PlatformModule = {
   adminOnly: true,
 };
 
-const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, DRAWERS_MODULE, GARAGE_MODULE, WARDROBE_MODULE, ADMINISTRATION_MODULE];
+const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, DRAWERS_MODULE, GARAGE_MODULE, SNAKE_MODULE, WARDROBE_MODULE, ADMINISTRATION_MODULE];
 
 interface GetAvailableModulesOptions {
   isAdmin?: boolean;

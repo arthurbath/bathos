@@ -11,7 +11,7 @@ export interface HouseholdMember {
 }
 
 export interface HouseholdModuleAdapter {
-  module: 'budget' | 'drawers';
+  module: 'budget' | 'drawers' | 'snake';
   rpc: {
     createHousehold: HouseholdRpcName;
     joinHousehold: HouseholdRpcName;

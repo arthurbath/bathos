@@ -76,12 +76,13 @@ describe('LauncherPage modules', () => {
       expect(container.textContent).toContain('Budget');
       expect(container.textContent).toContain('Drawers');
       expect(container.textContent).toContain('Garage');
+      expect(container.textContent).toContain('Snake');
       expect(container.textContent).toContain('Wardrobe');
       expect(container.textContent).not.toContain('Administration');
       const moduleLabels = Array.from(container.querySelectorAll('a')).map((link) => link.textContent ?? '');
       expect(moduleLabels.map((label) => (
-        ['Budget', 'Drawers', 'Garage', 'Wardrobe'].find((moduleName) => label.includes(moduleName))
-      )).filter(Boolean)).toEqual(['Budget', 'Drawers', 'Garage', 'Wardrobe']);
+        ['Budget', 'Drawers', 'Garage', 'Snake', 'Wardrobe'].find((moduleName) => label.includes(moduleName))
+      )).filter(Boolean)).toEqual(['Budget', 'Drawers', 'Garage', 'Snake', 'Wardrobe']);
       expect(mockNavigate).not.toHaveBeenCalledWith('/budget/summary', { replace: true });
     } finally {
       cleanup(root, container);
@@ -100,13 +101,14 @@ describe('LauncherPage modules', () => {
 
     try {
       expect(container.textContent).toContain('Garage');
+      expect(container.textContent).toContain('Snake');
       expect(container.textContent).toContain('Wardrobe');
       expect(container.textContent).toContain('Administration');
       expect(container.textContent).toContain('Admin');
       const moduleLabels = Array.from(container.querySelectorAll('a')).map((link) => link.textContent ?? '');
       expect(moduleLabels.map((label) => (
-        ['Budget', 'Drawers', 'Garage', 'Wardrobe', 'Administration'].find((moduleName) => label.includes(moduleName))
-      )).filter(Boolean)).toEqual(['Budget', 'Drawers', 'Garage', 'Wardrobe', 'Administration']);
+        ['Budget', 'Drawers', 'Garage', 'Snake', 'Wardrobe', 'Administration'].find((moduleName) => label.includes(moduleName))
+      )).filter(Boolean)).toEqual(['Budget', 'Drawers', 'Garage', 'Snake', 'Wardrobe', 'Administration']);
     } finally {
       cleanup(root, container);
     }

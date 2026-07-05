@@ -1,0 +1,23 @@
+{
+  "name": "Snake",
+  "short_name": "Snake",
+  "description": "Track snake weight records and ball python growth expectations",
+  "start_url": "/snake/weights",
+  "display": "standalone",
+  "background_color": "#fcfcfc",
+  "theme_color": "#1f1f1f",
+  "icons": [
+    {
+      "src": "/module-snake.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/module-snake.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

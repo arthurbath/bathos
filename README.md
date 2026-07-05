@@ -48,6 +48,19 @@ Track vehicle maintenance schedules and service history for each user account. F
 
 Accessible at [os.bath.garden/garage/due](https://os.bath.garden/garage/due).
 
+### Snake
+
+Track snake weight records and growth expectations in a shared household. The first growth profile supports ball pythons. Features include:
+
+- One or more snake profiles per household
+- Snake facts such as name, birthday, species, morph, sex, and notes
+- Weight records by snake with date and grams
+- Automatic previous-record detection from weigh-in dates
+- Derived monthly growth rate, age at weigh-in, expected growth range, and growth status
+- Household invite code flow and membership controls for co-owners
+
+Accessible at [os.bath.garden/snake/weights](https://os.bath.garden/snake/weights).
+
 ### Wardrobe
 
 Track clothing items for a personal wardrobe. Features include:
@@ -64,8 +77,8 @@ Accessible at [os.bath.garden/wardrobe/items](https://os.bath.garden/wardrobe/it
 
 - Built with React, TypeScript, Vite, Tailwind CSS, and Supabase
 - Modules are isolated under `src/modules/[name]/` — removing one should not break another
-- Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`, `wardrobe_`) for clarity
-- Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`, `/wardrobe/...`)
+- Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`, `snake_`, `wardrobe_`) for clarity
+- Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`, `/snake/...`, `/wardrobe/...`)
 - OpenSpec is used for non-trivial behavior, UI paradigm, shared component, routing, auth, data, and database changes; validate specs with `npm run spec:validate`
 - See `docs/agents/ARCHITECTURE.md` for structure, `docs/agents/MODULE_GUIDE.md` for adding modules, and `docs/human/STYLE_GUIDE.md` for design conventions
 

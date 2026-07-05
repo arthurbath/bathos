@@ -25,3 +25,16 @@ export const drawersHouseholdAdapter: HouseholdModuleAdapter = {
     deleteHousehold: 'drawers_delete_household',
   },
 };
+
+export const snakeHouseholdAdapter: HouseholdModuleAdapter = {
+  module: 'snake',
+  rpc: {
+    createHousehold: 'snake_create_household_for_current_user',
+    joinHousehold: 'snake_join_household_for_current_user',
+    listMembers: 'snake_list_household_members',
+    rotateInviteCode: 'snake_rotate_household_invite_code',
+    removeMember: 'snake_remove_household_member',
+    leaveHousehold: 'snake_leave_household',
+    deleteHousehold: 'snake_delete_household',
+  },
+};

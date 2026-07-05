@@ -43,6 +43,17 @@ describe('useHostModule', () => {
     }
   });
 
+  it('detects the snake module from the URL path', () => {
+    window.history.replaceState({}, '', '/snake/weights');
+
+    const { container, root } = renderHarness();
+    try {
+      expect(container.querySelector('[data-testid="module-id"]')?.textContent).toBe('snake');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('returns none for retired module paths', () => {
     window.history.replaceState({}, '', '/corpus/documents');
 

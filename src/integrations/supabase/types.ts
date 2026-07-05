@@ -919,6 +919,186 @@ export type Database = {
         }
         Relationships: []
       }
+      snake_growth_expectation_ranges: {
+        Row: {
+          age_lower_months: number
+          age_upper_months: number | null
+          created_at: string
+          growth_lower_grams_per_month: number
+          growth_upper_grams_per_month: number
+          id: string
+          profile: string
+          range_label: string
+          sort_order: number
+        }
+        Insert: {
+          age_lower_months: number
+          age_upper_months?: number | null
+          created_at?: string
+          growth_lower_grams_per_month: number
+          growth_upper_grams_per_month: number
+          id?: string
+          profile: string
+          range_label: string
+          sort_order: number
+        }
+        Update: {
+          age_lower_months?: number
+          age_upper_months?: number | null
+          created_at?: string
+          growth_lower_grams_per_month?: number
+          growth_upper_grams_per_month?: number
+          id?: string
+          profile?: string
+          range_label?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      snake_household_members: {
+        Row: {
+          created_at: string
+          household_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          household_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          household_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "snake_household_members_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "snake_households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      snake_households: {
+        Row: {
+          created_at: string
+          id: string
+          invite_code: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invite_code?: string
+          name?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invite_code?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      snake_snakes: {
+        Row: {
+          birthday: string
+          created_at: string
+          growth_profile: string
+          household_id: string
+          id: string
+          is_active: boolean
+          morph: string | null
+          name: string
+          notes: string | null
+          sex: string
+          sort_order: number
+          species: string
+          updated_at: string
+        }
+        Insert: {
+          birthday: string
+          created_at?: string
+          growth_profile?: string
+          household_id: string
+          id?: string
+          is_active?: boolean
+          morph?: string | null
+          name: string
+          notes?: string | null
+          sex?: string
+          sort_order?: number
+          species?: string
+          updated_at?: string
+        }
+        Update: {
+          birthday?: string
+          created_at?: string
+          growth_profile?: string
+          household_id?: string
+          id?: string
+          is_active?: boolean
+          morph?: string | null
+          name?: string
+          notes?: string | null
+          sex?: string
+          sort_order?: number
+          species?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "snake_snakes_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "snake_households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      snake_weight_records: {
+        Row: {
+          created_at: string
+          household_id: string
+          id: string
+          recorded_on: string
+          snake_id: string
+          updated_at: string
+          weight_grams: number
+        }
+        Insert: {
+          created_at?: string
+          household_id: string
+          id?: string
+          recorded_on: string
+          snake_id: string
+          updated_at?: string
+          weight_grams: number
+        }
+        Update: {
+          created_at?: string
+          household_id?: string
+          id?: string
+          recorded_on?: string
+          snake_id?: string
+          updated_at?: string
+          weight_grams?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "snake_weight_records_snake_id_household_id_fkey"
+            columns: ["snake_id", "household_id"]
+            isOneToOne: false
+            referencedRelation: "snake_snakes"
+            referencedColumns: ["id", "household_id"]
+          },
+        ]
+      }
       wardrobe_items: {
         Row: {
           brand: string | null
@@ -1101,11 +1281,19 @@ export type Database = {
         Args: { _household_id: string; _user_id: string }
         Returns: boolean
       }
+      is_snake_household_member: {
+        Args: { _household_id: string; _user_id: string }
+        Returns: boolean
+      }
       lookup_drawers_household_by_invite_code: {
         Args: { _code: string }
         Returns: string
       }
       lookup_household_by_invite_code: {
+        Args: { _code: string }
+        Returns: string
+      }
+      lookup_snake_household_by_invite_code: {
         Args: { _code: string }
         Returns: string
       }
@@ -1138,6 +1326,37 @@ export type Database = {
       move_drawers_unit_drawers_to_limbo: {
         Args: { _unit_id: string }
         Returns: number
+      }
+      snake_create_household_for_current_user: { Args: never; Returns: Json }
+      snake_delete_household: {
+        Args: { _household_id: string }
+        Returns: Json
+      }
+      snake_join_household_for_current_user: {
+        Args: { _invite_code: string }
+        Returns: Json
+      }
+      snake_leave_household: {
+        Args: { _household_id: string }
+        Returns: Json
+      }
+      snake_list_household_members: {
+        Args: { _household_id: string }
+        Returns: {
+          created_at: string
+          display_name: string
+          email: string
+          is_self: boolean
+          user_id: string
+        }[]
+      }
+      snake_remove_household_member: {
+        Args: { _household_id: string; _member_user_id: string }
+        Returns: Json
+      }
+      snake_rotate_household_invite_code: {
+        Args: { _household_id: string }
+        Returns: Json
       }
       resize_drawers_unit: {
         Args: { _new_h: number; _new_w: number; _unit_id: string }

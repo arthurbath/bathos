@@ -15,7 +15,9 @@ export type GridKey =
   | 'wardrobe_items'
   | 'garage_vehicles'
   | 'garage_services'
-  | 'garage_servicings';
+  | 'garage_servicings'
+  | 'snake_snakes'
+  | 'snake_weight_records';
 export type ColumnWidthMap = Record<string, number>;
 
 export const EXPENSES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
@@ -121,6 +123,28 @@ export const GARAGE_SERVICINGS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
   [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
 };
 
+export const SNAKE_SNAKES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
+  name: 180,
+  birthday: 140,
+  species: 160,
+  morph: 160,
+  sex: 120,
+  notes: 260,
+  [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
+};
+
+export const SNAKE_WEIGHT_RECORDS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
+  recorded_on: 130,
+  weight_grams: 110,
+  change_grams: 110,
+  change_grams_per_month: 130,
+  age_months: 130,
+  expectation_lower: 160,
+  expectation_upper: 160,
+  growth_status: 240,
+  [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
+};
+
 export const GRID_FIXED_COLUMNS: Record<GridKey, string[]> = {
   expenses: [GRID_ACTIONS_COLUMN_ID],
   incomes: [GRID_ACTIONS_COLUMN_ID],
@@ -132,6 +156,8 @@ export const GRID_FIXED_COLUMNS: Record<GridKey, string[]> = {
   garage_vehicles: [GRID_ACTIONS_COLUMN_ID],
   garage_services: [GRID_ACTIONS_COLUMN_ID],
   garage_servicings: [GRID_ACTIONS_COLUMN_ID],
+  snake_snakes: [GRID_ACTIONS_COLUMN_ID],
+  snake_weight_records: [GRID_ACTIONS_COLUMN_ID],
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

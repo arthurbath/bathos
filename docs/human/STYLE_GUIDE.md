@@ -127,6 +127,7 @@ All form-style modals (Add/Edit dialogs) must follow one keyboard interaction mo
 
 - Tab moves focus forward through every interactive field in top-to-bottom order; Shift+Tab moves backward.
 - Inputs use native editing behavior on focus (no separate focus/edit modes).
+- Date fields use the shared `DatePickerField` button-plus-calendar popover. Date values are selected from the picker rather than typed into a native text/date input.
 - Selects are keyboard-usable from the trigger: Space/Enter opens, arrow keys navigate options, Enter/Space confirms.
 - Checkboxes keep/receive focus when toggled so tabbing can continue naturally afterward.
 - Custom controls (e.g., color pickers) must remain in the normal tab order and be keyboard operable.

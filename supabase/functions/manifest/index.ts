@@ -11,6 +11,7 @@ const MODULES: Record<string, { name: string; icon: string; startUrl: string }> 
   budget:  { name: 'Budget',          icon: '/module-budget.png',          startUrl: '/budget/summary' },
   drawers: { name: 'Drawers',         icon: '/module-drawers.png',         startUrl: '/drawers/plan' },
   garage:  { name: 'Garage',          icon: '/module-garage.png',          startUrl: '/garage/due' },
+  snake:   { name: 'Snake',           icon: '/module-snake.png',           startUrl: '/snake/weights' },
   admin:   { name: 'Administration',  icon: '/module-administration.png',  startUrl: '/admin' },
 };
 

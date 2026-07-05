@@ -23,6 +23,7 @@ import { DataGridHistoryProvider } from "@/components/ui/data-grid-history";
 import Index from "./pages/Index";
 import DrawersIndex from "@/modules/drawers/DrawersIndex";
 import GarageIndex from "@/modules/garage/GarageIndex";
+import SnakeIndex from "@/modules/snake/SnakeIndex";
 import WardrobeIndex from "@/modules/wardrobe/WardrobeIndex";
 import NotFound from "./pages/NotFound";
 
@@ -115,6 +116,11 @@ function AppRoutes() {
         <Route path="/garage/services" element={<GarageIndex />} />
         <Route path="/garage/servicings" element={<GarageIndex />} />
         <Route path="/garage/config" element={<GarageIndex />} />
+
+        {/* Snake module */}
+        <Route path="/snake" element={<Navigate to="/snake/weights" replace />} />
+        <Route path="/snake/weights" element={<SnakeIndex />} />
+        <Route path="/snake/config" element={<SnakeIndex />} />
 
         {/* Wardrobe module */}
         <Route path="/wardrobe" element={<Navigate to="/wardrobe/items" replace />} />

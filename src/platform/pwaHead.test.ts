@@ -52,20 +52,20 @@ describe('initial PWA document head', () => {
   });
 
   it('exposes route-relative module icons for other modules', () => {
-    const dom = renderStaticHead('/budget/summary');
+    const dom = renderStaticHead('/snake/weights');
     const document = dom.window.document;
 
     expect(document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.href).toBe(
-      'https://os.bath.garden/budget/manifest.json',
+      'https://os.bath.garden/snake/manifest.json',
     );
-    expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href).toBe('https://os.bath.garden/budget/favicon.png');
+    expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href).toBe('https://os.bath.garden/snake/favicon.png');
     expect(
       Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="apple-touch-icon"]')).map((link) => link.href),
     ).toEqual([
-      'https://os.bath.garden/budget/apple-touch-icon.png',
-      'https://os.bath.garden/budget/apple-touch-icon.png',
-      'https://os.bath.garden/budget/apple-touch-icon.png',
-      'https://os.bath.garden/budget/apple-touch-icon.png',
+      'https://os.bath.garden/snake/apple-touch-icon.png',
+      'https://os.bath.garden/snake/apple-touch-icon.png',
+      'https://os.bath.garden/snake/apple-touch-icon.png',
+      'https://os.bath.garden/snake/apple-touch-icon.png',
     ]);
   });
 
