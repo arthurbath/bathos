@@ -569,8 +569,8 @@ function useGridNav(
     let tries = 0;
     const tryFocus = () => {
       const focused =
-        (target.rowId ? focusCellByRowId(target.rowId, target.col, target) : false) ||
-        focusCell(target.row, target.col, target);
+        (target.rowId ? focusCellByRowId(target.rowId, target.col) : false) ||
+        focusCell(target.row, target.col);
 
       if (focused || tries >= attempts) return;
       tries += 1;
