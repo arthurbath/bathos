@@ -206,7 +206,7 @@ export function MultiSelectFilter<TValue extends string>({
     }
   };
 
-  const handleCloseAutoFocus = (event: ReactFocusEvent<HTMLElement>) => {
+  const handleCloseAutoFocus = (event: Event) => {
     const closeFocusAction = closeFocusActionRef.current;
     closeFocusActionRef.current = null;
     if (closeFocusAction === 'trigger') {
