@@ -60,7 +60,7 @@ describe('initial PWA document head', () => {
     );
     expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href).toBe('https://os.bath.garden/snake/favicon.png');
     expect(
-      Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="apple-touch-icon"]')).map((link) => link.href),
+      Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="apple-touch-icon"]')).map((link: HTMLLinkElement) => link.href),
     ).toEqual([
       'https://os.bath.garden/snake/apple-touch-icon.png',
       'https://os.bath.garden/snake/apple-touch-icon.png',
