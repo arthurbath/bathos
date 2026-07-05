@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SnakeIcon } from '@/components/icons/SnakeIcon';
 import { getAvailableModules } from '@/platform/modules';
 
 describe('getAvailableModules', () => {
@@ -11,6 +12,7 @@ describe('getAvailableModules', () => {
     expect(modules[1].launchPath).toBe('/drawers/plan');
     expect(modules[2].launchPath).toBe('/garage/due');
     expect(modules[3].launchPath).toBe('/snake/weights');
+    expect(modules[3].icon).toBe(SnakeIcon);
     expect(modules[3].iconPath).toBe('/module-snake.png');
     expect(modules[4].launchPath).toBe('/wardrobe/items');
     expect(modules[4].iconPath).toBe('/module-wardrobe.png');

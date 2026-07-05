@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
-import { CarFront, CircleDollarSign, ShelvingUnit, Shield, Shirt, Worm } from 'lucide-react';
+import { CarFront, CircleDollarSign, ShelvingUnit, Shield, Shirt } from 'lucide-react';
+import { SnakeIcon } from '@/components/icons/SnakeIcon';
 
 export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'snake' | 'wardrobe' | 'admin';
 
@@ -54,7 +55,7 @@ const SNAKE_MODULE: PlatformModule = {
   name: 'Snake',
   description: 'Track snake weight records and ball python growth expectations',
   launchPath: '/snake/weights',
-  icon: Worm,
+  icon: SnakeIcon,
   iconPath: '/module-snake.png',
 };
 

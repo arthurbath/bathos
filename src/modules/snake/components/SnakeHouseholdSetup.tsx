@@ -1,4 +1,4 @@
-import { Worm } from 'lucide-react';
+import { SnakeIcon } from '@/components/icons/SnakeIcon';
 import { HouseholdSetupCard } from '@/platform/households';
 
 interface SnakeHouseholdSetupProps {
@@ -33,7 +33,7 @@ export function SnakeHouseholdSetup({
       joinInputPlaceholder="Enter invite code"
       createErrorTitle="Failed to create snake household"
       joinErrorTitle="Failed to join snake household"
-      icon={Worm}
+      icon={SnakeIcon}
       showAppSwitcher
     />
   );
