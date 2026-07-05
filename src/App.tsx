@@ -97,6 +97,7 @@ function AppRoutes() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/help" element={<HelpPage />} />
+        <Route path="/.lovable/oauth/consent" element={<OAuthConsentPage />} />
 
         {/* Budget module */}
         <Route path="/budget" element={<Navigate to="/budget/summary" replace />} />
