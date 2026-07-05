@@ -60,6 +60,7 @@ describe('LauncherPage modules', () => {
   beforeEach(() => {
     mockNavigate.mockReset();
     mockIsAdmin.mockReset();
+    mockAuthContext.mockReset();
   });
 
   it('shows general modules for signed-in users', () => {
@@ -126,6 +127,33 @@ describe('LauncherPage modules', () => {
 
     try {
       expect(container.querySelector('[data-testid="auth-page"]')).toBeTruthy();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('preserves the current path in a next param when redirecting to sign-in', () => {
+    mockAuthContext.mockReturnValue({
+      user: null,
+      loading: false,
+      signOut: vi.fn(),
+    });
+    mockIsAdmin.mockReturnValue({ isAdmin: false, loading: false, resolved: true });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={['/budget/summary?foo=bar']}>
+          <LauncherPage />
+        </MemoryRouter>,
+      );
+    });
+
+    try {
+      expect(mockNavigate).toHaveBeenCalledWith('/signin?next=%2Fbudget%2Fsummary%3Ffoo%3Dbar', { replace: true });
     } finally {
       cleanup(root, container);
     }

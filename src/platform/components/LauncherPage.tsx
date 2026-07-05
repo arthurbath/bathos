@@ -30,10 +30,17 @@ export default function LauncherPage() {
     if (!loading && !isSigningOut && !user) {
       const path = location.pathname;
       if (path !== '/signin' && path !== '/signup') {
-        navigate('/signin', { replace: true });
+        const next = location.pathname + location.search + location.hash;
+        const params = new URLSearchParams();
+        // Preserve the originally requested path so we can return after sign-in.
+        if (next && next !== '/' && next !== '/signin' && next !== '/signup') {
+          params.set('next', next);
+        }
+        const search = params.toString() ? `?${params.toString()}` : '';
+        navigate(`/signin${search}`, { replace: true });
       }
     }
-  }, [loading, isSigningOut, user, location.pathname, navigate]);
+  }, [loading, isSigningOut, user, location.pathname, location.search, location.hash, navigate]);
 
   if (loading || isSigningOut || (!!user && (!roleResolved || roleLoading))) {
     return (
