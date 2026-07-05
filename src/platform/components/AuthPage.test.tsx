@@ -29,6 +29,18 @@ vi.mock('@/components/PasswordRequirements', () => ({
   PasswordRequirements: () => <div data-testid="password-requirements" />,
 }));
 
+vi.mock('@/components/ui/checkbox', () => ({
+  Checkbox: ({ id, checked, onCheckedChange }: { id?: string; checked?: boolean; onCheckedChange?: (checked: boolean) => void }) => (
+    <input
+      data-testid="checkbox"
+      id={id}
+      type="checkbox"
+      checked={checked}
+      onChange={(e) => onCheckedChange?.(e.target.checked)}
+    />
+  ),
+}));
+
 let capturedOnValueChange: ((value: string) => void) | null = null;
 
 vi.mock('@/components/ui/tabs', () => ({
