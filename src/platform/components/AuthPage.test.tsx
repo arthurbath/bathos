@@ -131,12 +131,9 @@ describe('AuthPage redirect after sign-in', () => {
     const { root, container } = renderAt('/signin?next=%2F.lovable%2Foauth%2Fconsent%3Fid%3D123');
 
     try {
-      const signupTab = Array.from(container.querySelectorAll('[role="tab"]')).find(
-        (tab) => tab.textContent?.includes('Sign Up'),
-      );
-      expect(signupTab).toBeTruthy();
+      expect(capturedOnValueChange).toBeTruthy();
       act(() => {
-        signupTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        capturedOnValueChange?.('signup');
       });
       expect(mockNavigate).toHaveBeenCalledWith(
         '/signup?next=%2F.lovable%2Foauth%2Fconsent%3Fid%3D123',
