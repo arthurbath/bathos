@@ -12,6 +12,7 @@ import ResetPasswordPage from "@/platform/components/ResetPasswordPage";
 import TermsPage from "@/platform/components/TermsPage";
 import AdminPage from "@/platform/components/AdminPage";
 import HelpPage from "@/platform/components/HelpPage";
+import OAuthConsentPage from "@/platform/components/OAuthConsentPage";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import TermsGate from "@/platform/components/TermsGate";
 import AuthCallbackToasts from "@/platform/components/AuthCallbackToasts";
