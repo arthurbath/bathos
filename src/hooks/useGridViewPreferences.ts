@@ -155,7 +155,7 @@ export function sanitizeSortingState<TSorting extends SortingState = SortingStat
   return validSorting as TSorting;
 }
 
-function createDefaultInitialPreferences<TFilters extends Record<string, unknown>, TSorting extends SortingState>(
+function createDefaultInitialPreferences<TFilters extends object, TSorting extends SortingState>(
   options: UseGridViewPreferencesOptions<TFilters, TSorting>,
 ): InitialPreferences<TFilters, TSorting> {
   const sanitizeFilters = options.sanitizeFilters ?? ((raw: unknown) => (
