@@ -189,7 +189,7 @@ function createDefaultInitialPreferences<TFilters extends Record<string, unknown
   };
 }
 
-export function useGridViewPreferences<TFilters extends Record<string, unknown>, TSorting extends SortingState = SortingState>(
+export function useGridViewPreferences<TFilters extends object, TSorting extends SortingState = SortingState>(
   options: UseGridViewPreferencesOptions<TFilters, TSorting>,
 ) {
   const optionsRef = useRef(options);
