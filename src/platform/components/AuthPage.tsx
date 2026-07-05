@@ -15,6 +15,15 @@ import { PasswordRequirements } from '@/components/PasswordRequirements';
 import { checkAuthRateLimit, formatRetryAfter } from '@/lib/authRateLimit';
 import GatewayPageLayout from '@/platform/components/GatewayPageLayout';
 
+function getSafeNextPath(search: string): string | null {
+  const params = new URLSearchParams(search);
+  const next = params.get('next');
+  if (!next) return null;
+  // Only allow same-origin relative paths to prevent open redirects.
+  if (!next.startsWith('/') || next.startsWith('//') || /[\r\n]/.test(next)) return null;
+  return next;
+}
+
 export default function AuthPage() {
   const { signIn, signUp, session } = useAuthContext();
   const { toast } = useToast();
@@ -22,12 +31,13 @@ export default function AuthPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
-  // Redirect authenticated users to the launcher
+  // Redirect authenticated users to their intended destination (or the launcher)
   useEffect(() => {
     if (session) {
-      navigate('/', { replace: true });
+      const next = getSafeNextPath(location.search);
+      navigate(next ?? '/', { replace: true });
     }
-  }, [session, navigate]);
+  }, [session, location.search, navigate]);
 
   // Derive active tab from route
   const activeTab = location.pathname === '/signup' ? 'signup' : 'login';
