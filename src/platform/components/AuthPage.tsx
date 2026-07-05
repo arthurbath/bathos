@@ -62,7 +62,10 @@ export default function AuthPage() {
   }, []);
 
   const handleTabChange = (value: string) => {
-    navigate(value === 'signup' ? '/signup' : '/signin', { replace: true });
+    const path = value === 'signup' ? '/signup' : '/signin';
+    const next = getSafeNextPath(location.search);
+    const search = next ? `?next=${encodeURIComponent(next)}` : '';
+    navigate(`${path}${search}`, { replace: true });
   };
 
   const handleLogin = async (e: React.FormEvent) => {
