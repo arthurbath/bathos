@@ -60,6 +60,7 @@ describe('LauncherPage modules', () => {
   beforeEach(() => {
     mockNavigate.mockReset();
     mockIsAdmin.mockReset();
+    mockAuthContext.mockReset();
   });
 
   it('shows general modules for signed-in users', () => {
