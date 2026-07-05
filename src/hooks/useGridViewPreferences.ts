@@ -28,7 +28,7 @@ interface InitialPreferences<TFilters, TSorting> {
   allPreferences: Record<string, unknown>;
 }
 
-interface UseGridViewPreferencesOptions<TFilters extends Record<string, unknown>, TSorting extends SortingState = SortingState> {
+interface UseGridViewPreferencesOptions<TFilters extends object, TSorting extends SortingState = SortingState> {
   userId?: string;
   gridKey: GridKey;
   defaultFilters: TFilters;
