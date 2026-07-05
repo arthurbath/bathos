@@ -27,6 +27,7 @@ const babylon: Snake = {
   sex: 'unknown',
   notes: null,
   sort_order: 1,
+  is_active: true,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 };

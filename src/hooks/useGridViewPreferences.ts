@@ -28,7 +28,7 @@ interface InitialPreferences<TFilters, TSorting> {
   allPreferences: Record<string, unknown>;
 }
 
-interface UseGridViewPreferencesOptions<TFilters extends Record<string, unknown>, TSorting extends SortingState = SortingState> {
+interface UseGridViewPreferencesOptions<TFilters extends object, TSorting extends SortingState = SortingState> {
   userId?: string;
   gridKey: GridKey;
   defaultFilters: TFilters;
@@ -155,7 +155,7 @@ export function sanitizeSortingState<TSorting extends SortingState = SortingStat
   return validSorting as TSorting;
 }
 
-function createDefaultInitialPreferences<TFilters extends Record<string, unknown>, TSorting extends SortingState>(
+function createDefaultInitialPreferences<TFilters extends object, TSorting extends SortingState>(
   options: UseGridViewPreferencesOptions<TFilters, TSorting>,
 ): InitialPreferences<TFilters, TSorting> {
   const sanitizeFilters = options.sanitizeFilters ?? ((raw: unknown) => (
@@ -189,7 +189,7 @@ function createDefaultInitialPreferences<TFilters extends Record<string, unknown
   };
 }
 
-export function useGridViewPreferences<TFilters extends Record<string, unknown>, TSorting extends SortingState = SortingState>(
+export function useGridViewPreferences<TFilters extends object, TSorting extends SortingState = SortingState>(
   options: UseGridViewPreferencesOptions<TFilters, TSorting>,
 ) {
   const optionsRef = useRef(options);
