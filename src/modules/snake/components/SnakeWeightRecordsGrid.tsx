@@ -408,14 +408,14 @@ export function SnakeWeightRecordsGrid({
     }),
     columnHelper.accessor('growthExpectationLowerGramsPerMonth', {
       id: 'expectation_lower',
-      header: 'Expected Low',
+      header: 'Expected Low (g)',
       size: 160,
       minSize: 120,
       cell: ({ row }) => formatNumber(row.original.growthExpectationLowerGramsPerMonth),
     }),
     columnHelper.accessor('growthExpectationUpperGramsPerMonth', {
       id: 'expectation_upper',
-      header: 'Expected High',
+      header: 'Expected High (g)',
       size: 160,
       minSize: 120,
       cell: ({ row }) => formatNumber(row.original.growthExpectationUpperGramsPerMonth),
