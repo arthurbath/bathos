@@ -2,11 +2,11 @@
 // To take ownership, delete this banner line; the plugin then leaves the file alone.
 // supabase function: mcp
 // Bundled from src/lib/mcp/index.ts by @lovable.dev/mcp-js.
-// src/lib/mcp/index.ts
-import { auth, defineMcp } from "npm:@lovable.dev/mcp-js@0.20.0";
+// src/lib/mcp/mcp-core.ts
+import { auth, defineMcp, defineTool } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/tools/whoami.ts
-import { defineTool } from "npm:@lovable.dev/mcp-js@0.20.0";
 var whoami_default = defineTool({
   name: "whoami",
   title: "Who am I",
@@ -25,9 +25,6 @@ var whoami_default = defineTool({
   }
 });
 
-// src/lib/mcp/tools/list-garage-vehicles.ts
-import { defineTool as defineTool2 } from "npm:@lovable.dev/mcp-js@0.20.0";
-
 // src/lib/mcp/supabase.ts
 import { createClient } from "npm:@supabase/supabase-js@^2.95.3";
 function supabaseForUser(ctx) {
@@ -40,6 +37,19 @@ function supabaseForUser(ctx) {
     }
   );
 }
+function requireAuthenticated(ctx) {
+  if (!ctx.isAuthenticated()) {
+    throw new Error("Not authenticated");
+  }
+  return {
+    userId: ctx.getUserId(),
+    email: ctx.getUserEmail() ?? null,
+    supabase: supabaseForUser(ctx)
+  };
+}
+function nowIso() {
+  return (/* @__PURE__ */ new Date()).toISOString();
+}
 function toJson(data) {
   return {
     content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
@@ -49,101 +59,538 @@ function toJson(data) {
 function toError(message) {
   return { content: [{ type: "text", text: message }], isError: true };
 }
-
-// src/lib/mcp/tools/list-garage-vehicles.ts
-var list_garage_vehicles_default = defineTool2({
-  name: "list_garage_vehicles",
-  title: "List garage vehicles",
-  description: "List the signed-in user's Garage vehicles.",
-  inputSchema: {},
-  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async (_input, ctx) => {
-    if (!ctx.isAuthenticated()) return toError("Not authenticated");
-    const { data, error } = await supabaseForUser(ctx).from("garage_vehicles").select("*").order("name", { ascending: true });
-    if (error) return toError(error.message);
-    return toJson(data);
+function toMcpResult(promise) {
+  return promise.then(toJson).catch((error) => {
+    const message = error instanceof Error ? error.message : "Unexpected MCP error";
+    return toError(message);
+  });
+}
+async function resolveBudgetHousehold(auth2, requestedHouseholdId) {
+  let query = auth2.supabase.from("budget_household_members").select("household_id").eq("user_id", auth2.userId).limit(1);
+  if (requestedHouseholdId) {
+    query = query.eq("household_id", requestedHouseholdId);
   }
-});
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.household_id) {
+    throw new Error(requestedHouseholdId ? "Budget household is not accessible." : "No Budget household found.");
+  }
+  return data.household_id;
+}
+async function resolveSnakeHousehold(auth2, requestedHouseholdId) {
+  let query = auth2.supabase.from("snake_household_members").select("household_id").eq("user_id", auth2.userId).limit(1);
+  if (requestedHouseholdId) {
+    query = query.eq("household_id", requestedHouseholdId);
+  }
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.household_id) {
+    throw new Error(requestedHouseholdId ? "Snake household is not accessible." : "No Snake household found.");
+  }
+  return data.household_id;
+}
 
-// src/lib/mcp/tools/list-garage-services.ts
-import { defineTool as defineTool3 } from "npm:@lovable.dev/mcp-js@0.20.0";
-import { z } from "npm:zod@^3.25.76";
-var list_garage_services_default = defineTool3({
-  name: "list_garage_services",
-  title: "List garage services",
-  description: "List Garage services, optionally filtered to one vehicle.",
+// src/lib/mcp/resource-utils.ts
+var operationSchema = z.enum(["create", "update", "delete"]);
+var uuidSchema = z.string().uuid();
+var jsonObjectSchema = z.record(z.unknown());
+function requireId(operation, id) {
+  if ((operation === "update" || operation === "delete") && !id) {
+    throw new Error(`${operation} requires id.`);
+  }
+}
+function objectData(data) {
+  return data ?? {};
+}
+function stripOwnerFields(data) {
+  const {
+    id: _id,
+    user_id: _userId,
+    household_id: _householdId,
+    created_at: _createdAt,
+    updated_at: _updatedAt,
+    ...rest
+  } = data;
+  return rest;
+}
+function emptyToNull(value) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+function trimString(value) {
+  return typeof value === "string" ? value.trim() : value;
+}
+function withUpdatedAt(data, now) {
+  return { ...data, updated_at: now };
+}
+
+// src/lib/mcp/tools/garage-actions.ts
+var garageResourceSchema = z.enum(["vehicles", "services", "servicings"]);
+var serviceOutcomeSchema = z.object({
+  service_id: uuidSchema,
+  status: z.enum(["performed", "not_needed_yet", "declined"]).default("performed")
+});
+function deriveCadenceType(data) {
+  const everyMiles = Number(data.every_miles ?? 0);
+  const everyMonths = Number(data.every_months ?? 0);
+  return everyMiles > 0 || everyMonths > 0 ? "recurring" : "no_interval";
+}
+async function saveServicingOutcomes(args) {
+  const { error: deleteError } = await args.auth.supabase.from("garage_servicing_services").delete().eq("user_id", args.auth.userId).eq("vehicle_id", args.vehicleId).eq("servicing_id", args.servicingId);
+  if (deleteError) throw new Error(deleteError.message);
+  const deduped = Array.from(new Map(args.outcomes.map((outcome) => [outcome.service_id, outcome])).values());
+  if (deduped.length === 0) return;
+  const { error } = await args.auth.supabase.from("garage_servicing_services").insert(
+    deduped.map((outcome) => ({
+      user_id: args.auth.userId,
+      vehicle_id: args.vehicleId,
+      servicing_id: args.servicingId,
+      service_id: outcome.service_id,
+      status: outcome.status
+    }))
+  );
+  if (error) throw new Error(error.message);
+}
+async function getGarageData(input, auth2) {
+  if (input.resource === "vehicles") {
+    let query2 = auth2.supabase.from("garage_vehicles").select("*").eq("user_id", auth2.userId);
+    if (input.id) query2 = query2.eq("id", input.id);
+    const { data: data2, error: error2 } = await query2.order("created_at", { ascending: true }).limit(input.limit ?? 500);
+    if (error2) throw new Error(error2.message);
+    return data2;
+  }
+  if (!input.vehicle_id) throw new Error(`${input.resource} requires vehicle_id.`);
+  if (input.resource === "services") {
+    let query2 = auth2.supabase.from("garage_services").select("*").eq("user_id", auth2.userId).eq("vehicle_id", input.vehicle_id);
+    if (input.id) query2 = query2.eq("id", input.id);
+    const { data: data2, error: error2 } = await query2.order("sort_order", { ascending: true }).order("name", { ascending: true }).limit(input.limit ?? 500);
+    if (error2) throw new Error(error2.message);
+    return data2;
+  }
+  let query = auth2.supabase.from("garage_servicings").select("*, outcomes:garage_servicing_services(*), receipts:garage_servicing_receipts(*)").eq("user_id", auth2.userId).eq("vehicle_id", input.vehicle_id);
+  if (input.id) query = query.eq("id", input.id);
+  const { data, error } = await query.order("service_date", { ascending: false }).order("created_at", { ascending: false }).limit(input.limit ?? 500);
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function setGarageData(input, auth2) {
+  requireId(input.operation, input.id);
+  const raw = objectData(input.data);
+  const clean = stripOwnerFields(raw);
+  if (input.resource === "vehicles") {
+    if (input.operation === "create") {
+      const insert = {
+        ...clean,
+        user_id: auth2.userId,
+        name: trimString(clean.name)
+      };
+      const { data, error: error3 } = await auth2.supabase.from("garage_vehicles").insert(insert).select("*").single();
+      if (error3) throw new Error(error3.message);
+      return data;
+    }
+    if (input.operation === "update") {
+      const { data, error: error3 } = await auth2.supabase.from("garage_vehicles").update(withUpdatedAt({ ...clean, name: trimString(clean.name) }, nowIso())).eq("id", input.id).eq("user_id", auth2.userId).select("*").single();
+      if (error3) throw new Error(error3.message);
+      return data;
+    }
+    const { error: error2 } = await auth2.supabase.from("garage_vehicles").delete().eq("id", input.id).eq("user_id", auth2.userId);
+    if (error2) throw new Error(error2.message);
+    return { deleted: true, resource: input.resource, id: input.id };
+  }
+  const vehicleId = input.vehicle_id ?? (typeof raw.vehicle_id === "string" ? raw.vehicle_id : void 0);
+  if (!vehicleId) throw new Error(`${input.resource} requires vehicle_id.`);
+  if (input.resource === "services") {
+    if (input.operation === "create") {
+      const insert = {
+        ...clean,
+        user_id: auth2.userId,
+        vehicle_id: vehicleId,
+        name: trimString(clean.name),
+        cadence_type: clean.cadence_type ?? deriveCadenceType(clean)
+      };
+      const { data, error: error3 } = await auth2.supabase.from("garage_services").insert(insert).select("*").single();
+      if (error3) throw new Error(error3.message);
+      return data;
+    }
+    if (input.operation === "update") {
+      const update = {
+        ...clean,
+        name: trimString(clean.name),
+        cadence_type: clean.cadence_type ?? deriveCadenceType(clean)
+      };
+      const { data, error: error3 } = await auth2.supabase.from("garage_services").update(withUpdatedAt(update, nowIso())).eq("id", input.id).eq("user_id", auth2.userId).eq("vehicle_id", vehicleId).select("*").single();
+      if (error3) throw new Error(error3.message);
+      return data;
+    }
+    const { error: error2 } = await auth2.supabase.from("garage_services").delete().eq("id", input.id).eq("user_id", auth2.userId).eq("vehicle_id", vehicleId);
+    if (error2) throw new Error(error2.message);
+    return { deleted: true, resource: input.resource, id: input.id };
+  }
+  if (input.operation === "create") {
+    const servicingId = typeof raw.id === "string" ? raw.id : crypto.randomUUID();
+    const { error: error2 } = await auth2.supabase.from("garage_servicings").insert({
+      ...clean,
+      id: servicingId,
+      user_id: auth2.userId,
+      vehicle_id: vehicleId
+    });
+    if (error2) throw new Error(error2.message);
+    await saveServicingOutcomes({ auth: auth2, servicingId, vehicleId, outcomes: input.outcomes ?? [] });
+    return (await getGarageData({ resource: "servicings", vehicle_id: vehicleId, id: servicingId }, auth2))[0] ?? { id: servicingId };
+  }
+  if (input.operation === "update") {
+    const { error: error2 } = await auth2.supabase.from("garage_servicings").update(withUpdatedAt(clean, nowIso())).eq("id", input.id).eq("user_id", auth2.userId).eq("vehicle_id", vehicleId);
+    if (error2) throw new Error(error2.message);
+    if (input.outcomes) {
+      await saveServicingOutcomes({ auth: auth2, servicingId: input.id, vehicleId, outcomes: input.outcomes });
+    }
+    return (await getGarageData({ resource: "servicings", vehicle_id: vehicleId, id: input.id }, auth2))[0] ?? { id: input.id };
+  }
+  const { error } = await auth2.supabase.from("garage_servicings").delete().eq("id", input.id).eq("user_id", auth2.userId).eq("vehicle_id", vehicleId);
+  if (error) throw new Error(error.message);
+  return { deleted: true, resource: input.resource, id: input.id };
+}
+var getGarage = defineTool({
+  name: "get_garage",
+  title: "Get Garage Data",
+  description: "Read Garage vehicles, services, or servicings for the signed-in user.",
   inputSchema: {
-    vehicle_id: z.string().uuid().optional().describe("Optional vehicle id to filter by.")
+    resource: garageResourceSchema.describe("Garage resource to read: vehicles, services, or servicings."),
+    vehicle_id: uuidSchema.optional().describe("Vehicle id required for services and servicings."),
+    id: uuidSchema.optional().describe("Optional record id to narrow the result."),
+    limit: z.number().int().min(1).max(500).optional().describe("Max rows to return.")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ vehicle_id }, ctx) => {
-    if (!ctx.isAuthenticated()) return toError("Not authenticated");
-    let query = supabaseForUser(ctx).from("garage_services").select("*");
-    if (vehicle_id) query = query.eq("vehicle_id", vehicle_id);
-    const { data, error } = await query;
-    if (error) return toError(error.message);
-    return toJson(data);
-  }
+  handler: (input, ctx) => toMcpResult(getGarageData(input, requireAuthenticated(ctx)))
+});
+var setGarage = defineTool({
+  name: "set_garage",
+  title: "Set Garage Data",
+  description: "Create, update, or delete Garage vehicles, services, or servicings for the signed-in user.",
+  inputSchema: {
+    resource: garageResourceSchema,
+    operation: operationSchema,
+    id: uuidSchema.optional().describe("Record id required for update and delete."),
+    vehicle_id: uuidSchema.optional().describe("Vehicle id required for service and servicing mutations."),
+    data: jsonObjectSchema.optional().describe("Record fields for create or update. Owner fields are ignored."),
+    outcomes: z.array(serviceOutcomeSchema).optional().describe("Optional servicing service outcomes for servicings.")
+  },
+  annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(setGarageData(input, requireAuthenticated(ctx)))
 });
 
-// src/lib/mcp/tools/list-wardrobe-items.ts
-import { defineTool as defineTool4 } from "npm:@lovable.dev/mcp-js@0.20.0";
-import { z as z2 } from "npm:zod@^3.25.76";
-var list_wardrobe_items_default = defineTool4({
-  name: "list_wardrobe_items",
-  title: "List wardrobe items",
-  description: "List the signed-in user's Wardrobe items, optionally filtered by status.",
+// src/lib/mcp/tools/snake-actions.ts
+var snakeResourceSchema = z.enum(["snakes", "weight_records", "growth_expectation_ranges"]);
+async function getSnakeData(input, auth2) {
+  if (input.resource === "growth_expectation_ranges") {
+    const { data: data2, error: error2 } = await auth2.supabase.from("snake_growth_expectation_ranges").select("*").order("profile", { ascending: true }).order("sort_order", { ascending: true });
+    if (error2) throw new Error(error2.message);
+    return data2;
+  }
+  const householdId = await resolveSnakeHousehold(auth2, input.household_id);
+  if (input.resource === "snakes") {
+    let query2 = auth2.supabase.from("snake_snakes").select("*").eq("household_id", householdId);
+    if (input.id) query2 = query2.eq("id", input.id);
+    const { data: data2, error: error2 } = await query2.order("sort_order", { ascending: true }).order("created_at", { ascending: true }).limit(input.limit ?? 500);
+    if (error2) throw new Error(error2.message);
+    return data2;
+  }
+  let query = auth2.supabase.from("snake_weight_records").select("*").eq("household_id", householdId);
+  if (input.snake_id) query = query.eq("snake_id", input.snake_id);
+  if (input.id) query = query.eq("id", input.id);
+  const { data, error } = await query.order("recorded_on", { ascending: false }).order("created_at", { ascending: false }).limit(input.limit ?? 500);
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function setSnakeData(input, auth2) {
+  if (input.resource === "growth_expectation_ranges") {
+    throw new Error("growth_expectation_ranges is read-only.");
+  }
+  requireId(input.operation, input.id);
+  const householdId = await resolveSnakeHousehold(auth2, input.household_id);
+  const raw = objectData(input.data);
+  const clean = stripOwnerFields(raw);
+  if (input.resource === "snakes") {
+    const normalized = {
+      ...clean,
+      name: trimString(clean.name),
+      species: typeof clean.species === "string" ? clean.species.trim() || "Ball Python" : clean.species,
+      growth_profile: typeof clean.growth_profile === "string" ? clean.growth_profile.trim() || "ball_python" : clean.growth_profile,
+      morph: emptyToNull(clean.morph),
+      notes: emptyToNull(clean.notes)
+    };
+    if (input.operation === "create") {
+      const { data, error: error3 } = await auth2.supabase.from("snake_snakes").insert({ ...normalized, household_id: householdId }).select("*").single();
+      if (error3) throw new Error(error3.message);
+      return data;
+    }
+    if (input.operation === "update") {
+      const { data, error: error3 } = await auth2.supabase.from("snake_snakes").update(withUpdatedAt(normalized, nowIso())).eq("id", input.id).eq("household_id", householdId).select("*").single();
+      if (error3) throw new Error(error3.message);
+      return data;
+    }
+    const { error: error2 } = await auth2.supabase.from("snake_snakes").delete().eq("id", input.id).eq("household_id", householdId);
+    if (error2) throw new Error(error2.message);
+    return { deleted: true, resource: input.resource, id: input.id };
+  }
+  const snakeId = input.snake_id ?? (typeof raw.snake_id === "string" ? raw.snake_id : void 0);
+  if (!snakeId) throw new Error("weight_records requires snake_id.");
+  if (input.operation === "create") {
+    const { data, error: error2 } = await auth2.supabase.from("snake_weight_records").insert({ ...clean, household_id: householdId, snake_id: snakeId }).select("*").single();
+    if (error2) throw new Error(error2.message);
+    return data;
+  }
+  if (input.operation === "update") {
+    const { data, error: error2 } = await auth2.supabase.from("snake_weight_records").update(withUpdatedAt(clean, nowIso())).eq("id", input.id).eq("household_id", householdId).eq("snake_id", snakeId).select("*").single();
+    if (error2) throw new Error(error2.message);
+    return data;
+  }
+  const { error } = await auth2.supabase.from("snake_weight_records").delete().eq("id", input.id).eq("household_id", householdId).eq("snake_id", snakeId);
+  if (error) throw new Error(error.message);
+  return { deleted: true, resource: input.resource, id: input.id };
+}
+var getSnake = defineTool({
+  name: "get_snake",
+  title: "Get Snake Data",
+  description: "Read snakes, weight records, or growth expectation ranges for an accessible Snake household.",
   inputSchema: {
-    status: z2.string().optional().describe("Optional status filter (e.g. 'owned', 'wishlist')."),
-    limit: z2.number().int().min(1).max(500).optional().describe("Max rows to return (default 100).")
+    resource: snakeResourceSchema,
+    household_id: uuidSchema.optional().describe("Optional accessible Snake household id."),
+    snake_id: uuidSchema.optional().describe("Optional snake id for weight records."),
+    id: uuidSchema.optional().describe("Optional record id to narrow the result."),
+    limit: z.number().int().min(1).max(500).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ status, limit }, ctx) => {
-    if (!ctx.isAuthenticated()) return toError("Not authenticated");
-    let query = supabaseForUser(ctx).from("wardrobe_items").select("*").limit(limit ?? 100);
-    if (status) query = query.eq("status", status);
-    const { data, error } = await query;
-    if (error) return toError(error.message);
-    return toJson(data);
-  }
+  handler: (input, ctx) => toMcpResult(getSnakeData(input, requireAuthenticated(ctx)))
+});
+var setSnake = defineTool({
+  name: "set_snake",
+  title: "Set Snake Data",
+  description: "Create, update, or delete snakes and weight records for an accessible Snake household.",
+  inputSchema: {
+    resource: z.enum(["snakes", "weight_records"]),
+    operation: operationSchema,
+    household_id: uuidSchema.optional(),
+    snake_id: uuidSchema.optional().describe("Required for weight record mutations."),
+    id: uuidSchema.optional().describe("Record id required for update and delete."),
+    data: jsonObjectSchema.optional().describe("Record fields for create or update. Owner fields are ignored.")
+  },
+  annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(setSnakeData(input, requireAuthenticated(ctx)))
 });
 
-// src/lib/mcp/tools/list-snake-weights.ts
-import { defineTool as defineTool5 } from "npm:@lovable.dev/mcp-js@0.20.0";
-import { z as z3 } from "npm:zod@^3.25.76";
-var list_snake_weights_default = defineTool5({
-  name: "list_snake_weights",
-  title: "List snake weight records",
-  description: "List Snake weight records for the signed-in user.",
+// src/lib/mcp/tools/budget-actions.ts
+var budgetResourceSchema = z.enum([
+  "summary",
+  "household_settings",
+  "expenses",
+  "incomes",
+  "budgets",
+  "categories",
+  "payment_methods"
+]);
+function tableForResource(resource) {
+  switch (resource) {
+    case "expenses":
+      return "budget_expenses";
+    case "incomes":
+      return "budget_income_streams";
+    case "budgets":
+      return "budget_budgets";
+    case "categories":
+      return "budget_categories";
+    case "payment_methods":
+      return "budget_linked_accounts";
+    default:
+      throw new Error(`${resource} is not a table-backed Budget resource.`);
+  }
+}
+function normalizeNamed(data) {
+  return {
+    ...data,
+    name: typeof data.name === "string" ? data.name.trim() : data.name
+  };
+}
+function householdSettingsData(data) {
+  const allowed = [
+    "name",
+    "partner_x_name",
+    "partner_y_name",
+    "wage_gap_adjustment_enabled",
+    "partner_x_wage_cents_per_dollar",
+    "partner_y_wage_cents_per_dollar",
+    "partner_x_color",
+    "partner_y_color"
+  ];
+  return Object.fromEntries(
+    Object.entries(data).filter(([key]) => allowed.includes(key)).map(([key, value]) => [key, typeof value === "string" ? value.trim() : value])
+  );
+}
+async function getBudgetData(input, auth2) {
+  const householdId = await resolveBudgetHousehold(auth2, input.household_id);
+  if (input.resource === "summary") {
+    const [household, expenses, incomes, budgets, categories, paymentMethods] = await Promise.all([
+      auth2.supabase.from("budget_households").select("*").eq("id", householdId).single(),
+      auth2.supabase.from("budget_expenses").select("*").eq("household_id", householdId).order("created_at").limit(input.limit ?? 500),
+      auth2.supabase.from("budget_income_streams").select("*").eq("household_id", householdId).order("created_at").limit(input.limit ?? 500),
+      auth2.supabase.from("budget_budgets").select("*").eq("household_id", householdId).order("name").limit(input.limit ?? 500),
+      auth2.supabase.from("budget_categories").select("*").eq("household_id", householdId).order("name").limit(input.limit ?? 500),
+      auth2.supabase.from("budget_linked_accounts").select("*").eq("household_id", householdId).order("name").limit(input.limit ?? 500)
+    ]);
+    for (const result of [household, expenses, incomes, budgets, categories, paymentMethods]) {
+      if (result.error) throw new Error(result.error.message);
+    }
+    return {
+      household: household.data,
+      expenses: expenses.data,
+      incomes: incomes.data,
+      budgets: budgets.data,
+      categories: categories.data,
+      payment_methods: paymentMethods.data
+    };
+  }
+  if (input.resource === "household_settings") {
+    const { data: data2, error: error2 } = await auth2.supabase.from("budget_households").select("*").eq("id", householdId).single();
+    if (error2) throw new Error(error2.message);
+    return data2;
+  }
+  const table = tableForResource(input.resource);
+  let query = auth2.supabase.from(table).select("*").eq("household_id", householdId);
+  if (input.id) query = query.eq("id", input.id);
+  const { data, error } = await query.limit(input.limit ?? 500);
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function setBudgetData(input, auth2) {
+  if (input.resource === "summary") throw new Error("summary is read-only.");
+  const householdId = await resolveBudgetHousehold(auth2, input.household_id);
+  const clean = normalizeNamed(stripOwnerFields(objectData(input.data)));
+  if (input.resource === "household_settings") {
+    if (input.operation !== "update") throw new Error("household_settings only supports update.");
+    const update = householdSettingsData(clean);
+    if (Object.keys(update).length === 0) throw new Error("No supported household settings supplied.");
+    const { data, error: error2 } = await auth2.supabase.from("budget_households").update(update).eq("id", householdId).select("*").single();
+    if (error2) throw new Error(error2.message);
+    return data;
+  }
+  requireId(input.operation, input.id);
+  const table = tableForResource(input.resource);
+  if (input.operation === "create") {
+    const { data, error: error2 } = await auth2.supabase.from(table).insert({ ...clean, household_id: householdId }).select("*").single();
+    if (error2) throw new Error(error2.message);
+    return data;
+  }
+  if (input.operation === "update") {
+    const { data, error: error2 } = await auth2.supabase.from(table).update(clean).eq("id", input.id).eq("household_id", householdId).select("*").single();
+    if (error2) throw new Error(error2.message);
+    return data;
+  }
+  const { error } = await auth2.supabase.from(table).delete().eq("id", input.id).eq("household_id", householdId);
+  if (error) throw new Error(error.message);
+  return { deleted: true, resource: input.resource, id: input.id };
+}
+var getBudget = defineTool({
+  name: "get_budget",
+  title: "Get Budget Data",
+  description: "Read Budget household summary, settings, expenses, incomes, budgets, categories, or payment methods.",
   inputSchema: {
-    limit: z3.number().int().min(1).max(500).optional().describe("Max rows (default 100).")
+    resource: budgetResourceSchema,
+    household_id: uuidSchema.optional().describe("Optional accessible Budget household id."),
+    id: uuidSchema.optional().describe("Optional record id to narrow the result."),
+    limit: z.number().int().min(1).max(500).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ limit }, ctx) => {
-    if (!ctx.isAuthenticated()) return toError("Not authenticated");
-    const { data, error } = await supabaseForUser(ctx).from("snake_weight_records").select("*").order("recorded_at", { ascending: false }).limit(limit ?? 100);
-    if (error) return toError(error.message);
-    return toJson(data);
-  }
+  handler: (input, ctx) => toMcpResult(getBudgetData(input, requireAuthenticated(ctx)))
+});
+var setBudget = defineTool({
+  name: "set_budget",
+  title: "Set Budget Data",
+  description: "Create, update, or delete Budget records, or update Budget household partner settings.",
+  inputSchema: {
+    resource: z.enum(["household_settings", "expenses", "incomes", "budgets", "categories", "payment_methods"]),
+    operation: operationSchema,
+    household_id: uuidSchema.optional().describe("Optional accessible Budget household id."),
+    id: uuidSchema.optional().describe("Record id required for update and delete."),
+    data: jsonObjectSchema.optional().describe("Record fields for create or update. Owner fields are ignored.")
+  },
+  annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(setBudgetData(input, requireAuthenticated(ctx)))
 });
 
-// src/lib/mcp/tools/list-budget-expenses.ts
-import { defineTool as defineTool6 } from "npm:@lovable.dev/mcp-js@0.20.0";
-import { z as z4 } from "npm:zod@^3.25.76";
-var list_budget_expenses_default = defineTool6({
-  name: "list_budget_expenses",
-  title: "List budget expenses",
-  description: "List Budget expenses for the signed-in user's household.",
+// src/lib/mcp/tools/wardrobe-actions.ts
+var wardrobeCategorySchema = z.enum(["tops", "bottoms", "footwear", "outerwear", "underwear", "accessories"]);
+var wardrobeStatusSchema = z.enum([
+  "active",
+  "needs_modulation",
+  "endangered",
+  "seeking_replacement",
+  "pending_removal",
+  "costume",
+  "removed"
+]);
+function normalizeItem(data) {
+  return {
+    ...data,
+    name: emptyToNull(data.name),
+    brand: emptyToNull(data.brand),
+    model: emptyToNull(data.model),
+    color: emptyToNull(data.color),
+    size: emptyToNull(data.size),
+    link_url: emptyToNull(data.link_url),
+    notes: emptyToNull(data.notes)
+  };
+}
+async function getWardrobeData(input, auth2) {
+  let query = auth2.supabase.from("wardrobe_items").select("*").eq("user_id", auth2.userId);
+  if (input.id) query = query.eq("id", input.id);
+  if (input.status) query = query.eq("status", input.status);
+  if (input.category) query = query.eq("category", input.category);
+  const { data, error } = await query.order("created_at", { ascending: true }).limit(input.limit ?? 500);
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function setWardrobeData(input, auth2) {
+  requireId(input.operation, input.id);
+  const clean = normalizeItem(stripOwnerFields(objectData(input.data)));
+  if (input.operation === "create") {
+    const { data, error: error2 } = await auth2.supabase.from("wardrobe_items").insert({ ...clean, user_id: auth2.userId }).select("*").single();
+    if (error2) throw new Error(error2.message);
+    return data;
+  }
+  if (input.operation === "update") {
+    const { data, error: error2 } = await auth2.supabase.from("wardrobe_items").update(withUpdatedAt(clean, nowIso())).eq("id", input.id).eq("user_id", auth2.userId).select("*").single();
+    if (error2) throw new Error(error2.message);
+    return data;
+  }
+  const { error } = await auth2.supabase.from("wardrobe_items").delete().eq("id", input.id).eq("user_id", auth2.userId);
+  if (error) throw new Error(error.message);
+  return { deleted: true, resource: "items", id: input.id };
+}
+var getWardrobe = defineTool({
+  name: "get_wardrobe",
+  title: "Get Wardrobe Data",
+  description: "Read Wardrobe items for the signed-in user.",
   inputSchema: {
-    limit: z4.number().int().min(1).max(500).optional().describe("Max rows (default 200).")
+    id: uuidSchema.optional().describe("Optional item id to narrow the result."),
+    status: wardrobeStatusSchema.optional(),
+    category: wardrobeCategorySchema.optional(),
+    limit: z.number().int().min(1).max(500).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ limit }, ctx) => {
-    if (!ctx.isAuthenticated()) return toError("Not authenticated");
-    const { data, error } = await supabaseForUser(ctx).from("budget_expenses").select("*").limit(limit ?? 200);
-    if (error) return toError(error.message);
-    return toJson(data);
-  }
+  handler: (input, ctx) => toMcpResult(getWardrobeData(input, requireAuthenticated(ctx)))
+});
+var setWardrobe = defineTool({
+  name: "set_wardrobe",
+  title: "Set Wardrobe Data",
+  description: "Create, update, or delete Wardrobe items for the signed-in user.",
+  inputSchema: {
+    operation: operationSchema,
+    id: uuidSchema.optional().describe("Item id required for update and delete."),
+    data: jsonObjectSchema.optional().describe("Item fields for create or update. Owner fields are ignored.")
+  },
+  annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(setWardrobeData(input, requireAuthenticated(ctx)))
 });
 
 // src/lib/mcp/index.ts
@@ -152,18 +599,21 @@ var mcp_default = defineMcp({
   name: "bathos-mcp",
   title: "BathOS",
   version: "0.1.0",
-  instructions: "Read-only tools for the signed-in BathOS user across the Budget, Garage, Wardrobe, and Snake modules. Use `whoami` to verify connectivity.",
+  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Mutate only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
   }),
   tools: [
     whoami_default,
-    list_garage_vehicles_default,
-    list_garage_services_default,
-    list_wardrobe_items_default,
-    list_snake_weights_default,
-    list_budget_expenses_default
+    getGarage,
+    setGarage,
+    getSnake,
+    setSnake,
+    getBudget,
+    setBudget,
+    getWardrobe,
+    setWardrobe
   ]
 });
 

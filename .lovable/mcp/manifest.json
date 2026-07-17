@@ -33,25 +33,9 @@
         "outputSchema": null
       },
       {
-        "name": "list_garage_vehicles",
-        "title": "List garage vehicles",
-        "description": "List the signed-in user's Garage vehicles.",
-        "annotations": {
-          "readOnlyHint": true,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "inputSchema": {
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "type": "object",
-          "properties": {}
-        },
-        "outputSchema": null
-      },
-      {
-        "name": "list_garage_services",
-        "title": "List garage services",
-        "description": "List Garage services, optionally filtered to one vehicle.",
+        "name": "get_garage",
+        "title": "Get Garage Data",
+        "description": "Read Garage vehicles, services, or servicings for the signed-in user.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,
@@ -60,49 +44,120 @@
         "inputSchema": {
           "type": "object",
           "properties": {
+            "resource": {
+              "type": "string",
+              "enum": [
+                "vehicles",
+                "services",
+                "servicings"
+              ],
+              "description": "Garage resource to read: vehicles, services, or servicings."
+            },
             "vehicle_id": {
               "type": "string",
               "format": "uuid",
-              "description": "Optional vehicle id to filter by."
-            }
-          },
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": null
-      },
-      {
-        "name": "list_wardrobe_items",
-        "title": "List wardrobe items",
-        "description": "List the signed-in user's Wardrobe items, optionally filtered by status.",
-        "annotations": {
-          "readOnlyHint": true,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "status": {
-              "type": "string",
-              "description": "Optional status filter (e.g. 'owned', 'wishlist')."
+              "description": "Vehicle id required for services and servicings."
+            },
+            "id": {
+              "$ref": "#/properties/vehicle_id",
+              "description": "Optional record id to narrow the result."
             },
             "limit": {
               "type": "integer",
               "minimum": 1,
               "maximum": 500,
-              "description": "Max rows to return (default 100)."
+              "description": "Max rows to return."
             }
           },
+          "required": [
+            "resource"
+          ],
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         },
         "outputSchema": null
       },
       {
-        "name": "list_snake_weights",
-        "title": "List snake weight records",
-        "description": "List Snake weight records for the signed-in user.",
+        "name": "set_garage",
+        "title": "Set Garage Data",
+        "description": "Create, update, or delete Garage vehicles, services, or servicings for the signed-in user.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "resource": {
+              "type": "string",
+              "enum": [
+                "vehicles",
+                "services",
+                "servicings"
+              ]
+            },
+            "operation": {
+              "type": "string",
+              "enum": [
+                "create",
+                "update",
+                "delete"
+              ]
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Record id required for update and delete."
+            },
+            "vehicle_id": {
+              "$ref": "#/properties/id",
+              "description": "Vehicle id required for service and servicing mutations."
+            },
+            "data": {
+              "type": "object",
+              "additionalProperties": {},
+              "description": "Record fields for create or update. Owner fields are ignored."
+            },
+            "outcomes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "service_id": {
+                    "$ref": "#/properties/id"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "performed",
+                      "not_needed_yet",
+                      "declined"
+                    ],
+                    "default": "performed"
+                  }
+                },
+                "required": [
+                  "service_id"
+                ],
+                "additionalProperties": false
+              },
+              "description": "Optional servicing service outcomes for servicings."
+            }
+          },
+          "required": [
+            "resource",
+            "operation"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_snake",
+        "title": "Get Snake Data",
+        "description": "Read snakes, weight records, or growth expectation ranges for an accessible Snake household.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,
@@ -111,22 +166,99 @@
         "inputSchema": {
           "type": "object",
           "properties": {
+            "resource": {
+              "type": "string",
+              "enum": [
+                "snakes",
+                "weight_records",
+                "growth_expectation_ranges"
+              ]
+            },
+            "household_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Optional accessible Snake household id."
+            },
+            "snake_id": {
+              "$ref": "#/properties/household_id",
+              "description": "Optional snake id for weight records."
+            },
+            "id": {
+              "$ref": "#/properties/household_id",
+              "description": "Optional record id to narrow the result."
+            },
             "limit": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 500,
-              "description": "Max rows (default 100)."
+              "maximum": 500
             }
           },
+          "required": [
+            "resource"
+          ],
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         },
         "outputSchema": null
       },
       {
-        "name": "list_budget_expenses",
-        "title": "List budget expenses",
-        "description": "List Budget expenses for the signed-in user's household.",
+        "name": "set_snake",
+        "title": "Set Snake Data",
+        "description": "Create, update, or delete snakes and weight records for an accessible Snake household.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "resource": {
+              "type": "string",
+              "enum": [
+                "snakes",
+                "weight_records"
+              ]
+            },
+            "operation": {
+              "type": "string",
+              "enum": [
+                "create",
+                "update",
+                "delete"
+              ]
+            },
+            "household_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "snake_id": {
+              "$ref": "#/properties/household_id",
+              "description": "Required for weight record mutations."
+            },
+            "id": {
+              "$ref": "#/properties/household_id",
+              "description": "Record id required for update and delete."
+            },
+            "data": {
+              "type": "object",
+              "additionalProperties": {},
+              "description": "Record fields for create or update. Owner fields are ignored."
+            }
+          },
+          "required": [
+            "resource",
+            "operation"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_budget",
+        "title": "Get Budget Data",
+        "description": "Read Budget household summary, settings, expenses, incomes, budgets, categories, or payment methods.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,
@@ -135,13 +267,181 @@
         "inputSchema": {
           "type": "object",
           "properties": {
+            "resource": {
+              "type": "string",
+              "enum": [
+                "summary",
+                "household_settings",
+                "expenses",
+                "incomes",
+                "budgets",
+                "categories",
+                "payment_methods"
+              ]
+            },
+            "household_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Optional accessible Budget household id."
+            },
+            "id": {
+              "$ref": "#/properties/household_id",
+              "description": "Optional record id to narrow the result."
+            },
             "limit": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 500,
-              "description": "Max rows (default 200)."
+              "maximum": 500
             }
           },
+          "required": [
+            "resource"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "set_budget",
+        "title": "Set Budget Data",
+        "description": "Create, update, or delete Budget records, or update Budget household partner settings.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "resource": {
+              "type": "string",
+              "enum": [
+                "household_settings",
+                "expenses",
+                "incomes",
+                "budgets",
+                "categories",
+                "payment_methods"
+              ]
+            },
+            "operation": {
+              "type": "string",
+              "enum": [
+                "create",
+                "update",
+                "delete"
+              ]
+            },
+            "household_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Optional accessible Budget household id."
+            },
+            "id": {
+              "$ref": "#/properties/household_id",
+              "description": "Record id required for update and delete."
+            },
+            "data": {
+              "type": "object",
+              "additionalProperties": {},
+              "description": "Record fields for create or update. Owner fields are ignored."
+            }
+          },
+          "required": [
+            "resource",
+            "operation"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_wardrobe",
+        "title": "Get Wardrobe Data",
+        "description": "Read Wardrobe items for the signed-in user.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Optional item id to narrow the result."
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "active",
+                "needs_modulation",
+                "endangered",
+                "seeking_replacement",
+                "pending_removal",
+                "costume",
+                "removed"
+              ]
+            },
+            "category": {
+              "type": "string",
+              "enum": [
+                "tops",
+                "bottoms",
+                "footwear",
+                "outerwear",
+                "underwear",
+                "accessories"
+              ]
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "set_wardrobe",
+        "title": "Set Wardrobe Data",
+        "description": "Create, update, or delete Wardrobe items for the signed-in user.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "create",
+                "update",
+                "delete"
+              ]
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Item id required for update and delete."
+            },
+            "data": {
+              "type": "object",
+              "additionalProperties": {},
+              "description": "Item fields for create or update. Owner fields are ignored."
+            }
+          },
+          "required": [
+            "operation"
+          ],
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         },

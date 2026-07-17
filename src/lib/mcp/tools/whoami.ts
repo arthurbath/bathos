@@ -1,4 +1,4 @@
-import { defineTool } from "@lovable.dev/mcp-js";
+import { defineTool } from "../mcp-core";
 
 export default defineTool({
   name: "whoami",
