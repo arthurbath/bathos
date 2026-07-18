@@ -6,10 +6,13 @@ import { Switch } from '@/components/ui/switch';
 import type { GarageDueItem } from '@/modules/garage/types/garage';
 import { getGarageServiceTypeLabel } from '@/modules/garage/lib/serviceTypes';
 
+const MILES_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
+  maximumFractionDigits: 0,
+  minimumFractionDigits: 0,
+});
+
 function formatMilesValue(value: number): string {
-  const absoluteValue = Math.abs(value);
-  const inThousands = Math.max(1, Math.round(absoluteValue / 1000));
-  return `${inThousands}k`;
+  return MILES_NUMBER_FORMATTER.format(Math.abs(value));
 }
 
 function formatMonthsStatus(value: number | null): string {

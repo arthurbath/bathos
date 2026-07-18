@@ -67,4 +67,61 @@ describe('GarageDueView', () => {
       unmount(root, container);
     }
   });
+
+  it('renders full comma-delimited remaining mileage without abbreviations or decimals', () => {
+    const { container, root } = mount(
+      <GarageDueView
+        grouped={{
+          due: [
+            makeDueItem({
+              service: {
+                ...makeDueItem().service,
+                id: 'overdue-service',
+                name: 'Overdue Service',
+              },
+              bucket: 'due',
+              remainingMiles: -1250,
+            }),
+          ],
+          upcoming: [
+            makeDueItem({
+              service: {
+                ...makeDueItem().service,
+                id: 'four-digit-service',
+                name: 'Four Digit Service',
+              },
+              remainingMiles: 1250,
+            }),
+            makeDueItem({
+              service: {
+                ...makeDueItem().service,
+                id: 'singular-service',
+                name: 'Singular Service',
+              },
+              remainingMiles: 1,
+            }),
+            makeDueItem({
+              service: {
+                ...makeDueItem().service,
+                id: 'fractional-service',
+                name: 'Fractional Service',
+              },
+              remainingMiles: 1250.6,
+            }),
+          ],
+        }}
+        onUpdateServiceMonitoring={async () => {}}
+      />,
+    );
+
+    try {
+      expect(container.textContent).toContain('1,250 miles left');
+      expect(container.textContent).toContain('1 mile left');
+      expect(container.textContent).toContain('1,251 miles left');
+      expect(container.textContent).toContain('1,250 miles overdue');
+      expect(container.textContent).not.toContain('1k');
+    } finally {
+      unmount(root, container);
+    }
+  });
 });

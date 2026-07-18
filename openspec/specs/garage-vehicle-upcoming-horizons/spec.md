@@ -3,9 +3,7 @@
 ## Purpose
 
 Define how Garage stores, configures, migrates, and applies vehicle-specific mileage and time horizons for upcoming-service status.
-
 ## Requirements
-
 ### Requirement: Every vehicle owns upcoming-service horizons
 
 The Garage module SHALL persist a non-negative mileage horizon and a non-negative time horizon for every vehicle. New vehicles SHALL default to a 1,000-mile horizon and a 60-day horizon unless the creation request supplies other valid values.
@@ -73,3 +71,27 @@ Garage SHALL classify services as upcoming using only the selected vehicle's mil
 #### Scenario: Service is due or past due
 - **WHEN** a service reaches zero or a negative remaining interval
 - **THEN** Garage classifies it as due now or past due regardless of the vehicle's upcoming horizons
+
+### Requirement: Due screen shows exact remaining mileage
+
+The Garage Due screen SHALL display remaining mileage as the full comma-delimited mile count with no decimal places and SHALL NOT abbreviate thousands or millions with shortened suffixes such as `k` or `M`.
+
+#### Scenario: Upcoming service has four-digit remaining mileage
+
+- **WHEN** an upcoming service has 1,250 remaining miles
+- **THEN** the service displays `1,250 miles left`
+
+#### Scenario: Service has one remaining mile
+
+- **WHEN** a service has 1 remaining mile
+- **THEN** the service displays `1 mile left`
+
+#### Scenario: Service is overdue by mileage
+
+- **WHEN** a service is 1,250 miles overdue
+- **THEN** the service displays `1,250 miles overdue`
+
+#### Scenario: Remaining mileage contains a fractional value
+
+- **WHEN** a calculated remaining-mile value includes a fractional component
+- **THEN** the service displays the value rounded to a comma-delimited integer with no decimal places
