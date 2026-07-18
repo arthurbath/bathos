@@ -150,6 +150,15 @@ function setFileInputFiles(input: HTMLInputElement, files: File[]) {
   });
 }
 
+function setInputValue(input: HTMLInputElement, value: string) {
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  valueSetter?.call(input, value);
+  act(() => {
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
 function buildProps(overrides: Partial<React.ComponentProps<typeof GarageServicingsGrid>> = {}): React.ComponentProps<typeof GarageServicingsGrid> {
   const services: GarageService[] = [{
     id: 'service-1',
@@ -240,7 +249,7 @@ describe('GarageServicingsGrid servicing dialog', () => {
     }
   });
 
-  it('lists pending receipt files and lets the user remove them before saving', async () => {
+  it('defaults pending receipt names, lets the user edit them, and submits named files', async () => {
     const onAddServicing = vi.fn(async () => {});
     const { container, root } = mount(
       <GarageServicingsGrid
@@ -265,18 +274,20 @@ describe('GarageServicingsGrid servicing dialog', () => {
       setFileInputFiles(receiptInput!, [fileA, fileB]);
 
       await waitForCondition(() => {
-        expect(document.body.textContent).toContain('invoice-a.pdf');
-        expect(document.body.textContent).toContain('invoice-b.jpg');
+        expect((document.body.querySelector('input[aria-label="Receipt name for invoice-a.pdf"]') as HTMLInputElement | null)?.value).toBe('invoice-a');
+        expect((document.body.querySelector('input[aria-label="Receipt name for invoice-b.jpg"]') as HTMLInputElement | null)?.value).toBe('invoice-b');
       });
-      expect(document.body.textContent).not.toContain('pending upload');
+
+      const receiptNameInput = document.body.querySelector('input[aria-label="Receipt name for invoice-b.jpg"]') as HTMLInputElement;
+      setInputValue(receiptNameInput, 'Warranty Photo');
 
       const removeButton = document.body.querySelector('button[aria-label="Remove invoice-a.pdf"]') as HTMLButtonElement | null;
       expect(removeButton).toBeTruthy();
       click(removeButton!);
 
       await waitForCondition(() => {
-        expect(document.body.textContent).not.toContain('invoice-a.pdf');
-        expect(document.body.textContent).toContain('invoice-b.jpg');
+        expect(document.body.querySelector('input[aria-label="Receipt name for invoice-a.pdf"]')).toBeNull();
+        expect((document.body.querySelector('input[aria-label="Receipt name for invoice-b.jpg"]') as HTMLInputElement | null)?.value).toBe('Warranty Photo');
       });
 
       const saveButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Save') as HTMLButtonElement | undefined;
@@ -288,7 +299,10 @@ describe('GarageServicingsGrid servicing dialog', () => {
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((onAddServicing.mock.calls[0] as any)[0].receipt_files).toEqual([fileB]);
+      expect((onAddServicing.mock.calls[0] as any)[0].receipt_files).toEqual([{
+        file: fileB,
+        name: 'Warranty Photo',
+      }]);
     } finally {
       unmount(root, container);
     }
@@ -376,6 +390,7 @@ describe('GarageServicingsGrid servicing dialog', () => {
         vehicle_id: 'vehicle-1',
         servicing_id: 'servicing-1',
         filename: 'receipt.pdf',
+        name: 'Receipt',
         storage_object_path: 'garage-receipts/receipt.pdf',
         mime_type: 'application/pdf',
         size_bytes: 123,
@@ -388,7 +403,7 @@ describe('GarageServicingsGrid servicing dialog', () => {
 
     try {
       const receiptButton = Array.from(document.body.querySelectorAll('button[aria-label="Open servicing detail for 2026-03-02"]'))
-        .find((button) => button.textContent?.trim() === '1') as HTMLButtonElement | undefined;
+        .find((button) => button.textContent?.trim() === 'Receipt') as HTMLButtonElement | undefined;
       expect(receiptButton).toBeTruthy();
 
       click(receiptButton!);
@@ -398,6 +413,82 @@ describe('GarageServicingsGrid servicing dialog', () => {
         expect(receiptAddButton).toBeTruthy();
         expect(document.activeElement).toBe(receiptAddButton);
       });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('submits edits to existing receipt names without changing file metadata', async () => {
+    const onUpdateServicing = vi.fn(async () => {});
+    const servicing = buildServicing({
+      receipts: [{
+        id: 'receipt-1',
+        user_id: 'user-1',
+        vehicle_id: 'vehicle-1',
+        servicing_id: 'servicing-1',
+        filename: 'receipt.pdf',
+        name: 'Receipt',
+        storage_object_path: 'garage-receipts/receipt.pdf',
+        mime_type: 'application/pdf',
+        size_bytes: 123,
+        created_at: '2026-03-02T00:00:00.000Z',
+      }],
+    });
+    const { container, root } = mount(
+      <GarageServicingsGrid {...buildProps({ servicings: [servicing], onUpdateServicing })} />,
+    );
+
+    try {
+      const receiptButton = Array.from(document.body.querySelectorAll('button[aria-label="Open servicing detail for 2026-03-02"]'))
+        .find((button) => button.textContent?.trim() === 'Receipt') as HTMLButtonElement | undefined;
+      click(receiptButton!);
+
+      await waitForCondition(() => {
+        expect(document.body.querySelector('input[aria-label="Receipt name for receipt.pdf"]')).toBeTruthy();
+      });
+
+      setInputValue(
+        document.body.querySelector('input[aria-label="Receipt name for receipt.pdf"]') as HTMLInputElement,
+        'Paid Invoice',
+      );
+      const saveButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Save') as HTMLButtonElement;
+      await clickAsync(saveButton);
+
+      await waitForCondition(() => {
+        expect(onUpdateServicing).toHaveBeenCalledTimes(1);
+      });
+      expect(onUpdateServicing.mock.calls[0]?.[1].receipt_updates).toEqual([{ id: 'receipt-1', name: 'Paid Invoice' }]);
+      expect(onUpdateServicing.mock.calls[0]?.[1].receipt_files).toEqual([]);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('shows comma-delimited receipt names in the Servicings grid', () => {
+    const receiptBase = {
+      user_id: 'user-1',
+      vehicle_id: 'vehicle-1',
+      servicing_id: 'servicing-1',
+      mime_type: 'application/pdf',
+      size_bytes: 123,
+      created_at: '2026-03-02T00:00:00.000Z',
+    };
+    const servicing = buildServicing({
+      receipts: [
+        { ...receiptBase, id: 'receipt-1', filename: 'inspection.pdf', name: 'Inspection', storage_object_path: 'inspection.pdf' },
+        { ...receiptBase, id: 'receipt-2', filename: 'parts.pdf', name: 'Parts', storage_object_path: 'parts.pdf' },
+        { ...receiptBase, id: 'receipt-3', filename: 'payment.pdf', name: 'Payment', storage_object_path: 'payment.pdf' },
+      ],
+    });
+    const { container, root } = mount(
+      <GarageServicingsGrid {...buildProps({ servicings: [servicing] })} />,
+    );
+
+    try {
+      const receiptButton = Array.from(document.body.querySelectorAll('button[aria-label="Open servicing detail for 2026-03-02"]'))
+        .find((button) => button.textContent?.trim() === 'Inspection, Parts, Payment');
+      expect(receiptButton).toBeTruthy();
+      expect(receiptButton?.getAttribute('title')).toBe('Inspection, Parts, Payment');
     } finally {
       unmount(root, container);
     }

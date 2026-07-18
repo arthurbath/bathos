@@ -7,7 +7,7 @@ import type {
   GarageVehicle,
 } from '@/modules/garage/types/garage';
 
-interface DueDefaults {
+interface UpcomingHorizons {
   upcomingMiles: number;
   upcomingDays: number;
 }
@@ -105,14 +105,14 @@ export function classifyDueBucket(args: {
   remainingMonths: number | null;
   daysUntilDue: number | null;
   hasInterval: boolean;
-  defaults: DueDefaults;
+  horizons: UpcomingHorizons;
 }): GarageDueBucket {
   const {
     remainingMiles,
     remainingMonths,
     daysUntilDue,
     hasInterval,
-    defaults,
+    horizons,
   } = args;
 
   if (!hasInterval) return 'excluded_no_interval';
@@ -122,8 +122,8 @@ export function classifyDueBucket(args: {
   if (remainingValues.some((value) => value < 0)) return 'past_due';
   if (remainingValues.some((value) => value === 0)) return 'due_now';
 
-  const upcomingByMiles = typeof remainingMiles === 'number' && remainingMiles > 0 && remainingMiles <= defaults.upcomingMiles;
-  const upcomingByDays = typeof daysUntilDue === 'number' && daysUntilDue >= 0 && daysUntilDue <= defaults.upcomingDays;
+  const upcomingByMiles = typeof remainingMiles === 'number' && remainingMiles > 0 && remainingMiles <= horizons.upcomingMiles;
+  const upcomingByDays = typeof daysUntilDue === 'number' && daysUntilDue >= 0 && daysUntilDue <= horizons.upcomingDays;
 
   if (upcomingByMiles || upcomingByDays) return 'upcoming';
   return 'not_due';
@@ -133,10 +133,9 @@ export function computeDueItems(args: {
   services: GarageService[];
   servicings: GarageServicingWithRelations[];
   vehicle: GarageVehicle;
-  defaults: DueDefaults;
   now?: Date;
 }): GarageDueItem[] {
-  const { services, servicings, vehicle, defaults, now = new Date() } = args;
+  const { services, servicings, vehicle, now = new Date() } = args;
   const anchorDate = resolveVehicleAnchorDate(vehicle);
 
   return services.map((service) => {
@@ -172,7 +171,10 @@ export function computeDueItems(args: {
       remainingMonths,
       daysUntilDue,
       hasInterval,
-      defaults,
+      horizons: {
+        upcomingMiles: vehicle.upcoming_miles,
+        upcomingDays: vehicle.upcoming_days,
+      },
     });
 
     return {

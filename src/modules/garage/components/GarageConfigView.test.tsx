@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GarageConfigView } from '@/modules/garage/components/GarageConfigView';
-import type { GarageUserSettings, GarageVehicle } from '@/modules/garage/types/garage';
+import type { GarageVehicle } from '@/modules/garage/types/garage';
 
 const { toastMock } = vi.hoisted(() => ({
   toastMock: vi.fn(),
@@ -92,28 +92,19 @@ describe('GarageConfigView vehicles grid', () => {
         model_year: 2020,
         in_service_date: '2020-06-01',
         current_odometer_miles: 42000,
+        upcoming_miles: 2500,
+        upcoming_days: 90,
         is_active: true,
         created_at: '2026-01-01T00:00:00.000Z',
         updated_at: '2026-01-01T00:00:00.000Z',
       },
     ];
-    const settings: GarageUserSettings = {
-      id: 'settings-1',
-      user_id: 'user-1',
-      upcoming_miles_default: 1000,
-      upcoming_days_default: 60,
-      created_at: '2026-01-01T00:00:00.000Z',
-      updated_at: '2026-01-01T00:00:00.000Z',
-    };
-
     const { container, root } = mount(
       <GarageConfigView
         vehicles={vehicles}
-        settings={settings}
         onAddVehicle={async () => {}}
         onUpdateVehicle={async () => {}}
         onRemoveVehicle={async () => {}}
-        onUpdateSettings={async () => {}}
       />,
     );
 
@@ -122,11 +113,15 @@ describe('GarageConfigView vehicles grid', () => {
       const yearInput = container.querySelector('input[data-col="3"]') as HTMLInputElement | null;
       const dateButton = container.querySelector('button[data-col="4"]') as HTMLButtonElement | null;
       const mileageInput = container.querySelector('input[data-col="5"]') as HTMLInputElement | null;
+      const upcomingMilesInput = container.querySelector('input[data-col="6"]') as HTMLInputElement | null;
+      const upcomingMonthsInput = container.querySelector('input[data-col="7"]') as HTMLInputElement | null;
 
       expect(nameInput?.inputMode).toBe('');
       expect(yearInput?.inputMode).toBe('numeric');
       expect(yearInput?.value).toBe('2020');
       expect(mileageInput?.inputMode).toBe('decimal');
+      expect(upcomingMilesInput?.value).toBe('2500');
+      expect(upcomingMonthsInput?.value).toBe('3');
       expect(dateButton?.textContent).toContain('Jun');
     } finally {
       unmount(root, container);
@@ -145,6 +140,8 @@ describe('GarageConfigView vehicles grid', () => {
         model_year: 2020,
         in_service_date: '2020-06-01',
         current_odometer_miles: 42000,
+        upcoming_miles: 1000,
+        upcoming_days: 60,
         is_active: true,
         created_at: '2026-01-01T00:00:00.000Z',
         updated_at: '2026-01-01T00:00:00.000Z',
@@ -154,11 +151,9 @@ describe('GarageConfigView vehicles grid', () => {
     const { container, root } = mount(
       <GarageConfigView
         vehicles={vehicles}
-        settings={null}
         onAddVehicle={async () => {}}
         onUpdateVehicle={async () => {}}
         onRemoveVehicle={removeVehicle}
-        onUpdateSettings={async () => {}}
       />,
     );
 
@@ -189,11 +184,9 @@ describe('GarageConfigView vehicles grid', () => {
     const { container, root } = mount(
       <GarageConfigView
         vehicles={[]}
-        settings={null}
         onAddVehicle={addVehicle}
         onUpdateVehicle={async () => {}}
         onRemoveVehicle={async () => {}}
-        onUpdateSettings={async () => {}}
       />,
     );
 
@@ -207,10 +200,14 @@ describe('GarageConfigView vehicles grid', () => {
 
       const nameInput = document.body.querySelector('#garage-vehicle-name') as HTMLInputElement | null;
       const yearInput = document.body.querySelector('#garage-vehicle-year') as HTMLInputElement | null;
+      const upcomingMilesInput = document.body.querySelector('#garage-vehicle-upcoming-miles') as HTMLInputElement | null;
+      const upcomingMonthsInput = document.body.querySelector('#garage-vehicle-upcoming-months') as HTMLInputElement | null;
       const saveButton = document.body.querySelector('button[data-dialog-confirm="true"]') as HTMLButtonElement | null;
 
       expect(nameInput).toBeTruthy();
       expect(yearInput?.required).toBe(true);
+      expect(upcomingMilesInput?.value).toBe('1000');
+      expect(upcomingMonthsInput?.value).toBe('2');
       expect(saveButton).toBeTruthy();
 
       if (nameInput) {
@@ -228,6 +225,51 @@ describe('GarageConfigView vehicles grid', () => {
     }
   });
 
+  it('saves custom upcoming horizons with a new vehicle', async () => {
+    const addVehicle = vi.fn(async () => {});
+    const { container, root } = mount(
+      <GarageConfigView
+        vehicles={[]}
+        onAddVehicle={addVehicle}
+        onUpdateVehicle={async () => {}}
+        onRemoveVehicle={async () => {}}
+      />,
+    );
+
+    try {
+      const addButton = container.querySelector('button[aria-label="Add vehicle"]') as HTMLButtonElement | null;
+      await act(async () => {
+        addButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
+      const nameInput = document.body.querySelector('#garage-vehicle-name') as HTMLInputElement;
+      const yearInput = document.body.querySelector('#garage-vehicle-year') as HTMLInputElement;
+      const upcomingMilesInput = document.body.querySelector('#garage-vehicle-upcoming-miles') as HTMLInputElement;
+      const upcomingMonthsInput = document.body.querySelector('#garage-vehicle-upcoming-months') as HTMLInputElement;
+      const saveButton = document.body.querySelector('button[data-dialog-confirm="true"]') as HTMLButtonElement;
+
+      await dispatchInputChange(nameInput, 'Cargo Bike');
+      await dispatchInputChange(yearInput, '2025');
+      await dispatchInputChange(upcomingMilesInput, '200');
+      await dispatchInputChange(upcomingMonthsInput, '2.5');
+
+      await act(async () => {
+        saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
+      await waitForCondition(() => {
+        expect(addVehicle).toHaveBeenCalledWith(expect.objectContaining({
+          name: 'Cargo Bike',
+          model_year: 2025,
+          upcoming_miles: 200,
+          upcoming_days: 75,
+        }));
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it('restores the previous name and shows a toast when the grid name cell is cleared and saved', async () => {
     const updateVehicle = vi.fn(async () => {});
     const vehicles: GarageVehicle[] = [
@@ -240,6 +282,8 @@ describe('GarageConfigView vehicles grid', () => {
         model_year: 2020,
         in_service_date: '2020-06-01',
         current_odometer_miles: 42000,
+        upcoming_miles: 1000,
+        upcoming_days: 60,
         is_active: true,
         created_at: '2026-01-01T00:00:00.000Z',
         updated_at: '2026-01-01T00:00:00.000Z',
@@ -249,11 +293,9 @@ describe('GarageConfigView vehicles grid', () => {
     const { container, root } = mount(
       <GarageConfigView
         vehicles={vehicles}
-        settings={null}
         onAddVehicle={async () => {}}
         onUpdateVehicle={updateVehicle}
         onRemoveVehicle={async () => {}}
-        onUpdateSettings={async () => {}}
       />,
     );
 
@@ -289,6 +331,8 @@ describe('GarageConfigView vehicles grid', () => {
         model_year: 2020,
         in_service_date: '2020-06-01',
         current_odometer_miles: 42000,
+        upcoming_miles: 1000,
+        upcoming_days: 60,
         is_active: true,
         created_at: '2026-01-01T00:00:00.000Z',
         updated_at: '2026-01-01T00:00:00.000Z',
@@ -298,11 +342,9 @@ describe('GarageConfigView vehicles grid', () => {
     const { container, root } = mount(
       <GarageConfigView
         vehicles={vehicles}
-        settings={null}
         onAddVehicle={async () => {}}
         onUpdateVehicle={updateVehicle}
         onRemoveVehicle={async () => {}}
-        onUpdateSettings={async () => {}}
       />,
     );
 
@@ -338,6 +380,8 @@ describe('GarageConfigView vehicles grid', () => {
         model_year: 2020,
         in_service_date: '2020-06-01',
         current_odometer_miles: 42000,
+        upcoming_miles: 1000,
+        upcoming_days: 60,
         is_active: true,
         created_at: '2026-01-01T00:00:00.000Z',
         updated_at: '2026-01-01T00:00:00.000Z',
@@ -347,11 +391,9 @@ describe('GarageConfigView vehicles grid', () => {
     const { container, root } = mount(
       <GarageConfigView
         vehicles={vehicles}
-        settings={null}
         onAddVehicle={async () => {}}
         onUpdateVehicle={updateVehicle}
         onRemoveVehicle={async () => {}}
-        onUpdateSettings={async () => {}}
       />,
     );
 
@@ -391,6 +433,8 @@ describe('GarageConfigView vehicles grid', () => {
         model_year: 2020,
         in_service_date: '2020-06-01',
         current_odometer_miles: 42000,
+        upcoming_miles: 1000,
+        upcoming_days: 60,
         is_active: true,
         created_at: '2026-01-01T00:00:00.000Z',
         updated_at: '2026-01-01T00:00:00.000Z',
@@ -400,11 +444,9 @@ describe('GarageConfigView vehicles grid', () => {
     const { container, root } = mount(
       <GarageConfigView
         vehicles={vehicles}
-        settings={null}
         onAddVehicle={async () => {}}
         onUpdateVehicle={updateVehicle}
         onRemoveVehicle={async () => {}}
-        onUpdateSettings={async () => {}}
       />,
     );
 
@@ -422,6 +464,57 @@ describe('GarageConfigView vehicles grid', () => {
         expect(mileageInput.value).toBe('0');
       });
       expect(updateVehicle).toHaveBeenCalledWith('vehicle-1', { current_odometer_miles: 0 });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('updates each vehicle horizon independently from the grid', async () => {
+    const updateVehicle = vi.fn(async () => {});
+    const vehicles: GarageVehicle[] = [
+      {
+        id: 'vehicle-1',
+        user_id: 'user-1',
+        name: 'Cargo Bike',
+        make: null,
+        model: null,
+        model_year: 2025,
+        in_service_date: '2025-01-01',
+        current_odometer_miles: 800,
+        upcoming_miles: 200,
+        upcoming_days: 60,
+        is_active: true,
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+
+    const { container, root } = mount(
+      <GarageConfigView
+        vehicles={vehicles}
+        onAddVehicle={async () => {}}
+        onUpdateVehicle={updateVehicle}
+        onRemoveVehicle={async () => {}}
+      />,
+    );
+
+    try {
+      const upcomingMilesInput = container.querySelector('input[data-col="6"]') as HTMLInputElement;
+      const upcomingMonthsInput = container.querySelector('input[data-col="7"]') as HTMLInputElement;
+
+      await startGridEdit(upcomingMilesInput);
+      await dispatchInputChange(upcomingMilesInput, '350');
+      await commitGridEdit(upcomingMilesInput);
+      await waitForCondition(() => {
+        expect(updateVehicle).toHaveBeenCalledWith('vehicle-1', { upcoming_miles: 350 });
+      });
+
+      await startGridEdit(upcomingMonthsInput);
+      await dispatchInputChange(upcomingMonthsInput, '3.5');
+      await commitGridEdit(upcomingMonthsInput);
+      await waitForCondition(() => {
+        expect(updateVehicle).toHaveBeenCalledWith('vehicle-1', { upcoming_days: 105 });
+      });
     } finally {
       unmount(root, container);
     }

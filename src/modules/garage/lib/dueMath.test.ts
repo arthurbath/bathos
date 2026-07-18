@@ -12,6 +12,8 @@ function makeVehicle(overrides?: Partial<GarageVehicle>): GarageVehicle {
     model_year: 2013,
     in_service_date: '2016-05-14',
     current_odometer_miles: 111000,
+    upcoming_miles: 1000,
+    upcoming_days: 60,
     is_active: true,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
@@ -85,12 +87,58 @@ describe('dueMath', () => {
       services: [service],
       servicings: [makeServicing({ odometer_miles: 105000 })],
       vehicle: makeVehicle({ current_odometer_miles: 111000 }),
-      defaults: { upcomingMiles: 1000, upcomingDays: 60 },
       now: new Date('2026-02-27T12:00:00Z'),
     })[0];
 
     expect(item.remainingMiles).toBe(0);
     expect(item.bucket).toBe('due_now');
+  });
+
+  it('uses each vehicle mileage horizon to classify the same remaining distance', () => {
+    const service = makeService({ every_months: null, every_miles: 10000 });
+    const servicings = [makeServicing({ odometer_miles: 105000 })];
+
+    const bicycleItem = computeDueItems({
+      services: [service],
+      servicings,
+      vehicle: makeVehicle({ current_odometer_miles: 111000, upcoming_miles: 200 }),
+      now: new Date('2026-02-27T12:00:00Z'),
+    })[0];
+    const carItem = computeDueItems({
+      services: [service],
+      servicings,
+      vehicle: makeVehicle({ current_odometer_miles: 111000, upcoming_miles: 5000 }),
+      now: new Date('2026-02-27T12:00:00Z'),
+    })[0];
+
+    expect(bicycleItem.remainingMiles).toBe(4000);
+    expect(bicycleItem.bucket).toBe('not_due');
+    expect(carItem.bucket).toBe('upcoming');
+  });
+
+  it('uses the vehicle time horizon for time-only services', () => {
+    const item = computeDueItems({
+      services: [makeService({ every_miles: null, every_months: 12 })],
+      servicings: [makeServicing({ service_date: '2025-06-01' })],
+      vehicle: makeVehicle({ upcoming_days: 120 }),
+      now: new Date('2026-02-27T12:00:00Z'),
+    })[0];
+
+    expect(item.daysUntilDue).toBeGreaterThan(60);
+    expect(item.daysUntilDue).toBeLessThanOrEqual(120);
+    expect(item.bucket).toBe('upcoming');
+  });
+
+  it('does not mark a service upcoming through a zero horizon', () => {
+    const item = computeDueItems({
+      services: [makeService({ every_months: null, every_miles: 6001 })],
+      servicings: [makeServicing({ odometer_miles: 105000 })],
+      vehicle: makeVehicle({ current_odometer_miles: 111000, upcoming_miles: 0 }),
+      now: new Date('2026-02-27T12:00:00Z'),
+    })[0];
+
+    expect(item.remainingMiles).toBe(1);
+    expect(item.bucket).toBe('not_due');
   });
 
   it('marks service as past_due when either configured dimension is past due', () => {
@@ -99,7 +147,6 @@ describe('dueMath', () => {
       services: [service],
       servicings: [makeServicing({ service_date: '2023-01-01', odometer_miles: 90000 })],
       vehicle: makeVehicle({ current_odometer_miles: 111000 }),
-      defaults: { upcomingMiles: 1000, upcomingDays: 60 },
       now: new Date('2026-02-27T12:00:00Z'),
     })[0];
 
@@ -112,7 +159,6 @@ describe('dueMath', () => {
       services: [service],
       servicings: [makeServicing()],
       vehicle: makeVehicle(),
-      defaults: { upcomingMiles: 1000, upcomingDays: 60 },
       now: new Date('2026-02-27T12:00:00Z'),
     })[0];
 
@@ -125,7 +171,6 @@ describe('dueMath', () => {
       services: [service],
       servicings: [],
       vehicle: makeVehicle({ in_service_date: '2026-01-01' }),
-      defaults: { upcomingMiles: 1000, upcomingDays: 60 },
       now: new Date('2026-02-27T12:00:00Z'),
     })[0];
 
@@ -165,7 +210,6 @@ describe('dueMath', () => {
         }),
       ],
       vehicle: makeVehicle(),
-      defaults: { upcomingMiles: 1000, upcomingDays: 60 },
       now: new Date('2026-02-27T12:00:00Z'),
     })[0];
 
@@ -205,7 +249,6 @@ describe('dueMath', () => {
         }),
       ],
       vehicle: makeVehicle(),
-      defaults: { upcomingMiles: 1000, upcomingDays: 60 },
       now: new Date('2026-02-27T12:00:00Z'),
     })[0];
 

@@ -4,7 +4,6 @@ import type {
   GarageDueItem,
   GarageService,
   GarageServicingWithRelations,
-  GarageUserSettings,
   GarageVehicle,
 } from '@/modules/garage/types/garage';
 
@@ -12,9 +11,8 @@ export function useGarageDue(args: {
   services: GarageService[];
   servicings: GarageServicingWithRelations[];
   vehicle: GarageVehicle | null;
-  settings: GarageUserSettings | null;
 }) {
-  const { services, servicings, vehicle, settings } = args;
+  const { services, servicings, vehicle } = args;
 
   const dueItems = useMemo<GarageDueItem[]>(() => {
     if (!vehicle) return [];
@@ -23,10 +21,6 @@ export function useGarageDue(args: {
       services,
       servicings,
       vehicle,
-      defaults: {
-        upcomingMiles: settings?.upcoming_miles_default ?? 1000,
-        upcomingDays: settings?.upcoming_days_default ?? 60,
-      },
     }).sort((a, b) => {
       const bucketOrder = {
         past_due: 0,
@@ -49,7 +43,7 @@ export function useGarageDue(args: {
 
       return a.service.name.localeCompare(b.service.name);
     });
-  }, [services, servicings, settings?.upcoming_days_default, settings?.upcoming_miles_default, vehicle]);
+  }, [services, servicings, vehicle]);
 
   const grouped = useMemo(
     () => ({

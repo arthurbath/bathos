@@ -4,15 +4,6 @@ export type GarageServiceType = Enums<'garage_service_type'>;
 export type GarageServiceStatus = Enums<'garage_service_status'>;
 export type GarageCadenceType = Enums<'garage_cadence_type'>;
 
-export interface GarageUserSettings {
-  id: string;
-  user_id: string;
-  upcoming_miles_default: number;
-  upcoming_days_default: number;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface GarageVehicle {
   id: string;
   user_id: string;
@@ -22,6 +13,8 @@ export interface GarageVehicle {
   model_year: number | null;
   in_service_date: string | null;
   current_odometer_miles: number;
+  upcoming_miles: number;
+  upcoming_days: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -72,9 +65,20 @@ export interface GarageServicingReceipt {
   servicing_id: string;
   storage_object_path: string;
   filename: string;
+  name: string;
   mime_type: string | null;
   size_bytes: number | null;
   created_at: string;
+}
+
+export interface GarageReceiptUpload {
+  file: File;
+  name: string;
+}
+
+export interface GarageReceiptNameUpdate {
+  id: string;
+  name: string;
 }
 
 export interface GarageServicingWithRelations extends GarageServicing {

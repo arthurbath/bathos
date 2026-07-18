@@ -110,6 +110,8 @@ export const GARAGE_VEHICLES_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
   model_year: 100,
   in_service_date: 130,
   current_odometer_miles: 130,
+  upcoming_miles: 150,
+  upcoming_months: 170,
   [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
 };
 
@@ -118,7 +120,7 @@ export const GARAGE_SERVICINGS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
   odometer_miles: 120,
   shop_name: 180,
   outcomes: 140,
-  receipts: 100,
+  receipts: 220,
   notes: 240,
   [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
 };

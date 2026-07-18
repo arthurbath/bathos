@@ -19,11 +19,11 @@ import { EMPTY_GRID_VIEW_FILTERS, sanitizeSortingState, useGridViewPreferences }
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import { GARAGE_VEHICLES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS } from '@/lib/gridColumnWidths';
 import { cn } from '@/lib/utils';
-import type { GarageUserSettings, GarageVehicle } from '@/modules/garage/types/garage';
+import type { GarageVehicle } from '@/modules/garage/types/garage';
 
 const columnHelper = createColumnHelper<GarageVehicle>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
-const VEHICLE_ACTIONS_NAV_COL = 6;
+const VEHICLE_ACTIONS_NAV_COL = 8;
 const GARAGE_VEHICLES_HISTORY_KEY = 'garage_vehicles';
 const GARAGE_VEHICLES_DEFAULT_SORTING: SortingState = [{ id: 'name', desc: false }];
 const VEHICLE_MODEL_YEAR_MIN = 1900;
@@ -31,7 +31,6 @@ const VEHICLE_MODEL_YEAR_MAX = 2200;
 
 interface GarageConfigViewProps {
   vehicles: GarageVehicle[];
-  settings: GarageUserSettings | null;
   autoOpenAddVehicle?: boolean;
   onAddVehicle: (input: {
     id?: string;
@@ -41,11 +40,12 @@ interface GarageConfigViewProps {
     model_year?: number | null;
     in_service_date?: string | null;
     current_odometer_miles?: number;
+    upcoming_miles?: number;
+    upcoming_days?: number;
     is_active?: boolean;
   }) => Promise<void>;
   onUpdateVehicle: (id: string, updates: Partial<Omit<GarageVehicle, 'id' | 'user_id' | 'created_at'>>) => Promise<void>;
   onRemoveVehicle: (id: string) => Promise<void>;
-  onUpdateSettings: (updates: Partial<Pick<GarageUserSettings, 'upcoming_days_default' | 'upcoming_miles_default'>>) => Promise<void>;
 }
 
 interface VehicleFormState {
@@ -56,10 +56,14 @@ interface VehicleFormState {
   model_year: string;
   in_service_date: string;
   current_odometer_miles: string;
+  upcoming_miles: string;
+  upcoming_months: string;
   is_active: boolean;
 }
 
 const DAYS_PER_MONTH = 30;
+const DEFAULT_UPCOMING_MILES = 1000;
+const DEFAULT_UPCOMING_DAYS = 60;
 
 function emptyVehicleState(): VehicleFormState {
   return {
@@ -70,6 +74,8 @@ function emptyVehicleState(): VehicleFormState {
     model_year: '',
     in_service_date: '',
     current_odometer_miles: '',
+    upcoming_miles: String(DEFAULT_UPCOMING_MILES),
+    upcoming_months: formatDaysAsMonths(DEFAULT_UPCOMING_DAYS),
     is_active: true,
   };
 }
@@ -85,6 +91,12 @@ function toNumberOrNull(value: string): number | null {
 function formatDaysAsMonths(days: number): string {
   const months = days / DAYS_PER_MONTH;
   return Number.isInteger(months) ? String(months) : months.toFixed(1).replace(/\.0$/, '');
+}
+
+function normalizeHorizonMonthsToDays(value: string): number {
+  const parsed = Number(value.trim());
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.round(parsed * DAYS_PER_MONTH));
 }
 
 function parseDateInputValue(value: string): Date | undefined {
@@ -288,25 +300,13 @@ function VehicleActionsCell({
 
 export function GarageConfigView({
   vehicles,
-  settings,
   autoOpenAddVehicle = false,
   onAddVehicle,
   onUpdateVehicle,
   onRemoveVehicle,
-  onUpdateSettings,
 }: GarageConfigViewProps) {
   const dataGridHistory = useDataGridHistory();
-  const initialMiles = Math.max(0, settings?.upcoming_miles_default ?? 1000);
-  const initialDays = Math.max(0, settings?.upcoming_days_default ?? 60);
-
-  const [settingsMiles, setSettingsMiles] = useState(String(initialMiles));
-  const [settingsMonths, setSettingsMonths] = useState(formatDaysAsMonths(initialDays));
-  const [initialThresholds, setInitialThresholds] = useState(() => ({
-    miles: initialMiles,
-    days: initialDays,
-  }));
-  const [settingsSaving, setSettingsSaving] = useState(false);
-  const gridUserId = vehicles[0]?.user_id ?? settings?.user_id;
+  const gridUserId = vehicles[0]?.user_id;
   const { sorting, setSorting } = useGridViewPreferences({
     userId: gridUserId,
     gridKey: 'garage_vehicles',
@@ -378,6 +378,8 @@ export function GarageConfigView({
     const modelYear = parsedModelYear.value;
 
     const odometer = Math.max(0, toNumberOrNull(vehicleForm.current_odometer_miles) ?? 0);
+    const upcomingMiles = normalizeNonNegativeNumber(vehicleForm.upcoming_miles);
+    const upcomingDays = normalizeHorizonMonthsToDays(vehicleForm.upcoming_months);
 
     setFormBusy(true);
     try {
@@ -388,6 +390,8 @@ export function GarageConfigView({
         model_year: modelYear,
         in_service_date: vehicleForm.in_service_date || null,
         current_odometer_miles: odometer,
+        upcoming_miles: upcomingMiles,
+        upcoming_days: upcomingDays,
         is_active: vehicleForm.is_active,
       };
 
@@ -421,42 +425,11 @@ export function GarageConfigView({
     }
   };
 
-  const saveSettings = async () => {
-    const nextMiles = Math.max(0, Number(settingsMiles) || 0);
-    const nextDays = Math.max(0, Math.round((Number(settingsMonths) || 0) * DAYS_PER_MONTH));
-
-    setSettingsSaving(true);
-    try {
-      await onUpdateSettings({
-        upcoming_miles_default: nextMiles,
-        upcoming_days_default: nextDays,
-      });
-      setInitialThresholds({ miles: nextMiles, days: nextDays });
-      setSettingsMiles(String(nextMiles));
-      setSettingsMonths(formatDaysAsMonths(nextDays));
-      toast({ title: 'Settings updated' });
-    } catch (error) {
-      toast({
-        title: 'Failed to update settings',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive',
-      });
-    } finally {
-      setSettingsSaving(false);
-    }
-  };
-
   useEffect(() => {
     if (vehicles.length > 0) {
       setHasAutoOpenedModal(false);
     }
   }, [vehicles.length]);
-
-  useEffect(() => {
-    setInitialThresholds({ miles: initialMiles, days: initialDays });
-    setSettingsMiles(String(initialMiles));
-    setSettingsMonths(formatDaysAsMonths(initialDays));
-  }, [initialDays, initialMiles]);
 
   useEffect(() => {
     if (!autoOpenAddVehicle) return;
@@ -468,9 +441,6 @@ export function GarageConfigView({
     setHasAutoOpenedModal(true);
   }, [autoOpenAddVehicle, formOpen, hasAutoOpenedModal, openAddVehicle, vehicles.length]);
 
-  const thresholdsMiles = Math.max(0, Number(settingsMiles) || 0);
-  const thresholdsDays = Math.max(0, Math.round((Number(settingsMonths) || 0) * DAYS_PER_MONTH));
-  const thresholdsChanged = thresholdsMiles !== initialThresholds.miles || thresholdsDays !== initialThresholds.days;
   const columns = useMemo(
     () => [
       columnHelper.accessor('name', {
@@ -582,6 +552,43 @@ export function GarageConfigView({
           />
         ),
       }),
+      columnHelper.accessor('upcoming_miles', {
+        header: 'Upcoming Miles',
+        size: 150,
+        minSize: 110,
+        meta: { containsEditableInput: true },
+        cell: ({ row }) => (
+          <GridEditableCell
+            value={row.original.upcoming_miles}
+            navCol={6}
+            type="number"
+            inputMode="decimal"
+            numberDisplayFormat="plain"
+            deleteResetValue="0"
+            normalizeOnCommit={(value) => String(normalizeNonNegativeNumber(value))}
+            onChange={(value) => onUpdateVehicle(row.original.id, { upcoming_miles: normalizeNonNegativeNumber(value) })}
+          />
+        ),
+      }),
+      columnHelper.accessor((row) => row.upcoming_days, {
+        id: 'upcoming_months',
+        header: 'Upcoming Months',
+        size: 170,
+        minSize: 130,
+        meta: { containsEditableInput: true },
+        cell: ({ row }) => (
+          <GridEditableCell
+            value={formatDaysAsMonths(row.original.upcoming_days)}
+            navCol={7}
+            type="number"
+            inputMode="decimal"
+            numberDisplayFormat="plain"
+            deleteResetValue="0"
+            normalizeOnCommit={(value) => formatDaysAsMonths(normalizeHorizonMonthsToDays(value))}
+            onChange={(value) => onUpdateVehicle(row.original.id, { upcoming_days: normalizeHorizonMonthsToDays(value) })}
+          />
+        ),
+      }),
       columnHelper.display({
         id: 'actions',
         header: '',
@@ -614,30 +621,6 @@ export function GarageConfigView({
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-4">
-      <Card className="min-w-0">
-        <CardHeader>
-          <CardTitle>Thresholds for <em>Upcoming</em></CardTitle>
-          <p className="text-sm text-muted-foreground">
-            The mileage and time windows used to mark services as upcoming.
-          </p>
-        </CardHeader>
-        <CardContent data-command-enter-scope="true" className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="garage-upcoming-miles">Miles</Label>
-              <Input id="garage-upcoming-miles" type="number" inputMode="decimal" value={settingsMiles} onChange={(event) => setSettingsMiles(event.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="garage-upcoming-months">Months</Label>
-              <Input id="garage-upcoming-months" type="number" inputMode="decimal" value={settingsMonths} onChange={(event) => setSettingsMonths(event.target.value)} />
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <Button data-command-enter-confirm="true" type="button" onClick={() => { void saveSettings(); }} disabled={settingsSaving || !thresholdsChanged}>{settingsSaving ? 'Saving…' : 'Save'}</Button>
-          </div>
-        </CardContent>
-      </Card>
-
       <Card className="min-w-0">
         <CardHeader className="flex flex-row items-center justify-between gap-4">
           <CardTitle>Vehicles</CardTitle>
@@ -735,6 +718,30 @@ export function GarageConfigView({
                 <Input id="garage-vehicle-odo" type="number" inputMode="decimal" value={vehicleForm.current_odometer_miles} onChange={(event) => setVehicleForm((prev) => ({ ...prev, current_odometer_miles: event.target.value }))} />
               </div>
             </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="garage-vehicle-upcoming-miles">Upcoming Miles</Label>
+                <Input
+                  id="garage-vehicle-upcoming-miles"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  value={vehicleForm.upcoming_miles}
+                  onChange={(event) => setVehicleForm((prev) => ({ ...prev, upcoming_miles: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="garage-vehicle-upcoming-months">Upcoming Months</Label>
+                <Input
+                  id="garage-vehicle-upcoming-months"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  value={vehicleForm.upcoming_months}
+                  onChange={(event) => setVehicleForm((prev) => ({ ...prev, upcoming_months: event.target.value }))}
+                />
+              </div>
+            </div>
           </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setFormOpen(false)} disabled={formBusy}>Cancel</Button>
@@ -769,6 +776,8 @@ export function GarageConfigView({
                   model_year: deleteTarget.model_year,
                   in_service_date: deleteTarget.in_service_date,
                   current_odometer_miles: deleteTarget.current_odometer_miles,
+                  upcoming_miles: deleteTarget.upcoming_miles,
+                  upcoming_days: deleteTarget.upcoming_days,
                   is_active: deleteTarget.is_active,
                 };
                 dataGridHistory?.recordHistoryEntry({

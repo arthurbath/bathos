@@ -709,6 +709,7 @@ export type Database = {
           filename: string
           id: string
           mime_type: string | null
+          name: string
           servicing_id: string
           size_bytes: number | null
           storage_object_path: string
@@ -720,6 +721,7 @@ export type Database = {
           filename: string
           id?: string
           mime_type?: string | null
+          name: string
           servicing_id: string
           size_bytes?: number | null
           storage_object_path: string
@@ -731,6 +733,7 @@ export type Database = {
           filename?: string
           id?: string
           mime_type?: string | null
+          name?: string
           servicing_id?: string
           size_bytes?: number | null
           storage_object_path?: string
@@ -850,33 +853,6 @@ export type Database = {
           },
         ]
       }
-      garage_user_settings: {
-        Row: {
-          created_at: string
-          id: string
-          upcoming_days_default: number
-          upcoming_miles_default: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          upcoming_days_default?: number
-          upcoming_miles_default?: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          upcoming_days_default?: number
-          upcoming_miles_default?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       garage_vehicles: {
         Row: {
           created_at: string
@@ -888,6 +864,8 @@ export type Database = {
           model: string | null
           model_year: number | null
           name: string
+          upcoming_days: number
+          upcoming_miles: number
           updated_at: string
           user_id: string
         }
@@ -901,6 +879,8 @@ export type Database = {
           model?: string | null
           model_year?: number | null
           name: string
+          upcoming_days?: number
+          upcoming_miles?: number
           updated_at?: string
           user_id: string
         }
@@ -914,6 +894,8 @@ export type Database = {
           model?: string | null
           model_year?: number | null
           name?: string
+          upcoming_days?: number
+          upcoming_miles?: number
           updated_at?: string
           user_id?: string
         }

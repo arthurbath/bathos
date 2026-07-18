@@ -44,7 +44,7 @@ Track vehicle maintenance schedules and service history for each user account. F
 - CSV bulk import for services with a downloadable template and overwrite preview
 - Due and upcoming service views based on mileage and time intervals
 - Service visit logging with outcomes and notes
-- Receipt attachment support for service records
+- Receipt attachments with editable names listed in service history
 
 Accessible at [os.bath.garden/garage/due](https://os.bath.garden/garage/due).
 

@@ -16,6 +16,7 @@ import { useGarageDue } from '@/modules/garage/hooks/useGarageDue';
 import { GarageDueView } from '@/modules/garage/components/GarageDueView';
 import { GarageServicesGrid } from '@/modules/garage/components/GarageServicesGrid';
 import { GarageServicingsGrid } from '@/modules/garage/components/GarageServicingsGrid';
+import type { GarageReceiptUpload } from '@/modules/garage/types/garage';
 import { GarageConfigView } from '@/modules/garage/components/GarageConfigView';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import { CARD_PAGE_BOTTOM_PADDING_CLASS, FULL_VIEW_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
@@ -42,13 +43,11 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
 
   const {
     vehicles,
-    settings,
     activeVehicle,
     loading: vehiclesLoading,
     addVehicle,
     updateVehicle,
     removeVehicle,
-    upsertSettings,
   } = useGarageVehicles(userId);
 
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
@@ -110,7 +109,6 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
     services,
     servicings,
     vehicle: selectedVehicle,
-    settings,
   });
 
   const isDueRoute = location.pathname.endsWith('/due') || location.pathname === `${basePath}` || location.pathname === `${basePath}/`;
@@ -172,7 +170,7 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
     shop_name?: string | null;
     notes?: string | null;
     outcomes: Array<{ service_id: string; status: 'performed' | 'not_needed_yet' | 'declined' }>;
-    receipt_files?: File[];
+    receipt_files?: GarageReceiptUpload[];
   }) => {
     await addServicing(input);
     if (!selectedVehicle) return;
@@ -308,12 +306,10 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
             {isConfigRoute && (
               <GarageConfigView
                 vehicles={vehicles}
-                settings={settings}
                 autoOpenAddVehicle={vehicles.length === 0}
                 onAddVehicle={addVehicle}
                 onUpdateVehicle={updateVehicle}
                 onRemoveVehicle={removeVehicle}
-                onUpdateSettings={upsertSettings}
               />
             )}
           </>

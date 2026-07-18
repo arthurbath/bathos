@@ -8,6 +8,8 @@ import type {
   GarageServicingService,
   GarageServicingWithRelations,
   GarageServiceStatus,
+  GarageReceiptNameUpdate,
+  GarageReceiptUpload,
 } from '@/modules/garage/types/garage';
 
 interface OutcomeInput {
@@ -80,12 +82,15 @@ export function useGarageServicings(userId: string | undefined, vehicleId: strin
 
   const uploadReceipts = useCallback(async (args: {
     servicingId: string;
-    files: File[];
+    receipts: GarageReceiptUpload[];
   }) => {
     if (!userId || !vehicleId) throw new Error('No active vehicle selected.');
     const rows: Omit<GarageServicingReceipt, 'id' | 'created_at'>[] = [];
 
-    for (const file of args.files) {
+    for (const receipt of args.receipts) {
+      const { file } = receipt;
+      const name = receipt.name.trim();
+      if (!name) throw new Error('Receipt name required.');
       const storagePath = `${userId}/${vehicleId}/${args.servicingId}/${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
 
       const uploadResult = await supabase.storage
@@ -105,6 +110,7 @@ export function useGarageServicings(userId: string | undefined, vehicleId: strin
         servicing_id: args.servicingId,
         storage_object_path: storagePath,
         filename: file.name,
+        name,
         mime_type: file.type || null,
         size_bytes: file.size,
       });
@@ -115,6 +121,31 @@ export function useGarageServicings(userId: string | undefined, vehicleId: strin
         await supabase.from('garage_servicing_receipts').insert(rows),
       );
     }
+  }, [userId, vehicleId]);
+
+  const updateReceiptNames = useCallback(async (
+    servicingId: string,
+    updates: GarageReceiptNameUpdate[],
+  ) => {
+    if (!userId || !vehicleId) throw new Error('No active vehicle selected.');
+
+    const deduped = Array.from(new Map(updates.map((update) => [update.id, update])).values());
+    await Promise.all(deduped.map(async (update) => {
+      const name = update.name.trim();
+      if (!name) throw new Error('Receipt name required.');
+
+      await supabaseRequest(async () =>
+        await supabase
+          .from('garage_servicing_receipts')
+          .update({ name })
+          .eq('id', update.id)
+          .eq('servicing_id', servicingId)
+          .eq('user_id', userId)
+          .eq('vehicle_id', vehicleId)
+          .select('id')
+          .single(),
+      );
+    }));
   }, [userId, vehicleId]);
 
   const saveOutcomes = useCallback(async (servicingId: string, outcomes: OutcomeInput[]) => {
@@ -182,7 +213,7 @@ export function useGarageServicings(userId: string | undefined, vehicleId: strin
     shop_name?: string | null;
     notes?: string | null;
     outcomes: OutcomeInput[];
-    receipt_files?: File[];
+    receipt_files?: GarageReceiptUpload[];
   }) => {
     if (!userId || !vehicleId) throw new Error('No active vehicle selected.');
 
@@ -204,7 +235,7 @@ export function useGarageServicings(userId: string | undefined, vehicleId: strin
       await saveOutcomes(servicingId, input.outcomes);
 
       if ((input.receipt_files ?? []).length > 0) {
-        await uploadReceipts({ servicingId, files: input.receipt_files ?? [] });
+        await uploadReceipts({ servicingId, receipts: input.receipt_files ?? [] });
       }
 
       await refetch();
@@ -220,7 +251,8 @@ export function useGarageServicings(userId: string | undefined, vehicleId: strin
     shop_name?: string | null;
     notes?: string | null;
     outcomes: OutcomeInput[];
-    receipt_files?: File[];
+    receipt_files?: GarageReceiptUpload[];
+    receipt_updates?: GarageReceiptNameUpdate[];
     receipt_deletes?: Array<{ id: string; storagePath: string }>;
   }) => {
     if (!userId || !vehicleId) throw new Error('No active vehicle selected.');
@@ -245,8 +277,12 @@ export function useGarageServicings(userId: string | undefined, vehicleId: strin
 
       await saveOutcomes(servicingId, input.outcomes);
 
+      if ((input.receipt_updates ?? []).length > 0) {
+        await updateReceiptNames(servicingId, input.receipt_updates ?? []);
+      }
+
       if ((input.receipt_files ?? []).length > 0) {
-        await uploadReceipts({ servicingId, files: input.receipt_files ?? [] });
+        await uploadReceipts({ servicingId, receipts: input.receipt_files ?? [] });
       }
 
       if ((input.receipt_deletes ?? []).length > 0) {
@@ -258,7 +294,7 @@ export function useGarageServicings(userId: string | undefined, vehicleId: strin
       showMutationError(error);
       throw error;
     }
-  }, [deleteReceipts, refetch, saveOutcomes, uploadReceipts, userId, vehicleId]);
+  }, [deleteReceipts, refetch, saveOutcomes, updateReceiptNames, uploadReceipts, userId, vehicleId]);
 
   const removeServicing = useCallback(async (servicingId: string) => {
     if (!userId || !vehicleId) throw new Error('No active vehicle selected.');

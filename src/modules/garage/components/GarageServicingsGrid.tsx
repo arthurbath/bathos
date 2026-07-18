@@ -26,12 +26,15 @@ import {
   getGarageServiceTypeLabel,
 } from '@/modules/garage/lib/serviceTypes';
 import type {
+  GarageReceiptNameUpdate,
+  GarageReceiptUpload,
   GarageService,
   GarageServiceType,
   GarageServiceStatus,
   GarageServicingWithRelations,
 } from '@/modules/garage/types/garage';
 import { GARAGE_SERVICE_NAME_REQUIRED_ERROR, validateGarageServiceName } from '@/modules/garage/lib/serviceNames';
+import { getDefaultReceiptName } from '@/modules/garage/lib/receiptNames';
 
 const columnHelper = createColumnHelper<GarageServicingWithRelations>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
@@ -55,7 +58,8 @@ interface ServicingFormState {
   shop_name: string;
   notes: string;
   outcomes: Record<string, OutcomeDraftValue>;
-  newFiles: File[];
+  newFiles: GarageReceiptUpload[];
+  receiptNames: Record<string, string>;
   deletedReceipts: Array<{ id: string; storagePath: string }>;
 }
 
@@ -285,7 +289,7 @@ interface GarageServicingsGridProps {
     shop_name?: string | null;
     notes?: string | null;
     outcomes: Array<{ service_id: string; status: GarageServiceStatus }>;
-    receipt_files?: File[];
+    receipt_files?: GarageReceiptUpload[];
   }) => Promise<void>;
   onUpdateServicing: (id: string, input: {
     service_date: string;
@@ -293,7 +297,8 @@ interface GarageServicingsGridProps {
     shop_name?: string | null;
     notes?: string | null;
     outcomes: Array<{ service_id: string; status: GarageServiceStatus }>;
-    receipt_files?: File[];
+    receipt_files?: GarageReceiptUpload[];
+    receipt_updates?: GarageReceiptNameUpdate[];
     receipt_deletes?: Array<{ id: string; storagePath: string }>;
   }) => Promise<void>;
   onDeleteServicing: (id: string) => Promise<void>;
@@ -366,6 +371,7 @@ export function GarageServicingsGrid({
     notes: '',
     outcomes: buildDefaultOutcomeMap(services),
     newFiles: [],
+    receiptNames: {},
     deletedReceipts: [],
   }), [currentVehicleMileage, services, servicings]);
 
@@ -443,6 +449,7 @@ export function GarageServicingsGrid({
       notes: servicing.notes ?? '',
       outcomes: buildDefaultOutcomeMap(services, servicing),
       newFiles: [],
+      receiptNames: Object.fromEntries(servicing.receipts.map((receipt) => [receipt.id, receipt.name])),
       deletedReceipts: [],
     });
     setDialogOpen(true);
@@ -632,7 +639,10 @@ export function GarageServicingsGrid({
     if (files.length === 0) return;
     setFormState((prev) => ({
       ...prev,
-      newFiles: [...prev.newFiles, ...files],
+      newFiles: [
+        ...prev.newFiles,
+        ...files.map((file) => ({ file, name: getDefaultReceiptName(file.name) })),
+      ],
     }));
   }, []);
 
@@ -704,15 +714,37 @@ export function GarageServicingsGrid({
       return;
     }
 
+    const receiptNamesAreValid = formState.newFiles.every((receipt) => receipt.name.trim().length > 0)
+      && (editingServicing?.receipts ?? []).every((receipt) => (
+        (formState.receiptNames[receipt.id] ?? receipt.name).trim().length > 0
+      ));
+    if (!receiptNamesAreValid) {
+      toast({ title: 'Receipt name required', variant: 'destructive' });
+      return;
+    }
+
     setDialogBusy(true);
     try {
+      const receiptUpdates = (editingServicing?.receipts ?? [])
+        .map((receipt) => ({
+          id: receipt.id,
+          name: (formState.receiptNames[receipt.id] ?? receipt.name).trim(),
+        }))
+        .filter((receipt) => {
+          const existing = editingServicing?.receipts.find((row) => row.id === receipt.id);
+          return existing && receipt.name !== existing.name;
+        });
       const payload = {
         service_date: formState.service_date,
         odometer_miles: normalizeMileage(formState.odometer_miles),
         shop_name: formState.shop_name.trim() || null,
         notes: formState.notes.trim() || null,
         outcomes: buildOutcomePayload(),
-        receipt_files: formState.newFiles,
+        receipt_files: formState.newFiles.map((receipt) => ({
+          file: receipt.file,
+          name: receipt.name.trim(),
+        })),
+        receipt_updates: receiptUpdates,
         receipt_deletes: formState.deletedReceipts,
       };
 
@@ -844,18 +876,22 @@ export function GarageServicingsGrid({
       columnHelper.display({
         id: 'receipts',
         header: 'Receipts',
-        size: 90,
-        minSize: 75,
-        cell: ({ row }) => (
-          <button
-            type="button"
-            className="h-full w-full text-left text-xs text-foreground"
-            onClick={() => openEditDialog(row.original, 'receipts')}
-            aria-label={`Open servicing detail for ${row.original.service_date}`}
-          >
-            {row.original.receipts.length}
-          </button>
-        ),
+        size: 220,
+        minSize: 140,
+        cell: ({ row }) => {
+          const receiptNames = row.original.receipts.map((receipt) => receipt.name).join(', ');
+          return (
+            <button
+              type="button"
+              className="block h-full w-full truncate text-left text-xs text-foreground"
+              onClick={() => openEditDialog(row.original, 'receipts')}
+              aria-label={`Open servicing detail for ${row.original.service_date}`}
+              title={receiptNames || undefined}
+            >
+              {receiptNames}
+            </button>
+          );
+        },
       }),
       columnHelper.accessor('notes', {
         header: 'Notes',
@@ -1322,17 +1358,32 @@ export function GarageServicingsGrid({
               {editingServicing && editingServicing.receipts.length > 0 && (
                 <div className="space-y-2">
                   {editingServicing.receipts.map((receipt) => (
-                    <div key={receipt.id} className="flex items-center justify-between rounded-md border px-3 py-2">
-                      <button
+                    <div key={receipt.id} className="flex items-center gap-2 rounded-md border px-3 py-2">
+                      <Button
                         type="button"
-                        className="inline-flex items-center gap-2 text-sm underline decoration-dashed underline-offset-2"
+                        size="icon"
+                        variant="outline"
+                        className="h-9 w-9 shrink-0 p-0"
                         onClick={() => {
                           void onOpenReceipt(receipt.storage_object_path);
                         }}
+                        aria-label={`Open ${receipt.filename}`}
+                        title={receipt.filename}
                       >
                         <FileText className="h-4 w-4" />
-                        <span>{receipt.filename}</span>
-                      </button>
+                      </Button>
+                      <Input
+                        value={formState.receiptNames[receipt.id] ?? receipt.name}
+                        onChange={(event) => {
+                          const name = event.target.value;
+                          setFormState((prev) => ({
+                            ...prev,
+                            receiptNames: { ...prev.receiptNames, [receipt.id]: name },
+                          }));
+                        }}
+                        aria-label={`Receipt name for ${receipt.filename}`}
+                        required
+                      />
                       <Button
                         type="button"
                         size="icon"
@@ -1354,6 +1405,7 @@ export function GarageServicingsGrid({
                               }
                             : prev);
                         }}
+                        aria-label={`Remove ${receipt.name}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -1363,22 +1415,33 @@ export function GarageServicingsGrid({
               )}
               {formState.newFiles.length > 0 && (
                 <div className="space-y-2">
-                  {formState.newFiles.map((file, index) => (
+                  {formState.newFiles.map((receipt, index) => (
                     <div
-                      key={`${file.name}-${file.lastModified}-${file.size}-${index}`}
-                      className="flex items-center justify-between rounded-md border px-3 py-2"
+                      key={`${receipt.file.name}-${receipt.file.lastModified}-${receipt.file.size}-${index}`}
+                      className="flex items-center gap-2 rounded-md border px-3 py-2"
                     >
-                      <div className="inline-flex min-w-0 items-center gap-2 text-sm">
-                        <FileText className="h-4 w-4 shrink-0" />
-                        <span className="truncate">{file.name}</span>
-                      </div>
+                      <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <Input
+                        value={receipt.name}
+                        onChange={(event) => {
+                          const name = event.target.value;
+                          setFormState((prev) => ({
+                            ...prev,
+                            newFiles: prev.newFiles.map((row, fileIndex) => (
+                              fileIndex === index ? { ...row, name } : row
+                            )),
+                          }));
+                        }}
+                        aria-label={`Receipt name for ${receipt.file.name}`}
+                        required
+                      />
                       <Button
                         type="button"
                         size="icon"
                         variant="outline-destructive"
                         className="h-7 w-7 p-0"
                         onClick={() => removeReceiptFile(index)}
-                        aria-label={`Remove ${file.name}`}
+                        aria-label={`Remove ${receipt.file.name}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -1441,7 +1504,18 @@ export function GarageServicingsGrid({
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={dialogBusy}>Cancel</Button>
-            <Button data-dialog-confirm="true" type="button" onClick={() => { void submit(); }} disabled={dialogBusy}>{dialogBusy ? 'Saving…' : 'Save'}</Button>
+            <Button
+              data-dialog-confirm="true"
+              type="button"
+              onClick={() => { void submit(); }}
+              disabled={dialogBusy
+                || formState.newFiles.some((receipt) => receipt.name.trim().length === 0)
+                || (editingServicing?.receipts ?? []).some((receipt) => (
+                  (formState.receiptNames[receipt.id] ?? receipt.name).trim().length === 0
+                ))}
+            >
+              {dialogBusy ? 'Saving…' : 'Save'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
