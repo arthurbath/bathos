@@ -5,6 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GarageServicingsGrid } from '@/modules/garage/components/GarageServicingsGrid';
 import type { GarageService, GarageServicingWithRelations } from '@/modules/garage/types/garage';
 
+const { gridEditableCellMock } = vi.hoisted(() => ({
+  gridEditableCellMock: vi.fn(() => null),
+}));
+
 type MockDataGridTable = {
   getHeaderGroups: () => Array<{
     id: string;
@@ -64,7 +68,7 @@ vi.mock('@/components/ui/data-grid', () => ({
       </tbody>
     </table>
   ),
-  GridEditableCell: () => null,
+  GridEditableCell: gridEditableCellMock,
   gridMenuTriggerProps: () => ({}),
   gridNavProps: () => ({}),
   useDataGrid: () => null,
@@ -222,9 +226,31 @@ function buildServicing(overrides: Partial<GarageServicingWithRelations> = {}): 
 
 afterEach(() => {
   document.body.innerHTML = '';
+  gridEditableCellMock.mockClear();
 });
 
 describe('GarageServicingsGrid servicing dialog', () => {
+  it('designates servicing Notes as longtext', () => {
+    const servicing = buildServicing({ notes: 'Complete servicing details' });
+    const { container, root } = mount(
+      <GarageServicingsGrid {...buildProps({ servicings: [servicing] })} />,
+    );
+
+    try {
+      const notesCellProps = gridEditableCellMock.mock.calls
+        .map(([props]) => props as Record<string, unknown>)
+        .find((props) => props.navCol === 5);
+
+      expect(notesCellProps).toEqual(expect.objectContaining({
+        value: 'Complete servicing details',
+        type: 'longtext',
+        longTextTitle: 'Notes',
+      }));
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it('renders Notes after Receipts in the add servicing dialog', async () => {
     const { container, root } = mount(<GarageServicingsGrid {...buildProps()} />);
 

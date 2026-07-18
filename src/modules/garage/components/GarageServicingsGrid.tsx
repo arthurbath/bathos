@@ -902,6 +902,8 @@ export function GarageServicingsGrid({
           <GridEditableCell
             value={row.original.notes ?? ''}
             navCol={5}
+            type="longtext"
+            longTextTitle="Notes"
             deleteResetValue=""
             onChange={(value) => {
               return onUpdateServicing(row.original.id, {

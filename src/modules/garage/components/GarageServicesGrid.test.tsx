@@ -232,6 +232,56 @@ describe('GarageServicesGrid focus scrolling', () => {
     toastMock.mockReset();
   });
 
+  it('designates service Notes as longtext and opens the complete note', async () => {
+    const services: GarageService[] = [{
+      id: 'service-1',
+      user_id: 'user-1',
+      vehicle_id: 'vehicle-1',
+      name: 'Oil Change',
+      type: 'replacement',
+      monitoring: true,
+      cadence_type: 'recurring',
+      every_miles: 5000,
+      every_months: 6,
+      sort_order: 0,
+      notes: 'Use synthetic oil.\nInspect the filter housing.',
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    }];
+
+    const { container, root } = mount(
+      <GarageServicesGrid
+        userId=""
+        services={services}
+        servicings={[]}
+        loading={false}
+        vehicleName="Test Car"
+        onAddService={async () => services[0]!}
+        onUpdateService={async () => {}}
+        onImportServices={async () => {}}
+        onDeleteService={async () => {}}
+      />,
+    );
+
+    try {
+      const viewNotesButton = container.querySelector<HTMLButtonElement>('button[aria-label="View Notes"]');
+      expect(viewNotesButton).toBeTruthy();
+
+      await act(async () => {
+        viewNotesButton!.click();
+      });
+
+      await waitForCondition(() => {
+        const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
+        expect(dialog).toBeTruthy();
+        expect(dialog!.textContent).toContain('Notes');
+        expect(dialog!.textContent).toContain('Use synthetic oil.\nInspect the filter housing.');
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it('uses decimal keyboard hints for cadence inputs in the add-service dialog', async () => {
     const services: GarageService[] = [];
 

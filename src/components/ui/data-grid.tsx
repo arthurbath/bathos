@@ -8,8 +8,9 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { SelectValue } from '@/components/ui/select';
-import { ArrowUp, ArrowDown, ExternalLink } from 'lucide-react';
+import { ArrowUp, ArrowDown, ExternalLink, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GRID_ACTIONS_COLUMN_ID } from '@/lib/gridColumnWidths';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
@@ -1342,11 +1343,11 @@ export function GridSelectValue({ placeholder = GRID_NULL_PLACEHOLDER, ...props 
   return <SelectValue placeholder={placeholder} {...props} />;
 }
 
-export function GridEditableCell({ value, onChange, navCol, type = 'text', inputMode, numberDisplayFormat = 'grouped', className, placeholder, cellId, disabled = false, deleteResetValue, normalizeOnCommit }: {
+export function GridEditableCell({ value, onChange, navCol, type = 'text', inputMode, numberDisplayFormat = 'grouped', className, placeholder, cellId, disabled = false, deleteResetValue, normalizeOnCommit, longTextTitle = 'Full Text' }: {
   value: GridInputValue;
   onChange: (v: string) => void | Promise<unknown>;
   navCol: number;
-  type?: string;
+  type?: React.HTMLInputTypeAttribute | 'longtext';
   inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
   numberDisplayFormat?: GridNumberDisplayFormat;
   className?: string;
@@ -1355,6 +1356,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
   disabled?: boolean;
   deleteResetValue?: string;
   normalizeOnCommit?: (value: string) => string;
+  longTextTitle?: string;
 }) {
   const ctx = useDataGrid();
   const normalizedValue = normalizeGridInputValue(value);
@@ -1369,9 +1371,11 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
   const pendingCommittedValueRef = useRef<string | null>(null);
   const commitBaseValueRef = useRef<string | null>(null);
   const awaitingAsyncCommitRef = useRef(false);
+  const isLongText = type === 'longtext';
   const showFormattedNumber = type === 'number' && !editing;
-  const inputType = showFormattedNumber ? 'text' : type;
+  const inputType = isLongText || showFormattedNumber ? 'text' : type;
   const inputValue = showFormattedNumber ? formatGridNumberDisplay(local, numberDisplayFormat) : local;
+  const viewerNavCol = navCol + 0.1;
 
   useEffect(() => {
     const input = ref.current;
@@ -1494,7 +1498,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
     }
   };
 
-  return (
+  const input = (
     <Input
       ref={ref}
       type={inputType}
@@ -1633,8 +1637,51 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
           if (!moved) suppressBlurCommitRef.current = false;
         }
       }}
-      className={cn(CELL_INPUT_CLASS, !editing && 'caret-transparent', 'disabled:opacity-60 disabled:cursor-not-allowed', className)}
+      className={cn(CELL_INPUT_CLASS, !editing && 'caret-transparent', 'disabled:opacity-60 disabled:cursor-not-allowed', isLongText && '!min-w-0 flex-1', className)}
     />
+  );
+
+  if (!isLongText) return input;
+
+  return (
+    <div className="flex min-w-[120px] items-center gap-1">
+      {input}
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-7 w-7 shrink-0 border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))]"
+            aria-label={`View ${longTextTitle}`}
+            disabled={disabled}
+            data-row={ctx?.rowIndex}
+            data-row-id={ctx?.rowId}
+            data-col={viewerNavCol}
+            data-grid-focus-only="true"
+            onMouseDown={() => ctx?.onCellMouseDown(viewerNavCol)}
+            onPointerDown={() => ctx?.onCellPointerDown(viewerNavCol)}
+            onKeyDown={(event) => {
+              if (isGridNavigationKey(event.key)) {
+                ctx?.onCellKeyDown(event);
+              }
+            }}
+          >
+            <Search className="h-3.5 w-3.5" />
+          </Button>
+        </DialogTrigger>
+        <DialogContent aria-describedby={undefined} className="!grid-rows-[auto_minmax(0,1fr)]">
+          <DialogHeader>
+            <DialogTitle>{longTextTitle}</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="-mb-[25px] border-b-0 py-6">
+            <p className="whitespace-pre-wrap break-words text-sm text-foreground">
+              {local || GRID_NULL_PLACEHOLDER}
+            </p>
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 

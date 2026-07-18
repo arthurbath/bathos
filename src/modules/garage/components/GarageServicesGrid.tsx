@@ -672,6 +672,8 @@ export function GarageServicesGrid({
               return updateServiceAndNotifyIfHidden(row.original.id, { notes: value.trim() || null });
             }}
             navCol={6}
+            type="longtext"
+            longTextTitle="Notes"
             deleteResetValue=""
           />
         ),

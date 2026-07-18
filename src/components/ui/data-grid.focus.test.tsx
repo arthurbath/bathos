@@ -159,6 +159,45 @@ function UrlGridHarness() {
   return <DataGrid table={table} />;
 }
 
+function LongTextGridHarness() {
+  const [rows, setRows] = React.useState<RowData[]>([
+    { id: "row-a", name: "Alpha", note: "First line\nSecond line with complete details" },
+    { id: "row-b", name: "Bravo", note: "" },
+  ]);
+
+  const columns = React.useMemo(
+    () => [
+      columnHelper.accessor("note", {
+        id: "note",
+        header: "Note",
+        cell: ({ row, getValue }) => (
+          <GridEditableCell
+            value={getValue()}
+            navCol={0}
+            type="longtext"
+            longTextTitle="Notes"
+            onChange={(value) => {
+              setRows((previous) => previous.map((item) => (
+                item.id === row.original.id ? { ...item, note: value } : item
+              )));
+            }}
+          />
+        ),
+      }),
+    ],
+    [],
+  );
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return <DataGrid table={table} />;
+}
+
 function SortableGridHarness({ initialSorting, onUpdate }: { initialSorting: SortingState; onUpdate?: () => void }) {
   const [rows, setRows] = React.useState<RowData[]>([
     { id: "row-a", name: "Alpha", note: "Apple" },
@@ -2631,6 +2670,83 @@ describe("DataGrid null placeholders", () => {
       expect(percentInput?.getAttribute("placeholder")).toBe("—");
       expect(selectTrigger?.textContent).toContain("—");
       expect(customInput?.getAttribute("placeholder")).toBe("Custom");
+    } finally {
+      unmount(root, container);
+    }
+  });
+});
+
+describe("DataGrid longtext viewer", () => {
+  it("opens a read-only modal with the complete whitespace-preserved value", async () => {
+    const { container, root } = mount(<LongTextGridHarness />);
+    try {
+      const viewButton = container.querySelector<HTMLButtonElement>('button[aria-label="View Notes"][data-row-id="row-a"]');
+      expect(viewButton).not.toBeNull();
+
+      await act(async () => {
+        viewButton!.click();
+      });
+
+      await waitForCondition(() => {
+        const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
+        expect(dialog).not.toBeNull();
+        expect(dialog!.textContent).toContain("Notes");
+        expect(dialog!.textContent).toContain("First line\nSecond line with complete details");
+        expect(dialog!.querySelector("input, textarea")).toBeNull();
+        expect(dialog!.classList.contains("!grid-rows-[auto_minmax(0,1fr)]")).toBe(true);
+        const dialogBody = dialog!.querySelector<HTMLElement>('[data-dialog-body="true"]');
+        expect(dialogBody).not.toBeNull();
+        expect(dialogBody!.classList.contains("-mb-[25px]")).toBe(true);
+        expect(dialogBody!.classList.contains("border-b-0")).toBe(true);
+        expect(dialogBody!.classList.contains("py-6")).toBe(true);
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("shows the shared null placeholder for an empty longtext value", async () => {
+    const { container, root } = mount(<LongTextGridHarness />);
+    try {
+      const viewButton = container.querySelector<HTMLButtonElement>('button[aria-label="View Notes"][data-row-id="row-b"]');
+      expect(viewButton).not.toBeNull();
+
+      await act(async () => {
+        viewButton!.click();
+      });
+
+      await waitForCondition(() => {
+        const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
+        expect(dialog).not.toBeNull();
+        expect(dialog!.textContent).toContain("—");
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("opens from keyboard activation and retains standard inline editing", async () => {
+    const { container, root } = mount(<LongTextGridHarness />);
+    try {
+      const input = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      expect(input).not.toBeNull();
+
+      await startEditing(input!);
+      await dispatchInputChange(input!, "Updated complete notes");
+      await dispatchEnter(input!);
+
+      const viewButton = container.querySelector<HTMLButtonElement>('button[aria-label="View Notes"][data-row-id="row-a"]');
+      expect(viewButton).not.toBeNull();
+      await act(async () => {
+        viewButton!.focus();
+      });
+      await dispatchEnterOnElement(viewButton!);
+
+      await waitForCondition(() => {
+        const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
+        expect(dialog).not.toBeNull();
+        expect(dialog!.textContent).toContain("Updated complete notes");
+      });
     } finally {
       unmount(root, container);
     }
