@@ -226,7 +226,7 @@ function assertSameCreationRequest(
     [state.destination, request.destination],
     [state.today_section, request.todaySection],
     [state.actionability, request.actionability],
-    [state.entry_channel, request.entryChannel],
+    [existing.event.mutation_channel, request.entryChannel],
     [state.deadline, request.deadline],
     [state.area_id, request.areaId],
     [state.project_id, request.projectId],

@@ -356,6 +356,10 @@ The system SHALL use stable task identifiers and optimistic integer revisions so
 - **WHEN** one client completes a task and another client uploads an edit based on the same earlier revision
 - **THEN** the first accepted mutation remains authoritative and the later stale mutation follows the conflict-receipt behavior
 
+#### Scenario: Converge web and automation mutations in either winner order
+- **WHEN** the web client and an authenticated automation client mutate the same task from one base revision before both mutations settle
+- **THEN** whichever revision reaches the authoritative service first remains, the stale path drains or returns a content-free conflict receipt, every client converges to that row, and immutable entry provenance remains unchanged
+
 ### Requirement: Actionable Synchronization Diagnostics
 The system SHALL expose synchronization state without logging task content, including durable queue depth, last successful synchronization, upload and download activity or errors, and conflict receipts.
 

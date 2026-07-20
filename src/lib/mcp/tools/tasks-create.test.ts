@@ -150,7 +150,6 @@ function creationSnapshot(row: StoredRow): Json {
     destination: row.destination as string,
     today_section: row.today_section as string,
     actionability: row.actionability as string,
-    entry_channel: row.entry_channel as string,
     order_key: row.order_key as string,
     start_date: row.start_date as string | null,
     deadline: row.deadline as string | null,

@@ -14,6 +14,7 @@ This folder contains dated agent-facing security, performance, and technology ev
 
 | Date | File | Topic |
 |---|---|---|
+| 2026-07-20 | `2026-07-20_tasks_multi_client_convergence.md` | Personal Tasks overlapping web, MCP, and Raycast convergence validation |
 | 2026-07-20 | `2026-07-20_tasks_offline_workflow_validation.md` | Personal Tasks complete offline workflow validation |
 | 2026-07-19 | `2026-07-19_tasks_offline_sync.md` | Personal Tasks offline persistence and synchronization options |
 | 2026-05-14 | `2026-05-14_supabase_data_api_grants.md` | Supabase Data API explicit grants rollout evaluation |

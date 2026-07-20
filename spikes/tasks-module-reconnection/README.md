@@ -27,6 +27,16 @@ npm run test:tasks:offline
 
 The test uses the official PowerSync Node SDK, a temporary SQLite file, a synthetic local account, and synthetic task titles. It proves offline create, edit, reschedule, reorder, completion, delete, restore, generated-occurrence completion, durable queue survival across a database restart, authoritative reconciliation, and a second clean restart. The test clears its local file and signs out when finished. A local Supabase reset removes the disposable remote records.
 
+## Automated Multi-Client Convergence Gate
+
+With the same disposable services running, run:
+
+```sh
+npm run test:tasks:multi-client
+```
+
+The test begins with two concurrent retries of one Raycast-channel capture, downloads that task to a web client, and then forces overlapping web and MCP edits from the same revision in both winner orders. It proves exact-once capture, first-accepted revision authority, content-free conflict receipts, queue drainage, immutable entry provenance, and convergence without duplicates.
+
 ## Browser Acceptance Exercise
 
 Use a synthetic local account and synthetic task titles only.

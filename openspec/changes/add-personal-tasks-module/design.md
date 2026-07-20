@@ -378,6 +378,8 @@ Every local update also assigns a new client mutation identifier. Insert and upd
 
 Rationale: The spike proved this rule for title-versus-title and completion-versus-title conflicts across independent local databases. It prevents silent last-writer-wins overwrites while guaranteeing that a stale mutation does not retry forever.
 
+The production-path trust gate additionally proved this contract across every active client boundary. Two concurrent retries of one Raycast-channel capture resolved to one logical task. An MCP edit accepted from a shared base revision defeated the queued stale web edit on reconnection, while a current web edit defeated a later stale MCP request in the reverse order. Both paths preserved the first accepted revision, produced content-free conflict receipts, converged without duplicates, and retained immutable Raycast entry provenance. Future editing clients must join this matrix rather than introducing a separate conflict policy.
+
 Trade-off: The first foundation detects conflicts at task-record granularity rather than merging independent fields. This is intentionally conservative. A later field-aware merge policy may be specified only when a concrete workflow demonstrates that automatic merging is safer than an explicit conflict.
 
 ### Use fractional order keys with stable-ID tie-breaking
