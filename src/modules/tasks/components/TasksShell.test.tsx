@@ -172,6 +172,13 @@ describe('TasksShell', () => {
         title: 'Revised task',
         notes: 'Revised notes',
       });
+      await act(async () => {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      const restoredTitleButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+        (button) => button.textContent === 'Existing task',
+      );
+      expect(document.activeElement).toBe(restoredTitleButton);
     } finally {
       cleanup(root, container);
     }

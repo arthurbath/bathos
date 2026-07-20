@@ -84,6 +84,8 @@ The screen follows an original BathOS-native open-list composition: a restrained
 
 When no PowerSync service endpoint is configured, the module is fully usable in explicit local mode. A bounded browser exercise with synthetic data proved create-by-Enter, reload persistence, edit-and-notes persistence, completion, recoverable deletion, movement between Today and Inbox, owner-safe startup, and responsive rendering. The synthetic local records were cleared through the same full database-clear boundary used for an account change. Server reconnection remains unproven and the module remains intentionally absent from the launcher and PWA metadata until its permanent public identity and remote topology are resolved.
 
+Task-list mutations use a module-local optimistic overlay above the reactive PowerSync query. The overlay applies edits, moves, completions, and recoverable deletions before the asynchronous write settles, remains visible while a stale query result is still present, and retires only when the query reaches the same client mutation or reflects the task's removal. A failed write removes the overlay and restores the query-backed record. Inline editor save and cancel return focus to the task-title control so query refresh and editor teardown do not disrupt keyboard continuity.
+
 ## Goals / Non-Goals
 
 **Goals:**

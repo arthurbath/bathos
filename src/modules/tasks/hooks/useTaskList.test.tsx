@@ -1,0 +1,161 @@
+import React from 'react';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { TaskTodo } from '@/modules/tasks/types/tasks';
+import { useTaskList } from './useTaskList';
+
+const mocks = vi.hoisted(() => ({
+  useQuery: vi.fn(),
+  useTasksRuntime: vi.fn(),
+}));
+
+vi.mock('@powersync/react', () => ({
+  useQuery: (...args: unknown[]) => mocks.useQuery(...args),
+}));
+
+vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
+  useTasksRuntime: () => mocks.useTasksRuntime(),
+}));
+
+const originalTask: TaskTodo = {
+  id: 'task-a',
+  owner_id: 'owner-a',
+  title: 'Original title',
+  notes: '',
+  lifecycle: 'open',
+  completed_at: null,
+  canceled_at: null,
+  disposition: 'present',
+  deleted_at: null,
+  destination: 'today',
+  order_key: 'a0',
+  entry_channel: 'web',
+  source_kind: null,
+  source_url: null,
+  source_title: null,
+  source_external_id: null,
+  revision: 1,
+  client_mutation_id: 'mutation-a',
+  created_at: '2026-07-20T04:00:00.000Z',
+  updated_at: '2026-07-20T04:00:00.000Z',
+};
+
+let latest: ReturnType<typeof useTaskList>;
+let queryData: TaskTodo[];
+
+function Harness() {
+  latest = useTaskList('owner-a', 'today');
+  return null;
+}
+
+function renderHookHarness() {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  act(() => root.render(<Harness />));
+  return { container, root };
+}
+
+function rerender(root: Root) {
+  act(() => root.render(<Harness />));
+}
+
+function cleanup(root: Root, container: HTMLElement) {
+  act(() => root.unmount());
+  container.remove();
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+describe('useTaskList optimistic display', () => {
+  beforeEach(() => {
+    queryData = [originalTask];
+    mocks.useQuery.mockReset().mockImplementation(() => ({
+      data: queryData,
+      isLoading: false,
+      error: null,
+    }));
+  });
+
+  it('keeps a committed edit visible until the reactive query catches up', async () => {
+    const pendingUpdate = deferred<TaskTodo>();
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn().mockReturnValue(pendingUpdate.promise),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository });
+    const { container, root } = renderHookHarness();
+
+    try {
+      let updatePromise!: Promise<TaskTodo>;
+      act(() => {
+        updatePromise = latest.updateTask('task-a', { title: 'Revised title' });
+      });
+      expect(latest.tasks[0].title).toBe('Revised title');
+
+      rerender(root);
+      expect(latest.tasks[0].title).toBe('Revised title');
+
+      const savedTask = {
+        ...originalTask,
+        title: 'Revised title',
+        revision: 2,
+        client_mutation_id: 'mutation-b',
+        updated_at: '2026-07-20T04:01:00.000Z',
+      };
+      await act(async () => {
+        pendingUpdate.resolve(savedTask);
+        await updatePromise;
+      });
+      expect(latest.tasks[0]).toEqual(savedTask);
+
+      queryData = [originalTask];
+      rerender(root);
+      expect(latest.tasks[0]).toEqual(savedTask);
+
+      queryData = [savedTask];
+      rerender(root);
+      expect(latest.tasks[0]).toEqual(savedTask);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('removes a completed task immediately and restores it when the write fails', async () => {
+    const pendingCompletion = deferred<TaskTodo>();
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      transitionTask: vi.fn().mockReturnValue(pendingCompletion.promise),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository });
+    const { container, root } = renderHookHarness();
+
+    try {
+      let completionPromise!: Promise<TaskTodo>;
+      act(() => {
+        completionPromise = latest.transitionTask('task-a', 'complete');
+      });
+      expect(latest.tasks).toEqual([]);
+
+      await act(async () => {
+        pendingCompletion.reject(new Error('write failed'));
+        await expect(completionPromise).rejects.toThrow('write failed');
+      });
+      expect(latest.tasks).toEqual([originalTask]);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+});
