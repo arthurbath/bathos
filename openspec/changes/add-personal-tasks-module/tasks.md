@@ -78,7 +78,7 @@
 - [x] 6.3 Add guarded MCP update, completion, movement, scheduling, and recoverable deletion operations.
 - [x] 6.4 Add MCP mutation receipts and task-domain audit history.
 - [x] 6.5 Add MCP tests for authentication, RLS boundaries, invalid transitions, retries, and destructive guardrails.
-- [ ] 6.6 Build a Raycast quick-entry command with a configurable global hotkey.
+- [x] 6.6 Build a Raycast quick-entry command with a configurable global hotkey.
 - [ ] 6.7 Add dependable browser context capture with structured webpage origin.
 - [ ] 6.8 Add Mail, Finder, selected-text, and reading-list capture only for sources with verified contracts.
 - [ ] 6.9 Connect Inbox Manager output after the BathOS Inbox is approved for parallel use.

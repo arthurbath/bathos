@@ -403,7 +403,19 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 
 #### Scenario: Open global quick entry on Mac
 - **WHEN** the user invokes the configured Raycast task-entry hotkey
-- **THEN** Raycast presents a task capture interface without requiring the BathOS browser tab to be focused
+- **THEN** Raycast presents required title and optional notes inputs without requiring the BathOS browser tab to be focused
+
+#### Scenario: Capture from Raycast
+- **WHEN** the user submits a nonempty title through Raycast quick entry
+- **THEN** the authenticated task service creates exactly one Inbox to-do with `raycast` entry provenance and returns an accepted or already-applied receipt
+
+#### Scenario: Authorize Raycast safely
+- **WHEN** the Raycast command has no usable delegated credential
+- **THEN** it performs browser-based Authorization Code with S256 PKCE and retains the rotating refresh credential in the macOS login Keychain without storing a BathOS password, browser session, service-role credential, or client secret
+
+#### Scenario: Retry a capture safely
+- **WHEN** delivery of a submitted Raycast capture is retried after an ambiguous response
+- **THEN** the command reuses that capture's creation UUID and the service does not create a duplicate to-do
 
 ### Requirement: Parallel Use with Things
 The system SHALL support indefinite parallel use without requiring the user to migrate, delete, or modify the existing Things library.

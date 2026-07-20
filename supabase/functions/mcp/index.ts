@@ -978,6 +978,13 @@ import { assertTaskCalendarRange, isTaskCalendarDate } from "npm:@/modules/tasks
 import { generateTaskOrderKey } from "npm:@/modules/tasks/domain/taskOrder";
 var destinationSchema = z.enum(["inbox", "today", "anytime", "someday"]);
 var todaySectionSchema = z.enum(["daytime", "evening"]);
+var integrationChannelSchema = z.enum([
+  "mcp",
+  "raycast",
+  "browser_capture",
+  "mail_automation",
+  "native"
+]);
 var sourceKindSchema = z.enum([
   "webpage",
   "mail_message",
@@ -1056,6 +1063,7 @@ function normalizeRequest(input) {
     notes: input.notes,
     destination: input.destination,
     todaySection: input.today_section,
+    entryChannel: input.entry_channel ?? "mcp",
     requestedStartDate,
     startDateWasExplicit: input.start_date !== void 0 && input.start_date !== null,
     deadline,
@@ -1074,7 +1082,7 @@ async function readOne2(query) {
   return data;
 }
 async function findExistingCreation(auth2, idempotencyKey) {
-  const event = await readOne2(auth2.supabase.from("tasks_history_events").select("task_id, client_mutation_id, affected_ids, base_revision, result_revision, transition, occurred_at, outcome, after_state").eq("owner_id", auth2.userId).eq("client_mutation_id", idempotencyKey).eq("transition", "create").eq("mutation_channel", "mcp").maybeSingle());
+  const event = await readOne2(auth2.supabase.from("tasks_history_events").select("task_id, client_mutation_id, actor_type, mutation_channel, affected_ids, base_revision, result_revision, transition, occurred_at, outcome, after_state").eq("owner_id", auth2.userId).eq("client_mutation_id", idempotencyKey).eq("transition", "create").maybeSingle());
   if (event === null) return null;
   const task = await readOne2(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", event.task_id).maybeSingle());
   if (task === null) throw new Error("The idempotent task creation record is unavailable.");
@@ -1093,6 +1101,7 @@ function assertSameCreationRequest(request, existing) {
     [state.notes, request.notes],
     [state.destination, request.destination],
     [state.today_section, request.todaySection],
+    [state.entry_channel, request.entryChannel],
     [state.deadline, request.deadline],
     [state.area_id, request.areaId],
     [state.project_id, request.projectId],
@@ -1162,8 +1171,8 @@ function creationResult(existing, idempotencyOutcome) {
     idempotency_outcome: idempotencyOutcome,
     receipt: {
       client_mutation_id: existing.event.client_mutation_id,
-      actor_type: "automation",
-      mutation_channel: "mcp",
+      actor_type: existing.event.actor_type,
+      mutation_channel: existing.event.mutation_channel,
       affected_ids: existing.event.affected_ids,
       base_revision: existing.event.base_revision,
       result_revision: existing.event.result_revision,
@@ -1215,8 +1224,8 @@ async function createTaskData(input, auth2) {
     hierarchy_order_key: hierarchyOrderKey,
     start_date: startDate,
     deadline: request.deadline,
-    entry_channel: "mcp",
-    last_mutation_channel: "mcp",
+    entry_channel: request.entryChannel,
+    last_mutation_channel: request.entryChannel,
     last_actor_type: "automation",
     undo_source_event_id: null,
     source_kind: request.sourceKind,
@@ -1252,6 +1261,7 @@ var createTask = defineTool({
     notes: z.string().max(1e5).default(""),
     destination: destinationSchema.default("inbox"),
     today_section: todaySectionSchema.default("daytime"),
+    entry_channel: integrationChannelSchema.default("mcp").describe("Structured integration that collected the task. Ordinary MCP clients should keep the default."),
     start_date: calendarDateSchema.nullable().optional(),
     deadline: calendarDateSchema.nullable().optional(),
     area_id: uuidSchema.optional(),

@@ -24,8 +24,8 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 - **THEN** the server creates the record within the signed-in user's scope and returns its stable identifier and resulting state
 
 #### Scenario: Create a to-do through the narrow MCP contract
-- **WHEN** an authenticated MCP client calls `create_task` with a new idempotency key and valid title, planning, container, and optional typed-source fields
-- **THEN** the server creates one open present to-do with immutable `mcp` entry provenance, an automation actor, stable identifiers, owner-local Today semantics, and append-only creation history
+- **WHEN** an authenticated MCP client calls `create_task` with a new idempotency key and valid title, planning, container, optional typed-source fields, and an optional supported integration channel
+- **THEN** the server creates one open present to-do with immutable declared integration provenance or default `mcp` provenance, an automation actor, stable identifiers, owner-local Today semantics, and append-only creation history
 
 #### Scenario: Reject an idempotency-key payload change
 - **WHEN** an MCP client reuses a creation idempotency key with different normalized title, planning, container, or source input
@@ -75,8 +75,8 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 The BathOS MCP server SHALL expose explicit task fields for actionability, source/origin, templates, scheduling, recurrence, and completion without requiring clients to encode meaning in generic tags or task titles.
 
 #### Scenario: Set structured origin
-- **WHEN** an MCP client creates a task from a supported external source
-- **THEN** the server records `mcp` as the entry channel, validates the typed source reference independently, and does not require a title prefix
+- **WHEN** an MCP client creates a task from a supported external source or collection integration
+- **THEN** the server validates the closed integration channel and typed source reference independently, defaults the channel to `mcp`, and does not require a title prefix
 
 #### Scenario: Set actionability
 - **WHEN** an MCP client changes whether a task can be acted on immediately

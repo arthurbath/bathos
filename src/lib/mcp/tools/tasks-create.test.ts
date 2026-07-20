@@ -149,6 +149,7 @@ function creationSnapshot(row: StoredRow): Json {
     deleted_at: row.deleted_at as string | null,
     destination: row.destination as string,
     today_section: row.today_section as string,
+    entry_channel: row.entry_channel as string,
     order_key: row.order_key as string,
     start_date: row.start_date as string | null,
     deadline: row.deadline as string | null,
@@ -246,6 +247,24 @@ describe('Tasks MCP creation tool', () => {
     expect(result.task).not.toHaveProperty('owner_id');
     expect(client.rows('tasks_todos')[0]).toMatchObject({ owner_id: ownerA });
     expect(client.rows('tasks_history_events')).toHaveLength(1);
+  });
+
+  it('records a declared structured integration channel and includes it in idempotency', async () => {
+    const client = new FakeTasksClient();
+    const input = request({ entry_channel: 'raycast' });
+
+    const result = await createTaskData(input, authFor(ownerA, client));
+
+    expect(result.receipt).toMatchObject({ mutation_channel: 'raycast' });
+    expect(result.task).toMatchObject({
+      entry_channel: 'raycast',
+      last_mutation_channel: 'raycast',
+      last_actor_type: 'automation',
+    });
+    await expect(createTaskData(
+      request({ entry_channel: 'browser_capture' }),
+      authFor(ownerA, client),
+    )).rejects.toThrow('idempotency key was already used for a different task creation request');
   });
 
   it('resolves an exact retry through creation history after later edits', async () => {

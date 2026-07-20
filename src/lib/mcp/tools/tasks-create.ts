@@ -13,6 +13,13 @@ import { planningDateInTimeZone } from './tasks-read';
 
 const destinationSchema = z.enum(['inbox', 'today', 'anytime', 'someday']);
 const todaySectionSchema = z.enum(['daytime', 'evening']);
+const integrationChannelSchema = z.enum([
+  'mcp',
+  'raycast',
+  'browser_capture',
+  'mail_automation',
+  'native',
+]);
 const sourceKindSchema = z.enum([
   'webpage',
   'mail_message',
@@ -36,6 +43,7 @@ type TaskTodoRow = Tables['tasks_todos']['Row'];
 type TaskHistoryRow = Tables['tasks_history_events']['Row'];
 type TaskDestination = z.infer<typeof destinationSchema>;
 type TaskTodaySection = z.infer<typeof todaySectionSchema>;
+type TaskIntegrationChannel = z.infer<typeof integrationChannelSchema>;
 type TaskSource = z.infer<typeof sourceSchema>;
 
 export type CreateTaskRequest = {
@@ -44,6 +52,7 @@ export type CreateTaskRequest = {
   notes: string;
   destination: TaskDestination;
   today_section: TaskTodaySection;
+  entry_channel?: TaskIntegrationChannel;
   start_date?: string | null;
   deadline?: string | null;
   area_id?: string;
@@ -58,6 +67,7 @@ type NormalizedCreateTaskRequest = {
   notes: string;
   destination: TaskDestination;
   todaySection: TaskTodaySection;
+  entryChannel: TaskIntegrationChannel;
   requestedStartDate: string | null;
   startDateWasExplicit: boolean;
   deadline: string | null;
@@ -73,7 +83,8 @@ type NormalizedCreateTaskRequest = {
 type ExistingCreation = {
   event: Pick<
     TaskHistoryRow,
-    'task_id' | 'client_mutation_id' | 'affected_ids' | 'base_revision'
+    'task_id' | 'client_mutation_id' | 'actor_type' | 'mutation_channel'
+      | 'affected_ids' | 'base_revision'
       | 'result_revision' | 'transition' | 'occurred_at' | 'outcome'
       | 'after_state'
   >;
@@ -147,6 +158,7 @@ function normalizeRequest(input: CreateTaskRequest): NormalizedCreateTaskRequest
     notes: input.notes,
     destination: input.destination,
     todaySection: input.today_section,
+    entryChannel: input.entry_channel ?? 'mcp',
     requestedStartDate,
     startDateWasExplicit: input.start_date !== undefined && input.start_date !== null,
     deadline,
@@ -174,11 +186,10 @@ async function findExistingCreation(
 ): Promise<ExistingCreation | null> {
   const event = await readOne<ExistingCreation['event']>(auth.supabase
     .from('tasks_history_events')
-    .select('task_id, client_mutation_id, affected_ids, base_revision, result_revision, transition, occurred_at, outcome, after_state')
+    .select('task_id, client_mutation_id, actor_type, mutation_channel, affected_ids, base_revision, result_revision, transition, occurred_at, outcome, after_state')
     .eq('owner_id', auth.userId)
     .eq('client_mutation_id', idempotencyKey)
     .eq('transition', 'create')
-    .eq('mutation_channel', 'mcp')
     .maybeSingle());
   if (event === null) return null;
 
@@ -209,6 +220,7 @@ function assertSameCreationRequest(
     [state.notes, request.notes],
     [state.destination, request.destination],
     [state.today_section, request.todaySection],
+    [state.entry_channel, request.entryChannel],
     [state.deadline, request.deadline],
     [state.area_id, request.areaId],
     [state.project_id, request.projectId],
@@ -342,8 +354,8 @@ function creationResult(existing: ExistingCreation, idempotencyOutcome: 'created
     idempotency_outcome: idempotencyOutcome,
     receipt: {
       client_mutation_id: existing.event.client_mutation_id,
-      actor_type: 'automation',
-      mutation_channel: 'mcp',
+      actor_type: existing.event.actor_type,
+      mutation_channel: existing.event.mutation_channel,
       affected_ids: existing.event.affected_ids,
       base_revision: existing.event.base_revision,
       result_revision: existing.event.result_revision,
@@ -404,8 +416,8 @@ export async function createTaskData(
     hierarchy_order_key: hierarchyOrderKey,
     start_date: startDate,
     deadline: request.deadline,
-    entry_channel: 'mcp',
-    last_mutation_channel: 'mcp',
+    entry_channel: request.entryChannel,
+    last_mutation_channel: request.entryChannel,
     last_actor_type: 'automation',
     undo_source_event_id: null,
     source_kind: request.sourceKind,
@@ -442,6 +454,7 @@ export const createTask = defineTool({
     notes: z.string().max(100_000).default(''),
     destination: destinationSchema.default('inbox'),
     today_section: todaySectionSchema.default('daytime'),
+    entry_channel: integrationChannelSchema.default('mcp').describe('Structured integration that collected the task. Ordinary MCP clients should keep the default.'),
     start_date: calendarDateSchema.nullable().optional(),
     deadline: calendarDateSchema.nullable().optional(),
     area_id: uuidSchema.optional(),
