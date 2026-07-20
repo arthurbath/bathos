@@ -1440,6 +1440,68 @@ export type Database = {
         }
         Relationships: []
       }
+      tasks_mail_sources: {
+        Row: {
+          account_identifier: string
+          client_mutation_id: string
+          created_at: string
+          deep_link: string
+          last_error_code: string | null
+          lifecycle: string
+          mailbox_identifier: string
+          message_identifier: string
+          owner_id: string
+          retired_at: string | null
+          retirement_attempted_at: string | null
+          retirement_destination_identifier: string
+          revision: number
+          task_id: string
+          updated_at: string
+        }
+        Insert: {
+          account_identifier: string
+          client_mutation_id: string
+          created_at?: string
+          deep_link: string
+          last_error_code?: string | null
+          lifecycle?: string
+          mailbox_identifier: string
+          message_identifier: string
+          owner_id: string
+          retired_at?: string | null
+          retirement_attempted_at?: string | null
+          retirement_destination_identifier: string
+          revision?: number
+          task_id: string
+          updated_at?: string
+        }
+        Update: {
+          account_identifier?: string
+          client_mutation_id?: string
+          created_at?: string
+          deep_link?: string
+          last_error_code?: string | null
+          lifecycle?: string
+          mailbox_identifier?: string
+          message_identifier?: string
+          owner_id?: string
+          retired_at?: string | null
+          retirement_attempted_at?: string | null
+          retirement_destination_identifier?: string
+          revision?: number
+          task_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_mail_sources_task_owner_fkey"
+            columns: ["task_id", "owner_id"]
+            isOneToOne: true
+            referencedRelation: "tasks_todos"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
       tasks_projects: {
         Row: {
           area_id: string | null
@@ -1944,6 +2006,7 @@ export type Database = {
       tasks_create_export_v2: { Args: never; Returns: Json }
       tasks_create_export_v3: { Args: never; Returns: Json }
       tasks_create_export_v4: { Args: never; Returns: Json }
+      tasks_create_export_v5: { Args: never; Returns: Json }
       tasks_restore_export_v1: {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
@@ -1957,6 +2020,10 @@ export type Database = {
         Returns: Json
       }
       tasks_restore_export_v4: {
+        Args: { _dry_run?: boolean; _envelope: Json }
+        Returns: Json
+      }
+      tasks_restore_export_v5: {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
       }

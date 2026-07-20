@@ -457,8 +457,20 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **WHEN** reading-list capture creates a to-do
 - **THEN** the title does not retain the legacy glasses prefix because reading provenance is authoritative in the typed source
 
-#### Scenario: Gate Mail capture on a complete source contract
-- **WHEN** the task source schema cannot preserve Mail account identity and integration-specific source-retirement lifecycle alongside message identity and its deep link
+#### Scenario: Preserve Mail source identity and lifecycle
+- **WHEN** a future specialized Mail capture atomically creates a task and its Mail source record
+- **THEN** the owner-scoped source record preserves the task relationship, account and mailbox identifiers, durable message identifier, `message://` deep link, retirement destination, explicit retirement lifecycle, revision, and mutation identifier without storing Mail content
+
+#### Scenario: Reject an incomplete Mail source pair
+- **WHEN** a Mail task lacks its one-to-one source record, a non-Mail task owns one, or the task and source disagree about message identity or deep link
+- **THEN** the database rejects the transaction without leaving a partial task or source record
+
+#### Scenario: Export and restore Mail source state
+- **WHEN** the user exports and restores task data containing a Mail-sourced task
+- **THEN** the versioned portable envelope preserves the owner-safe Mail source record, explicit retirement lifecycle, revision, and mutation identity while excluding owner identifiers and Mail content
+
+#### Scenario: Gate Mail capture on a complete integration contract
+- **WHEN** atomic service creation, guarded source-lifecycle mutation, and parallel-use approval have not all passed verification
 - **THEN** Mail capture remains disabled and Inbox Manager does not dual-write to BathOS
 
 ### Requirement: Parallel Use with Things

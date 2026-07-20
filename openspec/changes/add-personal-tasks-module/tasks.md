@@ -28,8 +28,9 @@
 
 - [x] 3.1a Add the owner-scoped `tasks_todos` table for the first-slice task, planning, source, lifecycle, recovery, and ordering model.
 - [x] 3.1b Add owner-scoped area, project, heading, and checklist tables for the hierarchy slice.
-- [ ] 3.1d Add owner-scoped template, recurrence, reminder, and delivery tables when their product slices begin.
 - [x] 3.1c Add owner-scoped planning-time-zone settings for date-derived views.
+- [ ] 3.1d Add owner-scoped template, recurrence, reminder, and delivery tables when their product slices begin.
+- [x] 3.1e Add a normalized owner-scoped Mail source identity and retirement-lifecycle record.
 - [x] 3.2 Add RLS policies and grants that restrict every current task record to its signed-in owner and withhold hard deletion from authenticated clients.
 - [x] 3.3a Add first-slice constraints and indexes for stable identifiers, provenance, valid lifecycle/disposition, planning queries, and synchronization.
 - [x] 3.3b Add owner-inclusive hierarchy constraints and indexes with the later hierarchy tables.
@@ -39,6 +40,7 @@
 - [x] 3.7a Add recoverable deletion and restoration primitives with restoration tests.
 - [x] 3.7b Add append-only history, mutation receipts, and inverse-mutation undo primitives.
 - [x] 3.8 Add an initial portable export and verified restore path using synthetic test data.
+- [x] 3.8a Advance portable export and restore to include normalized Mail source records.
 - [x] 3.9 Regenerate or update Supabase TypeScript types for the new task objects.
 
 ## 4. Minimal End-to-End Module

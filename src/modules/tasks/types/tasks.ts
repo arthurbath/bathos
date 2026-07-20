@@ -21,6 +21,12 @@ export const taskSourceKinds = [
   'template',
   'other',
 ] as const;
+export const taskMailSourceLifecycles = [
+  'retained',
+  'retirement_pending',
+  'retirement_failed',
+  'retired',
+] as const;
 export const taskActorTypes = ['user', 'automation', 'system', 'import'] as const;
 export const taskHierarchyRootTypes = [
   'area',
@@ -62,6 +68,7 @@ export type TaskDestination = (typeof taskDestinations)[number];
 export type TaskTodaySection = (typeof taskTodaySections)[number];
 export type TaskEntryChannel = (typeof taskEntryChannels)[number];
 export type TaskSourceKind = (typeof taskSourceKinds)[number];
+export type TaskMailSourceLifecycle = (typeof taskMailSourceLifecycles)[number];
 export type TaskActorType = (typeof taskActorTypes)[number];
 export type TaskHierarchyRootType = (typeof taskHierarchyRootTypes)[number];
 export type TaskHierarchyOperationKind = (typeof taskHierarchyOperations)[number];
@@ -78,6 +85,7 @@ type TaskAreaRow = Tables<'tasks_areas'>;
 type TaskProjectRow = Tables<'tasks_projects'>;
 type TaskHeadingRow = Tables<'tasks_headings'>;
 type TaskChecklistItemRow = Tables<'tasks_checklist_items'>;
+type TaskMailSourceRow = Tables<'tasks_mail_sources'>;
 type TaskHierarchyOperationRow = Tables<'tasks_hierarchy_operations'>;
 type TaskHierarchyHistoryRow = Tables<'tasks_hierarchy_history_events'>;
 
@@ -126,6 +134,10 @@ export type TaskChecklistItem = Omit<
   TaskChecklistItemRow,
   keyof RefinedHierarchyFields
 > & RefinedHierarchyFields;
+
+export type TaskMailSource = Omit<TaskMailSourceRow, 'lifecycle'> & {
+  lifecycle: TaskMailSourceLifecycle;
+};
 
 type RefinedHierarchyOperationFields = {
   root_type: TaskHierarchyRootType;
