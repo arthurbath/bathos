@@ -3,7 +3,7 @@
 - [x] 1.1 Capture the private-first product posture, tag exclusion, deferred migration, optional native surfaces, and original-expression constraint in OpenSpec.
 - [x] 1.2 Perform an initial bounded read-only Things inventory and record only generalized findings in the public repository.
 - [x] 1.3 Catalogue the user's daily capture, planning, execution, review, completion, and rescheduling workflows.
-- [ ] 1.4 Define the actionability states that will replace the current tag conventions.
+- [x] 1.4 Define the actionability states that will replace the current tag conventions.
 - [x] 1.5 Define supported source/origin types and the behaviors attached to each origin.
 - [x] 1.6 Define to-do template and project template creation, editing, instantiation, and provenance behavior.
 - [x] 1.7 Inventory relevant Things keyboard behaviors and choose the BathOS keyboard contract for the first daily workflow.
@@ -17,7 +17,7 @@
 - [x] 2.2 Build a disposable spike for offline task creation, restart persistence, reconnection, and server reconciliation.
 - [x] 2.3 Build a disposable spike for stable manual ordering and overlapping reorder conflicts.
 - [x] 2.4 Define open, completed, canceled, recoverably deleted, restoration, and hierarchy-transition invariants.
-- [ ] 2.4a Add the structured actionability transitions after the vocabulary in 1.4 is resolved.
+- [x] 2.4a Add the structured actionability transitions after the vocabulary in 1.4 is resolved.
 - [x] 2.5 Define start-date, deadline, reminder, time-zone, and daylight-saving semantics.
 - [x] 2.6 Define recurrence definitions, occurrence identity, generation idempotency, and after-completion behavior.
 - [x] 2.7 Define undo, history, mutation receipt, trash, permanent deletion, backup, restore, and export contracts.
@@ -70,7 +70,7 @@
 - [ ] 5.8 Add reminders using the responsibility model selected in the architecture gate.
 - [ ] 5.9 Add recurrence definitions and idempotent occurrence generation.
 - [ ] 5.10 Add native to-do and project templates with provenance-aware instantiation.
-- [ ] 5.11 Add structured actionability and source/origin fields without generic tags.
+- [x] 5.11 Add structured actionability and source/origin fields without generic tags.
 - [x] 5.12a Add web-safe capture, route, row-focus, completion, reorder, and editor keyboard commands.
 - [x] 5.12b Add task search, structured-field filtering, keyboard help, and distinct Move/When command surfaces.
 - [ ] 5.13 Add bulk task selection and the approved bulk planning actions.

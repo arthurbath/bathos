@@ -446,6 +446,735 @@
           "$schema": "http://json-schema.org/draft-07/schema#"
         },
         "outputSchema": null
+      },
+      {
+        "name": "get_task_hierarchy",
+        "title": "Get Task Hierarchy",
+        "description": "Read the signed-in user's normalized task areas, projects, headings, to-dos, and checklist items. Returns stable ids and relationship fields without mutating data.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "root_type": {
+              "type": "string",
+              "enum": [
+                "all",
+                "area",
+                "project",
+                "heading",
+                "todo"
+              ],
+              "default": "all",
+              "description": "Read the complete bounded hierarchy or scope it to one area, project, heading, or to-do."
+            },
+            "root_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Required when root_type is not all."
+            },
+            "include_terminal": {
+              "type": "boolean",
+              "default": false,
+              "description": "Include completed and canceled projects and to-dos."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 250,
+              "description": "Maximum rows returned per hierarchy collection."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_task_record",
+        "title": "Get Task Record",
+        "description": "Read one task area, project, heading, to-do, or checklist item by stable id for the signed-in user.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "record_type": {
+              "type": "string",
+              "enum": [
+                "area",
+                "project",
+                "heading",
+                "todo",
+                "checklist_item"
+              ]
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable record id."
+            }
+          },
+          "required": [
+            "record_type",
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_task_view",
+        "title": "Get Task Planning View",
+        "description": "Read the signed-in user's Inbox, Today, Upcoming, Anytime, Someday, Logbook, or Trash view using the Tasks domain rules.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "enum": [
+                "inbox",
+                "today",
+                "upcoming",
+                "anytime",
+                "someday",
+                "logbook",
+                "trash"
+              ]
+            },
+            "planning_date": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "description": "Optional ISO calendar date for deterministic planning review. Defaults to today in the owner's stored planning time zone."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 250,
+              "description": "Maximum projects, to-dos, or Trash roots returned."
+            }
+          },
+          "required": [
+            "view"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_task",
+        "title": "Create Task",
+        "description": "Create one owner-scoped to-do with structured planning and source fields. A required idempotency key makes exact retries safe.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "idempotency_key": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable UUID for this logical creation request. Reuse it only to retry the exact same request."
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "notes": {
+              "type": "string",
+              "maxLength": 100000,
+              "default": ""
+            },
+            "destination": {
+              "type": "string",
+              "enum": [
+                "inbox",
+                "today",
+                "anytime",
+                "someday"
+              ],
+              "default": "inbox"
+            },
+            "today_section": {
+              "type": "string",
+              "enum": [
+                "daytime",
+                "evening"
+              ],
+              "default": "daytime"
+            },
+            "actionability": {
+              "type": "string",
+              "enum": [
+                "actionable",
+                "waiting"
+              ],
+              "default": "actionable",
+              "description": "Whether the task can be acted on now or is waiting on something external."
+            },
+            "entry_channel": {
+              "type": "string",
+              "enum": [
+                "mcp",
+                "raycast",
+                "browser_capture",
+                "mail_automation",
+                "native"
+              ],
+              "default": "mcp",
+              "description": "Structured integration that collected the task. Ordinary MCP clients should keep the default."
+            },
+            "start_date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "deadline": {
+              "anyOf": [
+                {
+                  "$ref": "#/properties/start_date/anyOf/0"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "area_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "project_id": {
+              "$ref": "#/properties/area_id"
+            },
+            "heading_id": {
+              "$ref": "#/properties/area_id"
+            },
+            "source": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "webpage",
+                    "mail_message",
+                    "file",
+                    "selected_text",
+                    "reading_item",
+                    "other"
+                  ]
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 8000
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "external_id": {
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false,
+              "description": "Optional typed source reference. Template provenance is reserved for template instantiation."
+            }
+          },
+          "required": [
+            "idempotency_key",
+            "title"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_mail_task",
+        "title": "Create Mail Task",
+        "description": "Atomically create one AI-processed Today task and its structured Mail source lifecycle record. Intended for a verified Mail integration, not generic task creation.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "idempotency_key": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable UUID for this logical Mail capture. Reuse it only for an exact retry."
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "notes": {
+              "type": "string",
+              "maxLength": 100000,
+              "default": ""
+            },
+            "account_identifier": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "mailbox_identifier": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "message_identifier": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "deep_link": {
+              "type": "string",
+              "maxLength": 8000
+            },
+            "retirement_destination_identifier": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "source_title": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "area_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Optional accessible area for verified work-mail routing."
+            }
+          },
+          "required": [
+            "idempotency_key",
+            "title",
+            "account_identifier",
+            "mailbox_identifier",
+            "message_identifier",
+            "deep_link",
+            "retirement_destination_identifier"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "begin_mail_retirement",
+        "title": "Begin Mail Retirement",
+        "description": "Mark one retained or explicitly failed Mail source as pending immediately before attempting its external Mail move.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "task_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Mail-sourced task identifier returned by create_mail_task."
+            },
+            "expected_revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Current Mail source revision."
+            },
+            "idempotency_key": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable UUID for this exact lifecycle mutation."
+            }
+          },
+          "required": [
+            "task_id",
+            "expected_revision",
+            "idempotency_key"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "resolve_mail_retirement",
+        "title": "Resolve Mail Retirement",
+        "description": "Record the verified success or bounded failure of a pending external Mail move.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "task_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Mail-sourced task identifier returned by create_mail_task."
+            },
+            "expected_revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Current Mail source revision."
+            },
+            "idempotency_key": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable UUID for this exact lifecycle mutation."
+            },
+            "result": {
+              "type": "string",
+              "enum": [
+                "retired",
+                "failed"
+              ]
+            },
+            "error_code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "task_id",
+            "expected_revision",
+            "idempotency_key",
+            "result"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_task",
+        "title": "Update Task",
+        "description": "Edit one current to-do title, notes, actionability, or complete typed source reference with an optimistic revision guard.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "task_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable to-do identifier."
+            },
+            "expected_revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Current revision returned by a task read."
+            },
+            "client_mutation_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable UUID for this logical mutation. Reuse it only to retry the exact same request."
+            },
+            "title": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "notes": {
+              "type": "string",
+              "maxLength": 100000
+            },
+            "actionability": {
+              "type": "string",
+              "enum": [
+                "actionable",
+                "waiting"
+              ],
+              "description": "Mark the task actionable now or waiting on something external."
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "webpage",
+                        "mail_message",
+                        "file",
+                        "selected_text",
+                        "reading_item",
+                        "other"
+                      ]
+                    },
+                    "url": {
+                      "type": "string",
+                      "maxLength": 8000
+                    },
+                    "title": {
+                      "type": "string",
+                      "maxLength": 1000
+                    },
+                    "external_id": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Complete replacement source, null to clear, or omit to preserve."
+            }
+          },
+          "required": [
+            "task_id",
+            "expected_revision",
+            "client_mutation_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "move_task",
+        "title": "Move Task",
+        "description": "Move one open to-do between planning placements, hierarchy containers, or both. Container changes require all three container IDs, using null to clear.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "task_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable to-do identifier."
+            },
+            "expected_revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Current revision returned by a task read."
+            },
+            "client_mutation_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable UUID for this logical mutation. Reuse it only to retry the exact same request."
+            },
+            "destination": {
+              "type": "string",
+              "enum": [
+                "inbox",
+                "today",
+                "anytime",
+                "someday"
+              ]
+            },
+            "today_section": {
+              "type": "string",
+              "enum": [
+                "daytime",
+                "evening"
+              ]
+            },
+            "start_date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "area_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "project_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/properties/area_id/anyOf/0"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "heading_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/properties/area_id/anyOf/0"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "task_id",
+            "expected_revision",
+            "client_mutation_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "schedule_task",
+        "title": "Schedule Task",
+        "description": "Set or clear one open to-do start date or deadline without accepting timestamps or time-zone offsets.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "task_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable to-do identifier."
+            },
+            "expected_revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Current revision returned by a task read."
+            },
+            "client_mutation_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable UUID for this logical mutation. Reuse it only to retry the exact same request."
+            },
+            "start_date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "deadline": {
+              "anyOf": [
+                {
+                  "$ref": "#/properties/start_date/anyOf/0"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "task_id",
+            "expected_revision",
+            "client_mutation_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "transition_task",
+        "title": "Transition Task",
+        "description": "Complete, cancel, reopen, recoverably delete, or restore one to-do. Permanent deletion is not available.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "task_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable to-do identifier."
+            },
+            "expected_revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Current revision returned by a task read."
+            },
+            "client_mutation_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable UUID for this logical mutation. Reuse it only to retry the exact same request."
+            },
+            "transition": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "cancel",
+                "reopen",
+                "delete",
+                "restore"
+              ]
+            }
+          },
+          "required": [
+            "task_id",
+            "expected_revision",
+            "client_mutation_id",
+            "transition"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
       }
     ]
   }

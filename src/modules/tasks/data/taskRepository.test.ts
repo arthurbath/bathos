@@ -29,6 +29,7 @@ const existingTask: TaskTodo = {
   deletion_root_id: null,
   destination: 'inbox',
   today_section: 'daytime',
+  actionability: 'actionable',
   order_key: 'a0',
   hierarchy_order_key: null,
   start_date: null,
@@ -113,6 +114,7 @@ describe('task repository', () => {
       title: '  New task  ',
       destination: 'today',
       today_section: 'daytime',
+      actionability: 'actionable',
       entryChannel: 'raycast',
     });
 
@@ -168,6 +170,32 @@ describe('task repository', () => {
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain(
       'revision = ?, client_mutation_id = ?, updated_at = ?',
     );
+  });
+
+  it('updates structured actionability without changing planning placement', async () => {
+    const { repository } = createHarness(existingTask);
+
+    await expect(repository.updateTask('owner-a', 'task-a', {
+      actionability: 'waiting',
+    })).resolves.toMatchObject({
+      actionability: 'waiting',
+      destination: 'inbox',
+      order_key: 'a0',
+      revision: 2,
+    });
+  });
+
+  it('rejects actionability changes on terminal or deleted tasks', async () => {
+    for (const current of [
+      { ...existingTask, lifecycle: 'completed' as const, completed_at: timestamp },
+      { ...existingTask, disposition: 'deleted' as const, deleted_at: timestamp },
+    ]) {
+      const { repository, transaction } = createHarness(current);
+      await expect(repository.updateTask('owner-a', 'task-a', {
+        actionability: 'waiting',
+      })).rejects.toThrow('Actionability can be changed only on open, present tasks');
+      expect(transaction.execute).not.toHaveBeenCalled();
+    }
   });
 
   it('moves work to a Today section at the end of that section order', async () => {

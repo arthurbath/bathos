@@ -103,6 +103,7 @@ const task = {
   deletion_root_id: null,
   destination: 'today' as const,
   today_section: 'daytime' as const,
+  actionability: 'actionable' as const,
   order_key: 'a0',
   hierarchy_order_key: null,
   start_date: null,
@@ -288,6 +289,7 @@ describe('TasksShell', () => {
       destination: 'inbox' as const,
       source_kind: 'mail_message' as const,
       source_title: 'Project update',
+      actionability: 'waiting' as const,
     };
     mockTaskList.mockReturnValue(defaultTaskList());
     mockTaskSearch.mockReturnValue({
@@ -312,6 +314,15 @@ describe('TasksShell', () => {
         ?.querySelector('select');
       await act(async () => {
         setSelectValue(sourceFilter!, 'mail_message');
+      });
+      expect(dialog.textContent).toContain('Reply to the architect');
+      expect(dialog.textContent).not.toContain('Existing task');
+      const actionabilityFilter = Array.from(dialog.querySelectorAll<HTMLLabelElement>('label'))
+        .find((label) => label.textContent?.startsWith('Actionability'))
+        ?.querySelector('select');
+      await act(async () => {
+        setSelectValue(sourceFilter!, 'all');
+        setSelectValue(actionabilityFilter!, 'waiting');
       });
       expect(dialog.textContent).toContain('Reply to the architect');
       expect(dialog.textContent).not.toContain('Existing task');
@@ -479,6 +490,34 @@ describe('TasksShell', () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
       expect(document.activeElement).toBe(second);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('marks a task waiting from its quick actions without changing placement', async () => {
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      const actions = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Actions for Existing task"]',
+      );
+      await act(async () => {
+        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      const waiting = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent === 'Mark as Waiting');
+      await act(async () => {
+        waiting?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+        actionability: 'waiting',
+      });
+      expect(taskList.moveTask).not.toHaveBeenCalled();
     } finally {
       cleanup(root, container);
     }

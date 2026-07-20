@@ -33,6 +33,7 @@ import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
 import type { TaskLifecycle } from '@/modules/tasks/domain/taskState';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type {
+  TaskActionability,
   TaskDestination,
   TaskSourceKind,
   TaskTodo,
@@ -46,6 +47,7 @@ export type TaskTemporalAction = {
 type TaskSearchFilters = {
   destination: 'all' | TaskDestination;
   lifecycle: 'all' | TaskLifecycle;
+  actionability: 'all' | TaskActionability;
   sourceKind: 'all' | 'none' | TaskSourceKind;
 };
 
@@ -99,18 +101,28 @@ export function TaskSearchDialog({
   const [filters, setFilters] = useState<TaskSearchFilters>({
     destination: 'all',
     lifecycle: 'all',
+    actionability: 'all',
     sourceKind: 'all',
   });
   useEffect(() => {
     if (open) return;
     setQuery('');
-    setFilters({ destination: 'all', lifecycle: 'all', sourceKind: 'all' });
+    setFilters({
+      destination: 'all',
+      lifecycle: 'all',
+      actionability: 'all',
+      sourceKind: 'all',
+    });
   }, [open]);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const deferredQuery = useDeferredValue(normalizedQuery);
   const filteredTasks = useMemo(() => tasks.filter((task) => {
     if (filters.destination !== 'all' && task.destination !== filters.destination) return false;
     if (filters.lifecycle !== 'all' && task.lifecycle !== filters.lifecycle) return false;
+    if (
+      filters.actionability !== 'all'
+      && task.actionability !== filters.actionability
+    ) return false;
     if (filters.sourceKind === 'none' && task.source_kind !== null) return false;
     if (
       filters.sourceKind !== 'all'
@@ -129,6 +141,7 @@ export function TaskSearchDialog({
   }), [deferredQuery, filters, hierarchy, tasks]);
   const filtersActive = filters.destination !== 'all'
     || filters.lifecycle !== 'all'
+    || filters.actionability !== 'all'
     || filters.sourceKind !== 'all';
   const resultLimit = normalizedQuery || filtersActive ? 100 : 20;
   const displayedTasks = filteredTasks.slice(0, resultLimit);
@@ -179,7 +192,7 @@ export function TaskSearchDialog({
             />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3" aria-label="Task Search Filters">
+          <div className="grid gap-3 sm:grid-cols-2" aria-label="Task Search Filters">
             <SearchFilter
               label="Placement"
               value={filters.destination}
@@ -207,6 +220,19 @@ export function TaskSearchDialog({
                 ['open', 'Open'],
                 ['completed', 'Completed'],
                 ['canceled', 'Canceled'],
+              ]}
+            />
+            <SearchFilter
+              label="Actionability"
+              value={filters.actionability}
+              onChange={(actionability) => setFilters((current) => ({
+                ...current,
+                actionability: actionability as TaskSearchFilters['actionability'],
+              }))}
+              options={[
+                ['all', 'All Actionability'],
+                ['actionable', 'Actionable'],
+                ['waiting', 'Waiting'],
               ]}
             />
             <SearchFilter
@@ -623,6 +649,7 @@ function getTaskSearchRoute(task: TaskTodo, planningDate: string): string {
 function getTaskSearchMetadata(task: TaskTodo, hierarchyLabel: string | null): string {
   const metadata = [
     task.lifecycle === 'open' ? task.destination : task.lifecycle,
+    task.actionability === 'waiting' ? 'waiting' : null,
     hierarchyLabel,
     task.source_kind ? sourceKindLabels[task.source_kind] : null,
   ].filter(Boolean);

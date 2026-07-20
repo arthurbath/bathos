@@ -978,6 +978,7 @@ import { assertTaskCalendarRange, isTaskCalendarDate } from "npm:@/modules/tasks
 import { generateTaskOrderKey } from "npm:@/modules/tasks/domain/taskOrder";
 var destinationSchema = z.enum(["inbox", "today", "anytime", "someday"]);
 var todaySectionSchema = z.enum(["daytime", "evening"]);
+var actionabilitySchema = z.enum(["actionable", "waiting"]);
 var integrationChannelSchema = z.enum([
   "mcp",
   "raycast",
@@ -1063,6 +1064,7 @@ function normalizeRequest(input) {
     notes: input.notes,
     destination: input.destination,
     todaySection: input.today_section,
+    actionability: input.actionability ?? "actionable",
     entryChannel: input.entry_channel ?? "mcp",
     requestedStartDate,
     startDateWasExplicit: input.start_date !== void 0 && input.start_date !== null,
@@ -1101,6 +1103,7 @@ function assertSameCreationRequest(request, existing) {
     [state.notes, request.notes],
     [state.destination, request.destination],
     [state.today_section, request.todaySection],
+    [state.actionability, request.actionability],
     [state.entry_channel, request.entryChannel],
     [state.deadline, request.deadline],
     [state.area_id, request.areaId],
@@ -1220,6 +1223,7 @@ async function createTaskData(input, auth2) {
     deletion_root_id: null,
     destination: request.destination,
     today_section: request.todaySection,
+    actionability: request.actionability,
     order_key: orderKey,
     hierarchy_order_key: hierarchyOrderKey,
     start_date: startDate,
@@ -1261,6 +1265,7 @@ var createTask = defineTool({
     notes: z.string().max(1e5).default(""),
     destination: destinationSchema.default("inbox"),
     today_section: todaySectionSchema.default("daytime"),
+    actionability: actionabilitySchema.default("actionable").describe("Whether the task can be acted on now or is waiting on something external."),
     entry_channel: integrationChannelSchema.default("mcp").describe("Structured integration that collected the task. Ordinary MCP clients should keep the default."),
     start_date: calendarDateSchema.nullable().optional(),
     deadline: calendarDateSchema.nullable().optional(),
@@ -1432,6 +1437,7 @@ import {
 } from "npm:@/modules/tasks/domain/taskState";
 var destinationSchema2 = z.enum(["inbox", "today", "anytime", "someday"]);
 var todaySectionSchema2 = z.enum(["daytime", "evening"]);
+var actionabilitySchema2 = z.enum(["actionable", "waiting"]);
 var sourceKindSchema2 = z.enum([
   "webpage",
   "mail_message",
@@ -1462,6 +1468,7 @@ var snapshotKeys = [
   "order_key",
   "start_date",
   "deadline",
+  "actionability",
   "source_kind",
   "source_url",
   "source_title",
@@ -1605,14 +1612,18 @@ function normalizeSource(source) {
   };
 }
 function updatePatch(input) {
-  if (input.title === void 0 && input.notes === void 0 && input.source === void 0) {
-    throw new Error("Update at least one of title, notes, or source.");
+  if (input.title === void 0 && input.notes === void 0 && input.actionability === void 0 && input.source === void 0) {
+    throw new Error("Update at least one of title, notes, actionability, or source.");
   }
   return {
     ...input.title === void 0 ? {} : { title: trimRequired3(input.title, "Task title", 500) },
     ...input.notes === void 0 ? {} : { notes: input.notes },
+    ...input.actionability === void 0 ? {} : { actionability: input.actionability },
     ...input.source === void 0 ? {} : normalizeSource(input.source)
   };
+}
+function updateTransition(input, current) {
+  return input.actionability !== void 0 && input.actionability !== current.actionability ? "set_actionability" : "update";
 }
 function changedPatch(current, patch) {
   return Object.fromEntries(
@@ -1793,7 +1804,7 @@ function expectedAfterForRetry(request, before, after) {
   const ignored = /* @__PURE__ */ new Set();
   if (request.kind === "update") {
     Object.assign(expected, updatePatch(request.input));
-    return { expected, ignored, transition: "update" };
+    return { expected, ignored, transition: updateTransition(request.input, before) };
   }
   if (request.kind === "move") {
     const input = request.input;
@@ -1915,7 +1926,14 @@ async function runDirectMutation(request, auth2) {
   if (conflict !== null) return conflict;
   if (request.kind === "update") {
     assertMutable(current);
-    return writeDirectMutation(request, current, updatePatch(request.input), "update", auth2);
+    const patch = updatePatch(request.input);
+    return writeDirectMutation(
+      request,
+      current,
+      patch,
+      updateTransition(request.input, rowSnapshot(current)),
+      auth2
+    );
   }
   if (request.kind === "move") {
     assertMutable(current);
@@ -2084,11 +2102,12 @@ var mutationBaseSchema = {
 var updateTask = defineTool({
   name: "update_task",
   title: "Update Task",
-  description: "Edit one current to-do title, notes, or complete typed source reference with an optimistic revision guard.",
+  description: "Edit one current to-do title, notes, actionability, or complete typed source reference with an optimistic revision guard.",
   inputSchema: {
     ...mutationBaseSchema,
     title: z.string().max(500).optional(),
     notes: z.string().max(1e5).optional(),
+    actionability: actionabilitySchema2.optional().describe("Mark the task actionable now or waiting on something external."),
     source: sourceSchema2.nullable().optional().describe("Complete replacement source, null to clear, or omit to preserve.")
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },

@@ -19,14 +19,30 @@ import type {
 } from '@/modules/tasks/types/tasks';
 
 type HierarchyTaskFields = 'area_id' | 'project_id' | 'heading_id' | 'hierarchy_order_key';
-type LegacyTaskTodo = Omit<TaskTodo, 'today_section' | HierarchyTaskFields>;
+type LegacyTaskTodo = Omit<
+  TaskTodo,
+  'today_section' | 'actionability' | HierarchyTaskFields
+>;
 type LegacyTaskHistorySnapshot = Omit<
   TaskHistorySnapshot,
-  'today_section' | HierarchyTaskFields
+  'today_section' | 'actionability' | HierarchyTaskFields
 >;
 type LegacyTaskHistoryEvent = Omit<TaskHistoryEvent, 'before_state' | 'after_state'> & {
   before_state: LegacyTaskHistorySnapshot | null;
   after_state: LegacyTaskHistorySnapshot;
+};
+type PreActionabilityTaskTodo = Omit<TaskTodo, 'actionability'> & {
+  actionability?: TaskTodo['actionability'];
+};
+type PreActionabilityTaskHistorySnapshot = Omit<TaskHistorySnapshot, 'actionability'> & {
+  actionability?: TaskHistorySnapshot['actionability'];
+};
+type PreActionabilityTaskHistoryEvent = Omit<
+  TaskHistoryEvent,
+  'before_state' | 'after_state'
+> & {
+  before_state: PreActionabilityTaskHistorySnapshot | null;
+  after_state: PreActionabilityTaskHistorySnapshot;
 };
 
 export type TaskExportV1 = {
@@ -82,8 +98,8 @@ export type TaskExportV3 = {
   created_at: string;
   manifest: TaskExportV2['manifest'];
   data: {
-    tasks_todos: Array<Omit<TaskTodo, 'owner_id'>>;
-    tasks_history_events: Array<Omit<TaskHistoryEvent, 'owner_id'>>;
+    tasks_todos: Array<Omit<PreActionabilityTaskTodo, 'owner_id'>>;
+    tasks_history_events: Array<Omit<PreActionabilityTaskHistoryEvent, 'owner_id'>>;
     tasks_user_settings: Array<Omit<TaskUserSettings, 'owner_id'>>;
   };
 };
@@ -115,9 +131,9 @@ export type TaskExportV4 = {
     tasks_areas: Array<Omit<TaskArea, 'owner_id'>>;
     tasks_projects: Array<Omit<TaskProject, 'owner_id'>>;
     tasks_headings: Array<Omit<TaskHeading, 'owner_id'>>;
-    tasks_todos: Array<Omit<TaskTodo, 'owner_id'>>;
+    tasks_todos: Array<Omit<PreActionabilityTaskTodo, 'owner_id'>>;
     tasks_checklist_items: Array<Omit<TaskChecklistItem, 'owner_id'>>;
-    tasks_history_events: Array<Omit<TaskHistoryEvent, 'owner_id'>>;
+    tasks_history_events: Array<Omit<PreActionabilityTaskHistoryEvent, 'owner_id'>>;
     tasks_hierarchy_operations: Array<Omit<TaskHierarchyOperation, 'owner_id'>>;
     tasks_hierarchy_history_events: Array<Omit<TaskHierarchyHistoryEvent, 'owner_id'>>;
     tasks_user_settings: Array<Omit<TaskUserSettings, 'owner_id'>>;
@@ -166,13 +182,25 @@ export type TaskExportV6 = {
   };
 };
 
+export type TaskExportV7 = {
+  format: 'garden.bath.tasks.export';
+  schema_version: 7;
+  created_at: string;
+  manifest: TaskExportV6['manifest'];
+  data: Omit<TaskExportV6['data'], 'tasks_todos' | 'tasks_history_events'> & {
+    tasks_todos: Array<Omit<TaskTodo, 'owner_id'>>;
+    tasks_history_events: Array<Omit<TaskHistoryEvent, 'owner_id'>>;
+  };
+};
+
 export type TaskPortableExport =
   | TaskExportV1
   | TaskExportV2
   | TaskExportV3
   | TaskExportV4
   | TaskExportV5
-  | TaskExportV6;
+  | TaskExportV6
+  | TaskExportV7;
 
 export type TaskRestoreCollectionReport = {
   inserts: number;
@@ -185,7 +213,7 @@ export type TaskRestoreCollectionReport = {
 
 export type TaskRestoreReport = {
   dry_run: boolean;
-  schema_version: 1 | 2 | 3 | 4 | 5 | 6;
+  schema_version: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   tasks_todos: TaskRestoreCollectionReport;
   tasks_history_events: TaskRestoreCollectionReport;
   tasks_user_settings?: TaskRestoreCollectionReport;
@@ -210,14 +238,14 @@ export class InvalidTaskExportError extends Error {
 
 export async function createTaskExport(
   supabase: TaskPortabilityClient,
-): Promise<TaskExportV6> {
-  const { data, error } = await supabase.rpc('tasks_create_export_v6');
+): Promise<TaskExportV7> {
+  const { data, error } = await supabase.rpc('tasks_create_export_v7');
   if (error) {
     throw error;
   }
   const taskExport = parseTaskExport(data);
-  if (taskExport.schema_version !== 6) {
-    throw new InvalidTaskExportError('The current task export did not use schema version six');
+  if (taskExport.schema_version !== 7) {
+    throw new InvalidTaskExportError('The current task export did not use schema version seven');
   }
   return taskExport;
 }
@@ -252,11 +280,11 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
   const record = requireRecord(value, 'Task export must be a JSON object');
   if (
     record.format !== 'garden.bath.tasks.export'
-    || ![1, 2, 3, 4, 5, 6].includes(record.schema_version as number)
+    || ![1, 2, 3, 4, 5, 6, 7].includes(record.schema_version as number)
   ) {
     throw new InvalidTaskExportError('Task export format or schema version is unsupported');
   }
-  const schemaVersion = record.schema_version as 1 | 2 | 3 | 4 | 5 | 6;
+  const schemaVersion = record.schema_version as 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
   const manifest = requireRecord(record.manifest, 'Task export manifest is invalid');
   const counts = requireRecord(manifest.counts, 'Task export counts are invalid');
@@ -264,7 +292,7 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
   const data = requireRecord(record.data, 'Task export data is invalid');
   const collections = requireArray(manifest.collections, 'Task export collections are invalid');
   if (schemaVersion >= 4) {
-    const expectedCollections = schemaVersion === 6
+    const expectedCollections = schemaVersion >= 6
       ? taskExportV6Collections
       : schemaVersion === 5
         ? taskExportV5Collections
@@ -283,7 +311,9 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
         throw new InvalidTaskExportError('Task export manifest does not match its data');
       }
     }
-    return schemaVersion === 6
+    return schemaVersion === 7
+      ? value as TaskExportV7
+      : schemaVersion === 6
       ? value as TaskExportV6
       : schemaVersion === 5
         ? value as TaskExportV5
@@ -323,7 +353,7 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
 
 function parseTaskRestoreReport(
   value: unknown,
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6,
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7,
 ): TaskRestoreReport {
   const report = requireRecord(value, 'Task restore report is invalid');
   if (typeof report.dry_run !== 'boolean' || report.schema_version !== schemaVersion) {
@@ -335,7 +365,7 @@ function parseTaskRestoreReport(
     parseCollectionReport(report.tasks_user_settings);
   }
   if (schemaVersion >= 4) {
-    const expectedCollections = schemaVersion === 6
+    const expectedCollections = schemaVersion >= 6
       ? taskExportV6Collections
       : schemaVersion === 5
         ? taskExportV5Collections
@@ -353,7 +383,9 @@ async function restoreTaskExport(
   dryRun: boolean,
 ): Promise<TaskRestoreReport> {
   const validatedExport = parseTaskExport(taskExport);
-  const functionName = validatedExport.schema_version === 6
+  const functionName = validatedExport.schema_version === 7
+    ? 'tasks_restore_export_v7'
+    : validatedExport.schema_version === 6
     ? 'tasks_restore_export_v6'
     : validatedExport.schema_version === 5
       ? 'tasks_restore_export_v5'

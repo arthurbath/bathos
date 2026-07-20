@@ -30,6 +30,7 @@ const mutationId = '50000000-0000-4000-8000-000000000001';
 const snapshotKeys = [
   'title', 'notes', 'lifecycle', 'completed_at', 'canceled_at', 'disposition',
   'deleted_at', 'destination', 'today_section', 'order_key', 'start_date', 'deadline',
+  'actionability',
   'source_kind', 'source_url', 'source_title', 'source_external_id', 'area_id',
   'project_id', 'heading_id', 'hierarchy_order_key', 'deletion_root_id',
 ] as const;
@@ -55,6 +56,7 @@ function task(overrides: Partial<Tables['tasks_todos']['Row']> = {}): Tables['ta
     deletion_root_id: null,
     destination: 'anytime',
     today_section: 'daytime',
+    actionability: 'actionable',
     order_key: 'a0',
     hierarchy_order_key: null,
     start_date: null,
@@ -134,6 +136,7 @@ class FakeTasksClient {
     Object.assign(row, patch, { updated_at: new Date().toISOString() });
     const transition = before.lifecycle !== row.lifecycle
       ? row.lifecycle === 'completed' ? 'complete' : row.lifecycle === 'canceled' ? 'cancel' : 'reopen'
+      : before.actionability !== row.actionability ? 'set_actionability'
       : before.destination !== row.destination || before.today_section !== row.today_section
         || before.area_id !== row.area_id || before.project_id !== row.project_id
         || before.heading_id !== row.heading_id
@@ -336,6 +339,36 @@ describe('Tasks MCP mutation tools', () => {
       task: { title: 'Later title', revision: 3 },
     });
     expect(client.taskUpdateCount).toBe(1);
+  });
+
+  it('sets structured actionability with a dedicated idempotent transition', async () => {
+    const client = new FakeTasksClient({ tasks_todos: [task()] });
+    const input = { ...base(), actionability: 'waiting' as const };
+
+    const first = await updateTaskData(input, authFor(ownerA, client));
+    const replay = await updateTaskData(input, authFor(ownerA, client));
+
+    expect(first).toMatchObject({
+      mutation_outcome: 'applied',
+      receipt: { transition: 'set_actionability', base_revision: 1, result_revision: 2 },
+      task: { actionability: 'waiting', revision: 2 },
+    });
+    expect(replay.mutation_outcome).toBe('already_applied');
+    expect(client.taskUpdateCount).toBe(1);
+  });
+
+  it('rejects actionability changes on terminal or deleted tasks', async () => {
+    for (const current of [
+      task({ lifecycle: 'completed', completed_at: '2026-07-20T09:00:00.000Z' }),
+      task({ disposition: 'deleted', deleted_at: '2026-07-20T09:00:00.000Z' }),
+    ]) {
+      const client = new FakeTasksClient({ tasks_todos: [current] });
+      await expect(updateTaskData(
+        { ...base(), actionability: 'waiting' },
+        authFor(ownerA, client),
+      )).rejects.toThrow(/Reopen|Restore/);
+      expect(client.taskUpdateCount).toBe(0);
+    }
   });
 
   it('rejects mutation-key reuse with a different payload', async () => {

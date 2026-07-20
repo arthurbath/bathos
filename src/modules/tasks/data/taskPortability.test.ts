@@ -15,10 +15,11 @@ import {
   taskExportV6Collections,
   type TaskExportV5,
   type TaskExportV6,
+  type TaskExportV7,
 } from './taskPortability';
 
 const checksum = 'a'.repeat(64);
-const taskExport = {
+const versionSixExport = {
   format: 'garden.bath.tasks.export',
   schema_version: 6,
   created_at: '2026-07-20T05:30:00.000Z',
@@ -33,8 +34,13 @@ const taskExport = {
   data: Object.fromEntries(taskExportV6Collections.map((name) => [name, []])),
 } as TaskExportV6;
 
+const taskExport = {
+  ...versionSixExport,
+  schema_version: 7,
+} as TaskExportV7;
+
 const versionFiveExport = {
-  ...taskExport,
+  ...versionSixExport,
   schema_version: 5,
   manifest: {
     collections: [...taskExportV5Collections],
@@ -60,7 +66,7 @@ describe('task portability', () => {
     const client = createClient([taskExport]);
 
     await expect(createTaskExport(client)).resolves.toEqual(taskExport);
-    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v6');
+    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v7');
     expect(serializeTaskExport(taskExport)).toBe(`${JSON.stringify(taskExport, null, 2)}\n`);
     expect(getTaskExportFilename(taskExport.created_at)).toBe('bathos-tasks-2026-07-20.json');
   });
@@ -68,7 +74,7 @@ describe('task portability', () => {
   it('previews and executes restore through distinct explicit calls', async () => {
     const preview = {
       dry_run: true,
-      schema_version: 6,
+      schema_version: 7,
       ...Object.fromEntries(taskExportV6Collections.map((name) => [name, report(0)])),
       tasks_todos: report(2),
       tasks_history_events: report(4),
@@ -79,11 +85,11 @@ describe('task portability', () => {
 
     await expect(previewTaskRestore(client, taskExport)).resolves.toEqual(preview);
     await expect(mergeTaskRestore(client, taskExport)).resolves.toEqual(merge);
-    expect(client.rpc).toHaveBeenNthCalledWith(1, 'tasks_restore_export_v6', {
+    expect(client.rpc).toHaveBeenNthCalledWith(1, 'tasks_restore_export_v7', {
       _envelope: taskExport,
       _dry_run: true,
     });
-    expect(client.rpc).toHaveBeenNthCalledWith(2, 'tasks_restore_export_v6', {
+    expect(client.rpc).toHaveBeenNthCalledWith(2, 'tasks_restore_export_v7', {
       _envelope: taskExport,
       _dry_run: false,
     });
@@ -106,7 +112,7 @@ describe('task portability', () => {
   });
 
   it('rejects incompatible envelopes and inconsistent reports', async () => {
-    expect(() => parseTaskExport({ ...taskExport, schema_version: 7 })).toThrow(
+    expect(() => parseTaskExport({ ...taskExport, schema_version: 8 })).toThrow(
       InvalidTaskExportError,
     );
     expect(() => parseTaskExport({
@@ -120,7 +126,7 @@ describe('task portability', () => {
 
     const client = createClient([{
       dry_run: true,
-      schema_version: 6,
+      schema_version: 7,
       ...Object.fromEntries(taskExportV6Collections.map((name) => [name, report(0)])),
       tasks_todos: { ...report(1), inserts: 2 },
     }]);

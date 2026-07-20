@@ -1,12 +1,14 @@
 import type { Tables } from '@/integrations/supabase/types';
 import {
   taskActorTypes,
+  taskActionabilities,
   taskDestinations,
   taskEntryChannels,
   taskMutationTransitions,
   taskSourceKinds,
   taskTodaySections,
   type TaskActorType,
+  type TaskActionability,
   type TaskDestination,
   type TaskEntryChannel,
   type TaskMutationTransition,
@@ -18,6 +20,7 @@ import {
 export type TaskHistorySnapshot = Pick<
   TaskTodo,
   | 'title'
+  | 'actionability'
   | 'notes'
   | 'lifecycle'
   | 'completed_at'
@@ -120,6 +123,7 @@ export function createTaskUndoPatch(
 export function snapshotTask(task: TaskTodo): TaskHistorySnapshot {
   return {
     title: task.title,
+    actionability: task.actionability ?? 'actionable',
     notes: task.notes,
     lifecycle: task.lifecycle,
     completed_at: task.completed_at,
@@ -151,6 +155,13 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
 
   return {
     title: requireText(parsed.title, 'title'),
+    actionability: parsed.actionability === undefined
+      ? 'actionable'
+      : requireEnum(
+        parsed.actionability,
+        taskActionabilities,
+        'actionability',
+      ) as TaskActionability,
     notes: requireText(parsed.notes, 'notes', true),
     lifecycle: requireEnum(parsed.lifecycle, ['open', 'completed', 'canceled'] as const, 'lifecycle'),
     completed_at: optionalText(parsed.completed_at, 'completed_at'),
@@ -245,6 +256,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function snapshotsEqual(left: TaskHistorySnapshot, right: TaskHistorySnapshot): boolean {
   return left.title === right.title
+    && left.actionability === right.actionability
     && left.notes === right.notes
     && left.lifecycle === right.lifecycle
     && left.completed_at === right.completed_at

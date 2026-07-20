@@ -3,6 +3,7 @@ import { column, Schema, Table } from '@powersync/web';
 const taskTodos = new Table(
   {
     owner_id: column.text,
+    actionability: column.text,
     area_id: column.text,
     project_id: column.text,
     heading_id: column.text,
@@ -45,6 +46,14 @@ const taskTodos = new Table(
       ],
       ownerStartDate: ['owner_id', 'start_date', 'disposition', 'lifecycle', 'order_key'],
       ownerDeadline: ['owner_id', 'deadline', 'disposition', 'lifecycle'],
+      ownerActionability: [
+        'owner_id',
+        'actionability',
+        'disposition',
+        'lifecycle',
+        'destination',
+        'order_key',
+      ],
       ownerUpdated: ['owner_id', '-updated_at'],
       ownerContainerOrder: [
         'owner_id',

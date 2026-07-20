@@ -98,7 +98,19 @@ The system SHALL represent workflow meaning through explicit structured concepts
 
 #### Scenario: Mark work as not immediately actionable
 - **WHEN** a user applies a defined non-actionable state to an open to-do
-- **THEN** the system stores that state explicitly and can include or exclude the to-do from relevant views without a tag
+- **THEN** the system stores `waiting` explicitly, preserves the to-do's planning placement, dates, hierarchy, lifecycle, and order, and can include or exclude it from relevant views without a tag
+
+#### Scenario: Return work to immediate actionability
+- **WHEN** a user changes a waiting open to-do back to `actionable`
+- **THEN** the system changes only its structured actionability and mutation metadata and leaves its other task dimensions intact
+
+#### Scenario: Preserve waiting work in a planned view
+- **WHEN** a waiting to-do belongs to Today, Inbox, Anytime, Someday, Upcoming, a project, or another defined view
+- **THEN** the system keeps it in that deliberate placement, presents its waiting state explicitly, and excludes it only when an actionability filter requests actionable work
+
+#### Scenario: Reject actionability changes outside active work
+- **WHEN** a caller attempts to change actionability on completed, canceled, or recoverably deleted work
+- **THEN** the system rejects the mutation without changing the record or appending history
 
 #### Scenario: Record task origin
 - **WHEN** a to-do is created through web, Raycast, MCP, Mail automation, browser capture, a native client, or import
@@ -419,7 +431,7 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 
 #### Scenario: Search and filter without unstructured labels
 - **WHEN** a user searches present work or filters the result set
-- **THEN** the module matches task text and structured source or hierarchy context, filters through explicit planning destination, lifecycle, and source-kind fields, and does not introduce generic tags
+- **THEN** the module matches task text and structured source or hierarchy context, filters through explicit planning destination, lifecycle, actionability, and source-kind fields, and does not introduce generic tags
 
 #### Scenario: Open a task across views from search
 - **WHEN** a user activates a task search result

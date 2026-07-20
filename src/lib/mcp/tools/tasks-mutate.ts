@@ -17,6 +17,7 @@ import { planningDateInTimeZone } from './tasks-read';
 
 const destinationSchema = z.enum(['inbox', 'today', 'anytime', 'someday']);
 const todaySectionSchema = z.enum(['daytime', 'evening']);
+const actionabilitySchema = z.enum(['actionable', 'waiting']);
 const sourceKindSchema = z.enum([
   'webpage',
   'mail_message',
@@ -41,6 +42,7 @@ type TaskHistoryRow = Tables['tasks_history_events']['Row'];
 type HierarchyOperationRow = Tables['tasks_hierarchy_operations']['Row'];
 type TaskDestination = z.infer<typeof destinationSchema>;
 type TaskTodaySection = z.infer<typeof todaySectionSchema>;
+type TaskActionability = z.infer<typeof actionabilitySchema>;
 type TaskSource = z.infer<typeof sourceSchema>;
 
 type MutationBase = {
@@ -52,6 +54,7 @@ type MutationBase = {
 export type UpdateTaskRequest = MutationBase & {
   title?: string;
   notes?: string;
+  actionability?: TaskActionability;
   source?: TaskSource | null;
 };
 
@@ -99,6 +102,7 @@ type MutationReceipt = {
 const snapshotKeys = [
   'title', 'notes', 'lifecycle', 'completed_at', 'canceled_at', 'disposition',
   'deleted_at', 'destination', 'today_section', 'order_key', 'start_date', 'deadline',
+  'actionability',
   'source_kind', 'source_url', 'source_title', 'source_external_id', 'area_id',
   'project_id', 'heading_id', 'hierarchy_order_key', 'deletion_root_id',
 ] as const;
@@ -302,14 +306,22 @@ function normalizeSource(source: TaskSource | null): Pick<
 }
 
 function updatePatch(input: UpdateTaskRequest): TaskPatch {
-  if (input.title === undefined && input.notes === undefined && input.source === undefined) {
-    throw new Error('Update at least one of title, notes, or source.');
+  if (input.title === undefined && input.notes === undefined
+    && input.actionability === undefined && input.source === undefined) {
+    throw new Error('Update at least one of title, notes, actionability, or source.');
   }
   return {
     ...(input.title === undefined ? {} : { title: trimRequired(input.title, 'Task title', 500) }),
     ...(input.notes === undefined ? {} : { notes: input.notes }),
+    ...(input.actionability === undefined ? {} : { actionability: input.actionability }),
     ...(input.source === undefined ? {} : normalizeSource(input.source)),
   };
+}
+
+function updateTransition(input: UpdateTaskRequest, current: Snapshot): 'update' | 'set_actionability' {
+  return input.actionability !== undefined && input.actionability !== current.actionability
+    ? 'set_actionability'
+    : 'update';
 }
 
 function changedPatch(current: Snapshot, patch: TaskPatch): TaskPatch {
@@ -575,7 +587,7 @@ function expectedAfterForRetry(
   const ignored = new Set<string>();
   if (request.kind === 'update') {
     Object.assign(expected, updatePatch(request.input));
-    return { expected, ignored, transition: 'update' };
+    return { expected, ignored, transition: updateTransition(request.input, before) };
   }
   if (request.kind === 'move') {
     const input = request.input;
@@ -733,7 +745,14 @@ async function runDirectMutation(
 
   if (request.kind === 'update') {
     assertMutable(current);
-    return writeDirectMutation(request, current, updatePatch(request.input), 'update', auth);
+    const patch = updatePatch(request.input);
+    return writeDirectMutation(
+      request,
+      current,
+      patch,
+      updateTransition(request.input, rowSnapshot(current)),
+      auth,
+    );
   }
   if (request.kind === 'move') {
     assertMutable(current);
@@ -941,11 +960,12 @@ const mutationBaseSchema = {
 export const updateTask = defineTool({
   name: 'update_task',
   title: 'Update Task',
-  description: 'Edit one current to-do title, notes, or complete typed source reference with an optimistic revision guard.',
+  description: 'Edit one current to-do title, notes, actionability, or complete typed source reference with an optimistic revision guard.',
   inputSchema: {
     ...mutationBaseSchema,
     title: z.string().max(500).optional(),
     notes: z.string().max(100_000).optional(),
+    actionability: actionabilitySchema.optional().describe('Mark the task actionable now or waiting on something external.'),
     source: sourceSchema.nullable().optional().describe('Complete replacement source, null to clear, or omit to preserve.'),
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },

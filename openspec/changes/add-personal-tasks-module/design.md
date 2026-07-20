@@ -29,7 +29,7 @@ This catalogue records generalized behavior observed on 2026 Jul 19 through boun
 - Automated reading and mail captures bypass the Inbox and enter Today because they have already been processed enough to be actionable.
 - Today is the central daily commitment surface. Start dates, deadlines, areas, projects, Anytime, Someday, Upcoming, and This Evening provide conventional planning structure around it.
 - Work and personal routing is intentionally lightweight. Work mail enters a dedicated area, while personal and reading captures remain unassigned.
-- A narrow actionability distinction is currently carried by two tags. These are not general labels. The replacement vocabulary still needs to define the underlying states and their interaction with planning views.
+- A narrow actionability distinction is currently carried by two tags. A bounded aggregate inventory found that both labels express the same underlying meaning: the to-do cannot be acted on immediately. These are not general labels and do not represent separate workflow states.
 - Manual order matters because the list communicates execution intent, not only membership or chronology.
 
 ### Execution
@@ -190,6 +190,20 @@ Rationale: Structured concepts can drive views, automation, MCP behavior, valida
 
 Alternative considered: Continue encoding meaning in titles and tags. Rejected because those conventions are fragile and cannot support dependable automation.
 
+### Model actionability as `actionable` or `waiting`
+
+Every to-do has one explicit actionability value. New to-dos default to `actionable`. `waiting` means that the to-do is valid open work but cannot be acted on immediately because some condition outside the to-do's current execution step must change first. The state does not attempt to encode the current emoji labels, and it does not add a generic reason, label, or metadata bag.
+
+Actionability is orthogonal to lifecycle, recoverable disposition, planning placement, dates, hierarchy, and manual order. Changing actionability therefore changes only the actionability value, revision, mutation attribution, and append-only history. A waiting to-do remains wherever the user deliberately planned it, including Today, and stays visible there with an explicit waiting treatment. Search and list surfaces can include or exclude waiting work through the structured field. Terminal or deleted records retain their last actionability value for history, restore, and export, but actionability can be changed only while the to-do is open and present.
+
+The initial interface labels the values `Actionable` and `Waiting`. It presents waiting state without decorative color and offers `All`, `Actionable`, and `Waiting` structured filters. A later contract may add a typed waiting reason or review condition only if parallel use demonstrates a concrete interaction that cannot be represented safely by the binary state.
+
+The implemented slice persists this field in Supabase and the module-local PowerSync schema, records a dedicated `set_actionability` history transition, carries it through undo and portable export schema v7, and exposes guarded web and MCP mutations. Legacy export versions remain checksum-valid and restore missing actionability as `actionable`. The web presents waiting state in planning rows, task editors, project task controls, quick actions, and unified search without moving or reordering the task.
+
+Rationale: The observed labels both compensate for one missing domain distinction. A binary state captures the user's stated intent while avoiding speculative subtypes, preserving deliberate planning placement, and giving web and automation clients a dependable filter.
+
+Alternative considered: Preserve separate states for the two current emoji labels. Rejected because the labels do not represent distinct user intent and would encode the workaround rather than the workflow.
+
 ### Separate entry channel from source identity
 
 Every created task will record an immutable entry channel that identifies how the mutation entered the task service. Supported channels are `web`, `raycast`, `mcp`, `mail_automation`, `browser_capture`, `native`, and `import`. A task may also have one typed primary source reference whose kind is `webpage`, `mail_message`, `file`, `selected_text`, `reading_item`, `template`, or `other`. Manual tasks have no source reference.
@@ -225,7 +239,7 @@ Alternative considered: Preserve template projects through naming conventions. R
 
 ### Use orthogonal lifecycle and record-disposition state
 
-Task lifecycle is `open`, `completed`, or `canceled`. Recoverable deletion is a separate record disposition, `present` or `deleted`, because an open task in Trash and a completed task in Trash must retain different restoration targets. Planning placement and structured actionability are also separate dimensions. Actionability applies only to open, present work, and its final vocabulary remains pending the user's distinction between the two current conventions.
+Task lifecycle is `open`, `completed`, or `canceled`. Recoverable deletion is a separate record disposition, `present` or `deleted`, because an open task in Trash and a completed task in Trash must retain different restoration targets. Planning placement and structured actionability are also separate dimensions. Actionability uses `actionable` or `waiting`; it is mutable only on open, present work and is retained unchanged when work becomes terminal or recoverably deleted.
 
 Lifecycle transitions follow these rules:
 
@@ -548,7 +562,6 @@ The following concerns are roadmap requirements and must not be dismissed as pol
 
 ## Open Questions
 
-- What exact actionability states should replace the current tag conventions?
 - Should the production PowerSync service use PowerSync Cloud or a self-hosted deployment?
 - What user-facing name and iconography should distinguish the module from Things?
 - Which native Apple surface, if any, is valuable enough to justify the first companion build?

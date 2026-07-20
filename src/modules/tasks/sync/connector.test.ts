@@ -24,6 +24,7 @@ function taskInsertEntry(destination: 'inbox' | 'today' | 'anytime' | 'someday' 
     disposition: 'present',
     destination,
     today_section: 'daytime',
+    actionability: 'actionable',
     order_key: 'a0',
     start_date: null,
     deadline: null,
@@ -224,6 +225,7 @@ describe('task sync connector', () => {
         canceled_at: null,
         deleted_at: null,
         today_section: 'daytime',
+        actionability: 'actionable',
         start_date: null,
         deadline: null,
         source_kind: null,
@@ -259,6 +261,24 @@ describe('task sync connector', () => {
       expect.objectContaining({ revision: 2, client_mutation_id: 'mutation-b' }),
     );
     expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it('uploads structured waiting state and rejects invalid actionability', async () => {
+    const valid = createHarness(taskPatchEntry({ actionability: 'waiting' }));
+    await valid.connector.uploadData(valid.database);
+    expect(valid.remoteStore.updateTask).toHaveBeenCalledWith(
+      'task-a',
+      1,
+      expect.objectContaining({ actionability: 'waiting' }),
+    );
+
+    const invalid = createHarness(taskPatchEntry({ actionability: 'blocked' }));
+    await invalid.connector.uploadData(invalid.database);
+    expect(invalid.remoteStore.updateTask).not.toHaveBeenCalled();
+    expect(invalid.database.execute).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR IGNORE INTO tasks_sync_issues'),
+      expect.arrayContaining(['invalid_local_mutation']),
+    );
   });
 
   it('uploads inverse-mutation metadata with an undo patch', async () => {

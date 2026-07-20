@@ -96,7 +96,7 @@ The BathOS MCP server SHALL expose explicit task fields for actionability, sourc
 
 #### Scenario: Set actionability
 - **WHEN** an MCP client changes whether a task can be acted on immediately
-- **THEN** the server validates and stores the defined actionability state rather than adding a tag
+- **THEN** the server accepts only `actionable` or `waiting`, requires an open present to-do and its current revision, stores the state rather than adding a tag, and returns an idempotent mutation receipt
 
 #### Scenario: Instantiate a template
 - **WHEN** an MCP client requests creation from a task or project template

@@ -3,6 +3,7 @@ import type { TaskDisposition, TaskLifecycle } from '@/modules/tasks/domain/task
 
 export const taskDestinations = ['inbox', 'today', 'anytime', 'someday'] as const;
 export const taskTodaySections = ['daytime', 'evening'] as const;
+export const taskActionabilities = ['actionable', 'waiting'] as const;
 export const taskEntryChannels = [
   'web',
   'raycast',
@@ -61,6 +62,7 @@ export const taskMutationTransitions = [
   'update',
   'move',
   'reorder',
+  'set_actionability',
   'complete',
   'cancel',
   'reopen',
@@ -71,6 +73,7 @@ export const taskMutationTransitions = [
 
 export type TaskDestination = (typeof taskDestinations)[number];
 export type TaskTodaySection = (typeof taskTodaySections)[number];
+export type TaskActionability = (typeof taskActionabilities)[number];
 export type TaskEntryChannel = (typeof taskEntryChannels)[number];
 export type TaskSourceKind = (typeof taskSourceKinds)[number];
 export type TaskMailSourceLifecycle = (typeof taskMailSourceLifecycles)[number];
@@ -101,6 +104,7 @@ type RefinedTaskFields = {
   disposition: TaskDisposition;
   destination: TaskDestination;
   today_section: TaskTodaySection;
+  actionability: TaskActionability;
   entry_channel: TaskEntryChannel;
   last_mutation_channel: TaskEntryChannel;
   last_actor_type: TaskActorType;

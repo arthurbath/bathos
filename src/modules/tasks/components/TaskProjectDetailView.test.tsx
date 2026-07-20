@@ -138,6 +138,14 @@ describe('TaskProjectDetailView', () => {
       await act(async () => setControlValue(taskHeading, 'heading-a'));
       expect(detailModel.moveTaskToHeading).toHaveBeenCalledWith('task-a', 'heading-a');
 
+      const actionability = container.querySelector<HTMLSelectElement>(
+        '[aria-label="Actionability for Project task"]',
+      )!;
+      await act(async () => setControlValue(actionability, 'waiting'));
+      expect(detailModel.updateTask).toHaveBeenCalledWith('task-a', {
+        actionability: 'waiting',
+      });
+
       const checklistInput = container.querySelector<HTMLInputElement>(
         '[aria-label="New Checklist Item for Project task"]',
       )!;
@@ -182,6 +190,7 @@ function projectTask(
     deleted_at: null,
     destination: 'anytime',
     today_section: 'daytime',
+    actionability: 'actionable',
     order_key: 'a0',
     hierarchy_order_key: hierarchyOrderKey,
     start_date: null,

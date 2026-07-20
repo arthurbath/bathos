@@ -38,6 +38,7 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('start_date');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('deadline');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('today_section');
+    expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('actionability');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('project_id');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('deletion_root_id');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain(

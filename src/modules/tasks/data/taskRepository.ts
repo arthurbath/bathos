@@ -19,6 +19,7 @@ import {
 } from '@/modules/tasks/domain/taskState';
 import type {
   TaskActorType,
+  TaskActionability,
   TaskDestination,
   TaskEntryChannel,
   TaskSourceKind,
@@ -44,6 +45,7 @@ export type CreateTaskInput = {
   sourceTitle?: string | null;
   sourceExternalId?: string | null;
   actorType?: TaskActorType;
+  actionability?: TaskActionability;
   areaId?: string | null;
   projectId?: string | null;
   headingId?: string | null;
@@ -72,6 +74,7 @@ export type EditableTaskPatch = Partial<
   Pick<
     TaskTodo,
     | 'title'
+    | 'actionability'
     | 'notes'
     | 'destination'
     | 'today_section'
@@ -97,6 +100,7 @@ export type TaskRepositoryOptions = {
 const insertColumns = [
   'id',
   'owner_id',
+  'actionability',
   'area_id',
   'project_id',
   'heading_id',
@@ -220,6 +224,7 @@ export class TaskRepository {
       const task: TaskTodo = {
         id: this.createId(),
         owner_id: input.ownerId,
+        actionability: input.actionability ?? 'actionable',
         area_id: input.areaId ?? null,
         project_id: input.projectId ?? null,
         heading_id: input.headingId ?? null,
@@ -533,6 +538,16 @@ export class TaskRepository {
         return current;
       }
 
+      if (
+        patch.actionability !== undefined
+        && patch.actionability !== current.actionability
+        && (current.lifecycle !== 'open' || current.disposition !== 'present')
+      ) {
+        throw new InvalidTaskMutationError(
+          'Actionability can be changed only on open, present tasks',
+        );
+      }
+
       assertSource(
         patch.source_kind === undefined ? current.source_kind : patch.source_kind,
         patch.source_url === undefined ? current.source_url : patch.source_url,
@@ -674,6 +689,13 @@ function normalizeEditablePatch(patch: EditableTaskPatch): EditableTaskPatch {
   }
   if (patch.deadline !== undefined) {
     normalized.deadline = normalizeTaskCalendarDate(patch.deadline, 'Deadline') ?? null;
+  }
+  if (
+    patch.actionability !== undefined
+    && patch.actionability !== 'actionable'
+    && patch.actionability !== 'waiting'
+  ) {
+    throw new InvalidTaskMutationError('Task actionability must be actionable or waiting');
   }
   return Object.fromEntries(
     Object.entries(normalized).filter(([, value]) => value !== undefined),

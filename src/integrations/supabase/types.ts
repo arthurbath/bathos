@@ -1643,6 +1643,7 @@ export type Database = {
       }
       tasks_todos: {
         Row: {
+          actionability: string
           area_id: string | null
           canceled_at: string | null
           client_mutation_id: string
@@ -1676,6 +1677,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          actionability?: string
           area_id?: string | null
           canceled_at?: string | null
           client_mutation_id: string
@@ -1709,6 +1711,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          actionability?: string
           area_id?: string | null
           canceled_at?: string | null
           client_mutation_id?: string
@@ -2058,6 +2061,7 @@ export type Database = {
       tasks_create_export_v4: { Args: never; Returns: Json }
       tasks_create_export_v5: { Args: never; Returns: Json }
       tasks_create_export_v6: { Args: never; Returns: Json }
+      tasks_create_export_v7: { Args: never; Returns: Json }
       tasks_create_mail_capture: {
         Args: {
           _account_identifier: string
@@ -2116,6 +2120,10 @@ export type Database = {
         Returns: Json
       }
       tasks_restore_export_v6: {
+        Args: { _dry_run?: boolean; _envelope: Json }
+        Returns: Json
+      }
+      tasks_restore_export_v7: {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
       }

@@ -149,6 +149,7 @@ function creationSnapshot(row: StoredRow): Json {
     deleted_at: row.deleted_at as string | null,
     destination: row.destination as string,
     today_section: row.today_section as string,
+    actionability: row.actionability as string,
     entry_channel: row.entry_channel as string,
     order_key: row.order_key as string,
     start_date: row.start_date as string | null,
@@ -217,6 +218,7 @@ describe('Tasks MCP creation tool', () => {
       title: '  Read the source  ',
       destination: 'today',
       today_section: 'evening',
+      actionability: 'waiting',
       source: {
         kind: 'webpage',
         url: 'https://example.test/article',
@@ -237,6 +239,7 @@ describe('Tasks MCP creation tool', () => {
       title: 'Read the source',
       destination: 'today',
       today_section: 'evening',
+      actionability: 'waiting',
       start_date: planningDateInTimeZone('America/Los_Angeles'),
       entry_channel: 'mcp',
       last_mutation_channel: 'mcp',
@@ -263,6 +266,17 @@ describe('Tasks MCP creation tool', () => {
     });
     await expect(createTaskData(
       request({ entry_channel: 'browser_capture' }),
+      authFor(ownerA, client),
+    )).rejects.toThrow('idempotency key was already used for a different task creation request');
+  });
+
+  it('defaults to actionable and treats actionability as idempotent creation input', async () => {
+    const client = new FakeTasksClient();
+    const result = await createTaskData(request(), authFor(ownerA, client));
+
+    expect(result.task).toMatchObject({ actionability: 'actionable' });
+    await expect(createTaskData(
+      request({ actionability: 'waiting' }),
       authFor(ownerA, client),
     )).rejects.toThrow('idempotency key was already used for a different task creation request');
   });

@@ -18,6 +18,7 @@ import {
   Cloud,
   CornerDownLeft,
   HardDrive,
+  Hourglass,
   Inbox,
   ListTodo,
   MoreHorizontal,
@@ -1009,6 +1010,12 @@ function TaskRow({
           {hierarchyLabel ? (
             <span className="mt-1 block text-xs font-normal text-info">{hierarchyLabel}</span>
           ) : null}
+          {task.actionability === 'waiting' ? (
+            <span className="mt-1 inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
+              <Hourglass className="h-3.5 w-3.5" aria-hidden="true" />
+              Waiting
+            </span>
+          ) : null}
           {(
             (planningLabel !== null && (planningLabel || task.start_date))
             || task.deadline
@@ -1036,6 +1043,14 @@ function TaskRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onSelect={() => void run(() => onUpdate({
+                actionability: task.actionability === 'waiting' ? 'actionable' : 'waiting',
+              }))}
+            >
+              {task.actionability === 'waiting' ? 'Mark as Actionable' : 'Mark as Waiting'}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => setMoveOpen(true)}>Move...</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setWhenOpen(true)}>When...</DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -1102,6 +1117,7 @@ function TaskEditor({
 }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes);
+  const [actionability, setActionability] = useState(task.actionability);
   const [startDate, setStartDate] = useState(task.start_date ?? '');
   const [deadline, setDeadline] = useState(task.deadline ?? '');
   const [organization, setOrganization] = useState(taskOrganizationValue(task));
@@ -1131,6 +1147,9 @@ function TaskEditor({
     }
     if (notes !== task.notes) {
       patch.notes = notes;
+    }
+    if (actionability !== task.actionability) {
+      patch.actionability = actionability;
     }
     if (startDate !== (task.start_date ?? '')) {
       patch.start_date = startDate || null;
@@ -1204,6 +1223,21 @@ function TaskEditor({
         placeholder="Notes"
         className="min-h-28 resize-y"
       />
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-foreground" htmlFor={`task-actionability-${task.id}`}>
+          Actionability
+        </label>
+        <select
+          id={`task-actionability-${task.id}`}
+          value={actionability}
+          onChange={(event) => setActionability(event.target.value as TaskTodo['actionability'])}
+          disabled={saving}
+          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="actionable">Actionable</option>
+          <option value="waiting">Waiting</option>
+        </select>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor={`task-organization-${task.id}`}>

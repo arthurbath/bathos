@@ -555,6 +555,7 @@ function parseTaskInsert(entry: CrudEntry): TaskInsert {
   return {
     id: entry.id,
     owner_id: requireText(data.owner_id, 'owner_id'),
+    actionability: parseTaskActionability(data.actionability),
     area_id: optionalText(data.area_id),
     project_id: optionalText(data.project_id),
     heading_id: optionalText(data.heading_id),
@@ -590,6 +591,7 @@ function parseTaskInsert(entry: CrudEntry): TaskInsert {
 function parseTaskUpdate(entry: CrudEntry): TaskUpdate {
   const data = entry.opData ?? {};
   const allowedColumns = new Set([
+    'actionability',
     'title',
     'notes',
     'lifecycle',
@@ -625,7 +627,18 @@ function parseTaskUpdate(entry: CrudEntry): TaskUpdate {
 
   requirePositiveInteger(data.revision, 'revision');
   requireText(data.client_mutation_id, 'client_mutation_id');
+  if (data.actionability !== undefined) {
+    parseTaskActionability(data.actionability);
+  }
   return { ...data } as TaskUpdate;
+}
+
+function parseTaskActionability(value: unknown): 'actionable' | 'waiting' {
+  const actionability = optionalText(value) ?? 'actionable';
+  if (actionability !== 'actionable' && actionability !== 'waiting') {
+    throw new InvalidTasksCrudEntryError('Task actionability must be actionable or waiting');
+  }
+  return actionability;
 }
 
 function parseSettingsInsert(entry: CrudEntry): TaskSettingsInsert {

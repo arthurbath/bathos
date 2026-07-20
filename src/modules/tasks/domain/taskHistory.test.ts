@@ -23,6 +23,7 @@ const currentTask: TaskTodo = {
   deleted_at: null,
   destination: 'today',
   today_section: 'daytime',
+  actionability: 'actionable',
   order_key: 'a0',
   start_date: null,
   deadline: null,
@@ -84,11 +85,24 @@ describe('task history', () => {
     }));
 
     expect(event.affected_ids).toEqual(['task-a']);
+    expect(event.after_state.actionability).toBe('actionable');
     expect(createTaskUndoPatch(currentTask, event)).toMatchObject({
       lifecycle: 'open',
       completed_at: null,
       title: 'Completed task',
     });
+  });
+
+  it('round-trips waiting actionability through inverse history', () => {
+    const waiting = { ...currentTask, actionability: 'waiting' as const, revision: 2 };
+    const before = { ...snapshotTask(waiting), actionability: 'actionable' as const };
+    const event = parseTaskHistoryEvent(historyRow({
+      transition: 'set_actionability',
+      before_state: JSON.stringify(before),
+      after_state: JSON.stringify(snapshotTask(waiting)),
+    }));
+
+    expect(createTaskUndoPatch(waiting, event)).toMatchObject({ actionability: 'actionable' });
   });
 
   it('rejects undo when the task advanced beyond the selected event', () => {

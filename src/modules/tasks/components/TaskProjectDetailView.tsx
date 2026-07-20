@@ -358,6 +358,9 @@ function ProjectTaskSection({
             headings={headings}
             checklistItems={detail.checklistItems.filter(({ task_id }) => task_id === task.id)}
             onRename={(title) => detail.updateTask(task.id, { title })}
+            onSetActionability={(actionability) => (
+              detail.updateTask(task.id, { actionability })
+            )}
             onMoveHeading={(headingId) => detail.moveTaskToHeading(task.id, headingId)}
             onMoveUp={index > 0 ? () => detail.reorderTask(task.id, 'up') : undefined}
             onMoveDown={index < tasks.length - 1
@@ -385,6 +388,7 @@ function ProjectTaskRow({
   headings,
   checklistItems,
   onRename,
+  onSetActionability,
   onMoveHeading,
   onMoveUp,
   onMoveDown,
@@ -397,6 +401,7 @@ function ProjectTaskRow({
   headings: TaskHeading[];
   checklistItems: TaskChecklistItem[];
   onRename: (title: string) => Promise<unknown>;
+  onSetActionability: (actionability: TaskTodo['actionability']) => Promise<unknown>;
   onMoveHeading: (headingId: string | null) => Promise<unknown>;
   onMoveUp?: () => Promise<unknown>;
   onMoveDown?: () => Promise<unknown>;
@@ -424,6 +429,21 @@ function ProjectTaskRow({
         />
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
+        <select
+          value={task.actionability}
+          onChange={(event) => {
+            void onSetActionability(
+              event.target.value as TaskTodo['actionability'],
+            ).catch((error) => {
+              showError('Task Actionability Could Not Be Updated', error);
+            });
+          }}
+          aria-label={`Actionability for ${task.title}`}
+          className="h-9 min-w-32 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="actionable">Actionable</option>
+          <option value="waiting">Waiting</option>
+        </select>
         <select
           value={task.heading_id ?? ''}
           onChange={(event) => {

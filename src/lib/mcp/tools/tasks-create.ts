@@ -13,6 +13,7 @@ import { planningDateInTimeZone } from './tasks-read';
 
 const destinationSchema = z.enum(['inbox', 'today', 'anytime', 'someday']);
 const todaySectionSchema = z.enum(['daytime', 'evening']);
+const actionabilitySchema = z.enum(['actionable', 'waiting']);
 const integrationChannelSchema = z.enum([
   'mcp',
   'raycast',
@@ -43,6 +44,7 @@ type TaskTodoRow = Tables['tasks_todos']['Row'];
 type TaskHistoryRow = Tables['tasks_history_events']['Row'];
 type TaskDestination = z.infer<typeof destinationSchema>;
 type TaskTodaySection = z.infer<typeof todaySectionSchema>;
+type TaskActionability = z.infer<typeof actionabilitySchema>;
 type TaskIntegrationChannel = z.infer<typeof integrationChannelSchema>;
 type TaskSource = z.infer<typeof sourceSchema>;
 
@@ -52,6 +54,7 @@ export type CreateTaskRequest = {
   notes: string;
   destination: TaskDestination;
   today_section: TaskTodaySection;
+  actionability?: TaskActionability;
   entry_channel?: TaskIntegrationChannel;
   start_date?: string | null;
   deadline?: string | null;
@@ -67,6 +70,7 @@ type NormalizedCreateTaskRequest = {
   notes: string;
   destination: TaskDestination;
   todaySection: TaskTodaySection;
+  actionability: TaskActionability;
   entryChannel: TaskIntegrationChannel;
   requestedStartDate: string | null;
   startDateWasExplicit: boolean;
@@ -158,6 +162,7 @@ function normalizeRequest(input: CreateTaskRequest): NormalizedCreateTaskRequest
     notes: input.notes,
     destination: input.destination,
     todaySection: input.today_section,
+    actionability: input.actionability ?? 'actionable',
     entryChannel: input.entry_channel ?? 'mcp',
     requestedStartDate,
     startDateWasExplicit: input.start_date !== undefined && input.start_date !== null,
@@ -220,6 +225,7 @@ function assertSameCreationRequest(
     [state.notes, request.notes],
     [state.destination, request.destination],
     [state.today_section, request.todaySection],
+    [state.actionability, request.actionability],
     [state.entry_channel, request.entryChannel],
     [state.deadline, request.deadline],
     [state.area_id, request.areaId],
@@ -412,6 +418,7 @@ export async function createTaskData(
     deletion_root_id: null,
     destination: request.destination,
     today_section: request.todaySection,
+    actionability: request.actionability,
     order_key: orderKey,
     hierarchy_order_key: hierarchyOrderKey,
     start_date: startDate,
@@ -454,6 +461,7 @@ export const createTask = defineTool({
     notes: z.string().max(100_000).default(''),
     destination: destinationSchema.default('inbox'),
     today_section: todaySectionSchema.default('daytime'),
+    actionability: actionabilitySchema.default('actionable').describe('Whether the task can be acted on now or is waiting on something external.'),
     entry_channel: integrationChannelSchema.default('mcp').describe('Structured integration that collected the task. Ordinary MCP clients should keep the default.'),
     start_date: calendarDateSchema.nullable().optional(),
     deadline: calendarDateSchema.nullable().optional(),
