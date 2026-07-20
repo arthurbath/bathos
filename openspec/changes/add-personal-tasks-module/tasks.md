@@ -27,11 +27,12 @@
 ## 3. Database and Domain Foundation
 
 - [x] 3.1a Add the owner-scoped `tasks_todos` table for the first-slice task, planning, source, lifecycle, recovery, and ordering model.
-- [ ] 3.1b Add owner-scoped area, project, heading, checklist, template, recurrence, reminder, and delivery tables when their product slices begin.
+- [x] 3.1b Add owner-scoped area, project, heading, and checklist tables for the hierarchy slice.
+- [ ] 3.1d Add owner-scoped template, recurrence, reminder, and delivery tables when their product slices begin.
 - [x] 3.1c Add owner-scoped planning-time-zone settings for date-derived views.
 - [x] 3.2 Add RLS policies and grants that restrict every current task record to its signed-in owner and withhold hard deletion from authenticated clients.
 - [x] 3.3a Add first-slice constraints and indexes for stable identifiers, provenance, valid lifecycle/disposition, planning queries, and synchronization.
-- [ ] 3.3b Add owner-inclusive hierarchy constraints and indexes with the later hierarchy tables.
+- [x] 3.3b Add owner-inclusive hierarchy constraints and indexes with the later hierarchy tables.
 - [x] 3.4 Add module-local TypeScript types and state-transition utilities with focused tests.
 - [x] 3.5 Add the selected local persistence, mutation queue, reconciliation, and conflict primitives.
 - [x] 3.6 Add stable ordering primitives with focused concurrent-order tests.
@@ -53,7 +54,10 @@
 ## 5. Daily Planning Workflow
 
 - [x] 5.1 Add Inbox behavior for unprocessed captures.
-- [ ] 5.2 Add areas, projects, headings, and checklist items with stable hierarchy behavior.
+- [x] 5.2a Add the owner-safe hierarchy schema, independent ordering, offline projection, and mutation primitives.
+- [ ] 5.2b Add area and project navigation, creation, editing, movement, and manual ordering.
+- [ ] 5.2c Add project headings, to-do placement, checklist editing, and hierarchy-context presentation in planning views.
+- [ ] 5.2d Add explicit project lifecycle, descendant transition, recoverable hierarchy deletion, history, export/restore, and trust tests.
 - [x] 5.3 Add Today and This Evening with manual ordering and unfinished-item rescheduling.
 - [x] 5.4 Add Upcoming with future start-date planning.
 - [x] 5.5 Add Anytime and Someday with the specified active/inactive semantics.

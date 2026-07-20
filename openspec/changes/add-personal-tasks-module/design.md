@@ -150,6 +150,20 @@ Area, project, heading, checklist, template, recurrence, reminder, and delivery 
 
 Rationale: The first migration should be production-grade for the behavior it exposes without freezing speculative hierarchy storage before those slices are implemented.
 
+### Normalize hierarchy and separate its order from planning order
+
+Areas, projects, headings, and checklist items use dedicated owner-scoped tables. To-dos retain nullable area, project, and heading references. A loose to-do may belong directly to one area. A project to-do derives its area through the project and therefore cannot also store a direct area reference. A heading always belongs to exactly one project, and a to-do that references a heading must reference that same project.
+
+Every hierarchy relationship uses an owner-inclusive foreign key. A relationship is therefore invalid when the child and parent owners differ, including when trusted service code bypasses RLS. Project-to-area, heading-to-project, checklist-to-to-do, and to-do-to-container relationships all use this boundary. Moving a project between areas changes only the project row because descendants derive that relationship. Moving a to-do between containers clears incompatible references before assigning the new parent.
+
+Planning order and hierarchy order are independent. Existing to-do `order_key` values continue to represent order inside planning placements and Today sections. To-dos gain a separate `hierarchy_order_key` for their order among loose area work, ungrouped project work, or one project heading. Projects use their own hierarchy order within an area or the unassigned-project scope. Areas, headings, and checklist items each maintain order only among peers in their own scope. All ordered collections retain stable-ID tie-breaking.
+
+Projects carry task-like lifecycle, recoverable disposition, planning placement, start date, deadline, and mutation metadata because projects can enter planning views and Logbook independently. Areas and headings are structural containers rather than completable work. Checklist items keep independent completion state, but completing or reopening a parent to-do never rewrites that state. Normal hierarchy removal is recoverable. Container transitions that affect descendants must use explicit domain operations rather than relying on foreign-key cascades or physical client deletion.
+
+Rationale: Normalized ownership keeps container meaning explicit, derived area membership avoids descendant rewrite storms, and separate order keys prevent a daily execution decision from changing durable project structure.
+
+Alternative considered: Store every hierarchy node in one generic tree table. Rejected because areas, projects, headings, to-dos, and checklist items have materially different lifecycle, planning, and mutation rules, and a generic node record would move those distinctions into fragile trigger logic.
+
 ### Do not implement tags
 
 The domain model will not include a generic many-to-many label system. Current tag usage will be translated into explicit task state or workflow fields after the exact vocabulary is defined.

@@ -9,10 +9,33 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
+const supportedUploadTables = new Set([
+  'tasks_todos',
+  'tasks_user_settings',
+  'tasks_areas',
+  'tasks_projects',
+  'tasks_headings',
+  'tasks_checklist_items',
+]);
+
+type HierarchyTable =
+  | 'tasks_areas'
+  | 'tasks_projects'
+  | 'tasks_headings'
+  | 'tasks_checklist_items';
+
 type TaskInsert = TablesInsert<'tasks_todos'>;
 type TaskUpdate = TablesUpdate<'tasks_todos'>;
 type TaskSettingsInsert = TablesInsert<'tasks_user_settings'>;
 type TaskSettingsUpdate = TablesUpdate<'tasks_user_settings'>;
+type TaskAreaInsert = TablesInsert<'tasks_areas'>;
+type TaskAreaUpdate = TablesUpdate<'tasks_areas'>;
+type TaskProjectInsert = TablesInsert<'tasks_projects'>;
+type TaskProjectUpdate = TablesUpdate<'tasks_projects'>;
+type TaskHeadingInsert = TablesInsert<'tasks_headings'>;
+type TaskHeadingUpdate = TablesUpdate<'tasks_headings'>;
+type TaskChecklistItemInsert = TablesInsert<'tasks_checklist_items'>;
+type TaskChecklistItemUpdate = TablesUpdate<'tasks_checklist_items'>;
 
 export type TasksRemoteWriteOutcome =
   | { status: 'applied' | 'already_applied' }
@@ -31,6 +54,18 @@ export interface TasksRemoteStore {
     settingsId: string,
     baseRevision: number,
     patch: TaskSettingsUpdate,
+  ): Promise<TasksRemoteWriteOutcome>;
+  insertArea(area: TaskAreaInsert): Promise<TasksRemoteWriteOutcome>;
+  updateArea(id: string, baseRevision: number, patch: TaskAreaUpdate): Promise<TasksRemoteWriteOutcome>;
+  insertProject(project: TaskProjectInsert): Promise<TasksRemoteWriteOutcome>;
+  updateProject(id: string, baseRevision: number, patch: TaskProjectUpdate): Promise<TasksRemoteWriteOutcome>;
+  insertHeading(heading: TaskHeadingInsert): Promise<TasksRemoteWriteOutcome>;
+  updateHeading(id: string, baseRevision: number, patch: TaskHeadingUpdate): Promise<TasksRemoteWriteOutcome>;
+  insertChecklistItem(item: TaskChecklistItemInsert): Promise<TasksRemoteWriteOutcome>;
+  updateChecklistItem(
+    id: string,
+    baseRevision: number,
+    patch: TaskChecklistItemUpdate,
   ): Promise<TasksRemoteWriteOutcome>;
 }
 
@@ -76,7 +111,7 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
   };
 
   private async uploadEntry(database: AbstractPowerSyncDatabase, entry: CrudEntry): Promise<void> {
-    if (entry.table !== 'tasks_todos' && entry.table !== 'tasks_user_settings') {
+    if (!supportedUploadTables.has(entry.table)) {
       await recordSyncIssue(database, entry, {
         kind: 'rejected_operation',
         code: 'unsupported_table',
@@ -107,14 +142,46 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
         } else {
           throw new InvalidTasksCrudEntryError('Unsupported task mutation operation');
         }
-      } else if (entry.op === UpdateType.PUT) {
+      } else if (entry.table === 'tasks_user_settings' && entry.op === UpdateType.PUT) {
         outcome = await this.options.remoteStore.insertSettings(parseSettingsInsert(entry));
-      } else if (entry.op === UpdateType.PATCH) {
+      } else if (entry.table === 'tasks_user_settings' && entry.op === UpdateType.PATCH) {
         const patch = parseSettingsUpdate(entry);
         outcome = await this.options.remoteStore.updateSettings(
           entry.id,
           requirePositiveInteger(patch.revision, 'revision') - 1,
           patch,
+        );
+      } else if (entry.table === 'tasks_areas') {
+        outcome = await uploadHierarchyEntry(
+          entry,
+          parseAreaInsert,
+          parseAreaUpdate,
+          this.options.remoteStore.insertArea.bind(this.options.remoteStore),
+          this.options.remoteStore.updateArea.bind(this.options.remoteStore),
+        );
+      } else if (entry.table === 'tasks_projects') {
+        outcome = await uploadHierarchyEntry(
+          entry,
+          parseProjectInsert,
+          parseProjectUpdate,
+          this.options.remoteStore.insertProject.bind(this.options.remoteStore),
+          this.options.remoteStore.updateProject.bind(this.options.remoteStore),
+        );
+      } else if (entry.table === 'tasks_headings') {
+        outcome = await uploadHierarchyEntry(
+          entry,
+          parseHeadingInsert,
+          parseHeadingUpdate,
+          this.options.remoteStore.insertHeading.bind(this.options.remoteStore),
+          this.options.remoteStore.updateHeading.bind(this.options.remoteStore),
+        );
+      } else if (entry.table === 'tasks_checklist_items') {
+        outcome = await uploadHierarchyEntry(
+          entry,
+          parseChecklistItemInsert,
+          parseChecklistItemUpdate,
+          this.options.remoteStore.insertChecklistItem.bind(this.options.remoteStore),
+          this.options.remoteStore.updateChecklistItem.bind(this.options.remoteStore),
         );
       } else {
         throw new InvalidTasksCrudEntryError('Unsupported task settings mutation operation');
@@ -267,6 +334,114 @@ export class TasksSupabaseRemoteStore implements TasksRemoteStore {
     );
   }
 
+  insertArea(area: TaskAreaInsert): Promise<TasksRemoteWriteOutcome> {
+    return this.insertHierarchy('tasks_areas', area);
+  }
+
+  updateArea(
+    id: string,
+    baseRevision: number,
+    patch: TaskAreaUpdate,
+  ): Promise<TasksRemoteWriteOutcome> {
+    return this.updateHierarchy('tasks_areas', id, baseRevision, patch);
+  }
+
+  insertProject(project: TaskProjectInsert): Promise<TasksRemoteWriteOutcome> {
+    return this.insertHierarchy('tasks_projects', project);
+  }
+
+  updateProject(
+    id: string,
+    baseRevision: number,
+    patch: TaskProjectUpdate,
+  ): Promise<TasksRemoteWriteOutcome> {
+    return this.updateHierarchy('tasks_projects', id, baseRevision, patch);
+  }
+
+  insertHeading(heading: TaskHeadingInsert): Promise<TasksRemoteWriteOutcome> {
+    return this.insertHierarchy('tasks_headings', heading);
+  }
+
+  updateHeading(
+    id: string,
+    baseRevision: number,
+    patch: TaskHeadingUpdate,
+  ): Promise<TasksRemoteWriteOutcome> {
+    return this.updateHierarchy('tasks_headings', id, baseRevision, patch);
+  }
+
+  insertChecklistItem(item: TaskChecklistItemInsert): Promise<TasksRemoteWriteOutcome> {
+    return this.insertHierarchy('tasks_checklist_items', item);
+  }
+
+  updateChecklistItem(
+    id: string,
+    baseRevision: number,
+    patch: TaskChecklistItemUpdate,
+  ): Promise<TasksRemoteWriteOutcome> {
+    return this.updateHierarchy('tasks_checklist_items', id, baseRevision, patch);
+  }
+
+  private async insertHierarchy<T extends HierarchyTable>(
+    table: T,
+    row: TablesInsert<T>,
+  ): Promise<TasksRemoteWriteOutcome> {
+    const { error } = await this.supabase.from(table).insert(row as never);
+    if (!error) return { status: 'applied' };
+    if (error.code !== '23505') return classifyRemoteError(error);
+    return this.classifyHierarchyRetry(
+      table,
+      row.id,
+      requirePositiveInteger(row.revision ?? 1, 'revision'),
+      row.client_mutation_id,
+    );
+  }
+
+  private async updateHierarchy<T extends HierarchyTable>(
+    table: T,
+    id: string,
+    baseRevision: number,
+    patch: TablesUpdate<T>,
+  ): Promise<TasksRemoteWriteOutcome> {
+    const query = await this.supabase
+      .from(table)
+      .update(patch as never)
+      .eq('id', id)
+      .eq('revision', baseRevision)
+      .select('id, revision, client_mutation_id')
+      .maybeSingle();
+    if (query.error) return classifyRemoteError(query.error);
+    if (query.data !== null) return { status: 'applied' };
+    return this.classifyHierarchyRetry(
+      table,
+      id,
+      requirePositiveInteger(patch.revision, 'revision'),
+      requireText(patch.client_mutation_id, 'client_mutation_id'),
+    );
+  }
+
+  private async classifyHierarchyRetry(
+    table: HierarchyTable,
+    id: string,
+    expectedRevision: number,
+    expectedMutationId: string,
+  ): Promise<TasksRemoteWriteOutcome> {
+    const current = await this.supabase
+      .from(table)
+      .select('id, revision, client_mutation_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (current.error) throwRemoteReadError(current.error);
+    const row = current.data as {
+      revision: number;
+      client_mutation_id: string;
+    } | null;
+    return row?.revision === expectedRevision
+      && row.client_mutation_id === expectedMutationId
+      ? { status: 'already_applied' }
+      : { status: 'conflict', remoteRevision: row?.revision ?? null };
+  }
+
   private async classifySettingsRetry(
     settingsId: string,
     expectedRevision: number,
@@ -320,6 +495,9 @@ function parseTaskInsert(entry: CrudEntry): TaskInsert {
   return {
     id: entry.id,
     owner_id: requireText(data.owner_id, 'owner_id'),
+    area_id: optionalText(data.area_id),
+    project_id: optionalText(data.project_id),
+    heading_id: optionalText(data.heading_id),
     title: requireText(data.title, 'title'),
     notes: optionalText(data.notes) ?? '',
     lifecycle: optionalText(data.lifecycle) ?? 'open',
@@ -330,6 +508,7 @@ function parseTaskInsert(entry: CrudEntry): TaskInsert {
     destination: optionalText(data.destination) ?? 'inbox',
     today_section: optionalText(data.today_section) ?? 'daytime',
     order_key: requireText(data.order_key, 'order_key'),
+    hierarchy_order_key: optionalText(data.hierarchy_order_key),
     start_date: optionalText(data.start_date),
     deadline: optionalText(data.deadline),
     entry_channel: entryChannel,
@@ -360,6 +539,10 @@ function parseTaskUpdate(entry: CrudEntry): TaskUpdate {
     'destination',
     'today_section',
     'order_key',
+    'area_id',
+    'project_id',
+    'heading_id',
+    'hierarchy_order_key',
     'start_date',
     'deadline',
     'last_mutation_channel',
@@ -414,6 +597,136 @@ function parseSettingsUpdate(entry: CrudEntry): TaskSettingsUpdate {
   requireText(data.client_mutation_id, 'client_mutation_id');
   requireText(data.updated_at, 'updated_at');
   return { ...data } as TaskSettingsUpdate;
+}
+
+async function uploadHierarchyEntry<I, U extends { revision?: number }>(
+  entry: CrudEntry,
+  parseInsert: (entry: CrudEntry) => I,
+  parseUpdate: (entry: CrudEntry) => U,
+  insert: (row: I) => Promise<TasksRemoteWriteOutcome>,
+  update: (id: string, baseRevision: number, patch: U) => Promise<TasksRemoteWriteOutcome>,
+): Promise<TasksRemoteWriteOutcome> {
+  if (entry.op === UpdateType.PUT) return insert(parseInsert(entry));
+  if (entry.op === UpdateType.PATCH) {
+    const patch = parseUpdate(entry);
+    return update(
+      entry.id,
+      requirePositiveInteger(patch.revision, 'revision') - 1,
+      patch,
+    );
+  }
+  throw new InvalidTasksCrudEntryError('Unsupported task hierarchy mutation operation');
+}
+
+function parseAreaInsert(entry: CrudEntry): TaskAreaInsert {
+  return parseHierarchyInsert(entry, ['title', 'order_key']) as TaskAreaInsert;
+}
+
+function parseProjectInsert(entry: CrudEntry): TaskProjectInsert {
+  return parseHierarchyInsert(entry, ['title', 'order_key', 'planning_order_key']) as TaskProjectInsert;
+}
+
+function parseHeadingInsert(entry: CrudEntry): TaskHeadingInsert {
+  return parseHierarchyInsert(entry, ['project_id', 'title', 'order_key']) as TaskHeadingInsert;
+}
+
+function parseChecklistItemInsert(entry: CrudEntry): TaskChecklistItemInsert {
+  const parsed = parseHierarchyInsert(entry, ['task_id', 'title', 'order_key']);
+  return {
+    ...parsed,
+    completed: booleanOrDefault(parsed.completed, false),
+  } as TaskChecklistItemInsert;
+}
+
+function parseAreaUpdate(entry: CrudEntry): TaskAreaUpdate {
+  return parseHierarchyUpdate(entry, hierarchyMutableColumns.area) as TaskAreaUpdate;
+}
+
+function parseProjectUpdate(entry: CrudEntry): TaskProjectUpdate {
+  return parseHierarchyUpdate(entry, hierarchyMutableColumns.project) as TaskProjectUpdate;
+}
+
+function parseHeadingUpdate(entry: CrudEntry): TaskHeadingUpdate {
+  return parseHierarchyUpdate(entry, hierarchyMutableColumns.heading) as TaskHeadingUpdate;
+}
+
+function parseChecklistItemUpdate(entry: CrudEntry): TaskChecklistItemUpdate {
+  const parsed = parseHierarchyUpdate(entry, hierarchyMutableColumns.checklist);
+  return {
+    ...parsed,
+    ...(parsed.completed === undefined
+      ? {}
+      : { completed: booleanOrDefault(parsed.completed, false) }),
+  } as TaskChecklistItemUpdate;
+}
+
+const hierarchyMutableColumns = {
+  area: ['title', 'order_key', 'disposition', 'deleted_at'],
+  project: [
+    'area_id', 'title', 'notes', 'lifecycle', 'completed_at', 'canceled_at',
+    'disposition', 'deleted_at', 'destination', 'today_section', 'order_key',
+    'planning_order_key', 'start_date', 'deadline',
+  ],
+  heading: ['title', 'order_key', 'disposition', 'deleted_at'],
+  checklist: [
+    'title', 'completed', 'completed_at', 'order_key', 'disposition', 'deleted_at',
+  ],
+} as const;
+
+const hierarchyMetadataColumns = [
+  'last_mutation_channel',
+  'last_actor_type',
+  'revision',
+  'client_mutation_id',
+  'updated_at',
+] as const;
+
+function parseHierarchyInsert(
+  entry: CrudEntry,
+  requiredColumns: readonly string[],
+): Record<string, unknown> {
+  const data = entry.opData ?? {};
+  const entryChannel = optionalText(data.entry_channel) ?? 'web';
+  const parsed: Record<string, unknown> = {
+    id: entry.id,
+    ...data,
+    owner_id: requireText(data.owner_id, 'owner_id'),
+    entry_channel: entryChannel,
+    last_mutation_channel: optionalText(data.last_mutation_channel) ?? entryChannel,
+    last_actor_type: optionalText(data.last_actor_type) ?? 'user',
+    revision: requirePositiveInteger(data.revision, 'revision'),
+    client_mutation_id: requireText(data.client_mutation_id, 'client_mutation_id'),
+    created_at: requireText(data.created_at, 'created_at'),
+    updated_at: requireText(data.updated_at, 'updated_at'),
+  };
+  for (const columnName of requiredColumns) {
+    parsed[columnName] = requireText(data[columnName], columnName);
+  }
+  return parsed;
+}
+
+function parseHierarchyUpdate(
+  entry: CrudEntry,
+  mutableColumns: readonly string[],
+): Record<string, unknown> {
+  const data = entry.opData ?? {};
+  const allowedColumns = new Set([...mutableColumns, ...hierarchyMetadataColumns]);
+  if (Object.keys(data).some((columnName) => !allowedColumns.has(columnName))) {
+    throw new InvalidTasksCrudEntryError(
+      'The task hierarchy update contains an immutable or unknown field',
+    );
+  }
+  requirePositiveInteger(data.revision, 'revision');
+  requireText(data.client_mutation_id, 'client_mutation_id');
+  requireText(data.updated_at, 'updated_at');
+  return { ...data };
+}
+
+function booleanOrDefault(value: unknown, fallback: boolean): boolean {
+  if (value === undefined || value === null) return fallback;
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
+  throw new InvalidTasksCrudEntryError('The task mutation contains invalid boolean data');
 }
 
 async function recordSyncIssue(

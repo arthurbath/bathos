@@ -16,6 +16,9 @@ const timestamp = '2026-07-20T04:30:00.000Z';
 const existingTask: TaskTodo = {
   id: 'task-a',
   owner_id: 'owner-a',
+  area_id: null,
+  project_id: null,
+  heading_id: null,
   title: 'Existing task',
   notes: '',
   lifecycle: 'open',
@@ -26,6 +29,7 @@ const existingTask: TaskTodo = {
   destination: 'inbox',
   today_section: 'daytime',
   order_key: 'a0',
+  hierarchy_order_key: null,
   start_date: null,
   deadline: null,
   entry_channel: 'web',
@@ -222,6 +226,30 @@ describe('task repository', () => {
       start_date: null,
       deadline: '2026-07-24',
     });
+  });
+
+  it('moves a task into one owned project heading without changing planning order', async () => {
+    const { repository, transaction } = createHarness(existingTask);
+    vi.mocked(transaction.getOptional)
+      .mockResolvedValueOnce(existingTask)
+      .mockResolvedValueOnce({ id: 'project-a' })
+      .mockResolvedValueOnce({ project_id: 'project-a' });
+
+    await expect(repository.moveTaskToContainer('owner-a', 'task-a', {
+      projectId: 'project-a',
+      headingId: 'heading-a',
+      hierarchyOrderKey: 'a1',
+    })).resolves.toMatchObject({
+      project_id: 'project-a',
+      heading_id: 'heading-a',
+      hierarchy_order_key: 'a1',
+      destination: 'inbox',
+      order_key: 'a0',
+      revision: 2,
+    });
+    expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain(
+      'project_id = ?, heading_id = ?, hierarchy_order_key = ?',
+    );
   });
 
   it('rejects Today-only placement outside Today and start dates in inactive destinations', async () => {

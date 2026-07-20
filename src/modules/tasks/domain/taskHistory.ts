@@ -27,6 +27,10 @@ export type TaskHistorySnapshot = Pick<
   | 'destination'
   | 'today_section'
   | 'order_key'
+  | 'area_id'
+  | 'project_id'
+  | 'heading_id'
+  | 'hierarchy_order_key'
   | 'start_date'
   | 'deadline'
   | 'source_kind'
@@ -124,6 +128,10 @@ export function snapshotTask(task: TaskTodo): TaskHistorySnapshot {
     destination: task.destination,
     today_section: task.today_section,
     order_key: task.order_key,
+    area_id: task.area_id ?? null,
+    project_id: task.project_id ?? null,
+    heading_id: task.heading_id ?? null,
+    hierarchy_order_key: task.hierarchy_order_key ?? null,
     start_date: task.start_date ?? null,
     deadline: task.deadline ?? null,
     source_kind: task.source_kind,
@@ -152,6 +160,13 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
       ? 'daytime'
       : requireEnum(parsed.today_section, taskTodaySections, 'Today section') as TaskTodaySection,
     order_key: requireText(parsed.order_key, 'order_key'),
+    area_id: optionalTextOrMissing(parsed.area_id, 'area_id'),
+    project_id: optionalTextOrMissing(parsed.project_id, 'project_id'),
+    heading_id: optionalTextOrMissing(parsed.heading_id, 'heading_id'),
+    hierarchy_order_key: optionalTextOrMissing(
+      parsed.hierarchy_order_key,
+      'hierarchy_order_key',
+    ),
     start_date: optionalTextOrMissing(parsed.start_date, 'start_date'),
     deadline: optionalTextOrMissing(parsed.deadline, 'deadline'),
     source_kind: parsed.source_kind === null
@@ -236,6 +251,10 @@ function snapshotsEqual(left: TaskHistorySnapshot, right: TaskHistorySnapshot): 
     && left.destination === right.destination
     && left.today_section === right.today_section
     && left.order_key === right.order_key
+    && left.area_id === right.area_id
+    && left.project_id === right.project_id
+    && left.heading_id === right.heading_id
+    && left.hierarchy_order_key === right.hierarchy_order_key
     && left.start_date === right.start_date
     && left.deadline === right.deadline
     && left.source_kind === right.source_kind

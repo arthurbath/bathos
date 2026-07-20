@@ -3,6 +3,9 @@ import { column, Schema, Table } from '@powersync/web';
 const taskTodos = new Table(
   {
     owner_id: column.text,
+    area_id: column.text,
+    project_id: column.text,
+    heading_id: column.text,
     title: column.text,
     notes: column.text,
     lifecycle: column.text,
@@ -13,6 +16,7 @@ const taskTodos = new Table(
     destination: column.text,
     today_section: column.text,
     order_key: column.text,
+    hierarchy_order_key: column.text,
     start_date: column.text,
     deadline: column.text,
     entry_channel: column.text,
@@ -41,8 +45,114 @@ const taskTodos = new Table(
       ownerStartDate: ['owner_id', 'start_date', 'disposition', 'lifecycle', 'order_key'],
       ownerDeadline: ['owner_id', 'deadline', 'disposition', 'lifecycle'],
       ownerUpdated: ['owner_id', '-updated_at'],
+      ownerContainerOrder: [
+        'owner_id',
+        'area_id',
+        'project_id',
+        'heading_id',
+        'disposition',
+        'hierarchy_order_key',
+      ],
     },
   },
+);
+
+const taskAreas = new Table(
+  {
+    owner_id: column.text,
+    title: column.text,
+    order_key: column.text,
+    disposition: column.text,
+    deleted_at: column.text,
+    entry_channel: column.text,
+    last_mutation_channel: column.text,
+    last_actor_type: column.text,
+    revision: column.integer,
+    client_mutation_id: column.text,
+    created_at: column.text,
+    updated_at: column.text,
+  },
+  { indexes: { ownerOrder: ['owner_id', 'disposition', 'order_key'] } },
+);
+
+const taskProjects = new Table(
+  {
+    owner_id: column.text,
+    area_id: column.text,
+    title: column.text,
+    notes: column.text,
+    lifecycle: column.text,
+    completed_at: column.text,
+    canceled_at: column.text,
+    disposition: column.text,
+    deleted_at: column.text,
+    destination: column.text,
+    today_section: column.text,
+    order_key: column.text,
+    planning_order_key: column.text,
+    start_date: column.text,
+    deadline: column.text,
+    entry_channel: column.text,
+    last_mutation_channel: column.text,
+    last_actor_type: column.text,
+    revision: column.integer,
+    client_mutation_id: column.text,
+    created_at: column.text,
+    updated_at: column.text,
+  },
+  {
+    indexes: {
+      ownerAreaOrder: ['owner_id', 'area_id', 'disposition', 'order_key'],
+      ownerPlanningOrder: [
+        'owner_id',
+        'destination',
+        'today_section',
+        'disposition',
+        'lifecycle',
+        'planning_order_key',
+      ],
+    },
+  },
+);
+
+const taskHeadings = new Table(
+  {
+    owner_id: column.text,
+    project_id: column.text,
+    title: column.text,
+    order_key: column.text,
+    disposition: column.text,
+    deleted_at: column.text,
+    entry_channel: column.text,
+    last_mutation_channel: column.text,
+    last_actor_type: column.text,
+    revision: column.integer,
+    client_mutation_id: column.text,
+    created_at: column.text,
+    updated_at: column.text,
+  },
+  { indexes: { ownerProjectOrder: ['owner_id', 'project_id', 'disposition', 'order_key'] } },
+);
+
+const taskChecklistItems = new Table(
+  {
+    owner_id: column.text,
+    task_id: column.text,
+    title: column.text,
+    completed: column.integer,
+    completed_at: column.text,
+    order_key: column.text,
+    disposition: column.text,
+    deleted_at: column.text,
+    entry_channel: column.text,
+    last_mutation_channel: column.text,
+    last_actor_type: column.text,
+    revision: column.integer,
+    client_mutation_id: column.text,
+    created_at: column.text,
+    updated_at: column.text,
+  },
+  { indexes: { ownerTaskOrder: ['owner_id', 'task_id', 'disposition', 'order_key'] } },
 );
 
 const taskHistoryEvents = new Table(
@@ -113,7 +223,11 @@ const taskOwnerBinding = new Table(
 );
 
 export const tasksPowerSyncSchema = new Schema({
+  tasks_areas: taskAreas,
+  tasks_projects: taskProjects,
+  tasks_headings: taskHeadings,
   tasks_todos: taskTodos,
+  tasks_checklist_items: taskChecklistItems,
   tasks_history_events: taskHistoryEvents,
   tasks_user_settings: taskUserSettings,
   tasks_sync_issues: taskSyncIssues,

@@ -59,6 +59,32 @@ function settingsInsertEntry() {
   });
 }
 
+function areaInsertEntry() {
+  return new CrudEntry(4, UpdateType.PUT, 'tasks_areas', 'area-a', 4, {
+    owner_id: 'owner-a',
+    title: 'Work',
+    order_key: 'a0',
+    disposition: 'present',
+    entry_channel: 'web',
+    last_mutation_channel: 'web',
+    last_actor_type: 'user',
+    revision: 1,
+    client_mutation_id: 'mutation-area',
+    created_at: '2026-07-20T04:00:00.000Z',
+    updated_at: '2026-07-20T04:00:00.000Z',
+  });
+}
+
+function checklistPatchEntry() {
+  return new CrudEntry(5, UpdateType.PATCH, 'tasks_checklist_items', 'item-a', 5, {
+    completed: 1,
+    completed_at: '2026-07-20T05:00:00.000Z',
+    revision: 2,
+    client_mutation_id: 'mutation-checklist',
+    updated_at: '2026-07-20T05:00:00.000Z',
+  });
+}
+
 function createHarness(
   entry: CrudEntry,
   outcome: TasksRemoteWriteOutcome | Error = { status: 'applied' },
@@ -75,6 +101,14 @@ function createHarness(
     updateTask: vi.fn(resolve),
     insertSettings: vi.fn(resolve),
     updateSettings: vi.fn(resolve),
+    insertArea: vi.fn(resolve),
+    updateArea: vi.fn(resolve),
+    insertProject: vi.fn(resolve),
+    updateProject: vi.fn(resolve),
+    insertHeading: vi.fn(resolve),
+    updateHeading: vi.fn(resolve),
+    insertChecklistItem: vi.fn(resolve),
+    updateChecklistItem: vi.fn(resolve),
   };
   const connector = new TasksSyncConnector({
     endpoint: 'https://sync.example.test',
@@ -104,6 +138,32 @@ describe('task sync connector', () => {
       created_at: '2026-07-20T04:00:00.000Z',
       updated_at: '2026-07-20T04:00:00.000Z',
     });
+  });
+
+  it('uploads hierarchy inserts through the same revision-safe queue', async () => {
+    const { connector, database, remoteStore } = createHarness(areaInsertEntry());
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.insertArea).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'area-a',
+      owner_id: 'owner-a',
+      title: 'Work',
+      revision: 1,
+      client_mutation_id: 'mutation-area',
+    }));
+  });
+
+  it('normalizes checklist booleans and uses the prior hierarchy revision', async () => {
+    const { connector, database, remoteStore } = createHarness(checklistPatchEntry());
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.updateChecklistItem).toHaveBeenCalledWith(
+      'item-a',
+      1,
+      expect.objectContaining({ completed: true, revision: 2 }),
+    );
   });
 
   it('uploads complete inserts and restores omitted null fields', async () => {

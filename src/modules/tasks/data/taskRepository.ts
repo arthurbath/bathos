@@ -43,6 +43,10 @@ export type CreateTaskInput = {
   sourceTitle?: string | null;
   sourceExternalId?: string | null;
   actorType?: TaskActorType;
+  areaId?: string | null;
+  projectId?: string | null;
+  headingId?: string | null;
+  hierarchyOrderKey?: string | null;
 };
 
 export type TaskMutationContext = {
@@ -56,6 +60,13 @@ export type TaskPlanningMoveInput = {
   startDate?: string | null;
 };
 
+export type TaskContainerMoveInput = {
+  areaId?: string | null;
+  projectId?: string | null;
+  headingId?: string | null;
+  hierarchyOrderKey?: string | null;
+};
+
 export type EditableTaskPatch = Partial<
   Pick<
     TaskTodo,
@@ -64,6 +75,10 @@ export type EditableTaskPatch = Partial<
     | 'destination'
     | 'today_section'
     | 'order_key'
+    | 'area_id'
+    | 'project_id'
+    | 'heading_id'
+    | 'hierarchy_order_key'
     | 'start_date'
     | 'deadline'
     | 'source_kind'
@@ -81,6 +96,9 @@ export type TaskRepositoryOptions = {
 const insertColumns = [
   'id',
   'owner_id',
+  'area_id',
+  'project_id',
+  'heading_id',
   'title',
   'notes',
   'lifecycle',
@@ -91,6 +109,7 @@ const insertColumns = [
   'destination',
   'today_section',
   'order_key',
+  'hierarchy_order_key',
   'start_date',
   'deadline',
   'entry_channel',
@@ -152,11 +171,23 @@ export class TaskRepository {
     const startDate = normalizeTaskCalendarDate(input.startDate, 'Start date') ?? null;
     const deadline = normalizeTaskCalendarDate(input.deadline, 'Deadline') ?? null;
     assertTaskCalendarRange(startDate, deadline);
+    assertTaskContainer(
+      input.areaId ?? null,
+      input.projectId ?? null,
+      input.headingId ?? null,
+    );
 
     return this.database.writeTransaction(async (transaction) => {
       const destination = input.destination ?? 'inbox';
       const todaySection = input.todaySection ?? 'daytime';
       assertPlanningPlacement(destination, todaySection, startDate);
+      await assertOwnedTaskContainer(
+        transaction,
+        input.ownerId,
+        input.areaId ?? null,
+        input.projectId ?? null,
+        input.headingId ?? null,
+      );
       const lastTask = input.orderKey
         ? null
         : await transaction.getOptional<{ order_key: string }>(
@@ -176,6 +207,9 @@ export class TaskRepository {
       const task: TaskTodo = {
         id: this.createId(),
         owner_id: input.ownerId,
+        area_id: input.areaId ?? null,
+        project_id: input.projectId ?? null,
+        heading_id: input.headingId ?? null,
         title,
         notes: input.notes ?? '',
         lifecycle: 'open',
@@ -186,6 +220,7 @@ export class TaskRepository {
         destination,
         today_section: todaySection,
         order_key: input.orderKey ?? generateTaskOrderKey(lastTask?.order_key ?? null, null),
+        hierarchy_order_key: input.hierarchyOrderKey ?? null,
         start_date: startDate,
         deadline,
         entry_channel: entryChannel,
@@ -353,6 +388,43 @@ export class TaskRepository {
     });
   }
 
+  async moveTaskToContainer(
+    ownerId: string,
+    taskId: string,
+    input: TaskContainerMoveInput,
+    context?: TaskMutationContext,
+  ): Promise<TaskTodo> {
+    assertOwner(ownerId);
+    const areaId = input.areaId ?? null;
+    const projectId = input.projectId ?? null;
+    const headingId = input.headingId ?? null;
+    assertTaskContainer(areaId, projectId, headingId);
+
+    return this.database.writeTransaction(async (transaction) => {
+      const current = await getOwnedTask(transaction, ownerId, taskId);
+      await assertOwnedTaskContainer(
+        transaction,
+        ownerId,
+        areaId,
+        projectId,
+        headingId,
+      );
+      return updateOwnedTask(
+        transaction,
+        current,
+        {
+          area_id: areaId,
+          project_id: projectId,
+          heading_id: headingId,
+          hierarchy_order_key: input.hierarchyOrderKey ?? null,
+        },
+        this.createId(),
+        this.now(),
+        normalizeMutationContext(context),
+      );
+    });
+  }
+
   async undoTask(
     ownerId: string,
     eventId: string,
@@ -385,6 +457,18 @@ export class TaskRepository {
         patch.destination === undefined ? current.destination : patch.destination,
         patch.today_section === undefined ? current.today_section : patch.today_section,
         patch.start_date === undefined ? current.start_date : patch.start_date,
+      );
+      assertTaskContainer(
+        patch.area_id === undefined ? current.area_id : patch.area_id,
+        patch.project_id === undefined ? current.project_id : patch.project_id,
+        patch.heading_id === undefined ? current.heading_id : patch.heading_id,
+      );
+      await assertOwnedTaskContainer(
+        transaction,
+        ownerId,
+        patch.area_id,
+        patch.project_id,
+        patch.heading_id,
       );
 
       return updateOwnedTask(
@@ -429,6 +513,24 @@ export class TaskRepository {
         patch.today_section === undefined ? current.today_section : patch.today_section,
         patch.start_date === undefined ? current.start_date : patch.start_date,
       );
+      assertTaskContainer(
+        patch.area_id === undefined ? current.area_id : patch.area_id,
+        patch.project_id === undefined ? current.project_id : patch.project_id,
+        patch.heading_id === undefined ? current.heading_id : patch.heading_id,
+      );
+      if (
+        patch.area_id !== undefined
+        || patch.project_id !== undefined
+        || patch.heading_id !== undefined
+      ) {
+        await assertOwnedTaskContainer(
+          transaction,
+          ownerId,
+          patch.area_id === undefined ? current.area_id : patch.area_id,
+          patch.project_id === undefined ? current.project_id : patch.project_id,
+          patch.heading_id === undefined ? current.heading_id : patch.heading_id,
+        );
+      }
 
       return updateOwnedTask(
         transaction,
@@ -536,6 +638,55 @@ function normalizeTitle(title: string): string {
     throw new InvalidTaskMutationError('A task title cannot exceed 500 characters');
   }
   return normalized;
+}
+
+function assertTaskContainer(
+  areaId: string | null,
+  projectId: string | null,
+  headingId: string | null,
+): void {
+  if (areaId != null && projectId != null) {
+    throw new InvalidTaskMutationError(
+      'A task cannot belong directly to both an area and a project',
+    );
+  }
+  if (headingId != null && projectId == null) {
+    throw new InvalidTaskMutationError('A task heading requires project membership');
+  }
+}
+
+async function assertOwnedTaskContainer(
+  transaction: Transaction,
+  ownerId: string,
+  areaId: string | null | undefined,
+  projectId: string | null | undefined,
+  headingId: string | null | undefined,
+): Promise<void> {
+  if (areaId != null) {
+    const area = await transaction.getOptional<{ id: string }>(
+      'SELECT id FROM tasks_areas WHERE id = ? AND owner_id = ?',
+      [areaId, ownerId],
+    );
+    if (area === null) throw new InvalidTaskMutationError('The task area is unavailable');
+  }
+  if (projectId != null) {
+    const project = await transaction.getOptional<{ id: string }>(
+      'SELECT id FROM tasks_projects WHERE id = ? AND owner_id = ?',
+      [projectId, ownerId],
+    );
+    if (project === null) throw new InvalidTaskMutationError('The task project is unavailable');
+  }
+  if (headingId != null) {
+    const heading = await transaction.getOptional<{ project_id: string }>(
+      'SELECT project_id FROM tasks_headings WHERE id = ? AND owner_id = ?',
+      [headingId, ownerId],
+    );
+    if (heading === null || heading.project_id !== projectId) {
+      throw new InvalidTaskMutationError(
+        'The task heading does not belong to the selected project',
+      );
+    }
+  }
 }
 
 function assertOwner(ownerId: string): void {

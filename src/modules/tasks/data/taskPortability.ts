@@ -7,8 +7,12 @@ import type {
 } from '@/modules/tasks/domain/taskHistory';
 import type { TaskTodo, TaskUserSettings } from '@/modules/tasks/types/tasks';
 
-type LegacyTaskTodo = Omit<TaskTodo, 'today_section'>;
-type LegacyTaskHistorySnapshot = Omit<TaskHistorySnapshot, 'today_section'>;
+type HierarchyTaskFields = 'area_id' | 'project_id' | 'heading_id' | 'hierarchy_order_key';
+type LegacyTaskTodo = Omit<TaskTodo, 'today_section' | HierarchyTaskFields>;
+type LegacyTaskHistorySnapshot = Omit<
+  TaskHistorySnapshot,
+  'today_section' | HierarchyTaskFields
+>;
 type LegacyTaskHistoryEvent = Omit<TaskHistoryEvent, 'before_state' | 'after_state'> & {
   before_state: LegacyTaskHistorySnapshot | null;
   after_state: LegacyTaskHistorySnapshot;

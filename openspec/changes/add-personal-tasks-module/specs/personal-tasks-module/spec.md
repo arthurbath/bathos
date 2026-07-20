@@ -34,6 +34,26 @@ The system SHALL organize active work through Inbox, areas, projects, headings, 
 - **WHEN** a user places a project or loose to-do in an area
 - **THEN** the system includes the item in that area's active work
 
+#### Scenario: Keep project membership canonical
+- **WHEN** a to-do belongs to a project whose area changes
+- **THEN** the to-do remains in the project, derives its area from that project, and does not receive a competing direct area assignment
+
+#### Scenario: Organize a project with headings
+- **WHEN** a user places a to-do under a heading in a project
+- **THEN** the heading belongs to that same project and the system rejects cross-project or cross-owner hierarchy references
+
+#### Scenario: Move a to-do between containers
+- **WHEN** a user moves a to-do to an area, project, heading, or no container
+- **THEN** the system clears incompatible parent references, preserves the to-do's stable identity and planning state, and assigns an order within the new hierarchy scope
+
+#### Scenario: Maintain a checklist
+- **WHEN** a user adds, edits, reorders, completes, reopens, or recoverably removes a checklist item
+- **THEN** the checklist item remains owned by exactly one to-do and its completion state remains independent from the parent to-do's lifecycle
+
+#### Scenario: Order hierarchy independently from planning views
+- **WHEN** a user reorders an area, project, heading, project to-do, loose area to-do, or checklist item
+- **THEN** the system changes only the selected item's order within that hierarchy scope and does not change its order in Today, Anytime, Someday, or another planning view
+
 ### Requirement: Date-Based Planning Views
 The system SHALL derive Today, This Evening, Upcoming, Anytime, Someday, and Logbook from task state, start dates, deadlines, and completion state.
 

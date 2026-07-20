@@ -1081,6 +1081,178 @@ export type Database = {
           },
         ]
       }
+      tasks_areas: {
+        Row: {
+          client_mutation_id: string
+          created_at: string
+          deleted_at: string | null
+          disposition: string
+          entry_channel: string
+          id: string
+          last_actor_type: string
+          last_mutation_channel: string
+          order_key: string
+          owner_id: string
+          revision: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          client_mutation_id: string
+          created_at?: string
+          deleted_at?: string | null
+          disposition?: string
+          entry_channel?: string
+          id: string
+          last_actor_type?: string
+          last_mutation_channel?: string
+          order_key: string
+          owner_id: string
+          revision?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          client_mutation_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          disposition?: string
+          entry_channel?: string
+          id?: string
+          last_actor_type?: string
+          last_mutation_channel?: string
+          order_key?: string
+          owner_id?: string
+          revision?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tasks_checklist_items: {
+        Row: {
+          client_mutation_id: string
+          completed: boolean
+          completed_at: string | null
+          created_at: string
+          deleted_at: string | null
+          disposition: string
+          entry_channel: string
+          id: string
+          last_actor_type: string
+          last_mutation_channel: string
+          order_key: string
+          owner_id: string
+          revision: number
+          task_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          client_mutation_id: string
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          disposition?: string
+          entry_channel?: string
+          id: string
+          last_actor_type?: string
+          last_mutation_channel?: string
+          order_key: string
+          owner_id: string
+          revision?: number
+          task_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          client_mutation_id?: string
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          disposition?: string
+          entry_channel?: string
+          id?: string
+          last_actor_type?: string
+          last_mutation_channel?: string
+          order_key?: string
+          owner_id?: string
+          revision?: number
+          task_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_checklist_items_task_owner_fkey"
+            columns: ["task_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_todos"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
+      tasks_headings: {
+        Row: {
+          client_mutation_id: string
+          created_at: string
+          deleted_at: string | null
+          disposition: string
+          entry_channel: string
+          id: string
+          last_actor_type: string
+          last_mutation_channel: string
+          order_key: string
+          owner_id: string
+          project_id: string
+          revision: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          client_mutation_id: string
+          created_at?: string
+          deleted_at?: string | null
+          disposition?: string
+          entry_channel?: string
+          id: string
+          last_actor_type?: string
+          last_mutation_channel?: string
+          order_key: string
+          owner_id: string
+          project_id: string
+          revision?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          client_mutation_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          disposition?: string
+          entry_channel?: string
+          id?: string
+          last_actor_type?: string
+          last_mutation_channel?: string
+          order_key?: string
+          owner_id?: string
+          project_id?: string
+          revision?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_headings_project_owner_fkey"
+            columns: ["project_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_projects"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
       tasks_history_events: {
         Row: {
           actor_type: string
@@ -1143,8 +1315,9 @@ export type Database = {
           },
         ]
       }
-      tasks_todos: {
+      tasks_projects: {
         Row: {
+          area_id: string | null
           canceled_at: string | null
           client_mutation_id: string
           completed_at: string | null
@@ -1161,18 +1334,15 @@ export type Database = {
           notes: string
           order_key: string
           owner_id: string
+          planning_order_key: string
           revision: number
-          source_external_id: string | null
-          source_kind: string | null
-          source_title: string | null
-          source_url: string | null
           start_date: string | null
           today_section: string
           title: string
-          undo_source_event_id: string | null
           updated_at: string
         }
         Insert: {
+          area_id?: string | null
           canceled_at?: string | null
           client_mutation_id: string
           completed_at?: string | null
@@ -1189,18 +1359,15 @@ export type Database = {
           notes?: string
           order_key: string
           owner_id: string
+          planning_order_key: string
           revision?: number
-          source_external_id?: string | null
-          source_kind?: string | null
-          source_title?: string | null
-          source_url?: string | null
           start_date?: string | null
           today_section?: string
           title: string
-          undo_source_event_id?: string | null
           updated_at?: string
         }
         Update: {
+          area_id?: string | null
           canceled_at?: string | null
           client_mutation_id?: string
           completed_at?: string | null
@@ -1217,6 +1384,109 @@ export type Database = {
           notes?: string
           order_key?: string
           owner_id?: string
+          planning_order_key?: string
+          revision?: number
+          start_date?: string | null
+          today_section?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_projects_area_owner_fkey"
+            columns: ["area_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_areas"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
+      tasks_todos: {
+        Row: {
+          area_id: string | null
+          canceled_at: string | null
+          client_mutation_id: string
+          completed_at: string | null
+          created_at: string
+          deadline: string | null
+          deleted_at: string | null
+          destination: string
+          disposition: string
+          entry_channel: string
+          heading_id: string | null
+          hierarchy_order_key: string | null
+          id: string
+          last_actor_type: string
+          last_mutation_channel: string
+          lifecycle: string
+          notes: string
+          order_key: string
+          owner_id: string
+          project_id: string | null
+          revision: number
+          source_external_id: string | null
+          source_kind: string | null
+          source_title: string | null
+          source_url: string | null
+          start_date: string | null
+          today_section: string
+          title: string
+          undo_source_event_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          area_id?: string | null
+          canceled_at?: string | null
+          client_mutation_id: string
+          completed_at?: string | null
+          created_at?: string
+          deadline?: string | null
+          deleted_at?: string | null
+          destination?: string
+          disposition?: string
+          entry_channel?: string
+          heading_id?: string | null
+          hierarchy_order_key?: string | null
+          id: string
+          last_actor_type?: string
+          last_mutation_channel?: string
+          lifecycle?: string
+          notes?: string
+          order_key: string
+          owner_id: string
+          project_id?: string | null
+          revision?: number
+          source_external_id?: string | null
+          source_kind?: string | null
+          source_title?: string | null
+          source_url?: string | null
+          start_date?: string | null
+          today_section?: string
+          title: string
+          undo_source_event_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          area_id?: string | null
+          canceled_at?: string | null
+          client_mutation_id?: string
+          completed_at?: string | null
+          created_at?: string
+          deadline?: string | null
+          deleted_at?: string | null
+          destination?: string
+          disposition?: string
+          entry_channel?: string
+          heading_id?: string | null
+          hierarchy_order_key?: string | null
+          id?: string
+          last_actor_type?: string
+          last_mutation_channel?: string
+          lifecycle?: string
+          notes?: string
+          order_key?: string
+          owner_id?: string
+          project_id?: string | null
           revision?: number
           source_external_id?: string | null
           source_kind?: string | null
@@ -1228,7 +1498,29 @@ export type Database = {
           undo_source_event_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tasks_todos_area_owner_fkey"
+            columns: ["area_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_areas"
+            referencedColumns: ["id", "owner_id"]
+          },
+          {
+            foreignKeyName: "tasks_todos_heading_project_owner_fkey"
+            columns: ["heading_id", "project_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_headings"
+            referencedColumns: ["id", "project_id", "owner_id"]
+          },
+          {
+            foreignKeyName: "tasks_todos_project_owner_fkey"
+            columns: ["project_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_projects"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
       }
       tasks_user_settings: {
         Row: {
