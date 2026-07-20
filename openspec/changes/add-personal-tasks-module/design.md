@@ -10,6 +10,72 @@ BathOS already provides React, TypeScript, Supabase Auth, RLS, and an OAuth-auth
 
 The repository is public. Product documentation, migrations, tests, fixtures, and logs must not contain personal Things titles, notes, area names, project names, or other private content. Discovery findings committed to the repository must be generalized or aggregated.
 
+## Current Workflow Catalogue
+
+This catalogue records generalized behavior observed on 2026 Jul 19 through bounded read-only inspection of Things and the local capture systems that feed it. It deliberately excludes personal task content. The catalogue should be revised whenever parallel use reveals a different behavior or priority.
+
+### Capture
+
+- Manual capture is keyboard-first. Global shortcuts open Things or one of its quick-entry surfaces without requiring navigation through the main application.
+- General quick entry and context-aware quick entry are distinct workflows. Context-aware capture may attach information from the active application.
+- Browser reading capture runs through Raycast and Inbox Manager. It creates an unassigned Today to-do with a visible reading-origin marker and preserves the source URL in the notes.
+- Mail capture runs on a schedule through Inbox Manager. AI refines the title and notes before the to-do is created, stores durable message context and a source link, routes work mail to the work area, leaves personal mail unassigned, and schedules the result for Today.
+- External capture origins are currently represented through title prefixes, note structure, and links. The BathOS module should store the origin and source reference as structured data, then derive any visible marker from those fields.
+- Reusable projects and to-dos are currently held as template content inside Things. They are source material for future work, not ordinary active projects.
+
+### Planning
+
+- The Things Inbox is a temporary processing surface rather than a long-lived list. The observed Inbox was empty when inventoried.
+- Automated reading and mail captures bypass the Inbox and enter Today because they have already been processed enough to be actionable.
+- Today is the central daily commitment surface. Start dates, deadlines, areas, projects, Anytime, Someday, Upcoming, and This Evening provide conventional planning structure around it.
+- Work and personal routing is intentionally lightweight. Work mail enters a dedicated area, while personal and reading captures remain unassigned.
+- A narrow actionability distinction is currently carried by two tags. These are not general labels. The replacement vocabulary still needs to define the underlying states and their interaction with planning views.
+- Manual order matters because the list communicates execution intent, not only membership or chronology.
+
+### Execution
+
+- The main application can be activated globally, and high-frequency keyboard actions support completing the current to-do and advancing to the next one.
+- Execution is centered on the ordered Today list. A task must remain visibly stable while it is edited, completed, moved, or saved.
+- Source links are part of execution for captured webpages and mail. Opening the source record should not require searching for it again.
+- Completion must be fast, reversible, and safe under delayed synchronization or repeated automation calls.
+
+### Review, Completion, and Retention
+
+- Completed and canceled to-dos enter the Logbook.
+- Inbox Manager prunes Logbook items older than 30 days to Things Trash on a daily schedule. Long-term accumulation inside Things is therefore not a current requirement, but dependable backup and export remain required before BathOS holds valuable data.
+- Source mail stays in its original Inbox until its Things to-do is retired, then moves to the destination recorded during capture. This lifecycle is specific to Mail and should remain an integration contract rather than a generic task rule.
+- Things remains independent and authoritative during development. Parallel-use tasks in BathOS do not need dual writes or reconciliation with Things.
+
+### Canonical Flow
+
+The observed flow is:
+
+1. A manual action or trusted source integration captures an item.
+2. The capture path preserves source identity and performs any source-specific enrichment.
+3. The item enters Inbox or Today, with optional area assignment, according to how much processing the capture path has already completed.
+4. Planning assigns temporal and structural context, including order.
+5. The user executes from Today through keyboard-first interactions and source deep links.
+6. Completion moves the item into history, where it remains recoverable and exportable under an explicit retention policy.
+
+## First Parallel-Use Slice
+
+The first useful product slice will be **Capture and Run Today**. It is intentionally smaller than a Things parity milestone. It should prove that BathOS can safely hold a disposable but real set of daily tasks alongside Things.
+
+The slice includes:
+
+- Owner-scoped to-dos with stable identifiers
+- Title, notes, structured origin, and an optional source link
+- Inbox and Today destinations
+- Stable manual ordering in Today
+- Keyboard-accessible creation, editing, completion, and restoration
+- Completion history and recoverable deletion
+- Local persistence, offline creation and completion, restart survival, reconnection, and server reconciliation
+- A minimal Raycast quick-entry path after the service contract is stable
+
+The slice excludes areas, projects, headings, checklists, recurrence, reminders, templates, Mail integration, broad MCP mutation access, and native Apple surfaces. Those capabilities remain required roadmap work, but none is necessary to answer the first trust question: can the module reliably capture a task, keep it ordered and available offline, and complete it without losing or duplicating state?
+
+Implementation of this slice begins only after the offline, reconciliation, conflict, and ordering spikes select its technical foundation.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -83,6 +149,16 @@ The first architecture gate will select and test the local persistence, mutation
 Rationale: A task system that becomes unavailable, loses a completion, reorders unexpectedly, or duplicates a repeated task cannot earn daily trust. Retrofitting offline behavior after an online-only data layer is established would be expensive and risky.
 
 Alternative considered: Build an online-only Supabase client first and add offline support later. Rejected as the default because it would defer the highest-risk architectural concern.
+
+### Spike PowerSync before fallback approaches
+
+The first disposable offline spike will evaluate PowerSync with local Supabase and synthetic task data. PowerSync is the provisional leader because it provides local SQLite, a durable upload queue, live queries, documented Supabase integration, Safari-oriented web storage options, and client SDKs that preserve a path to native Apple software.
+
+The spike must test restart survival, exact-once logical outcomes, server-originated changes, conflicting edits, manual reorder convergence, recoverable deletion, multi-tab behavior, Safari, and owner isolation. It will not connect production data or create a paid service dependency.
+
+Rationale: PowerSync covers more of the risky offline write loop than the other evaluated options while retaining Supabase as the authoritative database and RLS boundary for uploaded mutations.
+
+Fallback considered: RxDB with its direct Supabase replication plugin. It will receive the same spike if PowerSync fails a defined acceptance condition. Electric was not selected first because its current product handles read-path sync but leaves write-path synchronization to the application. A custom IndexedDB mutation queue remains an escape hatch, not the preferred foundation.
 
 ### Keep Supabase as the authoritative service boundary
 
@@ -217,7 +293,6 @@ The following concerns are roadmap requirements and must not be dismissed as pol
 - What exact actionability states should replace the current tag conventions?
 - Which source/origin types need first-class behavior, and which are informational only?
 - How should template updates affect instances that were already created?
-- What is the smallest daily workflow that would make parallel use genuinely useful?
 - Which offline and synchronization approach best fits web, Supabase, MCP, and a possible native client?
 - Should reminders be scheduled by the server, a native client, Web Push, or a layered combination?
 - What user-facing name and iconography should distinguish the module from Things?

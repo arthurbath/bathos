@@ -2,18 +2,18 @@
 
 - [x] 1.1 Capture the private-first product posture, tag exclusion, deferred migration, optional native surfaces, and original-expression constraint in OpenSpec.
 - [x] 1.2 Perform an initial bounded read-only Things inventory and record only generalized findings in the public repository.
-- [ ] 1.3 Catalogue the user's daily capture, planning, execution, review, completion, and rescheduling workflows.
+- [x] 1.3 Catalogue the user's daily capture, planning, execution, review, completion, and rescheduling workflows.
 - [ ] 1.4 Define the actionability states that will replace the current tag conventions.
 - [ ] 1.5 Define supported source/origin types and the behaviors attached to each origin.
 - [ ] 1.6 Define to-do template and project template creation, editing, instantiation, and provenance behavior.
 - [ ] 1.7 Inventory relevant Things keyboard behaviors and choose the BathOS keyboard contract for the first daily workflow.
-- [ ] 1.8 Select the smallest end-to-end workflow that can provide useful parallel operation.
+- [x] 1.8 Select the smallest end-to-end workflow that can provide useful parallel operation.
 - [ ] 1.9 Confirm or revise the working `/tasks` route, `tasks_` database namespace, and `src/modules/tasks` source path.
 - [ ] 1.10 Select an original user-facing product name and initial icon direction before launcher implementation.
 
 ## 2. Architecture Gates
 
-- [ ] 2.1 Compare module-local offline persistence and synchronization approaches against web, Supabase, MCP, and possible native-client requirements.
+- [x] 2.1 Compare module-local offline persistence and synchronization approaches against web, Supabase, MCP, and possible native-client requirements.
 - [ ] 2.2 Build a disposable spike for offline task creation, restart persistence, reconnection, and server reconciliation.
 - [ ] 2.3 Build a disposable spike for stable manual ordering and overlapping reorder conflicts.
 - [ ] 2.4 Define the task state machine, including open, completed, canceled, recoverably deleted, and structured actionability states.
