@@ -262,6 +262,8 @@ Alternative considered: Build an online-only Supabase client first and add offli
 
 The task module will use PowerSync as its module-local persistence and synchronization foundation for the first production slice. The browser application will read and write a local SQLite projection, PowerSync will persist queued mutations, and a task-domain connector will upload those mutations through Supabase. Postgres, RLS, and stable server revisions remain authoritative.
 
+The web client uses a module-owned database file with the cooperative OPFS VFS and PowerSync multi-tab coordination enabled at both the database and open-factory boundaries. The production schema mirrors `tasks_todos` and adds only content-free local synchronization issues and a local owner binding. Database construction remains lazy and browser-only so tests, server-side tooling, and unrelated BathOS routes do not open the task database.
+
 The disposable local spike proved restart survival, exact-once logical outcomes, server-originated changes, conflicting edits, manual reorder convergence, recoverable deletion, multi-tab behavior, real Safari operation, and owner isolation. It used only local services, synthetic accounts, and synthetic data. No production database or paid service was connected.
 
 Rationale: PowerSync covers the risky offline write loop while retaining Supabase as the authoritative database and RLS boundary for uploaded mutations. Two independent browser installations converged after offline writes and conflicts, and OPFS plus the multi-tab worker preserved state across reloads and tabs.
@@ -274,6 +276,8 @@ The production deployment topology remains open. PowerSync Cloud and self-hostin
 
 Every mutable task record will carry an integer revision. A client mutation increments the revision and may update the server only when the stored revision matches the mutation's base revision. If the predicate no longer matches, the client removes the stale mutation from its retry queue, records a content-free conflict receipt, and accepts the authoritative server row on download.
 
+Every local update also assigns a new client mutation identifier. Insert and update retries query the authoritative row after an ambiguous uniqueness or revision result and treat an exact identifier-and-revision match as already applied. Transient network and service errors leave the transaction queued. Deterministic conflicts, constraint failures, invalid local operations, and attempted physical deletes produce content-free local issues and drain only the handled transaction so one bad mutation cannot block later work.
+
 Rationale: The spike proved this rule for title-versus-title and completion-versus-title conflicts across independent local databases. It prevents silent last-writer-wins overwrites while guaranteeing that a stale mutation does not retry forever.
 
 Trade-off: The first foundation detects conflicts at task-record granularity rather than merging independent fields. This is intentionally conservative. A later field-aware merge policy may be specified only when a concrete workflow demonstrates that automatic merging is safer than an explicit conflict.
@@ -282,6 +286,8 @@ Trade-off: The first foundation detects conflicts at task-record granularity rat
 
 Ordered task views will sort by fractional order key and then stable task ID. Moving an item changes only that item's order key. Different tasks moved into the same gap may legitimately receive the same fractional key, and the stable ID produces the same total order on every client. Concurrent moves of the same task use the task revision conflict rule.
 
+The first implementation uses the `fractional-indexing` key algorithm. Key generation validates its bounds, move-key calculation removes the moving record before selecting its new neighbors, and focused tests prove beginning, middle, end, move, invalid-range, and concurrent same-gap behavior.
+
 Rationale: Two independent installations generated the same `a0V` key for different tasks and converged to an identical order without rewriting unrelated rows, losing an item, or creating a duplicate.
 
 ### Mirror owner authorization in RLS and Sync Streams
@@ -289,6 +295,8 @@ Rationale: Two independent installations generated the same `a0V` key for differ
 Postgres RLS remains authoritative for uploads and direct service access. The PowerSync owner stream is a second, security-critical rule that limits downloaded rows to `owner_id = auth.user_id()`. Every production schema change that affects ownership must update and test both boundaries together.
 
 The client must also bind its local database to the authenticated owner. On account change, it must clear or rebind the local projection before rendering task data for the new owner rather than relying on eventual synchronization to remove cached rows.
+
+The first implementation stores one local owner binding and calls PowerSync's full `disconnectAndClear()` operation on account change or sign-out. Local-only tables are cleared with the synchronized projection, and the new owner is recorded only after clearing completes. Task routes must await this boundary before exposing repository queries.
 
 Rationale: The spike proved an empty owner-B download, isolation of a new owner-B task from owner A, zero cross-owner reads and updates under the authenticated database role, rejection of an owner-spoofed insert, and removal of owner-B rows when the same installation switched to owner A. The explicit client rule keeps that final boundary deterministic.
 
