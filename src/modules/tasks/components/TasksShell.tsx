@@ -897,6 +897,32 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               projectId={projectId}
               hierarchy={hierarchy}
               planningDate={planningDate}
+              reminder={reminders.byRootId.get(projectId) ?? null}
+              reminderMode={reminders.mode}
+              reminderTimeZone={reminders.planningTimeZone}
+              onSaveReminder={async (input) => {
+                try {
+                  await reminders.save({
+                    rootType: 'project',
+                    rootId: projectId,
+                    reminder: reminders.byRootId.get(projectId) ?? null,
+                    ...input,
+                  });
+                } catch (reminderError) {
+                  showTaskError('Project Reminder Could Not Be Saved', reminderError);
+                  throw reminderError;
+                }
+              }}
+              onCancelReminder={async () => {
+                const reminder = reminders.byRootId.get(projectId);
+                if (!reminder) return;
+                try {
+                  await reminders.cancel(reminder);
+                } catch (reminderError) {
+                  showTaskError('Project Reminder Could Not Be Canceled', reminderError);
+                  throw reminderError;
+                }
+              }}
             />
           ) : view === 'projects' ? <TaskProjectsView hierarchy={hierarchy} />
             : view === 'templates' ? <TaskTemplatesView ownerId={userId} hierarchy={hierarchy} />

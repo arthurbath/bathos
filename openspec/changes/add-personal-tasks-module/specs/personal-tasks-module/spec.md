@@ -532,6 +532,10 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** a reminder instant is accepted
 - **THEN** the server creates one stable logical delivery occurrence and targets each registered delivery endpoint idempotently
 
+#### Scenario: Manage a project reminder from the web
+- **WHEN** a user saves or clears a reminder from an open project detail
+- **THEN** the web interface uses the existing project-root reminder contract, owner planning time zone, daylight-saving ambiguity choice, connected-only mutation gate, and visible degraded-state explanation
+
 #### Scenario: Retry one delivery target
 - **WHEN** a provider request is retried for the same occurrence and registered target
 - **THEN** the system reuses the target-delivery identifier and does not create another logical delivery

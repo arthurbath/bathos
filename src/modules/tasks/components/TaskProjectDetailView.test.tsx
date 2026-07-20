@@ -77,6 +77,11 @@ function renderDetail(hierarchyModel: TaskHierarchyModel) {
         projectId="project-a"
         hierarchy={hierarchyModel}
         planningDate="2026-07-20"
+        reminder={null}
+        reminderMode="connected"
+        reminderTimeZone="America/Los_Angeles"
+        onSaveReminder={vi.fn().mockResolvedValue(undefined)}
+        onCancelReminder={vi.fn().mockResolvedValue(undefined)}
       />
     </MemoryRouter>,
   ));

@@ -5,7 +5,11 @@ import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { taskProjectFixture, taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
+import {
+  taskProjectFixture,
+  taskReminderFixture,
+  taskTodoFixture,
+} from '@/modules/tasks/testing/taskFixtures';
 import { normalizeTaskEditorPlanningPatch } from './taskEditorPlanning';
 import { getTasksStorageStatusLabel } from './tasksStorageStatus';
 import { TasksShell } from './TasksShell';
@@ -102,8 +106,36 @@ vi.mock('./TaskAreaDetailView', () => ({
 }));
 
 vi.mock('./TaskProjectDetailView', () => ({
-  TaskProjectDetailView: ({ projectId }: { projectId: string }) => (
-    <section data-testid="project-detail-view">Project {projectId}</section>
+  TaskProjectDetailView: ({
+    projectId,
+    onSaveReminder,
+    onCancelReminder,
+  }: {
+    projectId: string;
+    onSaveReminder: (input: {
+      localDate: string;
+      localTime: string;
+      ambiguityChoice: 'earlier' | 'later';
+    }) => Promise<void>;
+    onCancelReminder: () => Promise<void>;
+  }) => (
+    <section data-testid="project-detail-view">
+      Project {projectId}
+      <button
+        type="button"
+        aria-label="Save Project Reminder"
+        onClick={() => void onSaveReminder({
+          localDate: '2026-07-21',
+          localTime: '10:30',
+          ambiguityChoice: 'later',
+        })}
+      />
+      <button
+        type="button"
+        aria-label="Cancel Project Reminder"
+        onClick={() => void onCancelReminder()}
+      />
+    </section>
   ),
 }));
 
@@ -922,6 +954,57 @@ describe('TasksShell', () => {
       expect(project.container.querySelector<HTMLAnchorElement>(
         'a[aria-label="Return to Projects"]',
       )?.getAttribute('href')).toBe('/tasks/projects');
+    } finally {
+      cleanup(project.root, project.container);
+    }
+  });
+
+  it('uses the project-root reminder contract from project detail', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const reminder = taskReminderFixture({
+      root_type: 'project',
+      task_id: null,
+      project_id: 'project-alpha',
+    });
+    const save = vi.fn().mockResolvedValue(undefined);
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    mockTaskReminders.mockReturnValue({
+      reminders: [reminder],
+      byRootId: new Map([[reminder.project_id!, reminder]]),
+      dueItems: [],
+      mode: 'connected',
+      planningTimeZone: 'America/Los_Angeles',
+      loading: false,
+      error: null,
+      save,
+      cancel,
+      acknowledge: vi.fn().mockResolvedValue(undefined),
+      claimDue: vi.fn().mockResolvedValue(undefined),
+      webPush: null,
+    });
+    const project = renderShell('/tasks/projects/project-alpha');
+
+    try {
+      await act(async () => {
+        project.container.querySelector<HTMLButtonElement>(
+          '[aria-label="Save Project Reminder"]',
+        )?.click();
+      });
+      expect(save).toHaveBeenCalledWith({
+        rootType: 'project',
+        rootId: 'project-alpha',
+        reminder,
+        localDate: '2026-07-21',
+        localTime: '10:30',
+        ambiguityChoice: 'later',
+      });
+
+      await act(async () => {
+        project.container.querySelector<HTMLButtonElement>(
+          '[aria-label="Cancel Project Reminder"]',
+        )?.click();
+      });
+      expect(cancel).toHaveBeenCalledWith(reminder);
     } finally {
       cleanup(project.root, project.container);
     }

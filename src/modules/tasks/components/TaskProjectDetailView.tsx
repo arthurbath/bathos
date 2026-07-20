@@ -36,9 +36,18 @@ import {
 } from '@/modules/tasks/components/TaskProjectsView';
 import { submitTaskFormOnEnter } from '@/modules/tasks/components/taskFormKeyboard';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
+import {
+  TaskProjectReminderForm,
+  type ProjectReminderInput,
+} from '@/modules/tasks/components/TaskProjectReminderForm';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import { useTaskProjectDetail } from '@/modules/tasks/hooks/useTaskProjectDetail';
-import type { TaskChecklistItem, TaskHeading, TaskTodo } from '@/modules/tasks/types/tasks';
+import type {
+  TaskChecklistItem,
+  TaskHeading,
+  TaskReminder,
+  TaskTodo,
+} from '@/modules/tasks/types/tasks';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 
 export function TaskProjectDetailView({
@@ -46,11 +55,21 @@ export function TaskProjectDetailView({
   projectId,
   hierarchy,
   planningDate,
+  reminder,
+  reminderMode,
+  reminderTimeZone,
+  onSaveReminder,
+  onCancelReminder,
 }: {
   ownerId: string;
   projectId: string;
   hierarchy: TaskHierarchyModel;
   planningDate: string;
+  reminder: TaskReminder | null;
+  reminderMode: 'local' | 'connected';
+  reminderTimeZone: string;
+  onSaveReminder: (input: ProjectReminderInput) => Promise<void>;
+  onCancelReminder: () => Promise<void>;
 }) {
   const detail = useTaskProjectDetail(ownerId, projectId);
   const navigate = useNavigate();
@@ -194,11 +213,22 @@ export function TaskProjectDetailView({
       </div>
 
       {project.lifecycle === 'open' ? (
-        <ProjectPlanningForm
-          project={project}
-          planningDate={planningDate}
-          onSave={(patch) => hierarchy.updateProject(project.id, patch)}
-        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ProjectPlanningForm
+            project={project}
+            planningDate={planningDate}
+            onSave={(patch) => hierarchy.updateProject(project.id, patch)}
+          />
+          <TaskProjectReminderForm
+            key={reminder?.client_mutation_id ?? 'new-reminder'}
+            projectId={project.id}
+            reminder={reminder}
+            mode={reminderMode}
+            timeZone={reminderTimeZone}
+            onSave={onSaveReminder}
+            onCancel={onCancelReminder}
+          />
+        </div>
       ) : null}
 
       {project.lifecycle === 'open' ? <div className="grid gap-4 md:grid-cols-2">
