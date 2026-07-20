@@ -134,6 +134,7 @@ export function useTaskReminders(ownerId: string) {
     byRootId,
     dueItems,
     claimError,
+    projectionError: remindersQuery.error,
     mode,
     planningTimeZone,
     loading: remindersQuery.isLoading,

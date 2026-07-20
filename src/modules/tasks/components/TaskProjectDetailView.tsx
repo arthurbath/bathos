@@ -40,6 +40,7 @@ import {
   TaskProjectReminderForm,
   type ProjectReminderInput,
 } from '@/modules/tasks/components/TaskProjectReminderForm';
+import type { TaskReminderAvailability } from '@/modules/tasks/components/taskReminderAvailability';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import { useTaskProjectDetail } from '@/modules/tasks/hooks/useTaskProjectDetail';
 import type {
@@ -66,7 +67,7 @@ export function TaskProjectDetailView({
   hierarchy: TaskHierarchyModel;
   planningDate: string;
   reminder: TaskReminder | null;
-  reminderMode: 'local' | 'connected';
+  reminderMode: TaskReminderAvailability;
   reminderTimeZone: string;
   onSaveReminder: (input: ProjectReminderInput) => Promise<void>;
   onCancelReminder: () => Promise<void>;

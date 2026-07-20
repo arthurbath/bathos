@@ -87,6 +87,7 @@
 - [x] 5.8c Expose project-root reminder creation, revision, and cancellation in project detail with the existing connected-only delivery contract.
 - [x] 5.8d Surface in-app due-reminder claim failure through content-free degraded state and explicit retry.
 - [x] 5.8e Keep service-worker registration and notification permission behind the explicit browser-reminder Enable action.
+- [x] 5.8f Disable reminder mutation while current schedules are loading or unavailable so unknown data cannot be treated as empty.
 - [x] 5.9 Add recurrence definitions and idempotent occurrence generation.
 - [x] 5.9a Report recurrence catch-up failure independently from accepted definition changes and expose bounded explicit retry.
 - [x] 5.9b Distinguish recurrence projection loading and failure from a trustworthy empty state.

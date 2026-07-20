@@ -548,6 +548,10 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** an open connected client cannot claim due reminder deliveries
 - **THEN** the interface shows a content-free degraded state, preserves scheduled reminders and any previously claimed items, and exposes a bounded explicit retry
 
+#### Scenario: Protect schedules while the reminder projection is untrustworthy
+- **WHEN** current reminder data is loading or fails to load
+- **THEN** to-do and project reminder editors distinguish that state from local-only operation, disable reminder mutation, and do not treat an unknown current schedule as an empty schedule
+
 #### Scenario: Retry one delivery target
 - **WHEN** a provider request is retried for the same occurrence and registered target
 - **THEN** the system reuses the target-delivery identifier and does not create another logical delivery

@@ -324,6 +324,7 @@ describe('TasksShell', () => {
       byRootId: new Map(),
       dueItems: [],
       claimError: null,
+      projectionError: null,
       mode: 'local',
       planningTimeZone: 'America/Los_Angeles',
       loading: false,
@@ -1488,6 +1489,33 @@ describe('TasksShell', () => {
         .find(({ textContent }) => textContent === 'Retry');
       await act(async () => retry?.click());
       expect(claimDue).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('reports an unavailable reminder projection and prevents blind reminder replacement', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), dueItems: [], mode: 'connected',
+      planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: new Error('provider detail'), claimError: null,
+      projectionError: new Error('provider detail'),
+      save: vi.fn(), cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell();
+
+    try {
+      const status = container.querySelector('section[aria-label="Reminder Data Status"]');
+      expect(status?.textContent).toContain('Reminder Data Unavailable');
+      expect(status?.textContent).not.toContain('provider detail');
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      expect(container.querySelector<HTMLButtonElement>('[aria-label="Reminder Date"]')?.disabled)
+        .toBe(true);
+      expect(container.textContent).toContain('Editing is disabled to protect existing schedules');
     } finally {
       cleanup(root, container);
     }

@@ -94,6 +94,11 @@ import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPo
 import { TaskPlanningProjects } from '@/modules/tasks/components/TaskPlanningProjects';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
 import { TaskSyncDiagnosticsDialog } from '@/modules/tasks/components/TaskSyncDiagnosticsDialog';
+import {
+  getTaskReminderAvailability,
+  getTaskReminderUnavailableMessage,
+  type TaskReminderAvailability,
+} from '@/modules/tasks/components/taskReminderAvailability';
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
@@ -192,6 +197,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   );
   const taskSearch = useTaskSearch(userId, searchOpen);
   const reminders = useTaskReminders(userId);
+  const reminderAvailability = getTaskReminderAvailability(
+    reminders.mode,
+    reminders.loading,
+    reminders.projectionError,
+  );
   const acknowledgeReminderDelivery = reminders.acknowledge;
   const captureInputRef = useRef<HTMLInputElement>(null);
   const commandReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -638,7 +648,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           ? `Unfinished Since ${formatTaskCalendarDate(task.start_date ?? planningDate)}`
           : view === 'today' ? null : undefined}
         reminder={reminders.byRootId.get(task.id) ?? null}
-        reminderMode={reminders.mode}
+        reminderMode={reminderAvailability}
         reminderTimeZone={reminders.planningTimeZone}
         onSaveReminder={async (input) => {
           try {
@@ -785,6 +795,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             <TaskReminderClaimFailure onRetry={reminders.claimDue} />
           ) : null}
 
+          {reminders.projectionError ? <TaskReminderProjectionFailure /> : null}
+
           {reminders.webPush ? (
             <TaskWebPushCapability
               model={reminders.webPush}
@@ -902,7 +914,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               hierarchy={hierarchy}
               planningDate={planningDate}
               reminder={reminders.byRootId.get(projectId) ?? null}
-              reminderMode={reminders.mode}
+              reminderMode={reminderAvailability}
               reminderTimeZone={reminders.planningTimeZone}
               onSaveReminder={async (input) => {
                 try {
@@ -1313,6 +1325,24 @@ function TaskReminderClaimFailure({
   );
 }
 
+function TaskReminderProjectionFailure() {
+  return (
+    <section
+      aria-label="Reminder Data Status"
+      aria-live="polite"
+      className="flex gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-4"
+    >
+      <Bell className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+      <div className="min-w-0">
+        <h3 className="text-sm font-semibold text-foreground">Reminder Data Unavailable</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Current schedules could not be loaded. Reminder editing is disabled until synchronization recovers.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function TaskWebPushCapability({
   model,
   connected,
@@ -1628,7 +1658,7 @@ function TaskRow({
   onMoveDown?: () => Promise<void>;
   planningLabel?: string | null;
   reminder: TaskReminder | null;
-  reminderMode: 'local' | 'connected';
+  reminderMode: TaskReminderAvailability;
   reminderTimeZone: string;
   onSaveReminder: (input: {
     localDate: string;
@@ -1938,7 +1968,7 @@ function TaskEditor({
   onCancel: () => void;
   onSave: (patch: EditableTaskPatch) => Promise<void>;
   reminder: TaskReminder | null;
-  reminderMode: 'local' | 'connected';
+  reminderMode: TaskReminderAvailability;
   reminderTimeZone: string;
   onSaveReminder: (input: {
     localDate: string;
@@ -2268,7 +2298,7 @@ function TaskEditor({
         ) : null}
         {reminderMode !== 'connected' ? (
           <p className="text-xs text-warning">
-            Reminders require connected task storage so the server can own delivery identity.
+            {getTaskReminderUnavailableMessage(reminderMode)}
           </p>
         ) : reminder?.resolution_kind === 'gap_forward' ? (
           <p className="text-xs text-warning">

@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 
 import { taskReminderFixture } from '@/modules/tasks/testing/taskFixtures';
+import type { TaskReminderAvailability } from './taskReminderAvailability';
 import { TaskProjectReminderForm } from './TaskProjectReminderForm';
 
 const reminder = taskReminderFixture({
@@ -17,7 +18,7 @@ function renderForm({
   onSave = vi.fn().mockResolvedValue(undefined),
   onCancel = vi.fn().mockResolvedValue(undefined),
 }: {
-  mode?: 'local' | 'connected';
+  mode?: TaskReminderAvailability;
   onSave?: ReturnType<typeof vi.fn>;
   onCancel?: ReturnType<typeof vi.fn>;
 } = {}) {
@@ -84,6 +85,19 @@ describe('TaskProjectReminderForm', () => {
       expect(save?.disabled).toBe(true);
       expect(container.querySelector<HTMLButtonElement>('[aria-label="Project Reminder Date"]')
         ?.disabled).toBe(true);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('protects an existing schedule when the reminder projection is unavailable', () => {
+    const { container, root } = renderForm({ mode: 'unavailable' });
+    try {
+      expect(container.textContent).toContain('Editing is disabled to protect existing schedules');
+      expect(container.textContent).not.toContain('provider detail');
+      const save = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent === 'Save Reminder');
+      expect(save?.disabled).toBe(true);
     } finally {
       cleanup(root, container);
     }

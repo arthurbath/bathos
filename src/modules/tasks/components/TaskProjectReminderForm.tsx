@@ -4,6 +4,10 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { DatePickerField } from '@/components/ui/date-picker-field';
 import { Input } from '@/components/ui/input';
+import {
+  getTaskReminderUnavailableMessage,
+  type TaskReminderAvailability,
+} from '@/modules/tasks/components/taskReminderAvailability';
 import type { TaskReminder } from '@/modules/tasks/types/tasks';
 
 export type ProjectReminderInput = {
@@ -22,7 +26,7 @@ export function TaskProjectReminderForm({
 }: {
   projectId: string;
   reminder: TaskReminder | null;
-  mode: 'local' | 'connected';
+  mode: TaskReminderAvailability;
   timeZone: string;
   onSave: (input: ProjectReminderInput) => Promise<void>;
   onCancel: () => Promise<void>;
@@ -143,7 +147,7 @@ export function TaskProjectReminderForm({
       ) : null}
       {!connected ? (
         <p className="text-xs text-warning">
-          Reminders require connected task storage so the server can own delivery identity.
+          {getTaskReminderUnavailableMessage(mode)}
         </p>
       ) : reminder?.resolution_kind === 'gap_forward' ? (
         <p className="text-xs text-warning">
