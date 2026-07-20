@@ -417,6 +417,18 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **WHEN** a keyboard user presses `N`, `/`, or `?` outside an editable control or unrelated modal
 - **THEN** the module respectively focuses task capture, opens unified search and navigation, or opens a visible keyboard-command reference
 
+#### Scenario: Search and filter without unstructured labels
+- **WHEN** a user searches present work or filters the result set
+- **THEN** the module matches task text and structured source or hierarchy context, filters through explicit planning destination, lifecycle, and source-kind fields, and does not introduce generic tags
+
+#### Scenario: Open a task across views from search
+- **WHEN** a user activates a task search result
+- **THEN** the module navigates through a real in-app link to the task's current planning or history view and opens or focuses the stable task record
+
+#### Scenario: Keep structural movement and temporal planning distinct
+- **WHEN** a user invokes `M` or `W` on a focused open task
+- **THEN** `M` changes only area, project, or heading placement while `W` changes only planning destination, Today section, or start date
+
 #### Scenario: Save or cancel an open editor
 - **WHEN** a keyboard user presses Command+Enter or Escape in an open task editor
 - **THEN** the module respectively saves valid changes or cancels editing and restores focus to the task title

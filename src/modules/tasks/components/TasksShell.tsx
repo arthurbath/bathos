@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Circle,
   CircleDashed,
+  CircleHelp,
   CircleSlash2,
   Cloud,
   CornerDownLeft,
@@ -23,6 +24,7 @@ import {
   Moon,
   Plus,
   RotateCcw,
+  Search,
   Trash2,
   FolderKanban,
   X,
@@ -47,12 +49,20 @@ import { CARD_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import {
+  TaskKeyboardHelpDialog,
+  TaskMoveDialog,
+  TaskSearchDialog,
+  TaskWhenDialog,
+  type TaskTemporalAction,
+} from '@/modules/tasks/components/TaskCommandSurfaces';
+import {
   getTodayTaskSection,
   useTaskList,
   type TaskListView,
   type TodayTaskSection,
 } from '@/modules/tasks/hooks/useTaskList';
 import { useTaskHierarchy, type TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
+import { useTaskSearch } from '@/modules/tasks/hooks/useTaskSearch';
 import {
   useTaskHierarchyTrash,
   type DeletedTaskHierarchyRoot,
@@ -74,11 +84,6 @@ type TasksShellProps = {
   userId: string;
   displayName: string;
   onSignOut: () => Promise<void> | void;
-};
-
-type TaskRowAction = {
-  label: string;
-  run: () => Promise<void>;
 };
 
 const taskViews = [
@@ -129,7 +134,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [creating, setCreating] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
+  const [searchTargetTaskId, setSearchTargetTaskId] = useState<string | null>(null);
+  const taskSearch = useTaskSearch(userId, searchOpen);
   const captureInputRef = useRef<HTMLInputElement>(null);
+  const commandReturnFocusRef = useRef<HTMLElement | null>(null);
   const pendingNavigationRef = useRef(false);
   const navigationResetRef = useRef<number | null>(null);
 
@@ -137,6 +147,23 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setSelectedTaskId(null);
     captureInputRef.current?.focus();
   }, [view]);
+
+  useEffect(() => {
+    if (!searchTargetTaskId) return;
+    const target = tasks.find(({ id }) => id === searchTargetTaskId);
+    if (!target) return;
+    if (target.lifecycle === 'open') {
+      setSelectedTaskId(target.id);
+    }
+    window.setTimeout(() => {
+      document.querySelector<HTMLElement>(
+        target.lifecycle === 'open'
+          ? `[data-task-title-control][data-task-id="${target.id}"]`
+          : `[data-task-search-id="${target.id}"]`,
+      )?.focus();
+    }, 0);
+    setSearchTargetTaskId(null);
+  }, [searchTargetTaskId, tasks]);
 
   useEffect(() => {
     const clearPendingNavigation = () => {
@@ -147,13 +174,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       }
     };
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      const opensKeyboardHelp = event.key === '?' && event.shiftKey;
       if (
         event.defaultPrevented
         || event.isComposing
         || event.metaKey
         || event.ctrlKey
         || event.altKey
-        || event.shiftKey
+        || (event.shiftKey && !opensKeyboardHelp)
         || isTaskKeyboardInput(event.target)
         || document.querySelector('[role="dialog"], [role="menu"]')
       ) {
@@ -184,6 +212,22 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         } else {
           navigate(`${basePath}/inbox`);
         }
+        return;
+      }
+      if (key === '/') {
+        event.preventDefault();
+        commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+        setSearchOpen(true);
+        return;
+      }
+      if (opensKeyboardHelp) {
+        event.preventDefault();
+        commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+        setKeyboardHelpOpen(true);
       }
     };
 
@@ -193,6 +237,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       clearPendingNavigation();
     };
   }, [basePath, navigate]);
+
+  const openCommandSurface = (open: (value: boolean) => void) => {
+    commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    open(true);
+  };
+  const restoreCommandFocus = () => {
+    const returnFocus = commandReturnFocusRef.current;
+    commandReturnFocusRef.current = null;
+    returnFocus?.focus();
+  };
 
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault();
@@ -222,17 +278,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
   };
 
-  const planningActionsForTask = (task: TaskTodo): TaskRowAction[] => {
+  const planningActionsForTask = (task: TaskTodo): TaskTemporalAction[] => {
     const action = (
       label: string,
       input: Parameters<typeof moveTask>[1],
-    ): TaskRowAction => ({
+    ): TaskTemporalAction => ({
       label,
       run: async () => {
         try {
           await moveTask(task.id, input);
         } catch (moveError) {
           showTaskError('Task Could Not Be Moved', moveError);
+          throw moveError;
         }
       },
     });
@@ -272,7 +329,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
 
     const section = getTodayTaskSection(task, planningDate);
-    const actions: TaskRowAction[] = [];
+    const actions: TaskTemporalAction[] = [];
     if (section === 'unfinished') {
       actions.push(action('Reschedule for Today', {
         destination: 'today',
@@ -398,7 +455,31 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               <span className="md:hidden">{getTaskViewLabel(view)}</span>
               <span className="hidden md:inline">Tasks</span>
             </h2>
-            <MobileProjectsLink view={view} basePath={basePath} navigate={navigate} />
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="clear"
+                size="icon"
+                aria-label="Search Tasks and Views"
+                aria-keyshortcuts="/"
+                onClick={() => openCommandSurface(setSearchOpen)}
+                className="h-9 w-9 text-muted-foreground"
+              >
+                <Search className="h-4 w-4" aria-hidden="true" />
+              </Button>
+              <Button
+                type="button"
+                variant="clear"
+                size="icon"
+                aria-label="Keyboard Commands"
+                aria-keyshortcuts="?"
+                onClick={() => openCommandSurface(setKeyboardHelpOpen)}
+                className="h-9 w-9 text-muted-foreground"
+              >
+                <CircleHelp className="h-4 w-4" aria-hidden="true" />
+              </Button>
+              <MobileProjectsLink view={view} basePath={basePath} navigate={navigate} />
+            </div>
           </div>
 
           <nav
@@ -560,6 +641,33 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onNavigate={(path) => navigate(`${basePath}${path}`)}
         hrefForPath={(path) => `${basePath}${path}`}
       />
+      <TaskSearchDialog
+        open={searchOpen}
+        basePath={basePath}
+        tasks={taskSearch.tasks}
+        hierarchy={hierarchy}
+        planningDate={planningDate}
+        loading={taskSearch.loading}
+        error={taskSearch.error}
+        onOpenChange={setSearchOpen}
+        onCloseAutoFocus={restoreCommandFocus}
+        onNavigate={(path) => {
+          commandReturnFocusRef.current = null;
+          setSearchOpen(false);
+          navigate(path);
+        }}
+        onSelectTask={(task, path) => {
+          commandReturnFocusRef.current = null;
+          setSearchOpen(false);
+          setSearchTargetTaskId(task.id);
+          navigate(path);
+        }}
+      />
+      <TaskKeyboardHelpDialog
+        open={keyboardHelpOpen}
+        onOpenChange={setKeyboardHelpOpen}
+        onCloseAutoFocus={restoreCommandFocus}
+      />
     </div>
   );
 }
@@ -590,7 +698,11 @@ function LogbookTaskRow({
   };
 
   return (
-    <article className="flex min-h-16 items-center gap-3 px-2 sm:px-4">
+    <article
+      tabIndex={-1}
+      data-task-search-id={task.id}
+      className="flex min-h-16 items-center gap-3 px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4"
+    >
       <Icon
         className={`h-5 w-5 shrink-0 ${completed ? 'text-success' : 'text-muted-foreground'}`}
         aria-hidden="true"
@@ -767,13 +879,15 @@ function TaskRow({
   onSelect: () => void;
   onUpdate: (patch: EditableTaskPatch) => Promise<void>;
   onComplete: () => Promise<void>;
-  planningActions: TaskRowAction[];
+  planningActions: TaskTemporalAction[];
   onMoveUp?: () => Promise<void>;
   onMoveDown?: () => Promise<void>;
   planningLabel?: string | null;
   onDelete: () => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [whenOpen, setWhenOpen] = useState(false);
   const titleButtonRef = useRef<HTMLButtonElement>(null);
   const hierarchyLabel = getTaskHierarchyLabel(task, hierarchy);
 
@@ -873,10 +987,20 @@ function TaskRow({
                   window.setTimeout(() => titleButtonRef.current?.focus(), 0);
                 }
               });
+              return;
+            }
+            if (event.key.toLowerCase() === 'm') {
+              event.preventDefault();
+              setMoveOpen(true);
+              return;
+            }
+            if (event.key.toLowerCase() === 'w') {
+              event.preventDefault();
+              setWhenOpen(true);
             }
           }}
           aria-expanded={selected}
-          aria-keyshortcuts="Enter ArrowUp ArrowDown C Alt+ArrowUp Alt+ArrowDown"
+          aria-keyshortcuts="Enter ArrowUp ArrowDown C M W Alt+ArrowUp Alt+ArrowDown"
           data-task-title-control
           data-task-id={task.id}
           className="min-w-0 flex-1 py-4 text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -912,12 +1036,9 @@ function TaskRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {planningActions.map((action) => (
-              <DropdownMenuItem key={action.label} onSelect={() => void run(action.run)}>
-                {action.label}
-              </DropdownMenuItem>
-            ))}
-            {onMoveUp || onMoveDown ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuItem onSelect={() => setMoveOpen(true)}>Move...</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setWhenOpen(true)}>When...</DropdownMenuItem>
+            <DropdownMenuSeparator />
             {onMoveUp ? (
               <DropdownMenuItem onSelect={() => void run(onMoveUp)}>Move Up</DropdownMenuItem>
             ) : null}
@@ -943,6 +1064,25 @@ function TaskRow({
           onSave={onUpdate}
         />
       ) : null}
+      <TaskMoveDialog
+        open={moveOpen}
+        task={task}
+        hierarchy={hierarchy}
+        onOpenChange={(nextOpen) => {
+          setMoveOpen(nextOpen);
+        }}
+        onCloseAutoFocus={() => titleButtonRef.current?.focus()}
+        onMove={onUpdate}
+      />
+      <TaskWhenDialog
+        open={whenOpen}
+        task={task}
+        actions={planningActions}
+        onOpenChange={(nextOpen) => {
+          setWhenOpen(nextOpen);
+        }}
+        onCloseAutoFocus={() => titleButtonRef.current?.focus()}
+      />
     </article>
   );
 }

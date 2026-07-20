@@ -9,6 +9,7 @@ import { getTasksStorageStatusLabel } from './tasksStorageStatus';
 import { TasksShell } from './TasksShell';
 
 const mockTaskList = vi.fn();
+const mockTaskSearch = vi.fn();
 const mockTaskHierarchy = vi.fn();
 const mockTaskHierarchyTrash = vi.fn();
 const mockPrepareForSignOut = vi.fn();
@@ -18,6 +19,10 @@ vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
   getTodayTaskSection: (value: { start_date: string | null; today_section: string }, date: string) => (
     value.start_date !== null && value.start_date < date ? 'unfinished' : value.today_section
   ),
+}));
+
+vi.mock('@/modules/tasks/hooks/useTaskSearch', () => ({
+  useTaskSearch: (...args: unknown[]) => mockTaskSearch(...args),
 }));
 
 vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({
@@ -169,10 +174,34 @@ function setSelectValue(select: HTMLSelectElement, value: string) {
   select.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+async function openTaskMenuSurface(
+  container: HTMLElement,
+  taskTitle: string,
+  surfaceLabel: 'Move...' | 'When...',
+) {
+  const actions = container.querySelector<HTMLButtonElement>(
+    `button[aria-label="Actions for ${taskTitle}"]`,
+  );
+  await act(async () => {
+    actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  const surface = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    .find((item) => item.textContent === surfaceLabel);
+  await act(async () => {
+    surface?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+}
+
 describe('TasksShell', () => {
   beforeEach(() => {
     mockPrepareForSignOut.mockReset().mockResolvedValue(undefined);
     mockTaskList.mockReset();
+    mockTaskSearch.mockReset().mockReturnValue({
+      tasks: [task],
+      loading: false,
+      error: null,
+    });
     mockTaskHierarchy.mockReset().mockReturnValue({
       areas: [],
       projects: [],
@@ -246,6 +275,160 @@ describe('TasksShell', () => {
       });
       expect(container.querySelector('a[aria-current="page"]')?.textContent).toContain('Upcoming');
       expect(mockTaskList).toHaveBeenLastCalledWith('owner-a', 'upcoming');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('opens unified search with slash and filters on structured source data', async () => {
+    const mailTask = {
+      ...task,
+      id: 'task-mail',
+      title: 'Reply to the architect',
+      destination: 'inbox' as const,
+      source_kind: 'mail_message' as const,
+      source_title: 'Project update',
+    };
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskSearch.mockReturnValue({
+      tasks: [task, mailTask],
+      loading: false,
+      error: null,
+    });
+    const { container, root } = renderShell();
+
+    try {
+      const titleButton = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
+      titleButton.focus();
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: '/', bubbles: true, cancelable: true,
+        }));
+      });
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      expect(dialog.textContent).toContain('Search Tasks');
+      const sourceFilter = Array.from(dialog.querySelectorAll<HTMLLabelElement>('label'))
+        .find((label) => label.textContent?.startsWith('Source'))
+        ?.querySelector('select');
+      await act(async () => {
+        setSelectValue(sourceFilter!, 'mail_message');
+      });
+      expect(dialog.textContent).toContain('Reply to the architect');
+      expect(dialog.textContent).not.toContain('Existing task');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('navigates from search to a future task and opens it for editing', async () => {
+    const futureTask = {
+      ...task,
+      id: 'task-future',
+      title: 'Book the inspection',
+      start_date: '2026-07-24',
+    };
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [futureTask] });
+    mockTaskSearch.mockReturnValue({ tasks: [futureTask], loading: false, error: null });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: '/', bubbles: true, cancelable: true,
+        }));
+      });
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      const search = dialog.querySelector<HTMLInputElement>('[aria-label="Search Tasks and Views"]')!;
+      await act(async () => {
+        setInputValue(search, 'inspection');
+      });
+      const result = Array.from(dialog.querySelectorAll<HTMLAnchorElement>('a'))
+        .find((link) => link.textContent?.includes('Book the inspection'));
+      await act(async () => {
+        result?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(mockTaskList).toHaveBeenLastCalledWith('owner-a', 'upcoming');
+      expect(container.querySelector('#task-title-task-future')).toBeTruthy();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('opens keyboard help with question mark and closes it with Escape', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      const titleButton = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
+      titleButton.focus();
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: '?', shiftKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      expect(dialog.textContent).toContain('Keyboard Commands');
+      expect(dialog.textContent).toContain('Move to an Area, Project, or Heading');
+      await act(async () => {
+        (document.activeElement ?? dialog).dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape', bubbles: true, cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(dialog.dataset.state).toBe('closed');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('opens distinct structural Move and temporal When surfaces from task focus', async () => {
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskHierarchy.mockReturnValue({
+      areas: [],
+      projects: [{ id: 'project-a', title: 'House' }],
+      headings: [{ id: 'heading-a', project_id: 'project-a', title: 'Repairs' }],
+      loading: false,
+      error: null,
+    });
+    const { container, root } = renderShell();
+
+    try {
+      const titleButton = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
+      titleButton.focus();
+      await act(async () => {
+        titleButton.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'm', bubbles: true, cancelable: true,
+        }));
+      });
+      const heading = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent === 'House / Repairs');
+      await act(async () => {
+        heading?.click();
+      });
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+        area_id: null,
+        project_id: 'project-a',
+        heading_id: 'heading-a',
+      });
+
+      titleButton.focus();
+      await act(async () => {
+        titleButton.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'w', bubbles: true, cancelable: true,
+        }));
+      });
+      const someday = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent === 'Move to Someday');
+      await act(async () => {
+        someday?.click();
+      });
+      expect(taskList.moveTask).toHaveBeenCalledWith('task-a', {
+        destination: 'someday',
+        todaySection: 'daytime',
+        startDate: null,
+      });
     } finally {
       cleanup(root, container);
     }
@@ -349,14 +532,8 @@ describe('TasksShell', () => {
     const { container, root } = renderShell('/tasks/inbox');
 
     try {
-      const actions = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Actions for Existing task"]',
-      );
-      await act(async () => {
-        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
-        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      });
-      const moveAnytime = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+      await openTaskMenuSurface(container, 'Existing task', 'When...');
+      const moveAnytime = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
         .find((item) => item.textContent === 'Move to Anytime');
       await act(async () => {
         moveAnytime?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -671,14 +848,8 @@ describe('TasksShell', () => {
     try {
       expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
       expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'upcoming');
-      const actions = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Actions for Existing task"]',
-      );
-      await act(async () => {
-        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
-        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      });
-      const makeAvailable = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+      await openTaskMenuSurface(container, 'Existing task', 'When...');
+      const makeAvailable = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
         .find((item) => item.textContent === 'Make Available Today');
       await act(async () => {
         makeAvailable?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -704,14 +875,8 @@ describe('TasksShell', () => {
       expect(container.querySelector('input[aria-label="Add a Task"]')).toBeTruthy();
       expect(container.querySelector('section[aria-label="Anytime Tasks"]')).toBeTruthy();
 
-      const actions = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Actions for Existing task"]',
-      );
-      await act(async () => {
-        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
-        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      });
-      const moveSomeday = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+      await openTaskMenuSurface(container, 'Existing task', 'When...');
+      const moveSomeday = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
         .find((item) => item.textContent === 'Move to Someday');
       await act(async () => {
         moveSomeday?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -806,14 +971,8 @@ describe('TasksShell', () => {
       expect(container.querySelector('#tasks-daytime-heading')?.textContent).toContain('Today (1)');
       expect(container.querySelector('#tasks-evening-heading')?.textContent).toContain('This Evening (1)');
 
-      const actions = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Actions for Carryover task"]',
-      );
-      await act(async () => {
-        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
-        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      });
-      const moveEvening = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+      await openTaskMenuSurface(container, 'Carryover task', 'When...');
+      const moveEvening = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
         .find((item) => item.textContent === 'Move to This Evening');
       await act(async () => {
         moveEvening?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

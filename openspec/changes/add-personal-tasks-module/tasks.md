@@ -72,7 +72,7 @@
 - [ ] 5.10 Add native to-do and project templates with provenance-aware instantiation.
 - [ ] 5.11 Add structured actionability and source/origin fields without generic tags.
 - [x] 5.12a Add web-safe capture, route, row-focus, completion, reorder, and editor keyboard commands.
-- [ ] 5.12b Add task search, structured-field filtering, keyboard help, and distinct Move/When command surfaces.
+- [x] 5.12b Add task search, structured-field filtering, keyboard help, and distinct Move/When command surfaces.
 - [ ] 5.13 Add bulk task selection and the approved bulk planning actions.
 
 ## 6. MCP and macOS Capture
