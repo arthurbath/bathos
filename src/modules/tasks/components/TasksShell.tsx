@@ -92,6 +92,17 @@ const taskViews = [
   { path: '/projects', label: 'Projects', icon: FolderKanban },
 ] as const;
 
+const taskNavigationShortcuts: Record<string, string> = {
+  i: '/inbox',
+  t: '/today',
+  u: '/upcoming',
+  a: '/anytime',
+  s: '/someday',
+  l: '/logbook',
+  p: '/projects',
+  r: '/trash',
+};
+
 type TaskShellView = TaskListView | 'projects' | 'project';
 
 export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) {
@@ -119,11 +130,69 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [creating, setCreating] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const captureInputRef = useRef<HTMLInputElement>(null);
+  const pendingNavigationRef = useRef(false);
+  const navigationResetRef = useRef<number | null>(null);
 
   useEffect(() => {
     setSelectedTaskId(null);
     captureInputRef.current?.focus();
   }, [view]);
+
+  useEffect(() => {
+    const clearPendingNavigation = () => {
+      pendingNavigationRef.current = false;
+      if (navigationResetRef.current !== null) {
+        window.clearTimeout(navigationResetRef.current);
+        navigationResetRef.current = null;
+      }
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (
+        event.defaultPrevented
+        || event.isComposing
+        || event.metaKey
+        || event.ctrlKey
+        || event.altKey
+        || event.shiftKey
+        || isTaskKeyboardInput(event.target)
+        || document.querySelector('[role="dialog"], [role="menu"]')
+      ) {
+        clearPendingNavigation();
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      if (pendingNavigationRef.current) {
+        clearPendingNavigation();
+        const path = taskNavigationShortcuts[key];
+        if (path) {
+          event.preventDefault();
+          navigate(`${basePath}${path}`);
+        }
+        return;
+      }
+      if (key === 'g') {
+        event.preventDefault();
+        pendingNavigationRef.current = true;
+        navigationResetRef.current = window.setTimeout(clearPendingNavigation, 1200);
+        return;
+      }
+      if (key === 'n') {
+        event.preventDefault();
+        if (captureInputRef.current) {
+          captureInputRef.current.focus();
+        } else {
+          navigate(`${basePath}/inbox`);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      clearPendingNavigation();
+    };
+  }, [basePath, navigate]);
 
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault();
@@ -265,6 +334,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             await transitionTask(task.id, 'complete');
           } catch (completeError) {
             showTaskError('Task Could Not Be Completed', completeError);
+            throw completeError;
           }
         }}
         planningActions={planningActionsForTask(task)}
@@ -273,6 +343,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             await reorderTask(task.id, 'up');
           } catch (reorderError) {
             showTaskError('Task Could Not Be Reordered', reorderError);
+            throw reorderError;
           }
         } : undefined}
         onMoveDown={(view === 'today' || view === 'anytime' || view === 'someday')
@@ -282,6 +353,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             await reorderTask(task.id, 'down');
           } catch (reorderError) {
             showTaskError('Task Could Not Be Reordered', reorderError);
+            throw reorderError;
           }
         } : undefined}
         planningLabel={view === 'today' && getTodayTaskSection(task, planningDate) === 'unfinished'
@@ -318,7 +390,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <main className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
         <div className="space-y-7">
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-3xl font-semibold leading-none tracking-tight">
+            <h2
+              tabIndex={-1}
+              data-task-view-heading
+              className="text-3xl font-semibold leading-none tracking-tight"
+            >
               <span className="md:hidden">{getTaskViewLabel(view)}</span>
               <span className="hidden md:inline">Tasks</span>
             </h2>
@@ -368,7 +444,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 }}
                 disabled={creating}
                 aria-label="Add a Task"
-                aria-keyshortcuts="Enter"
+                aria-keyshortcuts="N Enter"
                 autoComplete="off"
                 placeholder="Add a Task"
                 className="h-14 rounded-md pl-12 pr-14 text-base"
@@ -701,16 +777,44 @@ function TaskRow({
   const titleButtonRef = useRef<HTMLButtonElement>(null);
   const hierarchyLabel = getTaskHierarchyLabel(task, hierarchy);
 
-  const run = async (operation: () => Promise<void>) => {
+  const run = async (operation: () => Promise<void>): Promise<boolean> => {
     if (pending) {
-      return;
+      return false;
     }
     setPending(true);
     try {
       await operation();
+      return true;
+    } catch {
+      return false;
     } finally {
       setPending(false);
     }
+  };
+
+  const getTaskTitleControls = () => Array.from(
+    titleButtonRef.current?.closest('main')?.querySelectorAll<HTMLButtonElement>(
+      '[data-task-title-control]',
+    ) ?? [],
+  );
+
+  const focusRelativeTask = (offset: -1 | 1) => {
+    const controls = getTaskTitleControls();
+    const currentIndex = controls.indexOf(titleButtonRef.current!);
+    controls[currentIndex + offset]?.focus();
+  };
+
+  const focusAfterRemoval = (main: HTMLElement | null, currentIndex: number) => {
+    window.setTimeout(() => {
+      const remaining = Array.from(main?.querySelectorAll<HTMLButtonElement>(
+        '[data-task-title-control]',
+      ) ?? []).filter(
+        (control) => control.dataset.taskId !== task.id,
+      );
+      const fallback = main?.querySelector<HTMLElement>('input[aria-label="Add a Task"]')
+        ?? main?.querySelector<HTMLElement>('[data-task-view-heading]');
+      (remaining[currentIndex] ?? remaining[currentIndex - 1] ?? fallback)?.focus();
+    }, 0);
   };
 
   return (
@@ -729,7 +833,52 @@ function TaskRow({
           ref={titleButtonRef}
           type="button"
           onClick={onSelect}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) {
+              return;
+            }
+            if (
+              event.altKey
+              && !event.metaKey
+              && !event.ctrlKey
+              && !event.shiftKey
+              && (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+            ) {
+              const reorder = event.key === 'ArrowUp' ? onMoveUp : onMoveDown;
+              if (reorder) {
+                event.preventDefault();
+                void run(reorder).then(() => {
+                  window.setTimeout(() => titleButtonRef.current?.focus(), 0);
+                });
+              }
+              return;
+            }
+            if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+              return;
+            }
+            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+              event.preventDefault();
+              focusRelativeTask(event.key === 'ArrowUp' ? -1 : 1);
+              return;
+            }
+            if (event.key.toLowerCase() === 'c') {
+              event.preventDefault();
+              const controls = getTaskTitleControls();
+              const currentIndex = controls.indexOf(event.currentTarget);
+              const main = event.currentTarget.closest('main');
+              void run(onComplete).then((applied) => {
+                if (applied) {
+                  focusAfterRemoval(main, currentIndex);
+                } else {
+                  window.setTimeout(() => titleButtonRef.current?.focus(), 0);
+                }
+              });
+            }
+          }}
           aria-expanded={selected}
+          aria-keyshortcuts="Enter ArrowUp ArrowDown C Alt+ArrowUp Alt+ArrowDown"
+          data-task-title-control
+          data-task-id={task.id}
           className="min-w-0 flex-1 py-4 text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span className="block">{task.title}</span>
@@ -877,11 +1026,21 @@ function TaskEditor({
     <form
       onSubmit={handleSave}
       onKeyDown={(event) => {
+        if (
+          event.key === 'Enter'
+          && (event.metaKey || event.ctrlKey)
+          && !event.nativeEvent.isComposing
+        ) {
+          event.preventDefault();
+          event.currentTarget.requestSubmit();
+          return;
+        }
         if (event.key === 'Escape') {
           event.preventDefault();
           handleCancel();
         }
       }}
+      aria-keyshortcuts="Meta+Enter Escape"
       className="space-y-3 border-t border-[hsl(var(--grid-sticky-line))] px-4 py-4 sm:ml-14"
     >
       <label className="sr-only" htmlFor={`task-title-${task.id}`}>
@@ -1095,6 +1254,12 @@ function MobileProjectsLink({
       {label}
     </a>
   );
+}
+
+function isTaskKeyboardInput(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(
+    'input, textarea, select, [contenteditable="true"]',
+  ));
 }
 
 function getTaskViewFromPath(pathname: string): TaskShellView {

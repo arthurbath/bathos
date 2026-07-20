@@ -211,6 +211,96 @@ describe('TasksShell', () => {
     }
   });
 
+  it('focuses capture with N and ignores app commands inside editable controls', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      const titleButton = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
+      const capture = container.querySelector<HTMLInputElement>('input[aria-label="Add a Task"]')!;
+      titleButton.focus();
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', bubbles: true }));
+      });
+      expect(document.activeElement).toBe(capture);
+
+      await act(async () => {
+        capture.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }));
+        capture.dispatchEvent(new KeyboardEvent('keydown', { key: 'u', bubbles: true }));
+      });
+      expect(container.querySelector('a[aria-current="page"]')?.textContent).toContain('Today');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('navigates task views with a web-safe G sequence', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.focus();
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }));
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'u', bubbles: true }));
+      });
+      expect(container.querySelector('a[aria-current="page"]')?.textContent).toContain('Upcoming');
+      expect(mockTaskList).toHaveBeenLastCalledWith('owner-a', 'upcoming');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('moves row focus, reorders, and completes through scoped task commands', async () => {
+    const secondTask = {
+      ...task,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    };
+    const taskList = { ...defaultTaskList(), tasks: [task, secondTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      const first = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
+      const second = container.querySelector<HTMLButtonElement>('[data-task-id="task-b"]')!;
+      first.focus();
+      await act(async () => {
+        first.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown', bubbles: true, cancelable: true,
+        }));
+      });
+      expect(document.activeElement).toBe(second);
+
+      await act(async () => {
+        second.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowUp', altKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      expect(taskList.reorderTask).toHaveBeenCalledWith('task-b', 'up');
+      await act(async () => {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.activeElement).toBe(second);
+
+      first.focus();
+      await act(async () => {
+        first.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'c', bubbles: true, cancelable: true,
+        }));
+      });
+      expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'complete');
+      await act(async () => {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.activeElement).toBe(second);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('provides a real mobile link into Projects and a Today return link', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const today = renderShell('/tasks/today');
@@ -334,6 +424,30 @@ describe('TasksShell', () => {
         (button) => button.textContent === 'Existing task',
       );
       expect(document.activeElement).toBe(restoredTitleButton);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('saves an open task editor with Command+Enter', async () => {
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      const title = container.querySelector<HTMLInputElement>('#task-title-task-a')!;
+      await act(async () => {
+        setInputValue(title, 'Saved by keyboard');
+        title.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', metaKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+        title: 'Saved by keyboard',
+      });
     } finally {
       cleanup(root, container);
     }
