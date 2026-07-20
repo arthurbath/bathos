@@ -40,13 +40,13 @@
 
 ## 4. Minimal End-to-End Module
 
-- [ ] 4.1 Add the isolated task module shell and working routes.
+- [x] 4.1 Add the isolated task module shell and working routes.
 - [ ] 4.2 Register the task module in platform module detection, launcher metadata, PWA metadata, and related tests.
-- [ ] 4.3 Add the minimum owner-scoped task query and mutation hooks.
-- [ ] 4.4 Add keyboard-accessible task creation, editing, completion, and recoverable deletion.
+- [x] 4.3 Add the minimum owner-scoped task query and mutation hooks.
+- [x] 4.4 Add keyboard-accessible task creation, editing, completion, and recoverable deletion.
 - [ ] 4.5 Prove offline creation and completion across a client restart and later reconnection.
 - [ ] 4.6 Prove optimistic task display without stale-value snapback or focus disruption.
-- [ ] 4.7 Add focused accessibility and keyboard tests for the minimal workflow.
+- [x] 4.7 Add focused accessibility and keyboard tests for the minimal workflow.
 
 ## 5. Daily Planning Workflow
 

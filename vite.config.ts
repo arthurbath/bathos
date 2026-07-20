@@ -66,6 +66,12 @@ function clientConsoleMirrorPlugin(): Plugin {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  optimizeDeps: {
+    exclude: ["@powersync/web", "@journeyapps/wa-sqlite"],
+  },
+  worker: {
+    format: "es",
+  },
   server: {
     host: "::",
     port: 8080,

@@ -54,6 +54,17 @@ describe('useHostModule', () => {
     }
   });
 
+  it('detects the tasks module from the URL path', () => {
+    window.history.replaceState({}, '', '/tasks/today');
+
+    const { container, root } = renderHarness();
+    try {
+      expect(container.querySelector('[data-testid="module-id"]')?.textContent).toBe('tasks');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('returns none for retired module paths', () => {
     window.history.replaceState({}, '', '/corpus/documents');
 

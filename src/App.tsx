@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { AuthProvider } from "@/platform/contexts/AuthContext";
 import LauncherPage from "@/platform/components/LauncherPage";
 import AccountPage from "@/platform/components/AccountPage";
@@ -27,6 +27,8 @@ import GarageIndex from "@/modules/garage/GarageIndex";
 import SnakeIndex from "@/modules/snake/SnakeIndex";
 import WardrobeIndex from "@/modules/wardrobe/WardrobeIndex";
 import NotFound from "./pages/NotFound";
+
+const TasksIndex = lazy(() => import("@/modules/tasks/TasksIndex"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -70,6 +72,20 @@ function DocumentHead() {
 function GlobalCommandEnterSubmit() {
   useCommandEnterSubmit();
   return null;
+}
+
+function TasksRoute() {
+  return (
+    <Suspense
+      fallback={(
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <LoadingSpinner />
+        </div>
+      )}
+    >
+      <TasksIndex />
+    </Suspense>
+  );
 }
 
 export function ScrollToTopOnPathnameChange() {
@@ -127,6 +143,11 @@ function AppRoutes() {
         {/* Wardrobe module */}
         <Route path="/wardrobe" element={<Navigate to="/wardrobe/items" replace />} />
         <Route path="/wardrobe/items" element={<WardrobeIndex />} />
+
+        {/* Tasks module */}
+        <Route path="/tasks" element={<Navigate to="/tasks/today" replace />} />
+        <Route path="/tasks/inbox" element={<TasksRoute />} />
+        <Route path="/tasks/today" element={<TasksRoute />} />
 
         {/* Legacy routes */}
         <Route path="/incomes" element={<Navigate to="/budget/incomes" replace />} />

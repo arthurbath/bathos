@@ -76,6 +76,14 @@ The slice excludes areas, projects, headings, checklists, recurrence, reminders,
 
 The offline, reconciliation, conflict, and ordering architecture gate passed on 2026 Jul 19. Implementation of this slice can proceed on the selected module-local PowerSync foundation.
 
+### First Integrated Local Slice
+
+The first integrated browser slice landed under `/tasks/today` and `/tasks/inbox` on 2026 Jul 19. It uses the neutral internal label `Tasks` until the permanent product name and icon are selected. The route is lazy-loaded so PowerSync, WA-SQLite, its workers, and its WebAssembly files do not enter the initial BathOS application chunk. Vite emits the worker graph as ES modules and excludes PowerSync and WA-SQLite from dependency pre-bundling so the development and production worker paths remain valid.
+
+The screen follows an original BathOS-native open-list composition: a restrained header status, Inbox/Today view switch, keyboard-first capture field, ordered task rows, quiet completion and action controls, and an in-place plain-text title and notes editor. It does not copy Things branding, iconography, sidebar anatomy, or exact row treatment. On small screens, Inbox and Today move to the shared BathOS bottom navigation and the active view becomes the page heading.
+
+When no PowerSync service endpoint is configured, the module is fully usable in explicit local mode. A bounded browser exercise with synthetic data proved create-by-Enter, reload persistence, edit-and-notes persistence, completion, recoverable deletion, movement between Today and Inbox, owner-safe startup, and responsive rendering. The synthetic local records were cleared through the same full database-clear boundary used for an account change. Server reconnection remains unproven and the module remains intentionally absent from the launcher and PWA metadata until its permanent public identity and remote topology are resolved.
+
 ## Goals / Non-Goals
 
 **Goals:**
