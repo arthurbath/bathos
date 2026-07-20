@@ -4,11 +4,11 @@
 - [x] 1.2 Perform an initial bounded read-only Things inventory and record only generalized findings in the public repository.
 - [x] 1.3 Catalogue the user's daily capture, planning, execution, review, completion, and rescheduling workflows.
 - [ ] 1.4 Define the actionability states that will replace the current tag conventions.
-- [ ] 1.5 Define supported source/origin types and the behaviors attached to each origin.
-- [ ] 1.6 Define to-do template and project template creation, editing, instantiation, and provenance behavior.
+- [x] 1.5 Define supported source/origin types and the behaviors attached to each origin.
+- [x] 1.6 Define to-do template and project template creation, editing, instantiation, and provenance behavior.
 - [ ] 1.7 Inventory relevant Things keyboard behaviors and choose the BathOS keyboard contract for the first daily workflow.
 - [x] 1.8 Select the smallest end-to-end workflow that can provide useful parallel operation.
-- [ ] 1.9 Confirm or revise the working `/tasks` route, `tasks_` database namespace, and `src/modules/tasks` source path.
+- [x] 1.9 Confirm or revise the working `/tasks` route, `tasks_` database namespace, and `src/modules/tasks` source path.
 - [ ] 1.10 Select an original user-facing product name and initial icon direction before launcher implementation.
 
 ## 2. Architecture Gates
@@ -16,11 +16,12 @@
 - [x] 2.1 Compare module-local offline persistence and synchronization approaches against web, Supabase, MCP, and possible native-client requirements.
 - [x] 2.2 Build a disposable spike for offline task creation, restart persistence, reconnection, and server reconciliation.
 - [x] 2.3 Build a disposable spike for stable manual ordering and overlapping reorder conflicts.
-- [ ] 2.4 Define the task state machine, including open, completed, canceled, recoverably deleted, and structured actionability states.
-- [ ] 2.5 Define start-date, deadline, reminder, time-zone, and daylight-saving semantics.
-- [ ] 2.6 Define recurrence definitions, occurrence identity, generation idempotency, and after-completion behavior.
-- [ ] 2.7 Define undo, history, mutation receipt, trash, permanent deletion, backup, restore, and export contracts.
-- [ ] 2.8 Define notification responsibility across server, web, and possible native clients.
+- [x] 2.4 Define open, completed, canceled, recoverably deleted, restoration, and hierarchy-transition invariants.
+- [ ] 2.4a Add the structured actionability transitions after the vocabulary in 1.4 is resolved.
+- [x] 2.5 Define start-date, deadline, reminder, time-zone, and daylight-saving semantics.
+- [x] 2.6 Define recurrence definitions, occurrence identity, generation idempotency, and after-completion behavior.
+- [x] 2.7 Define undo, history, mutation receipt, trash, permanent deletion, backup, restore, and export contracts.
+- [x] 2.8 Define notification responsibility across server, web, and possible native clients.
 - [x] 2.9 Record the selected architecture and update OpenSpec requirements when the spikes resolve current questions.
 
 ## 3. Database and Domain Foundation

@@ -110,11 +110,11 @@ Rationale: The expected product is personal software, and collaboration would in
 
 Alternative considered: Create a task household from the beginning. Rejected because speculative collaboration should not shape the core data model before a real use case exists.
 
-### Use `tasks` as a working technical namespace
+### Use `tasks` as the permanent technical namespace
 
-The initial OpenSpec artifacts use `/tasks/...`, `src/modules/tasks/`, and `tasks_` as working route, source, and database namespaces. The user-facing product name remains open and may be selected before implementation.
+The module will use `/tasks/...`, `src/modules/tasks/`, and `tasks_` as its permanent route, source, and database namespaces. The user-facing product name remains open and may change without renaming internal engineering surfaces.
 
-Rationale: Engineering artifacts need a stable reference while product naming remains a separate creative decision.
+Rationale: A permanent neutral namespace keeps routes, migrations, synchronization rules, tests, and integrations stable while product naming remains a separate creative decision.
 
 Alternative considered: Delay all artifacts until a product name exists. Rejected because the product name does not need to determine the internal namespace.
 
@@ -134,13 +134,111 @@ Rationale: Structured concepts can drive views, automation, MCP behavior, valida
 
 Alternative considered: Continue encoding meaning in titles and tags. Rejected because those conventions are fragile and cannot support dependable automation.
 
+### Separate entry channel from source identity
+
+Every created task will record an immutable entry channel that identifies how the mutation entered the task service. Supported channels are `web`, `raycast`, `mcp`, `mail_automation`, `browser_capture`, `native`, and `import`. A task may also have one typed primary source reference whose kind is `webpage`, `mail_message`, `file`, `selected_text`, `reading_item`, `template`, or `other`. Manual tasks have no source reference.
+
+Entry channel and source kind answer different questions. An MCP client can create a webpage-sourced task, and a Raycast command can capture a Mail message. Neither field will be inferred from the other, the title, or an icon.
+
+Source behavior is type-specific:
+
+- Webpage and reading-item sources preserve a canonical URL and optional source title.
+- Mail sources preserve a durable message identifier, account identifier, deep link, and integration lifecycle status. Moving or retiring source mail remains a Mail integration operation, not generic task behavior.
+- File sources preserve a reopenable file reference supported by the originating client. They must not assume that a local path is portable to every device.
+- Selected-text sources may preserve the captured excerpt and an optional parent source, subject to the same owner and export boundaries as task notes.
+- Template sources are assigned only by the template-instantiation operation and preserve the definition and revision used.
+- Import sources preserve an import-run identifier and external stable identifier for deduplication without treating imported owner identifiers as authoritative.
+
+Automation channels must also provide a stable idempotency key when a retry could duplicate work. Operational diagnostics may record source kind, channel, and stable identifiers, but they must not log source titles, excerpts, URLs containing secrets, Mail content, file paths, or task content.
+
+Rationale: A typed source contract can power deep links, source-specific lifecycle behavior, deduplication, and presentation without turning a generic metadata bag into a second tag system.
+
 ### Separate template definitions from active work
 
-Reusable to-do and project templates will be modeled distinctly from the generated to-dos and projects that enter active planning views. Instantiation must create independent work records with traceable template origin.
+Reusable to-do and project templates will be modeled distinctly from the generated to-dos and projects that enter active planning views. Each saved template revision is immutable. Editing a template creates a new current revision, and instantiation deep-copies the selected revision into independent active work.
+
+A to-do template may contain title, notes, checklist items, structured source defaults, actionability defaults, and relative planning values. A project template may additionally contain headings, ordered descendant to-dos, and their checklist items. Relative dates resolve from an explicit instantiation anchor. Absolute dates and reminders are excluded from reusable templates unless a later contract defines a safe reason to preserve them.
+
+Every generated root and supported descendant retains the template definition identifier, template revision, instantiation identifier, and corresponding template-node identifier. Editing generated work never mutates the template. Editing or deleting a template never changes or deletes existing instances. Deleting a template archives the definition so existing provenance remains readable.
+
+Instantiation is one transaction and accepts an idempotency key. A retry returns the original generated root and descendants. A partial hierarchy is never exposed as a successful instance.
 
 Rationale: The current library already uses template projects extensively. Treating templates as ordinary projects makes them appear in planning views and encourages accidental editing of reusable source material.
 
 Alternative considered: Preserve template projects through naming conventions. Rejected because the module can support this workflow directly.
+
+### Use orthogonal lifecycle and record-disposition state
+
+Task lifecycle is `open`, `completed`, or `canceled`. Recoverable deletion is a separate record disposition, `present` or `deleted`, because an open task in Trash and a completed task in Trash must retain different restoration targets. Planning placement and structured actionability are also separate dimensions. Actionability applies only to open, present work, and its final vocabulary remains pending the user's distinction between the two current conventions.
+
+Lifecycle transitions follow these rules:
+
+- New active work begins `open`.
+- Completing open work sets `completed_at`, clears `canceled_at`, removes the record from active planning views, and appends a completion event.
+- Canceling open work sets `canceled_at`, clears `completed_at`, removes the record from active planning views, and appends a cancellation event.
+- Reopening completed or canceled work clears the current terminal timestamp and appends a reopen event. It never erases the prior terminal event from history.
+- Repeating an already-applied transition with the same client mutation identifier returns the original result. A different request for the current target lifecycle produces a no-op receipt rather than a duplicate history event.
+- Every transition checks the record revision. A stale transition cannot silently overwrite an accepted transition.
+- Completing or canceling a project with open descendants requires an explicit descendant policy. The default operation rejects the transition rather than silently cascading. A separately named cascade operation may complete or cancel open descendants in one transaction and must report every affected stable identifier.
+- Completing a parent to-do does not rewrite checklist-item completion values. Reopening the parent restores the checklist exactly as it was.
+
+Recoverable deletion stores the prior lifecycle, planning placement, parent, and order needed for deterministic restoration. Deleting a hierarchy marks the supported descendants in the same transaction. Restoring the root restores its descendants to their prior states when their parents still exist. If a prior container no longer exists, the root returns to Inbox and the restoration receipt reports the fallback.
+
+Rationale: Orthogonal dimensions prevent view placement, actionability, history, and recovery from becoming contradictory values in one overloaded state field.
+
+### Treat dates as calendar values and reminders as resolved instants
+
+Start dates and deadlines are ISO calendar dates without a time-zone offset. A start date controls when work becomes available in active views. A deadline communicates the completion boundary but never hides work before that date. A deadline earlier than the start date is invalid.
+
+Today is derived from the owner's IANA planning time zone. Date-only values do not shift when the owner travels, changes the planning time zone, or crosses a daylight-saving boundary. `This Evening` is a section of Today, not a reminder time or independent date. An item may be placed there only while it belongs to Today.
+
+A reminder stores the intended local date and wall-clock time, the IANA time zone used to interpret that intent, and the resulting UTC instant. Once resolved, changing the owner's current time zone changes display conversion but does not move the reminder instant. Editing the reminder resolves a new instant from the newly supplied intent.
+
+If a requested local reminder time does not exist because the clock moves forward, the system resolves it to the first valid instant after the gap and reports that adjustment. If the time occurs twice because the clock moves backward, the system chooses the earlier instant unless the caller explicitly selects the later occurrence. The resolved instant and resolution choice are stored so every client schedules the same event.
+
+Rationale: Calendar planning should stay attached to the day the user chose, while a scheduled notification needs one unambiguous instant.
+
+### Separate recurrence definitions from generated occurrences
+
+A recurrence definition is not an active task. It owns a stable identifier, an immutable revision history, a rule mode, a planning time zone, a missed-occurrence policy, and a template snapshot for future occurrences. Generated work is an ordinary independent task with recurrence-definition, recurrence-revision, and logical-occurrence identifiers.
+
+Calendar recurrence uses a schedule such as daily, weekly, monthly, or yearly. After-completion recurrence derives the next event only from an authoritative completion of the preceding occurrence. Cancellation does not advance an after-completion rule. Each logical recurrence event has a deterministic key derived from the definition and its scheduled local date or predecessor occurrence. A database uniqueness boundary guarantees that retries, delayed clients, and concurrent generators cannot create two occurrences for the same event.
+
+The authoritative server performs generation transactionally. Clients may request an idempotent catch-up evaluation, but offline clients do not independently claim occurrence identity. Missed calendar schedules use one explicit definition policy:
+
+- `skip` advances past missed events without creating work.
+- `latest` creates only the most recent due event and is the default.
+- `all` creates every missed event within the configured safety limit and requires explicit selection.
+
+Editing a definition affects future, ungenerated occurrences only. Existing occurrences retain the revision and values from which they were created. Pausing or archiving a definition stops future generation without deleting existing work. Generation failure remains retryable and visible through content-free diagnostics.
+
+Rationale: Stable logical occurrence identity and server-authoritative generation prevent duplicate or missing work across retries and disconnected clients.
+
+### Make history append-only and recovery explicit
+
+Every accepted domain mutation appends an owner-scoped history event and returns a mutation receipt. A receipt contains the client mutation identifier, actor type, entry channel, affected stable identifiers, base and resulting revisions, transition type, timestamp, outcome, and conflict or fallback code. Operational logs and synchronization diagnostics use content-free receipt fields. Owner-scoped history may retain the minimum previous structured values required for audit and supported undo.
+
+Undo is an inverse domain mutation, not a database rollback. It uses the current revision, appends its own event, and is accepted only when intervening changes do not make the inverse unsafe. A rejected undo leaves current data untouched and explains the conflict. Undo eligibility may expire from the immediate interface, but history retention and Trash restoration are independent of that window.
+
+Normal deletion is always recoverable. Trash retains the deleted hierarchy and restoration metadata. Permanent deletion is a separately named, explicitly confirmed operation available only for records already in Trash. It is excluded from the initial MCP mutation surface. The operation must report all descendants and related owner data that will be erased and is not presented as undoable.
+
+Portable export uses a versioned, documented JSON envelope with stable identifiers, task hierarchy, templates, recurrence definitions, source metadata, history, and recoverably deleted records. It excludes authentication credentials, notification tokens, and service diagnostics. The envelope includes a manifest, record counts, schema version, creation time, and checksums.
+
+Restore validates checksums and schema compatibility before writing, supports a dry run, assigns all imported data to the authenticated owner, and never trusts exported owner identifiers. Merge restore is idempotent by stable identifier and reports conflicts without overwriting newer records. Replace restore requires a verified pre-restore backup and separate confirmation. A failed restore transaction must not expose a partially restored hierarchy.
+
+Rationale: A personal task system must make ordinary mistakes recoverable and catastrophic operations conspicuous before it holds authoritative data.
+
+### Keep the server authoritative for reminder delivery
+
+The server owns the canonical reminder schedule and creates one stable delivery occurrence for each reminder event. Delivery is idempotent per occurrence and registered target. Web Push is the first external delivery channel when browser support and permission are available. An open web client also presents due in-app reminders. A later native client may add an Apple Push Notification service target without changing reminder identity or recurrence semantics.
+
+Clients may cache near-term schedules to improve responsiveness, but a local schedule is not authoritative and must use the server-issued delivery occurrence identifier. Reconnection, reinstall, and multiple open tabs must not create a second logical occurrence. Multiple explicitly registered devices may each receive the same occurrence, while retries to one target use the same target-delivery identifier.
+
+The service records scheduled, attempted, provider-accepted, failed, and acknowledged states separately. Provider acceptance is not reported as proof that the user saw the notification. Permission denial, missing platform support, expired targets, and persistent delivery failure are visible as degraded reminder capability without blocking task operation.
+
+Notification payloads contain only the minimum user-approved content required for the selected preview setting. Delivery diagnostics never contain task titles or notes.
+
+Rationale: Server ownership supports delivery while the task app is closed and gives web and later native clients one deduplication contract.
 
 ### Decide the offline and synchronization model before broad UI implementation
 
@@ -321,9 +419,6 @@ The following concerns are roadmap requirements and must not be dismissed as pol
 ## Open Questions
 
 - What exact actionability states should replace the current tag conventions?
-- Which source/origin types need first-class behavior, and which are informational only?
-- How should template updates affect instances that were already created?
 - Should the production PowerSync service use PowerSync Cloud or a self-hosted deployment?
-- Should reminders be scheduled by the server, a native client, Web Push, or a layered combination?
 - What user-facing name and iconography should distinguish the module from Things?
 - Which native Apple surface, if any, is valuable enough to justify the first companion build?

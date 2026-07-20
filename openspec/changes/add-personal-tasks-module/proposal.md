@@ -4,7 +4,7 @@ Things is central to the user's daily planning, capture, reading, and work workf
 
 ## What Changes
 
-- Add a private-first BathOS task module under the working `/tasks/...` route and `tasks_` database namespace. The user-facing product name remains undecided.
+- Add a private-first BathOS task module under the permanent `/tasks/...` route, `src/modules/tasks/` source path, and `tasks_` database namespace. The user-facing product name remains undecided.
 - Provide a cross-platform web interface for capture, organization, scheduling, completion, search, and review.
 - Model Inbox, Today, This Evening, Upcoming, Anytime, Someday, Logbook, areas, projects, headings, checklists, start dates, deadlines, reminders, repeats, notes, and manual ordering without adding tags or another unstructured labeling system.
 - Replace existing tag and title-prefix workarounds with explicit structured concepts for actionability, source/origin, templates, and other personal workflow semantics as those concepts are defined.

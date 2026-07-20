@@ -24,7 +24,7 @@ The BathOS MCP server SHALL expose explicit task fields for actionability, sourc
 
 #### Scenario: Set structured origin
 - **WHEN** an MCP client creates a task from a supported external source
-- **THEN** the server records the source through the task origin contract and does not require a title prefix
+- **THEN** the server records `mcp` as the entry channel, validates the typed source reference independently, and does not require a title prefix
 
 #### Scenario: Set actionability
 - **WHEN** an MCP client changes whether a task can be acted on immediately
@@ -51,5 +51,8 @@ Task MCP mutations SHALL use stable identifiers, enforce ownership and valid sta
 
 #### Scenario: Return mutation receipt
 - **WHEN** an MCP task mutation succeeds
-- **THEN** the server returns the affected stable identifiers, resulting state, and mutation metadata required by the audit contract
+- **THEN** the server returns the client mutation identifier, affected stable identifiers, base and resulting revisions, transition, resulting state, timestamp, and outcome required by the audit contract
 
+#### Scenario: Exclude permanent deletion
+- **WHEN** an MCP client requests permanent deletion through the initial task mutation surface
+- **THEN** the server rejects the request and leaves recoverably deleted data unchanged

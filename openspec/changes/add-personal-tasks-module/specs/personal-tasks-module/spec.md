@@ -58,26 +58,34 @@ The system SHALL derive Today, This Evening, Upcoming, Anytime, Someday, and Log
 - **THEN** the system removes it from active planning views and retains it in Logbook according to the history contract
 
 ### Requirement: Tagless Structured Semantics
-The system SHALL represent workflow meaning through explicit structured concepts and SHALL NOT require generic tags or title parsing as canonical task data.
+The system SHALL represent workflow meaning through explicit structured concepts and SHALL NOT require generic tags, title parsing, or a generic metadata bag as canonical task data.
 
 #### Scenario: Mark work as not immediately actionable
 - **WHEN** a user applies a defined non-actionable state to an open to-do
 - **THEN** the system stores that state explicitly and can include or exclude the to-do from relevant views without a tag
 
 #### Scenario: Record task origin
-- **WHEN** a to-do is created from a defined source such as manual entry, Mail, a webpage, or an automation
-- **THEN** the system stores the source as structured origin metadata without requiring an emoji or text prefix
+- **WHEN** a to-do is created through web, Raycast, MCP, Mail automation, browser capture, a native client, or import
+- **THEN** the system stores that immutable entry channel separately from any typed source reference
+
+#### Scenario: Preserve a typed source
+- **WHEN** a task is captured from a webpage, Mail message, file, selected text, reading item, template, or import
+- **THEN** the system stores the stable source fields and source-specific lifecycle metadata defined for that type without requiring an emoji or text prefix
+
+#### Scenario: Retry an automated capture
+- **WHEN** an automated entry channel retries creation with the same idempotency key
+- **THEN** the system returns the original task and does not duplicate the source record
 
 #### Scenario: Render an origin indicator
 - **WHEN** the interface displays a task whose origin has a configured indicator
 - **THEN** the interface derives that presentation from origin metadata rather than parsing the task title
 
 ### Requirement: Native Templates
-The system SHALL support reusable to-do and project templates as definitions that are separate from active task records.
+The system SHALL support reusable, revisioned to-do and project template definitions that are separate from active task records.
 
 #### Scenario: Create work from a template
-- **WHEN** a user instantiates a to-do or project template
-- **THEN** the system creates independent active records and retains a reference to the source template
+- **WHEN** a user instantiates a to-do or project template revision with an explicit planning anchor
+- **THEN** the system atomically creates independent active records, resolves relative planning values, and records template, revision, instantiation, and template-node provenance
 
 #### Scenario: Edit an instantiated task
 - **WHEN** a user edits work created from a template
@@ -87,24 +95,118 @@ The system SHALL support reusable to-do and project templates as definitions tha
 - **WHEN** a template definition exists but has not been instantiated
 - **THEN** the system excludes the definition from Inbox, Today, Upcoming, Anytime, Someday, and Logbook
 
-### Requirement: Scheduling and Recurrence Integrity
-The system SHALL distinguish start dates, deadlines, reminder timestamps, recurrence definitions, and recurrence occurrences.
+#### Scenario: Revise a template
+- **WHEN** a user edits a template that already has generated instances
+- **THEN** the system creates a new current template revision and leaves every existing instance unchanged
+
+#### Scenario: Retry template instantiation
+- **WHEN** a caller retries instantiation with the same idempotency key
+- **THEN** the system returns the original generated hierarchy and never exposes a duplicate or partial instance
+
+#### Scenario: Archive a used template
+- **WHEN** a user deletes a template that has generated instances
+- **THEN** the system archives the definition, excludes it from new-template selection, and preserves readable provenance for existing work
+
+### Requirement: Orthogonal Task State
+The system SHALL model lifecycle, record disposition, planning placement, and structured actionability as separate dimensions with revision-checked transitions and append-only history.
+
+#### Scenario: Complete open work
+- **WHEN** a caller completes present open work from the current revision
+- **THEN** the system sets the lifecycle to completed, records `completed_at`, removes the work from active views, and appends one completion event
+
+#### Scenario: Cancel open work
+- **WHEN** a caller cancels present open work from the current revision
+- **THEN** the system sets the lifecycle to canceled, records `canceled_at`, removes the work from active views, and appends one cancellation event
+
+#### Scenario: Reopen terminal work
+- **WHEN** a caller reopens completed or canceled work from the current revision
+- **THEN** the system returns the lifecycle to open, clears the current terminal timestamp, and retains the prior completion or cancellation event in history
+
+#### Scenario: Retry a lifecycle transition
+- **WHEN** a caller repeats a lifecycle mutation with the same client mutation identifier
+- **THEN** the system returns the original receipt without appending another history event
+
+#### Scenario: Request the current lifecycle again
+- **WHEN** a caller with a new mutation identifier requests a lifecycle value the record already has
+- **THEN** the system returns a no-op receipt without appending a duplicate terminal event
+
+#### Scenario: Transition a project with open descendants
+- **WHEN** a caller completes or cancels a project that still has open descendants without an explicit descendant policy
+- **THEN** the system rejects the transition without changing the project or descendants
+
+#### Scenario: Cascade a project transition explicitly
+- **WHEN** a caller invokes a supported cascade transition for a project and its open descendants
+- **THEN** the system applies the transition atomically and reports every affected stable identifier
+
+#### Scenario: Complete a parent to-do with checklist state
+- **WHEN** a caller completes and later reopens a to-do with checklist items
+- **THEN** the system preserves each checklist item's prior completion state
+
+### Requirement: Temporal Planning Semantics
+The system SHALL store start dates and deadlines as local calendar dates, derive Today from the owner's IANA planning time zone, and store reminders as unambiguous resolved instants with their original local intent.
 
 #### Scenario: Start date and deadline coexist
 - **WHEN** a to-do has both a start date and a later deadline
 - **THEN** the system uses the start date to control when the to-do becomes active and retains the deadline as the completion boundary
 
+#### Scenario: Reject an impossible date range
+- **WHEN** a caller supplies a deadline earlier than the start date
+- **THEN** the system rejects the mutation without partially changing temporal values
+
+#### Scenario: Travel across time zones
+- **WHEN** the owner's current or planning time zone changes
+- **THEN** date-only start and deadline values remain assigned to the same calendar dates
+
+#### Scenario: Place work in This Evening
+- **WHEN** a user places work in This Evening
+- **THEN** the system treats the value as a section of Today and does not convert it into an independent date or reminder time
+
+#### Scenario: Resolve a reminder
+- **WHEN** a caller schedules a reminder with a local date, wall-clock time, and IANA time zone
+- **THEN** the system stores that intent and the resulting UTC instant used by every delivery client
+
+#### Scenario: Resolve a nonexistent reminder time
+- **WHEN** a requested local reminder time falls in a daylight-saving gap
+- **THEN** the system selects the first valid instant after the gap and records the adjustment
+
+#### Scenario: Resolve an ambiguous reminder time
+- **WHEN** a requested local reminder time occurs twice during a daylight-saving transition and the caller supplies no preference
+- **THEN** the system selects the earlier instant and records that choice
+
+#### Scenario: Display a reminder after travel
+- **WHEN** the owner's display time zone changes after a reminder is resolved
+- **THEN** the interface converts the stored instant for display without moving the scheduled instant
+
+### Requirement: Recurrence Integrity
+The system SHALL keep recurrence definitions separate from generated task occurrences and SHALL assign every logical recurrence event a deterministic, unique identity.
+
 #### Scenario: Generate a recurring occurrence
 - **WHEN** a recurrence definition becomes due to produce work
-- **THEN** the system creates no more than one occurrence for that recurrence event
+- **THEN** the authoritative server transaction creates no more than one occurrence for that logical recurrence event
 
 #### Scenario: Complete an occurrence
-- **WHEN** a user completes one occurrence of recurring work
-- **THEN** the system preserves the recurrence definition and evaluates the next occurrence according to its recurrence rule
+- **WHEN** a user completes one occurrence of after-completion work
+- **THEN** the system preserves the recurrence definition and evaluates one next event from the authoritative completion
 
-#### Scenario: Interpret dates across time changes
-- **WHEN** a user's time zone or daylight-saving offset changes
-- **THEN** date-only planning values remain assigned to their intended local dates and reminder timestamps follow the documented reminder policy
+#### Scenario: Cancel an after-completion occurrence
+- **WHEN** a user cancels an occurrence governed by an after-completion rule
+- **THEN** the system does not advance that rule from the cancellation
+
+#### Scenario: Retry occurrence generation
+- **WHEN** clients or jobs concurrently request generation for the same logical recurrence event
+- **THEN** a uniqueness boundary returns the one existing occurrence instead of creating a duplicate
+
+#### Scenario: Evaluate missed calendar events
+- **WHEN** a calendar recurrence has one or more missed events
+- **THEN** the generator applies the definition's explicit `skip`, `latest`, or `all` policy and defaults to `latest`
+
+#### Scenario: Edit a recurrence definition
+- **WHEN** a user changes a recurrence definition after it has generated work
+- **THEN** the change affects only future ungenerated occurrences and existing occurrences retain their source revision
+
+#### Scenario: Pause recurrence
+- **WHEN** a user pauses or archives a recurrence definition
+- **THEN** the system stops future generation without deleting existing occurrences
 
 ### Requirement: Stable Manual Ordering
 The system SHALL preserve intentional manual ordering across saves, refreshes, offline operation, and synchronization.
@@ -171,11 +273,19 @@ The system SHALL expose synchronization state without logging task content, incl
 - **THEN** the client retains the queued mutation and reports the upload failure separately from its general connection state
 
 ### Requirement: Recoverable History
-The system SHALL provide undo, recoverable deletion, history, backup, and export behavior before the module is considered replacement-ready.
+The system SHALL provide append-only history, mutation receipts, inverse-mutation undo, recoverable deletion, versioned export, and verified restore behavior before the module is considered replacement-ready.
 
 #### Scenario: Undo a recent change
 - **WHEN** a user invokes undo for a supported recent task mutation
 - **THEN** the system restores the prior state and synchronizes the restoration as a new valid mutation
+
+#### Scenario: Reject an unsafe undo
+- **WHEN** intervening changes make the requested inverse mutation unsafe
+- **THEN** the system rejects undo without overwriting current data and returns a conflict receipt
+
+#### Scenario: Return a mutation receipt
+- **WHEN** the system accepts, rejects, or treats a task-domain mutation as a no-op
+- **THEN** it returns a content-free receipt with the client mutation identifier, actor, channel, affected stable identifiers, revisions, transition, timestamp, outcome, and applicable code
 
 #### Scenario: Delete a task
 - **WHEN** a user deletes a to-do or project through the normal interface
@@ -183,11 +293,58 @@ The system SHALL provide undo, recoverable deletion, history, backup, and export
 
 #### Scenario: Restore deleted work
 - **WHEN** a user restores a recoverably deleted item
-- **THEN** the system returns the item and its supported descendants to an appropriate active or historical location
+- **THEN** the system restores the item and its supported descendants to their prior lifecycle, planning, parent, and order values when those destinations remain valid
+
+#### Scenario: Restore work whose container no longer exists
+- **WHEN** a recoverably deleted root cannot return to its prior container
+- **THEN** the system restores the hierarchy to Inbox and reports the fallback in the mutation receipt
+
+#### Scenario: Permanently delete work
+- **WHEN** a user invokes the separately authorized and confirmed permanent-deletion operation for work already in Trash
+- **THEN** the system reports and then erases the selected hierarchy and related owner data without presenting the operation as undoable
 
 #### Scenario: Export task data
 - **WHEN** a user requests an export
-- **THEN** the system produces a portable representation of the user's task data without requiring direct database access
+- **THEN** the system produces a versioned JSON envelope with a manifest, counts, checksums, stable identifiers, active data, templates, recurrence definitions, source metadata, history, and recoverably deleted records without credentials or delivery tokens
+
+#### Scenario: Preview a restore
+- **WHEN** a user supplies an export for dry-run restore
+- **THEN** the system validates checksums and schema compatibility and reports planned inserts, matches, and conflicts without writing task data
+
+#### Scenario: Merge a restore
+- **WHEN** a user restores an export into existing data
+- **THEN** the system assigns records to the authenticated owner, matches by stable identifier, remains idempotent on retry, and reports conflicts without overwriting newer records
+
+#### Scenario: Replace data from a restore
+- **WHEN** a user explicitly selects replace restore
+- **THEN** the system requires a verified pre-restore backup and separate confirmation before atomically replacing task data
+
+### Requirement: Layered Reminder Delivery
+The system SHALL keep the server authoritative for reminder scheduling and logical delivery identity while supporting Web Push, in-app delivery, and later native delivery targets through one idempotent contract.
+
+#### Scenario: Schedule reminder delivery
+- **WHEN** a reminder instant is accepted
+- **THEN** the server creates one stable logical delivery occurrence and targets each registered delivery endpoint idempotently
+
+#### Scenario: Retry one delivery target
+- **WHEN** a provider request is retried for the same occurrence and registered target
+- **THEN** the system reuses the target-delivery identifier and does not create another logical delivery
+
+#### Scenario: Open multiple browser tabs
+- **WHEN** multiple tabs observe the same due reminder
+- **THEN** the tabs share the logical occurrence and do not create duplicate server delivery records
+
+#### Scenario: Deliver on multiple registered devices
+- **WHEN** an owner has multiple explicitly registered delivery targets
+- **THEN** each target may receive the same logical occurrence once under its own target-delivery identifier
+
+#### Scenario: Delivery capability is unavailable
+- **WHEN** notification permission is denied, platform support is missing, or a target expires
+- **THEN** the task remains usable and the interface reports degraded reminder capability
+
+#### Scenario: Report delivery outcome
+- **WHEN** a notification provider accepts a delivery request
+- **THEN** the system records provider acceptance separately from user acknowledgement and does not claim that the user saw the reminder
 
 ### Requirement: Keyboard-First Daily Operation
 The system SHALL support efficient keyboard operation for high-frequency capture, navigation, editing, scheduling, movement, completion, and search workflows.
