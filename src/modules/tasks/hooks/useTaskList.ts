@@ -80,22 +80,13 @@ export function useTaskList(ownerId: string, view: TaskListView) {
     });
   }, [query.data]);
 
-  const tasks = useMemo(() => {
-    const merged = new Map(query.data.map((task) => [task.id, task]));
-    for (const [taskId, optimisticTask] of Object.entries(optimisticTasks)) {
-      if (optimisticTask === null) {
-        merged.delete(taskId);
-      } else {
-        merged.set(taskId, optimisticTask);
-      }
-    }
-
-    return Array.from(merged.values())
-      .filter((task) => (
-        taskIsVisible(task, ownerId, view, planningDate)
-      ))
-      .sort((left, right) => compareTasksForView(left, right, view, planningDate));
-  }, [optimisticTasks, ownerId, planningDate, query.data, view]);
+  const tasks = useMemo(() => deriveTaskViewTasks(
+    query.data,
+    optimisticTasks,
+    ownerId,
+    view,
+    planningDate,
+  ), [optimisticTasks, ownerId, planningDate, query.data, view]);
 
   const setOptimisticTask = useCallback((taskId: string, task: TaskTodo | null | undefined) => {
     setOptimisticTasks((current) => {
@@ -262,6 +253,27 @@ export function useTaskList(ownerId: string, view: TaskListView) {
     transitionTask,
     planningDate,
   };
+}
+
+export function deriveTaskViewTasks(
+  queriedTasks: readonly TaskTodo[],
+  optimisticTasks: Readonly<Record<string, TaskTodo | null>>,
+  ownerId: string,
+  view: TaskListView,
+  planningDate: string,
+): TaskTodo[] {
+  const merged = new Map(queriedTasks.map((task) => [task.id, task]));
+  for (const [taskId, optimisticTask] of Object.entries(optimisticTasks)) {
+    if (optimisticTask === null) {
+      merged.delete(taskId);
+    } else {
+      merged.set(taskId, optimisticTask);
+    }
+  }
+
+  return Array.from(merged.values())
+    .filter((task) => taskIsVisible(task, ownerId, view, planningDate))
+    .sort((left, right) => compareTasksForView(left, right, view, planningDate));
 }
 
 function taskIsVisible(

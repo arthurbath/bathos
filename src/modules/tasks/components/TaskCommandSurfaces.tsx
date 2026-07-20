@@ -30,25 +30,18 @@ import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { shouldHandleWithBrowser } from '@/lib/navigation';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
-import type { TaskLifecycle } from '@/modules/tasks/domain/taskState';
+import {
+  createTaskSearchDocuments,
+  filterTaskSearchDocuments,
+  getTaskSearchSourceKinds,
+  type TaskSearchFilters,
+} from '@/modules/tasks/domain/taskSearch';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
-import type {
-  TaskActionability,
-  TaskDestination,
-  TaskSourceKind,
-  TaskTodo,
-} from '@/modules/tasks/types/tasks';
+import type { TaskSourceKind, TaskTodo } from '@/modules/tasks/types/tasks';
 
 export type TaskTemporalAction = {
   label: string;
   run: () => Promise<void>;
-};
-
-type TaskSearchFilters = {
-  destination: 'all' | TaskDestination;
-  lifecycle: 'all' | TaskLifecycle;
-  actionability: 'all' | TaskActionability;
-  sourceKind: 'all' | 'none' | TaskSourceKind;
 };
 
 const taskSearchViews = [
@@ -116,38 +109,25 @@ export function TaskSearchDialog({
   }, [open]);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const deferredQuery = useDeferredValue(normalizedQuery);
-  const filteredTasks = useMemo(() => tasks.filter((task) => {
-    if (filters.destination !== 'all' && task.destination !== filters.destination) return false;
-    if (filters.lifecycle !== 'all' && task.lifecycle !== filters.lifecycle) return false;
-    if (
-      filters.actionability !== 'all'
-      && task.actionability !== filters.actionability
-    ) return false;
-    if (filters.sourceKind === 'none' && task.source_kind !== null) return false;
-    if (
-      filters.sourceKind !== 'all'
-      && filters.sourceKind !== 'none'
-      && task.source_kind !== filters.sourceKind
-    ) return false;
-    if (!deferredQuery) return true;
-    const hierarchyLabel = getTaskHierarchyLabel(task, hierarchy);
-    return [
-      task.title,
-      task.notes,
-      task.source_title,
-      task.source_url,
-      hierarchyLabel,
-    ].some((value) => value?.toLocaleLowerCase().includes(deferredQuery));
-  }), [deferredQuery, filters, hierarchy, tasks]);
+  const { areas, headings, projects } = hierarchy;
+  const documents = useMemo(
+    () => createTaskSearchDocuments(tasks, { areas, headings, projects }),
+    [areas, headings, projects, tasks],
+  );
+  const filteredDocuments = useMemo(
+    () => filterTaskSearchDocuments(documents, deferredQuery, filters),
+    [deferredQuery, documents, filters],
+  );
   const filtersActive = filters.destination !== 'all'
     || filters.lifecycle !== 'all'
     || filters.actionability !== 'all'
     || filters.sourceKind !== 'all';
   const resultLimit = normalizedQuery || filtersActive ? 100 : 20;
-  const displayedTasks = filteredTasks.slice(0, resultLimit);
-  const availableSourceKinds = useMemo(() => Array.from(new Set(
-    tasks.flatMap((task) => (task.source_kind ? [task.source_kind] : [])),
-  )).sort(), [tasks]);
+  const displayedDocuments = filteredDocuments.slice(0, resultLimit);
+  const availableSourceKinds = useMemo(
+    () => getTaskSearchSourceKinds(documents),
+    [documents],
+  );
 
   const handleViewClick = (event: MouseEvent<HTMLAnchorElement>, path: string) => {
     if (shouldHandleWithBrowser(event)) return;
@@ -280,7 +260,7 @@ export function TaskSearchDialog({
 
           <section aria-labelledby="task-search-results-heading">
             <h3 id="task-search-results-heading" className="mb-2 text-xs font-semibold text-muted-foreground">
-              Tasks ({filteredTasks.length})
+              Tasks ({filteredDocuments.length})
             </h3>
             {loading ? (
               <div className="flex min-h-24 items-center justify-center"><LoadingSpinner /></div>
@@ -288,14 +268,13 @@ export function TaskSearchDialog({
               <p role="alert" className="py-6 text-center text-sm text-destructive">
                 Tasks Could Not Be Searched
               </p>
-            ) : filteredTasks.length === 0 ? (
+            ) : filteredDocuments.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">No Matching Tasks</p>
             ) : (
               <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-                {displayedTasks.map((task) => {
+                {displayedDocuments.map(({ task, hierarchyLabel }) => {
                   const route = getTaskSearchRoute(task, planningDate);
                   const href = `${basePath}/${route}`;
-                  const hierarchyLabel = getTaskHierarchyLabel(task, hierarchy);
                   return (
                     <a
                       key={task.id}
@@ -312,9 +291,9 @@ export function TaskSearchDialog({
                 })}
               </div>
             )}
-            {filteredTasks.length > displayedTasks.length ? (
+            {filteredDocuments.length > displayedDocuments.length ? (
               <p className="pt-3 text-center text-xs text-muted-foreground">
-                Showing {displayedTasks.length} of {filteredTasks.length}. Refine the search to narrow results.
+                Showing {displayedDocuments.length} of {filteredDocuments.length}. Refine the search to narrow results.
               </p>
             ) : null}
           </section>
@@ -717,17 +696,4 @@ function getTaskSearchMetadata(task: TaskTodo, hierarchyLabel: string | null): s
     task.source_kind ? sourceKindLabels[task.source_kind] : null,
   ].filter(Boolean);
   return metadata.map((value) => value![0].toUpperCase() + value!.slice(1)).join(' / ');
-}
-
-function getTaskHierarchyLabel(task: TaskTodo, hierarchy: TaskHierarchyModel): string | null {
-  if (task.project_id) {
-    const project = hierarchy.projects.find(({ id }) => id === task.project_id);
-    const heading = hierarchy.headings.find(({ id }) => id === task.heading_id);
-    if (!project) return 'Unavailable Project';
-    return heading ? `${project.title} / ${heading.title}` : project.title;
-  }
-  if (task.area_id) {
-    return hierarchy.areas.find(({ id }) => id === task.area_id)?.title ?? 'Unavailable Area';
-  }
-  return null;
 }

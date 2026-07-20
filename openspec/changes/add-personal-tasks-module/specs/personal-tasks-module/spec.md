@@ -604,6 +604,21 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **WHEN** parallel-use approval has not passed verification
 - **THEN** Mail capture remains disabled and Inbox Manager does not dual-write to BathOS
 
+### Requirement: Large-Library Responsiveness
+The system SHALL retain bounded task-view and search latency as active and historical task data grows beyond the owner's current library.
+
+#### Scenario: Derive task views at synthetic scale
+- **WHEN** the performance harness derives Inbox, Today, Upcoming, Anytime, Someday, Logbook, or Trash from 10,000 mixed synthetic records
+- **THEN** each derivation remains below 100 ms p95 and returns the complete correctly ordered view
+
+#### Scenario: Search a large task library
+- **WHEN** the search surface indexes and filters 10,000 synthetic tasks across text, hierarchy, placement, lifecycle, actionability, and source kind
+- **THEN** reusable index construction remains below 100 ms p95, each text or structured filter remains below 50 ms p95, and result presentation remains capped without misreporting the total match count
+
+#### Scenario: Render a task view larger than the current library
+- **WHEN** the development performance harness renders 1,000 interactive task rows and opens search over 10,000 records
+- **THEN** the initial view render remains below 2,000 ms, search opens below 1,000 ms, and the module retains its complete keyboard and assistive-technology contract
+
 ### Requirement: Parallel Use with Things
 The system SHALL support indefinite parallel use without requiring the user to migrate, delete, or modify the existing Things library.
 
