@@ -6,7 +6,11 @@ import { getBudget, setBudget } from "./tools/budget-actions";
 import { getWardrobe, setWardrobe } from "./tools/wardrobe-actions";
 import { getTaskHierarchy, getTaskRecord, getTaskView } from "./tools/tasks-read";
 import { createTask } from "./tools/tasks-create";
-import { createMailTask } from "./tools/tasks-mail";
+import {
+  beginMailRetirement,
+  createMailTask,
+  resolveMailRetirement,
+} from "./tools/tasks-mail";
 import { moveTask, scheduleTask, transitionTask, updateTask } from "./tools/tasks-mutate";
 
 // Direct Supabase host for OAuth issuer (must not be a proxy URL).
@@ -39,6 +43,8 @@ export default defineMcp({
     getTaskView,
     createTask,
     createMailTask,
+    beginMailRetirement,
+    resolveMailRetirement,
     updateTask,
     moveTask,
     scheduleTask,

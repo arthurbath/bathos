@@ -186,12 +186,10 @@ SELECT throws_ok(
 
 SELECT lives_ok(
   $$
-    UPDATE public.tasks_mail_sources
-    SET lifecycle = 'retirement_pending',
-        retirement_attempted_at = now(),
-        revision = 2,
-        client_mutation_id = '61000000-0000-4000-8000-000000000027'
-    WHERE task_id = '61000000-0000-4000-8000-000000000010'
+    SELECT public.tasks_begin_mail_retirement(
+      '61000000-0000-4000-8000-000000000010', 1,
+      '61000000-0000-4000-8000-000000000027'
+    )
   $$,
   'accepts an explicit source-retirement attempt'
 );
@@ -205,37 +203,35 @@ SELECT is(
 
 SELECT throws_ok(
   $$
-    UPDATE public.tasks_mail_sources
-    SET lifecycle = 'retired',
-        retired_at = now(),
-        client_mutation_id = '61000000-0000-4000-8000-000000000028'
-    WHERE task_id = '61000000-0000-4000-8000-000000000010'
+    SELECT public.tasks_resolve_mail_retirement(
+      '61000000-0000-4000-8000-000000000010', 1,
+      '61000000-0000-4000-8000-000000000028',
+      'retired', NULL
+    )
   $$,
-  '23514', NULL,
-  'rejects a Mail source update without the next revision'
+  '40001', NULL,
+  'rejects a stale Mail source revision'
 );
 
 SELECT throws_ok(
   $$
-    UPDATE public.tasks_mail_sources
-    SET lifecycle = 'retirement_failed',
-        last_error_code = NULL,
-        revision = 3,
-        client_mutation_id = '61000000-0000-4000-8000-000000000029'
-    WHERE task_id = '61000000-0000-4000-8000-000000000010'
+    SELECT public.tasks_resolve_mail_retirement(
+      '61000000-0000-4000-8000-000000000010', 2,
+      '61000000-0000-4000-8000-000000000029',
+      'failed', NULL
+    )
   $$,
-  '23514', NULL,
+  '22023', NULL,
   'requires a bounded error code for failed retirement'
 );
 
 SELECT lives_ok(
   $$
-    UPDATE public.tasks_mail_sources
-    SET lifecycle = 'retired',
-        retired_at = now(),
-        revision = 3,
-        client_mutation_id = '61000000-0000-4000-8000-000000000030'
-    WHERE task_id = '61000000-0000-4000-8000-000000000010'
+    SELECT public.tasks_resolve_mail_retirement(
+      '61000000-0000-4000-8000-000000000010', 2,
+      '61000000-0000-4000-8000-000000000030',
+      'retired', NULL
+    )
   $$,
   'accepts a completed Mail source retirement'
 );

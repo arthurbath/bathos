@@ -41,6 +41,7 @@
 - [x] 3.7b Add append-only history, mutation receipts, and inverse-mutation undo primitives.
 - [x] 3.8 Add an initial portable export and verified restore path using synthetic test data.
 - [x] 3.8a Advance portable export and restore to include normalized Mail source records.
+- [ ] 3.8b Advance portable export and restore to include append-only Mail retirement events.
 - [x] 3.9 Regenerate or update Supabase TypeScript types for the new task objects.
 
 ## 4. Minimal End-to-End Module
@@ -85,9 +86,9 @@
 - [x] 6.8a Add Finder capture for exactly one selected item with a typed local file source.
 - [x] 6.8b Add selected-text capture that actively copies the current selection and rejects stale clipboard content.
 - [x] 6.8c Add AI-enriched reading-list capture with typed reading provenance and Today placement.
-- [ ] 6.8d Add Mail capture after the structured source contract preserves account identity, message identity, deep link, and source-retirement lifecycle.
+- [x] 6.8d Add Mail capture after the structured source contract preserves account identity, message identity, deep link, and source-retirement lifecycle.
 - [x] 6.8d1 Add specialized atomic Mail task creation with request and source-identity deduplication.
-- [ ] 6.8d2 Add guarded, auditable Mail source-retirement lifecycle mutations.
+- [x] 6.8d2 Add guarded, auditable Mail source-retirement lifecycle mutations.
 - [ ] 6.9 Connect Inbox Manager output after the BathOS Inbox is approved for parallel use.
 
 ## 7. Trust Validation

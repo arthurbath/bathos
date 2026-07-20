@@ -465,6 +465,14 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **WHEN** authenticated Mail capture supplies AI-processed title and notes, complete source identity, retirement destination, and optional verified work-area assignment
 - **THEN** the specialized service creates one unassigned or area-assigned daytime Today task and retained source record in a single transaction with no generic fallback write
 
+#### Scenario: Retire a Mail source only after verified movement
+- **WHEN** the integration begins retirement and then attempts the external Mail move
+- **THEN** the source first enters `retirement_pending`, changes to `retired` only after verified success, or changes to `retirement_failed` with a bounded diagnostic that permits an explicit retry
+
+#### Scenario: Audit Mail source retirement
+- **WHEN** an accepted Mail source lifecycle mutation changes state
+- **THEN** the system appends one immutable owner-scoped event with the request UUID, transition, base and result revisions, time, and optional failure code while rejecting direct authenticated state changes
+
 #### Scenario: Reject an incomplete Mail source pair
 - **WHEN** a Mail task lacks its one-to-one source record, a non-Mail task owns one, or the task and source disagree about message identity or deep link
 - **THEN** the database rejects the transaction without leaving a partial task or source record
@@ -474,7 +482,7 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **THEN** the versioned portable envelope preserves the owner-safe Mail source record, explicit retirement lifecycle, revision, and mutation identity while excluding owner identifiers and Mail content
 
 #### Scenario: Gate Mail capture on a complete integration contract
-- **WHEN** guarded source-lifecycle mutation and parallel-use approval have not both passed verification
+- **WHEN** parallel-use approval has not passed verification
 - **THEN** Mail capture remains disabled and Inbox Manager does not dual-write to BathOS
 
 ### Requirement: Parallel Use with Things

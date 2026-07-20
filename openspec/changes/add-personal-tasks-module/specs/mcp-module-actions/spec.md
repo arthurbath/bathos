@@ -35,6 +35,14 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 - **WHEN** a verified integration retries the same Mail request UUID or later presents the same owner, account, and message identity with a different request UUID
 - **THEN** the server returns the existing task and source without creating duplicate records while rejecting changed data for the same request UUID or conflicting source identity
 
+#### Scenario: Guard Mail source retirement around an external move
+- **WHEN** a verified integration is ready to move a retained Mail source and then reports the external result
+- **THEN** `begin_mail_retirement` first records a pending state and `resolve_mail_retirement` records only verified retirement or an explicit bounded failure, using optimistic revisions and idempotent receipts for both mutations
+
+#### Scenario: Preserve auditable Mail retirement transitions
+- **WHEN** a Mail retirement fails, is retried, and later succeeds
+- **THEN** the server retains each accepted owner-scoped lifecycle event, rejects direct authenticated source updates and event inserts, and keeps the retired state terminal
+
 #### Scenario: Reject an idempotency-key payload change
 - **WHEN** an MCP client reuses a creation idempotency key with different normalized title, planning, container, or source input
 - **THEN** the server rejects the request and neither creates nor changes a task

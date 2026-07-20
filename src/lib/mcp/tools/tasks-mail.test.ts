@@ -3,7 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Database, Json } from '@/integrations/supabase/types';
 import type { AuthenticatedMcpContext } from '@/lib/mcp/supabase';
 
-import { createMailTask, createMailTaskData, type CreateMailTaskRequest } from './tasks-mail';
+import {
+  beginMailRetirement,
+  beginMailRetirementData,
+  createMailTask,
+  createMailTaskData,
+  resolveMailRetirement,
+  resolveMailRetirementData,
+  type CreateMailTaskRequest,
+} from './tasks-mail';
 import { planningDateInTimeZone } from './tasks-read';
 
 type TableName = keyof Database['public']['Tables'];
@@ -116,6 +124,13 @@ describe('Tasks Mail MCP tool', () => {
     });
   });
 
+  it('advertises narrow idempotent retirement lifecycle mutations', () => {
+    expect(beginMailRetirement.name).toBe('begin_mail_retirement');
+    expect(resolveMailRetirement.name).toBe('resolve_mail_retirement');
+    expect(beginMailRetirement.annotations).toMatchObject({ idempotentHint: true });
+    expect(resolveMailRetirement.annotations).toMatchObject({ idempotentHint: true });
+  });
+
   it('normalizes and submits an unassigned Today Mail capture atomically', async () => {
     const client = clientFor({ tasks_user_settings: [settings()] });
 
@@ -187,5 +202,60 @@ describe('Tasks Mail MCP tool', () => {
     await expect(createMailTaskData(request(), authFor(client)))
       .rejects.toThrow('Mail source conflict');
     expect(client.rpc).toHaveBeenCalledOnce();
+  });
+
+  it('begins source retirement with optimistic revision and idempotency guards', async () => {
+    const client = clientFor({});
+
+    await beginMailRetirementData({
+      task_id: areaId,
+      expected_revision: 2,
+      idempotency_key: '81000000-0000-4000-8000-000000000020',
+    }, authFor(client));
+
+    expect(client.rpc).toHaveBeenCalledWith('tasks_begin_mail_retirement', {
+      _task_id: areaId,
+      _expected_revision: 2,
+      _idempotency_key: '81000000-0000-4000-8000-000000000020',
+    });
+  });
+
+  it('resolves verified external success without accepting diagnostics', async () => {
+    const client = clientFor({});
+
+    await resolveMailRetirementData({
+      task_id: areaId,
+      expected_revision: 3,
+      idempotency_key: '81000000-0000-4000-8000-000000000021',
+      result: 'retired',
+    }, authFor(client));
+
+    expect(client.rpc).toHaveBeenCalledWith('tasks_resolve_mail_retirement', {
+      _task_id: areaId,
+      _expected_revision: 3,
+      _idempotency_key: '81000000-0000-4000-8000-000000000021',
+      _result: 'retired',
+      _error_code: null,
+    });
+  });
+
+  it('requires a bounded diagnostic when the external Mail move fails', async () => {
+    const client = clientFor({});
+    const base = {
+      task_id: areaId,
+      expected_revision: 3,
+      idempotency_key: '81000000-0000-4000-8000-000000000022',
+      result: 'failed' as const,
+    };
+
+    await expect(resolveMailRetirementData(base, authFor(client)))
+      .rejects.toThrow('requires an error code');
+    expect(client.rpc).not.toHaveBeenCalled();
+
+    await resolveMailRetirementData({ ...base, error_code: ' mail_move_timeout ' }, authFor(client));
+    expect(client.rpc).toHaveBeenCalledWith('tasks_resolve_mail_retirement', expect.objectContaining({
+      _result: 'failed',
+      _error_code: 'mail_move_timeout',
+    }));
   });
 });

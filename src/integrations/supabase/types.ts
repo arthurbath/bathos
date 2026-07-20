@@ -1502,6 +1502,56 @@ export type Database = {
           },
         ]
       }
+      tasks_mail_source_events: {
+        Row: {
+          base_lifecycle: string
+          base_revision: number
+          client_mutation_id: string
+          error_code: string | null
+          id: string
+          occurred_at: string
+          owner_id: string
+          result_lifecycle: string
+          result_revision: number
+          task_id: string
+          transition: string
+        }
+        Insert: {
+          base_lifecycle: string
+          base_revision: number
+          client_mutation_id: string
+          error_code?: string | null
+          id?: string
+          occurred_at: string
+          owner_id: string
+          result_lifecycle: string
+          result_revision: number
+          task_id: string
+          transition: string
+        }
+        Update: {
+          base_lifecycle?: string
+          base_revision?: number
+          client_mutation_id?: string
+          error_code?: string | null
+          id?: string
+          occurred_at?: string
+          owner_id?: string
+          result_lifecycle?: string
+          result_revision?: number
+          task_id?: string
+          transition?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_mail_source_events_source_owner_fkey"
+            columns: ["task_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_mail_sources"
+            referencedColumns: ["task_id", "owner_id"]
+          },
+        ]
+      }
       tasks_projects: {
         Row: {
           area_id: string | null
@@ -2023,6 +2073,24 @@ export type Database = {
           _start_date: string
           _task_id: string
           _title: string
+        }
+        Returns: Json
+      }
+      tasks_begin_mail_retirement: {
+        Args: {
+          _expected_revision: number
+          _idempotency_key: string
+          _task_id: string
+        }
+        Returns: Json
+      }
+      tasks_resolve_mail_retirement: {
+        Args: {
+          _error_code?: string | null
+          _expected_revision: number
+          _idempotency_key: string
+          _result: string
+          _task_id: string
         }
         Returns: Json
       }

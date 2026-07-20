@@ -1371,6 +1371,58 @@ var createMailTask = defineTool({
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
   handler: (input, ctx) => toMcpResult(createMailTaskData(input, requireAuthenticated(ctx)))
 });
+async function beginMailRetirementData(input, auth2) {
+  const { data, error } = await auth2.supabase.rpc("tasks_begin_mail_retirement", {
+    _task_id: input.task_id,
+    _expected_revision: input.expected_revision,
+    _idempotency_key: input.idempotency_key
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function resolveMailRetirementData(input, auth2) {
+  const errorCode = input.error_code?.trim() || null;
+  if (input.result === "failed" && errorCode === null) {
+    throw new Error("A failed Mail retirement requires an error code.");
+  }
+  if (input.result === "retired" && errorCode !== null) {
+    throw new Error("A successful Mail retirement cannot include an error code.");
+  }
+  const { data, error } = await auth2.supabase.rpc("tasks_resolve_mail_retirement", {
+    _task_id: input.task_id,
+    _expected_revision: input.expected_revision,
+    _idempotency_key: input.idempotency_key,
+    _result: input.result,
+    _error_code: errorCode
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+var retirementMutationInput = {
+  task_id: uuidSchema.describe("Mail-sourced task identifier returned by create_mail_task."),
+  expected_revision: z.number().int().positive().describe("Current Mail source revision."),
+  idempotency_key: uuidSchema.describe("Stable UUID for this exact lifecycle mutation.")
+};
+var beginMailRetirement = defineTool({
+  name: "begin_mail_retirement",
+  title: "Begin Mail Retirement",
+  description: "Mark one retained or explicitly failed Mail source as pending immediately before attempting its external Mail move.",
+  inputSchema: retirementMutationInput,
+  annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(beginMailRetirementData(input, requireAuthenticated(ctx)))
+});
+var resolveMailRetirement = defineTool({
+  name: "resolve_mail_retirement",
+  title: "Resolve Mail Retirement",
+  description: "Record the verified success or bounded failure of a pending external Mail move.",
+  inputSchema: {
+    ...retirementMutationInput,
+    result: z.enum(["retired", "failed"]),
+    error_code: z.string().trim().min(1).max(200).optional()
+  },
+  annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(resolveMailRetirementData(input, requireAuthenticated(ctx)))
+});
 
 // src/lib/mcp/tools/tasks-mutate.ts
 import { assertTaskCalendarRange as assertTaskCalendarRange2, isTaskCalendarDate as isTaskCalendarDate2 } from "npm:@/modules/tasks/domain/taskDates";
@@ -2108,6 +2160,8 @@ var mcp_default = defineMcp({
     getTaskView,
     createTask,
     createMailTask,
+    beginMailRetirement,
+    resolveMailRetirement,
     updateTask,
     moveTask,
     scheduleTask,
