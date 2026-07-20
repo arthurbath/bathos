@@ -86,6 +86,8 @@ describe('TaskProjectsView', () => {
       const projectArea = container.querySelector<HTMLSelectElement>('[aria-label="New Project Area"]')!;
       expect(container.querySelector<HTMLAnchorElement>('[aria-label="Open Alpha"]')
         ?.getAttribute('href')).toBe('/projects/project-alpha');
+      expect(container.querySelector<HTMLAnchorElement>('[aria-label="Open Work Area"]')
+        ?.getAttribute('href')).toBe('/areas/area-work');
 
       await act(async () => {
         areaInput.focus();

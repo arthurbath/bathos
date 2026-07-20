@@ -73,6 +73,7 @@
 - [x] 5.2e Keep long project identity and lifecycle controls on separate narrow-mobile rows.
 - [x] 5.2f Project task-like planning state appears in every applicable web planning view, with project-specific ordering, temporal actions, detail links, lifecycle recovery, and date editing.
 - [x] 5.2g Expose recoverable checklist-item deletion in project details with immediate optimistic removal, failure rollback, and Trash restoration.
+- [x] 5.2h Add navigable area details with owner-scoped loose active to-dos, active projects, current planning links, and modified-click preservation.
 - [x] 5.3 Add Today and This Evening with manual ordering and unfinished-item rescheduling.
 - [x] 5.4 Add Upcoming with future start-date planning.
 - [x] 5.5 Add Anytime and Someday with the specified active/inactive semantics.

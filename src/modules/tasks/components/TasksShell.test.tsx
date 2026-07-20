@@ -95,6 +95,12 @@ vi.mock('./TaskProjectsView', () => ({
   ),
 }));
 
+vi.mock('./TaskAreaDetailView', () => ({
+  TaskAreaDetailView: ({ areaId }: { areaId: string }) => (
+    <section data-testid="area-detail-view">Area {areaId}</section>
+  ),
+}));
+
 vi.mock('./TaskProjectDetailView', () => ({
   TaskProjectDetailView: ({ projectId }: { projectId: string }) => (
     <section data-testid="project-detail-view">Project {projectId}</section>
@@ -918,6 +924,24 @@ describe('TasksShell', () => {
       )?.getAttribute('href')).toBe('/tasks/projects');
     } finally {
       cleanup(project.root, project.container);
+    }
+  });
+
+  it('routes an area detail path as part of Projects without exposing task capture', () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const area = renderShell('/tasks/areas/area-work');
+    try {
+      expect(area.container.querySelector('[data-testid="area-detail-view"]')?.textContent)
+        .toBe('Area area-work');
+      expect(area.container.querySelector('[aria-label="Add a Task"]')).toBeNull();
+      expect(area.container.querySelector<HTMLAnchorElement>(
+        'nav[aria-label="Task views"] a[href="/tasks/projects"]',
+      )?.getAttribute('aria-current')).toBe('page');
+      expect(area.container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Return to Projects"]',
+      )?.getAttribute('href')).toBe('/tasks/projects');
+    } finally {
+      cleanup(area.root, area.container);
     }
   });
 

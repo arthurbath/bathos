@@ -86,6 +86,7 @@ import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskReminder, TaskTodo } from '@/modules/tasks/types/tasks';
 import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/taskEditorPlanning';
 import { TaskProjectDetailView } from '@/modules/tasks/components/TaskProjectDetailView';
+import { TaskAreaDetailView } from '@/modules/tasks/components/TaskAreaDetailView';
 import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
 import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView';
 import { TaskPermanentDeletionButton } from '@/modules/tasks/components/TaskPermanentDeletionButton';
@@ -128,7 +129,7 @@ const taskNavigationShortcuts: Record<string, string> = {
   e: '/templates',
 };
 
-type TaskShellView = TaskListView | 'projects' | 'project' | 'templates';
+type TaskShellView = TaskListView | 'projects' | 'project' | 'area' | 'templates';
 
 export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) {
   const location = useLocation();
@@ -136,7 +137,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const basePath = useModuleBasePath();
   const view = getTaskViewFromPath(location.pathname);
   const projectId = getTaskProjectIdFromPath(location.pathname);
-  const taskListView: TaskListView = view === 'projects' || view === 'project' || view === 'templates'
+  const areaId = getTaskAreaIdFromPath(location.pathname);
+  const taskListView: TaskListView = view === 'projects'
+    || view === 'project'
+    || view === 'area'
+    || view === 'templates'
     ? 'inbox'
     : view;
   const {
@@ -804,7 +809,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           >
             {taskViews.map(({ path, label, icon: Icon }) => {
               const href = `${basePath}${path}`;
-              const active = view === path.slice(1) || (path === '/projects' && view === 'project');
+              const active = view === path.slice(1)
+                || (path === '/projects' && (view === 'project' || view === 'area'));
               return (
                 <a
                   key={path}
@@ -838,7 +844,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             />
           ) : null}
 
-          {!bulkMode && view !== 'projects' && view !== 'project' && view !== 'templates' && (view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday') ? (
+          {!bulkMode && view !== 'projects' && view !== 'project' && view !== 'area' && view !== 'templates' && (view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday') ? (
             <form onSubmit={handleCreate} className="relative">
               <Plus
                 className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
@@ -874,7 +880,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             </form>
           ) : null}
 
-          {view === 'project' && projectId ? (
+          {view === 'area' && areaId ? (
+            <TaskAreaDetailView
+              ownerId={userId}
+              areaId={areaId}
+              hierarchy={hierarchy}
+              planningDate={planningDate}
+              onOpenTask={(taskId, href) => {
+                setSearchTargetTaskId(taskId);
+                navigate(href);
+              }}
+            />
+          ) : view === 'project' && projectId ? (
             <TaskProjectDetailView
               ownerId={userId}
               projectId={projectId}
@@ -2240,6 +2257,7 @@ function getTaskViewLabel(view: TaskShellView): string {
   if (view === 'trash') return 'Trash';
   if (view === 'projects') return 'Projects';
   if (view === 'project') return 'Project';
+  if (view === 'area') return 'Area';
   if (view === 'templates') return 'Templates';
   return 'Today';
 }
@@ -2253,14 +2271,15 @@ function MobileProjectsLink({
   basePath: string;
   navigate: ReturnType<typeof useNavigate>;
 }) {
-  const destination = view === 'project' ? 'projects' : view === 'projects' ? 'today' : 'projects';
+  const detailView = view === 'project' || view === 'area';
+  const destination = detailView ? 'projects' : view === 'projects' ? 'today' : 'projects';
   const href = `${basePath}/${destination}`;
   const Icon = destination === 'today' ? CalendarDays : FolderKanban;
   const label = destination === 'today' ? 'Today' : 'Projects';
   return (
     <a
       href={href}
-      aria-label={view === 'project'
+      aria-label={detailView
         ? 'Return to Projects'
         : destination === 'projects' ? 'Open Projects' : 'Return to Today'}
       onClick={(event) => handleClientSideLinkNavigation(event, navigate, href)}
@@ -2312,6 +2331,7 @@ function getTaskViewFromPath(pathname: string): TaskShellView {
   if (pathname.endsWith('/upcoming')) return 'upcoming';
   if (pathname.endsWith('/trash')) return 'trash';
   if (pathname.endsWith('/templates')) return 'templates';
+  if (getTaskAreaIdFromPath(pathname)) return 'area';
   if (getTaskProjectIdFromPath(pathname)) return 'project';
   if (pathname.endsWith('/projects')) return 'projects';
   return 'today';
@@ -2319,6 +2339,11 @@ function getTaskViewFromPath(pathname: string): TaskShellView {
 
 function getTaskProjectIdFromPath(pathname: string): string | null {
   const match = pathname.match(/\/projects\/([^/]+)$/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function getTaskAreaIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/\/areas\/([^/]+)$/);
   return match ? decodeURIComponent(match[1]) : null;
 }
 

@@ -65,6 +65,10 @@ The system SHALL organize active work through Inbox, areas, projects, headings, 
 - **WHEN** a user places a project or loose to-do in an area
 - **THEN** the system includes the item in that area's active work
 
+#### Scenario: Review active work in an area
+- **WHEN** a user opens an area from the Projects hierarchy
+- **THEN** the web interface presents that owner's present open loose to-dos and projects for the area, preserves real links to project details and each to-do's current planning view, and excludes terminal or unrelated work
+
 #### Scenario: Keep project membership canonical
 - **WHEN** a to-do belongs to a project whose area changes
 - **THEN** the to-do remains in the project, derives its area from that project, and does not receive a competing direct area assignment

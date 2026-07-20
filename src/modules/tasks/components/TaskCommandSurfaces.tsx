@@ -36,6 +36,7 @@ import {
   getTaskSearchSourceKinds,
   type TaskSearchFilters,
 } from '@/modules/tasks/domain/taskSearch';
+import { getTaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type { TaskSourceKind, TaskTodo } from '@/modules/tasks/types/tasks';
 
@@ -273,7 +274,7 @@ export function TaskSearchDialog({
             ) : (
               <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
                 {displayedDocuments.map(({ task, hierarchyLabel }) => {
-                  const route = getTaskSearchRoute(task, planningDate);
+                  const route = getTaskPlanningRoute(task, planningDate);
                   const href = `${basePath}/${route}`;
                   return (
                     <a
@@ -677,16 +678,6 @@ function TaskCommandButton({
       {label}{current ? ' (Current)' : ''}
     </Button>
   );
-}
-
-function getTaskSearchRoute(task: TaskTodo, planningDate: string): string {
-  if (task.lifecycle !== 'open') return 'logbook';
-  if (
-    task.start_date
-    && task.start_date > planningDate
-    && (task.destination === 'today' || task.destination === 'anytime')
-  ) return 'upcoming';
-  return task.destination;
 }
 
 function getTaskSearchMetadata(task: TaskTodo, hierarchyLabel: string | null): string {

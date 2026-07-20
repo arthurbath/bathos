@@ -138,6 +138,7 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
               onReorderProject={(project, direction) => (
                 hierarchy.reorderProject(project.id, direction)
               )}
+              areaHref={`${basePath}/areas/${area.id}`}
               projectHref={(project) => `${basePath}/projects/${project.id}`}
               onNavigate={navigate}
             />
@@ -172,6 +173,7 @@ function AreaSection({
   onRenameProject,
   onMoveProject,
   onReorderProject,
+  areaHref,
   projectHref,
   onNavigate,
 }: {
@@ -184,6 +186,7 @@ function AreaSection({
   onRenameProject: (project: TaskProject, title: string) => Promise<unknown>;
   onMoveProject: (project: TaskProject, areaId: string | null) => Promise<unknown>;
   onReorderProject: (project: TaskProject, direction: 'up' | 'down') => Promise<unknown>;
+  areaHref?: string;
   projectHref: (project: TaskProject) => string;
   onNavigate: ReturnType<typeof useNavigate>;
 }) {
@@ -202,6 +205,18 @@ function AreaSection({
         {area ? (
           <div className="ml-auto flex gap-1">
             <span className="self-center text-xs text-muted-foreground">{projects.length}</span>
+            <a
+              href={areaHref}
+              aria-label={`Open ${area.title} Area`}
+              onClick={(event) => handleClientSideLinkNavigation(
+                event,
+                onNavigate,
+                areaHref!,
+              )}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </a>
             <TaskHierarchyOrderButton label={`Move ${area.title} Up`} icon={ArrowUp} action={onMoveUp} />
             <TaskHierarchyOrderButton label={`Move ${area.title} Down`} icon={ArrowDown} action={onMoveDown} />
           </div>
