@@ -314,6 +314,27 @@ describe('task repository', () => {
     expect(transaction.execute).not.toHaveBeenCalled();
   });
 
+  it('rejects a bulk start date beyond one selected deadline before writing', async () => {
+    const constrainedTask = {
+      ...existingTask,
+      id: 'task-b',
+      title: 'Deadline-constrained task',
+      deadline: '2026-07-20',
+      client_mutation_id: 'mutation-b',
+    };
+    const { repository, transaction } = createHarness(null);
+    vi.mocked(transaction.getOptional)
+      .mockResolvedValueOnce(existingTask)
+      .mockResolvedValueOnce(constrainedTask);
+
+    await expect(repository.moveTasks('owner-a', ['task-a', 'task-b'], {
+      destination: 'today',
+      todaySection: 'daytime',
+      startDate: '2026-07-21',
+    })).rejects.toThrow('Deadline cannot be earlier than the start date');
+    expect(transaction.execute).not.toHaveBeenCalled();
+  });
+
   it('moves a task into one owned project heading without changing planning order', async () => {
     const { repository, transaction } = createHarness(existingTask);
     vi.mocked(transaction.getOptional)

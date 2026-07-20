@@ -599,6 +599,58 @@ describe('TasksShell', () => {
     }
   });
 
+  it('keeps bulk selection available when atomic planning fails', async () => {
+    const secondTask = {
+      ...task,
+      id: 'task-b',
+      title: 'Deadline-constrained task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    };
+    const taskList = { ...defaultTaskList(), tasks: [task, secondTask] };
+    taskList.moveTasks.mockRejectedValueOnce(
+      new Error('Deadline cannot be earlier than the start date'),
+    );
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('button[aria-label="Select Tasks"]')?.click();
+      });
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Select Existing task"]',
+        )?.click();
+        container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Select Deadline-constrained task"]',
+        )?.click();
+      });
+      const plan = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find(({ textContent }) => textContent === 'Plan Selected');
+      await act(async () => plan?.click());
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      const tomorrow = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
+        .find(({ textContent }) => textContent === 'Move to Tomorrow');
+      await act(async () => {
+        tomorrow?.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      expect(taskList.moveTasks).toHaveBeenCalledWith(['task-a', 'task-b'], {
+        destination: 'today',
+        todaySection: 'daytime',
+        startDate: '2026-07-21',
+      });
+      expect(dialog.isConnected).toBe(true);
+      expect(container.querySelector('section[aria-label="Task Selection"]')?.textContent)
+        .toContain('2 Tasks Selected');
+      expect(container.querySelector('[aria-label="Add a Task"]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('marks a task waiting from its quick actions without changing placement', async () => {
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
