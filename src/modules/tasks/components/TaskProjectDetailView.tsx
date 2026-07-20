@@ -35,6 +35,7 @@ import {
   TaskHierarchyOrderButton,
 } from '@/modules/tasks/components/TaskProjectsView';
 import { submitTaskFormOnEnter } from '@/modules/tasks/components/taskFormKeyboard';
+import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import { useTaskProjectDetail } from '@/modules/tasks/hooks/useTaskProjectDetail';
 import type { TaskChecklistItem, TaskHeading, TaskTodo } from '@/modules/tasks/types/tasks';
@@ -604,6 +605,7 @@ function ProjectTaskRow({
     <article className="px-2 py-3 sm:px-4">
       <div className="flex min-h-9 items-center gap-1">
         <TaskHierarchyEditableTitle value={task.title} onSave={onRename} />
+        <TaskSourceIndicator task={task} />
         <TaskHierarchyOrderButton
           label={`Move ${task.title} Up`}
           icon={ArrowUp}

@@ -155,6 +155,14 @@ The system SHALL represent workflow meaning through explicit structured concepts
 - **WHEN** a task is captured from a webpage, Mail message, file, selected text, reading item, template, or import
 - **THEN** the system stores the stable source fields and source-specific lifecycle metadata defined for that type without requiring an emoji or text prefix
 
+#### Scenario: Reopen a structured task source
+- **WHEN** the interface displays present active or terminal work whose typed source contains a supported HTTP(S), Mail-message, or originating-Mac file reference
+- **THEN** it exposes a named real link derived from the structured source fields, opens web sources in a separate browser tab, hands platform deep links to their originating application, and never parses the task title or notes to find the source
+
+#### Scenario: Present provenance without an actionable source link
+- **WHEN** a task has typed source provenance but its source reference is absent, malformed, or uses a protocol outside that source type's supported contract
+- **THEN** the interface retains a visible named origin indicator without exposing the reference as an actionable link
+
 #### Scenario: Retry an automated capture
 - **WHEN** an automated entry channel retries creation with the same idempotency key
 - **THEN** the system returns the original task and does not duplicate the source record

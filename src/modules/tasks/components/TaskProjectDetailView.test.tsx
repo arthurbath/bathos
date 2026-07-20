@@ -216,6 +216,30 @@ describe('TaskProjectDetailView', () => {
     }
   });
 
+  it('exposes a project task file source as a platform deep link', () => {
+    const hierarchyModel = hierarchy();
+    const detailModel = detail();
+    detailModel.tasks = [{
+      ...task,
+      source_kind: 'file',
+      source_url: 'file:///Users/Shared/Synthetic.txt',
+      source_title: 'Synthetic.txt',
+    }];
+    mockUseTaskProjectDetail.mockReturnValue(detailModel);
+    const { container, root } = renderDetail(hierarchyModel);
+
+    try {
+      const link = container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Open File for Project task"]',
+      );
+      expect(link?.getAttribute('href')).toBe('file:///Users/Shared/Synthetic.txt');
+      expect(link?.hasAttribute('target')).toBe(false);
+      expect(link?.title).toBe('File: Synthetic.txt');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('edits project planning and clears availability when moved to Someday', async () => {
     const hierarchyModel = hierarchy();
     mockUseTaskProjectDetail.mockReturnValue(detail());

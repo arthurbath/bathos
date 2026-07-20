@@ -365,6 +365,30 @@ describe('TasksShell', () => {
     }
   });
 
+  it('exposes a captured webpage as a named real link in the active task row', () => {
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [{
+        ...task,
+        source_kind: 'webpage',
+        source_url: 'https://example.test/source',
+        source_title: 'Synthetic source',
+      }],
+    });
+    const { container, root } = renderShell();
+
+    try {
+      const link = container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Open Webpage for Existing task"]',
+      );
+      expect(link?.getAttribute('href')).toBe('https://example.test/source');
+      expect(link?.target).toBe('_blank');
+      expect(link?.title).toBe('Webpage: Synthetic source');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('navigates from search to a future task and opens it for editing', async () => {
     const futureTask = {
       ...task,
@@ -1434,6 +1458,8 @@ describe('TasksShell', () => {
       ...task,
       lifecycle: 'completed' as const,
       completed_at: '2026-07-20T04:05:00.000Z',
+      source_kind: 'mail_message' as const,
+      source_url: 'message://synthetic-logbook-message',
     };
     const taskList = {
       ...defaultTaskList(),
@@ -1445,6 +1471,9 @@ describe('TasksShell', () => {
     try {
       expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
       expect(container.querySelector('section[aria-label="Logbook Tasks"]')).toBeTruthy();
+      expect(container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Open Mail Message for Existing task"]',
+      )?.getAttribute('href')).toBe('message://synthetic-logbook-message');
       const reopen = container.querySelector<HTMLButtonElement>(
         'button[aria-label="Reopen Existing task"]',
       );

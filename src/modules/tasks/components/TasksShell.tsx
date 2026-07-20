@@ -90,6 +90,7 @@ import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView'
 import { TaskPermanentDeletionButton } from '@/modules/tasks/components/TaskPermanentDeletionButton';
 import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
 import { TaskPlanningProjects } from '@/modules/tasks/components/TaskPlanningProjects';
+import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
 import {
   getTasksStorageStatusLabel,
   type TasksSyncState,
@@ -1296,6 +1297,7 @@ function LogbookTaskRow({
           ) : null}
         </p>
       </div>
+      <TaskSourceIndicator task={task} />
       <Button
         type="button"
         variant="outline"
@@ -1670,6 +1672,7 @@ function TaskRow({
             </span>
           ) : null}
         </button>
+        {!bulkSelection ? <TaskSourceIndicator task={task} /> : null}
         {!bulkSelection ? <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
