@@ -40,6 +40,7 @@
 - [x] 3.7a Add recoverable deletion and restoration primitives with restoration tests.
 - [x] 3.7b Add append-only history, mutation receipts, and inverse-mutation undo primitives.
 - [x] 3.7c Add server-authoritative permanent-deletion preview, stale-scope rejection, confirmed execution, and idempotent content-free receipts for deleted to-do and project roots.
+- [x] 3.7d Expose the latest authoritative safe to-do undo through a visible web action and a text-safe keyboard command.
 - [x] 3.8 Add an initial portable export and verified restore path using synthetic test data.
 - [x] 3.8a Advance portable export and restore to include normalized Mail source records.
 - [x] 3.8b Advance portable export and restore to include append-only Mail retirement events.

@@ -15,6 +15,7 @@ const mockTaskSearch = vi.fn();
 const mockTaskHierarchy = vi.fn();
 const mockTaskHierarchyTrash = vi.fn();
 const mockTaskReminders = vi.fn();
+const mockTaskUndo = vi.fn();
 const mockPrepareForSignOut = vi.fn();
 const mockTasksRuntime = vi.fn();
 
@@ -39,6 +40,10 @@ vi.mock('@/modules/tasks/hooks/useTaskHierarchyTrash', () => ({
 
 vi.mock('@/modules/tasks/hooks/useTaskReminders', () => ({
   useTaskReminders: (...args: unknown[]) => mockTaskReminders(...args),
+}));
+
+vi.mock('@/modules/tasks/hooks/useTaskUndo', () => ({
+  useTaskUndo: (...args: unknown[]) => mockTaskUndo(...args),
 }));
 
 vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
@@ -223,6 +228,14 @@ describe('TasksShell', () => {
     mockPrepareForSignOut.mockReset().mockResolvedValue(undefined);
     mockTasksRuntime.mockReset().mockReturnValue(defaultTasksRuntime());
     mockTaskList.mockReset();
+    mockTaskUndo.mockReset().mockReturnValue({
+      available: false,
+      pending: false,
+      loading: false,
+      error: null,
+      event: null,
+      undo: vi.fn(),
+    });
     mockTaskSearch.mockReset().mockReturnValue({
       tasks: [task],
       loading: false,
@@ -453,6 +466,60 @@ describe('TasksShell', () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
       expect(dialog.dataset.state).toBe('closed');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('exposes authoritative task undo while preserving native editor undo', async () => {
+    const undo = vi.fn().mockResolvedValue(undefined);
+    mockTaskUndo.mockReturnValue({
+      available: true,
+      pending: false,
+      loading: false,
+      error: null,
+      event: { id: 'event-update' },
+      undo,
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      const undoButton = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Undo Last Task Change"]',
+      );
+      expect(undoButton).toHaveAttribute('aria-keyshortcuts', 'Meta+Z Control+Z');
+      await act(async () => {
+        undoButton?.click();
+      });
+      expect(undo).toHaveBeenCalledTimes(1);
+
+      const capture = container.querySelector<HTMLInputElement>('input[aria-label="Add a Task"]')!;
+      capture.focus();
+      await act(async () => {
+        capture.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'z', metaKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      expect(undo).toHaveBeenCalledTimes(1);
+
+      const title = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
+      title.focus();
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'z', metaKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      expect(undo).toHaveBeenCalledTimes(2);
+
+      title.focus();
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: '?', shiftKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      expect(document.querySelector<HTMLElement>('[role="dialog"]')?.textContent)
+        .toContain('Undo the Last Task Change');
     } finally {
       cleanup(root, container);
     }

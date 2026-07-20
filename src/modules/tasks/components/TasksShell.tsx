@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -34,6 +35,7 @@ import {
   Square,
   SquareCheckBig,
   Trash2,
+  Undo2,
   FolderKanban,
   X,
 } from 'lucide-react';
@@ -75,6 +77,7 @@ import {
 } from '@/modules/tasks/hooks/useTaskList';
 import { useTaskHierarchy, type TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import { useTaskSearch } from '@/modules/tasks/hooks/useTaskSearch';
+import { useTaskUndo } from '@/modules/tasks/hooks/useTaskUndo';
 import { useTaskReminders } from '@/modules/tasks/hooks/useTaskReminders';
 import type { TaskWebPushModel } from '@/modules/tasks/hooks/useTaskWebPush';
 import {
@@ -163,6 +166,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     transitionTask,
     planningDate,
   } = useTaskList(userId, taskListView);
+  const {
+    available: taskUndoAvailable,
+    pending: taskUndoPending,
+    undo: undoLastTaskChange,
+  } = useTaskUndo(userId);
   const planningProjects = useMemo(() => deriveTaskViewProjects(
     hierarchy.projects,
     userId,
@@ -205,6 +213,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     : syncState !== 'connected'
       ? 'Reconnect to preview the current server deletion scope'
       : undefined;
+
+  const runTaskUndo = useCallback(async () => {
+    try {
+      await undoLastTaskChange();
+    } catch (undoError) {
+      showTaskError('Task Change Could Not Be Undone', undoError);
+    }
+  }, [undoLastTaskChange]);
 
   useEffect(() => {
     const previousMotionScope = document.body.getAttribute('data-tasks-motion-scope');
@@ -280,6 +296,27 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     };
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       const opensKeyboardHelp = event.key === '?' && event.shiftKey;
+      const invokesTaskUndo = event.key.toLowerCase() === 'z'
+        && (event.metaKey || event.ctrlKey)
+        && !event.altKey
+        && !event.shiftKey;
+      const editableTarget = isTaskKeyboardInput(event.target);
+      const commandSurfaceOpen = document.querySelector('[role="dialog"], [role="menu"]') !== null;
+      if (invokesTaskUndo) {
+        clearPendingNavigation();
+        if (
+          !event.defaultPrevented
+          && !event.isComposing
+          && !editableTarget
+          && !commandSurfaceOpen
+          && taskUndoAvailable
+          && !taskUndoPending
+        ) {
+          event.preventDefault();
+          void runTaskUndo();
+        }
+        return;
+      }
       if (
         event.defaultPrevented
         || event.isComposing
@@ -287,8 +324,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         || event.ctrlKey
         || event.altKey
         || (event.shiftKey && !opensKeyboardHelp)
-        || isTaskKeyboardInput(event.target)
-        || document.querySelector('[role="dialog"], [role="menu"]')
+        || editableTarget
+        || commandSurfaceOpen
       ) {
         clearPendingNavigation();
         return;
@@ -341,7 +378,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       window.removeEventListener('keydown', handleKeyDown);
       clearPendingNavigation();
     };
-  }, [basePath, navigate]);
+  }, [basePath, navigate, runTaskUndo, taskUndoAvailable, taskUndoPending]);
 
   const openCommandSurface = (open: (value: boolean) => void) => {
     commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
@@ -664,7 +701,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
       <main className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
         <div className="space-y-7">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <h2
               tabIndex={-1}
               data-task-view-heading
@@ -674,6 +711,21 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               <span className="hidden md:inline">Tasks</span>
             </h2>
             <div className="flex items-center gap-1">
+              {taskUndoAvailable ? (
+                <Button
+                  type="button"
+                  variant="clear"
+                  size="icon"
+                  disabled={taskUndoPending}
+                  aria-label="Undo Last Task Change"
+                  aria-keyshortcuts="Meta+Z Control+Z"
+                  title="Undo Last Task Change"
+                  className="h-9 w-9 text-muted-foreground"
+                  onClick={() => void runTaskUndo()}
+                >
+                  <Undo2 className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              ) : null}
               {bulkEligible && tasks.length > 0 ? (
                 <Button
                   type="button"

@@ -421,6 +421,14 @@ The system SHALL provide append-only history, mutation receipts, inverse-mutatio
 - **WHEN** a user invokes undo for a supported recent task mutation
 - **THEN** the system restores the prior state and synchronizes the restoration as a new valid mutation
 
+#### Scenario: Expose the latest safe task undo on the web
+- **WHEN** the local synchronized projection contains a latest accepted non-creation task event whose result revision still matches the current task
+- **THEN** the web interface exposes a visible Undo action and lets Command+Z or Control+Z outside editable controls invoke that event's guarded inverse mutation
+
+#### Scenario: Withhold unavailable or unsafe web undo
+- **WHEN** no current authoritative event is projected, an undo is already pending, or an editable control owns the native undo command
+- **THEN** the web interface does not submit a duplicate or speculative inverse mutation and does not intercept native text undo
+
 #### Scenario: Reject an unsafe undo
 - **WHEN** intervening changes make the requested inverse mutation unsafe
 - **THEN** the system rejects undo without overwriting current data and returns a conflict receipt
@@ -620,7 +628,7 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 
 #### Scenario: Leave browser and text-entry commands intact
 - **WHEN** focus is in an input, textarea, select, content-editable surface, or unrelated modal
-- **THEN** app-level single-key commands remain inactive, native Tab traversal continues, and the module does not claim Command+1 through Command+9, Command+T, Command+L, Command+R, or Command+W
+- **THEN** app-level single-key commands remain inactive, native Tab traversal and text undo continue, and the module does not claim Command+1 through Command+9, Command+T, Command+L, Command+R, or Command+W
 
 #### Scenario: Traverse a task and its complete editor
 - **WHEN** a keyboard user advances or reverses focus through a task row or expanded task editor

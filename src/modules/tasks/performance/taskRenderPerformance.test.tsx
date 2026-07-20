@@ -19,6 +19,16 @@ vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
 vi.mock('@/modules/tasks/hooks/useTaskSearch', () => ({
   useTaskSearch: (...args: unknown[]) => mockTaskSearch(...args),
 }));
+vi.mock('@/modules/tasks/hooks/useTaskUndo', () => ({
+  useTaskUndo: () => ({
+    available: false,
+    pending: false,
+    loading: false,
+    error: null,
+    event: null,
+    undo: vi.fn(),
+  }),
+}));
 vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({
   useTaskHierarchy: () => ({
     areas: [], projects: [], headings: [], loading: false, error: null,

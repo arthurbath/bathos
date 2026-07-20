@@ -348,6 +348,7 @@ export function TaskKeyboardHelpDialog({
         ['/', 'Search Tasks and Views'],
         ['?', 'Show Keyboard Help'],
         ['G then I/T/U/A/S/L/P/R/E', 'Navigate to a View'],
+        ['Command+Z', 'Undo the Last Task Change'],
       ],
     },
     {
