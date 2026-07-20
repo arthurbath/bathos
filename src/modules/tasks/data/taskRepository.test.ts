@@ -2,6 +2,7 @@ import type { Transaction } from '@powersync/web';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
+import { snapshotTask, type TaskHistoryStorageRow } from '@/modules/tasks/domain/taskHistory';
 
 import {
   InvalidTaskMutationError,
@@ -25,6 +26,9 @@ const existingTask: TaskTodo = {
   destination: 'inbox',
   order_key: 'a0',
   entry_channel: 'web',
+  last_mutation_channel: 'web',
+  last_actor_type: 'user',
+  undo_source_event_id: null,
   source_kind: null,
   source_url: null,
   source_title: null,
@@ -71,6 +75,9 @@ describe('task repository', () => {
       title: 'New task',
       destination: 'today',
       entry_channel: 'raycast',
+      last_mutation_channel: 'raycast',
+      last_actor_type: 'user',
+      undo_source_event_id: null,
       revision: 1,
       client_mutation_id: 'mutation-new',
     });
@@ -93,9 +100,61 @@ describe('task repository', () => {
       revision: 2,
       client_mutation_id: 'task-new',
       updated_at: timestamp,
+      last_mutation_channel: 'web',
+      last_actor_type: 'user',
+      undo_source_event_id: null,
     });
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain(
       'revision = ?, client_mutation_id = ?, updated_at = ?',
+    );
+  });
+
+  it('restores the prior snapshot as a revision-checked inverse mutation', async () => {
+    const completedTask: TaskTodo = {
+      ...existingTask,
+      lifecycle: 'completed',
+      completed_at: timestamp,
+      revision: 2,
+      client_mutation_id: 'mutation-complete',
+      updated_at: timestamp,
+    };
+    const event: TaskHistoryStorageRow = {
+      id: 'event-complete',
+      owner_id: 'owner-a',
+      task_id: 'task-a',
+      client_mutation_id: 'mutation-complete',
+      actor_type: 'user',
+      mutation_channel: 'web',
+      affected_ids: JSON.stringify(['task-a']),
+      base_revision: 1,
+      result_revision: 2,
+      transition: 'complete',
+      occurred_at: timestamp,
+      outcome: 'accepted',
+      code: null,
+      before_state: JSON.stringify(snapshotTask(existingTask)),
+      after_state: JSON.stringify(snapshotTask(completedTask)),
+    };
+    const { repository, transaction } = createHarness(null);
+    vi.mocked(transaction.getOptional)
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(completedTask);
+
+    const undone = await repository.undoTask('owner-a', 'event-complete', {
+      channel: 'raycast',
+    });
+
+    expect(undone).toMatchObject({
+      lifecycle: 'open',
+      completed_at: null,
+      revision: 3,
+      client_mutation_id: 'task-new',
+      last_mutation_channel: 'raycast',
+      last_actor_type: 'user',
+      undo_source_event_id: 'event-complete',
+    });
+    expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain(
+      'undo_source_event_id = ?',
     );
   });
 

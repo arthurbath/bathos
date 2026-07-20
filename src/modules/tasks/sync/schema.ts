@@ -13,6 +13,9 @@ const taskTodos = new Table(
     destination: column.text,
     order_key: column.text,
     entry_channel: column.text,
+    last_mutation_channel: column.text,
+    last_actor_type: column.text,
+    undo_source_event_id: column.text,
     source_kind: column.text,
     source_url: column.text,
     source_title: column.text,
@@ -26,6 +29,31 @@ const taskTodos = new Table(
     indexes: {
       ownerDestinationOrder: ['owner_id', 'destination', 'disposition', 'lifecycle', 'order_key'],
       ownerUpdated: ['owner_id', '-updated_at'],
+    },
+  },
+);
+
+const taskHistoryEvents = new Table(
+  {
+    owner_id: column.text,
+    task_id: column.text,
+    client_mutation_id: column.text,
+    actor_type: column.text,
+    mutation_channel: column.text,
+    affected_ids: column.text,
+    base_revision: column.integer,
+    result_revision: column.integer,
+    transition: column.text,
+    occurred_at: column.text,
+    outcome: column.text,
+    code: column.text,
+    before_state: column.text,
+    after_state: column.text,
+  },
+  {
+    indexes: {
+      ownerOccurred: ['owner_id', '-occurred_at'],
+      ownerTaskOccurred: ['owner_id', 'task_id', '-occurred_at'],
     },
   },
 );
@@ -58,6 +86,7 @@ const taskOwnerBinding = new Table(
 
 export const tasksPowerSyncSchema = new Schema({
   tasks_todos: taskTodos,
+  tasks_history_events: taskHistoryEvents,
   tasks_sync_issues: taskSyncIssues,
   tasks_owner_binding: taskOwnerBinding,
 });

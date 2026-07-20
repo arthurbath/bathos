@@ -2,10 +2,17 @@ import type { AbstractPowerSyncDatabase, Transaction } from '@powersync/web';
 
 import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
 import {
+  createTaskUndoPatch,
+  parseTaskHistoryEvent,
+  type TaskHistorySnapshot,
+  type TaskHistoryStorageRow,
+} from '@/modules/tasks/domain/taskHistory';
+import {
   applyTaskStateTransition,
   type TaskStateTransition,
 } from '@/modules/tasks/domain/taskState';
 import type {
+  TaskActorType,
   TaskDestination,
   TaskEntryChannel,
   TaskSourceKind,
@@ -25,6 +32,12 @@ export type CreateTaskInput = {
   sourceUrl?: string | null;
   sourceTitle?: string | null;
   sourceExternalId?: string | null;
+  actorType?: TaskActorType;
+};
+
+export type TaskMutationContext = {
+  channel?: TaskEntryChannel;
+  actorType?: TaskActorType;
 };
 
 export type EditableTaskPatch = Partial<
@@ -59,6 +72,9 @@ const insertColumns = [
   'destination',
   'order_key',
   'entry_channel',
+  'last_mutation_channel',
+  'last_actor_type',
+  'undo_source_event_id',
   'source_kind',
   'source_url',
   'source_title',
@@ -73,6 +89,13 @@ export class TaskNotFoundError extends Error {
   constructor() {
     super('The task does not exist for the signed-in owner');
     this.name = 'TaskNotFoundError';
+  }
+}
+
+export class TaskHistoryEventNotFoundError extends Error {
+  constructor() {
+    super('The history event does not exist for the signed-in owner');
+    this.name = 'TaskHistoryEventNotFoundError';
   }
 }
 
@@ -121,6 +144,7 @@ export class TaskRepository {
             [input.ownerId, destination],
           );
       const timestamp = this.now();
+      const entryChannel = input.entryChannel ?? 'web';
       const task: TaskTodo = {
         id: this.createId(),
         owner_id: input.ownerId,
@@ -133,7 +157,10 @@ export class TaskRepository {
         deleted_at: null,
         destination,
         order_key: input.orderKey ?? generateTaskOrderKey(lastTask?.order_key ?? null, null),
-        entry_channel: input.entryChannel ?? 'web',
+        entry_channel: entryChannel,
+        last_mutation_channel: entryChannel,
+        last_actor_type: input.actorType ?? 'user',
+        undo_source_event_id: null,
         source_kind: input.sourceKind ?? null,
         source_url: input.sourceUrl ?? null,
         source_title: input.sourceTitle ?? null,
@@ -154,14 +181,20 @@ export class TaskRepository {
     });
   }
 
-  async updateTask(ownerId: string, taskId: string, patch: EditableTaskPatch): Promise<TaskTodo> {
-    return this.mutateTask(ownerId, taskId, normalizeEditablePatch(patch));
+  async updateTask(
+    ownerId: string,
+    taskId: string,
+    patch: EditableTaskPatch,
+    context?: TaskMutationContext,
+  ): Promise<TaskTodo> {
+    return this.mutateTask(ownerId, taskId, normalizeEditablePatch(patch), context);
   }
 
   async transitionTask(
     ownerId: string,
     taskId: string,
     transition: TaskStateTransition,
+    context?: TaskMutationContext,
   ): Promise<TaskTodo> {
     assertOwner(ownerId);
     return this.database.writeTransaction(async (transaction) => {
@@ -183,13 +216,57 @@ export class TaskRepository {
         return current;
       }
 
-      return updateOwnedTask(transaction, current, {
-        lifecycle: result.state.lifecycle,
-        completed_at: result.state.completedAt,
-        canceled_at: result.state.canceledAt,
-        disposition: result.state.disposition,
-        deleted_at: result.state.deletedAt,
-      }, this.createId(), occurredAt);
+      return updateOwnedTask(
+        transaction,
+        current,
+        {
+          lifecycle: result.state.lifecycle,
+          completed_at: result.state.completedAt,
+          canceled_at: result.state.canceledAt,
+          disposition: result.state.disposition,
+          deleted_at: result.state.deletedAt,
+        },
+        this.createId(),
+        occurredAt,
+        normalizeMutationContext(context),
+      );
+    });
+  }
+
+  async undoTask(
+    ownerId: string,
+    eventId: string,
+    context?: TaskMutationContext,
+  ): Promise<TaskTodo> {
+    assertOwner(ownerId);
+    return this.database.writeTransaction(async (transaction) => {
+      const storedEvent = await transaction.getOptional<TaskHistoryStorageRow>(
+        'SELECT * FROM tasks_history_events WHERE id = ? AND owner_id = ?',
+        [eventId, ownerId],
+      );
+      if (storedEvent === null) {
+        throw new TaskHistoryEventNotFoundError();
+      }
+
+      const event = parseTaskHistoryEvent(storedEvent);
+      const current = await getOwnedTask(transaction, ownerId, event.task_id);
+      const patch = createTaskUndoPatch(current, event);
+      assertSource(
+        patch.source_kind,
+        patch.source_url,
+        patch.source_title,
+        patch.source_external_id,
+      );
+
+      return updateOwnedTask(
+        transaction,
+        current,
+        patch,
+        this.createId(),
+        this.now(),
+        normalizeMutationContext(context),
+        event.id,
+      );
     });
   }
 
@@ -197,6 +274,7 @@ export class TaskRepository {
     ownerId: string,
     taskId: string,
     patch: EditableTaskPatch,
+    context?: TaskMutationContext,
   ): Promise<TaskTodo> {
     assertOwner(ownerId);
     return this.database.writeTransaction(async (transaction) => {
@@ -214,7 +292,14 @@ export class TaskRepository {
           : patch.source_external_id,
       );
 
-      return updateOwnedTask(transaction, current, patch, this.createId(), this.now());
+      return updateOwnedTask(
+        transaction,
+        current,
+        patch,
+        this.createId(),
+        this.now(),
+        normalizeMutationContext(context),
+      );
     });
   }
 }
@@ -237,19 +322,28 @@ async function getOwnedTask(
 async function updateOwnedTask(
   transaction: Transaction,
   current: TaskTodo,
-  patch: EditableTaskPatch | TaskStatePatch,
+  patch: EditableTaskPatch | TaskStatePatch | TaskHistorySnapshot,
   mutationId: string,
   updatedAt: string,
+  context: Required<TaskMutationContext>,
+  undoSourceEventId: string | null = null,
 ): Promise<TaskTodo> {
+  const metadataPatch = {
+    last_mutation_channel: context.channel,
+    last_actor_type: context.actorType,
+    undo_source_event_id: undoSourceEventId,
+  };
   const next = {
     ...current,
     ...patch,
+    ...metadataPatch,
     revision: current.revision + 1,
     client_mutation_id: mutationId,
     updated_at: updatedAt,
   };
   const changedColumns = [
     ...Object.keys(patch),
+    ...Object.keys(metadataPatch),
     'revision',
     'client_mutation_id',
     'updated_at',
@@ -269,6 +363,15 @@ type TaskStatePatch = Pick<
   TaskTodo,
   'lifecycle' | 'completed_at' | 'canceled_at' | 'disposition' | 'deleted_at'
 >;
+
+function normalizeMutationContext(
+  context: TaskMutationContext | undefined,
+): Required<TaskMutationContext> {
+  return {
+    channel: context?.channel ?? 'web',
+    actorType: context?.actorType ?? 'user',
+  };
+}
 
 function normalizeEditablePatch(patch: EditableTaskPatch): EditableTaskPatch {
   const normalized = { ...patch };

@@ -1081,6 +1081,68 @@ export type Database = {
           },
         ]
       }
+      tasks_history_events: {
+        Row: {
+          actor_type: string
+          affected_ids: string[]
+          after_state: Json
+          base_revision: number
+          before_state: Json | null
+          client_mutation_id: string
+          code: string | null
+          id: string
+          mutation_channel: string
+          occurred_at: string
+          outcome: string
+          owner_id: string
+          result_revision: number
+          task_id: string
+          transition: string
+        }
+        Insert: {
+          actor_type: string
+          affected_ids: string[]
+          after_state: Json
+          base_revision: number
+          before_state?: Json | null
+          client_mutation_id: string
+          code?: string | null
+          id?: string
+          mutation_channel: string
+          occurred_at: string
+          outcome?: string
+          owner_id: string
+          result_revision: number
+          task_id: string
+          transition: string
+        }
+        Update: {
+          actor_type?: string
+          affected_ids?: string[]
+          after_state?: Json
+          base_revision?: number
+          before_state?: Json | null
+          client_mutation_id?: string
+          code?: string | null
+          id?: string
+          mutation_channel?: string
+          occurred_at?: string
+          outcome?: string
+          owner_id?: string
+          result_revision?: number
+          task_id?: string
+          transition?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_history_events_task_owner_fkey"
+            columns: ["task_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_todos"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
       tasks_todos: {
         Row: {
           canceled_at: string | null
@@ -1092,6 +1154,8 @@ export type Database = {
           disposition: string
           entry_channel: string
           id: string
+          last_actor_type: string
+          last_mutation_channel: string
           lifecycle: string
           notes: string
           order_key: string
@@ -1102,6 +1166,7 @@ export type Database = {
           source_title: string | null
           source_url: string | null
           title: string
+          undo_source_event_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1114,6 +1179,8 @@ export type Database = {
           disposition?: string
           entry_channel?: string
           id: string
+          last_actor_type?: string
+          last_mutation_channel?: string
           lifecycle?: string
           notes?: string
           order_key: string
@@ -1124,6 +1191,7 @@ export type Database = {
           source_title?: string | null
           source_url?: string | null
           title: string
+          undo_source_event_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1136,6 +1204,8 @@ export type Database = {
           disposition?: string
           entry_channel?: string
           id?: string
+          last_actor_type?: string
+          last_mutation_channel?: string
           lifecycle?: string
           notes?: string
           order_key?: string
@@ -1146,6 +1216,7 @@ export type Database = {
           source_title?: string | null
           source_url?: string | null
           title?: string
+          undo_source_event_id?: string | null
           updated_at?: string
         }
         Relationships: []

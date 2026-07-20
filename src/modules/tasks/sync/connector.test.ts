@@ -25,6 +25,9 @@ function taskInsertEntry() {
     destination: 'inbox',
     order_key: 'a0',
     entry_channel: 'web',
+    last_mutation_channel: 'web',
+    last_actor_type: 'user',
+    undo_source_event_id: null,
     revision: 1,
     client_mutation_id: 'mutation-a',
     created_at: '2026-07-20T04:00:00.000Z',
@@ -85,6 +88,9 @@ describe('task sync connector', () => {
         canceled_at: null,
         deleted_at: null,
         source_kind: null,
+        last_mutation_channel: 'web',
+        last_actor_type: 'user',
+        undo_source_event_id: null,
       }),
     );
     expect(database.execute).not.toHaveBeenCalled();
@@ -102,6 +108,26 @@ describe('task sync connector', () => {
       expect.objectContaining({ revision: 2, client_mutation_id: 'mutation-b' }),
     );
     expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it('uploads inverse-mutation metadata with an undo patch', async () => {
+    const { connector, database, remoteStore } = createHarness(taskPatchEntry({
+      last_mutation_channel: 'raycast',
+      last_actor_type: 'user',
+      undo_source_event_id: 'event-a',
+    }));
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.updateTask).toHaveBeenCalledWith(
+      'task-a',
+      1,
+      expect.objectContaining({
+        last_mutation_channel: 'raycast',
+        last_actor_type: 'user',
+        undo_source_event_id: 'event-a',
+      }),
+    );
   });
 
   it('records content-free conflict diagnostics and drains the handled transaction', async () => {

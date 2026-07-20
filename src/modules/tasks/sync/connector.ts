@@ -236,6 +236,7 @@ export class TasksSupabaseRemoteStore implements TasksRemoteStore {
 
 function parseTaskInsert(entry: CrudEntry): TaskInsert {
   const data = entry.opData ?? {};
+  const entryChannel = optionalText(data.entry_channel) ?? 'web';
   return {
     id: entry.id,
     owner_id: requireText(data.owner_id, 'owner_id'),
@@ -248,7 +249,10 @@ function parseTaskInsert(entry: CrudEntry): TaskInsert {
     deleted_at: optionalText(data.deleted_at),
     destination: optionalText(data.destination) ?? 'inbox',
     order_key: requireText(data.order_key, 'order_key'),
-    entry_channel: optionalText(data.entry_channel) ?? 'web',
+    entry_channel: entryChannel,
+    last_mutation_channel: optionalText(data.last_mutation_channel) ?? entryChannel,
+    last_actor_type: optionalText(data.last_actor_type) ?? 'user',
+    undo_source_event_id: optionalText(data.undo_source_event_id),
     source_kind: optionalText(data.source_kind),
     source_url: optionalText(data.source_url),
     source_title: optionalText(data.source_title),
@@ -272,6 +276,9 @@ function parseTaskUpdate(entry: CrudEntry): TaskUpdate {
     'deleted_at',
     'destination',
     'order_key',
+    'last_mutation_channel',
+    'last_actor_type',
+    'undo_source_event_id',
     'source_kind',
     'source_url',
     'source_title',

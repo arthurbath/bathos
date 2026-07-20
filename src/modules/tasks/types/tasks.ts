@@ -20,10 +20,26 @@ export const taskSourceKinds = [
   'template',
   'other',
 ] as const;
+export const taskActorTypes = ['user', 'automation', 'system', 'import'] as const;
+export const taskMutationTransitions = [
+  'baseline',
+  'create',
+  'update',
+  'move',
+  'reorder',
+  'complete',
+  'cancel',
+  'reopen',
+  'delete',
+  'restore',
+  'undo',
+] as const;
 
 export type TaskDestination = (typeof taskDestinations)[number];
 export type TaskEntryChannel = (typeof taskEntryChannels)[number];
 export type TaskSourceKind = (typeof taskSourceKinds)[number];
+export type TaskActorType = (typeof taskActorTypes)[number];
+export type TaskMutationTransition = (typeof taskMutationTransitions)[number];
 
 type TaskTodoRow = Tables<'tasks_todos'>;
 type TaskTodoInsertRow = TablesInsert<'tasks_todos'>;
@@ -34,6 +50,8 @@ type RefinedTaskFields = {
   disposition: TaskDisposition;
   destination: TaskDestination;
   entry_channel: TaskEntryChannel;
+  last_mutation_channel: TaskEntryChannel;
+  last_actor_type: TaskActorType;
   source_kind: TaskSourceKind | null;
 };
 
