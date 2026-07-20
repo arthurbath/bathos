@@ -484,6 +484,14 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** a notification provider accepts a delivery request
 - **THEN** the system records provider acceptance separately from user acknowledgement and does not claim that the user saw the reminder
 
+#### Scenario: Fail to record a provider outcome
+- **WHEN** the dispatcher cannot persist the provider-accepted or failed outcome after attempting delivery
+- **THEN** the invocation reports failure with content-free diagnostics and does not report a fully successful run
+
+#### Scenario: Prepare production Web Push configuration
+- **WHEN** reminder delivery is activated in a production environment
+- **THEN** the server and web build use one verified public VAPID key, the server keeps the matching private key and an independent high-entropy dispatch secret outside the repository, and the scheduled request resolves its matching header value from managed secrets without embedding it in the Cron command
+
 #### Scenario: Acknowledge an opened notification
 - **WHEN** the user opens a Web Push notification for a logical occurrence
 - **THEN** the authenticated Tasks route acknowledges that occurrence and later in-app or provider claims do not create another delivery after acknowledgement

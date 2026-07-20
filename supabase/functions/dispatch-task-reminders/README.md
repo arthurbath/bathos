@@ -9,7 +9,7 @@ Required Edge Function secrets:
 - `TASKS_WEB_PUSH_VAPID_PRIVATE_KEY`: The private VAPID key. Never place it in the repository or client environment.
 - `TASKS_WEB_PUSH_SUBJECT`: A `mailto:` or public HTTPS contact URI. Do not use an `https://localhost` subject because Safari push services reject it.
 
-Supabase provides the project URL and a server-only secret key to hosted Edge Functions. The dispatcher accepts the current `SUPABASE_SECRET_KEYS` environment shape and the legacy `SUPABASE_SERVICE_ROLE_KEY` fallback.
+Supabase provides the project URL and a server-only secret key to hosted Edge Functions. The dispatcher accepts the current hosted `SUPABASE_SECRET_KEYS` environment shape, the current local `SUPABASE_SECRET_KEY` shape, and the legacy `SUPABASE_SERVICE_ROLE_KEY` fallback.
 
 Deploy the function with JWT verification disabled because Supabase Cron uses the separate dispatch secret:
 
@@ -18,5 +18,7 @@ supabase functions deploy dispatch-task-reminders --no-verify-jwt
 ```
 
 Then create a Supabase Cron job that sends a `POST` request to `/functions/v1/dispatch-task-reminders` every minute with `Content-Type: application/json` and the `x-tasks-dispatch-secret` header. Store the header value in managed secrets or Vault. Do not place it in migration SQL or this public repository.
+
+Use the secret-free package in `deploy/tasks-reminders/` for configuration preflight, fixed-name Cron creation, verification, rollback, and a rollback-only local SQL test. If a provider outcome cannot be recorded after a send attempt, the invocation returns an HTTP failure with a content-free `receipt_errors` count instead of falsely reporting a successful run.
 
 On iPhone and iPad, standards-based Web Push requires the Tasks route to be installed as a Home Screen web app. Notification permission is requested only from the explicit Enable action in the Tasks interface.

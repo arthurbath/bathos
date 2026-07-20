@@ -71,6 +71,8 @@
 - [x] 5.7a Add date-only start-date and deadline storage, range validation, history, undo, export/restore, synchronization, and editing.
 - [x] 5.7b Apply owner-time-zone availability and deadline presentation across derived planning views.
 - [x] 5.8 Add reminders using the responsibility model selected in the architecture gate.
+- [x] 5.8a Prepare and locally validate the secret-free Web Push and Cron deployment package, configuration preflight, dispatcher boundary tests, and outcome-receipt failure handling.
+- [ ] 5.8b After production activation is approved, provision the reminder secrets, Edge Function, Vault entry, Cron job, public web key, and synthetic-device acceptance test.
 - [x] 5.9 Add recurrence definitions and idempotent occurrence generation.
 - [x] 5.10 Add native to-do and project templates with provenance-aware instantiation.
 - [x] 5.11 Add structured actionability and source/origin fields without generic tags.
