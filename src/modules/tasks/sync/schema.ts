@@ -13,6 +13,7 @@ const taskTodos = new Table(
     canceled_at: column.text,
     disposition: column.text,
     deleted_at: column.text,
+    deletion_root_id: column.text,
     destination: column.text,
     today_section: column.text,
     order_key: column.text,
@@ -64,6 +65,7 @@ const taskAreas = new Table(
     order_key: column.text,
     disposition: column.text,
     deleted_at: column.text,
+    deletion_root_id: column.text,
     entry_channel: column.text,
     last_mutation_channel: column.text,
     last_actor_type: column.text,
@@ -86,6 +88,7 @@ const taskProjects = new Table(
     canceled_at: column.text,
     disposition: column.text,
     deleted_at: column.text,
+    deletion_root_id: column.text,
     destination: column.text,
     today_section: column.text,
     order_key: column.text,
@@ -123,6 +126,7 @@ const taskHeadings = new Table(
     order_key: column.text,
     disposition: column.text,
     deleted_at: column.text,
+    deletion_root_id: column.text,
     entry_channel: column.text,
     last_mutation_channel: column.text,
     last_actor_type: column.text,
@@ -144,6 +148,7 @@ const taskChecklistItems = new Table(
     order_key: column.text,
     disposition: column.text,
     deleted_at: column.text,
+    deletion_root_id: column.text,
     entry_channel: column.text,
     last_mutation_channel: column.text,
     last_actor_type: column.text,
@@ -176,6 +181,56 @@ const taskHistoryEvents = new Table(
     indexes: {
       ownerOccurred: ['owner_id', '-occurred_at'],
       ownerTaskOccurred: ['owner_id', 'task_id', '-occurred_at'],
+    },
+  },
+);
+
+const taskHierarchyOperations = new Table(
+  {
+    owner_id: column.text,
+    root_type: column.text,
+    root_id: column.text,
+    operation: column.text,
+    descendant_policy: column.text,
+    expected_revisions: column.text,
+    actor_type: column.text,
+    mutation_channel: column.text,
+    requested_at: column.text,
+    outcome: column.text,
+    code: column.text,
+    affected_ids: column.text,
+    result_revisions: column.text,
+    completed_at: column.text,
+  },
+  {
+    indexes: {
+      ownerRequested: ['owner_id', '-requested_at'],
+      ownerRootRequested: ['owner_id', 'root_type', 'root_id', '-requested_at'],
+    },
+  },
+);
+
+const taskHierarchyHistoryEvents = new Table(
+  {
+    owner_id: column.text,
+    entity_type: column.text,
+    entity_id: column.text,
+    client_mutation_id: column.text,
+    operation_id: column.text,
+    actor_type: column.text,
+    mutation_channel: column.text,
+    affected_ids: column.text,
+    base_revision: column.integer,
+    result_revision: column.integer,
+    transition: column.text,
+    occurred_at: column.text,
+    before_state: column.text,
+    after_state: column.text,
+  },
+  {
+    indexes: {
+      ownerOccurred: ['owner_id', '-occurred_at'],
+      ownerEntityOccurred: ['owner_id', 'entity_type', 'entity_id', '-occurred_at'],
     },
   },
 );
@@ -229,6 +284,8 @@ export const tasksPowerSyncSchema = new Schema({
   tasks_todos: taskTodos,
   tasks_checklist_items: taskChecklistItems,
   tasks_history_events: taskHistoryEvents,
+  tasks_hierarchy_operations: taskHierarchyOperations,
+  tasks_hierarchy_history_events: taskHierarchyHistoryEvents,
   tasks_user_settings: taskUserSettings,
   tasks_sync_issues: taskSyncIssues,
   tasks_owner_binding: taskOwnerBinding,

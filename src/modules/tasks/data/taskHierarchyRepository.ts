@@ -47,9 +47,7 @@ export type CreateTaskChecklistItemInput = CreateHierarchyInput & {
   taskId: string;
 };
 
-export type TaskAreaPatch = Partial<
-  Pick<TaskArea, 'title' | 'order_key' | 'disposition' | 'deleted_at'>
->;
+export type TaskAreaPatch = Partial<Pick<TaskArea, 'title' | 'order_key'>>;
 
 export type TaskProjectPatch = Partial<
   Pick<
@@ -57,11 +55,6 @@ export type TaskProjectPatch = Partial<
     | 'area_id'
     | 'title'
     | 'notes'
-    | 'lifecycle'
-    | 'completed_at'
-    | 'canceled_at'
-    | 'disposition'
-    | 'deleted_at'
     | 'destination'
     | 'today_section'
     | 'order_key'
@@ -71,12 +64,7 @@ export type TaskProjectPatch = Partial<
   >
 >;
 
-export type TaskHeadingPatch = Partial<
-  Pick<
-    TaskHeading,
-    'title' | 'order_key' | 'disposition' | 'deleted_at'
-  >
->;
+export type TaskHeadingPatch = Partial<Pick<TaskHeading, 'title' | 'order_key'>>;
 
 export type TaskChecklistItemPatch = Partial<
   Pick<
@@ -85,8 +73,6 @@ export type TaskChecklistItemPatch = Partial<
     | 'completed'
     | 'completed_at'
     | 'order_key'
-    | 'disposition'
-    | 'deleted_at'
   >
 >;
 
@@ -123,6 +109,7 @@ export class TaskHierarchyRepository {
         ),
         disposition: 'present',
         deleted_at: null,
+        deletion_root_id: null,
       };
       await insertRow(transaction, 'tasks_areas', area);
       return area;
@@ -146,6 +133,7 @@ export class TaskHierarchyRepository {
         canceled_at: null,
         disposition: 'present',
         deleted_at: null,
+        deletion_root_id: null,
         destination: 'anytime',
         today_section: 'daytime',
         order_key: input.orderKey ?? await nextOrderKey(
@@ -189,6 +177,7 @@ export class TaskHierarchyRepository {
         ),
         disposition: 'present',
         deleted_at: null,
+        deletion_root_id: null,
       };
       await insertRow(transaction, 'tasks_headings', heading);
       return heading;
@@ -222,6 +211,7 @@ export class TaskHierarchyRepository {
         ),
         disposition: 'present',
         deleted_at: null,
+        deletion_root_id: null,
       };
       await insertRow(transaction, 'tasks_checklist_items', item);
       return item;
@@ -262,7 +252,6 @@ export class TaskHierarchyRepository {
             'area',
           );
         }
-        assertLifecycleState(next);
         assertProjectPlanning(next);
       },
     );
@@ -482,23 +471,6 @@ function assertOwner(ownerId: string): void {
 
 function requireId(value: string, message: string): void {
   if (!value.trim()) throw new InvalidTaskMutationError(message);
-}
-
-function assertLifecycleState(patch: TaskProjectPatch): void {
-  const isOpen = patch.lifecycle === 'open'
-    && patch.completed_at == null
-    && patch.canceled_at == null;
-  const isCompleted = patch.lifecycle === 'completed'
-    && patch.completed_at != null
-    && patch.canceled_at == null;
-  const isCanceled = patch.lifecycle === 'canceled'
-    && patch.canceled_at != null
-    && patch.completed_at == null;
-  if (!isOpen && !isCompleted && !isCanceled) {
-    throw new InvalidTaskMutationError(
-      'Project lifecycle and terminal timestamps must agree',
-    );
-  }
 }
 
 function assertProjectPlanning(patch: TaskProjectPatch): void {

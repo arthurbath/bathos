@@ -1085,6 +1085,7 @@ export type Database = {
         Row: {
           client_mutation_id: string
           created_at: string
+          deletion_root_id: string | null
           deleted_at: string | null
           disposition: string
           entry_channel: string
@@ -1100,6 +1101,7 @@ export type Database = {
         Insert: {
           client_mutation_id: string
           created_at?: string
+          deletion_root_id?: string | null
           deleted_at?: string | null
           disposition?: string
           entry_channel?: string
@@ -1115,6 +1117,7 @@ export type Database = {
         Update: {
           client_mutation_id?: string
           created_at?: string
+          deletion_root_id?: string | null
           deleted_at?: string | null
           disposition?: string
           entry_channel?: string
@@ -1135,6 +1138,7 @@ export type Database = {
           completed: boolean
           completed_at: string | null
           created_at: string
+          deletion_root_id: string | null
           deleted_at: string | null
           disposition: string
           entry_channel: string
@@ -1153,6 +1157,7 @@ export type Database = {
           completed?: boolean
           completed_at?: string | null
           created_at?: string
+          deletion_root_id?: string | null
           deleted_at?: string | null
           disposition?: string
           entry_channel?: string
@@ -1171,6 +1176,7 @@ export type Database = {
           completed?: boolean
           completed_at?: string | null
           created_at?: string
+          deletion_root_id?: string | null
           deleted_at?: string | null
           disposition?: string
           entry_channel?: string
@@ -1198,6 +1204,7 @@ export type Database = {
         Row: {
           client_mutation_id: string
           created_at: string
+          deletion_root_id: string | null
           deleted_at: string | null
           disposition: string
           entry_channel: string
@@ -1214,6 +1221,7 @@ export type Database = {
         Insert: {
           client_mutation_id: string
           created_at?: string
+          deletion_root_id?: string | null
           deleted_at?: string | null
           disposition?: string
           entry_channel?: string
@@ -1230,6 +1238,7 @@ export type Database = {
         Update: {
           client_mutation_id?: string
           created_at?: string
+          deletion_root_id?: string | null
           deleted_at?: string | null
           disposition?: string
           entry_channel?: string
@@ -1315,6 +1324,122 @@ export type Database = {
           },
         ]
       }
+      tasks_hierarchy_history_events: {
+        Row: {
+          actor_type: string
+          affected_ids: string[]
+          after_state: Json
+          base_revision: number
+          before_state: Json | null
+          client_mutation_id: string
+          entity_id: string
+          entity_type: string
+          id: string
+          mutation_channel: string
+          occurred_at: string
+          operation_id: string | null
+          owner_id: string
+          result_revision: number
+          transition: string
+        }
+        Insert: {
+          actor_type: string
+          affected_ids: string[]
+          after_state: Json
+          base_revision: number
+          before_state?: Json | null
+          client_mutation_id: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          mutation_channel: string
+          occurred_at: string
+          operation_id?: string | null
+          owner_id: string
+          result_revision: number
+          transition: string
+        }
+        Update: {
+          actor_type?: string
+          affected_ids?: string[]
+          after_state?: Json
+          base_revision?: number
+          before_state?: Json | null
+          client_mutation_id?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          mutation_channel?: string
+          occurred_at?: string
+          operation_id?: string | null
+          owner_id?: string
+          result_revision?: number
+          transition?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_hierarchy_history_events_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_hierarchy_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tasks_hierarchy_operations: {
+        Row: {
+          actor_type: string
+          affected_ids: string[]
+          code: string | null
+          completed_at: string | null
+          descendant_policy: string
+          expected_revisions: Json
+          id: string
+          mutation_channel: string
+          operation: string
+          outcome: string
+          owner_id: string
+          requested_at: string
+          result_revisions: Json
+          root_id: string
+          root_type: string
+        }
+        Insert: {
+          actor_type?: string
+          affected_ids?: string[]
+          code?: string | null
+          completed_at?: string | null
+          descendant_policy?: string
+          expected_revisions: Json
+          id: string
+          mutation_channel?: string
+          operation: string
+          outcome?: string
+          owner_id: string
+          requested_at: string
+          result_revisions?: Json
+          root_id: string
+          root_type: string
+        }
+        Update: {
+          actor_type?: string
+          affected_ids?: string[]
+          code?: string | null
+          completed_at?: string | null
+          descendant_policy?: string
+          expected_revisions?: Json
+          id?: string
+          mutation_channel?: string
+          operation?: string
+          outcome?: string
+          owner_id?: string
+          requested_at?: string
+          result_revisions?: Json
+          root_id?: string
+          root_type?: string
+        }
+        Relationships: []
+      }
       tasks_projects: {
         Row: {
           area_id: string | null
@@ -1322,6 +1447,7 @@ export type Database = {
           client_mutation_id: string
           completed_at: string | null
           created_at: string
+          deletion_root_id: string | null
           deadline: string | null
           deleted_at: string | null
           destination: string
@@ -1347,6 +1473,7 @@ export type Database = {
           client_mutation_id: string
           completed_at?: string | null
           created_at?: string
+          deletion_root_id?: string | null
           deadline?: string | null
           deleted_at?: string | null
           destination?: string
@@ -1372,6 +1499,7 @@ export type Database = {
           client_mutation_id?: string
           completed_at?: string | null
           created_at?: string
+          deletion_root_id?: string | null
           deadline?: string | null
           deleted_at?: string | null
           destination?: string
@@ -1408,6 +1536,7 @@ export type Database = {
           client_mutation_id: string
           completed_at: string | null
           created_at: string
+          deletion_root_id: string | null
           deadline: string | null
           deleted_at: string | null
           destination: string
@@ -1440,6 +1569,7 @@ export type Database = {
           client_mutation_id: string
           completed_at?: string | null
           created_at?: string
+          deletion_root_id?: string | null
           deadline?: string | null
           deleted_at?: string | null
           destination?: string
@@ -1472,6 +1602,7 @@ export type Database = {
           client_mutation_id?: string
           completed_at?: string | null
           created_at?: string
+          deletion_root_id?: string | null
           deadline?: string | null
           deleted_at?: string | null
           destination?: string

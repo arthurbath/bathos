@@ -1,8 +1,29 @@
 import { useState, type FormEvent } from 'react';
-import { ArrowDown, ArrowUp, ChevronLeft, ListChecks, Plus } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  CheckCircle2,
+  ChevronLeft,
+  CircleSlash2,
+  ListChecks,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogBody,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { toast } from '@/hooks/use-toast';
@@ -35,6 +56,8 @@ export function TaskProjectDetailView({
   const [newTaskHeadingId, setNewTaskHeadingId] = useState('');
   const [creatingHeading, setCreatingHeading] = useState(false);
   const [creatingTask, setCreatingTask] = useState(false);
+  const [projectAction, setProjectAction] = useState<'complete' | 'cancel' | 'delete' | null>(null);
+  const [changingProject, setChangingProject] = useState(false);
 
   const createHeading = async (event: FormEvent) => {
     event.preventDefault();
@@ -89,6 +112,29 @@ export function TaskProjectDetailView({
   const area = hierarchy.areas.find(({ id }) => id === project.area_id);
   const projectsHref = `${basePath}/projects`;
   const ungroupedTasks = detail.tasks.filter(({ heading_id }) => heading_id === null);
+  const openDescendantCount = detail.tasks.filter(({ lifecycle }) => lifecycle === 'open').length;
+
+  const confirmProjectAction = async () => {
+    if (!projectAction || changingProject) return;
+    setChangingProject(true);
+    try {
+      if (projectAction === 'delete') {
+        await hierarchy.deleteHierarchy('project', project.id);
+        navigate(projectsHref);
+      } else {
+        await hierarchy.transitionProject(
+          project.id,
+          projectAction === 'complete' ? 'complete_project' : 'cancel_project',
+          openDescendantCount > 0,
+        );
+      }
+      setProjectAction(null);
+    } catch (error) {
+      showError('Project Could Not Be Changed', error);
+    } finally {
+      setChangingProject(false);
+    }
+  };
 
   return (
     <div className="space-y-7">
@@ -101,13 +147,47 @@ export function TaskProjectDetailView({
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           Projects
         </a>
-        <div>
-          <h3 className="text-2xl font-semibold leading-tight text-foreground">{project.title}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{area?.title ?? 'No Area'}</p>
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-2xl font-semibold leading-tight text-foreground">{project.title}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {area?.title ?? 'No Area'}{project.lifecycle === 'open' ? '' : ` · ${project.lifecycle === 'completed' ? 'Completed' : 'Canceled'}`}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {project.lifecycle === 'open' ? (
+              <>
+                <Button type="button" variant="outline-success" size="sm" onClick={() => setProjectAction('complete')}>
+                  <CheckCircle2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  Complete
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setProjectAction('cancel')}>
+                  <CircleSlash2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void hierarchy.transitionProject(project.id, 'reopen_project').catch((error) => {
+                  showError('Project Could Not Be Reopened', error);
+                })}
+              >
+                <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Reopen
+              </Button>
+            )}
+            <Button type="button" variant="outline-destructive" size="sm" onClick={() => setProjectAction('delete')}>
+              <Trash2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Delete
+            </Button>
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      {project.lifecycle === 'open' ? <div className="grid gap-4 md:grid-cols-2">
         <form onSubmit={createHeading} className="flex gap-2">
           <Input
             value={newHeadingTitle}
@@ -153,7 +233,7 @@ export function TaskProjectDetailView({
             <Plus className="h-4 w-4" />
           </Button>
         </form>
-      </div>
+      </div> : null}
 
       {headings.length === 0 && ungroupedTasks.length === 0 ? (
         <p className="py-12 text-center text-sm text-muted-foreground">No Project Tasks</p>
@@ -183,6 +263,43 @@ export function TaskProjectDetailView({
           ))}
         </div>
       )}
+
+      <AlertDialog
+        open={projectAction !== null}
+        onOpenChange={(open) => { if (!open && !changingProject) setProjectAction(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {projectAction === 'delete'
+                ? 'Delete Project'
+                : projectAction === 'complete' ? 'Complete Project' : 'Cancel Project'}
+            </AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogBody>
+            <AlertDialogDescription>
+              {projectAction === 'delete'
+                ? 'The project, headings, tasks, and checklist items will move to Trash together.'
+                : openDescendantCount > 0
+                  ? `${openDescendantCount} open ${openDescendantCount === 1 ? 'task' : 'tasks'} will be ${projectAction === 'complete' ? 'completed' : 'canceled'} with the project.`
+                  : `The project will be ${projectAction === 'complete' ? 'completed' : 'canceled'}.`}
+            </AlertDialogDescription>
+          </AlertDialogBody>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={changingProject}>Keep Project</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={changingProject}
+              className={projectAction === 'delete' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : undefined}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmProjectAction();
+              }}
+            >
+              {projectAction === 'delete' ? 'Move to Trash' : 'Continue'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

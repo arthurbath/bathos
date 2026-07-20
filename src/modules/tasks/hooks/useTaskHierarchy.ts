@@ -15,7 +15,7 @@ import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskArea, TaskHeading, TaskProject } from '@/modules/tasks/types/tasks';
 
 export function useTaskHierarchy(ownerId: string) {
-  const { hierarchyRepository } = useTasksRuntime();
+  const { hierarchyOperationsRepository, hierarchyRepository } = useTasksRuntime();
   const areasQuery = useQuery<TaskArea>(
     `SELECT * FROM tasks_areas
      WHERE owner_id = ? AND disposition = 'present'
@@ -145,6 +145,39 @@ export function useTaskHierarchy(ownerId: string) {
     return orderKey === null ? undefined : updateHeading(headingId, { order_key: orderKey });
   }, [headings, updateHeading]);
 
+  const transitionProject = useCallback(async (
+    projectId: string,
+    operation: 'complete_project' | 'cancel_project' | 'reopen_project',
+    cascade = false,
+  ) => hierarchyOperationsRepository.request({
+    ownerId,
+    rootType: 'project',
+    rootId: projectId,
+    operation,
+    descendantPolicy: cascade ? 'cascade' : 'reject',
+  }), [hierarchyOperationsRepository, ownerId]);
+
+  const deleteHierarchy = useCallback(async (
+    rootType: 'area' | 'project' | 'heading',
+    rootId: string,
+  ) => {
+    const result = await hierarchyOperationsRepository.request({
+      ownerId,
+      rootType,
+      rootId,
+      operation: 'delete',
+      descendantPolicy: 'cascade',
+    });
+    if (rootType === 'area') {
+      setOptimisticAreas((current) => ({ ...current, [rootId]: null }));
+    } else if (rootType === 'project') {
+      setOptimisticProjects((current) => ({ ...current, [rootId]: null }));
+    } else {
+      setOptimisticHeadings((current) => ({ ...current, [rootId]: null }));
+    }
+    return result;
+  }, [hierarchyOperationsRepository, ownerId]);
+
   return {
     areas,
     projects,
@@ -161,6 +194,8 @@ export function useTaskHierarchy(ownerId: string) {
     reorderProject,
     reorderHeading,
     moveProjectToArea,
+    transitionProject,
+    deleteHierarchy,
   };
 }
 

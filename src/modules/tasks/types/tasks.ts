@@ -22,6 +22,28 @@ export const taskSourceKinds = [
   'other',
 ] as const;
 export const taskActorTypes = ['user', 'automation', 'system', 'import'] as const;
+export const taskHierarchyRootTypes = [
+  'area',
+  'project',
+  'heading',
+  'todo',
+  'checklist_item',
+] as const;
+export const taskHierarchyOperations = [
+  'complete_project',
+  'cancel_project',
+  'reopen_project',
+  'delete',
+  'restore',
+] as const;
+export const taskHierarchyDescendantPolicies = ['reject', 'cascade'] as const;
+export const taskHierarchyOperationOutcomes = [
+  'pending',
+  'accepted',
+  'noop',
+  'rejected',
+  'conflict',
+] as const;
 export const taskMutationTransitions = [
   'baseline',
   'create',
@@ -41,6 +63,12 @@ export type TaskTodaySection = (typeof taskTodaySections)[number];
 export type TaskEntryChannel = (typeof taskEntryChannels)[number];
 export type TaskSourceKind = (typeof taskSourceKinds)[number];
 export type TaskActorType = (typeof taskActorTypes)[number];
+export type TaskHierarchyRootType = (typeof taskHierarchyRootTypes)[number];
+export type TaskHierarchyOperationKind = (typeof taskHierarchyOperations)[number];
+export type TaskHierarchyDescendantPolicy =
+  (typeof taskHierarchyDescendantPolicies)[number];
+export type TaskHierarchyOperationOutcome =
+  (typeof taskHierarchyOperationOutcomes)[number];
 export type TaskMutationTransition = (typeof taskMutationTransitions)[number];
 
 type TaskTodoRow = Tables<'tasks_todos'>;
@@ -50,6 +78,8 @@ type TaskAreaRow = Tables<'tasks_areas'>;
 type TaskProjectRow = Tables<'tasks_projects'>;
 type TaskHeadingRow = Tables<'tasks_headings'>;
 type TaskChecklistItemRow = Tables<'tasks_checklist_items'>;
+type TaskHierarchyOperationRow = Tables<'tasks_hierarchy_operations'>;
+type TaskHierarchyHistoryRow = Tables<'tasks_hierarchy_history_events'>;
 
 type RefinedTaskFields = {
   lifecycle: TaskLifecycle;
@@ -96,5 +126,29 @@ export type TaskChecklistItem = Omit<
   TaskChecklistItemRow,
   keyof RefinedHierarchyFields
 > & RefinedHierarchyFields;
+
+type RefinedHierarchyOperationFields = {
+  root_type: TaskHierarchyRootType;
+  operation: TaskHierarchyOperationKind;
+  descendant_policy: TaskHierarchyDescendantPolicy;
+  actor_type: TaskActorType;
+  mutation_channel: TaskEntryChannel;
+  outcome: TaskHierarchyOperationOutcome;
+};
+
+export type TaskHierarchyOperation = Omit<
+  TaskHierarchyOperationRow,
+  keyof RefinedHierarchyOperationFields
+> & RefinedHierarchyOperationFields;
+
+export type TaskHierarchyHistoryEvent = Omit<
+  TaskHierarchyHistoryRow,
+  'entity_type' | 'actor_type' | 'mutation_channel' | 'transition'
+> & {
+  entity_type: Exclude<TaskHierarchyRootType, 'todo'>;
+  actor_type: TaskActorType;
+  mutation_channel: TaskEntryChannel;
+  transition: Exclude<TaskMutationTransition, 'undo'>;
+};
 
 export type TaskUserSettings = Tables<'tasks_user_settings'>;

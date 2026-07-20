@@ -24,6 +24,7 @@ export type TaskHistorySnapshot = Pick<
   | 'canceled_at'
   | 'disposition'
   | 'deleted_at'
+  | 'deletion_root_id'
   | 'destination'
   | 'today_section'
   | 'order_key'
@@ -125,6 +126,7 @@ export function snapshotTask(task: TaskTodo): TaskHistorySnapshot {
     canceled_at: task.canceled_at,
     disposition: task.disposition,
     deleted_at: task.deleted_at,
+    deletion_root_id: task.deletion_root_id ?? null,
     destination: task.destination,
     today_section: task.today_section,
     order_key: task.order_key,
@@ -155,6 +157,7 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
     canceled_at: optionalText(parsed.canceled_at, 'canceled_at'),
     disposition: requireEnum(parsed.disposition, ['present', 'deleted'] as const, 'disposition'),
     deleted_at: optionalText(parsed.deleted_at, 'deleted_at'),
+    deletion_root_id: optionalTextOrMissing(parsed.deletion_root_id, 'deletion_root_id'),
     destination: requireEnum(parsed.destination, taskDestinations, 'destination') as TaskDestination,
     today_section: parsed.today_section === undefined
       ? 'daytime'
@@ -248,6 +251,7 @@ function snapshotsEqual(left: TaskHistorySnapshot, right: TaskHistorySnapshot): 
     && left.canceled_at === right.canceled_at
     && left.disposition === right.disposition
     && left.deleted_at === right.deleted_at
+    && left.deletion_root_id === right.deletion_root_id
     && left.destination === right.destination
     && left.today_section === right.today_section
     && left.order_key === right.order_key

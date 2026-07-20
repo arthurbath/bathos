@@ -53,6 +53,10 @@ import {
   type TodayTaskSection,
 } from '@/modules/tasks/hooks/useTaskList';
 import { useTaskHierarchy, type TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
+import {
+  useTaskHierarchyTrash,
+  type DeletedTaskHierarchyRoot,
+} from '@/modules/tasks/hooks/useTaskHierarchyTrash';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/taskEditorPlanning';
@@ -95,6 +99,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const taskListView: TaskListView = view === 'projects' || view === 'project' ? 'inbox' : view;
   const { mode, prepareForSignOut } = useTasksRuntime();
   const hierarchy = useTaskHierarchy(userId);
+  const hierarchyTrash = useTaskHierarchyTrash(userId);
   const {
     tasks,
     loading,
@@ -378,18 +383,55 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               hierarchy={hierarchy}
             />
           ) : view === 'projects' ? <TaskProjectsView hierarchy={hierarchy} /> : <section aria-label={getTaskSectionLabel(view)}>
-            {loading ? (
+            {loading || (view === 'trash' && hierarchyTrash.loading) ? (
               <div className="flex min-h-40 items-center justify-center">
                 <LoadingSpinner />
               </div>
-            ) : error ? (
+            ) : error || (view === 'trash' && hierarchyTrash.error) ? (
               <p role="alert" className="py-12 text-center text-sm text-destructive">
                 Tasks Could Not Be Loaded
               </p>
-            ) : tasks.length === 0 ? (
+            ) : tasks.length === 0 && (view !== 'trash' || hierarchyTrash.roots.length === 0) ? (
               <p className="py-12 text-center text-sm text-muted-foreground">
                 {view === 'trash' ? 'Trash Is Empty' : view === 'logbook' ? 'Logbook Is Empty' : 'No Tasks'}
               </p>
+            ) : view === 'trash' ? (
+              <div className="space-y-5">
+                {hierarchyTrash.roots.length > 0 ? (
+                  <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+                    {hierarchyTrash.roots.map((root) => (
+                      <DeletedHierarchyRow
+                        key={`${root.root_type}:${root.id}`}
+                        root={root}
+                        onRestore={async () => {
+                          try {
+                            await hierarchyTrash.restore(root);
+                          } catch (restoreError) {
+                            showTaskError('Hierarchy Could Not Be Restored', restoreError);
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                {tasks.length > 0 ? (
+                  <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+                    {tasks.map((task) => (
+                      <DeletedTaskRow
+                        key={task.id}
+                        task={task}
+                        onRestore={async () => {
+                          try {
+                            await transitionTask(task.id, 'restore');
+                          } catch (restoreError) {
+                            showTaskError('Task Could Not Be Restored', restoreError);
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             ) : view === 'today' ? (
               <TodayTaskSections
                 tasks={tasks}
@@ -399,19 +441,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             ) : (
               <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
                 {tasks.map((task) => (
-                  view === 'trash' ? (
-                    <DeletedTaskRow
-                      key={task.id}
-                      task={task}
-                      onRestore={async () => {
-                        try {
-                          await transitionTask(task.id, 'restore');
-                        } catch (restoreError) {
-                          showTaskError('Task Could Not Be Restored', restoreError);
-                        }
-                      }}
-                    />
-                  ) : view === 'logbook' ? (
+                  view === 'logbook' ? (
                     <LogbookTaskRow
                       key={task.id}
                       task={task}
@@ -525,6 +555,30 @@ function LogbookTaskRow({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+    </article>
+  );
+}
+
+function DeletedHierarchyRow({
+  root,
+  onRestore,
+}: {
+  root: DeletedTaskHierarchyRoot;
+  onRestore: () => Promise<void>;
+}) {
+  const label = root.root_type === 'checklist_item'
+    ? 'Checklist Item'
+    : root.root_type[0].toUpperCase() + root.root_type.slice(1);
+  return (
+    <article className="flex min-h-14 items-center gap-3 px-3 py-2 sm:px-4">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">{root.title}</p>
+        <p className="text-xs text-muted-foreground">Deleted {label}</p>
+      </div>
+      <Button type="button" variant="outline" size="sm" onClick={() => void onRestore()}>
+        <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden="true" />
+        Restore
+      </Button>
     </article>
   );
 }

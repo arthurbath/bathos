@@ -29,6 +29,7 @@ const originalTask: TaskTodo = {
   canceled_at: null,
   disposition: 'present',
   deleted_at: null,
+  deletion_root_id: null,
   destination: 'today',
   today_section: 'daytime',
   order_key: 'a0',
@@ -174,12 +175,14 @@ describe('useTaskList optimistic display', () => {
       id: 'task-older',
       disposition: 'deleted' as const,
       deleted_at: '2026-07-20T04:01:00.000Z',
+      deletion_root_id: 'task-older',
     };
     const newerDeletedTask = {
       ...originalTask,
       id: 'task-newer',
       disposition: 'deleted' as const,
       deleted_at: '2026-07-20T04:02:00.000Z',
+      deletion_root_id: 'task-newer',
     };
     queryData = [olderDeletedTask, newerDeletedTask];
     const pendingRestore = deferred<TaskTodo>();
@@ -204,6 +207,7 @@ describe('useTaskList optimistic display', () => {
         ...newerDeletedTask,
         disposition: 'present' as const,
         deleted_at: null,
+        deletion_root_id: null,
         revision: 2,
         client_mutation_id: 'mutation-restored',
       };

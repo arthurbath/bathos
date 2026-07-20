@@ -3,11 +3,13 @@ import { createContext, useContext } from 'react';
 
 import type { TaskRepository } from '@/modules/tasks/data/taskRepository';
 import type { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
+import type { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHierarchyOperationsRepository';
 
 export type TasksRuntimeValue = {
   database: PowerSyncDatabase;
   repository: TaskRepository;
   hierarchyRepository: TaskHierarchyRepository;
+  hierarchyOperationsRepository: TaskHierarchyOperationsRepository;
   mode: 'local' | 'connected';
   planningTimeZone: string;
   prepareForSignOut: () => Promise<void>;

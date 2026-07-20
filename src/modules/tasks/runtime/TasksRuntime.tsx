@@ -13,6 +13,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { supabase } from '@/integrations/supabase/client';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
 import { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
+import { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHierarchyOperationsRepository';
 import { resolveTaskPlanningTimeZone } from '@/modules/tasks/domain/taskDates';
 import {
   bindTasksDatabaseOwner,
@@ -41,6 +42,10 @@ export function TasksRuntimeProvider({
   const repository = useMemo(() => new TaskRepository(database), [database]);
   const hierarchyRepository = useMemo(
     () => new TaskHierarchyRepository(database),
+    [database],
+  );
+  const hierarchyOperationsRepository = useMemo(
+    () => new TaskHierarchyOperationsRepository(database),
     [database],
   );
 
@@ -104,11 +109,19 @@ export function TasksRuntimeProvider({
       database,
       repository,
       hierarchyRepository,
+      hierarchyOperationsRepository,
       mode: state.status === 'ready' ? state.mode : 'local',
       planningTimeZone: state.status === 'ready' ? state.planningTimeZone : 'UTC',
       prepareForSignOut,
     }),
-    [database, hierarchyRepository, prepareForSignOut, repository, state],
+    [
+      database,
+      hierarchyOperationsRepository,
+      hierarchyRepository,
+      prepareForSignOut,
+      repository,
+      state,
+    ],
   );
 
   if (state.status === 'loading') {

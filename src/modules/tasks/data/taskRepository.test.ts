@@ -26,6 +26,7 @@ const existingTask: TaskTodo = {
   canceled_at: null,
   disposition: 'present',
   deleted_at: null,
+  deletion_root_id: null,
   destination: 'inbox',
   today_section: 'daytime',
   order_key: 'a0',
@@ -49,6 +50,8 @@ const existingTask: TaskTodo = {
 function createHarness(queryResult: unknown | null) {
   const transaction = {
     execute: vi.fn().mockResolvedValue({ rows: undefined, rowsAffected: 1 }),
+    get: vi.fn().mockResolvedValue(queryResult),
+    getAll: vi.fn().mockResolvedValue([]),
     getOptional: vi.fn().mockResolvedValue(queryResult),
   } as unknown as Transaction;
   const database = {
@@ -369,6 +372,16 @@ describe('task repository', () => {
     });
 
     const deleteHarness = createHarness(completed);
+    vi.mocked(deleteHarness.transaction.getAll).mockResolvedValueOnce([{
+      entity_type: 'todo', id: 'task-a', revision: 2,
+    }]);
+    vi.mocked(deleteHarness.transaction.getOptional).mockResolvedValueOnce({
+      ...completed,
+      disposition: 'deleted',
+      deleted_at: timestamp,
+      deletion_root_id: 'task-a',
+      revision: 3,
+    });
     const deleted = await deleteHarness.repository.transitionTask('owner-a', 'task-a', 'delete');
     expect(deleted).toMatchObject({
       lifecycle: 'completed',
@@ -378,6 +391,17 @@ describe('task repository', () => {
     });
 
     const restoreHarness = createHarness(deleted);
+    vi.mocked(restoreHarness.transaction.getAll).mockResolvedValueOnce([{
+      entity_type: 'todo', id: 'task-a', revision: 3,
+    }]);
+    vi.mocked(restoreHarness.transaction.get).mockResolvedValueOnce(deleted);
+    vi.mocked(restoreHarness.transaction.getOptional).mockResolvedValueOnce({
+      ...deleted,
+      disposition: 'present',
+      deleted_at: null,
+      deletion_root_id: null,
+      revision: 4,
+    });
     const restored = await restoreHarness.repository.transitionTask('owner-a', 'task-a', 'restore');
     expect(restored).toMatchObject({
       lifecycle: 'completed',

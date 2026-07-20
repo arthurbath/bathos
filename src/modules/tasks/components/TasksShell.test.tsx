@@ -9,6 +9,7 @@ import { TasksShell } from './TasksShell';
 
 const mockTaskList = vi.fn();
 const mockTaskHierarchy = vi.fn();
+const mockTaskHierarchyTrash = vi.fn();
 const mockPrepareForSignOut = vi.fn();
 
 vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
@@ -20,6 +21,10 @@ vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
 
 vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({
   useTaskHierarchy: (...args: unknown[]) => mockTaskHierarchy(...args),
+}));
+
+vi.mock('@/modules/tasks/hooks/useTaskHierarchyTrash', () => ({
+  useTaskHierarchyTrash: (...args: unknown[]) => mockTaskHierarchyTrash(...args),
 }));
 
 vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
@@ -72,6 +77,7 @@ const task = {
   canceled_at: null,
   disposition: 'present' as const,
   deleted_at: null,
+  deletion_root_id: null,
   destination: 'today' as const,
   today_section: 'daytime' as const,
   order_key: 'a0',
@@ -155,6 +161,12 @@ describe('TasksShell', () => {
       headings: [],
       loading: false,
       error: null,
+    });
+    mockTaskHierarchyTrash.mockReset().mockReturnValue({
+      roots: [],
+      loading: false,
+      error: null,
+      restore: vi.fn().mockResolvedValue(undefined),
     });
   });
 
@@ -493,6 +505,7 @@ describe('TasksShell', () => {
       ...task,
       disposition: 'deleted' as const,
       deleted_at: '2026-07-20T04:05:00.000Z',
+      deletion_root_id: 'task-a',
     };
     const taskList = {
       ...defaultTaskList(),

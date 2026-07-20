@@ -232,6 +232,12 @@ Lifecycle transitions follow these rules:
 
 Recoverable deletion stores the prior lifecycle, planning placement, parent, and order needed for deterministic restoration. Deleting a hierarchy marks the supported descendants in the same transaction. Restoring the root restores its descendants to their prior states when their parents still exist. If a prior container no longer exists, the root returns to Inbox and the restoration receipt reports the fallback.
 
+Hierarchy-wide lifecycle and recovery mutations use an owner-scoped operation receipt rather than a sequence of independently uploaded row changes. The web client applies the complete mutation to its local PowerSync projection in one SQLite transaction and queues one `tasks_hierarchy_operations` record containing the root, operation, explicit descendant policy, and the expected revision of every affected row. On upload, the connector submits that operation record and does not independently upload the optimistic descendant writes from the same transaction. Postgres accepts the operation record once, compares the complete expected-revision map with the authoritative candidate set, and applies all accepted row transitions in the operation's transaction. A stale, missing, or newly discovered descendant therefore produces a content-free conflict receipt rather than a partial cascade or an unexpected overwrite.
+
+Every recoverably deleted hierarchy row carries a nullable `deletion_root_id`. Present rows require a null marker. A hierarchy deletion assigns the selected root identifier only to rows that are present when that operation is accepted. Restoring the root changes only deleted rows whose marker matches that root, so a descendant deleted independently before or after the cascade is never resurrected accidentally. A project whose former area is unavailable restores as an unassigned project. A to-do whose former area, project, or heading is unavailable returns to Inbox and reports the fallback. Structural descendants that cannot exist without a present parent, such as a heading or checklist item, require that parent to be restored first instead of being exposed in an invalid hierarchy.
+
+Direct project lifecycle updates are allowed only when no present open descendant to-dos exist. Completing or canceling a project with open descendants requires the explicitly named cascade operation. Reopening a project changes the project only; it does not guess which historical descendant states should be reopened. Direct container deletion is rejected whenever supported present descendants exist, so client bugs or generic table mutations cannot bypass the hierarchy operation contract.
+
 Rationale: Orthogonal dimensions prevent view placement, actionability, history, and recovery from becoming contradictory values in one overloaded state field.
 
 ### Treat dates as calendar values and reminders as resolved instants
@@ -321,6 +327,8 @@ Rationale: PowerSync covers the risky offline write loop while retaining Supabas
 Fallback considered: RxDB with its direct Supabase replication plugin remains the first fallback if production integration exposes a failure that the disposable spike could not reveal. Electric was not selected because its current product handles read-path sync but leaves write-path synchronization to the application. A custom IndexedDB mutation queue remains an escape hatch, not the preferred foundation.
 
 The production deployment topology remains open. PowerSync Cloud and self-hosting have different privacy, uptime, cost, and operational trade-offs. That choice must be made before a remotely available production task module is deployed, but it does not block the local domain foundation.
+
+Atomic hierarchy operations are the one intentional exception to ordinary per-row uploads. Their synchronized operation receipt is both the durable offline command and the server result. The containing local SQLite transaction may update multiple projected rows optimistically, but the connector recognizes the operation entry, uploads only that entry, and lets the authoritative operation transaction generate the server rows and append-only history. The subsequent synchronization download confirms or rolls back the optimistic projection as one logical mutation.
 
 ### Use whole-record optimistic revisions and server-authoritative conflicts
 

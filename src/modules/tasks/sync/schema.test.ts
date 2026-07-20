@@ -13,6 +13,8 @@ describe('tasks PowerSync schema', () => {
       'tasks_areas',
       'tasks_checklist_items',
       'tasks_headings',
+      'tasks_hierarchy_history_events',
+      'tasks_hierarchy_operations',
       'tasks_history_events',
       'tasks_owner_binding',
       'tasks_projects',
@@ -27,6 +29,8 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_projects.local_only).toBe(false);
     expect(tables.tasks_headings.local_only).toBe(false);
     expect(tables.tasks_checklist_items.local_only).toBe(false);
+    expect(tables.tasks_hierarchy_operations.local_only).toBe(false);
+    expect(tables.tasks_hierarchy_history_events.local_only).toBe(false);
     expect(tables.tasks_sync_issues.local_only).toBe(true);
     expect(tables.tasks_owner_binding.local_only).toBe(true);
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('client_mutation_id');
@@ -35,6 +39,7 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('deadline');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('today_section');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('project_id');
+    expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('deletion_root_id');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain(
       'hierarchy_order_key',
     );
@@ -42,6 +47,9 @@ describe('tasks PowerSync schema', () => {
       'planning_order_key',
     );
     expect(tables.tasks_history_events.columns.map(({ name }) => name)).toContain('before_state');
+    expect(tables.tasks_hierarchy_operations.columns.map(({ name }) => name)).toContain(
+      'expected_revisions',
+    );
     expect(tables.tasks_sync_issues.columns.map(({ name }) => name)).not.toContain('title');
     expect(tables.tasks_sync_issues.columns.map(({ name }) => name)).not.toContain('notes');
   });

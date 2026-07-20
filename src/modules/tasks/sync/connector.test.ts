@@ -85,12 +85,32 @@ function checklistPatchEntry() {
   });
 }
 
+function hierarchyOperationEntry() {
+  return new CrudEntry(6, UpdateType.PUT, 'tasks_hierarchy_operations', 'operation-a', 6, {
+    owner_id: 'owner-a',
+    root_type: 'project',
+    root_id: 'project-a',
+    operation: 'complete_project',
+    descendant_policy: 'cascade',
+    expected_revisions: JSON.stringify({ 'project-a': 2, 'task-a': 4 }),
+    actor_type: 'user',
+    mutation_channel: 'web',
+    requested_at: detectedAt,
+    outcome: 'pending',
+    affected_ids: '[]',
+    result_revisions: '{}',
+  });
+}
+
 function createHarness(
-  entry: CrudEntry,
+  entry: CrudEntry | CrudEntry[],
   outcome: TasksRemoteWriteOutcome | Error = { status: 'applied' },
 ) {
   const complete = vi.fn().mockResolvedValue(undefined);
-  const transaction = { crud: [entry], complete } as unknown as CrudTransaction;
+  const transaction = {
+    crud: Array.isArray(entry) ? entry : [entry],
+    complete,
+  } as unknown as CrudTransaction;
   const database = {
     getNextCrudTransaction: vi.fn().mockResolvedValue(transaction),
     execute: vi.fn().mockResolvedValue({ rows: undefined, rowsAffected: 1 }),
@@ -109,6 +129,7 @@ function createHarness(
     updateHeading: vi.fn(resolve),
     insertChecklistItem: vi.fn(resolve),
     updateChecklistItem: vi.fn(resolve),
+    insertHierarchyOperation: vi.fn(resolve),
   };
   const connector = new TasksSyncConnector({
     endpoint: 'https://sync.example.test',
@@ -164,6 +185,29 @@ describe('task sync connector', () => {
       1,
       expect.objectContaining({ completed: true, revision: 2 }),
     );
+  });
+
+  it('uploads one atomic hierarchy operation instead of its optimistic row patches', async () => {
+    const { connector, database, remoteStore } = createHarness([
+      taskPatchEntry({ lifecycle: 'completed', completed_at: detectedAt }),
+      hierarchyOperationEntry(),
+    ]);
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.updateTask).not.toHaveBeenCalled();
+    expect(remoteStore.insertHierarchyOperation).toHaveBeenCalledWith({
+      id: 'operation-a',
+      owner_id: 'owner-a',
+      root_type: 'project',
+      root_id: 'project-a',
+      operation: 'complete_project',
+      descendant_policy: 'cascade',
+      expected_revisions: { 'project-a': 2, 'task-a': 4 },
+      actor_type: 'user',
+      mutation_channel: 'web',
+      requested_at: detectedAt,
+    });
   });
 
   it('uploads complete inserts and restores omitted null fields', async () => {

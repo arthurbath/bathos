@@ -213,6 +213,11 @@ function AreaSection({
               value={project.title}
               onSave={(title) => onRenameProject(project, title)}
             />
+            {project.lifecycle !== 'open' ? (
+              <span className="text-xs text-muted-foreground">
+                {project.lifecycle === 'completed' ? 'Completed' : 'Canceled'}
+              </span>
+            ) : null}
             <a
               href={projectHref(project)}
               aria-label={`Open ${project.title}`}

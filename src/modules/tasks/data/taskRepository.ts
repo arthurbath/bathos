@@ -1,6 +1,7 @@
 import type { AbstractPowerSyncDatabase, Transaction } from '@powersync/web';
 
 import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
+import { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHierarchyOperationsRepository';
 import {
   assertTaskCalendarRange,
   isTaskPlanningTimeZone,
@@ -106,6 +107,7 @@ const insertColumns = [
   'canceled_at',
   'disposition',
   'deleted_at',
+  'deletion_root_id',
   'destination',
   'today_section',
   'order_key',
@@ -150,6 +152,7 @@ export class InvalidTaskMutationError extends Error {
 export class TaskRepository {
   private readonly createId: () => string;
   private readonly now: () => string;
+  private readonly hierarchyOperations: TaskHierarchyOperationsRepository;
 
   constructor(
     private readonly database: TaskRepositoryDatabase,
@@ -157,6 +160,7 @@ export class TaskRepository {
   ) {
     this.createId = options.createId ?? createUuid;
     this.now = options.now ?? (() => new Date().toISOString());
+    this.hierarchyOperations = new TaskHierarchyOperationsRepository(database, options);
   }
 
   async createTask(input: CreateTaskInput): Promise<TaskTodo> {
@@ -226,6 +230,7 @@ export class TaskRepository {
         canceled_at: null,
         disposition: 'present',
         deleted_at: null,
+        deletion_root_id: null,
         destination,
         today_section: todaySection,
         order_key: input.orderKey ?? generateTaskOrderKey(lastTask?.order_key ?? null, null),
@@ -361,6 +366,19 @@ export class TaskRepository {
     context?: TaskMutationContext,
   ): Promise<TaskTodo> {
     assertOwner(ownerId);
+    if (transition === 'delete' || transition === 'restore') {
+      await this.hierarchyOperations.request({
+        ownerId,
+        rootType: 'todo',
+        rootId: taskId,
+        operation: transition,
+        descendantPolicy: 'cascade',
+        context,
+      });
+      return this.database.writeTransaction((transaction) => (
+        getOwnedTask(transaction, ownerId, taskId)
+      ));
+    }
     return this.database.writeTransaction(async (transaction) => {
       const current = await getOwnedTask(transaction, ownerId, taskId);
       const occurredAt = this.now();

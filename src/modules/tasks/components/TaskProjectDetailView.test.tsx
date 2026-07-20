@@ -21,7 +21,7 @@ const secondItem = checklistItem('item-b', 'Step two', 'a1');
 function hierarchy(): TaskHierarchyModel {
   return {
     areas: [{ id: 'area-a', title: 'Work' }],
-    projects: [{ id: 'project-a', title: 'Launch', area_id: 'area-a' }],
+    projects: [{ id: 'project-a', title: 'Launch', area_id: 'area-a', lifecycle: 'open' }],
     headings: [{ id: 'heading-a', title: 'Next', project_id: 'project-a' }],
     loading: false,
     error: null,

@@ -16,6 +16,7 @@ const supportedUploadTables = new Set([
   'tasks_projects',
   'tasks_headings',
   'tasks_checklist_items',
+  'tasks_hierarchy_operations',
 ]);
 
 type HierarchyTable =
@@ -36,10 +37,11 @@ type TaskHeadingInsert = TablesInsert<'tasks_headings'>;
 type TaskHeadingUpdate = TablesUpdate<'tasks_headings'>;
 type TaskChecklistItemInsert = TablesInsert<'tasks_checklist_items'>;
 type TaskChecklistItemUpdate = TablesUpdate<'tasks_checklist_items'>;
+type TaskHierarchyOperationInsert = TablesInsert<'tasks_hierarchy_operations'>;
 
 export type TasksRemoteWriteOutcome =
   | { status: 'applied' | 'already_applied' }
-  | { status: 'conflict'; remoteRevision: number | null }
+  | { status: 'conflict'; remoteRevision: number | null; code?: string }
   | { status: 'rejected'; code: string };
 
 export interface TasksRemoteStore {
@@ -66,6 +68,9 @@ export interface TasksRemoteStore {
     id: string,
     baseRevision: number,
     patch: TaskChecklistItemUpdate,
+  ): Promise<TasksRemoteWriteOutcome>;
+  insertHierarchyOperation(
+    operation: TaskHierarchyOperationInsert,
   ): Promise<TasksRemoteWriteOutcome>;
 }
 
@@ -100,6 +105,23 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
   uploadData = async (database: AbstractPowerSyncDatabase): Promise<void> => {
     const transaction = await database.getNextCrudTransaction();
     if (transaction === null) {
+      return;
+    }
+
+    const operationEntries = transaction.crud.filter(
+      (entry) => entry.table === 'tasks_hierarchy_operations',
+    );
+    if (operationEntries.length > 0) {
+      if (operationEntries.length !== 1 || operationEntries[0].op !== UpdateType.PUT) {
+        await recordSyncIssue(database, operationEntries[0], {
+          kind: 'rejected_operation',
+          code: 'invalid_hierarchy_operation_transaction',
+        }, this.now());
+        await transaction.complete();
+        return;
+      }
+      await this.uploadEntry(database, operationEntries[0]);
+      await transaction.complete();
       return;
     }
 
@@ -183,6 +205,11 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
           this.options.remoteStore.insertChecklistItem.bind(this.options.remoteStore),
           this.options.remoteStore.updateChecklistItem.bind(this.options.remoteStore),
         );
+      } else if (entry.table === 'tasks_hierarchy_operations'
+        && entry.op === UpdateType.PUT) {
+        outcome = await this.options.remoteStore.insertHierarchyOperation(
+          parseHierarchyOperationInsert(entry),
+        );
       } else {
         throw new InvalidTasksCrudEntryError('Unsupported task settings mutation operation');
       }
@@ -200,7 +227,7 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
     if (outcome.status === 'conflict') {
       await recordSyncIssue(database, entry, {
         kind: 'conflict',
-        code: 'revision_conflict',
+        code: outcome.code ?? 'revision_conflict',
         remoteRevision: outcome.remoteRevision,
       }, this.now());
     } else if (outcome.status === 'rejected') {
@@ -382,6 +409,39 @@ export class TasksSupabaseRemoteStore implements TasksRemoteStore {
     return this.updateHierarchy('tasks_checklist_items', id, baseRevision, patch);
   }
 
+  async insertHierarchyOperation(
+    operation: TaskHierarchyOperationInsert,
+  ): Promise<TasksRemoteWriteOutcome> {
+    const { error } = await this.supabase
+      .from('tasks_hierarchy_operations')
+      .insert(operation);
+    if (error && error.code !== '23505') return classifyRemoteError(error);
+
+    const current = await this.supabase
+      .from('tasks_hierarchy_operations')
+      .select('outcome, code')
+      .eq('id', operation.id)
+      .maybeSingle();
+    if (current.error) throwRemoteReadError(current.error);
+    if (current.data === null) {
+      return { status: 'conflict', remoteRevision: null, code: 'operation_missing' };
+    }
+    if (current.data.outcome === 'accepted' || current.data.outcome === 'noop') {
+      return { status: error ? 'already_applied' : 'applied' };
+    }
+    if (current.data.outcome === 'conflict') {
+      return {
+        status: 'conflict',
+        remoteRevision: null,
+        code: current.data.code ?? 'revision_set_changed',
+      };
+    }
+    return {
+      status: 'rejected',
+      code: current.data.code ?? 'hierarchy_operation_rejected',
+    };
+  }
+
   private async insertHierarchy<T extends HierarchyTable>(
     table: T,
     row: TablesInsert<T>,
@@ -505,6 +565,7 @@ function parseTaskInsert(entry: CrudEntry): TaskInsert {
     canceled_at: optionalText(data.canceled_at),
     disposition: optionalText(data.disposition) ?? 'present',
     deleted_at: optionalText(data.deleted_at),
+    deletion_root_id: optionalText(data.deletion_root_id),
     destination: optionalText(data.destination) ?? 'inbox',
     today_section: optionalText(data.today_section) ?? 'daytime',
     order_key: requireText(data.order_key, 'order_key'),
@@ -536,6 +597,7 @@ function parseTaskUpdate(entry: CrudEntry): TaskUpdate {
     'canceled_at',
     'disposition',
     'deleted_at',
+    'deletion_root_id',
     'destination',
     'today_section',
     'order_key',
@@ -660,16 +722,33 @@ function parseChecklistItemUpdate(entry: CrudEntry): TaskChecklistItemUpdate {
   } as TaskChecklistItemUpdate;
 }
 
+function parseHierarchyOperationInsert(entry: CrudEntry): TaskHierarchyOperationInsert {
+  const data = entry.opData ?? {};
+  return {
+    id: entry.id,
+    owner_id: requireText(data.owner_id, 'owner_id'),
+    root_type: requireText(data.root_type, 'root_type'),
+    root_id: requireText(data.root_id, 'root_id'),
+    operation: requireText(data.operation, 'operation'),
+    descendant_policy: requireText(data.descendant_policy, 'descendant_policy'),
+    expected_revisions: requireJsonObject(data.expected_revisions, 'expected_revisions'),
+    actor_type: requireText(data.actor_type, 'actor_type'),
+    mutation_channel: requireText(data.mutation_channel, 'mutation_channel'),
+    requested_at: requireText(data.requested_at, 'requested_at'),
+  };
+}
+
 const hierarchyMutableColumns = {
-  area: ['title', 'order_key', 'disposition', 'deleted_at'],
+  area: ['title', 'order_key', 'disposition', 'deleted_at', 'deletion_root_id'],
   project: [
     'area_id', 'title', 'notes', 'lifecycle', 'completed_at', 'canceled_at',
-    'disposition', 'deleted_at', 'destination', 'today_section', 'order_key',
+    'disposition', 'deleted_at', 'deletion_root_id', 'destination', 'today_section', 'order_key',
     'planning_order_key', 'start_date', 'deadline',
   ],
-  heading: ['title', 'order_key', 'disposition', 'deleted_at'],
+  heading: ['title', 'order_key', 'disposition', 'deleted_at', 'deletion_root_id'],
   checklist: [
     'title', 'completed', 'completed_at', 'order_key', 'disposition', 'deleted_at',
+    'deletion_root_id',
   ],
 } as const;
 
@@ -792,6 +871,26 @@ function optionalText(value: unknown): string | null {
     throw new InvalidTasksCrudEntryError('The task mutation contains invalid text');
   }
   return value;
+}
+
+function requireJsonObject(value: unknown, field: string): Record<string, number> {
+  let parsed = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      throw new InvalidTasksCrudEntryError(`The task mutation requires valid ${field}`);
+    }
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new InvalidTasksCrudEntryError(`The task mutation requires valid ${field}`);
+  }
+  for (const revision of Object.values(parsed)) {
+    if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 1) {
+      throw new InvalidTasksCrudEntryError(`The task mutation requires valid ${field}`);
+    }
+  }
+  return parsed as Record<string, number>;
 }
 
 function requirePositiveInteger(value: unknown, field: string): number {

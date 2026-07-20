@@ -17,7 +17,6 @@ export function useTaskProjectDetail(ownerId: string, projectId: string) {
     `SELECT * FROM tasks_todos
      WHERE owner_id = ?
        AND project_id = ?
-       AND lifecycle = 'open'
        AND disposition = 'present'
      ORDER BY heading_id, hierarchy_order_key, id`,
     [ownerId, projectId],

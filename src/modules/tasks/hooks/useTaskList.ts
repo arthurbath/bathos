@@ -26,6 +26,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
          FROM tasks_todos
          WHERE owner_id = ?
            AND disposition = 'deleted'
+           AND deletion_root_id = id
          ORDER BY deleted_at DESC, id`
       : historical
         ? `SELECT *
@@ -259,7 +260,7 @@ function taskIsVisible(
     return false;
   }
   if (view === 'trash') {
-    return task.disposition === 'deleted';
+    return task.disposition === 'deleted' && task.deletion_root_id === task.id;
   }
   if (view === 'logbook') {
     return task.disposition === 'present' && task.lifecycle !== 'open';
