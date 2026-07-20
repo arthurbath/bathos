@@ -38,6 +38,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
           ? `SELECT *
              FROM tasks_todos
              WHERE owner_id = ?
+               AND destination IN ('today', 'anytime')
                AND start_date > ?
                AND lifecycle = 'open'
                AND disposition = 'present'
@@ -48,7 +49,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
            AND destination = ?
            AND lifecycle = 'open'
            AND disposition = 'present'
-           AND (? <> 'today' OR start_date IS NULL OR start_date <= ?)
+           AND (? NOT IN ('today', 'anytime') OR start_date IS NULL OR start_date <= ?)
          ORDER BY order_key, id`,
     trash || historical
       ? [ownerId]
@@ -127,25 +128,32 @@ export function useTaskList(ownerId: string, view: TaskListView) {
     async (taskId: string, patch: EditableTaskPatch) => {
       const currentTask = tasks.find((task) => task.id === taskId);
       if (currentTask) {
-        setOptimisticTask(taskId, {
+        const optimisticTask = {
           ...currentTask,
           ...patch,
           revision: currentTask.revision + 1,
           client_mutation_id: `optimistic:${currentTask.client_mutation_id}`,
           updated_at: new Date().toISOString(),
-        });
+        };
+        setOptimisticTask(
+          taskId,
+          taskIsVisible(optimisticTask, ownerId, view, planningDate) ? optimisticTask : null,
+        );
       }
 
       try {
         const updatedTask = await repository.updateTask(ownerId, taskId, patch);
-        setOptimisticTask(taskId, updatedTask);
+        setOptimisticTask(
+          taskId,
+          taskIsVisible(updatedTask, ownerId, view, planningDate) ? updatedTask : null,
+        );
         return updatedTask;
       } catch (error) {
         setOptimisticTask(taskId, undefined);
         throw error;
       }
     },
-    [ownerId, repository, setOptimisticTask, tasks],
+    [ownerId, planningDate, repository, setOptimisticTask, tasks, view],
   );
   const transitionTask = useCallback(
     async (taskId: string, transition: TaskStateTransition) => {
@@ -265,7 +273,9 @@ function taskIsVisible(
   return task.destination === view
     && task.lifecycle === 'open'
     && task.disposition === 'present'
-    && (view !== 'today' || task.start_date === null || task.start_date <= planningDate);
+    && ((view !== 'today' && view !== 'anytime')
+      || task.start_date === null
+      || task.start_date <= planningDate);
 }
 
 function compareTasksForView(

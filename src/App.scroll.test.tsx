@@ -9,6 +9,8 @@ import { ScrollToTopOnPathnameChange } from "./App";
 describe("task route registry", () => {
   it("registers the Upcoming task view", () => {
     expect(TASK_ROUTE_PATHS).toContain("/tasks/upcoming");
+    expect(TASK_ROUTE_PATHS).toContain("/tasks/anytime");
+    expect(TASK_ROUTE_PATHS).toContain("/tasks/someday");
   });
 });
 

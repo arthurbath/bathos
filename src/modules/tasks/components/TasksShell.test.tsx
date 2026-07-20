@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { normalizeTaskEditorPlanningPatch } from './taskEditorPlanning';
 import { TasksShell } from './TasksShell';
 
 const mockTaskList = vi.fn();
@@ -391,6 +392,63 @@ describe('TasksShell', () => {
         destination: 'today',
         todaySection: 'daytime',
         startDate: '2026-07-20',
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('captures and manually plans active work in Anytime', async () => {
+    const anytimeTask = { ...task, destination: 'anytime' as const };
+    const taskList = { ...defaultTaskList(), tasks: [anytimeTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/anytime');
+
+    try {
+      expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'anytime');
+      expect(container.querySelector('input[aria-label="Add a Task"]')).toBeTruthy();
+      expect(container.querySelector('section[aria-label="Anytime Tasks"]')).toBeTruthy();
+
+      const actions = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Actions for Existing task"]',
+      );
+      await act(async () => {
+        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      const moveSomeday = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent === 'Move to Someday');
+      await act(async () => {
+        moveSomeday?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(taskList.moveTask).toHaveBeenCalledWith('task-a', {
+        destination: 'someday',
+        todaySection: 'daytime',
+        startDate: null,
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('captures inactive work in Someday and activates it when a start date is assigned', () => {
+    const somedayTask = { ...task, destination: 'someday' as const };
+    const taskList = { ...defaultTaskList(), tasks: [somedayTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/someday');
+
+    try {
+      expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'someday');
+      expect(container.querySelector('input[aria-label="Add a Task"]')).toBeTruthy();
+      expect(container.querySelector('section[aria-label="Someday Tasks"]')).toBeTruthy();
+      expect(normalizeTaskEditorPlanningPatch(
+        somedayTask,
+        { start_date: '2026-07-24' },
+        '2026-07-20',
+      )).toEqual({
+        destination: 'anytime',
+        today_section: 'daytime',
+        start_date: '2026-07-24',
       });
     } finally {
       cleanup(root, container);

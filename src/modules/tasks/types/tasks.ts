@@ -1,7 +1,7 @@
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import type { TaskDisposition, TaskLifecycle } from '@/modules/tasks/domain/taskState';
 
-export const taskDestinations = ['inbox', 'today'] as const;
+export const taskDestinations = ['inbox', 'today', 'anytime', 'someday'] as const;
 export const taskTodaySections = ['daytime', 'evening'] as const;
 export const taskEntryChannels = [
   'web',

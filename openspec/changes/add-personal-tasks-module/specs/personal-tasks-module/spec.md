@@ -54,12 +54,20 @@ The system SHALL derive Today, This Evening, Upcoming, Anytime, Someday, and Log
 - **THEN** the system includes it in Upcoming and withholds it from active Anytime work until its start date arrives
 
 #### Scenario: Leave work actionable without a date
-- **WHEN** an open to-do has no future start date and is not assigned to Someday
-- **THEN** the system includes it in Anytime
+- **WHEN** an open present to-do is assigned to Anytime and has no future start date
+- **THEN** the system includes it in Anytime and excludes Inbox, Today, and Someday work from that view
+
+#### Scenario: Temporarily defer Anytime work
+- **WHEN** an Anytime to-do receives a future start date
+- **THEN** the system withholds it from Anytime, includes it in Upcoming, and returns it to Anytime automatically when its owner-local start date arrives
 
 #### Scenario: Store an uncommitted possibility
 - **WHEN** a user assigns a to-do or project to Someday
-- **THEN** the system withholds it from Today, Upcoming, and Anytime until the user changes its planning state
+- **THEN** the system clears its start date and Today section and withholds it from Today, Upcoming, and Anytime until the user changes its planning state
+
+#### Scenario: Activate Someday work
+- **WHEN** a user moves a Someday item to Anytime or assigns it a start date
+- **THEN** the system changes its placement to Anytime and includes it in Anytime or Upcoming according to that start date
 
 #### Scenario: Complete or cancel work
 - **WHEN** a user completes or cancels a to-do or project
@@ -226,6 +234,10 @@ The system SHALL preserve intentional manual ordering across saves, refreshes, o
 #### Scenario: Reorder sections of Today independently
 - **WHEN** a user reorders work in Unfinished, Today, or This Evening
 - **THEN** the system changes only that item's order within the same visible section and does not move it across planning dates or Today sections
+
+#### Scenario: Reorder active and inactive planning pools independently
+- **WHEN** a user reorders work in Anytime or Someday
+- **THEN** the system changes only that item's order within its current planning placement and does not activate, defer, schedule, or move unrelated work
 
 #### Scenario: Restore after asynchronous save
 - **WHEN** a reorder is saved asynchronously and the view refreshes

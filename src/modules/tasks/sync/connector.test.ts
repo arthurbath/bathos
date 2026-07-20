@@ -15,14 +15,14 @@ import {
 
 const detectedAt = '2026-07-20T05:00:00.000Z';
 
-function taskInsertEntry() {
+function taskInsertEntry(destination: 'inbox' | 'today' | 'anytime' | 'someday' = 'inbox') {
   return new CrudEntry(1, UpdateType.PUT, 'tasks_todos', 'task-a', 1, {
     owner_id: 'owner-a',
     title: 'Offline task',
     notes: '',
     lifecycle: 'open',
     disposition: 'present',
-    destination: 'inbox',
+    destination,
     today_section: 'daytime',
     order_key: 'a0',
     start_date: null,
@@ -130,6 +130,18 @@ describe('task sync connector', () => {
     );
     expect(database.execute).not.toHaveBeenCalled();
     expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it('uploads Anytime and Someday as durable planning destinations', async () => {
+    for (const destination of ['anytime', 'someday'] as const) {
+      const { connector, database, remoteStore } = createHarness(taskInsertEntry(destination));
+
+      await connector.uploadData(database);
+
+      expect(remoteStore.insertTask).toHaveBeenCalledWith(
+        expect.objectContaining({ destination }),
+      );
+    }
   });
 
   it('uses the prior revision as the optimistic update precondition', async () => {

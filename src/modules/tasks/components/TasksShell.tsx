@@ -12,11 +12,13 @@ import {
   CalendarRange,
   CheckCircle2,
   Circle,
+  CircleDashed,
   CircleSlash2,
   Cloud,
   CornerDownLeft,
   HardDrive,
   Inbox,
+  ListTodo,
   MoreHorizontal,
   Moon,
   Plus,
@@ -51,6 +53,7 @@ import {
 } from '@/modules/tasks/hooks/useTaskList';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
+import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/taskEditorPlanning';
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
@@ -70,6 +73,8 @@ const taskViews = [
   { path: '/inbox', label: 'Inbox', icon: Inbox },
   { path: '/today', label: 'Today', icon: CalendarDays },
   { path: '/upcoming', label: 'Upcoming', icon: CalendarRange },
+  { path: '/anytime', label: 'Anytime', icon: ListTodo },
+  { path: '/someday', label: 'Someday', icon: CircleDashed },
   { path: '/logbook', label: 'Logbook', icon: Archive },
   { path: '/trash', label: 'Trash', icon: Trash2 },
 ] as const;
@@ -144,19 +149,38 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       },
     });
 
+    const moveToToday = action(view === 'upcoming' ? 'Make Available Today' : 'Move to Today', {
+      destination: 'today',
+      todaySection: 'daytime',
+      startDate: planningDate,
+    });
+    const moveToAnytime = action('Move to Anytime', {
+      destination: 'anytime',
+      todaySection: 'daytime',
+      startDate: null,
+    });
+    const moveToSomeday = action('Move to Someday', {
+      destination: 'someday',
+      todaySection: 'daytime',
+      startDate: null,
+    });
+    const moveToInbox = action('Move to Inbox', {
+      destination: 'inbox',
+      todaySection: 'daytime',
+      startDate: null,
+    });
+
     if (view === 'upcoming') {
-      return [action('Make Available Today', {
-        destination: 'today',
-        todaySection: 'daytime',
-        startDate: planningDate,
-      })];
+      return [moveToToday, moveToAnytime, moveToSomeday, moveToInbox];
     }
     if (view === 'inbox') {
-      return [action('Move to Today', {
-        destination: 'today',
-        todaySection: 'daytime',
-        startDate: planningDate,
-      })];
+      return [moveToToday, moveToAnytime, moveToSomeday];
+    }
+    if (view === 'anytime') {
+      return [moveToToday, moveToSomeday, moveToInbox];
+    }
+    if (view === 'someday') {
+      return [moveToToday, moveToAnytime, moveToInbox];
     }
 
     const section = getTodayTaskSection(task, planningDate);
@@ -187,11 +211,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         todaySection: 'daytime',
         startDate: addTaskCalendarDays(planningDate, 1),
       }),
-      action('Move to Inbox', {
-        destination: 'inbox',
-        todaySection: 'daytime',
-        startDate: null,
-      }),
+      moveToAnytime,
+      moveToSomeday,
+      moveToInbox,
     );
     return actions;
   };
@@ -206,11 +228,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onSelect={() => setSelectedTaskId((current) => (current === task.id ? null : task.id))}
         onUpdate={async (patch) => {
           try {
-            const normalizedPatch = task.today_section === 'evening'
-              && patch.start_date !== undefined
-              && patch.start_date !== planningDate
-              ? { ...patch, today_section: 'daytime' as const }
-              : patch;
+            const normalizedPatch = normalizeTaskEditorPlanningPatch(
+              task,
+              patch,
+              planningDate,
+            );
             await updateTask(task.id, normalizedPatch);
             setSelectedTaskId(null);
           } catch (updateError) {
@@ -226,14 +248,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           }
         }}
         planningActions={planningActionsForTask(task)}
-        onMoveUp={view === 'today' && index > 0 ? async () => {
+        onMoveUp={(view === 'today' || view === 'anytime' || view === 'someday') && index > 0 ? async () => {
           try {
             await reorderTask(task.id, 'up');
           } catch (reorderError) {
             showTaskError('Task Could Not Be Reordered', reorderError);
           }
         } : undefined}
-        onMoveDown={view === 'today' && index >= 0 && index < sectionTasks.length - 1 ? async () => {
+        onMoveDown={(view === 'today' || view === 'anytime' || view === 'someday')
+          && index >= 0
+          && index < sectionTasks.length - 1 ? async () => {
           try {
             await reorderTask(task.id, 'down');
           } catch (reorderError) {
@@ -274,7 +298,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
           <nav
             aria-label="Task views"
-            className="hidden grid-cols-5 rounded-md border border-[hsl(var(--grid-sticky-line))] p-1 md:grid"
+            className="hidden rounded-md border border-[hsl(var(--grid-sticky-line))] p-1 md:grid"
+            style={{ gridTemplateColumns: `repeat(${taskViews.length}, minmax(0, 1fr))` }}
           >
             {taskViews.map(({ path, label, icon: Icon }) => {
               const href = `${basePath}${path}`;
@@ -296,7 +321,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             })}
           </nav>
 
-          {view === 'inbox' || view === 'today' ? (
+          {view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday' ? (
             <form onSubmit={handleCreate} className="relative">
               <Plus
                 className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
@@ -495,7 +520,7 @@ function DeletedTaskRow({ task, onRestore }: { task: TaskTodo; onRestore: () => 
         <p className="text-xs text-muted-foreground">
           {task.lifecycle === 'open' ? 'Open' : task.lifecycle === 'completed' ? 'Completed' : 'Canceled'}
           {' · '}
-          {task.destination === 'inbox' ? 'Inbox' : 'Today'}
+          {getTaskViewLabel(task.destination)}
         </p>
       </div>
       <Button
@@ -870,6 +895,8 @@ function showTaskError(title: string, error: unknown): void {
 
 function getTaskViewLabel(view: TaskListView): string {
   if (view === 'inbox') return 'Inbox';
+  if (view === 'anytime') return 'Anytime';
+  if (view === 'someday') return 'Someday';
   if (view === 'logbook') return 'Logbook';
   if (view === 'upcoming') return 'Upcoming';
   if (view === 'trash') return 'Trash';
@@ -878,6 +905,8 @@ function getTaskViewLabel(view: TaskListView): string {
 
 function getTaskViewFromPath(pathname: string): TaskListView {
   if (pathname.endsWith('/inbox')) return 'inbox';
+  if (pathname.endsWith('/anytime')) return 'anytime';
+  if (pathname.endsWith('/someday')) return 'someday';
   if (pathname.endsWith('/logbook')) return 'logbook';
   if (pathname.endsWith('/upcoming')) return 'upcoming';
   if (pathname.endsWith('/trash')) return 'trash';
@@ -886,6 +915,8 @@ function getTaskViewFromPath(pathname: string): TaskListView {
 
 function getTaskSectionLabel(view: TaskListView): string {
   if (view === 'inbox') return 'Inbox Tasks';
+  if (view === 'anytime') return 'Anytime Tasks';
+  if (view === 'someday') return 'Someday Tasks';
   if (view === 'logbook') return 'Logbook Tasks';
   if (view === 'upcoming') return 'Upcoming Tasks';
   if (view === 'trash') return 'Deleted Tasks';

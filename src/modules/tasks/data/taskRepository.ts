@@ -156,7 +156,7 @@ export class TaskRepository {
     return this.database.writeTransaction(async (transaction) => {
       const destination = input.destination ?? 'inbox';
       const todaySection = input.todaySection ?? 'daytime';
-      assertTodaySection(destination, todaySection);
+      assertPlanningPlacement(destination, todaySection, startDate);
       const lastTask = input.orderKey
         ? null
         : await transaction.getOptional<{ order_key: string }>(
@@ -275,11 +275,8 @@ export class TaskRepository {
   ): Promise<TaskTodo> {
     assertOwner(ownerId);
     const todaySection = input.todaySection ?? 'daytime';
-    assertTodaySection(input.destination, todaySection);
     const startDate = normalizeTaskCalendarDate(input.startDate, 'Start date') ?? null;
-    if (input.destination === 'inbox' && (todaySection !== 'daytime' || startDate !== null)) {
-      throw new InvalidTaskMutationError('Inbox work cannot retain Today planning placement');
-    }
+    assertPlanningPlacement(input.destination, todaySection, startDate);
 
     return this.database.writeTransaction(async (transaction) => {
       const current = await getOwnedTask(transaction, ownerId, taskId);
@@ -384,9 +381,10 @@ export class TaskRepository {
         patch.start_date === undefined ? current.start_date : patch.start_date,
         patch.deadline === undefined ? current.deadline : patch.deadline,
       );
-      assertTodaySection(
+      assertPlanningPlacement(
         patch.destination === undefined ? current.destination : patch.destination,
         patch.today_section === undefined ? current.today_section : patch.today_section,
+        patch.start_date === undefined ? current.start_date : patch.start_date,
       );
 
       return updateOwnedTask(
@@ -426,9 +424,10 @@ export class TaskRepository {
         patch.start_date === undefined ? current.start_date : patch.start_date,
         patch.deadline === undefined ? current.deadline : patch.deadline,
       );
-      assertTodaySection(
+      assertPlanningPlacement(
         patch.destination === undefined ? current.destination : patch.destination,
         patch.today_section === undefined ? current.today_section : patch.today_section,
+        patch.start_date === undefined ? current.start_date : patch.start_date,
       );
 
       return updateOwnedTask(
@@ -559,12 +558,17 @@ function assertSource(
   }
 }
 
-function assertTodaySection(
+function assertPlanningPlacement(
   destination: TaskDestination,
   todaySection: TaskTodaySection,
+  startDate: string | null,
 ): void {
   if (todaySection === 'evening' && destination !== 'today') {
     throw new InvalidTaskMutationError('This Evening is available only within Today');
+  }
+  if ((destination === 'inbox' || destination === 'someday') && startDate !== null) {
+    const label = destination === 'inbox' ? 'Inbox' : 'Someday';
+    throw new InvalidTaskMutationError(`${label} work cannot retain a start date`);
   }
 }
 

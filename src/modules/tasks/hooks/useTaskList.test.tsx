@@ -330,6 +330,99 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
+  it('keeps future Anytime work in Upcoming while supporting direct Anytime capture', async () => {
+    harnessView = 'anytime';
+    const availableTask = {
+      ...originalTask,
+      destination: 'anytime' as const,
+      start_date: null,
+    };
+    const futureTask = {
+      ...availableTask,
+      id: 'task-future',
+      start_date: '2099-01-02',
+    };
+    queryData = [futureTask, availableTask];
+    const repository = {
+      createTask: vi.fn().mockResolvedValue({
+        ...availableTask,
+        id: 'task-created',
+        title: 'Anytime capture',
+      }),
+      updateTask: vi.fn(),
+      moveTask: vi.fn(),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.tasks.map((item) => item.id)).toEqual(['task-a']);
+      expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain(
+        "? NOT IN ('today', 'anytime')",
+      );
+
+      await act(async () => {
+        await latest.createTask('Anytime capture');
+      });
+      expect(repository.createTask).toHaveBeenCalledWith({
+        ownerId: 'owner-a',
+        title: 'Anytime capture',
+        destination: 'anytime',
+        startDate: null,
+      });
+
+      harnessView = 'upcoming';
+      queryData = [futureTask];
+      rerender(root);
+      expect(latest.tasks.map((item) => item.id)).toEqual(['task-future']);
+      expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain(
+        "destination IN ('today', 'anytime')",
+      );
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('removes a Someday task immediately when assigning a start date activates it', async () => {
+    harnessView = 'someday';
+    const somedayTask = { ...originalTask, destination: 'someday' as const };
+    queryData = [somedayTask];
+    const activatedTask = {
+      ...somedayTask,
+      destination: 'anytime' as const,
+      start_date: '2099-01-02',
+      revision: 2,
+      client_mutation_id: 'mutation-activated',
+    };
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn().mockResolvedValue(activatedTask),
+      moveTask: vi.fn(),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      let updatePromise!: Promise<TaskTodo>;
+      act(() => {
+        updatePromise = latest.updateTask('task-a', {
+          destination: 'anytime',
+          today_section: 'daytime',
+          start_date: '2099-01-02',
+        });
+      });
+      expect(latest.tasks).toEqual([]);
+      await act(async () => {
+        await updatePromise;
+      });
+      expect(latest.tasks).toEqual([]);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('groups unfinished, daytime, and evening work while reordering only within a section', async () => {
     const unfinished = {
       ...originalTask,

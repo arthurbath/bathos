@@ -1,0 +1,22 @@
+import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
+import type { TaskTodo } from '@/modules/tasks/types/tasks';
+
+export function normalizeTaskEditorPlanningPatch(
+  task: TaskTodo,
+  patch: EditableTaskPatch,
+  planningDate: string,
+): EditableTaskPatch {
+  const normalizedPatch: EditableTaskPatch = { ...patch };
+  if (task.destination === 'someday'
+    && patch.start_date !== undefined
+    && patch.start_date !== null) {
+    normalizedPatch.destination = 'anytime';
+    normalizedPatch.today_section = 'daytime';
+  }
+  if (task.today_section === 'evening'
+    && patch.start_date !== undefined
+    && patch.start_date !== planningDate) {
+    normalizedPatch.today_section = 'daytime';
+  }
+  return normalizedPatch;
+}

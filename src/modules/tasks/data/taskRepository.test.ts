@@ -171,7 +171,46 @@ describe('task repository', () => {
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain('today_section = ?');
   });
 
-  it('rejects This Evening outside Today and scheduled placement in Inbox', async () => {
+  it('moves active work to Anytime or Someday with destination-scoped planning', async () => {
+    const anytimeHarness = createHarness(existingTask);
+    vi.mocked(anytimeHarness.transaction.getOptional)
+      .mockResolvedValueOnce(existingTask)
+      .mockResolvedValueOnce({ order_key: 'a0' });
+
+    await expect(anytimeHarness.repository.moveTask('owner-a', 'task-a', {
+      destination: 'anytime',
+      startDate: '2026-07-24',
+    })).resolves.toMatchObject({
+      destination: 'anytime',
+      today_section: 'daytime',
+      start_date: '2026-07-24',
+    });
+
+    const scheduledTask = {
+      ...existingTask,
+      destination: 'today' as const,
+      today_section: 'evening' as const,
+      start_date: '2026-07-20',
+      deadline: '2026-07-24',
+    };
+    const somedayHarness = createHarness(scheduledTask);
+    vi.mocked(somedayHarness.transaction.getOptional)
+      .mockResolvedValueOnce(scheduledTask)
+      .mockResolvedValueOnce(null);
+
+    await expect(somedayHarness.repository.moveTask('owner-a', 'task-a', {
+      destination: 'someday',
+      todaySection: 'daytime',
+      startDate: null,
+    })).resolves.toMatchObject({
+      destination: 'someday',
+      today_section: 'daytime',
+      start_date: null,
+      deadline: '2026-07-24',
+    });
+  });
+
+  it('rejects Today-only placement outside Today and start dates in inactive destinations', async () => {
     const { repository } = createHarness(existingTask);
 
     await expect(repository.createTask({
@@ -183,7 +222,20 @@ describe('task repository', () => {
     await expect(repository.moveTask('owner-a', 'task-a', {
       destination: 'inbox',
       startDate: '2026-07-20',
-    })).rejects.toThrow('Inbox work cannot retain Today planning placement');
+    })).rejects.toThrow('Inbox work cannot retain a start date');
+    await expect(repository.createTask({
+      ownerId: 'owner-a',
+      title: 'Inactive later task',
+      destination: 'someday',
+      startDate: '2026-07-20',
+    })).rejects.toThrow('Someday work cannot retain a start date');
+
+    const somedayTask = { ...existingTask, destination: 'someday' as const };
+    const updateHarness = createHarness(somedayTask);
+    await expect(updateHarness.repository.updateTask('owner-a', 'task-a', {
+      start_date: '2026-07-20',
+    })).rejects.toThrow('Someday work cannot retain a start date');
+    expect(updateHarness.transaction.execute).not.toHaveBeenCalled();
   });
 
   it('restores the prior snapshot as a revision-checked inverse mutation', async () => {
@@ -315,6 +367,7 @@ describe('task repository', () => {
   it('validates date-only planning ranges against the complete current task', async () => {
     const { repository, transaction } = createHarness({
       ...existingTask,
+      destination: 'anytime',
       start_date: '2026-07-20',
     });
 
@@ -325,6 +378,7 @@ describe('task repository', () => {
 
     const invalidHarness = createHarness({
       ...existingTask,
+      destination: 'anytime',
       start_date: '2026-07-24',
     });
     await expect(
