@@ -18,6 +18,11 @@ describe('tasks PowerSync schema', () => {
       'tasks_history_events',
       'tasks_owner_binding',
       'tasks_projects',
+      'tasks_recurrence_definitions',
+      'tasks_recurrence_evaluations',
+      'tasks_recurrence_occurrences',
+      'tasks_recurrence_revisions',
+      'tasks_recurrence_status_events',
       'tasks_sync_issues',
       'tasks_template_instantiations',
       'tasks_template_revisions',
@@ -37,6 +42,11 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_templates.local_only).toBe(false);
     expect(tables.tasks_template_revisions.local_only).toBe(false);
     expect(tables.tasks_template_instantiations.local_only).toBe(false);
+    expect(tables.tasks_recurrence_definitions.local_only).toBe(false);
+    expect(tables.tasks_recurrence_revisions.local_only).toBe(false);
+    expect(tables.tasks_recurrence_occurrences.local_only).toBe(false);
+    expect(tables.tasks_recurrence_evaluations.local_only).toBe(false);
+    expect(tables.tasks_recurrence_status_events.local_only).toBe(false);
     expect(tables.tasks_sync_issues.local_only).toBe(true);
     expect(tables.tasks_owner_binding.local_only).toBe(true);
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('client_mutation_id');
@@ -47,6 +57,9 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('actionability');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain(
       'template_instantiation_id',
+    );
+    expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain(
+      'recurrence_occurrence_id',
     );
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('project_id');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('deletion_root_id');

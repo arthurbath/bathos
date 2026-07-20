@@ -2226,13 +2226,161 @@ var instantiateTaskTemplate = defineTool({
   ))
 });
 
+// src/lib/mcp/tools/tasks-recurrence.ts
+async function readMany4(query) {
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+function stripOwner3(row) {
+  const { owner_id: _ownerId, ...record } = row;
+  return record;
+}
+async function getTaskRecurrencesData(input, auth2) {
+  let query = auth2.supabase.from("tasks_recurrence_definitions").select("*").eq("owner_id", auth2.userId);
+  if (!input.include_archived) query = query.neq("status", "archived");
+  const definitions = await readMany4(query.order("name").order("id").limit(input.limit + 1));
+  const visible = definitions.slice(0, input.limit);
+  const ids = visible.map(({ id }) => id);
+  const revisions = ids.length === 0 ? [] : await readMany4(auth2.supabase.from("tasks_recurrence_revisions").select("*").eq("owner_id", auth2.userId).in("recurrence_id", ids).order("recurrence_id").order("revision", { ascending: false }));
+  const occurrenceRows = !input.include_occurrences || ids.length === 0 ? [] : await readMany4(auth2.supabase.from("tasks_recurrence_occurrences").select("*").eq("owner_id", auth2.userId).in("recurrence_id", ids).order("scheduled_date", { ascending: false }).limit(501));
+  const occurrences = occurrenceRows.slice(0, 500);
+  const currentByDefinition = new Map(revisions.map((revision) => [
+    `${revision.recurrence_id}:${revision.revision}`,
+    revision
+  ]));
+  const occurrencesByDefinition = /* @__PURE__ */ new Map();
+  for (const occurrence of occurrences) {
+    const rows = occurrencesByDefinition.get(occurrence.recurrence_id) ?? [];
+    rows.push(stripOwner3(occurrence));
+    occurrencesByDefinition.set(occurrence.recurrence_id, rows);
+  }
+  return {
+    recurrences: visible.map((definition) => ({
+      ...stripOwner3(definition),
+      current_revision_record: currentByDefinition.has(
+        `${definition.id}:${definition.current_revision}`
+      ) ? stripOwner3(currentByDefinition.get(`${definition.id}:${definition.current_revision}`)) : null,
+      ...input.include_occurrences ? { occurrences: occurrencesByDefinition.get(definition.id) ?? [] } : {}
+    })),
+    truncated: definitions.length > input.limit,
+    occurrences_truncated: input.include_occurrences && occurrenceRows.length > 500
+  };
+}
+async function saveTaskRecurrenceData(input, auth2) {
+  const { data, error } = await auth2.supabase.rpc("tasks_save_recurrence", {
+    _recurrence_id: input.recurrence_id ?? null,
+    _expected_record_revision: input.expected_record_revision ?? null,
+    _name: input.name,
+    _template_id: input.template_id,
+    _template_revision: input.template_revision ?? null,
+    _rule_mode: input.rule_mode,
+    _frequency: input.frequency,
+    _interval_count: input.interval_count,
+    _start_date: input.start_date,
+    _planning_timezone: input.planning_timezone,
+    _missed_policy: input.missed_policy,
+    _catch_up_limit: input.catch_up_limit,
+    _target_area_id: input.target_area_id ?? null,
+    _mutation_id: input.idempotency_key,
+    _mutation_channel: "mcp",
+    _actor_type: "automation"
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function setTaskRecurrenceStatusData(input, auth2) {
+  const { data, error } = await auth2.supabase.rpc("tasks_set_recurrence_status", {
+    _recurrence_id: input.recurrence_id,
+    _expected_record_revision: input.expected_record_revision,
+    _status: input.status,
+    _mutation_id: input.idempotency_key,
+    _mutation_channel: "mcp",
+    _actor_type: "automation"
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function evaluateTaskRecurrenceData(input, auth2) {
+  const { data, error } = await auth2.supabase.rpc("tasks_evaluate_recurrence", {
+    _recurrence_id: input.recurrence_id,
+    _through_date: input.through_date,
+    _request_id: input.idempotency_key,
+    _entry_channel: "mcp",
+    _actor_type: "automation"
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+var calendarDateSchema3 = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+var getTaskRecurrences = defineTool({
+  name: "get_task_recurrences",
+  title: "Get Task Recurrences",
+  description: "Read owner-scoped recurrence definitions, immutable current rules, and optionally their generated occurrence identities.",
+  inputSchema: {
+    include_archived: z.boolean().default(false),
+    include_occurrences: z.boolean().default(false),
+    limit: z.number().int().min(1).max(500).default(250)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(getTaskRecurrencesData(input, requireAuthenticated(ctx)))
+});
+var saveTaskRecurrence = defineTool({
+  name: "save_task_recurrence",
+  title: "Save Task Recurrence",
+  description: "Create or revise one recurrence definition from an immutable native task-template revision. Existing generated work never changes.",
+  inputSchema: {
+    recurrence_id: uuidSchema.optional().describe("Existing recurrence to revise. Omit to create."),
+    expected_record_revision: z.number().int().positive().optional().describe("Required current record revision when revising an existing recurrence."),
+    name: z.string().min(1).max(500),
+    template_id: uuidSchema,
+    template_revision: z.number().int().positive().optional(),
+    rule_mode: z.enum(["calendar", "after_completion"]),
+    frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
+    interval_count: z.number().int().min(1).max(1e3).default(1),
+    start_date: calendarDateSchema3,
+    planning_timezone: z.string().min(1).max(200),
+    missed_policy: z.enum(["skip", "latest", "all"]).default("latest"),
+    catch_up_limit: z.number().int().min(1).max(100).default(50),
+    target_area_id: uuidSchema.optional(),
+    idempotency_key: uuidSchema.describe("Stable UUID for this exact save request.")
+  },
+  annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(saveTaskRecurrenceData(input, requireAuthenticated(ctx)))
+});
+var setTaskRecurrenceStatus = defineTool({
+  name: "set_task_recurrence_status",
+  title: "Set Task Recurrence Status",
+  description: "Pause, resume, or permanently archive one recurrence definition without changing existing generated work.",
+  inputSchema: {
+    recurrence_id: uuidSchema,
+    expected_record_revision: z.number().int().positive(),
+    status: z.enum(["active", "paused", "archived"]),
+    idempotency_key: uuidSchema.describe("Stable UUID for this exact status request.")
+  },
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(setTaskRecurrenceStatusData(input, requireAuthenticated(ctx)))
+});
+var evaluateTaskRecurrence = defineTool({
+  name: "evaluate_task_recurrence",
+  title: "Evaluate Task Recurrence",
+  description: "Request idempotent server-side catch-up for one recurrence through an explicit local calendar date.",
+  inputSchema: {
+    recurrence_id: uuidSchema,
+    through_date: calendarDateSchema3,
+    idempotency_key: uuidSchema.describe("Stable UUID for this exact evaluation request.")
+  },
+  annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(evaluateTaskRecurrenceData(input, requireAuthenticated(ctx)))
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "rsqfokyqntmtdejfwmjs";
 var mcp_default = defineMcp({
   name: "bathos-mcp",
   title: "BathOS",
   version: "0.1.0",
-  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, planning views, and native templates plus guarded create, update, move, schedule, template-instantiation, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
+  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, planning views, native templates, and explicit recurrence definitions plus guarded create, update, move, schedule, template-instantiation, recurrence, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates and planning time zones, never tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -2251,6 +2399,7 @@ var mcp_default = defineMcp({
     getTaskRecord,
     getTaskView,
     getTaskTemplates,
+    getTaskRecurrences,
     createTask,
     createMailTask,
     beginMailRetirement,
@@ -2259,7 +2408,10 @@ var mcp_default = defineMcp({
     moveTask,
     scheduleTask,
     transitionTask,
-    instantiateTaskTemplate
+    instantiateTaskTemplate,
+    saveTaskRecurrence,
+    setTaskRecurrenceStatus,
+    evaluateTaskRecurrence
   ]
 });
 

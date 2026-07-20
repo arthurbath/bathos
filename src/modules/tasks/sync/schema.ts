@@ -33,6 +33,10 @@ const taskTodos = new Table(
     template_revision: column.integer,
     template_instantiation_id: column.text,
     template_node_id: column.text,
+    recurrence_definition_id: column.text,
+    recurrence_revision: column.integer,
+    recurrence_occurrence_id: column.text,
+    recurrence_logical_key: column.text,
     revision: column.integer,
     client_mutation_id: column.text,
     created_at: column.text,
@@ -112,6 +116,10 @@ const taskProjects = new Table(
     template_revision: column.integer,
     template_instantiation_id: column.text,
     template_node_id: column.text,
+    recurrence_definition_id: column.text,
+    recurrence_revision: column.integer,
+    recurrence_occurrence_id: column.text,
+    recurrence_logical_key: column.text,
     entry_channel: column.text,
     last_mutation_channel: column.text,
     last_actor_type: column.text,
@@ -340,6 +348,110 @@ const taskTemplateInstantiations = new Table(
   },
 );
 
+const taskRecurrenceDefinitions = new Table(
+  {
+    owner_id: column.text,
+    name: column.text,
+    status: column.text,
+    current_revision: column.integer,
+    record_revision: column.integer,
+    evaluated_through_date: column.text,
+    archived_at: column.text,
+    last_mutation_channel: column.text,
+    last_actor_type: column.text,
+    client_mutation_id: column.text,
+    created_at: column.text,
+    updated_at: column.text,
+  },
+  {
+    indexes: {
+      ownerStatusUpdated: ['owner_id', 'status', '-updated_at'],
+    },
+  },
+);
+
+const taskRecurrenceRevisions = new Table(
+  {
+    owner_id: column.text,
+    recurrence_id: column.text,
+    revision: column.integer,
+    name: column.text,
+    template_id: column.text,
+    template_revision: column.integer,
+    rule_mode: column.text,
+    frequency: column.text,
+    interval_count: column.integer,
+    start_date: column.text,
+    planning_timezone: column.text,
+    missed_policy: column.text,
+    catch_up_limit: column.integer,
+    target_area_id: column.text,
+    client_mutation_id: column.text,
+    created_at: column.text,
+  },
+  {
+    indexes: {
+      ownerDefinitionRevision: ['owner_id', 'recurrence_id', '-revision'],
+    },
+  },
+);
+
+const taskRecurrenceOccurrences = new Table(
+  {
+    owner_id: column.text,
+    recurrence_id: column.text,
+    recurrence_revision: column.integer,
+    logical_key: column.text,
+    scheduled_date: column.text,
+    predecessor_occurrence_id: column.text,
+    template_instantiation_id: column.text,
+    root_type: column.text,
+    root_id: column.text,
+    client_mutation_id: column.text,
+    generated_at: column.text,
+  },
+  {
+    indexes: {
+      ownerDefinitionSchedule: ['owner_id', 'recurrence_id', '-scheduled_date'],
+      ownerRoot: ['owner_id', 'root_type', 'root_id'],
+    },
+  },
+);
+
+const taskRecurrenceEvaluations = new Table(
+  {
+    owner_id: column.text,
+    recurrence_id: column.text,
+    through_date: column.text,
+    result: column.text,
+    client_mutation_id: column.text,
+    created_at: column.text,
+  },
+  {
+    indexes: {
+      ownerDefinitionCreated: ['owner_id', 'recurrence_id', '-created_at'],
+    },
+  },
+);
+
+const taskRecurrenceStatusEvents = new Table(
+  {
+    owner_id: column.text,
+    recurrence_id: column.text,
+    requested_status: column.text,
+    base_record_revision: column.integer,
+    result_record_revision: column.integer,
+    result: column.text,
+    client_mutation_id: column.text,
+    created_at: column.text,
+  },
+  {
+    indexes: {
+      ownerDefinitionCreated: ['owner_id', 'recurrence_id', '-created_at'],
+    },
+  },
+);
+
 const taskSyncIssues = new Table(
   {
     task_id: column.text,
@@ -379,6 +491,11 @@ export const tasksPowerSyncSchema = new Schema({
   tasks_templates: taskTemplates,
   tasks_template_revisions: taskTemplateRevisions,
   tasks_template_instantiations: taskTemplateInstantiations,
+  tasks_recurrence_definitions: taskRecurrenceDefinitions,
+  tasks_recurrence_revisions: taskRecurrenceRevisions,
+  tasks_recurrence_occurrences: taskRecurrenceOccurrences,
+  tasks_recurrence_evaluations: taskRecurrenceEvaluations,
+  tasks_recurrence_status_events: taskRecurrenceStatusEvents,
   tasks_sync_issues: taskSyncIssues,
   tasks_owner_binding: taskOwnerBinding,
 });

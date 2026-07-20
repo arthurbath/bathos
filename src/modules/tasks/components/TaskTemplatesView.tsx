@@ -21,6 +21,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { toast } from '@/hooks/use-toast';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import { useTaskTemplates } from '@/modules/tasks/hooks/useTaskTemplates';
+import { TaskRecurrencePanel } from '@/modules/tasks/components/TaskRecurrencePanel';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type {
   TaskTemplate,
@@ -313,6 +314,13 @@ export function TaskTemplatesView({
           })}
         </div>
       )}
+
+      <TaskRecurrencePanel
+        ownerId={ownerId}
+        templates={model.templates}
+        templateRevisions={model.revisions}
+        areas={hierarchy.areas}
+      />
     </div>
   );
 }

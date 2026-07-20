@@ -34,6 +34,10 @@ export const taskMailSourceTransitions = [
   'retired',
 ] as const;
 export const taskTemplateKinds = ['todo', 'project'] as const;
+export const taskRecurrenceStatuses = ['active', 'paused', 'archived'] as const;
+export const taskRecurrenceRuleModes = ['calendar', 'after_completion'] as const;
+export const taskRecurrenceFrequencies = ['daily', 'weekly', 'monthly', 'yearly'] as const;
+export const taskRecurrenceMissedPolicies = ['skip', 'latest', 'all'] as const;
 export const taskActorTypes = ['user', 'automation', 'system', 'import'] as const;
 export const taskHierarchyRootTypes = [
   'area',
@@ -80,6 +84,10 @@ export type TaskSourceKind = (typeof taskSourceKinds)[number];
 export type TaskMailSourceLifecycle = (typeof taskMailSourceLifecycles)[number];
 export type TaskMailSourceTransition = (typeof taskMailSourceTransitions)[number];
 export type TaskTemplateKind = (typeof taskTemplateKinds)[number];
+export type TaskRecurrenceStatus = (typeof taskRecurrenceStatuses)[number];
+export type TaskRecurrenceRuleMode = (typeof taskRecurrenceRuleModes)[number];
+export type TaskRecurrenceFrequency = (typeof taskRecurrenceFrequencies)[number];
+export type TaskRecurrenceMissedPolicy = (typeof taskRecurrenceMissedPolicies)[number];
 export type TaskActorType = (typeof taskActorTypes)[number];
 export type TaskHierarchyRootType = (typeof taskHierarchyRootTypes)[number];
 export type TaskHierarchyOperationKind = (typeof taskHierarchyOperations)[number];
@@ -103,6 +111,11 @@ type TaskHierarchyHistoryRow = Tables<'tasks_hierarchy_history_events'>;
 type TaskTemplateRow = Tables<'tasks_templates'>;
 type TaskTemplateRevisionRow = Tables<'tasks_template_revisions'>;
 type TaskTemplateInstantiationRow = Tables<'tasks_template_instantiations'>;
+type TaskRecurrenceDefinitionRow = Tables<'tasks_recurrence_definitions'>;
+type TaskRecurrenceRevisionRow = Tables<'tasks_recurrence_revisions'>;
+type TaskRecurrenceOccurrenceRow = Tables<'tasks_recurrence_occurrences'>;
+type TaskRecurrenceEvaluationRow = Tables<'tasks_recurrence_evaluations'>;
+type TaskRecurrenceStatusEventRow = Tables<'tasks_recurrence_status_events'>;
 
 type RefinedTaskFields = {
   lifecycle: TaskLifecycle;
@@ -259,5 +272,33 @@ export type TaskTemplateInstantiation = Omit<
   actor_type: TaskActorType;
   root_type: TaskTemplateKind;
 };
+
+export type TaskRecurrenceDefinition = Omit<
+  TaskRecurrenceDefinitionRow,
+  'status' | 'last_mutation_channel' | 'last_actor_type'
+> & {
+  status: TaskRecurrenceStatus;
+  last_mutation_channel: TaskEntryChannel;
+  last_actor_type: TaskActorType;
+};
+
+export type TaskRecurrenceRevision = Omit<
+  TaskRecurrenceRevisionRow,
+  'rule_mode' | 'frequency' | 'missed_policy'
+> & {
+  rule_mode: TaskRecurrenceRuleMode;
+  frequency: TaskRecurrenceFrequency;
+  missed_policy: TaskRecurrenceMissedPolicy;
+};
+
+export type TaskRecurrenceOccurrence = Omit<
+  TaskRecurrenceOccurrenceRow,
+  'root_type'
+> & {
+  root_type: TaskTemplateKind;
+};
+
+export type TaskRecurrenceEvaluation = TaskRecurrenceEvaluationRow;
+export type TaskRecurrenceStatusEvent = TaskRecurrenceStatusEventRow;
 
 export type TaskUserSettings = Tables<'tasks_user_settings'>;

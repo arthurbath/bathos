@@ -14,10 +14,12 @@ import {
   taskExportV5Collections,
   taskExportV6Collections,
   taskExportV8Collections,
+  taskExportV9Collections,
   type TaskExportV5,
   type TaskExportV6,
   type TaskExportV7,
   type TaskExportV8,
+  type TaskExportV9,
 } from './taskPortability';
 
 const checksum = 'a'.repeat(64);
@@ -41,7 +43,7 @@ const taskExport = {
   schema_version: 7,
 } as TaskExportV7;
 
-const currentTaskExport = {
+const versionEightExport = {
   format: 'garden.bath.tasks.export',
   schema_version: 8,
   created_at: '2026-07-20T05:30:00.000Z',
@@ -55,6 +57,21 @@ const currentTaskExport = {
   },
   data: Object.fromEntries(taskExportV8Collections.map((name) => [name, []])),
 } as TaskExportV8;
+
+const currentTaskExport = {
+  format: 'garden.bath.tasks.export',
+  schema_version: 9,
+  created_at: '2026-07-20T05:30:00.000Z',
+  manifest: {
+    collections: [...taskExportV9Collections],
+    counts: Object.fromEntries(taskExportV9Collections.map((name) => [name, 0])),
+    checksums: {
+      algorithm: 'sha256',
+      ...Object.fromEntries(taskExportV9Collections.map((name) => [name, checksum])),
+    },
+  },
+  data: Object.fromEntries(taskExportV9Collections.map((name) => [name, []])),
+} as TaskExportV9;
 
 const versionFiveExport = {
   ...versionSixExport,
@@ -83,7 +100,7 @@ describe('task portability', () => {
     const client = createClient([currentTaskExport]);
 
     await expect(createTaskExport(client)).resolves.toEqual(currentTaskExport);
-    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v8');
+    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v9');
     expect(serializeTaskExport(currentTaskExport)).toBe(`${JSON.stringify(currentTaskExport, null, 2)}\n`);
     expect(getTaskExportFilename(currentTaskExport.created_at)).toBe('bathos-tasks-2026-07-20.json');
   });
@@ -128,8 +145,24 @@ describe('task portability', () => {
     });
   });
 
+  it('retains restore compatibility with version eight exports', async () => {
+    const preview = {
+      dry_run: true,
+      schema_version: 8,
+      ...Object.fromEntries(taskExportV8Collections.map((name) => [name, report(0)])),
+    };
+    const client = createClient([preview]);
+
+    expect(parseTaskExport(versionEightExport)).toEqual(versionEightExport);
+    await expect(previewTaskRestore(client, versionEightExport)).resolves.toEqual(preview);
+    expect(client.rpc).toHaveBeenCalledWith('tasks_restore_export_v8', {
+      _envelope: versionEightExport,
+      _dry_run: true,
+    });
+  });
+
   it('rejects incompatible envelopes and inconsistent reports', async () => {
-    expect(() => parseTaskExport({ ...taskExport, schema_version: 9 })).toThrow(
+    expect(() => parseTaskExport({ ...taskExport, schema_version: 10 })).toThrow(
       InvalidTaskExportError,
     );
     expect(() => parseTaskExport({

@@ -68,7 +68,7 @@
 - [x] 5.7a Add date-only start-date and deadline storage, range validation, history, undo, export/restore, synchronization, and editing.
 - [x] 5.7b Apply owner-time-zone availability and deadline presentation across derived planning views.
 - [ ] 5.8 Add reminders using the responsibility model selected in the architecture gate.
-- [ ] 5.9 Add recurrence definitions and idempotent occurrence generation.
+- [x] 5.9 Add recurrence definitions and idempotent occurrence generation.
 - [x] 5.10 Add native to-do and project templates with provenance-aware instantiation.
 - [x] 5.11 Add structured actionability and source/origin fields without generic tags.
 - [x] 5.12a Add web-safe capture, route, row-focus, completion, reorder, and editor keyboard commands.
@@ -97,7 +97,7 @@
 - [ ] 7.1 Test offline create, edit, complete, reschedule, reorder, delete, restore, and recurrence workflows.
 - [ ] 7.2 Test overlapping mutations from web, MCP, Raycast, and any other active client.
 - [ ] 7.3 Test time-zone and daylight-saving transitions for date-only planning and reminders.
-- [ ] 7.4 Test recurrence retries, missed schedules, delayed clients, and duplicate-suppression behavior.
+- [x] 7.4 Test recurrence retries, missed schedules, delayed clients, and duplicate-suppression behavior.
 - [ ] 7.5 Test undo, trash restoration, backup, export, and restore with synthetic and disposable personal test data.
 - [ ] 7.6 Test keyboard traversal, focus restoration, screen-reader labels, and reduced-motion behavior.
 - [ ] 7.7 Measure task-view and search performance with a synthetic dataset larger than the current Things library.

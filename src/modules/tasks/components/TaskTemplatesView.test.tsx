@@ -11,9 +11,14 @@ const instantiate = vi.fn().mockResolvedValue({
   result: { project_id: null, root_id: 'created-task' },
 });
 const mockUseTaskTemplates = vi.fn();
+const mockUseTaskRecurrences = vi.fn();
+const recurrenceSave = vi.fn().mockResolvedValue({});
 
 vi.mock('@/modules/tasks/hooks/useTaskTemplates', () => ({
   useTaskTemplates: (...args: unknown[]) => mockUseTaskTemplates(...args),
+}));
+vi.mock('@/modules/tasks/hooks/useTaskRecurrences', () => ({
+  useTaskRecurrences: (...args: unknown[]) => mockUseTaskRecurrences(...args),
 }));
 
 vi.mock('@/platform/hooks/useHostModule', () => ({
@@ -117,10 +122,26 @@ function setInput(input: HTMLInputElement, value: string) {
 describe('TaskTemplatesView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseTaskRecurrences.mockReturnValue({
+      definitions: [],
+      revisions: new Map(),
+      occurrences: [],
+      planningDate: '2026-07-20',
+      mode: 'connected',
+      loading: false,
+      error: null,
+      save: recurrenceSave,
+      setStatus: vi.fn(),
+      evaluate: vi.fn(),
+    });
   });
 
   it('keeps synchronized templates visible but disables mutation in local mode', () => {
     mockUseTaskTemplates.mockReturnValue(model('local'));
+    mockUseTaskRecurrences.mockReturnValue({
+      ...mockUseTaskRecurrences(),
+      mode: 'local',
+    });
     const { container, root } = renderView();
     try {
       expect(container.textContent).toContain('Weekly Review');
@@ -156,6 +177,34 @@ describe('TaskTemplatesView', () => {
         templateId: template.id,
         templateRevision: 1,
         anchorDate: '2026-07-20',
+        targetAreaId: null,
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('saves an explicit recurrence rule from the current template revision', async () => {
+    mockUseTaskTemplates.mockReturnValue(model('connected'));
+    const { container, root } = renderView();
+    try {
+      const repeatName = container.querySelector<HTMLInputElement>('[data-recurrence-name]')!;
+      await act(async () => setInput(repeatName, 'Weekly Review Repeat'));
+      await act(async () => {
+        repeatName.form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+      expect(recurrenceSave).toHaveBeenCalledWith({
+        recurrenceId: undefined,
+        expectedRecordRevision: undefined,
+        name: 'Weekly Review Repeat',
+        templateId: template.id,
+        templateRevision: 1,
+        ruleMode: 'calendar',
+        frequency: 'weekly',
+        intervalCount: 1,
+        startDate: '2026-07-20',
+        missedPolicy: 'latest',
+        catchUpLimit: 50,
         targetAreaId: null,
       });
     } finally {

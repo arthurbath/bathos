@@ -14,6 +14,11 @@ import type {
   TaskMailSource,
   TaskMailSourceEvent,
   TaskProject,
+  TaskRecurrenceDefinition,
+  TaskRecurrenceEvaluation,
+  TaskRecurrenceOccurrence,
+  TaskRecurrenceRevision,
+  TaskRecurrenceStatusEvent,
   TaskTemplate,
   TaskTemplateInstantiation,
   TaskTemplateRevision,
@@ -26,6 +31,15 @@ type TemplateProvenanceFields =
   | 'template_revision'
   | 'template_instantiation_id'
   | 'template_node_id';
+type RecurrenceProvenanceFields =
+  | 'recurrence_definition_id'
+  | 'recurrence_revision'
+  | 'recurrence_occurrence_id'
+  | 'recurrence_logical_key';
+type PreRecurrenceTaskTodo = Omit<TaskTodo, RecurrenceProvenanceFields> &
+  Partial<Pick<TaskTodo, RecurrenceProvenanceFields>>;
+type PreRecurrenceTaskProject = Omit<TaskProject, RecurrenceProvenanceFields> &
+  Partial<Pick<TaskProject, RecurrenceProvenanceFields>>;
 type PreTemplateTaskTodo = Omit<TaskTodo, TemplateProvenanceFields> &
   Partial<Pick<TaskTodo, TemplateProvenanceFields>>;
 type PreTemplateTaskProject = Omit<TaskProject, TemplateProvenanceFields> &
@@ -231,13 +245,44 @@ export type TaskExportV8 = {
     TaskExportV7['data'],
     'tasks_projects' | 'tasks_headings' | 'tasks_todos' | 'tasks_checklist_items'
   > & {
-    tasks_projects: Array<Omit<TaskProject, 'owner_id'>>;
+    tasks_projects: Array<Omit<PreRecurrenceTaskProject, 'owner_id'>>;
     tasks_headings: Array<Omit<TaskHeading, 'owner_id'>>;
-    tasks_todos: Array<Omit<TaskTodo, 'owner_id'>>;
+    tasks_todos: Array<Omit<PreRecurrenceTaskTodo, 'owner_id'>>;
     tasks_checklist_items: Array<Omit<TaskChecklistItem, 'owner_id'>>;
     tasks_templates: Array<Omit<TaskTemplate, 'owner_id'>>;
     tasks_template_revisions: Array<Omit<TaskTemplateRevision, 'owner_id'>>;
     tasks_template_instantiations: Array<Omit<TaskTemplateInstantiation, 'owner_id'>>;
+  };
+};
+
+export const taskExportV9Collections = [
+  ...taskExportV8Collections,
+  'tasks_recurrence_definitions',
+  'tasks_recurrence_revisions',
+  'tasks_recurrence_occurrences',
+  'tasks_recurrence_evaluations',
+  'tasks_recurrence_status_events',
+] as const;
+
+type TaskExportV9Collection = (typeof taskExportV9Collections)[number];
+
+export type TaskExportV9 = {
+  format: 'garden.bath.tasks.export';
+  schema_version: 9;
+  created_at: string;
+  manifest: {
+    collections: [...typeof taskExportV9Collections];
+    counts: Record<TaskExportV9Collection, number>;
+    checksums: { algorithm: 'sha256' } & Record<TaskExportV9Collection, string>;
+  };
+  data: Omit<TaskExportV8['data'], 'tasks_projects' | 'tasks_todos'> & {
+    tasks_projects: Array<Omit<TaskProject, 'owner_id'>>;
+    tasks_todos: Array<Omit<TaskTodo, 'owner_id'>>;
+    tasks_recurrence_definitions: Array<Omit<TaskRecurrenceDefinition, 'owner_id'>>;
+    tasks_recurrence_revisions: Array<Omit<TaskRecurrenceRevision, 'owner_id'>>;
+    tasks_recurrence_occurrences: Array<Omit<TaskRecurrenceOccurrence, 'owner_id'>>;
+    tasks_recurrence_evaluations: Array<Omit<TaskRecurrenceEvaluation, 'owner_id'>>;
+    tasks_recurrence_status_events: Array<Omit<TaskRecurrenceStatusEvent, 'owner_id'>>;
   };
 };
 
@@ -249,7 +294,8 @@ export type TaskPortableExport =
   | TaskExportV5
   | TaskExportV6
   | TaskExportV7
-  | TaskExportV8;
+  | TaskExportV8
+  | TaskExportV9;
 
 export type TaskRestoreCollectionReport = {
   inserts: number;
@@ -262,7 +308,7 @@ export type TaskRestoreCollectionReport = {
 
 export type TaskRestoreReport = {
   dry_run: boolean;
-  schema_version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  schema_version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   applied?: boolean;
   code?: string | null;
   tasks_todos: TaskRestoreCollectionReport;
@@ -279,6 +325,11 @@ export type TaskRestoreReport = {
   tasks_templates?: TaskRestoreCollectionReport;
   tasks_template_revisions?: TaskRestoreCollectionReport;
   tasks_template_instantiations?: TaskRestoreCollectionReport;
+  tasks_recurrence_definitions?: TaskRestoreCollectionReport;
+  tasks_recurrence_revisions?: TaskRestoreCollectionReport;
+  tasks_recurrence_occurrences?: TaskRestoreCollectionReport;
+  tasks_recurrence_evaluations?: TaskRestoreCollectionReport;
+  tasks_recurrence_status_events?: TaskRestoreCollectionReport;
 };
 
 type TaskPortabilityClient = Pick<SupabaseClient<Database>, 'rpc'>;
@@ -292,14 +343,14 @@ export class InvalidTaskExportError extends Error {
 
 export async function createTaskExport(
   supabase: TaskPortabilityClient,
-): Promise<TaskExportV8> {
-  const { data, error } = await supabase.rpc('tasks_create_export_v8');
+): Promise<TaskExportV9> {
+  const { data, error } = await supabase.rpc('tasks_create_export_v9');
   if (error) {
     throw error;
   }
   const taskExport = parseTaskExport(data);
-  if (taskExport.schema_version !== 8) {
-    throw new InvalidTaskExportError('The current task export did not use schema version eight');
+  if (taskExport.schema_version !== 9) {
+    throw new InvalidTaskExportError('The current task export did not use schema version nine');
   }
   return taskExport;
 }
@@ -334,11 +385,11 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
   const record = requireRecord(value, 'Task export must be a JSON object');
   if (
     record.format !== 'garden.bath.tasks.export'
-    || ![1, 2, 3, 4, 5, 6, 7, 8].includes(record.schema_version as number)
+    || ![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(record.schema_version as number)
   ) {
     throw new InvalidTaskExportError('Task export format or schema version is unsupported');
   }
-  const schemaVersion = record.schema_version as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  const schemaVersion = record.schema_version as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
   const manifest = requireRecord(record.manifest, 'Task export manifest is invalid');
   const counts = requireRecord(manifest.counts, 'Task export counts are invalid');
@@ -346,7 +397,9 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
   const data = requireRecord(record.data, 'Task export data is invalid');
   const collections = requireArray(manifest.collections, 'Task export collections are invalid');
   if (schemaVersion >= 4) {
-    const expectedCollections = schemaVersion === 8
+    const expectedCollections = schemaVersion === 9
+      ? taskExportV9Collections
+      : schemaVersion === 8
       ? taskExportV8Collections
       : schemaVersion >= 6
       ? taskExportV6Collections
@@ -367,7 +420,9 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
         throw new InvalidTaskExportError('Task export manifest does not match its data');
       }
     }
-    return schemaVersion === 8
+    return schemaVersion === 9
+      ? value as TaskExportV9
+      : schemaVersion === 8
       ? value as TaskExportV8
       : schemaVersion === 7
       ? value as TaskExportV7
@@ -411,7 +466,7 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
 
 function parseTaskRestoreReport(
   value: unknown,
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
 ): TaskRestoreReport {
   const report = requireRecord(value, 'Task restore report is invalid');
   if (typeof report.dry_run !== 'boolean' || report.schema_version !== schemaVersion) {
@@ -423,7 +478,9 @@ function parseTaskRestoreReport(
     parseCollectionReport(report.tasks_user_settings);
   }
   if (schemaVersion >= 4) {
-    const expectedCollections = schemaVersion === 8
+    const expectedCollections = schemaVersion === 9
+      ? taskExportV9Collections
+      : schemaVersion === 8
       ? taskExportV8Collections
       : schemaVersion >= 6
       ? taskExportV6Collections
@@ -443,7 +500,9 @@ async function restoreTaskExport(
   dryRun: boolean,
 ): Promise<TaskRestoreReport> {
   const validatedExport = parseTaskExport(taskExport);
-  const functionName = validatedExport.schema_version === 8
+  const functionName = validatedExport.schema_version === 9
+    ? 'tasks_restore_export_v9'
+    : validatedExport.schema_version === 8
     ? 'tasks_restore_export_v8'
     : validatedExport.schema_version === 7
     ? 'tasks_restore_export_v7'
