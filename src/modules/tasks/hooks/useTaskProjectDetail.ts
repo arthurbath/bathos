@@ -12,7 +12,11 @@ import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskChecklistItem, TaskTodo } from '@/modules/tasks/types/tasks';
 
 export function useTaskProjectDetail(ownerId: string, projectId: string) {
-  const { repository, hierarchyRepository } = useTasksRuntime();
+  const {
+    repository,
+    hierarchyRepository,
+    hierarchyOperationsRepository,
+  } = useTasksRuntime();
   const tasksQuery = useQuery<TaskTodo>(
     `SELECT * FROM tasks_todos
      WHERE owner_id = ?
@@ -168,6 +172,27 @@ export function useTaskProjectDetail(ownerId: string, projectId: string) {
     return orderKey === null ? item : updateChecklistItem(itemId, { order_key: orderKey });
   }, [checklistItems, updateChecklistItem]);
 
+  const deleteChecklistItem = useCallback(async (itemId: string) => {
+    const currentItem = checklistItems.find(({ id }) => id === itemId);
+    if (currentItem) {
+      setOptimisticChecklist((current) => ({ ...current, [itemId]: null }));
+    }
+    try {
+      return await hierarchyOperationsRepository.request({
+        ownerId,
+        rootType: 'checklist_item',
+        rootId: itemId,
+        operation: 'delete',
+        descendantPolicy: 'cascade',
+      });
+    } catch (error) {
+      if (currentItem) {
+        setOptimisticChecklist((current) => ({ ...current, [itemId]: currentItem }));
+      }
+      throw error;
+    }
+  }, [checklistItems, hierarchyOperationsRepository, ownerId]);
+
   return {
     tasks,
     checklistItems,
@@ -181,6 +206,7 @@ export function useTaskProjectDetail(ownerId: string, projectId: string) {
     updateChecklistItem,
     completeChecklistItem,
     reorderChecklistItem,
+    deleteChecklistItem,
   };
 }
 

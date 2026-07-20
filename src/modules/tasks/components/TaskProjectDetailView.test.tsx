@@ -62,6 +62,7 @@ function detail() {
     updateChecklistItem: vi.fn().mockResolvedValue(undefined),
     completeChecklistItem: vi.fn().mockResolvedValue(undefined),
     reorderChecklistItem: vi.fn().mockResolvedValue(undefined),
+    deleteChecklistItem: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -211,6 +212,11 @@ describe('TaskProjectDetailView', () => {
         container.querySelector<HTMLButtonElement>('[aria-label="Move Step two Up"]')?.click();
       });
       expect(detailModel.reorderChecklistItem).toHaveBeenCalledWith('item-b', 'up');
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[aria-label="Delete Step one"]')?.click();
+      });
+      expect(detailModel.deleteChecklistItem).toHaveBeenCalledWith('item-a');
     } finally {
       cleanup(root, container);
     }

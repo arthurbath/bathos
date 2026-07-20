@@ -193,6 +193,71 @@ describe('useTaskProjectDetail', () => {
     }
   });
 
+  it('removes a checklist item immediately through the recoverable hierarchy path', async () => {
+    const pending = deferred<{ id: string; affectedIds: string[] }>();
+    const hierarchyOperationsRepository = {
+      request: vi.fn().mockReturnValue(pending.promise),
+    };
+    mocks.useTasksRuntime.mockReturnValue({
+      repository: {
+        createTask: vi.fn(),
+        updateTask: vi.fn(),
+        moveTaskToContainer: vi.fn(),
+      },
+      hierarchyRepository: hierarchyRepository(),
+      hierarchyOperationsRepository,
+    });
+    const { container, root } = renderHarness();
+
+    try {
+      let promise!: Promise<{ id: string; affectedIds: string[] }>;
+      act(() => {
+        promise = latest.deleteChecklistItem(item.id);
+      });
+      expect(latest.checklistItems).toEqual([]);
+      expect(hierarchyOperationsRepository.request).toHaveBeenCalledWith({
+        ownerId: 'owner-a',
+        rootType: 'checklist_item',
+        rootId: item.id,
+        operation: 'delete',
+        descendantPolicy: 'cascade',
+      });
+
+      await act(async () => {
+        pending.resolve({ id: 'operation-a', affectedIds: [item.id] });
+        await promise;
+      });
+      expect(latest.checklistItems).toEqual([]);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('restores an optimistically removed checklist item when deletion fails', async () => {
+    const hierarchyOperationsRepository = {
+      request: vi.fn().mockRejectedValue(new Error('offline write failed')),
+    };
+    mocks.useTasksRuntime.mockReturnValue({
+      repository: {
+        createTask: vi.fn(),
+        updateTask: vi.fn(),
+        moveTaskToContainer: vi.fn(),
+      },
+      hierarchyRepository: hierarchyRepository(),
+      hierarchyOperationsRepository,
+    });
+    const { container, root } = renderHarness();
+
+    try {
+      await expect(act(async () => {
+        await latest.deleteChecklistItem(item.id);
+      })).rejects.toThrow('offline write failed');
+      expect(latest.checklistItems).toEqual([item]);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('normalizes SQLite checklist booleans for React controls', () => {
     checklistRows = [{ ...item, completed: 0 as unknown as boolean }];
     mocks.useTasksRuntime.mockReturnValue({

@@ -1539,6 +1539,36 @@ describe('TasksShell', () => {
     }
   });
 
+  it('restores independently deleted checklist items from Trash', async () => {
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [] });
+    const deletedChecklistItem = {
+      id: 'checklist-a',
+      title: 'Verify release',
+      deleted_at: '2026-07-20T04:05:00.000Z',
+      root_type: 'checklist_item' as const,
+    };
+    const restore = vi.fn().mockResolvedValue(undefined);
+    mockTaskHierarchyTrash.mockReturnValue({
+      roots: [deletedChecklistItem],
+      loading: false,
+      error: null,
+      restore,
+    });
+    const { container, root } = renderShell('/tasks/trash');
+
+    try {
+      expect(container.textContent).toContain('Deleted Checklist Item');
+      const restoreButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Restore');
+      await act(async () => {
+        restoreButton?.click();
+      });
+      expect(restore).toHaveBeenCalledWith(deletedChecklistItem);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('exposes server-authoritative permanent deletion only when connected and synchronized', () => {
     const deletedTask = {
       ...task,

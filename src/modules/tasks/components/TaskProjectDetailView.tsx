@@ -564,6 +564,7 @@ function ProjectTaskSection({
             onReorderChecklistItem={(item, direction) => (
               detail.reorderChecklistItem(item.id, direction)
             )}
+            onDeleteChecklistItem={(item) => detail.deleteChecklistItem(item.id)}
           />
         ))}
       </div>
@@ -584,6 +585,7 @@ function ProjectTaskRow({
   onRenameChecklistItem,
   onCompleteChecklistItem,
   onReorderChecklistItem,
+  onDeleteChecklistItem,
 }: {
   task: TaskTodo;
   headings: TaskHeading[];
@@ -600,6 +602,7 @@ function ProjectTaskRow({
     item: TaskChecklistItem,
     direction: 'up' | 'down',
   ) => Promise<unknown>;
+  onDeleteChecklistItem: (item: TaskChecklistItem) => Promise<unknown>;
 }) {
   return (
     <article className="px-2 py-3 sm:px-4">
@@ -660,6 +663,7 @@ function ProjectTaskRow({
             onRename={onRenameChecklistItem}
             onComplete={onCompleteChecklistItem}
             onReorder={onReorderChecklistItem}
+            onDelete={onDeleteChecklistItem}
           />
         </details>
       </div>
@@ -674,6 +678,7 @@ function ChecklistEditor({
   onRename,
   onComplete,
   onReorder,
+  onDelete,
 }: {
   task: TaskTodo;
   items: TaskChecklistItem[];
@@ -681,6 +686,7 @@ function ChecklistEditor({
   onRename: (item: TaskChecklistItem, title: string) => Promise<unknown>;
   onComplete: (item: TaskChecklistItem, completed: boolean) => Promise<unknown>;
   onReorder: (item: TaskChecklistItem, direction: 'up' | 'down') => Promise<unknown>;
+  onDelete: (item: TaskChecklistItem) => Promise<unknown>;
 }) {
   const [title, setTitle] = useState('');
   const [creating, setCreating] = useState(false);
@@ -730,6 +736,20 @@ function ChecklistEditor({
             icon={ArrowDown}
             action={index < items.length - 1 ? () => onReorder(item, 'down') : undefined}
           />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`Delete ${item.title}`}
+            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive focus-visible:text-destructive"
+            onClick={() => {
+              void onDelete(item).catch((error) => {
+                showError('Checklist Item Could Not Be Deleted', error);
+              });
+            }}
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+          </Button>
         </div>
       ))}
       <form onSubmit={create} className="flex gap-2">
