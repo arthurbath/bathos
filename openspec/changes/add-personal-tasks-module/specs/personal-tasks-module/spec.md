@@ -30,6 +30,14 @@ The system SHALL deploy remote task synchronization only through an explicitly a
 - **WHEN** the production service, publication, stream rules, authentication, and client endpoint are configured
 - **THEN** a synthetic owner proves cross-client download, queued upload, conflict handling, restart recovery, owner isolation, and cleanup before the user stores personal task content
 
+#### Scenario: Evolve the synchronized task projection
+- **WHEN** a nonlocal task collection is added to or removed from the client schema
+- **THEN** the production and disposable streams, production and disposable publications, replication-role grants, database preflight, replica identity, RLS, and regression test change together as one exact owner-scoped set
+
+#### Scenario: Exclude server-only task secrets
+- **WHEN** the synchronized task projection is configured
+- **THEN** it excludes Web Push subscription material, Mail source lifecycle records, private operational context, and every non-Tasks module table
+
 #### Scenario: Operate without an approved remote topology
 - **WHEN** no production PowerSync endpoint is configured
 - **THEN** the module identifies itself as local-only, preserves that installation's durable task data, and does not imply cross-device or MCP convergence

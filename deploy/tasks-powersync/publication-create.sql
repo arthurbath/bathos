@@ -1,4 +1,4 @@
-DROP PUBLICATION IF EXISTS powersync;
+\set ON_ERROR_STOP on
 
 CREATE PUBLICATION powersync FOR TABLE
   public.tasks_areas,

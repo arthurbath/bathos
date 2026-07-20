@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(50);
+SELECT plan(51);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -36,6 +36,24 @@ SELECT has_table(
 SELECT has_table(
   'public', 'tasks_reminder_claims',
   'stores exact in-app claim receipts'
+);
+SELECT is(
+  (
+    SELECT count(*)
+    FROM pg_class AS relation
+    JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+    WHERE namespace.nspname = 'public'
+      AND relation.relname = ANY (ARRAY[
+        'tasks_reminders',
+        'tasks_reminder_occurrences',
+        'tasks_delivery_targets',
+        'tasks_reminder_deliveries',
+        'tasks_reminder_claims'
+      ])
+      AND relation.relreplident = 'f'
+  ),
+  5::bigint,
+  'uses full replica identity for every synchronized reminder table'
 );
 SELECT has_function(
   'public', 'tasks_save_reminder',

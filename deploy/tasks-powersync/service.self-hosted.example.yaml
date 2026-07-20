@@ -1,0 +1,31 @@
+# This fallback template is not used by PowerSync Cloud.
+# Every referenced value must come from a managed secret or deployment environment.
+
+_type: self-hosted
+
+telemetry:
+  disable_telemetry_sharing: true
+
+replication:
+  connections:
+    - type: postgresql
+      uri: !env PS_DATA_SOURCE_URI
+      sslmode: verify-full
+
+storage:
+  type: postgresql
+  uri: !env PS_STORAGE_URI
+  sslmode: verify-full
+
+port: !env PS_PORT
+
+sync_config:
+  path: sync-config.yaml
+
+client_auth:
+  supabase: true
+
+system:
+  logging:
+    level: info
+    format: json

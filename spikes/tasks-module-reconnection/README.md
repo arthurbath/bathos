@@ -2,6 +2,8 @@
 
 This isolated harness proves restart persistence and later reconciliation for the real BathOS Tasks module against local Supabase and a disposable self-hosted PowerSync service. It uses synthetic accounts and records only. It does not select a production PowerSync topology or change the committed BathOS environment.
 
+Its owner stream and publication mirror the canonical secret-free package under `deploy/tasks-powersync/`. A regression test derives the expected set from the browser client schema and fails if either harness drifts.
+
 ## Start
 
 From the repository root, start local Supabase, apply every migration, and install the disposable logical-replication publication:

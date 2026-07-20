@@ -1,6 +1,6 @@
-DROP PUBLICATION IF EXISTS powersync;
+\set ON_ERROR_STOP on
 
-CREATE PUBLICATION powersync FOR TABLE
+ALTER PUBLICATION powersync SET TABLE
   public.tasks_areas,
   public.tasks_projects,
   public.tasks_headings,
