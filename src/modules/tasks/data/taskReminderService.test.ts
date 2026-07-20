@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   InvalidTaskReminderError,
   TaskReminderService,
+  isSecurePushEndpoint,
   isTaskReminderTime,
 } from './taskReminderService';
 
@@ -114,5 +115,56 @@ describe('TaskReminderService', () => {
     expect(isTaskReminderTime('09:30')).toBe(true);
     expect(isTaskReminderTime('09:30:00')).toBe(true);
     expect(isTaskReminderTime('24:00')).toBe(false);
+  });
+
+  it('registers and revokes an owner-scoped Web Push target', async () => {
+    const target = {
+      id: 'target-a', owner_id: 'owner-a', channel: 'web_push',
+      endpoint_key: 'sha256:abc', label: 'This Browser', capability_status: 'active',
+      configuration: { preview: 'title' }, last_error_code: null,
+      last_seen_at: '2026-07-20T16:00:00Z', created_at: '2026-07-20T16:00:00Z',
+      updated_at: '2026-07-20T16:00:00Z',
+    };
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: { outcome: 'accepted', target }, error: null })
+      .mockResolvedValueOnce({
+        data: {
+          outcome: 'accepted',
+          target: { ...target, capability_status: 'revoked', last_error_code: 'user_disabled' },
+        },
+        error: null,
+      });
+    const service = new TaskReminderService({ rpc } as never);
+    const subscription = {
+      endpoint: 'https://push.example.test/subscription-a',
+      keys: { p256dh: 'public-key', auth: 'auth-secret' },
+    };
+
+    await expect(service.registerWebPush(subscription)).resolves.toMatchObject({
+      outcome: 'accepted', target: { id: 'target-a', capability_status: 'active' },
+    });
+    expect(rpc).toHaveBeenCalledWith('tasks_register_web_push_target', {
+      _endpoint: subscription.endpoint,
+      _p256dh: subscription.keys.p256dh,
+      _auth_secret: subscription.keys.auth,
+      _label: 'This Browser',
+      _reactivate_revoked: false,
+    });
+    await expect(service.revokeWebPush('target-a')).resolves.toMatchObject({
+      outcome: 'accepted', target: { capability_status: 'revoked' },
+    });
+  });
+
+  it('requires a secure Web Push endpoint before calling the server', async () => {
+    const rpc = vi.fn();
+    const service = new TaskReminderService({ rpc } as never);
+
+    await expect(service.registerWebPush({
+      endpoint: 'http://push.example.test/subscription-a',
+      keys: { p256dh: 'public-key', auth: 'auth-secret' },
+    })).rejects.toBeInstanceOf(InvalidTaskReminderError);
+    expect(isSecurePushEndpoint('https://push.example.test/subscription-a')).toBe(true);
+    expect(isSecurePushEndpoint('not a URL')).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

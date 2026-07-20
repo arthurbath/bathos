@@ -854,6 +854,51 @@ describe('TasksShell', () => {
     }
   });
 
+  it('acknowledges a Web Push delivery opened from its notification URL', async () => {
+    const acknowledge = vi.fn().mockResolvedValue(undefined);
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), mode: 'connected', dueItems: [],
+      planningTimeZone: 'America/Los_Angeles', loading: false, error: null,
+      save: vi.fn(), cancel: vi.fn(), acknowledge, claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/today?reminder_delivery=push-delivery-a');
+
+    try {
+      await act(async () => Promise.resolve());
+      expect(acknowledge).toHaveBeenCalledTimes(1);
+      expect(acknowledge).toHaveBeenCalledWith('push-delivery-a');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('reports degraded browser capability and offers an explicit enable action', async () => {
+    const enable = vi.fn().mockResolvedValue(undefined);
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), mode: 'connected', dueItems: [],
+      planningTimeZone: 'America/Los_Angeles', loading: false, error: null,
+      save: vi.fn(), cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+      webPush: {
+        status: 'available', busy: false, error: null,
+        enable, disable: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+    const { container, root } = renderShell();
+
+    try {
+      expect(container.querySelector('section[aria-label="Browser Reminder Capability"]')?.textContent)
+        .toContain('Background Reminders Off');
+      const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find(({ textContent }) => textContent === 'Enable');
+      await act(async () => button?.click());
+      expect(enable).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('moves an evening task back to daytime when its Today date is cleared', async () => {
     const eveningTask = {
       ...task,

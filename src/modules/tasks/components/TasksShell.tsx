@@ -68,6 +68,7 @@ import {
 import { useTaskHierarchy, type TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import { useTaskSearch } from '@/modules/tasks/hooks/useTaskSearch';
 import { useTaskReminders } from '@/modules/tasks/hooks/useTaskReminders';
+import type { TaskWebPushModel } from '@/modules/tasks/hooks/useTaskWebPush';
 import {
   useTaskHierarchyTrash,
   type DeletedTaskHierarchyRoot,
@@ -149,8 +150,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [searchTargetTaskId, setSearchTargetTaskId] = useState<string | null>(null);
   const taskSearch = useTaskSearch(userId, searchOpen);
   const reminders = useTaskReminders(userId);
+  const acknowledgeReminderDelivery = reminders.acknowledge;
   const captureInputRef = useRef<HTMLInputElement>(null);
   const commandReturnFocusRef = useRef<HTMLElement | null>(null);
+  const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
   const pendingNavigationRef = useRef(false);
   const navigationResetRef = useRef<number | null>(null);
 
@@ -158,6 +161,25 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setSelectedTaskId(null);
     captureInputRef.current?.focus();
   }, [view]);
+
+  useEffect(() => {
+    const parameters = new URLSearchParams(location.search);
+    const deliveryId = parameters.get('reminder_delivery');
+    if (!deliveryId || acknowledgedPushDeliveriesRef.current.has(deliveryId)) return;
+    acknowledgedPushDeliveriesRef.current.add(deliveryId);
+    void acknowledgeReminderDelivery(deliveryId).then(() => {
+      parameters.delete('reminder_delivery');
+      const remainingSearch = parameters.toString();
+      navigate({
+        pathname: location.pathname,
+        search: remainingSearch ? `?${remainingSearch}` : '',
+        hash: location.hash,
+      }, { replace: true });
+    }).catch((reminderError) => {
+      acknowledgedPushDeliveriesRef.current.delete(deliveryId);
+      showTaskError('Reminder Could Not Be Acknowledged', reminderError);
+    });
+  }, [acknowledgeReminderDelivery, location.hash, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (!searchTargetTaskId) return;
@@ -533,6 +555,27 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             />
           ) : null}
 
+          {reminders.webPush ? (
+            <TaskWebPushCapability
+              model={reminders.webPush}
+              connected={reminders.mode === 'connected'}
+              onEnable={async () => {
+                try {
+                  await reminders.webPush.enable();
+                } catch (reminderError) {
+                  showTaskError('Browser Reminders Could Not Be Enabled', reminderError);
+                }
+              }}
+              onDisable={async () => {
+                try {
+                  await reminders.webPush.disable();
+                } catch (reminderError) {
+                  showTaskError('Browser Reminders Could Not Be Disabled', reminderError);
+                }
+              }}
+            />
+          ) : null}
+
           <nav
             aria-label="Task views"
             className="hidden rounded-md border border-[hsl(var(--grid-sticky-line))] p-1 md:grid"
@@ -768,6 +811,80 @@ function TaskDueReminders({
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function TaskWebPushCapability({
+  model,
+  connected,
+  onEnable,
+  onDisable,
+}: {
+  model: TaskWebPushModel;
+  connected: boolean;
+  onEnable: () => Promise<void>;
+  onDisable: () => Promise<void>;
+}) {
+  if (model.status === 'checking') return null;
+
+  const active = model.status === 'active';
+  const canEnable = connected && ['available', 'revoked', 'error'].includes(model.status);
+  const heading = (() => {
+    switch (model.status) {
+      case 'active': return 'Browser Reminders On';
+      case 'available': return 'Background Reminders Off';
+      case 'denied': return 'Notifications Blocked';
+      case 'unsupported': return 'Background Reminders Unavailable';
+      case 'revoked': return 'Reminder Subscription Expired';
+      case 'error': return 'Background Reminders Degraded';
+      default: return 'Background Reminders Unconfigured';
+    }
+  })();
+  const detail = (() => {
+    if (!connected) return 'Background reminders require connected task storage.';
+    switch (model.status) {
+      case 'active':
+        return 'This browser can receive reminders while Tasks is closed. Notifications show task titles.';
+      case 'available':
+        return 'Enable notifications on this browser to receive reminders while Tasks is closed.';
+      case 'denied':
+        return 'Allow notifications in this browser or system settings. In-app reminders remain available.';
+      case 'unsupported':
+        return 'This browser cannot receive standards-based Web Push. In-app reminders remain available.';
+      case 'revoked':
+        return 'The notification provider expired this browser subscription. Enable it again to register a new one.';
+      case 'error':
+        return model.error?.message ?? 'The browser reminder capability could not be verified.';
+      default:
+        return 'The Web Push provider keys have not been configured for this installation.';
+    }
+  })();
+
+  return (
+    <section
+      aria-label="Browser Reminder Capability"
+      aria-live="polite"
+      className={`flex flex-col gap-3 rounded-md border p-4 sm:flex-row sm:items-center ${
+        active ? 'border-success/40 bg-success/5' : 'border-warning/40 bg-warning/5'
+      }`}
+    >
+      <div className="flex min-w-0 flex-1 gap-3">
+        <Bell className={`mt-0.5 h-4 w-4 shrink-0 ${active ? 'text-success' : 'text-warning'}`} aria-hidden="true" />
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-foreground">{heading}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+        </div>
+      </div>
+      {active ? (
+        <Button type="button" variant="outline" size="sm" disabled={model.busy} onClick={() => void onDisable()}>
+          Disable
+        </Button>
+      ) : canEnable ? (
+        <Button type="button" variant="outline" size="sm" disabled={model.busy} onClick={() => void onEnable()}>
+          Enable
+        </Button>
+      ) : null}
     </section>
   );
 }

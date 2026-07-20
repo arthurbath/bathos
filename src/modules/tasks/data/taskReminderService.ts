@@ -4,6 +4,8 @@ import type { Database } from '@/integrations/supabase/types';
 import { isTaskCalendarDate } from '@/modules/tasks/domain/taskDates';
 import {
   taskActorTypes,
+  taskDeliveryCapabilityStatuses,
+  taskDeliveryChannels,
   taskEntryChannels,
   taskReminderAmbiguityChoices,
   taskReminderResolutionKinds,
@@ -13,6 +15,7 @@ import {
   type TaskReminderAmbiguityChoice,
   type TaskReminderDelivery,
   type TaskReminderOccurrence,
+  type TaskDeliveryTarget,
   type TaskTemplateKind,
 } from '@/modules/tasks/types/tasks';
 
@@ -52,6 +55,19 @@ export type TaskReminderClaimResult = {
   outcome: 'accepted';
   through_at: string;
   items: TaskDueReminder[];
+};
+
+export type TaskWebPushSubscriptionInput = {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+};
+
+export type TaskWebPushRegistrationResult = {
+  outcome: 'accepted' | 'already_registered' | 'revoked';
+  target: TaskDeliveryTarget;
 };
 
 export class InvalidTaskReminderError extends Error {
@@ -167,6 +183,59 @@ export class TaskReminderService {
       delivery: result.delivery as TaskReminderDelivery,
     };
   }
+
+  async registerWebPush(
+    subscription: TaskWebPushSubscriptionInput,
+    label = 'This Browser',
+    reactivateRevoked = false,
+  ): Promise<TaskWebPushRegistrationResult> {
+    if (
+      !isSecurePushEndpoint(subscription.endpoint)
+      || !subscription.keys.p256dh
+      || !subscription.keys.auth
+      || !label.trim()
+    ) {
+      throw new InvalidTaskReminderError('A valid Web Push subscription is required');
+    }
+    const { data, error } = await this.client.rpc('tasks_register_web_push_target', {
+      _endpoint: subscription.endpoint,
+      _p256dh: subscription.keys.p256dh,
+      _auth_secret: subscription.keys.auth,
+      _label: label.trim(),
+      _reactivate_revoked: reactivateRevoked,
+    });
+    if (error) throw error;
+    const result = requireRecord(data, 'Web Push registration returned an invalid result');
+    return {
+      outcome: requireEnum(
+        result.outcome,
+        ['accepted', 'already_registered', 'revoked'] as const,
+        'Web Push registration outcome',
+      ),
+      target: parseTaskDeliveryTarget(result.target),
+    };
+  }
+
+  async revokeWebPush(targetId: string): Promise<{
+    outcome: 'accepted' | 'already_applied';
+    target: TaskDeliveryTarget;
+  }> {
+    if (!targetId) throw new InvalidTaskReminderError('A Web Push target is required');
+    const { data, error } = await this.client.rpc('tasks_revoke_web_push_target', {
+      _target_id: targetId,
+      _reason: 'user_disabled',
+    });
+    if (error) throw error;
+    const result = requireRecord(data, 'Web Push revocation returned an invalid result');
+    return {
+      outcome: requireEnum(
+        result.outcome,
+        ['accepted', 'already_applied'] as const,
+        'Web Push revocation outcome',
+      ),
+      target: parseTaskDeliveryTarget(result.target),
+    };
+  }
 }
 
 export function parseTaskReminder(value: unknown): TaskReminder {
@@ -224,6 +293,15 @@ export function isTaskReminderTime(value: unknown): value is string {
     && /^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(value);
 }
 
+export function isSecurePushEndpoint(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function parseTaskDueReminder(value: unknown): TaskDueReminder {
   const record = requireRecord(value, 'Due reminder is invalid');
   return {
@@ -236,6 +314,26 @@ function parseTaskDueReminder(value: unknown): TaskDueReminder {
     resolved_at: requireTimestamp(record.resolved_at, 'reminder due time'),
     attempt_count: requirePositiveInteger(record.attempt_count, 'reminder attempt count'),
   };
+}
+
+function parseTaskDeliveryTarget(value: unknown): TaskDeliveryTarget {
+  const record = requireRecord(value, 'Web Push target is invalid');
+  requireText(record.id, 'Web Push target identifier');
+  requireText(record.owner_id, 'Web Push target owner');
+  requireText(record.endpoint_key, 'Web Push endpoint identity');
+  requireText(record.label, 'Web Push target label');
+  requireTimestamp(record.last_seen_at, 'Web Push target last-seen time');
+  requireTimestamp(record.created_at, 'Web Push target creation time');
+  requireTimestamp(record.updated_at, 'Web Push target update time');
+  return {
+    ...record,
+    channel: requireEnum(record.channel, taskDeliveryChannels, 'delivery channel'),
+    capability_status: requireEnum(
+      record.capability_status,
+      taskDeliveryCapabilityStatuses,
+      'delivery capability status',
+    ),
+  } as TaskDeliveryTarget;
 }
 
 function requireRecord(value: unknown, message: string): Record<string, unknown> {

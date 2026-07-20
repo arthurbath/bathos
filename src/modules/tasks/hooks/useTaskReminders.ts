@@ -8,11 +8,13 @@ import {
 } from '@/modules/tasks/data/taskReminderService';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskReminder } from '@/modules/tasks/types/tasks';
+import { useTaskWebPush } from '@/modules/tasks/hooks/useTaskWebPush';
 
 const CLAIM_INTERVAL_MS = 60_000;
 
 export function useTaskReminders(ownerId: string) {
   const { mode, planningTimeZone, reminderService } = useTasksRuntime();
+  const webPush = useTaskWebPush(mode, reminderService);
   const remindersQuery = useQuery<TaskReminder>(
     `SELECT * FROM tasks_reminders
      WHERE owner_id = ? AND status = 'active'
@@ -139,6 +141,7 @@ export function useTaskReminders(ownerId: string) {
     cancel,
     acknowledge,
     claimDue,
+    webPush,
   };
 }
 

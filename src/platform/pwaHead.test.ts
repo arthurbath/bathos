@@ -81,4 +81,17 @@ describe('initial PWA document head', () => {
       'https://os.bath.garden/apple-touch-icon.png',
     );
   });
+
+  it('gives the hidden Tasks route provisional install metadata for Web Push', () => {
+    const dom = renderInitialHead('/tasks/upcoming');
+    const document = dom.window.document;
+
+    expect(document.title).toBe('Tasks');
+    expect(document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]')?.content)
+      .toBe('Tasks');
+    expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href)
+      .toBe('https://os.bath.garden/icon-192.png');
+    expect(document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.href)
+      .toBe('blob:test-manifest');
+  });
 });

@@ -28,6 +28,7 @@
           exercise:{ name: 'Exercise',       icon: '/module-exercise.png',        start: '/exercise/run' },
           snake:   { name: 'Snake',          icon: '/module-snake.png',           start: '/snake/weights' },
           wardrobe:{ name: 'Wardrobe',       icon: '/module-wardrobe.png',        start: '/wardrobe/items' },
+          tasks:   { name: 'Tasks',          icon: '/icon-192.png',               start: '/tasks/today', id: '/tasks' },
           admin:   { name: 'Administration', icon: '/module-administration.png',  start: '/admin' }
         };
 
@@ -36,7 +37,7 @@
 
         var appName = mod ? mod.name : 'BathOS';
         var iconPath = mod ? mod.icon : '/icon-192.png';
-        var startUrl = mod ? location.pathname : '/';
+        var startUrl = firstSegment === 'tasks' ? mod.start : mod ? location.pathname : '/';
 
         // Set document title synchronously
         document.title = appName;
@@ -61,6 +62,15 @@
             purpose: 'any maskable'
           }]
         };
+        if (mod && mod.id) manifest.id = mod.id;
+
+        if (firstSegment === 'tasks') {
+          var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+          if (appleTitle) appleTitle.content = appName;
+          document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]').forEach(function(link) {
+            link.href = iconPath;
+          });
+        }
 
         var blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
         var link = document.querySelector('link[rel="manifest"]') || document.createElement('link');

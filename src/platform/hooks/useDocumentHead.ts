@@ -22,8 +22,9 @@ function setAllAppleTouchIcons(href: string) {
 
 let currentManifestBlobUrl: string | null = null;
 
-function updateManifest(name: string, startUrl: string, iconPath: string) {
+function updateManifest(name: string, startUrl: string, iconPath: string, id?: string) {
   const manifest = {
+    ...(id ? { id } : {}),
     name,
     short_name: name,
     description: 'A bunch of hyper-specific apps for Art and his friends',
@@ -79,6 +80,12 @@ export function useDocumentHead() {
       setAllAppleTouchIcons(icon);
       setAppleWebAppTitle(mod.name);
       updateManifest(mod.name, location.pathname, icon);
+    } else if (firstSegment === 'tasks') {
+      document.title = 'Tasks';
+      setLinkHref('icon', '/icon-192.png');
+      setAllAppleTouchIcons('/icon-192.png');
+      setAppleWebAppTitle('Tasks');
+      updateManifest('Tasks', '/tasks/today', '/icon-192.png', '/tasks');
     } else {
       document.title = DEFAULT_TITLE;
       setLinkHref('icon', DEFAULT_ICON);

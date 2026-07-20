@@ -2607,6 +2607,43 @@ export type Database = {
         }
         Relationships: []
       }
+      tasks_web_push_subscriptions: {
+        Row: {
+          auth_secret: string
+          created_at: string
+          endpoint: string
+          owner_id: string
+          p256dh: string
+          target_id: string
+          updated_at: string
+        }
+        Insert: {
+          auth_secret: string
+          created_at?: string
+          endpoint: string
+          owner_id: string
+          p256dh: string
+          target_id: string
+          updated_at?: string
+        }
+        Update: {
+          auth_secret?: string
+          created_at?: string
+          endpoint?: string
+          owner_id?: string
+          p256dh?: string
+          target_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_web_push_subscriptions_target_owner_fkey"
+            columns: ["target_id", "owner_id"]
+            referencedRelation: "tasks_delivery_targets"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
       wardrobe_items: {
         Row: {
           brand: string | null
@@ -2913,6 +2950,10 @@ export type Database = {
         Args: { _request_id: string; _through_at: string }
         Returns: Json
       }
+      tasks_claim_web_push_deliveries: {
+        Args: { _limit?: number; _through_at: string }
+        Returns: Json
+      }
       tasks_create_export_v1: { Args: never; Returns: Json }
       tasks_create_export_v10: { Args: never; Returns: Json }
       tasks_create_export_v2: { Args: never; Returns: Json }
@@ -2961,6 +3002,26 @@ export type Database = {
           _target_area_id?: string
           _template_id: string
           _template_revision: number
+        }
+        Returns: Json
+      }
+      tasks_record_web_push_delivery_result: {
+        Args: {
+          _delivery_id: string
+          _error_code?: string
+          _outcome: string
+          _provider_message_id?: string
+          _target_revoked?: boolean
+        }
+        Returns: Json
+      }
+      tasks_register_web_push_target: {
+        Args: {
+          _auth_secret: string
+          _endpoint: string
+          _label?: string
+          _p256dh: string
+          _reactivate_revoked?: boolean
         }
         Returns: Json
       }
@@ -3020,6 +3081,10 @@ export type Database = {
       }
       tasks_restore_export_v9: {
         Args: { _dry_run?: boolean; _envelope: Json }
+        Returns: Json
+      }
+      tasks_revoke_web_push_target: {
+        Args: { _reason?: string; _target_id: string }
         Returns: Json
       }
       tasks_save_recurrence: {

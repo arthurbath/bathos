@@ -1,0 +1,12 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.95.3",
+    "web-push": "npm:web-push@3.6.7"
+  },
+  "compilerOptions": {
+    "types": [
+      "npm:@types/node@22.15.30",
+      "npm:@types/web-push@3.6.4"
+    ]
+  }
+}

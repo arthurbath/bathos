@@ -406,9 +406,17 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** notification permission is denied, platform support is missing, or a target expires
 - **THEN** the task remains usable and the interface reports degraded reminder capability
 
+#### Scenario: Register Web Push explicitly
+- **WHEN** a user invokes the browser-reminder Enable action on a supported secure client and grants notification permission
+- **THEN** the client registers one standards-based service-worker subscription, the server stores its provider credentials outside the synchronized target projection, and repeated registration reuses the target identity
+
 #### Scenario: Report delivery outcome
 - **WHEN** a notification provider accepts a delivery request
 - **THEN** the system records provider acceptance separately from user acknowledgement and does not claim that the user saw the reminder
+
+#### Scenario: Acknowledge an opened notification
+- **WHEN** the user opens a Web Push notification for a logical occurrence
+- **THEN** the authenticated Tasks route acknowledges that occurrence and later in-app or provider claims do not create another delivery after acknowledgement
 
 ### Requirement: Keyboard-First Daily Operation
 The system SHALL support efficient keyboard operation for high-frequency capture, navigation, editing, scheduling, movement, completion, and search workflows.

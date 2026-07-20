@@ -23,3 +23,8 @@ verify_jwt = false
 
 [functions.manifest]
 verify_jwt = false
+
+[functions.dispatch-task-reminders]
+verify_jwt = false
+entrypoint = "./functions/dispatch-task-reminders/index.ts"
+import_map = "./functions/dispatch-task-reminders/deno.json"
