@@ -268,15 +268,18 @@ SELECT throws_ok(
 
 SELECT lives_ok(
   $$
-    UPDATE public.tasks_todos
-    SET
-      disposition = 'deleted',
-      deleted_at = '2026-07-20T03:00:00.000Z',
-      revision = 3,
-      client_mutation_id = '10000000-0000-4000-8000-000000000029'
-    WHERE id = '10000000-0000-4000-8000-000000000010'
+    INSERT INTO public.tasks_hierarchy_operations (
+      id, owner_id, root_type, root_id, operation, descendant_policy,
+      expected_revisions, requested_at
+    ) VALUES (
+      '10000000-0000-4000-8000-000000000029',
+      '10000000-0000-4000-8000-000000000001',
+      'todo', '10000000-0000-4000-8000-000000000010', 'delete', 'cascade',
+      jsonb_build_object('10000000-0000-4000-8000-000000000010', 2),
+      '2026-07-20T03:00:00.000Z'
+    )
   $$,
-  'allows recoverable deletion with a matching timestamp'
+  'allows recoverable deletion through an explicit hierarchy operation'
 );
 
 SELECT is(
@@ -287,15 +290,18 @@ SELECT is(
 
 SELECT lives_ok(
   $$
-    UPDATE public.tasks_todos
-    SET
-      disposition = 'present',
-      deleted_at = NULL,
-      revision = 4,
-      client_mutation_id = '10000000-0000-4000-8000-000000000030'
-    WHERE id = '10000000-0000-4000-8000-000000000010'
+    INSERT INTO public.tasks_hierarchy_operations (
+      id, owner_id, root_type, root_id, operation, descendant_policy,
+      expected_revisions, requested_at
+    ) VALUES (
+      '10000000-0000-4000-8000-000000000030',
+      '10000000-0000-4000-8000-000000000001',
+      'todo', '10000000-0000-4000-8000-000000000010', 'restore', 'cascade',
+      jsonb_build_object('10000000-0000-4000-8000-000000000010', 3),
+      '2026-07-20T03:01:00.000Z'
+    )
   $$,
-  'allows restoration with a matching disposition and timestamp'
+  'allows restoration through an explicit hierarchy operation'
 );
 
 SELECT is(

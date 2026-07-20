@@ -131,13 +131,16 @@ SELECT lives_ok(
 );
 SELECT lives_ok(
   $$
-    UPDATE public.tasks_todos
-    SET
-      disposition = 'deleted',
-      deleted_at = '2026-07-20T05:05:00.000Z',
-      revision = 2,
-      client_mutation_id = '41000000-0000-4000-8000-000000000031'
-    WHERE id = '41000000-0000-4000-8000-000000000011'
+    INSERT INTO public.tasks_hierarchy_operations (
+      id, owner_id, root_type, root_id, operation, descendant_policy,
+      expected_revisions, requested_at
+    ) VALUES (
+      '41000000-0000-4000-8000-000000000031',
+      '41000000-0000-4000-8000-000000000001',
+      'todo', '41000000-0000-4000-8000-000000000011', 'delete', 'cascade',
+      jsonb_build_object('41000000-0000-4000-8000-000000000011', 1),
+      '2026-07-20T05:05:00.000Z'
+    )
   $$,
   'records recoverable deletion before export'
 );

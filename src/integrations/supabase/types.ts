@@ -1943,6 +1943,7 @@ export type Database = {
       tasks_create_export_v1: { Args: never; Returns: Json }
       tasks_create_export_v2: { Args: never; Returns: Json }
       tasks_create_export_v3: { Args: never; Returns: Json }
+      tasks_create_export_v4: { Args: never; Returns: Json }
       tasks_restore_export_v1: {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
@@ -1952,6 +1953,10 @@ export type Database = {
         Returns: Json
       }
       tasks_restore_export_v3: {
+        Args: { _dry_run?: boolean; _envelope: Json }
+        Returns: Json
+      }
+      tasks_restore_export_v4: {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
       }

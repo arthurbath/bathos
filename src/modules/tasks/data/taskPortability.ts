@@ -5,7 +5,16 @@ import type {
   TaskHistoryEvent,
   TaskHistorySnapshot,
 } from '@/modules/tasks/domain/taskHistory';
-import type { TaskTodo, TaskUserSettings } from '@/modules/tasks/types/tasks';
+import type {
+  TaskArea,
+  TaskChecklistItem,
+  TaskHeading,
+  TaskHierarchyHistoryEvent,
+  TaskHierarchyOperation,
+  TaskProject,
+  TaskTodo,
+  TaskUserSettings,
+} from '@/modules/tasks/types/tasks';
 
 type HierarchyTaskFields = 'area_id' | 'project_id' | 'heading_id' | 'hierarchy_order_key';
 type LegacyTaskTodo = Omit<TaskTodo, 'today_section' | HierarchyTaskFields>;
@@ -77,7 +86,43 @@ export type TaskExportV3 = {
   };
 };
 
-export type TaskPortableExport = TaskExportV1 | TaskExportV2 | TaskExportV3;
+export const taskExportV4Collections = [
+  'tasks_areas',
+  'tasks_projects',
+  'tasks_headings',
+  'tasks_todos',
+  'tasks_checklist_items',
+  'tasks_history_events',
+  'tasks_hierarchy_operations',
+  'tasks_hierarchy_history_events',
+  'tasks_user_settings',
+] as const;
+
+type TaskExportV4Collection = (typeof taskExportV4Collections)[number];
+
+export type TaskExportV4 = {
+  format: 'garden.bath.tasks.export';
+  schema_version: 4;
+  created_at: string;
+  manifest: {
+    collections: [...typeof taskExportV4Collections];
+    counts: Record<TaskExportV4Collection, number>;
+    checksums: { algorithm: 'sha256' } & Record<TaskExportV4Collection, string>;
+  };
+  data: {
+    tasks_areas: Array<Omit<TaskArea, 'owner_id'>>;
+    tasks_projects: Array<Omit<TaskProject, 'owner_id'>>;
+    tasks_headings: Array<Omit<TaskHeading, 'owner_id'>>;
+    tasks_todos: Array<Omit<TaskTodo, 'owner_id'>>;
+    tasks_checklist_items: Array<Omit<TaskChecklistItem, 'owner_id'>>;
+    tasks_history_events: Array<Omit<TaskHistoryEvent, 'owner_id'>>;
+    tasks_hierarchy_operations: Array<Omit<TaskHierarchyOperation, 'owner_id'>>;
+    tasks_hierarchy_history_events: Array<Omit<TaskHierarchyHistoryEvent, 'owner_id'>>;
+    tasks_user_settings: Array<Omit<TaskUserSettings, 'owner_id'>>;
+  };
+};
+
+export type TaskPortableExport = TaskExportV1 | TaskExportV2 | TaskExportV3 | TaskExportV4;
 
 export type TaskRestoreCollectionReport = {
   inserts: number;
@@ -90,10 +135,16 @@ export type TaskRestoreCollectionReport = {
 
 export type TaskRestoreReport = {
   dry_run: boolean;
-  schema_version: 1 | 2 | 3;
+  schema_version: 1 | 2 | 3 | 4;
   tasks_todos: TaskRestoreCollectionReport;
   tasks_history_events: TaskRestoreCollectionReport;
   tasks_user_settings?: TaskRestoreCollectionReport;
+  tasks_areas?: TaskRestoreCollectionReport;
+  tasks_projects?: TaskRestoreCollectionReport;
+  tasks_headings?: TaskRestoreCollectionReport;
+  tasks_checklist_items?: TaskRestoreCollectionReport;
+  tasks_hierarchy_operations?: TaskRestoreCollectionReport;
+  tasks_hierarchy_history_events?: TaskRestoreCollectionReport;
 };
 
 type TaskPortabilityClient = Pick<SupabaseClient<Database>, 'rpc'>;
@@ -107,14 +158,14 @@ export class InvalidTaskExportError extends Error {
 
 export async function createTaskExport(
   supabase: TaskPortabilityClient,
-): Promise<TaskExportV3> {
-  const { data, error } = await supabase.rpc('tasks_create_export_v3');
+): Promise<TaskExportV4> {
+  const { data, error } = await supabase.rpc('tasks_create_export_v4');
   if (error) {
     throw error;
   }
   const taskExport = parseTaskExport(data);
-  if (taskExport.schema_version !== 3) {
-    throw new InvalidTaskExportError('The current task export did not use schema version three');
+  if (taskExport.schema_version !== 4) {
+    throw new InvalidTaskExportError('The current task export did not use schema version four');
   }
   return taskExport;
 }
@@ -149,19 +200,37 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
   const record = requireRecord(value, 'Task export must be a JSON object');
   if (
     record.format !== 'garden.bath.tasks.export'
-    || ![1, 2, 3].includes(record.schema_version as number)
+    || ![1, 2, 3, 4].includes(record.schema_version as number)
   ) {
     throw new InvalidTaskExportError('Task export format or schema version is unsupported');
   }
-  const schemaVersion = record.schema_version as 1 | 2 | 3;
+  const schemaVersion = record.schema_version as 1 | 2 | 3 | 4;
 
   const manifest = requireRecord(record.manifest, 'Task export manifest is invalid');
   const counts = requireRecord(manifest.counts, 'Task export counts are invalid');
   const checksums = requireRecord(manifest.checksums, 'Task export checksums are invalid');
   const data = requireRecord(record.data, 'Task export data is invalid');
+  const collections = requireArray(manifest.collections, 'Task export collections are invalid');
+  if (schemaVersion === 4) {
+    if (
+      typeof record.created_at !== 'string'
+      || collections.length !== taskExportV4Collections.length
+      || taskExportV4Collections.some((collection, index) => collections[index] !== collection)
+      || checksums.algorithm !== 'sha256'
+    ) {
+      throw new InvalidTaskExportError('Task export manifest does not match its data');
+    }
+    for (const collection of taskExportV4Collections) {
+      const records = requireArray(data[collection], `Task export ${collection} data is invalid`);
+      if (counts[collection] !== records.length || !isSha256(checksums[collection])) {
+        throw new InvalidTaskExportError('Task export manifest does not match its data');
+      }
+    }
+    return value as TaskExportV4;
+  }
+
   const tasks = requireArray(data.tasks_todos, 'Task export tasks are invalid');
   const history = requireArray(data.tasks_history_events, 'Task export history is invalid');
-  const collections = requireArray(manifest.collections, 'Task export collections are invalid');
   const settings = schemaVersion >= 2
     ? requireArray(data.tasks_user_settings, 'Task export settings are invalid')
     : null;
@@ -191,7 +260,10 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
   return value as TaskPortableExport;
 }
 
-function parseTaskRestoreReport(value: unknown, schemaVersion: 1 | 2 | 3): TaskRestoreReport {
+function parseTaskRestoreReport(
+  value: unknown,
+  schemaVersion: 1 | 2 | 3 | 4,
+): TaskRestoreReport {
   const report = requireRecord(value, 'Task restore report is invalid');
   if (typeof report.dry_run !== 'boolean' || report.schema_version !== schemaVersion) {
     throw new InvalidTaskExportError('Task restore report metadata is invalid');
@@ -200,6 +272,11 @@ function parseTaskRestoreReport(value: unknown, schemaVersion: 1 | 2 | 3): TaskR
   parseCollectionReport(report.tasks_history_events);
   if (schemaVersion >= 2) {
     parseCollectionReport(report.tasks_user_settings);
+  }
+  if (schemaVersion === 4) {
+    for (const collection of taskExportV4Collections) {
+      parseCollectionReport(report[collection]);
+    }
   }
   return value as TaskRestoreReport;
 }
@@ -210,7 +287,9 @@ async function restoreTaskExport(
   dryRun: boolean,
 ): Promise<TaskRestoreReport> {
   const validatedExport = parseTaskExport(taskExport);
-  const functionName = validatedExport.schema_version === 3
+  const functionName = validatedExport.schema_version === 4
+    ? 'tasks_restore_export_v4'
+    : validatedExport.schema_version === 3
     ? 'tasks_restore_export_v3'
     : validatedExport.schema_version === 2
       ? 'tasks_restore_export_v2'

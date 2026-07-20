@@ -331,15 +331,16 @@ SELECT is(
 
 SELECT lives_ok(
   $$
-    UPDATE public.tasks_todos
-    SET
-      disposition = 'deleted',
-      deleted_at = '2026-07-20T04:05:00.000Z',
-      revision = 3,
-      client_mutation_id = '31000000-0000-4000-8000-000000000023',
-      last_mutation_channel = 'web'
-    WHERE id = '31000000-0000-4000-8000-000000000010'
-      AND revision = 2
+    INSERT INTO public.tasks_hierarchy_operations (
+      id, owner_id, root_type, root_id, operation, descendant_policy,
+      expected_revisions, requested_at
+    ) VALUES (
+      '31000000-0000-4000-8000-000000000023',
+      '31000000-0000-4000-8000-000000000001',
+      'todo', '31000000-0000-4000-8000-000000000010', 'delete', 'cascade',
+      jsonb_build_object('31000000-0000-4000-8000-000000000010', 2),
+      '2026-07-20T04:05:00.000Z'
+    )
   $$,
   'records recoverable deletion atomically'
 );
@@ -347,7 +348,8 @@ SELECT is(
   (
     SELECT transition
     FROM public.tasks_history_events
-    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000023'
+    WHERE task_id = '31000000-0000-4000-8000-000000000010'
+      AND result_revision = 3
   ),
   'delete',
   'records recoverable deletion explicitly'
@@ -356,7 +358,8 @@ SELECT is(
   (
     SELECT before_state ->> 'disposition'
     FROM public.tasks_history_events
-    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000023'
+    WHERE task_id = '31000000-0000-4000-8000-000000000010'
+      AND result_revision = 3
   ),
   'present',
   'retains the pre-deletion disposition'
@@ -365,7 +368,8 @@ SELECT is(
   (
     SELECT after_state ->> 'disposition'
     FROM public.tasks_history_events
-    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000023'
+    WHERE task_id = '31000000-0000-4000-8000-000000000010'
+      AND result_revision = 3
   ),
   'deleted',
   'retains the deleted disposition'
@@ -373,15 +377,16 @@ SELECT is(
 
 SELECT lives_ok(
   $$
-    UPDATE public.tasks_todos
-    SET
-      disposition = 'present',
-      deleted_at = NULL,
-      revision = 4,
-      client_mutation_id = '31000000-0000-4000-8000-000000000024',
-      last_mutation_channel = 'web'
-    WHERE id = '31000000-0000-4000-8000-000000000010'
-      AND revision = 3
+    INSERT INTO public.tasks_hierarchy_operations (
+      id, owner_id, root_type, root_id, operation, descendant_policy,
+      expected_revisions, requested_at
+    ) VALUES (
+      '31000000-0000-4000-8000-000000000024',
+      '31000000-0000-4000-8000-000000000001',
+      'todo', '31000000-0000-4000-8000-000000000010', 'restore', 'cascade',
+      jsonb_build_object('31000000-0000-4000-8000-000000000010', 3),
+      '2026-07-20T04:06:00.000Z'
+    )
   $$,
   'records restoration atomically'
 );
@@ -389,7 +394,8 @@ SELECT is(
   (
     SELECT transition
     FROM public.tasks_history_events
-    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000024'
+    WHERE task_id = '31000000-0000-4000-8000-000000000010'
+      AND result_revision = 4
   ),
   'restore',
   'records restoration explicitly'
@@ -398,7 +404,8 @@ SELECT is(
   (
     SELECT after_state ->> 'disposition'
     FROM public.tasks_history_events
-    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000024'
+    WHERE task_id = '31000000-0000-4000-8000-000000000010'
+      AND result_revision = 4
   ),
   'present',
   'retains the restored disposition'
@@ -406,21 +413,23 @@ SELECT is(
 
 SELECT lives_ok(
   $$
-    UPDATE public.tasks_todos
-    SET
-      disposition = 'deleted',
-      deleted_at = '2026-07-20T04:05:00.000Z',
-      revision = 5,
-      client_mutation_id = '31000000-0000-4000-8000-000000000025',
-      last_mutation_channel = 'web',
-      last_actor_type = 'user',
-      undo_source_event_id = (
-        SELECT id
-        FROM public.tasks_history_events
-        WHERE client_mutation_id = '31000000-0000-4000-8000-000000000024'
-      )
-    WHERE id = '31000000-0000-4000-8000-000000000010'
-      AND revision = 4
+    DO $undo$
+    BEGIN
+      UPDATE public.tasks_todos
+      SET notes = 'Undo target', revision = 5,
+        client_mutation_id = '31000000-0000-4000-8000-000000000025'
+      WHERE id = '31000000-0000-4000-8000-000000000010' AND revision = 4;
+
+      UPDATE public.tasks_todos
+      SET notes = '', revision = 6,
+        client_mutation_id = '31000000-0000-4000-8000-000000000026',
+        undo_source_event_id = (
+          SELECT id FROM public.tasks_history_events
+          WHERE client_mutation_id = '31000000-0000-4000-8000-000000000025'
+        )
+      WHERE id = '31000000-0000-4000-8000-000000000010' AND revision = 5;
+    END
+    $undo$
   $$,
   'applies a safe inverse mutation from the current history event'
 );
@@ -428,25 +437,25 @@ SELECT is(
   (
     SELECT transition
     FROM public.tasks_history_events
-    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000025'
+    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000026'
   ),
   'undo',
   'records inverse mutation as undo'
 );
 SELECT is(
   (
-    SELECT disposition
+    SELECT notes
     FROM public.tasks_todos
     WHERE id = '31000000-0000-4000-8000-000000000010'
   ),
-  'deleted',
+  '',
   'restores the prior task state through undo'
 );
 SELECT is(
   (
     SELECT before_state ->> 'disposition'
     FROM public.tasks_history_events
-    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000025'
+    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000026'
   ),
   'present',
   'records the state before undo'
@@ -455,9 +464,9 @@ SELECT is(
   (
     SELECT after_state ->> 'disposition'
     FROM public.tasks_history_events
-    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000025'
+    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000026'
   ),
-  'deleted',
+  'present',
   'records the state after undo'
 );
 SELECT is(
@@ -469,7 +478,7 @@ SELECT is(
   (
     SELECT id
     FROM public.tasks_history_events
-    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000024'
+    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000025'
   ),
   'retains the source event for the accepted undo receipt'
 );
@@ -478,17 +487,17 @@ SELECT throws_ok(
   $$
     UPDATE public.tasks_todos
     SET
-      disposition = 'present',
-      deleted_at = NULL,
-      revision = 6,
-      client_mutation_id = '31000000-0000-4000-8000-000000000026',
+      notes = 'Unsafe undo',
+      revision = 7,
+      client_mutation_id = '31000000-0000-4000-8000-000000000027',
       undo_source_event_id = (
         SELECT id
         FROM public.tasks_history_events
-        WHERE client_mutation_id = '31000000-0000-4000-8000-000000000023'
+        WHERE task_id = '31000000-0000-4000-8000-000000000010'
+          AND result_revision = 4
       )
     WHERE id = '31000000-0000-4000-8000-000000000010'
-      AND revision = 5
+      AND revision = 6
   $$,
   '23514',
   'The requested undo is no longer safe',
@@ -500,14 +509,14 @@ SELECT is(
     FROM public.tasks_todos
     WHERE id = '31000000-0000-4000-8000-000000000010'
   ),
-  5::bigint,
+  6::bigint,
   'leaves current task state untouched after unsafe undo'
 );
 SELECT is(
   (
     SELECT count(*)
     FROM public.tasks_history_events
-    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000026'
+    WHERE client_mutation_id = '31000000-0000-4000-8000-000000000027'
   ),
   0::bigint,
   'does not append history for rejected undo'
@@ -518,8 +527,8 @@ SELECT throws_ok(
     UPDATE public.tasks_todos
     SET
       notes = 'Invalid metadata',
-      revision = 6,
-      client_mutation_id = '31000000-0000-4000-8000-000000000027',
+      revision = 7,
+      client_mutation_id = '31000000-0000-4000-8000-000000000028',
       last_actor_type = 'intruder'
     WHERE id = '31000000-0000-4000-8000-000000000010'
   $$,
