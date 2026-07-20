@@ -88,6 +88,8 @@ Task-list mutations use a module-local optimistic overlay above the reactive Pow
 
 The minimal recovery slice exposes `/tasks/trash` as a first-class view without exposing permanent deletion. Deleted tasks retain their prior lifecycle, destination, and order on the same durable record, and Restore changes only the recoverable disposition so completed and canceled work remain terminal while open work returns to its prior list. The Trash query is newest-deletion-first, restoration is optimistic with rollback, and task capture is unavailable inside Trash. A browser exercise proved create, recoverable delete, Trash visibility, restoration, return to the original Today placement, and persistence after reload; the synthetic database was cleared afterward and the temporary QA reset control was removed.
 
+The first Logbook slice exposes `/tasks/logbook` as the current terminal-work view. Present completed and canceled tasks are ordered by their respective terminal timestamp, display their terminal state and date, and cannot create new work in place. Reopen is an optimistic inverse lifecycle transition that returns the task to its retained Inbox or Today destination; Delete remains recoverable and moves terminal work to Trash without rewriting completion or cancellation state. Accepted completion, cancellation, reopen, and deletion events remain independently preserved in append-only history.
+
 ## Goals / Non-Goals
 
 **Goals:**

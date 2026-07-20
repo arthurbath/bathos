@@ -6,11 +6,12 @@ import type { TaskStateTransition } from '@/modules/tasks/domain/taskState';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
 
-export type TaskListView = TaskDestination | 'trash';
+export type TaskListView = TaskDestination | 'logbook' | 'trash';
 
 export function useTaskList(ownerId: string, view: TaskListView) {
   const { repository } = useTasksRuntime();
   const [optimisticTasks, setOptimisticTasks] = useState<Record<string, TaskTodo | null>>({});
+  const historical = view === 'logbook';
   const trash = view === 'trash';
   const query = useQuery<TaskTodo>(
     trash
@@ -19,14 +20,21 @@ export function useTaskList(ownerId: string, view: TaskListView) {
          WHERE owner_id = ?
            AND disposition = 'deleted'
          ORDER BY deleted_at DESC, id`
-      : `SELECT *
+      : historical
+        ? `SELECT *
+         FROM tasks_todos
+         WHERE owner_id = ?
+           AND lifecycle IN ('completed', 'canceled')
+           AND disposition = 'present'
+         ORDER BY COALESCE(completed_at, canceled_at) DESC, id`
+        : `SELECT *
          FROM tasks_todos
          WHERE owner_id = ?
            AND destination = ?
            AND lifecycle = 'open'
            AND disposition = 'present'
          ORDER BY order_key, id`,
-    trash ? [ownerId] : [ownerId, view],
+    trash || historical ? [ownerId] : [ownerId, view],
   );
 
   useEffect(() => {
@@ -80,8 +88,8 @@ export function useTaskList(ownerId: string, view: TaskListView) {
 
   const createTask = useCallback(
     async (title: string) => {
-      if (view === 'trash') {
-        throw new Error('Tasks cannot be created in Trash');
+      if (view === 'trash' || view === 'logbook') {
+        throw new Error(`Tasks cannot be created in ${view === 'trash' ? 'Trash' : 'Logbook'}`);
       }
       const createdTask = await repository.createTask({ ownerId, title, destination: view });
       setOptimisticTask(createdTask.id, createdTask);
@@ -118,6 +126,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
       const leavesCurrentView = transition === 'complete'
         || transition === 'cancel'
         || transition === 'delete'
+        || (view === 'logbook' && transition === 'reopen')
         || (view === 'trash' && transition === 'restore');
       if (leavesCurrentView) {
         setOptimisticTask(taskId, null);
@@ -154,6 +163,9 @@ function taskIsVisible(task: TaskTodo, ownerId: string, view: TaskListView): boo
   if (view === 'trash') {
     return task.disposition === 'deleted';
   }
+  if (view === 'logbook') {
+    return task.disposition === 'present' && task.lifecycle !== 'open';
+  }
   return task.destination === view && task.lifecycle === 'open' && task.disposition === 'present';
 }
 
@@ -161,6 +173,11 @@ function compareTasksForView(left: TaskTodo, right: TaskTodo, view: TaskListView
   if (view === 'trash') {
     return (right.deleted_at ?? '').localeCompare(left.deleted_at ?? '')
       || left.id.localeCompare(right.id);
+  }
+  if (view === 'logbook') {
+    return (right.completed_at ?? right.canceled_at ?? '').localeCompare(
+      left.completed_at ?? left.canceled_at ?? '',
+    ) || left.id.localeCompare(right.id);
   }
   return left.order_key.localeCompare(right.order_key) || left.id.localeCompare(right.id);
 }

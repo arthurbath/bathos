@@ -56,7 +56,7 @@
 - [ ] 5.3 Add Today and This Evening with manual ordering and unfinished-item rescheduling.
 - [ ] 5.4 Add Upcoming with future start-date planning.
 - [ ] 5.5 Add Anytime and Someday with the specified active/inactive semantics.
-- [ ] 5.6 Add Logbook, completion history, cancellation history, and recovery flows.
+- [x] 5.6 Add Logbook, completion history, cancellation history, and recovery flows.
 - [ ] 5.7 Add start dates, deadlines, and date-aware planning interactions.
 - [ ] 5.8 Add reminders using the responsibility model selected in the architecture gate.
 - [ ] 5.9 Add recurrence definitions and idempotent occurrence generation.

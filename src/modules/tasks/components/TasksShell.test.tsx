@@ -279,4 +279,34 @@ describe('TasksShell', () => {
       cleanup(root, container);
     }
   });
+
+  it('shows terminal work in Logbook and reopens it without exposing task capture', async () => {
+    const completedTask = {
+      ...task,
+      lifecycle: 'completed' as const,
+      completed_at: '2026-07-20T04:05:00.000Z',
+    };
+    const taskList = {
+      ...defaultTaskList(),
+      tasks: [completedTask],
+    };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/logbook');
+
+    try {
+      expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
+      expect(container.querySelector('section[aria-label="Logbook Tasks"]')).toBeTruthy();
+      const reopen = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Reopen Existing task"]',
+      );
+      await act(async () => {
+        reopen?.click();
+      });
+
+      expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'logbook');
+      expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'reopen');
+    } finally {
+      cleanup(root, container);
+    }
+  });
 });

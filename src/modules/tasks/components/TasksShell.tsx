@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
 import {
+  Archive,
   CalendarDays,
+  CheckCircle2,
   Circle,
+  CircleSlash2,
   Cloud,
   CornerDownLeft,
   HardDrive,
@@ -42,6 +45,7 @@ type TasksShellProps = {
 const taskViews = [
   { path: '/inbox', label: 'Inbox', icon: Inbox },
   { path: '/today', label: 'Today', icon: CalendarDays },
+  { path: '/logbook', label: 'Logbook', icon: Archive },
   { path: '/trash', label: 'Trash', icon: Trash2 },
 ] as const;
 
@@ -49,11 +53,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const location = useLocation();
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
-  const view: TaskListView = location.pathname.endsWith('/inbox')
-    ? 'inbox'
-    : location.pathname.endsWith('/trash')
-      ? 'trash'
-      : 'today';
+  const view = getTaskViewFromPath(location.pathname);
   const { mode, prepareForSignOut } = useTasksRuntime();
   const { tasks, loading, error, createTask, updateTask, transitionTask } = useTaskList(
     userId,
@@ -111,13 +111,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <main className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
         <div className="space-y-7">
           <h2 className="text-3xl font-semibold leading-none tracking-tight">
-            <span className="md:hidden">{view === 'inbox' ? 'Inbox' : view === 'trash' ? 'Trash' : 'Today'}</span>
+            <span className="md:hidden">{getTaskViewLabel(view)}</span>
             <span className="hidden md:inline">Tasks</span>
           </h2>
 
           <nav
             aria-label="Task views"
-            className="hidden grid-cols-3 rounded-md border border-[hsl(var(--grid-sticky-line))] p-1 md:grid"
+            className="hidden grid-cols-4 rounded-md border border-[hsl(var(--grid-sticky-line))] p-1 md:grid"
           >
             {taskViews.map(({ path, label, icon: Icon }) => {
               const href = `${basePath}${path}`;
@@ -139,7 +139,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             })}
           </nav>
 
-          {view !== 'trash' ? (
+          {view === 'inbox' || view === 'today' ? (
             <form onSubmit={handleCreate} className="relative">
               <Plus
                 className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
@@ -175,7 +175,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             </form>
           ) : null}
 
-          <section aria-label={view === 'inbox' ? 'Inbox Tasks' : view === 'trash' ? 'Deleted Tasks' : 'Today Tasks'}>
+          <section aria-label={getTaskSectionLabel(view)}>
             {loading ? (
               <div className="flex min-h-40 items-center justify-center">
                 <LoadingSpinner />
@@ -186,7 +186,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               </p>
             ) : tasks.length === 0 ? (
               <p className="py-12 text-center text-sm text-muted-foreground">
-                {view === 'trash' ? 'Trash Is Empty' : 'No Tasks'}
+                {view === 'trash' ? 'Trash Is Empty' : view === 'logbook' ? 'Logbook Is Empty' : 'No Tasks'}
               </p>
             ) : (
               <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
@@ -200,6 +200,25 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                           await transitionTask(task.id, 'restore');
                         } catch (restoreError) {
                           showTaskError('Task Could Not Be Restored', restoreError);
+                        }
+                      }}
+                    />
+                  ) : view === 'logbook' ? (
+                    <LogbookTaskRow
+                      key={task.id}
+                      task={task}
+                      onReopen={async () => {
+                        try {
+                          await transitionTask(task.id, 'reopen');
+                        } catch (reopenError) {
+                          showTaskError('Task Could Not Be Reopened', reopenError);
+                        }
+                      }}
+                      onDelete={async () => {
+                        try {
+                          await transitionTask(task.id, 'delete');
+                        } catch (deleteError) {
+                          showTaskError('Task Could Not Be Deleted', deleteError);
                         }
                       }}
                     />
@@ -255,6 +274,87 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         hrefForPath={(path) => `${basePath}${path}`}
       />
     </div>
+  );
+}
+
+function LogbookTaskRow({
+  task,
+  onReopen,
+  onDelete,
+}: {
+  task: TaskTodo;
+  onReopen: () => Promise<void>;
+  onDelete: () => Promise<void>;
+}) {
+  const [pending, setPending] = useState(false);
+  const completed = task.lifecycle === 'completed';
+  const Icon = completed ? CheckCircle2 : CircleSlash2;
+  const terminalAt = completed ? task.completed_at : task.canceled_at;
+  const run = async (operation: () => Promise<void>) => {
+    if (pending) {
+      return;
+    }
+    setPending(true);
+    try {
+      await operation();
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <article className="flex min-h-16 items-center gap-3 px-2 sm:px-4">
+      <Icon
+        className={`h-5 w-5 shrink-0 ${completed ? 'text-success' : 'text-muted-foreground'}`}
+        aria-hidden="true"
+      />
+      <div className="min-w-0 flex-1 py-3">
+        <p className="truncate text-[15px] font-medium leading-5 text-foreground">{task.title}</p>
+        <p className="text-xs text-muted-foreground">
+          {completed ? 'Completed' : 'Canceled'}
+          {terminalAt ? (
+            <>
+              {' · '}
+              <time dateTime={terminalAt}>{formatTaskTerminalDate(terminalAt)}</time>
+            </>
+          ) : null}
+        </p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pending}
+        aria-label={`Reopen ${task.title}`}
+        className="gap-1.5"
+        onClick={() => void run(onReopen)}
+      >
+        <RotateCcw className="h-4 w-4" aria-hidden="true" />
+        Reopen
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="clear"
+            size="icon"
+            disabled={pending}
+            aria-label={`Actions for ${task.title}`}
+            className="h-10 w-10 text-muted-foreground"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onSelect={() => void run(onDelete)}
+          >
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </article>
   );
 }
 
@@ -496,4 +596,32 @@ function showTaskError(title: string, error: unknown): void {
     description: error instanceof Error ? error.message : 'Unknown error',
     variant: 'destructive',
   });
+}
+
+function getTaskViewLabel(view: TaskListView): string {
+  if (view === 'inbox') return 'Inbox';
+  if (view === 'logbook') return 'Logbook';
+  if (view === 'trash') return 'Trash';
+  return 'Today';
+}
+
+function getTaskViewFromPath(pathname: string): TaskListView {
+  if (pathname.endsWith('/inbox')) return 'inbox';
+  if (pathname.endsWith('/logbook')) return 'logbook';
+  if (pathname.endsWith('/trash')) return 'trash';
+  return 'today';
+}
+
+function getTaskSectionLabel(view: TaskListView): string {
+  if (view === 'inbox') return 'Inbox Tasks';
+  if (view === 'logbook') return 'Logbook Tasks';
+  if (view === 'trash') return 'Deleted Tasks';
+  return 'Today Tasks';
+}
+
+function formatTaskTerminalDate(timestamp: string): string {
+  const date = new Date(timestamp);
+  return Number.isNaN(date.valueOf())
+    ? timestamp
+    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
 }

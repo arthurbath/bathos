@@ -213,4 +213,57 @@ describe('useTaskList optimistic display', () => {
       cleanup(root, container);
     }
   });
+
+  it('orders Logbook by terminal time and removes a reopened task immediately', async () => {
+    harnessView = 'logbook';
+    const olderCompletedTask = {
+      ...originalTask,
+      id: 'task-completed',
+      lifecycle: 'completed' as const,
+      completed_at: '2026-07-20T04:01:00.000Z',
+    };
+    const newerCanceledTask = {
+      ...originalTask,
+      id: 'task-canceled',
+      lifecycle: 'canceled' as const,
+      canceled_at: '2026-07-20T04:02:00.000Z',
+    };
+    queryData = [olderCompletedTask, newerCanceledTask];
+    const pendingReopen = deferred<TaskTodo>();
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      transitionTask: vi.fn().mockReturnValue(pendingReopen.promise),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository });
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.tasks.map((task) => task.id)).toEqual(['task-canceled', 'task-completed']);
+      expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain(
+        "lifecycle IN ('completed', 'canceled')",
+      );
+
+      let reopenPromise!: Promise<TaskTodo>;
+      act(() => {
+        reopenPromise = latest.transitionTask('task-canceled', 'reopen');
+      });
+      expect(latest.tasks.map((task) => task.id)).toEqual(['task-completed']);
+
+      const reopenedTask = {
+        ...newerCanceledTask,
+        lifecycle: 'open' as const,
+        canceled_at: null,
+        revision: 2,
+        client_mutation_id: 'mutation-reopened',
+      };
+      await act(async () => {
+        pendingReopen.resolve(reopenedTask);
+        await reopenPromise;
+      });
+      expect(latest.tasks.map((task) => task.id)).toEqual(['task-completed']);
+    } finally {
+      cleanup(root, container);
+    }
+  });
 });
