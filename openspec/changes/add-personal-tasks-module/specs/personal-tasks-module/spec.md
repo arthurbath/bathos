@@ -551,6 +551,10 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **WHEN** assistive technology inspects the task surface, an expanded editor, or a command dialog
 - **THEN** every interactive control has a nonempty programmatic name, stateful controls expose their current state, and each dialog has a programmatic title without a dangling description reference
 
+#### Scenario: Keep task header controls inside a narrow mobile viewport
+- **WHEN** a task planning view is rendered at 390 CSS pixels wide
+- **THEN** the view title and header actions remain fully inside the document viewport without horizontal page overflow, while compact icon-only links retain nonempty programmatic names
+
 #### Scenario: Respect reduced-motion preference
 - **WHEN** the operating system requests reduced motion while the Tasks route is mounted
 - **THEN** task-page and portal animations, transitions, delays, and smooth scrolling are reduced without changing the motion policy of unrelated BathOS routes

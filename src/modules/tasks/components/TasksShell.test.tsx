@@ -653,6 +653,23 @@ describe('TasksShell', () => {
     }
   });
 
+  it('keeps narrow mobile hierarchy links compact without losing their names', () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const today = renderShell('/tasks/today');
+
+    try {
+      for (const label of ['Open Projects', 'Open Templates']) {
+        const link = today.container.querySelector<HTMLAnchorElement>(
+          `a[aria-label="${label}"]`,
+        );
+        expect(link).not.toBeNull();
+        expect(link?.querySelector('span')?.className).toContain('sr-only sm:not-sr-only');
+      }
+    } finally {
+      cleanup(today.root, today.container);
+    }
+  });
+
   it('provides a real Templates route on desktop and mobile without task capture', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const templates = renderShell('/tasks/templates');

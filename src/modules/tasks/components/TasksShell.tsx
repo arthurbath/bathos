@@ -2030,7 +2030,7 @@ function MobileProjectsLink({
       className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[hsl(var(--grid-sticky-line))] px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
     >
       <Icon className="h-4 w-4" aria-hidden="true" />
-      {label}
+      <span className="sr-only sm:not-sr-only">{label}</span>
     </a>
   );
 }
