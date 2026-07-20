@@ -126,6 +126,20 @@ describe('task repository', () => {
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain('INSERT INTO tasks_todos');
   });
 
+  it('places unscheduled captures without an explicit destination in Inbox', async () => {
+    const { repository } = createHarness(null);
+
+    await expect(repository.createTask({
+      ownerId: 'owner-a',
+      title: 'Unprocessed capture',
+    })).resolves.toMatchObject({
+      title: 'Unprocessed capture',
+      destination: 'inbox',
+      today_section: 'daytime',
+      start_date: null,
+    });
+  });
+
   it('updates editable fields with exactly one revision and a new mutation identifier', async () => {
     const { repository, transaction } = createHarness(existingTask);
 

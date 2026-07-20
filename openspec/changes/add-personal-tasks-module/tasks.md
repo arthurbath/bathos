@@ -52,7 +52,7 @@
 
 ## 5. Daily Planning Workflow
 
-- [ ] 5.1 Add Inbox behavior for unprocessed captures.
+- [x] 5.1 Add Inbox behavior for unprocessed captures.
 - [ ] 5.2 Add areas, projects, headings, and checklist items with stable hierarchy behavior.
 - [x] 5.3 Add Today and This Evening with manual ordering and unfinished-item rescheduling.
 - [x] 5.4 Add Upcoming with future start-date planning.

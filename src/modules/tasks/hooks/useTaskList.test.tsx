@@ -330,6 +330,32 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
+  it('captures directly into Inbox without scheduling the task', async () => {
+    harnessView = 'inbox';
+    const repository = {
+      createTask: vi.fn().mockResolvedValue({ ...originalTask, destination: 'inbox' }),
+      updateTask: vi.fn(),
+      moveTask: vi.fn(),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      await act(async () => {
+        await latest.createTask('Inbox capture');
+      });
+      expect(repository.createTask).toHaveBeenCalledWith({
+        ownerId: 'owner-a',
+        title: 'Inbox capture',
+        destination: 'inbox',
+        startDate: null,
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('keeps future Anytime work in Upcoming while supporting direct Anytime capture', async () => {
     harnessView = 'anytime';
     const availableTask = {

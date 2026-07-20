@@ -144,6 +144,36 @@ describe('TasksShell', () => {
     }
   });
 
+  it('processes an Inbox task into a chosen planning destination', async () => {
+    const inboxTask = { ...task, destination: 'inbox' as const };
+    const taskList = { ...defaultTaskList(), tasks: [inboxTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/inbox');
+
+    try {
+      const actions = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Actions for Existing task"]',
+      );
+      await act(async () => {
+        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      const moveAnytime = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent === 'Move to Anytime');
+      await act(async () => {
+        moveAnytime?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
+      expect(taskList.moveTask).toHaveBeenCalledWith('task-a', {
+        destination: 'anytime',
+        todaySection: 'daytime',
+        startDate: null,
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('completes an open task from its accessible completion control', async () => {
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
