@@ -294,7 +294,7 @@ export const taskExportV10Collections = [
   'tasks_reminder_occurrences',
 ] as const;
 
-type TaskExportV10Collection = (typeof taskExportV10Collections)[number];
+export type TaskExportV10Collection = (typeof taskExportV10Collections)[number];
 
 export type TaskExportV10 = {
   format: 'garden.bath.tasks.export';
@@ -360,12 +360,62 @@ export type TaskRestoreReport = {
   tasks_reminder_occurrences?: TaskRestoreCollectionReport;
 };
 
+export const TASK_REPLACE_RESTORE_CONFIRMATION = 'REPLACE TASK DATA';
+
+export type TaskReplaceRestorePreparation = {
+  schema_version: 10;
+  backup: TaskExportV10;
+  backup_digest: string;
+  current_counts: Record<TaskExportV10Collection, number>;
+  incoming_counts: Record<TaskExportV10Collection, number>;
+  restore_preview: TaskRestoreReport;
+};
+
+export type TaskReplaceRestoreResult = {
+  outcome: 'accepted';
+  schema_version: 10;
+  request_id: string;
+  backup_digest: string;
+  target_digest: string;
+  removed_counts: Record<TaskExportV10Collection, number>;
+  restore_report: TaskRestoreReport;
+};
+
 type TaskPortabilityClient = Pick<SupabaseClient<Database>, 'rpc'>;
 
 export class InvalidTaskExportError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'InvalidTaskExportError';
+  }
+}
+
+export class TaskPortabilityService {
+  constructor(private readonly client: TaskPortabilityClient) {}
+
+  createExport(): Promise<TaskExportV10> {
+    return createTaskExport(this.client);
+  }
+
+  previewRestore(taskExport: TaskPortableExport): Promise<TaskRestoreReport> {
+    return previewTaskRestore(this.client, taskExport);
+  }
+
+  mergeRestore(taskExport: TaskPortableExport): Promise<TaskRestoreReport> {
+    return mergeTaskRestore(this.client, taskExport);
+  }
+
+  prepareReplace(taskExport: TaskExportV10): Promise<TaskReplaceRestorePreparation> {
+    return prepareTaskReplaceRestore(this.client, taskExport);
+  }
+
+  replace(input: {
+    taskExport: TaskExportV10;
+    preparation: TaskReplaceRestorePreparation;
+    confirmation: string;
+    requestId?: string;
+  }): Promise<TaskReplaceRestoreResult> {
+    return replaceTaskRestore(this.client, input);
   }
 }
 
@@ -395,6 +445,44 @@ export async function mergeTaskRestore(
   taskExport: TaskPortableExport,
 ): Promise<TaskRestoreReport> {
   return restoreTaskExport(supabase, taskExport, false);
+}
+
+export async function prepareTaskReplaceRestore(
+  supabase: TaskPortabilityClient,
+  taskExport: TaskExportV10,
+): Promise<TaskReplaceRestorePreparation> {
+  const validatedExport = requireCurrentTaskExport(taskExport);
+  const { data, error } = await supabase.rpc('tasks_prepare_replace_restore', {
+    _envelope: validatedExport as unknown as Json,
+  });
+  if (error) throw error;
+  return parseReplacePreparation(data);
+}
+
+export async function replaceTaskRestore(
+  supabase: TaskPortabilityClient,
+  input: {
+    taskExport: TaskExportV10;
+    preparation: TaskReplaceRestorePreparation;
+    confirmation: string;
+    requestId?: string;
+  },
+): Promise<TaskReplaceRestoreResult> {
+  const validatedExport = requireCurrentTaskExport(input.taskExport);
+  if (input.confirmation !== TASK_REPLACE_RESTORE_CONFIRMATION) {
+    throw new InvalidTaskExportError('Enter the replacement confirmation exactly');
+  }
+  if (!isSha256(input.preparation.backup_digest)) {
+    throw new InvalidTaskExportError('A verified pre-restore backup is required');
+  }
+  const { data, error } = await supabase.rpc('tasks_replace_restore_v10', {
+    _envelope: validatedExport as unknown as Json,
+    _expected_backup_digest: input.preparation.backup_digest,
+    _request_id: input.requestId ?? crypto.randomUUID(),
+    _confirmation: input.confirmation,
+  });
+  if (error) throw error;
+  return parseReplaceResult(data);
 }
 
 export function serializeTaskExport(taskExport: TaskPortableExport): string {
@@ -526,6 +614,63 @@ function parseTaskRestoreReport(
     }
   }
   return value as TaskRestoreReport;
+}
+
+function requireCurrentTaskExport(value: unknown): TaskExportV10 {
+  const taskExport = parseTaskExport(value);
+  if (taskExport.schema_version !== 10) {
+    throw new InvalidTaskExportError('Replace restore requires a current schema version ten export');
+  }
+  return taskExport;
+}
+
+function parseReplacePreparation(value: unknown): TaskReplaceRestorePreparation {
+  const preparation = requireRecord(value, 'Task replacement preparation is invalid');
+  if (preparation.schema_version !== 10 || !isSha256(preparation.backup_digest)) {
+    throw new InvalidTaskExportError('Task replacement preparation metadata is invalid');
+  }
+  const backup = requireCurrentTaskExport(preparation.backup);
+  return {
+    schema_version: 10,
+    backup,
+    backup_digest: preparation.backup_digest,
+    current_counts: parseV10Counts(preparation.current_counts),
+    incoming_counts: parseV10Counts(preparation.incoming_counts),
+    restore_preview: parseTaskRestoreReport(preparation.restore_preview, 10),
+  };
+}
+
+function parseReplaceResult(value: unknown): TaskReplaceRestoreResult {
+  const result = requireRecord(value, 'Task replacement result is invalid');
+  if (
+    result.outcome !== 'accepted'
+    || result.schema_version !== 10
+    || typeof result.request_id !== 'string'
+    || !result.request_id
+    || !isSha256(result.backup_digest)
+    || !isSha256(result.target_digest)
+  ) {
+    throw new InvalidTaskExportError('Task replacement result metadata is invalid');
+  }
+  return {
+    outcome: 'accepted',
+    schema_version: 10,
+    request_id: result.request_id,
+    backup_digest: result.backup_digest,
+    target_digest: result.target_digest,
+    removed_counts: parseV10Counts(result.removed_counts),
+    restore_report: parseTaskRestoreReport(result.restore_report, 10),
+  };
+}
+
+function parseV10Counts(value: unknown): Record<TaskExportV10Collection, number> {
+  const counts = requireRecord(value, 'Task replacement collection counts are invalid');
+  for (const collection of taskExportV10Collections) {
+    if (!Number.isInteger(counts[collection]) || (counts[collection] as number) < 0) {
+      throw new InvalidTaskExportError('Task replacement collection counts are invalid');
+    }
+  }
+  return counts as Record<TaskExportV10Collection, number>;
 }
 
 async function restoreTaskExport(

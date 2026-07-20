@@ -8,6 +8,7 @@ import type { TaskTemplateService } from '@/modules/tasks/data/taskTemplateServi
 import type { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import type { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import type { TaskPermanentDeletionService } from '@/modules/tasks/data/taskPermanentDeletionService';
+import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
 
 export type TasksRuntimeValue = {
@@ -19,6 +20,7 @@ export type TasksRuntimeValue = {
   recurrenceService: TaskRecurrenceService;
   reminderService: TaskReminderService;
   permanentDeletionService: TaskPermanentDeletionService;
+  portabilityService: TaskPortabilityService;
   mode: 'local' | 'connected';
   syncState: TasksSyncState;
   pendingUploadCount: number;

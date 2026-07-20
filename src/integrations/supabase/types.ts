@@ -2968,6 +2968,19 @@ export type Database = {
         Args: { _root_id: string; _root_type: string }
         Returns: Json
       }
+      tasks_prepare_replace_restore: {
+        Args: { _envelope: Json }
+        Returns: Json
+      }
+      tasks_replace_restore_v10: {
+        Args: {
+          _confirmation: string
+          _envelope: Json
+          _expected_backup_digest: string
+          _request_id: string
+        }
+        Returns: Json
+      }
       tasks_create_export_v1: { Args: never; Returns: Json }
       tasks_create_export_v10: { Args: never; Returns: Json }
       tasks_create_export_v2: { Args: never; Returns: Json }

@@ -9,8 +9,11 @@ import {
   InvalidTaskExportError,
   mergeTaskRestore,
   parseTaskExport,
+  prepareTaskReplaceRestore,
   previewTaskRestore,
+  replaceTaskRestore,
   serializeTaskExport,
+  TASK_REPLACE_RESTORE_CONFIRMATION,
   taskExportV5Collections,
   taskExportV6Collections,
   taskExportV8Collections,
@@ -159,6 +162,74 @@ describe('task portability', () => {
       _envelope: versionEightExport,
       _dry_run: true,
     });
+  });
+
+  it('prepares and executes guarded current-schema replacement restore', async () => {
+    const restorePreview = {
+      dry_run: true,
+      schema_version: 10,
+      ...Object.fromEntries(taskExportV10Collections.map((name) => [name, report(0)])),
+    };
+    const counts = Object.fromEntries(taskExportV10Collections.map((name) => [name, 0]));
+    const preparation = {
+      schema_version: 10,
+      backup: currentTaskExport,
+      backup_digest: checksum,
+      current_counts: counts,
+      incoming_counts: counts,
+      restore_preview: restorePreview,
+    };
+    const result = {
+      outcome: 'accepted',
+      schema_version: 10,
+      request_id: 'request-a',
+      backup_digest: checksum,
+      target_digest: checksum,
+      removed_counts: counts,
+      restore_report: { ...restorePreview, dry_run: false, applied: true },
+    };
+    const client = createClient([preparation, result]);
+
+    const prepared = await prepareTaskReplaceRestore(client, currentTaskExport);
+    await expect(replaceTaskRestore(client, {
+      taskExport: currentTaskExport,
+      preparation: prepared,
+      confirmation: TASK_REPLACE_RESTORE_CONFIRMATION,
+      requestId: 'request-a',
+    })).resolves.toEqual(result);
+    expect(client.rpc).toHaveBeenNthCalledWith(1, 'tasks_prepare_replace_restore', {
+      _envelope: currentTaskExport,
+    });
+    expect(client.rpc).toHaveBeenNthCalledWith(2, 'tasks_replace_restore_v10', {
+      _envelope: currentTaskExport,
+      _expected_backup_digest: checksum,
+      _request_id: 'request-a',
+      _confirmation: TASK_REPLACE_RESTORE_CONFIRMATION,
+    });
+  });
+
+  it('keeps legacy exports and unconfirmed replacements out of replace restore', async () => {
+    const client = createClient([]);
+    await expect(prepareTaskReplaceRestore(client, versionEightExport as never)).rejects.toThrow(
+      'requires a current schema version ten export',
+    );
+    await expect(replaceTaskRestore(client, {
+      taskExport: currentTaskExport,
+      preparation: {
+        schema_version: 10,
+        backup: currentTaskExport,
+        backup_digest: checksum,
+        current_counts: Object.fromEntries(taskExportV10Collections.map((name) => [name, 0])),
+        incoming_counts: Object.fromEntries(taskExportV10Collections.map((name) => [name, 0])),
+        restore_preview: {
+          dry_run: true,
+          schema_version: 10,
+          ...Object.fromEntries(taskExportV10Collections.map((name) => [name, report(0)])),
+        },
+      },
+      confirmation: 'REPLACE',
+    })).rejects.toThrow('confirmation exactly');
+    expect(client.rpc).not.toHaveBeenCalled();
   });
 
   it('rejects incompatible envelopes and inconsistent reports', async () => {

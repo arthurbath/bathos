@@ -87,6 +87,7 @@ import { TaskProjectDetailView } from '@/modules/tasks/components/TaskProjectDet
 import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
 import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView';
 import { TaskPermanentDeletionButton } from '@/modules/tasks/components/TaskPermanentDeletionButton';
+import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
 import {
   getTasksStorageStatusLabel,
   type TasksSyncState,
@@ -141,6 +142,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     syncState,
     pendingUploadCount,
     permanentDeletionService,
+    portabilityService,
     prepareForSignOut,
   } = useTasksRuntime();
   const hierarchy = useTaskHierarchy(userId);
@@ -626,11 +628,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onSignOut={handleSignOut}
         showAppSwitcher
         actionsAccessory={(
-          <TasksStorageStatus
-            mode={mode}
-            syncState={syncState}
-            pendingUploadCount={pendingUploadCount}
-          />
+          <div className="flex items-center gap-1">
+            <TaskDataPortabilityDialog
+              service={portabilityService}
+              replaceAvailable={permanentDeletionAvailable}
+              replaceUnavailableReason={permanentDeletionUnavailableReason}
+            />
+            <TasksStorageStatus
+              mode={mode}
+              syncState={syncState}
+              pendingUploadCount={pendingUploadCount}
+            />
+          </div>
         )}
       />
 

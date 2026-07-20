@@ -18,6 +18,7 @@ import { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import { TaskPermanentDeletionService } from '@/modules/tasks/data/taskPermanentDeletionService';
+import { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import { resolveTaskPlanningTimeZone } from '@/modules/tasks/domain/taskDates';
 import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
 import {
@@ -70,6 +71,7 @@ export function TasksRuntimeProvider({
     () => new TaskPermanentDeletionService(supabase),
     [],
   );
+  const portabilityService = useMemo(() => new TaskPortabilityService(supabase), []);
 
   useEffect(() => {
     let active = true;
@@ -167,6 +169,7 @@ export function TasksRuntimeProvider({
       recurrenceService,
       reminderService,
       permanentDeletionService,
+      portabilityService,
       mode: state.status === 'ready' ? state.mode : 'local',
       syncState,
       pendingUploadCount,
@@ -182,6 +185,7 @@ export function TasksRuntimeProvider({
       recurrenceService,
       reminderService,
       permanentDeletionService,
+      portabilityService,
       templateService,
       syncState,
       pendingUploadCount,

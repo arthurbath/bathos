@@ -475,7 +475,19 @@ The system SHALL provide append-only history, mutation receipts, inverse-mutatio
 
 #### Scenario: Replace data from a restore
 - **WHEN** a user explicitly selects replace restore
-- **THEN** the system requires a verified pre-restore backup and separate confirmation before atomically replacing task data
+- **THEN** the system limits replacement to the complete current export schema, returns a checksum-verified pre-restore server backup, requires that backup to be downloaded plus a separate exact confirmation, and atomically replaces task data only while the server snapshot still matches the downloaded backup digest
+
+#### Scenario: Reject a stale replacement backup
+- **WHEN** synchronized task data changes after the pre-restore backup is prepared and before replacement executes
+- **THEN** the server rejects the stale backup digest without deleting or restoring any task record and requires a fresh preparation
+
+#### Scenario: Recover from replacement failure
+- **WHEN** a validated replacement envelope cannot be restored because of a stable-identifier collision or another transactional failure
+- **THEN** the complete deletion and restore transaction rolls back, the prior owner task graph remains visible, and an exact ambiguous-response retry either resumes safely or returns the original content-free receipt
+
+#### Scenario: Preserve delivery registration during replacement
+- **WHEN** task data is replaced
+- **THEN** the system removes task-specific reminder delivery diagnostics while retaining excluded browser delivery targets and credentials so the current device does not become silently unregistered
 
 ### Requirement: Layered Reminder Delivery
 The system SHALL keep the server authoritative for reminder scheduling and logical delivery identity while supporting Web Push, in-app delivery, and later native delivery targets through one idempotent contract.
