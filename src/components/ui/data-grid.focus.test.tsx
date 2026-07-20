@@ -2090,6 +2090,8 @@ describe("DataGrid undo and redo", () => {
       await dispatchEnter(primaryInput!);
 
       await waitForCondition(() => {
+        expect(getPrimaryInput()?.value).toBe("Alpha edited");
+        expect(getPrimaryInput()?.getAttribute("data-grid-editing")).toBe("false");
         expect(getSecondaryInput()).not.toBeNull();
       });
       await startEditing(getSecondaryInput()!);

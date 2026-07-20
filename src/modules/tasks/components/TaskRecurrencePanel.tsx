@@ -290,6 +290,7 @@ export function TaskRecurrencePanel({
           {model.definitions.map((definition) => {
             const revision = currentRevisionByDefinition.get(definition.id);
             if (!revision) return null;
+            const evaluationFailed = model.evaluationFailures.has(definition.id);
             return (
               <article key={definition.id} className="flex flex-wrap items-center gap-3 px-2 py-4 sm:px-4">
                 <Repeat2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -297,12 +298,15 @@ export function TaskRecurrencePanel({
                   <h3 className="truncate text-sm font-semibold">{definition.name}</h3>
                   <p className="text-xs text-muted-foreground">
                     {formatRule(revision)} / {definition.status === 'active' ? 'Active' : 'Paused'} / {occurrenceCounts.get(definition.id) ?? 0} Created
+                    {evaluationFailed ? (
+                      <span className="text-warning"> / Catch-Up Failed</span>
+                    ) : null}
                   </p>
                 </div>
                 <Button type="button" variant="outline" size="sm" disabled={!connected || pendingAction !== null} onClick={() => edit(definition, revision)}>
                   Revise
                 </Button>
-                <Button type="button" variant="outline" size="icon" disabled={!connected || definition.status !== 'active' || pendingAction !== null} onClick={() => void evaluate(definition)} aria-label={`Catch up ${definition.name}`}>
+                <Button type="button" variant={evaluationFailed ? 'outline-warning' : 'outline'} size="icon" disabled={!connected || definition.status !== 'active' || pendingAction !== null} onClick={() => void evaluate(definition)} aria-label={`${evaluationFailed ? 'Retry catch-up for' : 'Catch up'} ${definition.name}`}>
                   <RefreshCw className="h-4 w-4" aria-hidden="true" />
                 </Button>
                 <Button type="button" variant="outline" size="icon" disabled={!connected || pendingAction !== null} onClick={() => void changeStatus(definition, definition.status === 'active' ? 'paused' : 'active')} aria-label={`${definition.status === 'active' ? 'Pause' : 'Resume'} ${definition.name}`}>

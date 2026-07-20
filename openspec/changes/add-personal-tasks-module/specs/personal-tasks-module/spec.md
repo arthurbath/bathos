@@ -338,6 +338,10 @@ The system SHALL keep recurrence definitions separate from generated task occurr
 - **WHEN** a user pauses or archives a recurrence definition
 - **THEN** the system stops future generation without deleting existing occurrences
 
+#### Scenario: Report a failed catch-up independently from an accepted definition change
+- **WHEN** a recurrence definition is created, revised, or resumed successfully but its immediate occurrence evaluation fails
+- **THEN** the system retains the accepted definition change, reports catch-up as a separate content-free failure, avoids an automatic retry loop for the same planning date, and exposes an explicit retry action
+
 #### Scenario: Hydrate an owner-safe recurrence response
 - **WHEN** an authenticated recurrence RPC omits the owner identifier from its returned definition or revision
 - **THEN** the client assigns the already authenticated owner to the parsed result while synchronized recurrence rows continue to validate their stored owner identifier

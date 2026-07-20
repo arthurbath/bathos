@@ -3,6 +3,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  taskRecurrenceDefinitionFixture,
+  taskRecurrenceRevisionFixture,
+} from '@/modules/tasks/testing/taskFixtures';
 import { TaskTemplatesView } from './TaskTemplatesView';
 
 const capture = vi.fn().mockResolvedValue({});
@@ -126,6 +130,7 @@ describe('TaskTemplatesView', () => {
       definitions: [],
       revisions: new Map(),
       occurrences: [],
+      evaluationFailures: new Set(),
       planningDate: '2026-07-20',
       mode: 'connected',
       loading: false,
@@ -207,6 +212,42 @@ describe('TaskTemplatesView', () => {
         catchUpLimit: 50,
         targetAreaId: null,
       });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('shows a failed recurrence catch-up and exposes an explicit retry', async () => {
+    mockUseTaskTemplates.mockReturnValue(model('connected'));
+    const definition = taskRecurrenceDefinitionFixture({ name: 'Weekly Review Repeat' });
+    const recurrenceRevision = taskRecurrenceRevisionFixture({
+      recurrence_id: definition.id,
+      template_id: template.id,
+    });
+    const evaluate = vi.fn().mockResolvedValue({ generated_count: 0 });
+    mockUseTaskRecurrences.mockReturnValue({
+      definitions: [definition],
+      revisions: new Map([[definition.id, recurrenceRevision]]),
+      occurrences: [],
+      evaluationFailures: new Set([definition.id]),
+      planningDate: '2026-07-20',
+      mode: 'connected',
+      loading: false,
+      error: null,
+      save: recurrenceSave,
+      setStatus: vi.fn(),
+      evaluate,
+    });
+    const { container, root } = renderView();
+
+    try {
+      expect(container.textContent).toContain('Catch-Up Failed');
+      const retry = container.querySelector<HTMLButtonElement>(
+        '[aria-label="Retry catch-up for Weekly Review Repeat"]',
+      );
+      expect(retry).not.toBeNull();
+      await act(async () => retry?.click());
+      expect(evaluate).toHaveBeenCalledWith(definition);
     } finally {
       cleanup(root, container);
     }

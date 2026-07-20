@@ -86,6 +86,7 @@
 - [ ] 5.8b After production activation is approved, provision the reminder secrets, Edge Function, Vault entry, Cron job, public web key, and synthetic-device acceptance test.
 - [x] 5.8c Expose project-root reminder creation, revision, and cancellation in project detail with the existing connected-only delivery contract.
 - [x] 5.9 Add recurrence definitions and idempotent occurrence generation.
+- [x] 5.9a Report recurrence catch-up failure independently from accepted definition changes and expose bounded explicit retry.
 - [x] 5.10 Add native to-do and project templates with provenance-aware instantiation.
 - [x] 5.11 Add structured actionability and source/origin fields without generic tags.
 - [x] 5.11a Expose typed task sources through safe, named origin indicators and reopenable web or platform links.

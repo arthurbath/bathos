@@ -46,6 +46,9 @@ export function useTaskRecurrences(ownerId: string) {
   const [optimisticRevisions, setOptimisticRevisions] = useState<
     Record<string, TaskRecurrenceRevision>
   >({});
+  const [evaluationFailures, setEvaluationFailures] = useState<Set<string>>(
+    () => new Set(),
+  );
   const evaluationRequests = useRef(new Set<string>());
   const planningDate = taskCalendarDateInTimeZone(planningTimeZone);
 
@@ -106,15 +109,45 @@ export function useTaskRecurrences(ownerId: string) {
     return rows;
   }, [optimisticRevisions, queriedRevisions]);
 
+  const clearEvaluationFailure = useCallback((recurrenceId: string) => {
+    setEvaluationFailures((current) => {
+      if (!current.has(recurrenceId)) return current;
+      const next = new Set(current);
+      next.delete(recurrenceId);
+      return next;
+    });
+  }, []);
+
+  const recordEvaluationFailure = useCallback((recurrenceId: string) => {
+    setEvaluationFailures((current) => {
+      if (current.has(recurrenceId)) return current;
+      const next = new Set(current);
+      next.add(recurrenceId);
+      return next;
+    });
+  }, []);
+
+  const runEvaluation = useCallback(async (recurrenceId: string) => {
+    const key = `${recurrenceId}:${planningDate}`;
+    evaluationRequests.current.add(key);
+    try {
+      const result = await recurrenceService.evaluate(recurrenceId, planningDate);
+      setOptimisticDefinitions((current) => ({
+        ...current,
+        [recurrenceId]: result.definition,
+      }));
+      clearEvaluationFailure(recurrenceId);
+      return result;
+    } catch (error) {
+      recordEvaluationFailure(recurrenceId);
+      throw error;
+    }
+  }, [clearEvaluationFailure, planningDate, recordEvaluationFailure, recurrenceService]);
+
   const evaluate = useCallback(async (definition: TaskRecurrenceDefinition) => {
     if (mode !== 'connected') throw new Error('Recurrence evaluation requires connected task storage');
-    const result = await recurrenceService.evaluate(definition.id, planningDate);
-    setOptimisticDefinitions((current) => ({
-      ...current,
-      [definition.id]: result.definition,
-    }));
-    return result;
-  }, [mode, planningDate, recurrenceService]);
+    return runEvaluation(definition.id);
+  }, [mode, runEvaluation]);
 
   useEffect(() => {
     if (mode !== 'connected') return;
@@ -126,16 +159,9 @@ export function useTaskRecurrences(ownerId: string) {
         || evaluationRequests.current.has(key)
       ) continue;
       evaluationRequests.current.add(key);
-      void recurrenceService.evaluate(definition.id, planningDate).then((result) => {
-        setOptimisticDefinitions((current) => ({
-          ...current,
-          [definition.id]: result.definition,
-        }));
-      }).catch(() => {
-        evaluationRequests.current.delete(key);
-      });
+      void runEvaluation(definition.id).catch(() => undefined);
     }
-  }, [definitions, mode, planningDate, recurrenceService]);
+  }, [definitions, mode, planningDate, runEvaluation]);
 
   const save = useCallback(async (input: Omit<
     TaskRecurrenceSaveInput,
@@ -156,18 +182,15 @@ export function useTaskRecurrences(ownerId: string) {
         [result.definition.id]: result.revision!,
       }));
     }
+    clearEvaluationFailure(result.definition.id);
     if (
       result.definition.status === 'active'
       && input.startDate <= planningDate
     ) {
-      const evaluation = await recurrenceService.evaluate(result.definition.id, planningDate);
-      setOptimisticDefinitions((current) => ({
-        ...current,
-        [result.definition.id]: evaluation.definition,
-      }));
+      await runEvaluation(result.definition.id).catch(() => undefined);
     }
     return result;
-  }, [mode, planningDate, planningTimeZone, recurrenceService]);
+  }, [clearEvaluationFailure, mode, planningDate, planningTimeZone, recurrenceService, runEvaluation]);
 
   const setStatus = useCallback(async (
     definition: TaskRecurrenceDefinition,
@@ -182,20 +205,18 @@ export function useTaskRecurrences(ownerId: string) {
       ...current,
       [definition.id]: status === 'archived' ? null : result.definition,
     }));
+    clearEvaluationFailure(definition.id);
     if (status === 'active') {
-      const evaluation = await recurrenceService.evaluate(definition.id, planningDate);
-      setOptimisticDefinitions((current) => ({
-        ...current,
-        [definition.id]: evaluation.definition,
-      }));
+      await runEvaluation(definition.id).catch(() => undefined);
     }
     return result;
-  }, [mode, planningDate, recurrenceService]);
+  }, [clearEvaluationFailure, mode, recurrenceService, runEvaluation]);
 
   return {
     definitions,
     revisions,
     occurrences,
+    evaluationFailures,
     planningDate,
     mode,
     loading: definitionsQuery.isLoading || revisionsQuery.isLoading || occurrencesQuery.isLoading,

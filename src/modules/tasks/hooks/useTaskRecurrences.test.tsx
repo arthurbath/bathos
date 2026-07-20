@@ -139,6 +139,90 @@ describe('useTaskRecurrences', () => {
     expect(result.current.revisions.get(definition.id)).toEqual(revision);
   });
 
+  it('keeps an accepted save successful while exposing a failed catch-up for explicit retry', async () => {
+    const definition = taskRecurrenceDefinitionFixture({
+      evaluated_through_date: '2026-07-18',
+      client_mutation_id: 'mutation-saved-recurrence',
+    });
+    const revision = taskRecurrenceRevisionFixture({
+      client_mutation_id: 'mutation-saved-recurrence',
+    });
+    const evaluated = {
+      ...definition,
+      evaluated_through_date: '2026-07-19',
+    };
+    const recurrenceService = {
+      save: vi.fn().mockResolvedValue({ outcome: 'accepted', definition, revision }),
+      evaluate: vi.fn()
+        .mockRejectedValueOnce(new Error('catch-up unavailable'))
+        .mockResolvedValue({
+          outcome: 'accepted',
+          status: 'active',
+          through_date: '2026-07-19',
+          generated_count: 1,
+          occurrence_ids: ['recurrence-occurrence-a'],
+          definition: evaluated,
+        }),
+      setStatus: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'connected',
+      planningTimeZone,
+      recurrenceService,
+    });
+    const { result } = renderHook(() => useTaskRecurrences('owner-a'));
+
+    let saveResult: Awaited<ReturnType<typeof result.current.save>> | undefined;
+    await act(async () => {
+      saveResult = await result.current.save({
+        name: 'Daily Review',
+        templateId: 'template-a',
+        templateRevision: 1,
+        ruleMode: 'calendar',
+        frequency: 'daily',
+        intervalCount: 1,
+        startDate: '2026-07-19',
+        missedPolicy: 'latest',
+      });
+    });
+
+    expect(saveResult?.outcome).toBe('accepted');
+    expect(result.current.evaluationFailures.has(definition.id)).toBe(true);
+
+    await act(async () => {
+      await result.current.evaluate(definition);
+    });
+    expect(recurrenceService.evaluate).toHaveBeenCalledTimes(2);
+    expect(result.current.evaluationFailures.has(definition.id)).toBe(false);
+    expect(result.current.definitions[0]).toEqual(evaluated);
+  });
+
+  it('reports an automatic evaluation failure once without entering a retry loop', async () => {
+    const stale = taskRecurrenceDefinitionFixture({ evaluated_through_date: '2026-07-18' });
+    const recurrenceService = {
+      evaluate: vi.fn().mockRejectedValue(new Error('catch-up unavailable')),
+      save: vi.fn(),
+      setStatus: vi.fn(),
+    };
+    definitionRows = [stale];
+    revisionRows = [taskRecurrenceRevisionFixture()];
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'connected',
+      planningTimeZone,
+      recurrenceService,
+    });
+
+    const { result } = renderHook(() => useTaskRecurrences('owner-a'));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(recurrenceService.evaluate).toHaveBeenCalledTimes(1);
+    expect(result.current.evaluationFailures.has(stale.id)).toBe(true);
+  });
+
   it('keeps recurrence mutations unavailable in local-only mode', async () => {
     const recurrenceService = {
       save: vi.fn(),
