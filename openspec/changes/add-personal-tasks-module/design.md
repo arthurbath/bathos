@@ -378,6 +378,12 @@ Alternative considered: Build an independent local-only native database. Rejecte
 
 MCP will expose task concepts and operations rather than a generic table mutation interface. Mutations will use stable identifiers, validate ownership and state transitions, prefer recoverable deletion, and support idempotent creation where repeated tool calls are plausible.
 
+The first MCP slice is read-only and registers three closed-world tools on the existing BathOS OAuth server: `get_task_hierarchy`, `get_task_record`, and `get_task_view`. Every query uses the caller's bearer token through the existing RLS-scoped Supabase client and adds an explicit `owner_id` predicate as defense in depth. Returned task records retain stable relationship identifiers but omit the redundant owner identifier.
+
+Hierarchy reads return the normalized current collections instead of inventing a generic tree record. They may be bounded as a whole or scoped to one area, project, heading, or to-do, and they report every truncated collection. Individual-record reads accept only the five current domain record types. Planning-view reads apply the same owner-local date, lifecycle, disposition, availability, and ordering rules as the web module; Today additionally reports its derived Unfinished, daytime, or evening section. An explicit planning date is permitted for deterministic review, while the default is derived from the owner's stored planning time zone. Trash returns only independent deletion roots. Projects and to-dos remain separately typed in planning responses.
+
+This slice does not expose history as a generic record collection, create planning settings as a side effect of a read, or add any mutation capability. A caller without initialized planning settings must open the Tasks module once or supply an explicit planning date. Tool responses are bounded and identify truncation rather than silently presenting a partial result as complete.
+
 Rationale: AI access is a primary advantage of the module, but broad mutation primitives would increase the risk of duplication, data loss, and invalid states.
 
 Alternative considered: Expose generic CRUD over all task tables. Rejected because database shape is not an appropriate automation contract.

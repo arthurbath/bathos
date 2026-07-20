@@ -73,7 +73,7 @@
 
 ## 6. MCP and macOS Capture
 
-- [ ] 6.1 Add read-only MCP tools for task hierarchy, individual records, and defined planning views.
+- [x] 6.1 Add read-only MCP tools for task hierarchy, individual records, and defined planning views.
 - [ ] 6.2 Add guarded MCP task creation with stable IDs, structured origin, and idempotency support.
 - [ ] 6.3 Add guarded MCP update, completion, movement, scheduling, and recoverable deletion operations.
 - [ ] 6.4 Add MCP mutation receipts and task-domain audit history.

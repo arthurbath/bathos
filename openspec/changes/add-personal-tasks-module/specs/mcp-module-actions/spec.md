@@ -7,6 +7,18 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 - **WHEN** an authenticated MCP client requests task data or a defined task view
 - **THEN** the server returns only task records owned by the signed-in user
 
+#### Scenario: Read normalized task hierarchy
+- **WHEN** an authenticated MCP client requests the complete bounded hierarchy or scopes it to one area, project, heading, or to-do
+- **THEN** the server returns the current areas, projects, headings, to-dos, and checklist items with stable relationship identifiers and explicit truncation metadata
+
+#### Scenario: Read one task record
+- **WHEN** an authenticated MCP client requests one current task record by type and stable identifier
+- **THEN** the server returns that owned record without exposing an owner identifier or a record owned by another user
+
+#### Scenario: Read a defined planning view
+- **WHEN** an authenticated MCP client requests Inbox, Today, Upcoming, Anytime, Someday, Logbook, or Trash
+- **THEN** the server applies the task-domain lifecycle, disposition, planning-date, time-zone, and ordering rules and returns separately typed project, to-do, or Trash-root results
+
 #### Scenario: Create task data
 - **WHEN** an authenticated MCP client creates a supported task record with valid structured fields
 - **THEN** the server creates the record within the signed-in user's scope and returns its stable identifier and resulting state
