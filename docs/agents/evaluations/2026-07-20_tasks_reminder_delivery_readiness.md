@@ -16,7 +16,7 @@ Do not activate production reminder delivery until production infrastructure cha
 - The dispatcher previously accepted the current hosted `SUPABASE_SECRET_KEYS` shape and the legacy service-role variable, but not the current local `SUPABASE_SECRET_KEY` shape.
 - The dispatcher previously returned HTTP 200 after a push attempt even when the database could not record the provider result. This could make a scheduled run appear completely successful while leaving an ambiguous delivery receipt.
 - Production configuration existed only as prose. It had no key-pair preflight, fixed Cron SQL, Vault drift checks, rollback SQL, or transaction-safe local proof.
-- The local Supabase Edge runtime currently fails to determine the entrypoint for both the reminder dispatcher and an unrelated existing function. The failure is project-runtime-wide rather than dispatcher-specific. The extracted runtime-independent handler tests pass, but hosted bundling and HTTP acceptance remain part of the approval-gated deployment exercise.
+- The local Supabase CLI serve wrapper currently fails to determine the entrypoint for both the reminder dispatcher and an unrelated existing function. The failure is project-runtime-wide rather than dispatcher-specific. A direct bundle through the same cached Supabase Edge runtime image succeeds, which proves the dispatcher graph and npm dependencies are runtime-compatible. Hosted HTTP acceptance remains part of the approval-gated deployment exercise.
 
 ## Changes Made
 
@@ -35,6 +35,7 @@ Do not activate production reminder delivery until production infrastructure cha
 - Full application suite: 503 passing tests and 9 intentional skips across 93 files.
 - Database suite: 574 passing pgTAP assertions across 21 files, including the Web Push delivery contract.
 - Repository lint, TypeScript, production build, and strict OpenSpec validation: passing.
+- Edge compatibility: Supabase Edge Runtime `v1.74.2` produced a 10 MB dispatcher eszip successfully. The ignored temporary artifact was inspected and removed.
 - Cron package: created the required local extensions, one synthetic Vault secret, one active minute schedule, and the approved command in a database transaction. All assertions passed and the transaction rolled back.
 - Cleanup proof: no synthetic reminder secret and no Cron schema artifact remained after rollback.
 - Database lint reported one pre-existing Drawers function error and one pre-existing unused-variable warning in a Tasks restore helper. It reported no reminder-delivery finding.
@@ -52,4 +53,4 @@ Activation requires all of the following:
 6. Hosted function smoke tests for method and authentication boundaries.
 7. One synthetic-device test covering subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and cleanup.
 
-The local Edge runtime entrypoint failure should be repaired independently, but it does not justify bypassing hosted acceptance or deploying unverified credentials.
+The local CLI serve-wrapper entrypoint failure should be repaired independently, but it does not justify bypassing hosted acceptance or deploying unverified credentials.
