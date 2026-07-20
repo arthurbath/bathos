@@ -88,6 +88,7 @@
 - [x] 5.8d Surface in-app due-reminder claim failure through content-free degraded state and explicit retry.
 - [x] 5.9 Add recurrence definitions and idempotent occurrence generation.
 - [x] 5.9a Report recurrence catch-up failure independently from accepted definition changes and expose bounded explicit retry.
+- [x] 5.9b Distinguish recurrence projection loading and failure from a trustworthy empty state.
 - [x] 5.10 Add native to-do and project templates with provenance-aware instantiation.
 - [x] 5.11 Add structured actionability and source/origin fields without generic tags.
 - [x] 5.11a Expose typed task sources through safe, named origin indicators and reopenable web or platform links.

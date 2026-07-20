@@ -252,4 +252,33 @@ describe('TaskTemplatesView', () => {
       cleanup(root, container);
     }
   });
+
+  it('distinguishes an unavailable recurrence projection from an empty repeat list', () => {
+    mockUseTaskTemplates.mockReturnValue(model('connected'));
+    mockUseTaskRecurrences.mockReturnValue({
+      definitions: [],
+      revisions: new Map(),
+      occurrences: [],
+      evaluationFailures: new Set(),
+      planningDate: '2026-07-20',
+      mode: 'connected',
+      loading: false,
+      error: new Error('projection unavailable'),
+      save: recurrenceSave,
+      setStatus: vi.fn(),
+      evaluate: vi.fn(),
+    });
+    const { container, root } = renderView();
+
+    try {
+      expect(container.querySelector('[role="alert"]')?.textContent)
+        .toContain('Repeats Could Not Be Loaded');
+      expect(container.textContent).not.toContain('No Repeats');
+      const save = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Save Repeat');
+      expect(save?.disabled).toBe(true);
+    } finally {
+      cleanup(root, container);
+    }
+  });
 });

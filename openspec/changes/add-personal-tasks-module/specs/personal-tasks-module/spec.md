@@ -342,6 +342,10 @@ The system SHALL keep recurrence definitions separate from generated task occurr
 - **WHEN** a recurrence definition is created, revised, or resumed successfully but its immediate occurrence evaluation fails
 - **THEN** the system retains the accepted definition change, reports catch-up as a separate content-free failure, avoids an automatic retry loop for the same planning date, and exposes an explicit retry action
 
+#### Scenario: Distinguish unavailable recurrence data from an empty list
+- **WHEN** the recurrence projection is loading or fails to load
+- **THEN** the web interface presents the corresponding loading or failure state, withholds the empty-list claim, and disables recurrence mutation until the projection is trustworthy
+
 #### Scenario: Hydrate an owner-safe recurrence response
 - **WHEN** an authenticated recurrence RPC omits the owner identifier from its returned definition or revision
 - **THEN** the client assigns the already authenticated owner to the parsed result while synchronized recurrence rows continue to validate their stored owner identifier

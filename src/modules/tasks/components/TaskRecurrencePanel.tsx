@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { DatePickerField } from '@/components/ui/date-picker-field';
 import { Input } from '@/components/ui/input';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { toast } from '@/hooks/use-toast';
 import { useTaskRecurrences } from '@/modules/tasks/hooks/useTaskRecurrences';
 import type {
@@ -165,7 +166,7 @@ export function TaskRecurrencePanel({
     }
   };
 
-  const connected = model.mode === 'connected';
+  const connected = model.mode === 'connected' && !model.loading && !model.error;
 
   return (
     <section className="space-y-4 border-t border-[hsl(var(--grid-sticky-line))] pt-8">
@@ -178,6 +179,16 @@ export function TaskRecurrencePanel({
           Generate independent work from an immutable template revision.
         </p>
       </div>
+
+      {model.loading ? (
+        <div role="status" aria-label="Loading Repeats" className="flex min-h-24 items-center justify-center">
+          <LoadingSpinner />
+        </div>
+      ) : model.error ? (
+        <p role="alert" className="rounded-md border border-destructive/40 px-4 py-3 text-sm text-destructive">
+          Repeats Could Not Be Loaded
+        </p>
+      ) : null}
 
       <form onSubmit={save} className="space-y-4 rounded-md border border-[hsl(var(--grid-sticky-line))] p-4">
         <div className="flex items-center justify-between gap-4">
@@ -283,7 +294,7 @@ export function TaskRecurrencePanel({
         </Button>
       </form>
 
-      {model.definitions.length === 0 ? (
+      {model.loading || model.error ? null : model.definitions.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">No Repeats</p>
       ) : (
         <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
