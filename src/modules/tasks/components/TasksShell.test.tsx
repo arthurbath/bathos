@@ -141,6 +141,7 @@ function defaultTaskList() {
     createTask: vi.fn().mockResolvedValue(undefined),
     updateTask: vi.fn().mockResolvedValue(undefined),
     moveTask: vi.fn().mockResolvedValue(undefined),
+    moveTasks: vi.fn().mockResolvedValue([]),
     reorderTask: vi.fn().mockResolvedValue(undefined),
     transitionTask: vi.fn().mockResolvedValue(undefined),
     planningDate: '2026-07-20',
@@ -514,6 +515,67 @@ describe('TasksShell', () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
       expect(document.activeElement).toBe(second);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('selects multiple tasks and applies one approved bulk planning action', async () => {
+    const secondTask = {
+      ...task,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    };
+    const taskList = { ...defaultTaskList(), tasks: [task, secondTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      const selectMode = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Select Tasks"]',
+      );
+      await act(async () => selectMode?.click());
+      expect(container.querySelector('section[aria-label="Task Selection"]')?.textContent)
+        .toContain('0 Tasks Selected');
+      expect(container.querySelector('[aria-label="Add a Task"]')).toBeNull();
+
+      const first = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Select Existing task"]',
+      );
+      const second = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Select Second task"]',
+      );
+      await act(async () => {
+        first?.click();
+        second?.click();
+      });
+      expect(container.querySelector('section[aria-label="Task Selection"]')?.textContent)
+        .toContain('2 Tasks Selected');
+
+      const plan = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find(({ textContent }) => textContent === 'Plan Selected');
+      await act(async () => plan?.click());
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      expect(dialog.textContent).toContain('Plan Selected Tasks');
+      expect(dialog.textContent).toContain('2 Tasks');
+      const evening = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
+        .find(({ textContent }) => textContent === 'Move to This Evening');
+      await act(async () => evening?.click());
+
+      expect(taskList.moveTasks).toHaveBeenCalledWith(['task-a', 'task-b'], {
+        destination: 'today',
+        todaySection: 'evening',
+        startDate: '2026-07-20',
+      });
+      expect(container.querySelector('[aria-label="Add a Task"]')).toBeTruthy();
+      await act(async () => {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.activeElement).toBe(
+        container.querySelector('[aria-label="Add a Task"]'),
+      );
     } finally {
       cleanup(root, container);
     }

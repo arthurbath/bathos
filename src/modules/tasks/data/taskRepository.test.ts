@@ -259,6 +259,61 @@ describe('task repository', () => {
     });
   });
 
+  it('plans multiple selected tasks atomically and preserves their input order', async () => {
+    const secondTask = {
+      ...existingTask,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    };
+    const { database, repository, transaction } = createHarness(null);
+    vi.mocked(transaction.getOptional)
+      .mockResolvedValueOnce(existingTask)
+      .mockResolvedValueOnce(secondTask)
+      .mockResolvedValueOnce({ order_key: 'a9' });
+
+    const moved = await repository.moveTasks('owner-a', ['task-a', 'task-b'], {
+      destination: 'today',
+      todaySection: 'evening',
+      startDate: '2026-07-20',
+    });
+
+    expect(database.writeTransaction).toHaveBeenCalledOnce();
+    expect(moved).toHaveLength(2);
+    expect(moved.map(({ id }) => id)).toEqual(['task-a', 'task-b']);
+    expect(moved[0]).toMatchObject({
+      destination: 'today',
+      today_section: 'evening',
+      start_date: '2026-07-20',
+      revision: 2,
+    });
+    expect(moved[1].order_key > moved[0].order_key).toBe(true);
+    expect(transaction.execute).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(transaction.getOptional).mock.calls[2][0]).toContain(
+      'id NOT IN (?, ?)',
+    );
+  });
+
+  it('rejects an invalid bulk member before writing any selected task', async () => {
+    const completedTask = {
+      ...existingTask,
+      id: 'task-b',
+      lifecycle: 'completed' as const,
+      completed_at: timestamp,
+    };
+    const { repository, transaction } = createHarness(null);
+    vi.mocked(transaction.getOptional)
+      .mockResolvedValueOnce(existingTask)
+      .mockResolvedValueOnce(completedTask);
+
+    await expect(repository.moveTasks('owner-a', ['task-a', 'task-b'], {
+      destination: 'anytime',
+      startDate: null,
+    })).rejects.toThrow('Bulk planning applies only to open, present tasks');
+    expect(transaction.execute).not.toHaveBeenCalled();
+  });
+
   it('moves a task into one owned project heading without changing planning order', async () => {
     const { repository, transaction } = createHarness(existingTask);
     vi.mocked(transaction.getOptional)

@@ -372,6 +372,76 @@ export class TaskRepository {
     });
   }
 
+  async moveTasks(
+    ownerId: string,
+    taskIds: string[],
+    input: TaskPlanningMoveInput,
+    context?: TaskMutationContext,
+  ): Promise<TaskTodo[]> {
+    assertOwner(ownerId);
+    const uniqueTaskIds = Array.from(new Set(taskIds));
+    if (uniqueTaskIds.length === 0) {
+      throw new InvalidTaskMutationError('Select at least one task for bulk planning');
+    }
+    const todaySection = input.todaySection ?? 'daytime';
+    const startDate = normalizeTaskCalendarDate(input.startDate, 'Start date') ?? null;
+    assertPlanningPlacement(input.destination, todaySection, startDate);
+
+    return this.database.writeTransaction(async (transaction) => {
+      const currentTasks: TaskTodo[] = [];
+      for (const taskId of uniqueTaskIds) {
+        const current = await getOwnedTask(transaction, ownerId, taskId);
+        if (current.lifecycle !== 'open' || current.disposition !== 'present') {
+          throw new InvalidTaskMutationError(
+            'Bulk planning applies only to open, present tasks',
+          );
+        }
+        assertTaskCalendarRange(startDate, current.deadline);
+        currentTasks.push(current);
+      }
+
+      const placeholders = uniqueTaskIds.map(() => '?').join(', ');
+      const lastTask = await transaction.getOptional<{ order_key: string }>(
+        `SELECT order_key
+         FROM tasks_todos
+         WHERE owner_id = ?
+           AND destination = ?
+           AND today_section = ?
+           AND lifecycle = 'open'
+           AND disposition = 'present'
+           AND id NOT IN (${placeholders})
+         ORDER BY order_key DESC, id DESC
+         LIMIT 1`,
+        [ownerId, input.destination, todaySection, ...uniqueTaskIds],
+      );
+      const occurredAt = this.now();
+      const mutationContext = normalizeMutationContext(context);
+      let previousOrderKey = lastTask?.order_key ?? null;
+      const movedTasks: TaskTodo[] = [];
+
+      for (const current of currentTasks) {
+        const orderKey = generateTaskOrderKey(previousOrderKey, null);
+        const moved = await updateOwnedTask(
+          transaction,
+          current,
+          {
+            destination: input.destination,
+            today_section: todaySection,
+            start_date: startDate,
+            order_key: orderKey,
+          },
+          this.createId(),
+          occurredAt,
+          mutationContext,
+        );
+        movedTasks.push(moved);
+        previousOrderKey = orderKey;
+      }
+
+      return movedTasks;
+    });
+  }
+
   async transitionTask(
     ownerId: string,
     taskId: string,

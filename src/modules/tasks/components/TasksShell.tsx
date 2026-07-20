@@ -22,6 +22,7 @@ import {
   HardDrive,
   Hourglass,
   Inbox,
+  ListChecks,
   ListTodo,
   LayoutTemplate,
   MoreHorizontal,
@@ -29,6 +30,8 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Square,
+  SquareCheckBig,
   Trash2,
   FolderKanban,
   X,
@@ -50,10 +53,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import { CARD_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
-import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
+import type {
+  EditableTaskPatch,
+  TaskPlanningMoveInput,
+} from '@/modules/tasks/data/taskRepository';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import {
   TaskKeyboardHelpDialog,
+  TaskBulkWhenDialog,
   TaskMoveDialog,
   TaskSearchDialog,
   TaskWhenDialog,
@@ -138,6 +145,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     createTask,
     updateTask,
     moveTask,
+    moveTasks,
     reorderTask,
     transitionTask,
     planningDate,
@@ -145,6 +153,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [creating, setCreating] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelection, setBulkSelection] = useState<Set<string>>(() => new Set());
+  const [bulkWhenOpen, setBulkWhenOpen] = useState(false);
+  const [bulkPending, setBulkPending] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
   const [searchTargetTaskId, setSearchTargetTaskId] = useState<string | null>(null);
@@ -159,8 +171,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   useEffect(() => {
     setSelectedTaskId(null);
+    setBulkMode(false);
+    setBulkSelection(new Set());
+    setBulkWhenOpen(false);
     captureInputRef.current?.focus();
   }, [view]);
+
+  useEffect(() => {
+    const visibleIds = new Set(tasks.map(({ id }) => id));
+    setBulkSelection((current) => {
+      const next = new Set(Array.from(current).filter((taskId) => visibleIds.has(taskId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [tasks]);
 
   useEffect(() => {
     const parameters = new URLSearchParams(location.search);
@@ -283,6 +306,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     returnFocus?.focus();
   };
 
+  const focusTaskListFallback = () => {
+    commandReturnFocusRef.current = null;
+    window.setTimeout(() => {
+      const fallback = captureInputRef.current
+        ?? document.querySelector<HTMLElement>('[data-task-view-heading]');
+      fallback?.focus();
+    }, 0);
+  };
+
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault();
     const title = newTaskTitle.trim();
@@ -396,6 +428,59 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     return actions;
   };
 
+  const applyBulkPlanning = async (input: TaskPlanningMoveInput) => {
+    if (bulkPending) return;
+    const taskIds = tasks
+      .filter(({ id }) => bulkSelection.has(id))
+      .map(({ id }) => id);
+    if (taskIds.length === 0) return;
+    setBulkPending(true);
+    try {
+      await moveTasks(taskIds, input);
+      setBulkSelection(new Set());
+      setBulkMode(false);
+      focusTaskListFallback();
+    } catch (moveError) {
+      showTaskError('Selected Tasks Could Not Be Planned', moveError);
+      throw moveError;
+    } finally {
+      setBulkPending(false);
+    }
+  };
+
+  const bulkAction = (
+    label: string,
+    input: TaskPlanningMoveInput,
+  ): TaskTemporalAction => ({ label, run: () => applyBulkPlanning(input) });
+  const bulkPlanningActions: TaskTemporalAction[] = [
+    bulkAction('Move to Inbox', {
+      destination: 'inbox', todaySection: 'daytime', startDate: null,
+    }),
+    bulkAction('Move to Today', {
+      destination: 'today', todaySection: 'daytime', startDate: planningDate,
+    }),
+    bulkAction('Move to This Evening', {
+      destination: 'today', todaySection: 'evening', startDate: planningDate,
+    }),
+    bulkAction('Move to Tomorrow', {
+      destination: 'today',
+      todaySection: 'daytime',
+      startDate: addTaskCalendarDays(planningDate, 1),
+    }),
+    bulkAction('Move to Anytime', {
+      destination: 'anytime', todaySection: 'daytime', startDate: null,
+    }),
+    bulkAction('Move to Someday', {
+      destination: 'someday', todaySection: 'daytime', startDate: null,
+    }),
+  ];
+
+  const bulkEligible = view === 'inbox'
+    || view === 'today'
+    || view === 'upcoming'
+    || view === 'anytime'
+    || view === 'someday';
+
   const renderActiveTask = (task: TaskTodo, sectionTasks: TaskTodo[]) => {
     const index = sectionTasks.findIndex((candidate) => candidate.id === task.id);
     return (
@@ -405,6 +490,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         hierarchy={hierarchy}
         selected={selectedTaskId === task.id}
         onSelect={() => setSelectedTaskId((current) => (current === task.id ? null : task.id))}
+        bulkSelection={bulkMode ? {
+          selected: bulkSelection.has(task.id),
+          onToggle: () => setBulkSelection((current) => {
+            const next = new Set(current);
+            if (next.has(task.id)) next.delete(task.id);
+            else next.add(task.id);
+            return next;
+          }),
+        } : undefined}
         onUpdate={async (patch) => {
           try {
             const normalizedPatch = normalizeTaskEditorPlanningPatch(
@@ -515,6 +609,25 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               <span className="hidden md:inline">Tasks</span>
             </h2>
             <div className="flex items-center gap-1">
+              {bulkEligible && tasks.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="clear"
+                  size="icon"
+                  aria-label={bulkMode ? 'Exit Task Selection' : 'Select Tasks'}
+                  aria-pressed={bulkMode}
+                  onClick={() => {
+                    setSelectedTaskId(null);
+                    setBulkMode((current) => {
+                      if (current) setBulkSelection(new Set());
+                      return !current;
+                    });
+                  }}
+                  className="h-9 w-9 text-muted-foreground"
+                >
+                  <ListChecks className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="clear"
@@ -601,7 +714,23 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             })}
           </nav>
 
-          {view !== 'projects' && view !== 'project' && view !== 'templates' && (view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday') ? (
+          {bulkMode ? (
+            <TaskBulkToolbar
+              selectedCount={bulkSelection.size}
+              totalCount={tasks.length}
+              pending={bulkPending}
+              onSelectAll={() => setBulkSelection(new Set(tasks.map(({ id }) => id)))}
+              onClear={() => setBulkSelection(new Set())}
+              onPlan={() => openCommandSurface(setBulkWhenOpen)}
+              onDone={() => {
+                setBulkSelection(new Set());
+                setBulkMode(false);
+                focusTaskListFallback();
+              }}
+            />
+          ) : null}
+
+          {!bulkMode && view !== 'projects' && view !== 'project' && view !== 'templates' && (view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday') ? (
             <form onSubmit={handleCreate} className="relative">
               <Plus
                 className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
@@ -764,7 +893,73 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onOpenChange={setKeyboardHelpOpen}
         onCloseAutoFocus={restoreCommandFocus}
       />
+      <TaskBulkWhenDialog
+        open={bulkWhenOpen}
+        selectedCount={bulkSelection.size}
+        actions={bulkPlanningActions}
+        onOpenChange={setBulkWhenOpen}
+        onCloseAutoFocus={restoreCommandFocus}
+      />
     </div>
+  );
+}
+
+function TaskBulkToolbar({
+  selectedCount,
+  totalCount,
+  pending,
+  onSelectAll,
+  onClear,
+  onPlan,
+  onDone,
+}: {
+  selectedCount: number;
+  totalCount: number;
+  pending: boolean;
+  onSelectAll: () => void;
+  onClear: () => void;
+  onPlan: () => void;
+  onDone: () => void;
+}) {
+  return (
+    <section
+      aria-label="Task Selection"
+      className="flex flex-wrap items-center gap-2 rounded-md border border-info/40 bg-info/5 p-3"
+    >
+      <p className="mr-auto text-sm font-medium text-foreground" aria-live="polite">
+        {selectedCount} {selectedCount === 1 ? 'Task' : 'Tasks'} Selected
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pending || selectedCount === totalCount}
+        onClick={onSelectAll}
+      >
+        Select All
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pending || selectedCount === 0}
+        onClick={onClear}
+      >
+        Clear
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pending || selectedCount === 0}
+        onClick={onPlan}
+      >
+        Plan Selected
+      </Button>
+      <Button type="button" variant="clear" size="sm" disabled={pending} onClick={onDone}>
+        Done
+      </Button>
+    </section>
   );
 }
 
@@ -1082,6 +1277,7 @@ function TaskRow({
   hierarchy,
   selected,
   onSelect,
+  bulkSelection,
   onUpdate,
   onComplete,
   planningActions,
@@ -1099,6 +1295,10 @@ function TaskRow({
   hierarchy: TaskHierarchyModel;
   selected: boolean;
   onSelect: () => void;
+  bulkSelection?: {
+    selected: boolean;
+    onToggle: () => void;
+  };
   onUpdate: (patch: EditableTaskPatch) => Promise<void>;
   onComplete: () => Promise<void>;
   planningActions: TaskTemporalAction[];
@@ -1163,27 +1363,45 @@ function TaskRow({
   };
 
   return (
-    <article className={selected ? 'bg-foreground/[0.04]' : undefined}>
+    <article className={selected || bulkSelection?.selected ? 'bg-foreground/[0.04]' : undefined}>
       <div className="flex min-h-14 items-center gap-3 px-2 sm:px-4">
-        <button
-          type="button"
-          disabled={pending}
-          aria-label={`Complete ${task.title}`}
-          onClick={() => void run(onComplete)}
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-        >
-          <Circle className="h-6 w-6" aria-hidden="true" />
-        </button>
+        {bulkSelection ? (
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={bulkSelection.selected}
+            aria-label={`${bulkSelection.selected ? 'Deselect' : 'Select'} ${task.title}`}
+            onClick={bulkSelection.onToggle}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-info transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {bulkSelection.selected ? (
+              <SquareCheckBig className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <Square className="h-5 w-5" aria-hidden="true" />
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={pending}
+            aria-label={`Complete ${task.title}`}
+            onClick={() => void run(onComplete)}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          >
+            <Circle className="h-6 w-6" aria-hidden="true" />
+          </button>
+        )}
         <button
           ref={titleButtonRef}
           type="button"
-          onClick={onSelect}
+          onClick={bulkSelection ? bulkSelection.onToggle : onSelect}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing) {
               return;
             }
             if (
-              event.altKey
+              !bulkSelection
+              && event.altKey
               && !event.metaKey
               && !event.ctrlKey
               && !event.shiftKey
@@ -1204,6 +1422,9 @@ function TaskRow({
             if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
               event.preventDefault();
               focusRelativeTask(event.key === 'ArrowUp' ? -1 : 1);
+              return;
+            }
+            if (bulkSelection) {
               return;
             }
             if (event.key.toLowerCase() === 'c') {
@@ -1230,8 +1451,11 @@ function TaskRow({
               setWhenOpen(true);
             }
           }}
-          aria-expanded={selected}
-          aria-keyshortcuts="Enter ArrowUp ArrowDown C M W Alt+ArrowUp Alt+ArrowDown"
+          aria-expanded={bulkSelection ? undefined : selected}
+          aria-pressed={bulkSelection ? bulkSelection.selected : undefined}
+          aria-keyshortcuts={bulkSelection
+            ? 'Enter ArrowUp ArrowDown'
+            : 'Enter ArrowUp ArrowDown C M W Alt+ArrowUp Alt+ArrowDown'}
           data-task-title-control
           data-task-id={task.id}
           className="min-w-0 flex-1 py-4 text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -1265,7 +1489,7 @@ function TaskRow({
             </span>
           ) : null}
         </button>
-        <DropdownMenu>
+        {!bulkSelection ? <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               type="button"
@@ -1304,9 +1528,9 @@ function TaskRow({
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
-        </DropdownMenu>
+        </DropdownMenu> : null}
       </div>
-      {selected ? (
+      {selected && !bulkSelection ? (
         <TaskEditor
           task={task}
           hierarchy={hierarchy}
@@ -1320,7 +1544,7 @@ function TaskRow({
           onCancelReminder={onCancelReminder}
         />
       ) : null}
-      <TaskMoveDialog
+      {!bulkSelection ? <TaskMoveDialog
         open={moveOpen}
         task={task}
         hierarchy={hierarchy}
@@ -1329,8 +1553,8 @@ function TaskRow({
         }}
         onCloseAutoFocus={() => titleButtonRef.current?.focus()}
         onMove={onUpdate}
-      />
-      <TaskWhenDialog
+      /> : null}
+      {!bulkSelection ? <TaskWhenDialog
         open={whenOpen}
         task={task}
         actions={planningActions}
@@ -1338,7 +1562,7 @@ function TaskRow({
           setWhenOpen(nextOpen);
         }}
         onCloseAutoFocus={() => titleButtonRef.current?.focus()}
-      />
+      /> : null}
     </article>
   );
 }

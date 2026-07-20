@@ -593,6 +593,65 @@ export function TaskWhenDialog({
   );
 }
 
+export function TaskBulkWhenDialog({
+  open,
+  selectedCount,
+  actions,
+  onOpenChange,
+  onCloseAutoFocus,
+}: {
+  open: boolean;
+  selectedCount: number;
+  actions: TaskTemporalAction[];
+  onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const apply = async (action: TaskTemporalAction) => {
+    if (pending) return;
+    setPending(true);
+    try {
+      await action.run();
+      onOpenChange(false);
+    } catch {
+      // The task shell reports the error and keeps this surface available for retry.
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !pending && onOpenChange(nextOpen)}>
+      <DialogContent
+        className="shadow-none"
+        aria-describedby={undefined}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          onCloseAutoFocus();
+        }}
+      >
+        <DialogHeader><DialogTitle>Plan Selected Tasks</DialogTitle></DialogHeader>
+        <DialogBody className="pt-4">
+          <p className="mb-4 text-sm font-medium text-foreground">
+            {selectedCount} {selectedCount === 1 ? 'Task' : 'Tasks'}
+          </p>
+          <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+            {actions.map((action) => (
+              <TaskCommandButton
+                key={action.label}
+                label={action.label}
+                disabled={pending || selectedCount === 0}
+                onClick={() => void apply(action)}
+              />
+            ))}
+          </div>
+        </DialogBody>
+        <div className="text-xs text-muted-foreground">Escape Closes</div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function TaskCommandGroup({ label, children }: { label: string; children: ReactNode }) {
   const headingId = `task-command-${label.toLocaleLowerCase().replaceAll(' ', '-')}`;
   return (

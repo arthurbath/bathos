@@ -128,6 +128,25 @@ The system SHALL represent workflow meaning through explicit structured concepts
 - **WHEN** the interface displays a task whose origin has a configured indicator
 - **THEN** the interface derives that presentation from origin metadata rather than parsing the task title
 
+### Requirement: Bulk Task Planning
+The system SHALL provide an explicit, accessible selection mode for open tasks and SHALL apply the approved bulk temporal-planning actions to the selected records as one local transaction.
+
+#### Scenario: Select multiple visible tasks
+- **WHEN** a user enters task selection in Inbox, Today, Upcoming, Anytime, or Someday and selects one or more visible tasks
+- **THEN** the interface reports the selected count, exposes Select All and Clear controls, and makes each row's selected state available to keyboard and assistive-technology users
+
+#### Scenario: Plan selected tasks
+- **WHEN** a user applies Move to Inbox, Today, This Evening, Tomorrow, Anytime, or Someday to selected tasks
+- **THEN** the system updates every selected task's destination, Today section, start date, mutation metadata, revision, and destination order in one local transaction while preserving the selected task order
+
+#### Scenario: Reject one invalid bulk member
+- **WHEN** any selected task is no longer open and present or the requested start date conflicts with one selected task's deadline
+- **THEN** the system rejects the bulk planning operation without writing any selected task and leaves selection available for correction or retry
+
+#### Scenario: Keep bulk scope bounded
+- **WHEN** the user exits selection, changes task views, or completes a successful bulk plan
+- **THEN** the client clears the selection and returns to ordinary single-task editing without adding bulk completion, deletion, or structural hierarchy mutation to this capability
+
 ### Requirement: Native Templates
 The system SHALL support reusable, revisioned to-do and project template definitions that are separate from active task records.
 

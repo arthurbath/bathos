@@ -213,6 +213,19 @@ export function useTaskList(ownerId: string, view: TaskListView) {
     },
     [ownerId, planningDate, repository, setOptimisticTask, tasks, view],
   );
+  const moveTasks = useCallback(
+    async (taskIds: string[], input: TaskPlanningMoveInput) => {
+      const movedTasks = await repository.moveTasks(ownerId, taskIds, input);
+      for (const movedTask of movedTasks) {
+        setOptimisticTask(
+          movedTask.id,
+          taskIsVisible(movedTask, ownerId, view, planningDate) ? movedTask : null,
+        );
+      }
+      return movedTasks;
+    },
+    [ownerId, planningDate, repository, setOptimisticTask, view],
+  );
   const reorderTask = useCallback(
     async (taskId: string, direction: 'up' | 'down') => {
       const currentTask = tasks.find((task) => task.id === taskId);
@@ -244,6 +257,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
     createTask,
     updateTask,
     moveTask,
+    moveTasks,
     reorderTask,
     transitionTask,
     planningDate,
