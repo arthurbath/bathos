@@ -1478,6 +1478,11 @@ export type Database = {
         Args: { _household_id: string }
         Returns: Json
       }
+      tasks_create_export_v1: { Args: never; Returns: Json }
+      tasks_restore_export_v1: {
+        Args: { _dry_run?: boolean; _envelope: Json }
+        Returns: Json
+      }
     }
     Enums: {
       app_role: "admin" | "user"

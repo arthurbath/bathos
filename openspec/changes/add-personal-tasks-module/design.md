@@ -250,6 +250,10 @@ Portable export uses a versioned, documented JSON envelope with stable identifie
 
 Restore validates checksums and schema compatibility before writing, supports a dry run, assigns all imported data to the authenticated owner, and never trusts exported owner identifiers. Merge restore is idempotent by stable identifier and reports conflicts without overwriting newer records. Replace restore requires a verified pre-restore backup and separate confirmation. A failed restore transaction must not expose a partially restored hierarchy.
 
+The first portable format is `garden.bath.tasks.export` schema version 1. It contains the complete current `tasks_todos` and `tasks_history_events` collections, including structured sources and recoverably deleted rows, but no speculative empty collections for domain tables that do not exist yet. The server removes owner identifiers, orders each collection deterministically, and records its count and SHA-256 checksum in the manifest. Later domain tables require a new compatible schema version and corresponding validation before they enter export.
+
+Authenticated server functions create the envelope, validate it, preview merge restore, and execute merge restore. Restore rebinds every inserted record to the authenticated owner, treats an exact stable-ID record as an idempotent match, and treats any differing or globally colliding stable ID or mutation ID as a conflict without overwriting it. A private transaction-scoped restore context allows the authoritative task-history trigger to distinguish exact historical restoration from an ordinary task mutation; clients cannot create that context or write accepted history directly. Replace restore remains intentionally unavailable until the verified pre-restore-backup and separate-confirmation workflow is implemented.
+
 Rationale: A personal task system must make ordinary mistakes recoverable and catastrophic operations conspicuous before it holds authoritative data.
 
 ### Keep the server authoritative for reminder delivery

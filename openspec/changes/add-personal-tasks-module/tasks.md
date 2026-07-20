@@ -36,7 +36,7 @@
 - [x] 3.6 Add stable ordering primitives with focused concurrent-order tests.
 - [x] 3.7a Add recoverable deletion and restoration primitives with restoration tests.
 - [x] 3.7b Add append-only history, mutation receipts, and inverse-mutation undo primitives.
-- [ ] 3.8 Add an initial portable export and verified restore path using synthetic test data.
+- [x] 3.8 Add an initial portable export and verified restore path using synthetic test data.
 - [x] 3.9 Regenerate or update Supabase TypeScript types for the new task objects.
 
 ## 4. Minimal End-to-End Module
