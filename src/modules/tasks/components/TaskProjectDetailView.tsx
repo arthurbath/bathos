@@ -148,13 +148,13 @@ export function TaskProjectDetailView({
           Projects
         </a>
         <div className="flex flex-wrap items-start gap-3">
-          <div className="min-w-0 flex-1">
+          <div className="w-full min-w-0 sm:flex-1">
             <h3 className="text-2xl font-semibold leading-tight text-foreground">{project.title}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               {area?.title ?? 'No Area'}{project.lifecycle === 'open' ? '' : ` · ${project.lifecycle === 'completed' ? 'Completed' : 'Canceled'}`}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {project.lifecycle === 'open' ? (
               <>
                 <Button type="button" variant="outline-success" size="sm" onClick={() => setProjectAction('complete')}>

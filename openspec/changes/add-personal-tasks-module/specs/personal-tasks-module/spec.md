@@ -69,6 +69,10 @@ The system SHALL organize active work through Inbox, areas, projects, headings, 
 - **WHEN** a user places a to-do under a heading in a project
 - **THEN** the heading belongs to that same project and the system rejects cross-project or cross-owner hierarchy references
 
+#### Scenario: Keep project identity legible beside lifecycle controls
+- **WHEN** a project with a long title is opened at 390 CSS pixels wide
+- **THEN** the complete project title occupies its own mobile row without overlapping or collapsing behind Complete, Cancel, Reopen, or Delete actions, and the actions remain fully operable
+
 #### Scenario: Move a to-do between containers
 - **WHEN** a user moves a to-do to an area, project, heading, or no container
 - **THEN** the system clears incompatible parent references, preserves the to-do's stable identity and planning state, and assigns an order within the new hierarchy scope

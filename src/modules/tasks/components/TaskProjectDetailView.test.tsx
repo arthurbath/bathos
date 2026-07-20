@@ -90,6 +90,30 @@ function setControlValue(control: HTMLInputElement | HTMLSelectElement, value: s
 describe('TaskProjectDetailView', () => {
   beforeEach(() => mockUseTaskProjectDetail.mockReset());
 
+  it('gives project identity and lifecycle actions separate narrow-mobile rows', () => {
+    const hierarchyModel = hierarchy();
+    hierarchyModel.projects[0] = {
+      ...hierarchyModel.projects[0],
+      title: 'Mobile Acceptance Project',
+    };
+    mockUseTaskProjectDetail.mockReturnValue(detail());
+    const { container, root } = renderDetail(hierarchyModel);
+
+    try {
+      const title = Array.from(container.querySelectorAll('h3'))
+        .find((heading) => heading.textContent === 'Mobile Acceptance Project');
+      const complete = Array.from(container.querySelectorAll('button'))
+        .find((button) => button.textContent?.trim() === 'Complete');
+
+      expect(title?.parentElement?.className).toContain('w-full');
+      expect(title?.parentElement?.className).toContain('sm:flex-1');
+      expect(complete?.parentElement?.className).toContain('w-full');
+      expect(complete?.parentElement?.className).toContain('sm:w-auto');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('creates headings and project tasks in an explicit heading', async () => {
     const hierarchyModel = hierarchy();
     const detailModel = detail();
