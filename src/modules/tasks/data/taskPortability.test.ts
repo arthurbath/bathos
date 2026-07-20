@@ -13,9 +13,11 @@ import {
   serializeTaskExport,
   taskExportV5Collections,
   taskExportV6Collections,
+  taskExportV8Collections,
   type TaskExportV5,
   type TaskExportV6,
   type TaskExportV7,
+  type TaskExportV8,
 } from './taskPortability';
 
 const checksum = 'a'.repeat(64);
@@ -38,6 +40,21 @@ const taskExport = {
   ...versionSixExport,
   schema_version: 7,
 } as TaskExportV7;
+
+const currentTaskExport = {
+  format: 'garden.bath.tasks.export',
+  schema_version: 8,
+  created_at: '2026-07-20T05:30:00.000Z',
+  manifest: {
+    collections: [...taskExportV8Collections],
+    counts: Object.fromEntries(taskExportV8Collections.map((name) => [name, 0])),
+    checksums: {
+      algorithm: 'sha256',
+      ...Object.fromEntries(taskExportV8Collections.map((name) => [name, checksum])),
+    },
+  },
+  data: Object.fromEntries(taskExportV8Collections.map((name) => [name, []])),
+} as TaskExportV8;
 
 const versionFiveExport = {
   ...versionSixExport,
@@ -63,12 +80,12 @@ function createClient(results: unknown[]) {
 
 describe('task portability', () => {
   it('creates and serializes a versioned task export', async () => {
-    const client = createClient([taskExport]);
+    const client = createClient([currentTaskExport]);
 
-    await expect(createTaskExport(client)).resolves.toEqual(taskExport);
-    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v7');
-    expect(serializeTaskExport(taskExport)).toBe(`${JSON.stringify(taskExport, null, 2)}\n`);
-    expect(getTaskExportFilename(taskExport.created_at)).toBe('bathos-tasks-2026-07-20.json');
+    await expect(createTaskExport(client)).resolves.toEqual(currentTaskExport);
+    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v8');
+    expect(serializeTaskExport(currentTaskExport)).toBe(`${JSON.stringify(currentTaskExport, null, 2)}\n`);
+    expect(getTaskExportFilename(currentTaskExport.created_at)).toBe('bathos-tasks-2026-07-20.json');
   });
 
   it('previews and executes restore through distinct explicit calls', async () => {
@@ -112,7 +129,7 @@ describe('task portability', () => {
   });
 
   it('rejects incompatible envelopes and inconsistent reports', async () => {
-    expect(() => parseTaskExport({ ...taskExport, schema_version: 8 })).toThrow(
+    expect(() => parseTaskExport({ ...taskExport, schema_version: 9 })).toThrow(
       InvalidTaskExportError,
     );
     expect(() => parseTaskExport({

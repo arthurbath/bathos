@@ -340,6 +340,33 @@ describe('task sync connector', () => {
     expect(complete).toHaveBeenCalledOnce();
   });
 
+  it('rejects direct template writes because guarded RPCs own immutable history', async () => {
+    const entry = new CrudEntry(7, UpdateType.PUT, 'tasks_templates', 'template-a', 7, {
+      owner_id: 'owner-a',
+      kind: 'todo',
+      name: 'Unsafe Direct Write',
+    });
+    const { complete, connector, database, remoteStore } = createHarness(entry);
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.insertTask).not.toHaveBeenCalled();
+    expect(database.execute).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR IGNORE INTO tasks_sync_issues'),
+      [
+        'crud-7',
+        'template-a',
+        'rejected_operation',
+        'PUT',
+        null,
+        null,
+        detectedAt,
+        'unsupported_table',
+      ],
+    );
+    expect(complete).toHaveBeenCalledOnce();
+  });
+
   it('records malformed local writes without exposing task content', async () => {
     const { complete, connector, database, remoteStore } = createHarness(
       taskPatchEntry({ owner_id: 'owner-b' }),

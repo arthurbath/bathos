@@ -69,7 +69,7 @@
 - [x] 5.7b Apply owner-time-zone availability and deadline presentation across derived planning views.
 - [ ] 5.8 Add reminders using the responsibility model selected in the architecture gate.
 - [ ] 5.9 Add recurrence definitions and idempotent occurrence generation.
-- [ ] 5.10 Add native to-do and project templates with provenance-aware instantiation.
+- [x] 5.10 Add native to-do and project templates with provenance-aware instantiation.
 - [x] 5.11 Add structured actionability and source/origin fields without generic tags.
 - [x] 5.12a Add web-safe capture, route, row-focus, completion, reorder, and editor keyboard commands.
 - [x] 5.12b Add task search, structured-field filtering, keyboard help, and distinct Move/When command surfaces.

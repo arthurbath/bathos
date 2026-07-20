@@ -577,6 +577,34 @@
         "outputSchema": null
       },
       {
+        "name": "get_task_templates",
+        "title": "Get Task Templates",
+        "description": "Read the signed-in user's native to-do and project templates with each current immutable revision and relative planning snapshot.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "include_archived": {
+              "type": "boolean",
+              "default": false
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 250
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
         "name": "create_task",
         "title": "Create Task",
         "description": "Create one owner-scoped to-do with structured planning and source fields. A required idempotency key makes exact retries safe.",
@@ -1170,6 +1198,52 @@
             "expected_revision",
             "client_mutation_id",
             "transition"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "instantiate_task_template",
+        "title": "Instantiate Task Template",
+        "description": "Atomically create a complete to-do or project hierarchy from one native template revision for an explicit calendar date.",
+        "annotations": {
+          "readOnlyHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "template_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "template_revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Immutable revision to create. Defaults to the template current revision."
+            },
+            "anchor_date": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "description": "Explicit reference date used to preserve relative start dates and deadlines."
+            },
+            "target_area_id": {
+              "$ref": "#/properties/template_id",
+              "description": "Optional accessible destination area for a project template."
+            },
+            "idempotency_key": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Stable UUID for this exact creation request. Reuse only for an exact retry."
+            }
+          },
+          "required": [
+            "template_id",
+            "anchor_date",
+            "idempotency_key"
           ],
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"

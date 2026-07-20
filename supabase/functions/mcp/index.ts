@@ -2153,13 +2153,86 @@ var transitionTask = defineTool({
   handler: (input, ctx) => toMcpResult(transitionTaskData(input, requireAuthenticated(ctx)))
 });
 
+// src/lib/mcp/tools/tasks-templates.ts
+async function readMany3(query) {
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+function stripOwner2(row) {
+  const { owner_id: _ownerId, ...record } = row;
+  return record;
+}
+async function getTaskTemplatesData(input, auth2) {
+  let query = auth2.supabase.from("tasks_templates").select("*").eq("owner_id", auth2.userId);
+  if (!input.include_archived) query = query.is("archived_at", null);
+  const definitions = await readMany3(query.order("kind").order("name").order("id").limit(input.limit + 1));
+  const visible = definitions.slice(0, input.limit);
+  const ids = visible.map(({ id }) => id);
+  const revisions = ids.length === 0 ? [] : await readMany3(auth2.supabase.from("tasks_template_revisions").select("*").eq("owner_id", auth2.userId).in("template_id", ids).order("template_id").order("revision", { ascending: false }));
+  const currentByTemplate = new Map(revisions.map((revision) => [
+    `${revision.template_id}:${revision.revision}`,
+    revision
+  ]));
+  return {
+    templates: visible.map((definition) => ({
+      ...stripOwner2(definition),
+      current_revision_record: currentByTemplate.has(
+        `${definition.id}:${definition.current_revision}`
+      ) ? stripOwner2(currentByTemplate.get(`${definition.id}:${definition.current_revision}`)) : null
+    })),
+    truncated: definitions.length > input.limit
+  };
+}
+async function instantiateTaskTemplateData(input, auth2) {
+  const { data, error } = await auth2.supabase.rpc("tasks_instantiate_template", {
+    _template_id: input.template_id,
+    _template_revision: input.template_revision ?? null,
+    _anchor_date: input.anchor_date,
+    _request_id: input.idempotency_key,
+    _entry_channel: "mcp",
+    _actor_type: "automation",
+    _target_area_id: input.target_area_id
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+var getTaskTemplates = defineTool({
+  name: "get_task_templates",
+  title: "Get Task Templates",
+  description: "Read the signed-in user's native to-do and project templates with each current immutable revision and relative planning snapshot.",
+  inputSchema: {
+    include_archived: z.boolean().default(false),
+    limit: z.number().int().min(1).max(500).default(250)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(getTaskTemplatesData(input, requireAuthenticated(ctx)))
+});
+var instantiateTaskTemplate = defineTool({
+  name: "instantiate_task_template",
+  title: "Instantiate Task Template",
+  description: "Atomically create a complete to-do or project hierarchy from one native template revision for an explicit calendar date.",
+  inputSchema: {
+    template_id: uuidSchema,
+    template_revision: z.number().int().positive().optional().describe("Immutable revision to create. Defaults to the template current revision."),
+    anchor_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("Explicit reference date used to preserve relative start dates and deadlines."),
+    target_area_id: uuidSchema.optional().describe("Optional accessible destination area for a project template."),
+    idempotency_key: uuidSchema.describe("Stable UUID for this exact creation request. Reuse only for an exact retry.")
+  },
+  annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(instantiateTaskTemplateData(
+    input,
+    requireAuthenticated(ctx)
+  ))
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "rsqfokyqntmtdejfwmjs";
 var mcp_default = defineMcp({
   name: "bathos-mcp",
   title: "BathOS",
   version: "0.1.0",
-  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, and planning views plus guarded create, update, move, schedule, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
+  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, planning views, and native templates plus guarded create, update, move, schedule, template-instantiation, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -2177,6 +2250,7 @@ var mcp_default = defineMcp({
     getTaskHierarchy,
     getTaskRecord,
     getTaskView,
+    getTaskTemplates,
     createTask,
     createMailTask,
     beginMailRetirement,
@@ -2184,7 +2258,8 @@ var mcp_default = defineMcp({
     updateTask,
     moveTask,
     scheduleTask,
-    transitionTask
+    transitionTask,
+    instantiateTaskTemplate
   ]
 });
 

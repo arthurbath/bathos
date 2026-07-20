@@ -4,6 +4,7 @@ import { createContext, useContext } from 'react';
 import type { TaskRepository } from '@/modules/tasks/data/taskRepository';
 import type { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
 import type { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHierarchyOperationsRepository';
+import type { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
 import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
 
 export type TasksRuntimeValue = {
@@ -11,6 +12,7 @@ export type TasksRuntimeValue = {
   repository: TaskRepository;
   hierarchyRepository: TaskHierarchyRepository;
   hierarchyOperationsRepository: TaskHierarchyOperationsRepository;
+  templateService: TaskTemplateService;
   mode: 'local' | 'connected';
   syncState: TasksSyncState;
   pendingUploadCount: number;

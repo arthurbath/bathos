@@ -19,6 +19,10 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 - **WHEN** an authenticated MCP client requests Inbox, Today, Upcoming, Anytime, Someday, Logbook, or Trash
 - **THEN** the server applies the task-domain lifecycle, disposition, planning-date, time-zone, and ordering rules and returns separately typed project, to-do, or Trash-root results
 
+#### Scenario: Read native templates
+- **WHEN** an authenticated MCP client requests active or explicitly archived native templates
+- **THEN** the server returns only the signed-in owner's bounded template definitions and their current immutable revisions without exposing owner identifiers
+
 #### Scenario: Create task data
 - **WHEN** an authenticated MCP client creates a supported task record with valid structured fields
 - **THEN** the server creates the record within the signed-in user's scope and returns its stable identifier and resulting state
@@ -100,7 +104,7 @@ The BathOS MCP server SHALL expose explicit task fields for actionability, sourc
 
 #### Scenario: Instantiate a template
 - **WHEN** an MCP client requests creation from a task or project template
-- **THEN** the server uses the template-instantiation operation rather than exposing template storage as generic task duplication
+- **THEN** the server requires an explicit anchor and idempotency UUID, fixes the actor and channel to MCP automation, and uses the atomic template-instantiation operation rather than exposing template storage as generic task duplication
 
 ### Requirement: Task MCP Mutation Safety
 Task MCP mutations SHALL use stable identifiers, enforce ownership and valid state transitions, support idempotent creation where retries are plausible, and produce enough result information to audit the mutation.

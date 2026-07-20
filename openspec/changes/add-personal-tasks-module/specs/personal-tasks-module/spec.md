@@ -151,6 +151,14 @@ The system SHALL support reusable, revisioned to-do and project template definit
 - **WHEN** a caller retries instantiation with the same idempotency key
 - **THEN** the system returns the original generated hierarchy and never exposes a duplicate or partial instance
 
+#### Scenario: Reject a changed template retry
+- **WHEN** a caller reuses a template-instantiation idempotency key with a different template, revision, anchor, target area, channel, or actor
+- **THEN** the system rejects the request and leaves the original generated hierarchy unchanged
+
+#### Scenario: Capture relative planning from current work
+- **WHEN** a user saves a current open to-do or project hierarchy as a template revision with an explicit reference date
+- **THEN** the system stores immutable relative start-date and deadline offsets, ordering, actionability, headings, and checklist content without treating the source work as the template definition
+
 #### Scenario: Archive a used template
 - **WHEN** a user deletes a template that has generated instances
 - **THEN** the system archives the definition, excludes it from new-template selection, and preserves readable provenance for existing work
@@ -423,7 +431,7 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 
 #### Scenario: Navigate with web-safe commands
 - **WHEN** a keyboard user invokes the `G` navigation sequence outside an editable control
-- **THEN** the documented second key navigates to Inbox, Today, Upcoming, Anytime, Someday, Logbook, Projects, or Trash without claiming browser tab-number shortcuts
+- **THEN** the documented second key navigates to Inbox, Today, Upcoming, Anytime, Someday, Logbook, Projects, Templates, or Trash without claiming browser tab-number shortcuts
 
 #### Scenario: Open task capture, search, or keyboard help
 - **WHEN** a keyboard user presses `N`, `/`, or `?` outside an editable control or unrelated modal

@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
 import { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
 import { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHierarchyOperationsRepository';
+import { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
 import { resolveTaskPlanningTimeZone } from '@/modules/tasks/domain/taskDates';
 import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
 import {
@@ -53,6 +54,7 @@ export function TasksRuntimeProvider({
     () => new TaskHierarchyOperationsRepository(database),
     [database],
   );
+  const templateService = useMemo(() => new TaskTemplateService(supabase), []);
 
   useEffect(() => {
     let active = true;
@@ -146,6 +148,7 @@ export function TasksRuntimeProvider({
       repository,
       hierarchyRepository,
       hierarchyOperationsRepository,
+      templateService,
       mode: state.status === 'ready' ? state.mode : 'local',
       syncState,
       pendingUploadCount,
@@ -158,6 +161,7 @@ export function TasksRuntimeProvider({
       hierarchyRepository,
       prepareForSignOut,
       repository,
+      templateService,
       syncState,
       pendingUploadCount,
       state,

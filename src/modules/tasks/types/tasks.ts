@@ -33,6 +33,7 @@ export const taskMailSourceTransitions = [
   'retirement_failed',
   'retired',
 ] as const;
+export const taskTemplateKinds = ['todo', 'project'] as const;
 export const taskActorTypes = ['user', 'automation', 'system', 'import'] as const;
 export const taskHierarchyRootTypes = [
   'area',
@@ -78,6 +79,7 @@ export type TaskEntryChannel = (typeof taskEntryChannels)[number];
 export type TaskSourceKind = (typeof taskSourceKinds)[number];
 export type TaskMailSourceLifecycle = (typeof taskMailSourceLifecycles)[number];
 export type TaskMailSourceTransition = (typeof taskMailSourceTransitions)[number];
+export type TaskTemplateKind = (typeof taskTemplateKinds)[number];
 export type TaskActorType = (typeof taskActorTypes)[number];
 export type TaskHierarchyRootType = (typeof taskHierarchyRootTypes)[number];
 export type TaskHierarchyOperationKind = (typeof taskHierarchyOperations)[number];
@@ -98,6 +100,9 @@ type TaskMailSourceRow = Tables<'tasks_mail_sources'>;
 type TaskMailSourceEventRow = Tables<'tasks_mail_source_events'>;
 type TaskHierarchyOperationRow = Tables<'tasks_hierarchy_operations'>;
 type TaskHierarchyHistoryRow = Tables<'tasks_hierarchy_history_events'>;
+type TaskTemplateRow = Tables<'tasks_templates'>;
+type TaskTemplateRevisionRow = Tables<'tasks_template_revisions'>;
+type TaskTemplateInstantiationRow = Tables<'tasks_template_instantiations'>;
 
 type RefinedTaskFields = {
   lifecycle: TaskLifecycle;
@@ -181,6 +186,78 @@ export type TaskHierarchyHistoryEvent = Omit<
   actor_type: TaskActorType;
   mutation_channel: TaskEntryChannel;
   transition: Exclude<TaskMutationTransition, 'undo'>;
+};
+
+export type TaskTemplateChecklistNode = {
+  node_id: string;
+  title: string;
+  order_key: string;
+};
+
+export type TaskTemplateTodoNode = {
+  node_id: string;
+  heading_node_id?: string | null;
+  title: string;
+  notes: string;
+  actionability: TaskActionability;
+  destination: TaskDestination;
+  today_section: TaskTodaySection;
+  order_key: string;
+  hierarchy_order_key?: string;
+  start_offset_days: number | null;
+  deadline_offset_days: number | null;
+  checklist: TaskTemplateChecklistNode[];
+};
+
+export type TaskTodoTemplateSnapshot = {
+  version: 1;
+  kind: 'todo';
+  root: TaskTemplateTodoNode;
+};
+
+export type TaskProjectTemplateSnapshot = {
+  version: 1;
+  kind: 'project';
+  root: Omit<
+    TaskTemplateTodoNode,
+    'actionability' | 'checklist' | 'heading_node_id' | 'hierarchy_order_key'
+  > & { planning_order_key: string };
+  headings: Array<{
+    node_id: string;
+    title: string;
+    order_key: string;
+  }>;
+  todos: TaskTemplateTodoNode[];
+};
+
+export type TaskTemplateSnapshot =
+  | TaskTodoTemplateSnapshot
+  | TaskProjectTemplateSnapshot;
+
+type RefinedTemplateFields = {
+  kind: TaskTemplateKind;
+  last_mutation_channel: TaskEntryChannel;
+  last_actor_type: TaskActorType;
+};
+
+export type TaskTemplate = Omit<TaskTemplateRow, keyof RefinedTemplateFields>
+  & RefinedTemplateFields;
+
+export type TaskTemplateRevision = Omit<
+  TaskTemplateRevisionRow,
+  'source_type' | 'snapshot'
+> & {
+  source_type: TaskTemplateKind;
+  snapshot: TaskTemplateSnapshot;
+};
+
+export type TaskTemplateInstantiation = Omit<
+  TaskTemplateInstantiationRow,
+  'entry_channel' | 'actor_type' | 'root_type'
+> & {
+  entry_channel: TaskEntryChannel;
+  actor_type: TaskActorType;
+  root_type: TaskTemplateKind;
 };
 
 export type TaskUserSettings = Tables<'tasks_user_settings'>;

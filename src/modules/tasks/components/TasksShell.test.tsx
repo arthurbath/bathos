@@ -70,6 +70,12 @@ vi.mock('./TaskProjectDetailView', () => ({
   ),
 }));
 
+vi.mock('./TaskTemplatesView', () => ({
+  TaskTemplatesView: () => (
+    <section data-testid="templates-view">Templates</section>
+  ),
+}));
+
 vi.mock('@/platform/components/ToplineHeader', () => ({
   ToplineHeader: ({ title, onSignOut }: { title: string; onSignOut: () => void }) => (
     <header>
@@ -546,6 +552,24 @@ describe('TasksShell', () => {
       expect(todayLink?.getAttribute('href')).toBe('/tasks/today');
     } finally {
       cleanup(projects.root, projects.container);
+    }
+  });
+
+  it('provides a real Templates route on desktop and mobile without task capture', () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const templates = renderShell('/tasks/templates');
+    try {
+      expect(templates.container.querySelector('[data-testid="templates-view"]')?.textContent)
+        .toBe('Templates');
+      expect(templates.container.querySelector('[aria-label="Add a Task"]')).toBeNull();
+      expect(templates.container.querySelector<HTMLAnchorElement>(
+        'nav[aria-label="Task views"] a[href="/tasks/templates"]',
+      )?.getAttribute('aria-current')).toBe('page');
+      expect(templates.container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Return to Today"]',
+      )?.getAttribute('href')).toBe('/tasks/today');
+    } finally {
+      cleanup(templates.root, templates.container);
     }
   });
 

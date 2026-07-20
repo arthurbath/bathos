@@ -367,7 +367,7 @@ export function TaskKeyboardHelpDialog({
         ['N', 'Capture a Task'],
         ['/', 'Search Tasks and Views'],
         ['?', 'Show Keyboard Help'],
-        ['G then I/T/U/A/S/L/P/R', 'Navigate to a View'],
+        ['G then I/T/U/A/S/L/P/R/E', 'Navigate to a View'],
       ],
     },
     {

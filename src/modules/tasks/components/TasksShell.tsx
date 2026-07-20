@@ -21,6 +21,7 @@ import {
   Hourglass,
   Inbox,
   ListTodo,
+  LayoutTemplate,
   MoreHorizontal,
   Moon,
   Plus,
@@ -73,6 +74,7 @@ import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/taskEditorPlanning';
 import { TaskProjectDetailView } from '@/modules/tasks/components/TaskProjectDetailView';
 import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
+import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView';
 import {
   getTasksStorageStatusLabel,
   type TasksSyncState,
@@ -96,6 +98,7 @@ const taskViews = [
   { path: '/logbook', label: 'Logbook', icon: Archive },
   { path: '/trash', label: 'Trash', icon: Trash2 },
   { path: '/projects', label: 'Projects', icon: FolderKanban },
+  { path: '/templates', label: 'Templates', icon: LayoutTemplate },
 ] as const;
 
 const taskNavigationShortcuts: Record<string, string> = {
@@ -107,9 +110,10 @@ const taskNavigationShortcuts: Record<string, string> = {
   l: '/logbook',
   p: '/projects',
   r: '/trash',
+  e: '/templates',
 };
 
-type TaskShellView = TaskListView | 'projects' | 'project';
+type TaskShellView = TaskListView | 'projects' | 'project' | 'templates';
 
 export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) {
   const location = useLocation();
@@ -117,7 +121,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const basePath = useModuleBasePath();
   const view = getTaskViewFromPath(location.pathname);
   const projectId = getTaskProjectIdFromPath(location.pathname);
-  const taskListView: TaskListView = view === 'projects' || view === 'project' ? 'inbox' : view;
+  const taskListView: TaskListView = view === 'projects' || view === 'project' || view === 'templates'
+    ? 'inbox'
+    : view;
   const { mode, syncState, pendingUploadCount, prepareForSignOut } = useTasksRuntime();
   const hierarchy = useTaskHierarchy(userId);
   const hierarchyTrash = useTaskHierarchyTrash(userId);
@@ -480,6 +486,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 <CircleHelp className="h-4 w-4" aria-hidden="true" />
               </Button>
               <MobileProjectsLink view={view} basePath={basePath} navigate={navigate} />
+              <MobileTemplatesLink view={view} basePath={basePath} navigate={navigate} />
             </div>
           </div>
 
@@ -508,7 +515,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             })}
           </nav>
 
-          {view !== 'projects' && view !== 'project' && (view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday') ? (
+          {view !== 'projects' && view !== 'project' && view !== 'templates' && (view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday') ? (
             <form onSubmit={handleCreate} className="relative">
               <Plus
                 className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
@@ -550,7 +557,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               projectId={projectId}
               hierarchy={hierarchy}
             />
-          ) : view === 'projects' ? <TaskProjectsView hierarchy={hierarchy} /> : <section aria-label={getTaskSectionLabel(view)}>
+          ) : view === 'projects' ? <TaskProjectsView hierarchy={hierarchy} />
+            : view === 'templates' ? <TaskTemplatesView ownerId={userId} hierarchy={hierarchy} />
+              : <section aria-label={getTaskSectionLabel(view)}>
             {loading || (view === 'trash' && hierarchyTrash.loading) ? (
               <div className="flex min-h-40 items-center justify-center">
                 <LoadingSpinner />
@@ -637,7 +646,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       </main>
 
       <MobileBottomNav
-        items={taskViews.filter(({ path }) => path !== '/projects')}
+        items={taskViews.filter(({ path }) => path !== '/projects' && path !== '/templates')}
         isActive={(path) => view === path.slice(1)}
         onNavigate={(path) => navigate(`${basePath}${path}`)}
         hrefForPath={(path) => `${basePath}${path}`}
@@ -1399,6 +1408,7 @@ function getTaskViewLabel(view: TaskShellView): string {
   if (view === 'trash') return 'Trash';
   if (view === 'projects') return 'Projects';
   if (view === 'project') return 'Project';
+  if (view === 'templates') return 'Templates';
   return 'Today';
 }
 
@@ -1430,6 +1440,32 @@ function MobileProjectsLink({
   );
 }
 
+function MobileTemplatesLink({
+  view,
+  basePath,
+  navigate,
+}: {
+  view: TaskShellView;
+  basePath: string;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const destination = view === 'templates' ? 'today' : 'templates';
+  const href = `${basePath}/${destination}`;
+  const Icon = destination === 'today' ? CalendarDays : LayoutTemplate;
+  const label = destination === 'today' ? 'Today' : 'Templates';
+  return (
+    <a
+      href={href}
+      aria-label={destination === 'templates' ? 'Open Templates' : 'Return to Today'}
+      onClick={(event) => handleClientSideLinkNavigation(event, navigate, href)}
+      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[hsl(var(--grid-sticky-line))] px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+    >
+      <Icon className="h-4 w-4" aria-hidden="true" />
+      <span className="sr-only sm:not-sr-only">{label}</span>
+    </a>
+  );
+}
+
 function isTaskKeyboardInput(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(
     'input, textarea, select, [contenteditable="true"]',
@@ -1443,6 +1479,7 @@ function getTaskViewFromPath(pathname: string): TaskShellView {
   if (pathname.endsWith('/logbook')) return 'logbook';
   if (pathname.endsWith('/upcoming')) return 'upcoming';
   if (pathname.endsWith('/trash')) return 'trash';
+  if (pathname.endsWith('/templates')) return 'templates';
   if (getTaskProjectIdFromPath(pathname)) return 'project';
   if (pathname.endsWith('/projects')) return 'projects';
   return 'today';
