@@ -374,6 +374,8 @@ Fallback considered: RxDB with its direct Supabase replication plugin remains th
 
 The production deployment topology remains open. PowerSync Cloud and self-hosting have different privacy, uptime, cost, and operational trade-offs. That choice must be made before a remotely available production task module is deployed, but it does not block the local domain foundation.
 
+The 2026 Jul 20 deployment refresh recommends PowerSync Cloud Free for the bounded parallel-use trial. The expected one-owner workload fits its published capacity, Things remains the fallback during deactivation or another outage, and managed service avoids assuming an untested operations burden. This is a recommendation, not authorization. Production setup still requires confirmation that the BathOS Supabase plan permits external replication, approval to add PowerSync Cloud as a processor of personal task data, and synthetic production-path validation. An authoritative BathOS task system must later move to managed service without inactivity deactivation or a monitored and recoverable self-hosted topology.
+
 Atomic hierarchy operations are the one intentional exception to ordinary per-row uploads. Their synchronized operation receipt is both the durable offline command and the server result. The containing local SQLite transaction may update multiple projected rows optimistically, but the connector recognizes the operation entry, uploads only that entry, and lets the authoritative operation transaction generate the server rows and append-only history. The subsequent synchronization download confirms or rolls back the optimistic projection as one logical mutation.
 
 ### Use whole-record optimistic revisions and server-authoritative conflicts
@@ -590,6 +592,6 @@ The following concerns are roadmap requirements and must not be dismissed as pol
 
 ## Open Questions
 
-- Should the production PowerSync service use PowerSync Cloud or a self-hosted deployment?
+- Should the bounded parallel-use trial adopt the recommended PowerSync Cloud Free topology, subject to Supabase plan and privacy approval?
 - What user-facing name and iconography should distinguish the module from Things?
 - Which native Apple surface, if any, is valuable enough to justify the first companion build?

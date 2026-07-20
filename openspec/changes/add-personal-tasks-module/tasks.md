@@ -53,6 +53,8 @@
 - [x] 4.5 Prove offline creation and completion across a client restart and later reconnection.
 - [x] 4.6 Prove optimistic task display without stale-value snapback or focus disruption.
 - [x] 4.7 Add focused accessibility and keyboard tests for the minimal workflow.
+- [ ] 4.8 Approve and provision the production PowerSync topology, task-only replication boundary, owner-scoped Sync Streams, Supabase Auth, secrets, and public client endpoint.
+- [ ] 4.9 Prove the production topology with synthetic cross-client, conflict, restart, isolation, and cleanup validation before personal parallel use.
 
 ## 5. Daily Planning Workflow
 

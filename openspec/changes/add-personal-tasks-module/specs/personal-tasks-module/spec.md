@@ -19,6 +19,25 @@ The system SHALL provide a single-owner task module whose records are accessible
 - **WHEN** one owner signs out and another owner signs in on the same client installation
 - **THEN** the client clears or rebinds its local task projection before rendering the new owner's task data and never exposes the prior owner's cached rows
 
+### Requirement: Production Task Synchronization
+The system SHALL deploy remote task synchronization only through an explicitly approved topology whose download boundary mirrors task RLS and whose secrets remain outside the public client repository.
+
+#### Scenario: Provision production synchronization
+- **WHEN** a production PowerSync service is approved for parallel use
+- **THEN** it uses direct encrypted database replication, a least-privilege task-only role and publication, owner-scoped Sync Streams, Supabase Auth verification, managed secrets, and a public HTTPS client endpoint
+
+#### Scenario: Validate production synchronization before personal use
+- **WHEN** the production service, publication, stream rules, authentication, and client endpoint are configured
+- **THEN** a synthetic owner proves cross-client download, queued upload, conflict handling, restart recovery, owner isolation, and cleanup before the user stores personal task content
+
+#### Scenario: Operate without an approved remote topology
+- **WHEN** no production PowerSync endpoint is configured
+- **THEN** the module identifies itself as local-only, preserves that installation's durable task data, and does not imply cross-device or MCP convergence
+
+#### Scenario: Preserve the promotion boundary
+- **WHEN** a free or single-instance topology is used for parallel evaluation
+- **THEN** the system does not treat that topology as authoritative until uptime, monitoring, backup, upgrade, outage, and recovery behavior pass a later explicit review
+
 ### Requirement: Core Task Organization
 The system SHALL organize active work through Inbox, areas, projects, headings, to-dos, and checklist items without requiring generic tags.
 
