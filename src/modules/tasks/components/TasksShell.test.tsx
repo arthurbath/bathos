@@ -2,6 +2,7 @@ import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { normalizeTaskEditorPlanningPatch } from './taskEditorPlanning';
@@ -185,6 +186,23 @@ function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: str
 function setSelectValue(select: HTMLSelectElement, value: string) {
   Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(select, value);
   select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function expectInteractiveControlsToHaveNames(scope: ParentNode) {
+  const controls = Array.from(new Set(scope.querySelectorAll<HTMLElement>([
+    'a[href]',
+    'button',
+    'input',
+    'select',
+    'textarea',
+    '[role="button"]',
+    '[role="checkbox"]',
+    '[role="menuitem"]',
+  ].join(','))));
+  expect(controls.length).toBeGreaterThan(0);
+  controls.forEach((control) => {
+    expect(control, control.outerHTML).not.toHaveAccessibleName('');
+  });
 }
 
 async function openTaskMenuSurface(
@@ -704,6 +722,147 @@ describe('TasksShell', () => {
       });
 
       expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'complete');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('traverses task rows and the complete editor in browser tab order', async () => {
+    const user = userEvent.setup();
+    const tab = async (shift = false) => {
+      await act(async () => {
+        await user.tab({ shift });
+      });
+    };
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      const complete = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Complete Existing task"]',
+      )!;
+      const title = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
+      const actions = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Actions for Existing task"]',
+      )!;
+
+      complete.focus();
+      await tab();
+      expect(document.activeElement).toBe(title);
+      await tab();
+      expect(document.activeElement).toBe(actions);
+      await tab(true);
+      expect(document.activeElement).toBe(title);
+
+      await act(async () => {
+        await user.keyboard('{Enter}');
+      });
+      const editorTitle = container.querySelector<HTMLInputElement>('#task-title-task-a')!;
+      const notes = container.querySelector<HTMLTextAreaElement>('#task-notes-task-a')!;
+      const actionability = container.querySelector<HTMLSelectElement>('#task-actionability-task-a')!;
+      const organization = container.querySelector<HTMLSelectElement>('#task-organization-task-a')!;
+      const startDate = container.querySelector<HTMLButtonElement>('#task-start-date-task-a')!;
+      const deadline = container.querySelector<HTMLButtonElement>('#task-deadline-task-a')!;
+      const cancel = Array.from(editorTitle.form!.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent === 'Cancel')!;
+      const save = Array.from(editorTitle.form!.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent === 'Save')!;
+
+      expect(document.activeElement).toBe(editorTitle);
+      await tab();
+      expect(document.activeElement).toBe(notes);
+      await tab();
+      expect(document.activeElement).toBe(actionability);
+      await tab();
+      expect(document.activeElement).toBe(organization);
+      await tab();
+      expect(document.activeElement).toBe(startDate);
+      await tab();
+      expect(document.activeElement).toBe(deadline);
+      await tab();
+      expect(document.activeElement).toBe(cancel);
+      await tab();
+      expect(document.activeElement).toBe(save);
+      await tab(true);
+      expect(document.activeElement).toBe(cancel);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('gives every task control an accessible name and scopes reduced motion to the module', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      expect(document.body).toHaveAttribute('data-tasks-motion-scope', 'true');
+      expectInteractiveControlsToHaveNames(container);
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      expectInteractiveControlsToHaveNames(container);
+
+      await act(async () => {
+        container.querySelector<HTMLInputElement>('#task-title-task-a')?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        );
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      const title = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
+      title.focus();
+      await act(async () => {
+        title.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'm', bubbles: true, cancelable: true,
+        }));
+      });
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      expect(dialog).toHaveAccessibleName('Move Task');
+      expectInteractiveControlsToHaveNames(dialog);
+    } finally {
+      cleanup(root, container);
+    }
+
+    expect(document.body).not.toHaveAttribute('data-tasks-motion-scope');
+  });
+
+  it('keeps search traversal inside a named dialog', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      const searchButton = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Search Tasks and Views"]',
+      )!;
+      searchButton.focus();
+      await act(async () => {
+        searchButton.click();
+      });
+
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      const searchInput = dialog.querySelector<HTMLInputElement>(
+        'input[aria-label="Search Tasks and Views"]',
+      )!;
+      const placement = Array.from(dialog.querySelectorAll<HTMLSelectElement>('select'))
+        .find((select) => select.labels?.[0]?.textContent?.startsWith('Placement'))!;
+      expect(dialog).toHaveAccessibleName('Search Tasks');
+      expect(document.activeElement).toBe(searchInput);
+      expectInteractiveControlsToHaveNames(dialog);
+
+      await act(async () => {
+        searchInput.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Tab', bubbles: true, cancelable: true,
+        }));
+      });
+      expect(document.activeElement).toBe(placement);
+
+      await act(async () => {
+        placement.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape', bubbles: true, cancelable: true,
+        }));
+      });
+      expect(dialog.dataset.state).toBe('closed');
     } finally {
       cleanup(root, container);
     }

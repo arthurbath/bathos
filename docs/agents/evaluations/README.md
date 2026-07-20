@@ -14,6 +14,7 @@ This folder contains dated agent-facing security, performance, and technology ev
 
 | Date | File | Topic |
 |---|---|---|
+| 2026-07-20 | `2026-07-20_tasks_accessibility_validation.md` | Personal Tasks keyboard, focus, screen-reader label, dialog, and reduced-motion validation |
 | 2026-07-20 | `2026-07-20_tasks_preservation_recovery.md` | Personal Tasks undo, Trash, backup, export, and catastrophic restore validation |
 | 2026-07-20 | `2026-07-20_tasks_multi_client_convergence.md` | Personal Tasks overlapping web, MCP, and Raycast convergence validation |
 | 2026-07-20 | `2026-07-20_tasks_offline_workflow_validation.md` | Personal Tasks complete offline workflow validation |

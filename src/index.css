@@ -120,6 +120,19 @@
   display: none;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  body[data-tasks-motion-scope='true'] *,
+  body[data-tasks-motion-scope='true'] *::before,
+  body[data-tasks-motion-scope='true'] *::after {
+    scroll-behavior: auto !important;
+    animation-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @media (pointer: coarse) {
   /* Expand the touch hit target for column resize handles without changing visual size. */
   .data-grid-resize-handle::before {

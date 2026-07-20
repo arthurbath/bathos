@@ -170,6 +170,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const navigationResetRef = useRef<number | null>(null);
 
   useEffect(() => {
+    const previousMotionScope = document.body.getAttribute('data-tasks-motion-scope');
+    document.body.setAttribute('data-tasks-motion-scope', 'true');
+    return () => {
+      if (previousMotionScope === null) {
+        document.body.removeAttribute('data-tasks-motion-scope');
+      } else {
+        document.body.setAttribute('data-tasks-motion-scope', previousMotionScope);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     setSelectedTaskId(null);
     setBulkMode(false);
     setBulkSelection(new Set());

@@ -508,6 +508,18 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **WHEN** focus is in an input, textarea, select, content-editable surface, or unrelated modal
 - **THEN** app-level single-key commands remain inactive, native Tab traversal continues, and the module does not claim Command+1 through Command+9, Command+T, Command+L, Command+R, or Command+W
 
+#### Scenario: Traverse a task and its complete editor
+- **WHEN** a keyboard user advances or reverses focus through a task row or expanded task editor
+- **THEN** every available interactive control receives visible focus in documented order, unavailable controls are skipped, and save or cancel returns focus to the task title
+
+#### Scenario: Announce task controls and command surfaces
+- **WHEN** assistive technology inspects the task surface, an expanded editor, or a command dialog
+- **THEN** every interactive control has a nonempty programmatic name, stateful controls expose their current state, and each dialog has a programmatic title without a dangling description reference
+
+#### Scenario: Respect reduced-motion preference
+- **WHEN** the operating system requests reduced motion while the Tasks route is mounted
+- **THEN** task-page and portal animations, transitions, delays, and smooth scrolling are reduced without changing the motion policy of unrelated BathOS routes
+
 #### Scenario: Open global quick entry on Mac
 - **WHEN** the user invokes the configured Raycast task-entry hotkey
 - **THEN** Raycast presents required title and optional notes inputs without requiring the BathOS browser tab to be focused

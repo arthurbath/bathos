@@ -168,6 +168,7 @@ export function TaskSearchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="shadow-none sm:max-w-xl"
+        aria-describedby={undefined}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           onCloseAutoFocus();
@@ -395,6 +396,7 @@ export function TaskKeyboardHelpDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="shadow-none"
+        aria-describedby={undefined}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           onCloseAutoFocus();
@@ -463,6 +465,7 @@ export function TaskMoveDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => !pending && onOpenChange(nextOpen)}>
       <DialogContent
         className="shadow-none"
+        aria-describedby={undefined}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           onCloseAutoFocus();
@@ -568,6 +571,7 @@ export function TaskWhenDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => !pending && onOpenChange(nextOpen)}>
       <DialogContent
         className="shadow-none"
+        aria-describedby={undefined}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           onCloseAutoFocus();
