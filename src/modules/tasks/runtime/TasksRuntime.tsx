@@ -15,6 +15,7 @@ import { TaskRepository } from '@/modules/tasks/data/taskRepository';
 import { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
 import { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHierarchyOperationsRepository';
 import { resolveTaskPlanningTimeZone } from '@/modules/tasks/domain/taskDates';
+import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
 import {
   bindTasksDatabaseOwner,
   clearTasksDatabaseForSignOut,
@@ -38,6 +39,10 @@ export function TasksRuntimeProvider({
     | { status: 'ready'; mode: 'local' | 'connected'; planningTimeZone: string }
     | { status: 'error'; error: Error }
   >({ status: 'loading' });
+  const [syncState, setSyncState] = useState<TasksSyncState>(
+    import.meta.env.VITE_TASKS_POWERSYNC_ENDPOINT?.trim() ? 'connecting' : 'local',
+  );
+  const [pendingUploadCount, setPendingUploadCount] = useState(0);
   const [database, setDatabase] = useState<PowerSyncDatabase>(createTasksPowerSyncDatabase);
   const repository = useMemo(() => new TaskRepository(database), [database]);
   const hierarchyRepository = useMemo(
@@ -51,7 +56,16 @@ export function TasksRuntimeProvider({
 
   useEffect(() => {
     let active = true;
+    let disposeStatusListener: (() => void) | undefined;
+    let queuePoll: ReturnType<typeof setInterval> | undefined;
     const endpoint = import.meta.env.VITE_TASKS_POWERSYNC_ENDPOINT?.trim();
+
+    const refreshQueueDepth = async () => {
+      const queue = await database.getUploadQueueStats();
+      if (active) {
+        setPendingUploadCount(queue.count);
+      }
+    };
 
     void (async () => {
       try {
@@ -71,17 +85,35 @@ export function TasksRuntimeProvider({
         });
         if (endpoint) {
           const connector = createTasksSupabaseConnector({ endpoint, supabase });
+          setSyncState('connecting');
+          disposeStatusListener = database.registerListener({
+            statusChanged: (status) => {
+              if (!active) {
+                return;
+              }
+              setSyncState(status.connected ? 'connected' : status.connecting ? 'connecting' : 'offline');
+              void refreshQueueDepth().catch(() => undefined);
+            },
+          });
+          await refreshQueueDepth();
+          queuePoll = setInterval(() => {
+            void refreshQueueDepth().catch(() => undefined);
+          }, 1_000);
           try {
             await database.connect(connector);
           } catch {
             if (active) {
+              setSyncState('offline');
               setState({
                 status: 'ready',
-                mode: 'local',
+                mode: 'connected',
                 planningTimeZone: settings.planning_timezone,
               });
             }
           }
+        } else {
+          setSyncState('local');
+          setPendingUploadCount(0);
         }
       } catch (error) {
         if (active) {
@@ -95,6 +127,10 @@ export function TasksRuntimeProvider({
 
     return () => {
       active = false;
+      disposeStatusListener?.();
+      if (queuePoll !== undefined) {
+        clearInterval(queuePoll);
+      }
       void database.close().catch(() => undefined);
     };
   }, [database, ownerId, repository]);
@@ -111,6 +147,8 @@ export function TasksRuntimeProvider({
       hierarchyRepository,
       hierarchyOperationsRepository,
       mode: state.status === 'ready' ? state.mode : 'local',
+      syncState,
+      pendingUploadCount,
       planningTimeZone: state.status === 'ready' ? state.planningTimeZone : 'UTC',
       prepareForSignOut,
     }),
@@ -120,6 +158,8 @@ export function TasksRuntimeProvider({
       hierarchyRepository,
       prepareForSignOut,
       repository,
+      syncState,
+      pendingUploadCount,
       state,
     ],
   );

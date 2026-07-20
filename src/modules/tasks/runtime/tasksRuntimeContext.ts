@@ -4,6 +4,7 @@ import { createContext, useContext } from 'react';
 import type { TaskRepository } from '@/modules/tasks/data/taskRepository';
 import type { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
 import type { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHierarchyOperationsRepository';
+import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
 
 export type TasksRuntimeValue = {
   database: PowerSyncDatabase;
@@ -11,6 +12,8 @@ export type TasksRuntimeValue = {
   hierarchyRepository: TaskHierarchyRepository;
   hierarchyOperationsRepository: TaskHierarchyOperationsRepository;
   mode: 'local' | 'connected';
+  syncState: TasksSyncState;
+  pendingUploadCount: number;
   planningTimeZone: string;
   prepareForSignOut: () => Promise<void>;
 };

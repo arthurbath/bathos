@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { normalizeTaskEditorPlanningPatch } from './taskEditorPlanning';
+import { getTasksStorageStatusLabel } from './tasksStorageStatus';
 import { TasksShell } from './TasksShell';
 
 const mockTaskList = vi.fn();
@@ -30,10 +31,27 @@ vi.mock('@/modules/tasks/hooks/useTaskHierarchyTrash', () => ({
 vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
   useTasksRuntime: () => ({
     mode: 'local',
+    syncState: 'local',
+    pendingUploadCount: 0,
     planningTimeZone: 'America/Los_Angeles',
     prepareForSignOut: mockPrepareForSignOut,
   }),
 }));
+
+describe('getTasksStorageStatusLabel', () => {
+  it('distinguishes local, connected, pending, and offline states', () => {
+    expect(getTasksStorageStatusLabel({ mode: 'local', syncState: 'local', pendingUploadCount: 0 }))
+      .toBe('Local');
+    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'connected', pendingUploadCount: 0 }))
+      .toBe('Synced');
+    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'connected', pendingUploadCount: 2 }))
+      .toBe('Syncing 2');
+    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'offline', pendingUploadCount: 2 }))
+      .toBe('Offline - 2 Pending');
+    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'offline', pendingUploadCount: 0 }))
+      .toBe('Offline');
+  });
+});
 
 vi.mock('./TaskProjectsView', () => ({
   TaskProjectsView: () => (

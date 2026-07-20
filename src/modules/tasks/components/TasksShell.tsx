@@ -62,6 +62,10 @@ import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/taskEditorPlanning';
 import { TaskProjectDetailView } from '@/modules/tasks/components/TaskProjectDetailView';
 import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
+import {
+  getTasksStorageStatusLabel,
+  type TasksSyncState,
+} from '@/modules/tasks/components/tasksStorageStatus';
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
@@ -97,7 +101,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const view = getTaskViewFromPath(location.pathname);
   const projectId = getTaskProjectIdFromPath(location.pathname);
   const taskListView: TaskListView = view === 'projects' || view === 'project' ? 'inbox' : view;
-  const { mode, prepareForSignOut } = useTasksRuntime();
+  const { mode, syncState, pendingUploadCount, prepareForSignOut } = useTasksRuntime();
   const hierarchy = useTaskHierarchy(userId);
   const hierarchyTrash = useTaskHierarchyTrash(userId);
   const {
@@ -302,7 +306,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         displayName={displayName}
         onSignOut={handleSignOut}
         showAppSwitcher
-        actionsAccessory={<TasksStorageStatus mode={mode} />}
+        actionsAccessory={(
+          <TasksStorageStatus
+            mode={mode}
+            syncState={syncState}
+            pendingUploadCount={pendingUploadCount}
+          />
+        )}
       />
 
       <main className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
@@ -1020,12 +1030,21 @@ function TaskEditor({
   );
 }
 
-function TasksStorageStatus({ mode }: { mode: 'local' | 'connected' }) {
+function TasksStorageStatus({
+  mode,
+  syncState,
+  pendingUploadCount,
+}: {
+  mode: 'local' | 'connected';
+  syncState: TasksSyncState;
+  pendingUploadCount: number;
+}) {
   const Icon = mode === 'connected' ? Cloud : HardDrive;
+  const label = getTasksStorageStatusLabel({ mode, syncState, pendingUploadCount });
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-info">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-info" aria-label="Task Sync Status">
       <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-      {mode === 'connected' ? 'Sync' : 'Local'}
+      {label}
     </span>
   );
 }

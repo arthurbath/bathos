@@ -47,7 +47,7 @@
 - [ ] 4.2 Register the task module in platform module detection, launcher metadata, PWA metadata, and related tests.
 - [x] 4.3 Add the minimum owner-scoped task query and mutation hooks.
 - [x] 4.4 Add keyboard-accessible task creation, editing, completion, and recoverable deletion.
-- [ ] 4.5 Prove offline creation and completion across a client restart and later reconnection.
+- [x] 4.5 Prove offline creation and completion across a client restart and later reconnection.
 - [x] 4.6 Prove optimistic task display without stale-value snapback or focus disruption.
 - [x] 4.7 Add focused accessibility and keyboard tests for the minimal workflow.
 

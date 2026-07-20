@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://unpkg.com/@powersync/service-sync-rules@1.23.3/schema/sync_rules.json
+
+config:
+  edition: 3
+
+streams:
+  owner_tasks:
+    auto_subscribe: true
+    queries:
+      - SELECT * FROM tasks_areas WHERE owner_id = auth.user_id()
+      - SELECT * FROM tasks_projects WHERE owner_id = auth.user_id()
+      - SELECT * FROM tasks_headings WHERE owner_id = auth.user_id()
+      - SELECT * FROM tasks_todos WHERE owner_id = auth.user_id()
+      - SELECT * FROM tasks_checklist_items WHERE owner_id = auth.user_id()
+      - SELECT * FROM tasks_history_events WHERE owner_id = auth.user_id()
+      - SELECT * FROM tasks_hierarchy_operations WHERE owner_id = auth.user_id()
+      - SELECT * FROM tasks_hierarchy_history_events WHERE owner_id = auth.user_id()
+      - SELECT * FROM tasks_user_settings WHERE owner_id = auth.user_id()
