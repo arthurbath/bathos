@@ -86,6 +86,8 @@
 - [x] 6.8b Add selected-text capture that actively copies the current selection and rejects stale clipboard content.
 - [x] 6.8c Add AI-enriched reading-list capture with typed reading provenance and Today placement.
 - [ ] 6.8d Add Mail capture after the structured source contract preserves account identity, message identity, deep link, and source-retirement lifecycle.
+- [x] 6.8d1 Add specialized atomic Mail task creation with request and source-identity deduplication.
+- [ ] 6.8d2 Add guarded, auditable Mail source-retirement lifecycle mutations.
 - [ ] 6.9 Connect Inbox Manager output after the BathOS Inbox is approved for parallel use.
 
 ## 7. Trust Validation

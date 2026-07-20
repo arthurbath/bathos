@@ -424,7 +424,9 @@ Mail is deliberately not activated in this slice. The observed Inbox Manager con
 
 Portable export version 5 adds `tasks_mail_sources` to the complete task envelope. Validation checks both directions of the task-source relationship and rejects mismatched identity or deep-link data. Restore first reconstructs the version 4 task domain inside the same transaction, then restores source records before deferred pair constraints run. Dry-run and merge reports include Mail-source inserts, exact matches, and conflicts.
 
-Mail capture and Inbox Manager dual writing remain gated until a specialized atomic creation service, guarded lifecycle mutations, and parallel-use approval have all passed verification. Existing Mail rules and Things delivery remain unchanged.
+The specialized `create_mail_task` MCP operation derives the owner's planning date, validates optional work-area access, allocates planning and hierarchy order, and calls one database function that creates the Today task and retained source together. The database serializes capture by owner, account, and message identity. Exact request-UUID retries return the same task, while a later request UUID for the same source identity also returns the existing pair. Reusing a request UUID with changed normalized content or presenting conflicting metadata for an existing source is rejected. A source-row failure rolls back the task insert. This tool is intentionally narrower than generic `create_task` and accepts no owner, project, heading, lifecycle, order, or arbitrary metadata input.
+
+Mail capture and Inbox Manager dual writing remain gated until guarded lifecycle mutations and parallel-use approval have passed verification. Existing Mail rules and Things delivery remain unchanged.
 
 Rationale: Raycast already provides global hotkeys, forms, command lifecycle, and a familiar user workflow. It avoids building and signing a custom overlay before one is necessary.
 

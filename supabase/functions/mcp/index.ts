@@ -779,18 +779,18 @@ function planningDateInTimeZone(timeZone, instant = /* @__PURE__ */ new Date()) 
   const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
   return `${values.year}-${values.month}-${values.day}`;
 }
-function visibleInTaskView(row, view, planningDate) {
+function visibleInTaskView(row, view, planningDate2) {
   if (view === "logbook") return row.disposition === "present" && row.lifecycle !== "open";
   if (row.disposition !== "present" || row.lifecycle !== "open") return false;
   if (view === "upcoming") {
-    return (row.destination === "today" || row.destination === "anytime") && row.start_date !== null && row.start_date > planningDate;
+    return (row.destination === "today" || row.destination === "anytime") && row.start_date !== null && row.start_date > planningDate2;
   }
-  return row.destination === view && (view !== "today" && view !== "anytime" || row.start_date === null || row.start_date <= planningDate);
+  return row.destination === view && (view !== "today" && view !== "anytime" || row.start_date === null || row.start_date <= planningDate2);
 }
-function todaySection(row, planningDate) {
-  return row.start_date !== null && row.start_date < planningDate ? "unfinished" : row.today_section;
+function todaySection(row, planningDate2) {
+  return row.start_date !== null && row.start_date < planningDate2 ? "unfinished" : row.today_section;
 }
-function comparePlanningRows(left, right, view, planningDate) {
+function comparePlanningRows(left, right, view, planningDate2) {
   if (view === "logbook") {
     return (right.completed_at ?? right.canceled_at ?? "").localeCompare(
       left.completed_at ?? left.canceled_at ?? ""
@@ -801,17 +801,17 @@ function comparePlanningRows(left, right, view, planningDate) {
   }
   if (view === "today") {
     const ranks = { unfinished: 0, daytime: 1, evening: 2 };
-    return ranks[todaySection(left, planningDate)] - ranks[todaySection(right, planningDate)] || planningOrder(left).localeCompare(planningOrder(right)) || left.id.localeCompare(right.id);
+    return ranks[todaySection(left, planningDate2)] - ranks[todaySection(right, planningDate2)] || planningOrder(left).localeCompare(planningOrder(right)) || left.id.localeCompare(right.id);
   }
   return planningOrder(left).localeCompare(planningOrder(right)) || left.id.localeCompare(right.id);
 }
 function planningOrder(row) {
   return "planning_order_key" in row ? row.planning_order_key : row.order_key;
 }
-async function loadPlanningRows(auth2, view, planningDate, limit) {
+async function loadPlanningRows(auth2, view, planningDate2, limit) {
   const [todos, projects] = await Promise.all([
-    loadTodoPlanningRows(auth2, view, planningDate, limit),
-    loadProjectPlanningRows(auth2, view, planningDate, limit)
+    loadTodoPlanningRows(auth2, view, planningDate2, limit),
+    loadProjectPlanningRows(auth2, view, planningDate2, limit)
   ]);
   return {
     todos: todos.rows,
@@ -822,16 +822,16 @@ async function loadPlanningRows(auth2, view, planningDate, limit) {
     ].filter((name) => Boolean(name))
   };
 }
-async function loadTodoPlanningRows(auth2, view, planningDate, limit) {
+async function loadTodoPlanningRows(auth2, view, planningDate2, limit) {
   const base = () => auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId);
   if (view === "today") {
     const todayBase = () => base().eq("destination", "today").eq("lifecycle", "open").eq("disposition", "present");
     const segments = await Promise.all([
-      readMany(todayBase().lt("start_date", planningDate).order("start_date").order("order_key").order("id").limit(limit + 1), limit),
-      readMany(todayBase().eq("today_section", "daytime").or(`start_date.is.null,start_date.eq.${planningDate}`).order("order_key").order("id").limit(limit + 1), limit),
-      readMany(todayBase().eq("today_section", "evening").eq("start_date", planningDate).order("order_key").order("id").limit(limit + 1), limit)
+      readMany(todayBase().lt("start_date", planningDate2).order("start_date").order("order_key").order("id").limit(limit + 1), limit),
+      readMany(todayBase().eq("today_section", "daytime").or(`start_date.is.null,start_date.eq.${planningDate2}`).order("order_key").order("id").limit(limit + 1), limit),
+      readMany(todayBase().eq("today_section", "evening").eq("start_date", planningDate2).order("order_key").order("id").limit(limit + 1), limit)
     ]);
-    return mergePlanningSegments(segments, view, planningDate, limit);
+    return mergePlanningSegments(segments, view, planningDate2, limit);
   }
   let query = base();
   if (view === "logbook") {
@@ -839,25 +839,25 @@ async function loadTodoPlanningRows(auth2, view, planningDate, limit) {
   } else {
     query = query.eq("lifecycle", "open").eq("disposition", "present");
     if (view === "upcoming") {
-      query = query.in("destination", ["today", "anytime"]).gt("start_date", planningDate).order("start_date").order("order_key").order("id");
+      query = query.in("destination", ["today", "anytime"]).gt("start_date", planningDate2).order("start_date").order("order_key").order("id");
     } else {
       query = query.eq("destination", view);
-      if (view === "anytime") query = query.or(`start_date.is.null,start_date.lte.${planningDate}`);
+      if (view === "anytime") query = query.or(`start_date.is.null,start_date.lte.${planningDate2}`);
       query = query.order("order_key").order("id");
     }
   }
   return readMany(query.limit(limit + 1), limit);
 }
-async function loadProjectPlanningRows(auth2, view, planningDate, limit) {
+async function loadProjectPlanningRows(auth2, view, planningDate2, limit) {
   const base = () => auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId);
   if (view === "today") {
     const todayBase = () => base().eq("destination", "today").eq("lifecycle", "open").eq("disposition", "present");
     const segments = await Promise.all([
-      readMany(todayBase().lt("start_date", planningDate).order("start_date").order("planning_order_key").order("id").limit(limit + 1), limit),
-      readMany(todayBase().eq("today_section", "daytime").or(`start_date.is.null,start_date.eq.${planningDate}`).order("planning_order_key").order("id").limit(limit + 1), limit),
-      readMany(todayBase().eq("today_section", "evening").eq("start_date", planningDate).order("planning_order_key").order("id").limit(limit + 1), limit)
+      readMany(todayBase().lt("start_date", planningDate2).order("start_date").order("planning_order_key").order("id").limit(limit + 1), limit),
+      readMany(todayBase().eq("today_section", "daytime").or(`start_date.is.null,start_date.eq.${planningDate2}`).order("planning_order_key").order("id").limit(limit + 1), limit),
+      readMany(todayBase().eq("today_section", "evening").eq("start_date", planningDate2).order("planning_order_key").order("id").limit(limit + 1), limit)
     ]);
-    return mergePlanningSegments(segments, view, planningDate, limit);
+    return mergePlanningSegments(segments, view, planningDate2, limit);
   }
   let query = base();
   if (view === "logbook") {
@@ -865,21 +865,21 @@ async function loadProjectPlanningRows(auth2, view, planningDate, limit) {
   } else {
     query = query.eq("lifecycle", "open").eq("disposition", "present");
     if (view === "upcoming") {
-      query = query.in("destination", ["today", "anytime"]).gt("start_date", planningDate).order("start_date").order("planning_order_key").order("id");
+      query = query.in("destination", ["today", "anytime"]).gt("start_date", planningDate2).order("start_date").order("planning_order_key").order("id");
     } else {
       query = query.eq("destination", view);
-      if (view === "anytime") query = query.or(`start_date.is.null,start_date.lte.${planningDate}`);
+      if (view === "anytime") query = query.or(`start_date.is.null,start_date.lte.${planningDate2}`);
       query = query.order("planning_order_key").order("id");
     }
   }
   return readMany(query.limit(limit + 1), limit);
 }
-function mergePlanningSegments(segments, view, planningDate, limit) {
+function mergePlanningSegments(segments, view, planningDate2, limit) {
   const unique = /* @__PURE__ */ new Map();
   for (const segment of segments) {
     for (const row of segment.rows) unique.set(row.id, row);
   }
-  const rows = Array.from(unique.values()).filter((row) => visibleInTaskView(row, view, planningDate)).sort((left, right) => comparePlanningRows(left, right, view, planningDate));
+  const rows = Array.from(unique.values()).filter((row) => visibleInTaskView(row, view, planningDate2)).sort((left, right) => comparePlanningRows(left, right, view, planningDate2));
   return {
     rows: rows.slice(0, limit),
     truncated: rows.length > limit || segments.some((segment) => segment.truncated)
@@ -1127,11 +1127,11 @@ async function planningDateForOwner(auth2) {
 }
 async function resolveStartDate(request, auth2) {
   if (request.destination !== "today") return request.requestedStartDate;
-  const planningDate = await planningDateForOwner(auth2);
-  if (request.startDateWasExplicit && request.requestedStartDate !== planningDate) {
-    throw new Error(`Today work must use the owner's current planning date (${planningDate}).`);
+  const planningDate2 = await planningDateForOwner(auth2);
+  if (request.startDateWasExplicit && request.requestedStartDate !== planningDate2) {
+    throw new Error(`Today work must use the owner's current planning date (${planningDate2}).`);
   }
-  return planningDate;
+  return planningDate2;
 }
 async function validateContainer(request, auth2) {
   const [area, project, heading] = await Promise.all([
@@ -1273,9 +1273,108 @@ var createTask = defineTool({
   handler: (input, ctx) => toMcpResult(createTaskData(input, requireAuthenticated(ctx)))
 });
 
+// src/lib/mcp/tools/tasks-mail.ts
+import { generateTaskOrderKey as generateTaskOrderKey2 } from "npm:@/modules/tasks/domain/taskOrder";
+var messageDeepLinkSchema = z.string().max(8e3).refine(
+  (value) => value.startsWith("message://"),
+  { message: "Expected a message:// Mail deep link." }
+);
+async function readOne3(query) {
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data;
+}
+function trimRequired2(value, label, maxLength) {
+  const normalized = value.trim();
+  if (!normalized) throw new Error(`${label} is required.`);
+  if (Array.from(normalized).length > maxLength) {
+    throw new Error(`${label} cannot exceed ${maxLength} characters.`);
+  }
+  return normalized;
+}
+async function planningDate(auth2) {
+  const settings = await readOne3(auth2.supabase.from("tasks_user_settings").select("planning_timezone").eq("owner_id", auth2.userId).maybeSingle());
+  if (!settings) {
+    throw new Error("Task planning settings are not initialized. Open the Tasks module once.");
+  }
+  return planningDateInTimeZone(settings.planning_timezone);
+}
+async function validateArea(areaId, auth2) {
+  if (!areaId) return null;
+  const area = await readOne3(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle());
+  if (!area) throw new Error("The task area is unavailable.");
+  return area.id;
+}
+async function nextPlanningOrderKey2(startDate, auth2) {
+  const last = await readOne3(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", "today").eq("today_section", "daytime").eq("start_date", startDate).eq("lifecycle", "open").eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  return generateTaskOrderKey2(last?.order_key ?? null, null);
+}
+async function nextAreaOrderKey(areaId, auth2) {
+  if (areaId === null) return null;
+  const last = await readOne3(auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("area_id", areaId).is("project_id", null).is("heading_id", null).eq("lifecycle", "open").eq("disposition", "present").not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  return generateTaskOrderKey2(last?.hierarchy_order_key ?? null, null);
+}
+async function createMailTaskData(input, auth2) {
+  const title = trimRequired2(input.title, "Task title", 500);
+  const accountIdentifier = trimRequired2(input.account_identifier, "Mail account identifier", 500);
+  const mailboxIdentifier = trimRequired2(input.mailbox_identifier, "Mail mailbox identifier", 1e3);
+  const messageIdentifier = trimRequired2(input.message_identifier, "Mail message identifier", 2e3);
+  const retirementDestination = trimRequired2(
+    input.retirement_destination_identifier,
+    "Mail retirement destination",
+    1e3
+  );
+  const sourceTitle = input.source_title?.trim() || null;
+  const [startDate, areaId] = await Promise.all([
+    planningDate(auth2),
+    validateArea(input.area_id, auth2)
+  ]);
+  const [orderKey, hierarchyOrderKey] = await Promise.all([
+    nextPlanningOrderKey2(startDate, auth2),
+    nextAreaOrderKey(areaId, auth2)
+  ]);
+  const { data, error } = await auth2.supabase.rpc("tasks_create_mail_capture", {
+    _idempotency_key: input.idempotency_key,
+    _task_id: crypto.randomUUID(),
+    _title: title,
+    _notes: input.notes,
+    _start_date: startDate,
+    _order_key: orderKey,
+    _hierarchy_order_key: hierarchyOrderKey,
+    _account_identifier: accountIdentifier,
+    _mailbox_identifier: mailboxIdentifier,
+    _message_identifier: messageIdentifier,
+    _deep_link: input.deep_link,
+    _retirement_destination_identifier: retirementDestination,
+    _source_title: sourceTitle,
+    _area_id: areaId
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+var createMailTask = defineTool({
+  name: "create_mail_task",
+  title: "Create Mail Task",
+  description: "Atomically create one AI-processed Today task and its structured Mail source lifecycle record. Intended for a verified Mail integration, not generic task creation.",
+  inputSchema: {
+    idempotency_key: uuidSchema.describe("Stable UUID for this logical Mail capture. Reuse it only for an exact retry."),
+    title: z.string().trim().min(1).max(500),
+    notes: z.string().max(1e5).default(""),
+    account_identifier: z.string().trim().min(1).max(500),
+    mailbox_identifier: z.string().trim().min(1).max(1e3),
+    message_identifier: z.string().trim().min(1).max(2e3),
+    deep_link: messageDeepLinkSchema,
+    retirement_destination_identifier: z.string().trim().min(1).max(1e3),
+    source_title: z.string().max(1e3).optional(),
+    area_id: uuidSchema.optional().describe("Optional accessible area for verified work-mail routing.")
+  },
+  annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(createMailTaskData(input, requireAuthenticated(ctx)))
+});
+
 // src/lib/mcp/tools/tasks-mutate.ts
 import { assertTaskCalendarRange as assertTaskCalendarRange2, isTaskCalendarDate as isTaskCalendarDate2 } from "npm:@/modules/tasks/domain/taskDates";
-import { generateTaskOrderKey as generateTaskOrderKey2 } from "npm:@/modules/tasks/domain/taskOrder";
+import { generateTaskOrderKey as generateTaskOrderKey3 } from "npm:@/modules/tasks/domain/taskOrder";
 import {
   applyTaskStateTransition
 } from "npm:@/modules/tasks/domain/taskState";
@@ -1321,7 +1420,7 @@ var snapshotKeys = [
   "hierarchy_order_key",
   "deletion_root_id"
 ];
-function trimRequired2(value, label, maxLength) {
+function trimRequired3(value, label, maxLength) {
   const normalized = value.trim();
   if (!normalized) throw new Error(`${label} is required.`);
   if (Array.from(normalized).length > maxLength) {
@@ -1349,7 +1448,7 @@ function rowSnapshot(row) {
 function snapshotsMatch(actual, expected, ignored = /* @__PURE__ */ new Set()) {
   return snapshotKeys.every((key) => ignored.has(key) || actual[key] === expected[key]);
 }
-async function readOne3(query) {
+async function readOne4(query) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data;
@@ -1360,7 +1459,7 @@ async function readMany2(query) {
   return data ?? [];
 }
 async function readTask(auth2, taskId) {
-  return readOne3(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", taskId).maybeSingle());
+  return readOne4(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", taskId).maybeSingle());
 }
 async function requireTask(auth2, taskId) {
   const task = await readTask(auth2, taskId);
@@ -1368,10 +1467,10 @@ async function requireTask(auth2, taskId) {
   return task;
 }
 async function readHistoryByMutation(auth2, mutationId) {
-  return readOne3(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
+  return readOne4(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
 }
 async function readHierarchyOperation(auth2, mutationId) {
-  return readOne3(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
+  return readOne4(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
 }
 function historyReceipt(event) {
   return {
@@ -1458,7 +1557,7 @@ function updatePatch(input) {
     throw new Error("Update at least one of title, notes, or source.");
   }
   return {
-    ...input.title === void 0 ? {} : { title: trimRequired2(input.title, "Task title", 500) },
+    ...input.title === void 0 ? {} : { title: trimRequired3(input.title, "Task title", 500) },
     ...input.notes === void 0 ? {} : { notes: input.notes },
     ...input.source === void 0 ? {} : normalizeSource(input.source)
   };
@@ -1469,14 +1568,14 @@ function changedPatch(current, patch) {
   );
 }
 async function planningDateForOwner2(auth2, instant = /* @__PURE__ */ new Date()) {
-  const settings = await readOne3(auth2.supabase.from("tasks_user_settings").select("*").eq("owner_id", auth2.userId).maybeSingle());
+  const settings = await readOne4(auth2.supabase.from("tasks_user_settings").select("*").eq("owner_id", auth2.userId).maybeSingle());
   if (settings === null) {
     throw new Error("Task planning settings are not initialized. Open the Tasks module first.");
   }
   return planningDateInTimeZone(settings.planning_timezone, instant);
 }
-function validatePlanningPlacement(destination, todaySection2, startDate, planningDate) {
-  if (todaySection2 === "evening" && (destination !== "today" || startDate !== planningDate)) {
+function validatePlanningPlacement(destination, todaySection2, startDate, planningDate2) {
+  if (todaySection2 === "evening" && (destination !== "today" || startDate !== planningDate2)) {
     throw new Error("This Evening requires Today and the current planning date.");
   }
   if ((destination === "inbox" || destination === "someday") && startDate !== null) {
@@ -1486,9 +1585,9 @@ function validatePlanningPlacement(destination, todaySection2, startDate, planni
     throw new Error("Today work requires a start date.");
   }
 }
-async function nextPlanningOrderKey2(auth2, taskId, destination, todaySection2) {
-  const last = await readOne3(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", destination).eq("today_section", todaySection2).eq("lifecycle", "open").eq("disposition", "present").neq("id", taskId).order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey2(last?.order_key ?? null, null);
+async function nextPlanningOrderKey3(auth2, taskId, destination, todaySection2) {
+  const last = await readOne4(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", destination).eq("today_section", todaySection2).eq("lifecycle", "open").eq("disposition", "present").neq("id", taskId).order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  return generateTaskOrderKey3(last?.order_key ?? null, null);
 }
 async function validateContainer2(auth2, areaId, projectId, headingId) {
   if (areaId !== null && projectId !== null) {
@@ -1498,9 +1597,9 @@ async function validateContainer2(auth2, areaId, projectId, headingId) {
     throw new Error("A task heading requires project membership.");
   }
   const [area, project, heading] = await Promise.all([
-    areaId === null ? null : readOne3(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle()),
-    projectId === null ? null : readOne3(auth2.supabase.from("tasks_projects").select("id").eq("owner_id", auth2.userId).eq("id", projectId).eq("disposition", "present").eq("lifecycle", "open").maybeSingle()),
-    headingId === null ? null : readOne3(auth2.supabase.from("tasks_headings").select("id, project_id").eq("owner_id", auth2.userId).eq("id", headingId).eq("disposition", "present").maybeSingle())
+    areaId === null ? null : readOne4(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle()),
+    projectId === null ? null : readOne4(auth2.supabase.from("tasks_projects").select("id").eq("owner_id", auth2.userId).eq("id", projectId).eq("disposition", "present").eq("lifecycle", "open").maybeSingle()),
+    headingId === null ? null : readOne4(auth2.supabase.from("tasks_headings").select("id, project_id").eq("owner_id", auth2.userId).eq("id", headingId).eq("disposition", "present").maybeSingle())
   ]);
   if (areaId !== null && area === null) throw new Error("The task area is unavailable.");
   if (projectId !== null && project === null) throw new Error("The task project is unavailable.");
@@ -1514,8 +1613,8 @@ async function nextHierarchyOrderKey2(auth2, taskId, areaId, projectId, headingI
   query = areaId === null ? query.is("area_id", null) : query.eq("area_id", areaId);
   query = projectId === null ? query.is("project_id", null) : query.eq("project_id", projectId);
   query = headingId === null ? query.is("heading_id", null) : query.eq("heading_id", headingId);
-  const last = await readOne3(query.not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey2(last?.hierarchy_order_key ?? null, null);
+  const last = await readOne4(query.not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  return generateTaskOrderKey3(last?.hierarchy_order_key ?? null, null);
 }
 function hasOwn(input, key) {
   return Object.prototype.hasOwnProperty.call(input, key);
@@ -1536,16 +1635,16 @@ async function movePatch(input, current, auth2) {
   const patch = {};
   if (planningRequested) {
     const destination = input.destination;
-    const planningDate = await planningDateForOwner2(auth2);
+    const planningDate2 = await planningDateForOwner2(auth2);
     const todaySection2 = destination === "today" ? input.today_section ?? "daytime" : "daytime";
     let startDate = input.start_date ?? null;
     if (destination === "today") {
-      if (startDate !== null && startDate !== planningDate) {
-        throw new Error(`Today work must use the owner's current planning date (${planningDate}).`);
+      if (startDate !== null && startDate !== planningDate2) {
+        throw new Error(`Today work must use the owner's current planning date (${planningDate2}).`);
       }
-      startDate = planningDate;
+      startDate = planningDate2;
     }
-    validatePlanningPlacement(destination, todaySection2, startDate, planningDate);
+    validatePlanningPlacement(destination, todaySection2, startDate, planningDate2);
     assertTaskCalendarRange2(startDate, current.deadline);
     if (destination === current.destination && todaySection2 === current.today_section && startDate !== current.start_date) {
       throw new Error("Use schedule_task to change dates without moving planning placement.");
@@ -1554,7 +1653,7 @@ async function movePatch(input, current, auth2) {
     patch.today_section = todaySection2;
     patch.start_date = startDate;
     if (destination !== current.destination || todaySection2 !== current.today_section || startDate !== current.start_date) {
-      patch.order_key = await nextPlanningOrderKey2(
+      patch.order_key = await nextPlanningOrderKey3(
         auth2,
         current.id,
         destination,
@@ -1595,7 +1694,7 @@ async function schedulePatch(input, current, auth2) {
     throw new Error("Deadline must be a valid ISO calendar date.");
   }
   assertTaskCalendarRange2(startDate, deadline);
-  const planningDate = await planningDateForOwner2(auth2);
+  const planningDate2 = await planningDateForOwner2(auth2);
   let destination = current.destination;
   let todaySection2 = current.today_section;
   if (destination === "inbox" && startDate !== null) {
@@ -1608,13 +1707,13 @@ async function schedulePatch(input, current, auth2) {
   if (destination === "today" && startDate === null) {
     throw new Error("Today work requires a start date.");
   }
-  if (todaySection2 === "evening" && startDate !== planningDate) todaySection2 = "daytime";
-  validatePlanningPlacement(destination, todaySection2, startDate, planningDate);
+  if (todaySection2 === "evening" && startDate !== planningDate2) todaySection2 = "daytime";
+  validatePlanningPlacement(destination, todaySection2, startDate, planningDate2);
   const patch = { start_date: startDate, deadline };
   if (destination !== current.destination) {
     patch.destination = destination;
     patch.today_section = todaySection2;
-    patch.order_key = await nextPlanningOrderKey2(auth2, current.id, destination, todaySection2);
+    patch.order_key = await nextPlanningOrderKey3(auth2, current.id, destination, todaySection2);
   } else if (todaySection2 !== current.today_section) {
     patch.today_section = todaySection2;
   }
@@ -2008,6 +2107,7 @@ var mcp_default = defineMcp({
     getTaskRecord,
     getTaskView,
     createTask,
+    createMailTask,
     updateTask,
     moveTask,
     scheduleTask,

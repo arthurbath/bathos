@@ -2007,6 +2007,25 @@ export type Database = {
       tasks_create_export_v3: { Args: never; Returns: Json }
       tasks_create_export_v4: { Args: never; Returns: Json }
       tasks_create_export_v5: { Args: never; Returns: Json }
+      tasks_create_mail_capture: {
+        Args: {
+          _account_identifier: string
+          _area_id?: string | null
+          _deep_link: string
+          _hierarchy_order_key: string | null
+          _idempotency_key: string
+          _mailbox_identifier: string
+          _message_identifier: string
+          _notes: string
+          _order_key: string
+          _retirement_destination_identifier: string
+          _source_title?: string | null
+          _start_date: string
+          _task_id: string
+          _title: string
+        }
+        Returns: Json
+      }
       tasks_restore_export_v1: {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json

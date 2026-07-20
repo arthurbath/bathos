@@ -27,6 +27,14 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 - **WHEN** an authenticated MCP client calls `create_task` with a new idempotency key and valid title, planning, container, optional typed-source fields, and an optional supported integration channel
 - **THEN** the server creates one open present to-do with immutable declared integration provenance or default `mcp` provenance, an automation actor, stable identifiers, owner-local Today semantics, and append-only creation history
 
+#### Scenario: Create a Mail task atomically
+- **WHEN** a verified integration calls `create_mail_task` with complete structured Mail identity, retirement destination, AI-processed content, an optional accessible area, and a new idempotency key
+- **THEN** the server atomically creates one daytime Today task with `mail_automation` provenance and one retained Mail source record, then returns the creation receipt and both owner-safe records
+
+#### Scenario: Deduplicate Mail capture by request and source identity
+- **WHEN** a verified integration retries the same Mail request UUID or later presents the same owner, account, and message identity with a different request UUID
+- **THEN** the server returns the existing task and source without creating duplicate records while rejecting changed data for the same request UUID or conflicting source identity
+
 #### Scenario: Reject an idempotency-key payload change
 - **WHEN** an MCP client reuses a creation idempotency key with different normalized title, planning, container, or source input
 - **THEN** the server rejects the request and neither creates nor changes a task
