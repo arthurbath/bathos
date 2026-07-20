@@ -101,7 +101,7 @@
 - [x] 7.5 Test undo, trash restoration, backup, export, and restore with synthetic and disposable personal test data.
 - [x] 7.6 Test keyboard traversal, focus restoration, screen-reader labels, and reduced-motion behavior.
 - [x] 7.7 Measure task-view and search performance with a synthetic dataset larger than the current Things library.
-- [ ] 7.8 Run a sustained parallel-use evaluation and record unresolved trust failures before any migration decision.
+- [x] 7.8 Run a sustained parallel-use evaluation and record unresolved trust failures before any migration decision.
 
 ## 8. Optional Native Apple Companion
 

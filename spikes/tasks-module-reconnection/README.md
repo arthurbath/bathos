@@ -47,6 +47,16 @@ npm run test:tasks:preservation
 
 The test creates at least one record in every current portable collection, proves synchronized undo and Trash restoration, serializes a checksummed backup, rejects tampering, deletes the complete synthetic source account, previews and merges restoration into another owner, replays the backup as exact matches, and recovers a task that remained in Trash inside the backup.
 
+## Automated Sustained Parallel-Use Gate
+
+With the same disposable services running, run:
+
+```sh
+npm run test:tasks:sustained
+```
+
+The default ten-minute gate drives two persistent local clients plus the Raycast-aware creation and MCP mutation services. It alternates offline-web and stale-MCP conflict losers, retries every capture and completion, restarts one local client from its existing SQLite file, and proves final task, history, queue, conflict-receipt, and replica counts. Environment variables may shorten the duration, cadence, and minimum cycle count for smoke testing. Only the default ten-minute run qualifies as endurance evidence.
+
 ## Browser Acceptance Exercise
 
 Use a synthetic local account and synthetic task titles only.

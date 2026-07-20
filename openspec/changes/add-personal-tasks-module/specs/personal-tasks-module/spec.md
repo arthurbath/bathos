@@ -630,6 +630,14 @@ The system SHALL support indefinite parallel use without requiring the user to m
 - **WHEN** an authorized discovery process reads Things through AppleScript
 - **THEN** the process remains read-only, bounded, and excludes private task content from the public repository
 
+#### Scenario: Exercise sustained automated parallel use
+- **WHEN** two persistent local task clients plus the Raycast-aware creation and MCP mutation services run repeated retry, conflict, completion, and restart cycles for at least ten minutes
+- **THEN** upload queues drain, accepted revisions remain authoritative, exact retries do not duplicate work, every replica converges, and task, history, and conflict-receipt counts remain exact
+
+#### Scenario: Preserve the migration decision after an automated pass
+- **WHEN** the sustained automated gate passes but lived parallel use and production-device boundaries remain unresolved
+- **THEN** Things remains authoritative, Inbox Manager dual-writing remains disabled, and the system does not treat the automated result as migration approval
+
 #### Scenario: Defer migration
 - **WHEN** the BathOS module is not yet replacement-ready
 - **THEN** no implementation task requires a Things import or source-of-truth switch
