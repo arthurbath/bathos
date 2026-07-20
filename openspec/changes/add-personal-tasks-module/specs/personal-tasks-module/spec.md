@@ -536,6 +536,25 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** the user opens a Web Push notification for a logical occurrence
 - **THEN** the authenticated Tasks route acknowledges that occurrence and later in-app or provider claims do not create another delivery after acknowledgement
 
+### Requirement: Evidence-Gated Native Apple Expansion
+The system SHALL treat native Apple surfaces as an optional extension of the shared task domain and SHALL require a specific observed workflow gap before creating a native companion.
+
+#### Scenario: Continue without a native companion
+- **WHEN** the installed web app, Web Push, and Raycast adequately support the observed daily workflows
+- **THEN** the system continues the parallel-use trial without creating a native client, Apple extension, or permanent bundle identity
+
+#### Scenario: Diagnose a reminder incident before adding native push
+- **WHEN** a production reminder is missed, duplicated, or materially late
+- **THEN** the evaluation first verifies schedule computation, permission, target registration, provider outcome, and device state, and approves a native push target only when the remaining failure is a browser delivery limitation
+
+#### Scenario: Approve one native system surface
+- **WHEN** parallel use identifies a recurring gap served by a specific widget, control, App Intent, notification target, or distribution path
+- **THEN** the approved implementation is limited to the smallest native host and extensions that resolve that gap while reusing the shared ownership, mutation, synchronization, and reminder contracts
+
+#### Scenario: Avoid a second task product
+- **WHEN** a native surface reads or mutates task data
+- **THEN** it uses the authoritative task-domain contract and does not introduce an independent task database, reminder scheduler, or generic mutation API
+
 ### Requirement: Keyboard-First Daily Operation
 The system SHALL support efficient keyboard operation for high-frequency capture, navigation, editing, scheduling, movement, completion, and search workflows.
 

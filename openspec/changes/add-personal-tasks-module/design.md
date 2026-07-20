@@ -502,6 +502,10 @@ Alternative considered: Build a native macOS overlay immediately. Deferred becau
 
 A later native Apple companion may provide notifications, WidgetKit widgets, controls, App Intents, and TestFlight installation. Apple Watch and a broad Shortcuts library remain optional even if a native iPhone app exists.
 
+The 2026 Jul 20 native companion evaluation provisionally defers implementation until lived parallel use identifies a specific system-surface gap. The installed web app already covers offline task operation and standards-based Web Push. On supported iOS and iPadOS versions, those notifications appear on the Lock Screen, in Notification Center, and on a paired Apple Watch. Raycast already covers global and contextual macOS capture. Native work therefore requires evidence for a specific widget, control, App Intent, browser-delivery limitation, or distribution burden. A delivery incident prompts diagnosis first and justifies native push only when the remaining cause is a browser limitation.
+
+If evidence activates native work, the first build will be the smallest SwiftUI host and extension set that resolves the observed gap. It will reuse the same task-domain operations, ownership rules, revisions, mutation identities, and reminder occurrences. It will not introduce an independent task database or second generic mutation contract. A complete native client and PowerSync Swift projection remain later decisions.
+
 Rationale: Native extensions can add meaningful system integration, but they should not delay proving the task model and web workflow. The user is willing to enroll in the Apple Developer Program if TestFlight or restricted capabilities make membership useful.
 
 Alternative considered: Make a complete native client a V1 requirement. Rejected because the web module and Raycast can validate the product first.
