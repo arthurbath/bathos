@@ -14,7 +14,11 @@ vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
 }));
 
 vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
-  useTasksRuntime: () => ({ mode: 'local', prepareForSignOut: mockPrepareForSignOut }),
+  useTasksRuntime: () => ({
+    mode: 'local',
+    planningTimeZone: 'America/Los_Angeles',
+    prepareForSignOut: mockPrepareForSignOut,
+  }),
 }));
 
 vi.mock('@/platform/components/ToplineHeader', () => ({
@@ -66,6 +70,7 @@ function defaultTaskList() {
     createTask: vi.fn().mockResolvedValue(undefined),
     updateTask: vi.fn().mockResolvedValue(undefined),
     transitionTask: vi.fn().mockResolvedValue(undefined),
+    planningDate: '2026-07-20',
   };
 }
 
@@ -312,6 +317,36 @@ describe('TasksShell', () => {
 
       expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'trash');
       expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'restore');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('shows future-start work in Upcoming and can make it available today', async () => {
+    const upcomingTask = { ...task, start_date: '2026-07-24' };
+    const taskList = { ...defaultTaskList(), tasks: [upcomingTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
+      expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'upcoming');
+      const actions = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Actions for Existing task"]',
+      );
+      await act(async () => {
+        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      const makeAvailable = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent === 'Make Available Today');
+      await act(async () => {
+        makeAvailable?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+        destination: 'today',
+        start_date: '2026-07-20',
+      });
     } finally {
       cleanup(root, container);
     }

@@ -7,6 +7,7 @@ export type TasksRuntimeValue = {
   database: PowerSyncDatabase;
   repository: TaskRepository;
   mode: 'local' | 'connected';
+  planningTimeZone: string;
   prepareForSignOut: () => Promise<void>;
 };
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'rea
 import {
   Archive,
   CalendarDays,
+  CalendarRange,
   CheckCircle2,
   Circle,
   CircleSlash2,
@@ -48,6 +49,7 @@ type TasksShellProps = {
 const taskViews = [
   { path: '/inbox', label: 'Inbox', icon: Inbox },
   { path: '/today', label: 'Today', icon: CalendarDays },
+  { path: '/upcoming', label: 'Upcoming', icon: CalendarRange },
   { path: '/logbook', label: 'Logbook', icon: Archive },
   { path: '/trash', label: 'Trash', icon: Trash2 },
 ] as const;
@@ -58,7 +60,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const basePath = useModuleBasePath();
   const view = getTaskViewFromPath(location.pathname);
   const { mode, prepareForSignOut } = useTasksRuntime();
-  const { tasks, loading, error, createTask, updateTask, transitionTask } = useTaskList(
+  const { tasks, loading, error, createTask, updateTask, transitionTask, planningDate } = useTaskList(
     userId,
     view,
   );
@@ -120,7 +122,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
           <nav
             aria-label="Task views"
-            className="hidden grid-cols-4 rounded-md border border-[hsl(var(--grid-sticky-line))] p-1 md:grid"
+            className="hidden grid-cols-5 rounded-md border border-[hsl(var(--grid-sticky-line))] p-1 md:grid"
           >
             {taskViews.map(({ path, label, icon: Icon }) => {
               const href = `${basePath}${path}`;
@@ -248,13 +250,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                     }}
                     onMove={async () => {
                       try {
-                        await updateTask(task.id, {
-                          destination: view === 'inbox' ? 'today' : 'inbox',
-                        });
+                        await updateTask(task.id, view === 'upcoming'
+                          ? { destination: 'today', start_date: planningDate }
+                          : { destination: view === 'inbox' ? 'today' : 'inbox' });
                       } catch (moveError) {
                         showTaskError('Task Could Not Be Moved', moveError);
                       }
                     }}
+                    moveLabel={view === 'upcoming'
+                      ? 'Make Available Today'
+                      : `Move to ${task.destination === 'inbox' ? 'Today' : 'Inbox'}`}
                     onDelete={async () => {
                       try {
                         await transitionTask(task.id, 'delete');
@@ -401,6 +406,7 @@ function TaskRow({
   onUpdate,
   onComplete,
   onMove,
+  moveLabel,
   onDelete,
 }: {
   task: TaskTodo;
@@ -409,6 +415,7 @@ function TaskRow({
   onUpdate: (patch: EditableTaskPatch) => Promise<void>;
   onComplete: () => Promise<void>;
   onMove: () => Promise<void>;
+  moveLabel: string;
   onDelete: () => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
@@ -469,7 +476,7 @@ function TaskRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => void run(onMove)}>
-              Move to {task.destination === 'inbox' ? 'Today' : 'Inbox'}
+              {moveLabel}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
@@ -681,6 +688,7 @@ function showTaskError(title: string, error: unknown): void {
 function getTaskViewLabel(view: TaskListView): string {
   if (view === 'inbox') return 'Inbox';
   if (view === 'logbook') return 'Logbook';
+  if (view === 'upcoming') return 'Upcoming';
   if (view === 'trash') return 'Trash';
   return 'Today';
 }
@@ -688,6 +696,7 @@ function getTaskViewLabel(view: TaskListView): string {
 function getTaskViewFromPath(pathname: string): TaskListView {
   if (pathname.endsWith('/inbox')) return 'inbox';
   if (pathname.endsWith('/logbook')) return 'logbook';
+  if (pathname.endsWith('/upcoming')) return 'upcoming';
   if (pathname.endsWith('/trash')) return 'trash';
   return 'today';
 }
@@ -695,6 +704,7 @@ function getTaskViewFromPath(pathname: string): TaskListView {
 function getTaskSectionLabel(view: TaskListView): string {
   if (view === 'inbox') return 'Inbox Tasks';
   if (view === 'logbook') return 'Logbook Tasks';
+  if (view === 'upcoming') return 'Upcoming Tasks';
   if (view === 'trash') return 'Deleted Tasks';
   return 'Today Tasks';
 }

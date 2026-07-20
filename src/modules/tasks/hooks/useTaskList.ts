@@ -2,14 +2,16 @@ import { useQuery } from '@powersync/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
+import { taskCalendarDateInTimeZone } from '@/modules/tasks/domain/taskDates';
 import type { TaskStateTransition } from '@/modules/tasks/domain/taskState';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
 
-export type TaskListView = TaskDestination | 'logbook' | 'trash';
+export type TaskListView = TaskDestination | 'upcoming' | 'logbook' | 'trash';
 
 export function useTaskList(ownerId: string, view: TaskListView) {
-  const { repository } = useTasksRuntime();
+  const { repository, planningTimeZone } = useTasksRuntime();
+  const planningDate = useTaskPlanningDate(planningTimeZone);
   const [optimisticTasks, setOptimisticTasks] = useState<Record<string, TaskTodo | null>>({});
   const historical = view === 'logbook';
   const trash = view === 'trash';
@@ -27,14 +29,27 @@ export function useTaskList(ownerId: string, view: TaskListView) {
            AND lifecycle IN ('completed', 'canceled')
            AND disposition = 'present'
          ORDER BY COALESCE(completed_at, canceled_at) DESC, id`
-        : `SELECT *
+        : view === 'upcoming'
+          ? `SELECT *
+             FROM tasks_todos
+             WHERE owner_id = ?
+               AND start_date > ?
+               AND lifecycle = 'open'
+               AND disposition = 'present'
+             ORDER BY start_date, order_key, id`
+          : `SELECT *
          FROM tasks_todos
          WHERE owner_id = ?
            AND destination = ?
            AND lifecycle = 'open'
            AND disposition = 'present'
+           AND (? <> 'today' OR start_date IS NULL OR start_date <= ?)
          ORDER BY order_key, id`,
-    trash || historical ? [ownerId] : [ownerId, view],
+    trash || historical
+      ? [ownerId]
+      : view === 'upcoming'
+        ? [ownerId, planningDate]
+        : [ownerId, view, view, planningDate],
   );
 
   useEffect(() => {
@@ -70,10 +85,10 @@ export function useTaskList(ownerId: string, view: TaskListView) {
 
     return Array.from(merged.values())
       .filter((task) => (
-        taskIsVisible(task, ownerId, view)
+        taskIsVisible(task, ownerId, view, planningDate)
       ))
       .sort((left, right) => compareTasksForView(left, right, view));
-  }, [optimisticTasks, ownerId, query.data, view]);
+  }, [optimisticTasks, ownerId, planningDate, query.data, view]);
 
   const setOptimisticTask = useCallback((taskId: string, task: TaskTodo | null | undefined) => {
     setOptimisticTasks((current) => {
@@ -88,8 +103,9 @@ export function useTaskList(ownerId: string, view: TaskListView) {
 
   const createTask = useCallback(
     async (title: string) => {
-      if (view === 'trash' || view === 'logbook') {
-        throw new Error(`Tasks cannot be created in ${view === 'trash' ? 'Trash' : 'Logbook'}`);
+      if (view === 'trash' || view === 'logbook' || view === 'upcoming') {
+        const label = view === 'trash' ? 'Trash' : view === 'logbook' ? 'Logbook' : 'Upcoming';
+        throw new Error(`Tasks cannot be created in ${label}`);
       }
       const createdTask = await repository.createTask({ ownerId, title, destination: view });
       setOptimisticTask(createdTask.id, createdTask);
@@ -134,7 +150,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
 
       try {
         const transitionedTask = await repository.transitionTask(ownerId, taskId, transition);
-        setOptimisticTask(taskId, taskIsVisible(transitionedTask, ownerId, view)
+        setOptimisticTask(taskId, taskIsVisible(transitionedTask, ownerId, view, planningDate)
           ? transitionedTask
           : null);
         return transitionedTask;
@@ -143,7 +159,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
         throw error;
       }
     },
-    [ownerId, repository, setOptimisticTask, view],
+    [ownerId, planningDate, repository, setOptimisticTask, view],
   );
 
   return {
@@ -153,10 +169,16 @@ export function useTaskList(ownerId: string, view: TaskListView) {
     createTask,
     updateTask,
     transitionTask,
+    planningDate,
   };
 }
 
-function taskIsVisible(task: TaskTodo, ownerId: string, view: TaskListView): boolean {
+function taskIsVisible(
+  task: TaskTodo,
+  ownerId: string,
+  view: TaskListView,
+  planningDate: string,
+): boolean {
   if (task.owner_id !== ownerId) {
     return false;
   }
@@ -166,7 +188,16 @@ function taskIsVisible(task: TaskTodo, ownerId: string, view: TaskListView): boo
   if (view === 'logbook') {
     return task.disposition === 'present' && task.lifecycle !== 'open';
   }
-  return task.destination === view && task.lifecycle === 'open' && task.disposition === 'present';
+  if (view === 'upcoming') {
+    return task.disposition === 'present'
+      && task.lifecycle === 'open'
+      && task.start_date !== null
+      && task.start_date > planningDate;
+  }
+  return task.destination === view
+    && task.lifecycle === 'open'
+    && task.disposition === 'present'
+    && (view !== 'today' || task.start_date === null || task.start_date <= planningDate);
 }
 
 function compareTasksForView(left: TaskTodo, right: TaskTodo, view: TaskListView): number {
@@ -179,5 +210,27 @@ function compareTasksForView(left: TaskTodo, right: TaskTodo, view: TaskListView
       left.completed_at ?? left.canceled_at ?? '',
     ) || left.id.localeCompare(right.id);
   }
+  if (view === 'upcoming') {
+    return (left.start_date ?? '').localeCompare(right.start_date ?? '')
+      || left.order_key.localeCompare(right.order_key)
+      || left.id.localeCompare(right.id);
+  }
   return left.order_key.localeCompare(right.order_key) || left.id.localeCompare(right.id);
+}
+
+function useTaskPlanningDate(planningTimeZone: string): string {
+  const [planningDate, setPlanningDate] = useState(() => (
+    taskCalendarDateInTimeZone(planningTimeZone)
+  ));
+
+  useEffect(() => {
+    setPlanningDate(taskCalendarDateInTimeZone(planningTimeZone));
+    const timer = window.setInterval(() => {
+      const current = taskCalendarDateInTimeZone(planningTimeZone);
+      setPlanningDate((previous) => previous === current ? previous : current);
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [planningTimeZone]);
+
+  return planningDate;
 }

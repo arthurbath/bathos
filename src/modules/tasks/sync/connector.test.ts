@@ -47,6 +47,17 @@ function taskPatchEntry(data: Record<string, unknown> = {}) {
   });
 }
 
+function settingsInsertEntry() {
+  return new CrudEntry(3, UpdateType.PUT, 'tasks_user_settings', 'owner-a', 3, {
+    owner_id: 'owner-a',
+    planning_timezone: 'America/Los_Angeles',
+    revision: 1,
+    client_mutation_id: 'mutation-settings',
+    created_at: '2026-07-20T04:00:00.000Z',
+    updated_at: '2026-07-20T04:00:00.000Z',
+  });
+}
+
 function createHarness(
   entry: CrudEntry,
   outcome: TasksRemoteWriteOutcome | Error = { status: 'applied' },
@@ -61,6 +72,8 @@ function createHarness(
   const remoteStore: TasksRemoteStore = {
     insertTask: vi.fn(resolve),
     updateTask: vi.fn(resolve),
+    insertSettings: vi.fn(resolve),
+    updateSettings: vi.fn(resolve),
   };
   const connector = new TasksSyncConnector({
     endpoint: 'https://sync.example.test',
@@ -76,6 +89,22 @@ function createHarness(
 }
 
 describe('task sync connector', () => {
+  it('uploads the owner planning time zone through the same durable queue', async () => {
+    const { connector, database, remoteStore } = createHarness(settingsInsertEntry());
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.insertSettings).toHaveBeenCalledWith({
+      id: 'owner-a',
+      owner_id: 'owner-a',
+      planning_timezone: 'America/Los_Angeles',
+      revision: 1,
+      client_mutation_id: 'mutation-settings',
+      created_at: '2026-07-20T04:00:00.000Z',
+      updated_at: '2026-07-20T04:00:00.000Z',
+    });
+  });
+
   it('uploads complete inserts and restores omitted null fields', async () => {
     const { complete, connector, database, remoteStore } = createHarness(taskInsertEntry());
 

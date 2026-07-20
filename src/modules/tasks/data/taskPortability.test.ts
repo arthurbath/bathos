@@ -11,25 +11,26 @@ import {
   parseTaskExport,
   previewTaskRestore,
   serializeTaskExport,
-  type TaskExportV1,
+  type TaskExportV2,
 } from './taskPortability';
 
 const checksum = 'a'.repeat(64);
 const taskExport = {
   format: 'garden.bath.tasks.export',
-  schema_version: 1,
+  schema_version: 2,
   created_at: '2026-07-20T05:30:00.000Z',
   manifest: {
-    collections: ['tasks_todos', 'tasks_history_events'],
-    counts: { tasks_todos: 0, tasks_history_events: 0 },
+    collections: ['tasks_todos', 'tasks_history_events', 'tasks_user_settings'],
+    counts: { tasks_todos: 0, tasks_history_events: 0, tasks_user_settings: 0 },
     checksums: {
       algorithm: 'sha256',
       tasks_todos: checksum,
       tasks_history_events: checksum,
+      tasks_user_settings: checksum,
     },
   },
-  data: { tasks_todos: [], tasks_history_events: [] },
-} satisfies TaskExportV1;
+  data: { tasks_todos: [], tasks_history_events: [], tasks_user_settings: [] },
+} satisfies TaskExportV2;
 
 function createClient(results: unknown[]) {
   const rpc = vi.fn();
@@ -44,7 +45,7 @@ describe('task portability', () => {
     const client = createClient([taskExport]);
 
     await expect(createTaskExport(client)).resolves.toEqual(taskExport);
-    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v1');
+    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v2');
     expect(serializeTaskExport(taskExport)).toBe(`${JSON.stringify(taskExport, null, 2)}\n`);
     expect(getTaskExportFilename(taskExport.created_at)).toBe('bathos-tasks-2026-07-20.json');
   });
@@ -52,40 +53,45 @@ describe('task portability', () => {
   it('previews and executes restore through distinct explicit calls', async () => {
     const preview = {
       dry_run: true,
-      schema_version: 1,
+      schema_version: 2,
       tasks_todos: report(2),
       tasks_history_events: report(4),
+      tasks_user_settings: report(1),
     };
     const merge = { ...preview, dry_run: false };
     const client = createClient([preview, merge]);
 
     await expect(previewTaskRestore(client, taskExport)).resolves.toEqual(preview);
     await expect(mergeTaskRestore(client, taskExport)).resolves.toEqual(merge);
-    expect(client.rpc).toHaveBeenNthCalledWith(1, 'tasks_restore_export_v1', {
+    expect(client.rpc).toHaveBeenNthCalledWith(1, 'tasks_restore_export_v2', {
       _envelope: taskExport,
       _dry_run: true,
     });
-    expect(client.rpc).toHaveBeenNthCalledWith(2, 'tasks_restore_export_v1', {
+    expect(client.rpc).toHaveBeenNthCalledWith(2, 'tasks_restore_export_v2', {
       _envelope: taskExport,
       _dry_run: false,
     });
   });
 
   it('rejects incompatible envelopes and inconsistent reports', async () => {
-    expect(() => parseTaskExport({ ...taskExport, schema_version: 2 })).toThrow(
+    expect(() => parseTaskExport({ ...taskExport, schema_version: 3 })).toThrow(
       InvalidTaskExportError,
     );
     expect(() => parseTaskExport({
       ...taskExport,
-      manifest: { ...taskExport.manifest, counts: { tasks_todos: 1, tasks_history_events: 0 } },
+      manifest: {
+        ...taskExport.manifest,
+        counts: { tasks_todos: 1, tasks_history_events: 0, tasks_user_settings: 0 },
+      },
     })).toThrow('manifest does not match');
     expect(() => getTaskExportFilename('not-a-date')).toThrow('invalid creation time');
 
     const client = createClient([{
       dry_run: true,
-      schema_version: 1,
+      schema_version: 2,
       tasks_todos: { ...report(1), inserts: 2 },
       tasks_history_events: report(0),
+      tasks_user_settings: report(0),
     }]);
     await expect(previewTaskRestore(client, taskExport)).rejects.toThrow(
       'collection counts are invalid',

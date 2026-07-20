@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database, Json } from '@/integrations/supabase/types';
 import type { TaskHistoryEvent } from '@/modules/tasks/domain/taskHistory';
-import type { TaskTodo } from '@/modules/tasks/types/tasks';
+import type { TaskTodo, TaskUserSettings } from '@/modules/tasks/types/tasks';
 
 export type TaskExportV1 = {
   format: 'garden.bath.tasks.export';
@@ -26,6 +26,33 @@ export type TaskExportV1 = {
   };
 };
 
+export type TaskExportV2 = {
+  format: 'garden.bath.tasks.export';
+  schema_version: 2;
+  created_at: string;
+  manifest: {
+    collections: ['tasks_todos', 'tasks_history_events', 'tasks_user_settings'];
+    counts: {
+      tasks_todos: number;
+      tasks_history_events: number;
+      tasks_user_settings: number;
+    };
+    checksums: {
+      algorithm: 'sha256';
+      tasks_todos: string;
+      tasks_history_events: string;
+      tasks_user_settings: string;
+    };
+  };
+  data: {
+    tasks_todos: Array<Omit<TaskTodo, 'owner_id'>>;
+    tasks_history_events: Array<Omit<TaskHistoryEvent, 'owner_id'>>;
+    tasks_user_settings: Array<Omit<TaskUserSettings, 'owner_id'>>;
+  };
+};
+
+export type TaskPortableExport = TaskExportV1 | TaskExportV2;
+
 export type TaskRestoreCollectionReport = {
   inserts: number;
   matches: number;
@@ -37,9 +64,10 @@ export type TaskRestoreCollectionReport = {
 
 export type TaskRestoreReport = {
   dry_run: boolean;
-  schema_version: 1;
+  schema_version: 1 | 2;
   tasks_todos: TaskRestoreCollectionReport;
   tasks_history_events: TaskRestoreCollectionReport;
+  tasks_user_settings?: TaskRestoreCollectionReport;
 };
 
 type TaskPortabilityClient = Pick<SupabaseClient<Database>, 'rpc'>;
@@ -53,29 +81,33 @@ export class InvalidTaskExportError extends Error {
 
 export async function createTaskExport(
   supabase: TaskPortabilityClient,
-): Promise<TaskExportV1> {
-  const { data, error } = await supabase.rpc('tasks_create_export_v1');
+): Promise<TaskExportV2> {
+  const { data, error } = await supabase.rpc('tasks_create_export_v2');
   if (error) {
     throw error;
   }
-  return parseTaskExport(data);
+  const taskExport = parseTaskExport(data);
+  if (taskExport.schema_version !== 2) {
+    throw new InvalidTaskExportError('The current task export did not use schema version two');
+  }
+  return taskExport;
 }
 
 export async function previewTaskRestore(
   supabase: TaskPortabilityClient,
-  taskExport: TaskExportV1,
+  taskExport: TaskPortableExport,
 ): Promise<TaskRestoreReport> {
   return restoreTaskExport(supabase, taskExport, true);
 }
 
 export async function mergeTaskRestore(
   supabase: TaskPortabilityClient,
-  taskExport: TaskExportV1,
+  taskExport: TaskPortableExport,
 ): Promise<TaskRestoreReport> {
   return restoreTaskExport(supabase, taskExport, false);
 }
 
-export function serializeTaskExport(taskExport: TaskExportV1): string {
+export function serializeTaskExport(taskExport: TaskPortableExport): string {
   return `${JSON.stringify(taskExport, null, 2)}\n`;
 }
 
@@ -87,9 +119,12 @@ export function getTaskExportFilename(createdAt: string): string {
   return `bathos-tasks-${date.toISOString().slice(0, 10)}.json`;
 }
 
-export function parseTaskExport(value: unknown): TaskExportV1 {
+export function parseTaskExport(value: unknown): TaskPortableExport {
   const record = requireRecord(value, 'Task export must be a JSON object');
-  if (record.format !== 'garden.bath.tasks.export' || record.schema_version !== 1) {
+  if (
+    record.format !== 'garden.bath.tasks.export'
+    || (record.schema_version !== 1 && record.schema_version !== 2)
+  ) {
     throw new InvalidTaskExportError('Task export format or schema version is unsupported');
   }
 
@@ -100,48 +135,65 @@ export function parseTaskExport(value: unknown): TaskExportV1 {
   const tasks = requireArray(data.tasks_todos, 'Task export tasks are invalid');
   const history = requireArray(data.tasks_history_events, 'Task export history is invalid');
   const collections = requireArray(manifest.collections, 'Task export collections are invalid');
+  const settings = record.schema_version === 2
+    ? requireArray(data.tasks_user_settings, 'Task export settings are invalid')
+    : null;
 
   if (
     typeof record.created_at !== 'string'
-    || collections.length !== 2
+    || collections.length !== (record.schema_version === 2 ? 3 : 2)
     || collections[0] !== 'tasks_todos'
     || collections[1] !== 'tasks_history_events'
+    || (record.schema_version === 2 && collections[2] !== 'tasks_user_settings')
     || counts.tasks_todos !== tasks.length
     || counts.tasks_history_events !== history.length
     || checksums.algorithm !== 'sha256'
     || !isSha256(checksums.tasks_todos)
     || !isSha256(checksums.tasks_history_events)
+    || (
+      record.schema_version === 2
+      && (
+        counts.tasks_user_settings !== settings?.length
+        || !isSha256(checksums.tasks_user_settings)
+      )
+    )
   ) {
     throw new InvalidTaskExportError('Task export manifest does not match its data');
   }
 
-  return value as TaskExportV1;
+  return value as TaskPortableExport;
 }
 
-function parseTaskRestoreReport(value: unknown): TaskRestoreReport {
+function parseTaskRestoreReport(value: unknown, schemaVersion: 1 | 2): TaskRestoreReport {
   const report = requireRecord(value, 'Task restore report is invalid');
-  if (typeof report.dry_run !== 'boolean' || report.schema_version !== 1) {
+  if (typeof report.dry_run !== 'boolean' || report.schema_version !== schemaVersion) {
     throw new InvalidTaskExportError('Task restore report metadata is invalid');
   }
   parseCollectionReport(report.tasks_todos);
   parseCollectionReport(report.tasks_history_events);
+  if (schemaVersion === 2) {
+    parseCollectionReport(report.tasks_user_settings);
+  }
   return value as TaskRestoreReport;
 }
 
 async function restoreTaskExport(
   supabase: TaskPortabilityClient,
-  taskExport: TaskExportV1,
+  taskExport: TaskPortableExport,
   dryRun: boolean,
 ): Promise<TaskRestoreReport> {
   const validatedExport = parseTaskExport(taskExport);
-  const { data, error } = await supabase.rpc('tasks_restore_export_v1', {
+  const functionName = validatedExport.schema_version === 2
+    ? 'tasks_restore_export_v2'
+    : 'tasks_restore_export_v1';
+  const { data, error } = await supabase.rpc(functionName, {
     _envelope: validatedExport as unknown as Json,
     _dry_run: dryRun,
   });
   if (error) {
     throw error;
   }
-  return parseTaskRestoreReport(data);
+  return parseTaskRestoreReport(data, validatedExport.schema_version);
 }
 
 function parseCollectionReport(value: unknown): TaskRestoreCollectionReport {

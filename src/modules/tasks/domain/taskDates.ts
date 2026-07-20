@@ -48,3 +48,38 @@ export function isTaskCalendarDate(value: string): boolean {
     && date.getUTCMonth() === month - 1
     && date.getUTCDate() === day;
 }
+
+export function resolveTaskPlanningTimeZone(): string {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return isTaskPlanningTimeZone(timeZone) ? timeZone : 'UTC';
+}
+
+export function isTaskPlanningTimeZone(value: string): boolean {
+  if (!value.trim() || value !== value.trim()) {
+    return false;
+  }
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function taskCalendarDateInTimeZone(
+  timeZone: string,
+  instant: Date = new Date(),
+): string {
+  if (!isTaskPlanningTimeZone(timeZone) || Number.isNaN(instant.valueOf())) {
+    throw new InvalidTaskCalendarRangeError('A valid planning time zone and instant are required');
+  }
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(instant);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}

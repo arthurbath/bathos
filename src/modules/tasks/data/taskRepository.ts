@@ -3,6 +3,7 @@ import type { AbstractPowerSyncDatabase, Transaction } from '@powersync/web';
 import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
 import {
   assertTaskCalendarRange,
+  isTaskPlanningTimeZone,
   normalizeTaskCalendarDate,
 } from '@/modules/tasks/domain/taskDates';
 import {
@@ -21,6 +22,7 @@ import type {
   TaskEntryChannel,
   TaskSourceKind,
   TaskTodo,
+  TaskUserSettings,
 } from '@/modules/tasks/types/tasks';
 
 export type TaskRepositoryDatabase = Pick<AbstractPowerSyncDatabase, 'writeTransaction'>;
@@ -193,6 +195,52 @@ export class TaskRepository {
       );
 
       return task;
+    });
+  }
+
+  async ensurePlanningSettings(
+    ownerId: string,
+    planningTimeZone: string,
+  ): Promise<TaskUserSettings> {
+    assertOwner(ownerId);
+    if (!isTaskPlanningTimeZone(planningTimeZone)) {
+      throw new InvalidTaskMutationError('A recognized IANA planning time zone is required');
+    }
+
+    return this.database.writeTransaction(async (transaction) => {
+      const existing = await transaction.getOptional<TaskUserSettings>(
+        'SELECT * FROM tasks_user_settings WHERE owner_id = ?',
+        [ownerId],
+      );
+      if (existing !== null) {
+        return existing;
+      }
+
+      const timestamp = this.now();
+      const setting: TaskUserSettings = {
+        id: ownerId,
+        owner_id: ownerId,
+        planning_timezone: planningTimeZone,
+        revision: 1,
+        client_mutation_id: this.createId(),
+        created_at: timestamp,
+        updated_at: timestamp,
+      };
+      await transaction.execute(
+        `INSERT INTO tasks_user_settings
+          (id, owner_id, planning_timezone, revision, client_mutation_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          setting.id,
+          setting.owner_id,
+          setting.planning_timezone,
+          setting.revision,
+          setting.client_mutation_id,
+          setting.created_at,
+          setting.updated_at,
+        ],
+      );
+      return setting;
     });
   }
 

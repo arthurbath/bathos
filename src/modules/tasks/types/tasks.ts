@@ -62,3 +62,5 @@ export type TaskTodoInsert = Omit<TaskTodoInsertRow, keyof RefinedTaskFields> &
 
 export type TaskTodoUpdate = Omit<TaskTodoUpdateRow, keyof RefinedTaskFields> &
   Partial<RefinedTaskFields>;
+
+export type TaskUserSettings = Tables<'tasks_user_settings'>;

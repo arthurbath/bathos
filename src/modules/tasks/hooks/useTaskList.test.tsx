@@ -101,7 +101,7 @@ describe('useTaskList optimistic display', () => {
       updateTask: vi.fn().mockReturnValue(pendingUpdate.promise),
       transitionTask: vi.fn(),
     };
-    mocks.useTasksRuntime.mockReturnValue({ repository });
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
     const { container, root } = renderHookHarness();
 
     try {
@@ -146,7 +146,7 @@ describe('useTaskList optimistic display', () => {
       updateTask: vi.fn(),
       transitionTask: vi.fn().mockReturnValue(pendingCompletion.promise),
     };
-    mocks.useTasksRuntime.mockReturnValue({ repository });
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
     const { container, root } = renderHookHarness();
 
     try {
@@ -187,7 +187,7 @@ describe('useTaskList optimistic display', () => {
       updateTask: vi.fn(),
       transitionTask: vi.fn().mockReturnValue(pendingRestore.promise),
     };
-    mocks.useTasksRuntime.mockReturnValue({ repository });
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
     const { container, root } = renderHookHarness();
 
     try {
@@ -237,7 +237,7 @@ describe('useTaskList optimistic display', () => {
       updateTask: vi.fn(),
       transitionTask: vi.fn().mockReturnValue(pendingReopen.promise),
     };
-    mocks.useTasksRuntime.mockReturnValue({ repository });
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
     const { container, root } = renderHookHarness();
 
     try {
@@ -264,6 +264,41 @@ describe('useTaskList optimistic display', () => {
         await reopenPromise;
       });
       expect(latest.tasks.map((task) => task.id)).toEqual(['task-completed']);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('derives Upcoming and Today availability from the same planning date', () => {
+    const futureTask = {
+      ...originalTask,
+      id: 'task-future',
+      start_date: '2099-01-02',
+    };
+    const laterTask = {
+      ...originalTask,
+      id: 'task-later',
+      start_date: '2099-01-03',
+    };
+    queryData = [laterTask, futureTask];
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    harnessView = 'upcoming';
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.tasks.map((task) => task.id)).toEqual(['task-future', 'task-later']);
+      expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain('start_date > ?');
+      expect(mocks.useQuery.mock.calls.at(-1)?.[1]).toEqual(['owner-a', latest.planningDate]);
+
+      harnessView = 'today';
+      rerender(root);
+      expect(latest.tasks).toEqual([]);
+      expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain('start_date <= ?');
     } finally {
       cleanup(root, container);
     }

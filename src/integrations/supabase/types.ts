@@ -1227,6 +1227,36 @@ export type Database = {
         }
         Relationships: []
       }
+      tasks_user_settings: {
+        Row: {
+          client_mutation_id: string
+          created_at: string
+          id: string
+          owner_id: string
+          planning_timezone: string
+          revision: number
+          updated_at: string
+        }
+        Insert: {
+          client_mutation_id: string
+          created_at?: string
+          id: string
+          owner_id: string
+          planning_timezone: string
+          revision?: number
+          updated_at?: string
+        }
+        Update: {
+          client_mutation_id?: string
+          created_at?: string
+          id?: string
+          owner_id?: string
+          planning_timezone?: string
+          revision?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       wardrobe_items: {
         Row: {
           brand: string | null
@@ -1485,7 +1515,12 @@ export type Database = {
         Returns: Json
       }
       tasks_create_export_v1: { Args: never; Returns: Json }
+      tasks_create_export_v2: { Args: never; Returns: Json }
       tasks_restore_export_v1: {
+        Args: { _dry_run?: boolean; _envelope: Json }
+        Returns: Json
+      }
+      tasks_restore_export_v2: {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
       }

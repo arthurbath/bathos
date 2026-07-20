@@ -26,6 +26,7 @@ import DrawersIndex from "@/modules/drawers/DrawersIndex";
 import GarageIndex from "@/modules/garage/GarageIndex";
 import SnakeIndex from "@/modules/snake/SnakeIndex";
 import WardrobeIndex from "@/modules/wardrobe/WardrobeIndex";
+import { TASK_ROUTE_PATHS } from "@/modules/tasks/routes";
 import NotFound from "./pages/NotFound";
 
 const TasksIndex = lazy(() => import("@/modules/tasks/TasksIndex"));
@@ -146,10 +147,9 @@ function AppRoutes() {
 
         {/* Tasks module */}
         <Route path="/tasks" element={<Navigate to="/tasks/today" replace />} />
-        <Route path="/tasks/inbox" element={<TasksRoute />} />
-        <Route path="/tasks/today" element={<TasksRoute />} />
-        <Route path="/tasks/logbook" element={<TasksRoute />} />
-        <Route path="/tasks/trash" element={<TasksRoute />} />
+        {TASK_ROUTE_PATHS.map((path) => (
+          <Route key={path} path={path} element={<TasksRoute />} />
+        ))}
 
         {/* Legacy routes */}
         <Route path="/incomes" element={<Navigate to="/budget/incomes" replace />} />

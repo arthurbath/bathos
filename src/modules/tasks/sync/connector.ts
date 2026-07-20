@@ -11,6 +11,8 @@ import type { Database, TablesInsert, TablesUpdate } from '@/integrations/supaba
 
 type TaskInsert = TablesInsert<'tasks_todos'>;
 type TaskUpdate = TablesUpdate<'tasks_todos'>;
+type TaskSettingsInsert = TablesInsert<'tasks_user_settings'>;
+type TaskSettingsUpdate = TablesUpdate<'tasks_user_settings'>;
 
 export type TasksRemoteWriteOutcome =
   | { status: 'applied' | 'already_applied' }
@@ -23,6 +25,12 @@ export interface TasksRemoteStore {
     taskId: string,
     baseRevision: number,
     patch: TaskUpdate,
+  ): Promise<TasksRemoteWriteOutcome>;
+  insertSettings(settings: TaskSettingsInsert): Promise<TasksRemoteWriteOutcome>;
+  updateSettings(
+    settingsId: string,
+    baseRevision: number,
+    patch: TaskSettingsUpdate,
   ): Promise<TasksRemoteWriteOutcome>;
 }
 
@@ -68,7 +76,7 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
   };
 
   private async uploadEntry(database: AbstractPowerSyncDatabase, entry: CrudEntry): Promise<void> {
-    if (entry.table !== 'tasks_todos') {
+    if (entry.table !== 'tasks_todos' && entry.table !== 'tasks_user_settings') {
       await recordSyncIssue(database, entry, {
         kind: 'rejected_operation',
         code: 'unsupported_table',
@@ -86,17 +94,30 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
 
     let outcome: TasksRemoteWriteOutcome;
     try {
-      if (entry.op === UpdateType.PUT) {
-        outcome = await this.options.remoteStore.insertTask(parseTaskInsert(entry));
+      if (entry.table === 'tasks_todos') {
+        if (entry.op === UpdateType.PUT) {
+          outcome = await this.options.remoteStore.insertTask(parseTaskInsert(entry));
+        } else if (entry.op === UpdateType.PATCH) {
+          const patch = parseTaskUpdate(entry);
+          outcome = await this.options.remoteStore.updateTask(
+            entry.id,
+            requirePositiveInteger(patch.revision, 'revision') - 1,
+            patch,
+          );
+        } else {
+          throw new InvalidTasksCrudEntryError('Unsupported task mutation operation');
+        }
+      } else if (entry.op === UpdateType.PUT) {
+        outcome = await this.options.remoteStore.insertSettings(parseSettingsInsert(entry));
       } else if (entry.op === UpdateType.PATCH) {
-        const patch = parseTaskUpdate(entry);
-        outcome = await this.options.remoteStore.updateTask(
+        const patch = parseSettingsUpdate(entry);
+        outcome = await this.options.remoteStore.updateSettings(
           entry.id,
           requirePositiveInteger(patch.revision, 'revision') - 1,
           patch,
         );
       } else {
-        throw new InvalidTasksCrudEntryError('Unsupported task mutation operation');
+        throw new InvalidTasksCrudEntryError('Unsupported task settings mutation operation');
       }
     } catch (error) {
       if (!(error instanceof InvalidTasksCrudEntryError)) {
@@ -206,6 +227,65 @@ export class TasksSupabaseRemoteStore implements TasksRemoteStore {
       : { status: 'conflict', remoteRevision: current?.revision ?? null };
   }
 
+  async insertSettings(settings: TaskSettingsInsert): Promise<TasksRemoteWriteOutcome> {
+    const { error } = await this.supabase.from('tasks_user_settings').insert(settings);
+    if (!error) {
+      return { status: 'applied' };
+    }
+    if (error.code !== '23505') {
+      return classifyRemoteError(error);
+    }
+    return this.classifySettingsRetry(
+      settings.id,
+      requirePositiveInteger(settings.revision, 'revision'),
+      settings.client_mutation_id,
+    );
+  }
+
+  async updateSettings(
+    settingsId: string,
+    baseRevision: number,
+    patch: TaskSettingsUpdate,
+  ): Promise<TasksRemoteWriteOutcome> {
+    const { data, error } = await this.supabase
+      .from('tasks_user_settings')
+      .update(patch)
+      .eq('id', settingsId)
+      .eq('revision', baseRevision)
+      .select('id, revision, client_mutation_id')
+      .maybeSingle();
+    if (error) {
+      return classifyRemoteError(error);
+    }
+    if (data !== null) {
+      return { status: 'applied' };
+    }
+    return this.classifySettingsRetry(
+      settingsId,
+      requirePositiveInteger(patch.revision, 'revision'),
+      requireText(patch.client_mutation_id, 'client_mutation_id'),
+    );
+  }
+
+  private async classifySettingsRetry(
+    settingsId: string,
+    expectedRevision: number,
+    expectedMutationId: string,
+  ): Promise<TasksRemoteWriteOutcome> {
+    const current = await this.supabase
+      .from('tasks_user_settings')
+      .select('id, revision, client_mutation_id')
+      .eq('id', settingsId)
+      .maybeSingle();
+    if (current.error) {
+      throwRemoteReadError(current.error);
+    }
+    return current.data?.revision === expectedRevision
+      && current.data.client_mutation_id === expectedMutationId
+      ? { status: 'already_applied' }
+      : { status: 'conflict', remoteRevision: current.data?.revision ?? null };
+  }
+
   private async getRemoteState(
     taskId: string,
     mutationId: string,
@@ -299,6 +379,39 @@ function parseTaskUpdate(entry: CrudEntry): TaskUpdate {
   requirePositiveInteger(data.revision, 'revision');
   requireText(data.client_mutation_id, 'client_mutation_id');
   return { ...data } as TaskUpdate;
+}
+
+function parseSettingsInsert(entry: CrudEntry): TaskSettingsInsert {
+  const data = entry.opData ?? {};
+  return {
+    id: entry.id,
+    owner_id: requireText(data.owner_id, 'owner_id'),
+    planning_timezone: requireText(data.planning_timezone, 'planning_timezone'),
+    revision: requirePositiveInteger(data.revision, 'revision'),
+    client_mutation_id: requireText(data.client_mutation_id, 'client_mutation_id'),
+    created_at: requireText(data.created_at, 'created_at'),
+    updated_at: requireText(data.updated_at, 'updated_at'),
+  };
+}
+
+function parseSettingsUpdate(entry: CrudEntry): TaskSettingsUpdate {
+  const data = entry.opData ?? {};
+  const allowedColumns = new Set([
+    'planning_timezone',
+    'revision',
+    'client_mutation_id',
+    'updated_at',
+  ]);
+  if (Object.keys(data).some((columnName) => !allowedColumns.has(columnName))) {
+    throw new InvalidTasksCrudEntryError(
+      'The task settings update contains an immutable or unknown field',
+    );
+  }
+  requireText(data.planning_timezone, 'planning_timezone');
+  requirePositiveInteger(data.revision, 'revision');
+  requireText(data.client_mutation_id, 'client_mutation_id');
+  requireText(data.updated_at, 'updated_at');
+  return { ...data } as TaskSettingsUpdate;
 }
 
 async function recordSyncIssue(

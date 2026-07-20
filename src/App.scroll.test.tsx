@@ -3,7 +3,14 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { MemoryRouter, Routes, Route, Link } from "react-router-dom";
+import { TASK_ROUTE_PATHS } from "@/modules/tasks/routes";
 import { ScrollToTopOnPathnameChange } from "./App";
+
+describe("task route registry", () => {
+  it("registers the Upcoming task view", () => {
+    expect(TASK_ROUTE_PATHS).toContain("/tasks/upcoming");
+  });
+});
 
 function TestRoutes() {
   return (

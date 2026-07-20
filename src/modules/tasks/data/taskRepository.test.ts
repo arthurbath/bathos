@@ -61,6 +61,42 @@ function createHarness(queryResult: unknown | null) {
 }
 
 describe('task repository', () => {
+  it('persists one canonical planning time zone per owner', async () => {
+    const create = createHarness(null);
+    await expect(
+      create.repository.ensurePlanningSettings('owner-a', 'America/Los_Angeles'),
+    ).resolves.toMatchObject({
+      id: 'owner-a',
+      owner_id: 'owner-a',
+      planning_timezone: 'America/Los_Angeles',
+      revision: 1,
+      client_mutation_id: 'task-new',
+    });
+    expect(create.transaction.execute).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO tasks_user_settings'),
+      expect.any(Array),
+    );
+
+    const existing = {
+      id: 'owner-a',
+      owner_id: 'owner-a',
+      planning_timezone: 'America/New_York',
+      revision: 2,
+      client_mutation_id: 'mutation-settings',
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    const reuse = createHarness(existing);
+    await expect(
+      reuse.repository.ensurePlanningSettings('owner-a', 'America/Los_Angeles'),
+    ).resolves.toBe(existing);
+    expect(reuse.transaction.execute).not.toHaveBeenCalled();
+
+    await expect(
+      create.repository.ensurePlanningSettings('owner-a', 'Not/A_Time_Zone'),
+    ).rejects.toThrow('A recognized IANA planning time zone is required');
+  });
+
   it('creates a complete offline row after the current destination tail', async () => {
     const { repository, transaction } = createHarness({ order_key: 'a0' });
 

@@ -28,6 +28,7 @@
 
 - [x] 3.1a Add the owner-scoped `tasks_todos` table for the first-slice task, planning, source, lifecycle, recovery, and ordering model.
 - [ ] 3.1b Add owner-scoped area, project, heading, checklist, template, recurrence, reminder, and delivery tables when their product slices begin.
+- [x] 3.1c Add owner-scoped planning-time-zone settings for date-derived views.
 - [x] 3.2 Add RLS policies and grants that restrict every current task record to its signed-in owner and withhold hard deletion from authenticated clients.
 - [x] 3.3a Add first-slice constraints and indexes for stable identifiers, provenance, valid lifecycle/disposition, planning queries, and synchronization.
 - [ ] 3.3b Add owner-inclusive hierarchy constraints and indexes with the later hierarchy tables.
@@ -54,11 +55,11 @@
 - [ ] 5.1 Add Inbox behavior for unprocessed captures.
 - [ ] 5.2 Add areas, projects, headings, and checklist items with stable hierarchy behavior.
 - [ ] 5.3 Add Today and This Evening with manual ordering and unfinished-item rescheduling.
-- [ ] 5.4 Add Upcoming with future start-date planning.
+- [x] 5.4 Add Upcoming with future start-date planning.
 - [ ] 5.5 Add Anytime and Someday with the specified active/inactive semantics.
 - [x] 5.6 Add Logbook, completion history, cancellation history, and recovery flows.
 - [x] 5.7a Add date-only start-date and deadline storage, range validation, history, undo, export/restore, synchronization, and editing.
-- [ ] 5.7b Apply owner-time-zone availability and deadline presentation across derived planning views.
+- [x] 5.7b Apply owner-time-zone availability and deadline presentation across derived planning views.
 - [ ] 5.8 Add reminders using the responsibility model selected in the architecture gate.
 - [ ] 5.9 Add recurrence definitions and idempotent occurrence generation.
 - [ ] 5.10 Add native to-do and project templates with provenance-aware instantiation.

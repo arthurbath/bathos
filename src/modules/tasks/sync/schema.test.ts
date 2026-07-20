@@ -14,9 +14,11 @@ describe('tasks PowerSync schema', () => {
       'tasks_owner_binding',
       'tasks_sync_issues',
       'tasks_todos',
+      'tasks_user_settings',
     ]);
     expect(tables.tasks_todos.local_only).toBe(false);
     expect(tables.tasks_history_events.local_only).toBe(false);
+    expect(tables.tasks_user_settings.local_only).toBe(false);
     expect(tables.tasks_sync_issues.local_only).toBe(true);
     expect(tables.tasks_owner_binding.local_only).toBe(true);
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('client_mutation_id');

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { supabase } from '@/integrations/supabase/client';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
+import { resolveTaskPlanningTimeZone } from '@/modules/tasks/domain/taskDates';
 import {
   bindTasksDatabaseOwner,
   clearTasksDatabaseForSignOut,
@@ -31,7 +32,9 @@ export function TasksRuntimeProvider({
   children: ReactNode;
 }) {
   const [state, setState] = useState<
-    { status: 'loading' } | { status: 'ready'; mode: 'local' | 'connected' } | { status: 'error'; error: Error }
+    | { status: 'loading' }
+    | { status: 'ready'; mode: 'local' | 'connected'; planningTimeZone: string }
+    | { status: 'error'; error: Error }
   >({ status: 'loading' });
   const [database, setDatabase] = useState<PowerSyncDatabase>(createTasksPowerSyncDatabase);
   const repository = useMemo(() => new TaskRepository(database), [database]);
@@ -43,18 +46,30 @@ export function TasksRuntimeProvider({
     void (async () => {
       try {
         await bindTasksDatabaseOwner(database, ownerId);
+        const settings = await repository.ensurePlanningSettings(
+          ownerId,
+          resolveTaskPlanningTimeZone(),
+        );
         if (!active) {
           return;
         }
 
-        setState({ status: 'ready', mode: endpoint ? 'connected' : 'local' });
+        setState({
+          status: 'ready',
+          mode: endpoint ? 'connected' : 'local',
+          planningTimeZone: settings.planning_timezone,
+        });
         if (endpoint) {
           const connector = createTasksSupabaseConnector({ endpoint, supabase });
           try {
             await database.connect(connector);
           } catch {
             if (active) {
-              setState({ status: 'ready', mode: 'local' });
+              setState({
+                status: 'ready',
+                mode: 'local',
+                planningTimeZone: settings.planning_timezone,
+              });
             }
           }
         }
@@ -72,7 +87,7 @@ export function TasksRuntimeProvider({
       active = false;
       void database.close().catch(() => undefined);
     };
-  }, [database, ownerId]);
+  }, [database, ownerId, repository]);
 
   const prepareForSignOut = useCallback(
     () => clearTasksDatabaseForSignOut(database),
@@ -84,6 +99,7 @@ export function TasksRuntimeProvider({
       database,
       repository,
       mode: state.status === 'ready' ? state.mode : 'local',
+      planningTimeZone: state.status === 'ready' ? state.planningTimeZone : 'UTC',
       prepareForSignOut,
     }),
     [database, prepareForSignOut, repository, state],

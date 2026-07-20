@@ -62,6 +62,22 @@ const taskHistoryEvents = new Table(
   },
 );
 
+const taskUserSettings = new Table(
+  {
+    owner_id: column.text,
+    planning_timezone: column.text,
+    revision: column.integer,
+    client_mutation_id: column.text,
+    created_at: column.text,
+    updated_at: column.text,
+  },
+  {
+    indexes: {
+      owner: ['owner_id'],
+    },
+  },
+);
+
 const taskSyncIssues = new Table(
   {
     task_id: column.text,
@@ -91,6 +107,7 @@ const taskOwnerBinding = new Table(
 export const tasksPowerSyncSchema = new Schema({
   tasks_todos: taskTodos,
   tasks_history_events: taskHistoryEvents,
+  tasks_user_settings: taskUserSettings,
   tasks_sync_issues: taskSyncIssues,
   tasks_owner_binding: taskOwnerBinding,
 });

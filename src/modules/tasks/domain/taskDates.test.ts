@@ -3,13 +3,29 @@ import { describe, expect, it } from 'vitest';
 import {
   assertTaskCalendarRange,
   isTaskCalendarDate,
+  isTaskPlanningTimeZone,
   normalizeTaskCalendarDate,
+  taskCalendarDateInTimeZone,
 } from '@/modules/tasks/domain/taskDates';
 
 describe('task calendar dates', () => {
   it('accepts real ISO calendar dates without converting them to instants', () => {
     expect(isTaskCalendarDate('2028-02-29')).toBe(true);
     expect(normalizeTaskCalendarDate(' 2028-02-29 ', 'Start date')).toBe('2028-02-29');
+  });
+
+  it('derives one calendar day from the canonical planning time zone', () => {
+    const instant = new Date('2026-07-20T06:30:00.000Z');
+    expect(taskCalendarDateInTimeZone('America/Los_Angeles', instant)).toBe('2026-07-19');
+    expect(taskCalendarDateInTimeZone('America/New_York', instant)).toBe('2026-07-20');
+  });
+
+  it('validates IANA planning time zones', () => {
+    expect(isTaskPlanningTimeZone('America/Los_Angeles')).toBe(true);
+    expect(isTaskPlanningTimeZone('Not/A_Time_Zone')).toBe(false);
+    expect(() => taskCalendarDateInTimeZone('Not/A_Time_Zone')).toThrow(
+      'A valid planning time zone and instant are required',
+    );
   });
 
   it('rejects malformed and impossible dates', () => {
