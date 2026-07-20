@@ -98,6 +98,15 @@ function setControlValue(control: HTMLInputElement | HTMLSelectElement, value: s
   ));
 }
 
+function pressEnter(control: HTMLInputElement, isComposing = false) {
+  control.dispatchEvent(new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    isComposing,
+    key: 'Enter',
+  }));
+}
+
 describe('TaskProjectDetailView', () => {
   beforeEach(() => mockUseTaskProjectDetail.mockReset());
 
@@ -139,7 +148,11 @@ describe('TaskProjectDetailView', () => {
       const headingInput = container.querySelector<HTMLInputElement>('[aria-label="New Heading Name"]')!;
       await act(async () => {
         setControlValue(headingInput, 'Later');
-        headingInput.form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        pressEnter(headingInput, true);
+      });
+      expect(hierarchyModel.createHeading).not.toHaveBeenCalled();
+      await act(async () => {
+        pressEnter(headingInput);
       });
       expect(hierarchyModel.createHeading).toHaveBeenCalledWith('project-a', 'Later');
 
@@ -152,7 +165,7 @@ describe('TaskProjectDetailView', () => {
       await act(async () => {
         setControlValue(taskInput, 'Draft copy');
         setControlValue(headingSelect, 'heading-a');
-        taskInput.form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        pressEnter(taskInput);
       });
       expect(detailModel.createTask).toHaveBeenCalledWith('Draft copy', 'heading-a');
     } finally {
@@ -186,7 +199,7 @@ describe('TaskProjectDetailView', () => {
       )!;
       await act(async () => {
         setControlValue(checklistInput, 'Final review');
-        checklistInput.form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        pressEnter(checklistInput);
       });
       expect(detailModel.createChecklistItem).toHaveBeenCalledWith('task-a', 'Final review');
 

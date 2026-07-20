@@ -583,7 +583,7 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **THEN** the module respectively focuses task capture, opens unified search and navigation, or opens a visible keyboard-command reference
 
 #### Scenario: Submit inline hierarchy capture
-- **WHEN** a keyboard user enters a nonblank area or project name and presses Enter without an active composition event
+- **WHEN** a keyboard user enters a nonblank area, project, heading, project to-do, or checklist-item name and presses Enter without an active composition event
 - **THEN** the corresponding hierarchy form submits exactly as its visible add button would
 
 #### Scenario: Search and filter without unstructured labels

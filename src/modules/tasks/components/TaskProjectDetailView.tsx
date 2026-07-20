@@ -34,6 +34,7 @@ import {
   TaskHierarchyEditableTitle,
   TaskHierarchyOrderButton,
 } from '@/modules/tasks/components/TaskProjectsView';
+import { submitTaskFormOnEnter } from '@/modules/tasks/components/taskFormKeyboard';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import { useTaskProjectDetail } from '@/modules/tasks/hooks/useTaskProjectDetail';
 import type { TaskChecklistItem, TaskHeading, TaskTodo } from '@/modules/tasks/types/tasks';
@@ -204,6 +205,7 @@ export function TaskProjectDetailView({
           <Input
             value={newHeadingTitle}
             onChange={(event) => setNewHeadingTitle(event.target.value)}
+            onKeyDown={submitTaskFormOnEnter}
             aria-label="New Heading Name"
             placeholder="New Heading"
           />
@@ -221,6 +223,7 @@ export function TaskProjectDetailView({
           <Input
             value={newTaskTitle}
             onChange={(event) => setNewTaskTitle(event.target.value)}
+            onKeyDown={submitTaskFormOnEnter}
             aria-label="New Project Task Name"
             placeholder="New Task"
           />
@@ -731,6 +734,7 @@ function ChecklistEditor({
         <Input
           value={title}
           onChange={(event) => setTitle(event.target.value)}
+          onKeyDown={submitTaskFormOnEnter}
           aria-label={`New Checklist Item for ${task.title}`}
           placeholder="New Checklist Item"
           className="h-9"

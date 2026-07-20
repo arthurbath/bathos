@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { ArrowDown, ArrowUp, Check, ChevronRight, FolderKanban, Pencil, Plus, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,6 +9,7 @@ import { toast } from '@/hooks/use-toast';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type { TaskArea, TaskProject } from '@/modules/tasks/types/tasks';
+import { submitTaskFormOnEnter } from '@/modules/tasks/components/taskFormKeyboard';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 
 export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel }) {
@@ -72,7 +73,7 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
           <Input
             value={newAreaTitle}
             onChange={(event) => setNewAreaTitle(event.target.value)}
-            onKeyDown={submitHierarchyFormOnEnter}
+            onKeyDown={submitTaskFormOnEnter}
             aria-label="New Area Name"
             placeholder="New Area"
           />
@@ -90,7 +91,7 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
           <Input
             value={newProjectTitle}
             onChange={(event) => setNewProjectTitle(event.target.value)}
-            onKeyDown={submitHierarchyFormOnEnter}
+            onKeyDown={submitTaskFormOnEnter}
             aria-label="New Project Name"
             placeholder="New Project"
           />
@@ -159,12 +160,6 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
       )}
     </div>
   );
-}
-
-function submitHierarchyFormOnEnter(event: KeyboardEvent<HTMLInputElement>) {
-  if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
-  event.preventDefault();
-  event.currentTarget.form?.requestSubmit();
 }
 
 function AreaSection({
