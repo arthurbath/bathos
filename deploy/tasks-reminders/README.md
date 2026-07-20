@@ -20,16 +20,17 @@ The Cron header secret must also exist in Supabase Vault with the exact name `ta
 Export the five task reminder values only in the controlled deployment environment, then run:
 
 ```sh
+npm run verify:tasks:edge-bundle
 npm run verify:tasks:reminders
 ```
 
-The preflight verifies the key pair, client/server public-key equality, subject shape, and dispatch-secret length. It prints only a short public-key fingerprint. Compare that fingerprint across the Edge Function and web deployment environments without exposing key material.
+The bundle gate compiles the dispatcher with the newest locally cached official Supabase Edge Runtime image and removes its ignored temporary artifact in all outcomes. Set `TASKS_EDGE_RUNTIME_IMAGE` to an exact cached `public.ecr.aws/supabase/edge-runtime` tag when deployment must match a particular hosted runtime. The configuration preflight verifies the key pair, client/server public-key equality, subject shape, and dispatch-secret length. It prints only a short public-key fingerprint. Compare that fingerprint across the Edge Function and web deployment environments without exposing key material.
 
 ## Deployment sequence
 
 1. Approve production activation and select the intended Supabase project.
 2. Generate a fresh VAPID P-256 key pair and an independent dispatch secret outside the repository.
-3. Run the preflight with the intended server and web values.
+3. Run both preflight commands with the intended runtime, server, and web values.
 4. Set the four server values as Supabase Edge Function secrets.
 5. Set `VITE_TASKS_WEB_PUSH_PUBLIC_KEY` in the production web-build environment and deploy that build.
 6. Deploy `dispatch-task-reminders` with JWT verification disabled. The function authenticates only the separate dispatch secret.

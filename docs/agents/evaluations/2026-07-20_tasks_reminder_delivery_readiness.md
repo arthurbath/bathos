@@ -26,6 +26,7 @@ Do not activate production reminder delivery until production infrastructure cha
 - Added bounded dispatcher tests for method handling, missing configuration, authentication, provider acceptance, terminal revocation, claim failures, invalid claims, and receipt failures.
 - Changed a provider-outcome receipt failure to return HTTP 500 with a content-free `receipt_errors` count.
 - Added `npm run verify:tasks:reminders` to validate secret length, public/private P-256 key pairing, server/client public-key equality, and contact-subject shape without printing credentials.
+- Added `npm run verify:tasks:edge-bundle` to repeat the direct Edge Runtime compilation proof, report a bundle hash and size, and remove the ignored artifact in all outcomes.
 - Added `deploy/tasks-reminders/` with a deployment sequence, one-minute fixed-endpoint Cron SQL, Vault-backed header lookup, structural verification, targeted rollback, and rollback-only local validation.
 - Updated the Edge Function documentation and OpenSpec contract.
 
@@ -35,7 +36,7 @@ Do not activate production reminder delivery until production infrastructure cha
 - Full application suite: 503 passing tests and 9 intentional skips across 93 files.
 - Database suite: 574 passing pgTAP assertions across 21 files, including the Web Push delivery contract.
 - Repository lint, TypeScript, production build, and strict OpenSpec validation: passing.
-- Edge compatibility: Supabase Edge Runtime `v1.74.2` produced a 10 MB dispatcher eszip successfully. The ignored temporary artifact was inspected and removed.
+- Edge compatibility: the repeatable bundle gate used Supabase Edge Runtime `v1.74.2` to produce a 10 MB dispatcher eszip successfully, reported its digest, and removed the ignored temporary artifact.
 - Cron package: created the required local extensions, one synthetic Vault secret, one active minute schedule, and the approved command in a database transaction. All assertions passed and the transaction rolled back.
 - Cleanup proof: no synthetic reminder secret and no Cron schema artifact remained after rollback.
 - Database lint reported one pre-existing Drawers function error and one pre-existing unused-variable warning in a Tasks restore helper. It reported no reminder-delivery finding.
@@ -53,4 +54,4 @@ Activation requires all of the following:
 6. Hosted function smoke tests for method and authentication boundaries.
 7. One synthetic-device test covering subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and cleanup.
 
-The local CLI serve-wrapper entrypoint failure should be repaired independently, but it does not justify bypassing hosted acceptance or deploying unverified credentials.
+The local CLI serve-wrapper entrypoint failure is isolated to an external project-wide wrapper path and should be repaired independently. The repeatable direct-runtime bundle gate covers compilation, but it does not justify bypassing hosted HTTP acceptance or deploying unverified credentials.

@@ -72,6 +72,7 @@
 - [x] 5.7b Apply owner-time-zone availability and deadline presentation across derived planning views.
 - [x] 5.8 Add reminders using the responsibility model selected in the architecture gate.
 - [x] 5.8a Prepare and locally validate the secret-free Web Push and Cron deployment package, configuration preflight, dispatcher boundary tests, and outcome-receipt failure handling.
+- [x] 5.8a1 Add a repeatable direct Edge Runtime bundle gate after the local CLI serve wrapper proved project-wide unreliable.
 - [ ] 5.8b After production activation is approved, provision the reminder secrets, Edge Function, Vault entry, Cron job, public web key, and synthetic-device acceptance test.
 - [x] 5.9 Add recurrence definitions and idempotent occurrence generation.
 - [x] 5.10 Add native to-do and project templates with provenance-aware instantiation.

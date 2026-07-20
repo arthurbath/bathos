@@ -18,6 +18,7 @@
     "test:tasks:production-topology": "NODE_ENV=test RUN_TASKS_PRODUCTION_TOPOLOGY=1 vitest run src/modules/tasks/integration/productionTopology.integration.test.ts --testTimeout=180000 --maxWorkers=1 --minWorkers=1",
     "test:tasks:sustained": "NODE_ENV=test RUN_TASKS_SUSTAINED_INTEGRATION=1 vitest run src/modules/tasks/integration/sustainedParallelUse.integration.test.ts --testTimeout=900000 --maxWorkers=1 --minWorkers=1",
     "test:watch": "NODE_ENV=test vitest",
+    "verify:tasks:edge-bundle": "node scripts/verify-tasks-edge-bundle.mjs",
     "verify:tasks:reminders": "node scripts/verify-tasks-web-push-config.mjs"
   },
   "dependencies": {

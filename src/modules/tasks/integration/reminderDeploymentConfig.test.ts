@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { validateTaskReminderConfiguration } from '../../../../scripts/verify-tasks-web-push-config.mjs';
+import { selectEdgeRuntimeImage } from '../../../../scripts/verify-tasks-edge-bundle.mjs';
 
 function validEnvironment() {
   const key = createECDH('prime256v1');
@@ -19,6 +20,21 @@ function validEnvironment() {
 }
 
 describe('task reminder deployment configuration', () => {
+  it('selects the newest cached official Edge Runtime image', () => {
+    expect(selectEdgeRuntimeImage([
+      'unrelated/image:latest',
+      'public.ecr.aws/supabase/edge-runtime:v1.9.0',
+      'public.ecr.aws/supabase/edge-runtime:v1.74.2',
+      'public.ecr.aws/supabase/edge-runtime:<none>',
+    ].join('\n'))).toBe('public.ecr.aws/supabase/edge-runtime:v1.74.2');
+  });
+
+  it('rejects a runtime override outside the official Supabase repository', () => {
+    expect(() => selectEdgeRuntimeImage('', 'example.test/edge-runtime:v1')).toThrow(
+      'TASKS_EDGE_RUNTIME_IMAGE must use public.ecr.aws/supabase/edge-runtime',
+    );
+  });
+
   it('accepts one internally consistent server and browser configuration', () => {
     expect(validateTaskReminderConfiguration(validEnvironment())).toEqual({
       publicKeyFingerprint: expect.stringMatching(/^[a-f0-9]{12}$/),
