@@ -610,6 +610,10 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **WHEN** a user invokes `M` or `W` on a focused open task
 - **THEN** `M` changes only area, project, or heading placement while `W` changes only planning destination, Today section, or start date
 
+#### Scenario: Restore focus after a movement command
+- **WHEN** a structural or temporal movement command succeeds and its command surface closes
+- **THEN** focus returns to the moved task when it remains in the current view, or follows the same-position, prior-task, capture, and heading fallback when the move removes it
+
 #### Scenario: Save or cancel an open editor
 - **WHEN** a keyboard user presses Command+Enter or Escape in an open task editor
 - **THEN** the module respectively saves valid changes or cancels editing and restores focus to the task title

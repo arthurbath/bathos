@@ -1543,8 +1543,23 @@ function TaskRow({
     controls[currentIndex + offset]?.focus();
   };
 
-  const focusAfterRemoval = (main: HTMLElement | null, currentIndex: number) => {
+  const captureTaskFocus = () => {
+    const controls = getTaskTitleControls();
+    return {
+      currentIndex: controls.indexOf(titleButtonRef.current!),
+      main: titleButtonRef.current?.closest('main') ?? null,
+    };
+  };
+
+  const restoreTaskFocus = (
+    { main, currentIndex }: ReturnType<typeof captureTaskFocus>,
+    preferCurrentTask = false,
+  ) => {
     window.setTimeout(() => {
+      if (preferCurrentTask && titleButtonRef.current?.isConnected) {
+        titleButtonRef.current.focus();
+        return;
+      }
       const remaining = Array.from(main?.querySelectorAll<HTMLButtonElement>(
         '[data-task-title-control]',
       ) ?? []).filter(
@@ -1557,16 +1572,25 @@ function TaskRow({
   };
 
   const runTerminalAction = async (operation: () => Promise<void>) => {
-    const controls = getTaskTitleControls();
-    const currentIndex = controls.indexOf(titleButtonRef.current!);
-    const main = titleButtonRef.current?.closest('main') ?? null;
+    const focus = captureTaskFocus();
     const applied = await run(operation);
     if (applied) {
-      focusAfterRemoval(main, currentIndex);
+      restoreTaskFocus(focus);
     } else {
       window.setTimeout(() => titleButtonRef.current?.focus(), 0);
     }
   };
+
+  const runMovementAction = async (operation: () => Promise<void>) => {
+    const focus = captureTaskFocus();
+    await operation();
+    restoreTaskFocus(focus, true);
+  };
+
+  const movementPlanningActions = planningActions.map((action) => ({
+    ...action,
+    run: () => runMovementAction(action.run),
+  }));
 
   return (
     <article className={selected || bulkSelection?.selected ? 'bg-foreground/[0.04]' : undefined}>
@@ -1753,12 +1777,12 @@ function TaskRow({
           setMoveOpen(nextOpen);
         }}
         onCloseAutoFocus={() => titleButtonRef.current?.focus()}
-        onMove={onUpdate}
+        onMove={(patch) => runMovementAction(() => onUpdate(patch))}
       /> : null}
       {!bulkSelection ? <TaskWhenDialog
         open={whenOpen}
         task={task}
-        actions={planningActions}
+        actions={movementPlanningActions}
         onOpenChange={(nextOpen) => {
           setWhenOpen(nextOpen);
         }}

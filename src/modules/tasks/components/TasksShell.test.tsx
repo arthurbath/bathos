@@ -140,8 +140,7 @@ function renderShell(initialEntry = '/tasks/today') {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
-
-  act(() => {
+  const render = () => {
     root.render(
       <MemoryRouter initialEntries={[initialEntry]}>
         <TasksShell
@@ -151,9 +150,17 @@ function renderShell(initialEntry = '/tasks/today') {
         />
       </MemoryRouter>,
     );
+  };
+
+  act(() => {
+    render();
   });
 
-  return { container, root };
+  return {
+    container,
+    root,
+    rerender: render,
+  };
 }
 
 function cleanup(root: Root, container: HTMLElement) {
@@ -481,6 +488,10 @@ describe('TasksShell', () => {
         project_id: 'project-a',
         heading_id: 'heading-a',
       });
+      await act(async () => {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.activeElement).toBe(titleButton);
 
       titleButton.focus();
       await act(async () => {
@@ -498,6 +509,55 @@ describe('TasksShell', () => {
         todaySection: 'daytime',
         startDate: null,
       });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('focuses the same-position row when temporal planning removes the invoked task', async () => {
+    const secondTask = {
+      ...task,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    };
+    let resolveMove: (() => void) | undefined;
+    const taskList = { ...defaultTaskList(), tasks: [task, secondTask] };
+    taskList.moveTask.mockImplementation(() => new Promise<void>((resolve) => {
+      resolveMove = resolve;
+    }));
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root, rerender } = renderShell();
+
+    try {
+      const first = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
+      first.focus();
+      await act(async () => {
+        first.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'w', bubbles: true, cancelable: true,
+        }));
+      });
+      const someday = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent === 'Move to Someday');
+
+      await act(async () => {
+        someday?.click();
+        taskList.tasks = [secondTask];
+        rerender();
+        resolveMove?.();
+        await Promise.resolve();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      expect(taskList.moveTask).toHaveBeenCalledWith('task-a', {
+        destination: 'someday',
+        todaySection: 'daytime',
+        startDate: null,
+      });
+      expect(document.activeElement).toBe(
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-b"]'),
+      );
     } finally {
       cleanup(root, container);
     }
