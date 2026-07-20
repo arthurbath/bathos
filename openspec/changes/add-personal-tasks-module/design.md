@@ -384,6 +384,12 @@ Hierarchy reads return the normalized current collections instead of inventing a
 
 This slice does not expose history as a generic record collection, create planning settings as a side effect of a read, or add any mutation capability. A caller without initialized planning settings must open the Tasks module once or supply an explicit planning date. Tool responses are bounded and identify truncation rather than silently presenting a partial result as complete.
 
+The first mutation slice adds only `create_task`. It creates one to-do rather than exposing generic area, project, heading, checklist, or table CRUD. The tool requires a caller-generated UUID idempotency key, never accepts an owner field, fixes both entry and mutation channel to `mcp`, fixes the actor to `automation`, generates the stable task identifier server-side, and returns the accepted creation receipt plus the owner-safe current task. Optional source input is typed; template provenance remains reserved for the future template-instantiation operation.
+
+Idempotency resolves through the append-only `tasks_history_events` creation event, not only the mutable task row. This remains valid after later edits replace the task row's current client mutation identifier. An exact retry returns the same task and original creation receipt. Reusing the key with different normalized creation input is rejected. The initial lookup and the post-conflict lookup use the caller's RLS-scoped client plus explicit owner predicates, so a key collision outside the caller's scope is reported only as unavailable.
+
+New Inbox, Anytime, and Someday work follows the existing placement rules. Today derives the current calendar date from the owner's stored planning time zone and refuses an explicit different date. The tool validates that selected areas, projects, and headings are present, owner-scoped, and structurally compatible before insert. Planning and hierarchy order keys append through the shared fractional-indexing algorithm; simultaneous insertions may share a gap key and remain deterministic through stable-ID tie-breaking. The authoritative insert trigger appends the creation history event in the same database transaction.
+
 Rationale: AI access is a primary advantage of the module, but broad mutation primitives would increase the risk of duplication, data loss, and invalid states.
 
 Alternative considered: Expose generic CRUD over all task tables. Rejected because database shape is not an appropriate automation contract.

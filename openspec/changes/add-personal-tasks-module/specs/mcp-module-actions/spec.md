@@ -23,6 +23,14 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 - **WHEN** an authenticated MCP client creates a supported task record with valid structured fields
 - **THEN** the server creates the record within the signed-in user's scope and returns its stable identifier and resulting state
 
+#### Scenario: Create a to-do through the narrow MCP contract
+- **WHEN** an authenticated MCP client calls `create_task` with a new idempotency key and valid title, planning, container, and optional typed-source fields
+- **THEN** the server creates one open present to-do with immutable `mcp` entry provenance, an automation actor, stable identifiers, owner-local Today semantics, and append-only creation history
+
+#### Scenario: Reject an idempotency-key payload change
+- **WHEN** an MCP client reuses a creation idempotency key with different normalized title, planning, container, or source input
+- **THEN** the server rejects the request and neither creates nor changes a task
+
 #### Scenario: Update task data
 - **WHEN** an authenticated MCP client updates a supported task record by stable identifier
 - **THEN** the server applies the valid state transition only within the signed-in user's scope and returns the resulting state
@@ -52,6 +60,10 @@ Task MCP mutations SHALL use stable identifiers, enforce ownership and valid sta
 #### Scenario: Retry idempotent creation
 - **WHEN** an MCP client retries a task-creation request with the same supported idempotency identifier
 - **THEN** the server returns the original resulting task instead of creating a duplicate
+
+#### Scenario: Retry creation after later task changes
+- **WHEN** an MCP client retries the exact creation request after the resulting task has been edited or transitioned by a later mutation
+- **THEN** the server resolves the immutable creation-history receipt, returns the same stable task with its current state, and does not create another task or history event
 
 #### Scenario: Reject invalid owner fields
 - **WHEN** an MCP client attempts to assign task ownership to another user

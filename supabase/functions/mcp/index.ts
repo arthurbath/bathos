@@ -973,13 +973,300 @@ var getTaskView = defineTool({
   handler: (input, ctx) => toMcpResult(getTaskViewData(input, requireAuthenticated(ctx)))
 });
 
+// src/lib/mcp/tools/tasks-create.ts
+import { assertTaskCalendarRange, isTaskCalendarDate } from "npm:@/modules/tasks/domain/taskDates";
+import { generateTaskOrderKey } from "npm:@/modules/tasks/domain/taskOrder";
+var destinationSchema = z.enum(["inbox", "today", "anytime", "someday"]);
+var todaySectionSchema = z.enum(["daytime", "evening"]);
+var sourceKindSchema = z.enum([
+  "webpage",
+  "mail_message",
+  "file",
+  "selected_text",
+  "reading_item",
+  "other"
+]);
+var calendarDateSchema = z.string().refine(isTaskCalendarDate, {
+  message: "Expected a valid ISO calendar date."
+});
+var sourceSchema = z.object({
+  kind: sourceKindSchema,
+  url: z.string().max(8e3).optional(),
+  title: z.string().max(1e3).optional(),
+  external_id: z.string().max(2e3).optional()
+});
+function trimRequired(value, label, maxLength) {
+  const normalized = value.trim();
+  if (!normalized) throw new Error(`${label} is required.`);
+  if (Array.from(normalized).length > maxLength) {
+    throw new Error(`${label} cannot exceed ${maxLength} characters.`);
+  }
+  return normalized;
+}
+function trimOptional(value) {
+  const normalized = value?.trim() ?? "";
+  return normalized || null;
+}
+function normalizeRequest(input) {
+  const sourceKind = input.source?.kind ?? null;
+  const sourceUrl = trimOptional(input.source?.url);
+  const sourceTitle = trimOptional(input.source?.title);
+  const sourceExternalId = trimOptional(input.source?.external_id);
+  if ((sourceKind === "webpage" || sourceKind === "reading_item") && sourceUrl === null) {
+    throw new Error("Webpage and reading-item sources require a URL.");
+  }
+  if (sourceUrl !== null && (sourceKind === "webpage" || sourceKind === "reading_item")) {
+    let url;
+    try {
+      url = new URL(sourceUrl);
+    } catch {
+      throw new Error("Webpage and reading-item sources require a valid HTTP or HTTPS URL.");
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("Webpage and reading-item sources require a valid HTTP or HTTPS URL.");
+    }
+  }
+  const areaId = input.area_id ?? null;
+  const projectId = input.project_id ?? null;
+  const headingId = input.heading_id ?? null;
+  if (areaId !== null && projectId !== null) {
+    throw new Error("A task cannot belong directly to both an area and a project.");
+  }
+  if (headingId !== null && projectId === null) {
+    throw new Error("A task heading requires project membership.");
+  }
+  if (input.today_section === "evening" && input.destination !== "today") {
+    throw new Error("This Evening is available only within Today.");
+  }
+  const requestedStartDate = input.start_date ?? null;
+  if (requestedStartDate !== null && !isTaskCalendarDate(requestedStartDate)) {
+    throw new Error("Start date must be a valid ISO calendar date.");
+  }
+  const deadline = input.deadline ?? null;
+  if (deadline !== null && !isTaskCalendarDate(deadline)) {
+    throw new Error("Deadline must be a valid ISO calendar date.");
+  }
+  if ((input.destination === "inbox" || input.destination === "someday") && requestedStartDate !== null) {
+    throw new Error(`${input.destination === "inbox" ? "Inbox" : "Someday"} work cannot retain a start date.`);
+  }
+  if (requestedStartDate !== null) assertTaskCalendarRange(requestedStartDate, deadline);
+  return {
+    idempotencyKey: input.idempotency_key,
+    title: trimRequired(input.title, "Task title", 500),
+    notes: input.notes,
+    destination: input.destination,
+    todaySection: input.today_section,
+    requestedStartDate,
+    startDateWasExplicit: input.start_date !== void 0 && input.start_date !== null,
+    deadline,
+    areaId,
+    projectId,
+    headingId,
+    sourceKind,
+    sourceUrl,
+    sourceTitle,
+    sourceExternalId
+  };
+}
+async function readOne2(query) {
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function findExistingCreation(auth2, idempotencyKey) {
+  const event = await readOne2(auth2.supabase.from("tasks_history_events").select("task_id, client_mutation_id, affected_ids, base_revision, result_revision, transition, occurred_at, outcome, after_state").eq("owner_id", auth2.userId).eq("client_mutation_id", idempotencyKey).eq("transition", "create").eq("mutation_channel", "mcp").maybeSingle());
+  if (event === null) return null;
+  const task = await readOne2(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", event.task_id).maybeSingle());
+  if (task === null) throw new Error("The idempotent task creation record is unavailable.");
+  return { event, task };
+}
+function jsonRecord(value) {
+  if (value === null || Array.isArray(value) || typeof value !== "object") {
+    throw new Error("The idempotent task creation record is invalid.");
+  }
+  return value;
+}
+function assertSameCreationRequest(request, existing) {
+  const state = jsonRecord(existing.event.after_state);
+  const checks = [
+    [state.title, request.title],
+    [state.notes, request.notes],
+    [state.destination, request.destination],
+    [state.today_section, request.todaySection],
+    [state.deadline, request.deadline],
+    [state.area_id, request.areaId],
+    [state.project_id, request.projectId],
+    [state.heading_id, request.headingId],
+    [state.source_kind, request.sourceKind],
+    [state.source_url, request.sourceUrl],
+    [state.source_title, request.sourceTitle],
+    [state.source_external_id, request.sourceExternalId]
+  ];
+  if (request.destination !== "today" || request.startDateWasExplicit) {
+    checks.push([state.start_date, request.requestedStartDate]);
+  }
+  if (checks.some(([actual, expected]) => actual !== expected)) {
+    throw new Error("The idempotency key was already used for a different task creation request.");
+  }
+}
+async function planningDateForOwner(auth2) {
+  const settings = await readOne2(auth2.supabase.from("tasks_user_settings").select("*").eq("owner_id", auth2.userId).maybeSingle());
+  if (settings === null) {
+    throw new Error("Task planning settings are not initialized. Open the Tasks module before creating Today work.");
+  }
+  return planningDateInTimeZone(settings.planning_timezone);
+}
+async function resolveStartDate(request, auth2) {
+  if (request.destination !== "today") return request.requestedStartDate;
+  const planningDate = await planningDateForOwner(auth2);
+  if (request.startDateWasExplicit && request.requestedStartDate !== planningDate) {
+    throw new Error(`Today work must use the owner's current planning date (${planningDate}).`);
+  }
+  return planningDate;
+}
+async function validateContainer(request, auth2) {
+  const [area, project, heading] = await Promise.all([
+    request.areaId === null ? null : readOne2(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", request.areaId).eq("disposition", "present").maybeSingle()),
+    request.projectId === null ? null : readOne2(auth2.supabase.from("tasks_projects").select("id").eq("owner_id", auth2.userId).eq("id", request.projectId).eq("disposition", "present").eq("lifecycle", "open").maybeSingle()),
+    request.headingId === null ? null : readOne2(auth2.supabase.from("tasks_headings").select("id, project_id").eq("owner_id", auth2.userId).eq("id", request.headingId).eq("disposition", "present").maybeSingle())
+  ]);
+  if (request.areaId !== null && area === null) throw new Error("The task area is unavailable.");
+  if (request.projectId !== null && project === null) throw new Error("The task project is unavailable.");
+  if (request.headingId !== null && (heading === null || heading.project_id !== request.projectId)) {
+    throw new Error("The task heading does not belong to the selected project.");
+  }
+}
+async function nextPlanningOrderKey(request, startDate, auth2) {
+  let query = auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", request.destination).eq("today_section", request.todaySection).eq("lifecycle", "open").eq("disposition", "present");
+  if (request.destination === "today") query = query.eq("start_date", startDate);
+  const last = await readOne2(query.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  return generateTaskOrderKey(last?.order_key ?? null, null);
+}
+async function nextHierarchyOrderKey(request, auth2) {
+  if (request.areaId === null && request.projectId === null && request.headingId === null) {
+    return null;
+  }
+  let query = auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("lifecycle", "open").eq("disposition", "present");
+  query = request.areaId === null ? query.is("area_id", null) : query.eq("area_id", request.areaId);
+  query = request.projectId === null ? query.is("project_id", null) : query.eq("project_id", request.projectId);
+  query = request.headingId === null ? query.is("heading_id", null) : query.eq("heading_id", request.headingId);
+  const last = await readOne2(query.not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  return generateTaskOrderKey(last?.hierarchy_order_key ?? null, null);
+}
+function withoutOwner(row) {
+  const { owner_id: _ownerId, ...task } = row;
+  return task;
+}
+function creationResult(existing, idempotencyOutcome) {
+  return {
+    idempotency_outcome: idempotencyOutcome,
+    receipt: {
+      client_mutation_id: existing.event.client_mutation_id,
+      affected_ids: existing.event.affected_ids,
+      base_revision: existing.event.base_revision,
+      result_revision: existing.event.result_revision,
+      transition: existing.event.transition,
+      occurred_at: existing.event.occurred_at,
+      outcome: existing.event.outcome
+    },
+    task: withoutOwner(existing.task)
+  };
+}
+async function readCreationEvent(auth2, idempotencyKey) {
+  const created = await findExistingCreation(auth2, idempotencyKey);
+  if (created === null) throw new Error("The accepted task creation receipt is unavailable.");
+  return created;
+}
+async function createTaskData(input, auth2) {
+  const request = normalizeRequest(input);
+  const existing = await findExistingCreation(auth2, request.idempotencyKey);
+  if (existing !== null) {
+    assertSameCreationRequest(request, existing);
+    return creationResult(existing, "already_applied");
+  }
+  const startDate = await resolveStartDate(request, auth2);
+  assertTaskCalendarRange(startDate, request.deadline);
+  await validateContainer(request, auth2);
+  const [orderKey, hierarchyOrderKey] = await Promise.all([
+    nextPlanningOrderKey(request, startDate, auth2),
+    nextHierarchyOrderKey(request, auth2)
+  ]);
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+  const row = {
+    id: crypto.randomUUID(),
+    owner_id: auth2.userId,
+    area_id: request.areaId,
+    project_id: request.projectId,
+    heading_id: request.headingId,
+    title: request.title,
+    notes: request.notes,
+    lifecycle: "open",
+    completed_at: null,
+    canceled_at: null,
+    disposition: "present",
+    deleted_at: null,
+    deletion_root_id: null,
+    destination: request.destination,
+    today_section: request.todaySection,
+    order_key: orderKey,
+    hierarchy_order_key: hierarchyOrderKey,
+    start_date: startDate,
+    deadline: request.deadline,
+    entry_channel: "mcp",
+    last_mutation_channel: "mcp",
+    last_actor_type: "automation",
+    undo_source_event_id: null,
+    source_kind: request.sourceKind,
+    source_url: request.sourceUrl,
+    source_title: request.sourceTitle,
+    source_external_id: request.sourceExternalId,
+    revision: 1,
+    client_mutation_id: request.idempotencyKey,
+    created_at: timestamp,
+    updated_at: timestamp
+  };
+  const { error } = await auth2.supabase.from("tasks_todos").insert(row);
+  if (error) {
+    if (error.code === "23505") {
+      const replay = await findExistingCreation(auth2, request.idempotencyKey);
+      if (replay !== null) {
+        assertSameCreationRequest(request, replay);
+        return creationResult(replay, "already_applied");
+      }
+      throw new Error("The idempotency key is unavailable. Use a new key for a new task request.");
+    }
+    throw new Error(error.message);
+  }
+  return creationResult(await readCreationEvent(auth2, request.idempotencyKey), "created");
+}
+var createTask = defineTool({
+  name: "create_task",
+  title: "Create Task",
+  description: "Create one owner-scoped to-do with structured planning and source fields. A required idempotency key makes exact retries safe.",
+  inputSchema: {
+    idempotency_key: uuidSchema.describe("Stable UUID for this logical creation request. Reuse it only to retry the exact same request."),
+    title: z.string().trim().min(1).max(500),
+    notes: z.string().max(1e5).default(""),
+    destination: destinationSchema.default("inbox"),
+    today_section: todaySectionSchema.default("daytime"),
+    start_date: calendarDateSchema.nullable().optional(),
+    deadline: calendarDateSchema.nullable().optional(),
+    area_id: uuidSchema.optional(),
+    project_id: uuidSchema.optional(),
+    heading_id: uuidSchema.optional(),
+    source: sourceSchema.optional().describe("Optional typed source reference. Template provenance is reserved for template instantiation.")
+  },
+  annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(createTaskData(input, requireAuthenticated(ctx)))
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "rsqfokyqntmtdejfwmjs";
 var mcp_default = defineMcp({
   name: "bathos-mcp",
   title: "BathOS",
   version: "0.1.0",
-  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks currently expose read-only hierarchy, record, and planning-view tools. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
+  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose read-only hierarchy, record, and planning-view tools plus idempotent create_task capture. Use task mutations only when the user clearly asks and never reuse an idempotency key for a different request. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -996,7 +1283,8 @@ var mcp_default = defineMcp({
     setWardrobe,
     getTaskHierarchy,
     getTaskRecord,
-    getTaskView
+    getTaskView,
+    createTask
   ]
 });
 
