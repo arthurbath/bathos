@@ -433,6 +433,34 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **WHEN** a page-capture response is ambiguous and the pending request is retried
 - **THEN** the complete original title, notes, channel, typed source, and creation UUID are reused so the source fields are preserved and no duplicate to-do is created
 
+#### Scenario: Capture one selected Finder item
+- **WHEN** the user invokes Finder capture with exactly one file or folder selected
+- **THEN** the system creates one Inbox to-do with `raycast` entry provenance, the selected item's name, and a typed `file` source whose local `file://` reference is treated as originating-Mac context rather than a portable cross-device identifier
+
+#### Scenario: Reject an ambiguous Finder selection
+- **WHEN** Finder has no selected item or more than one selected item
+- **THEN** Finder capture explains that exactly one item is required and does not submit a task mutation
+
+#### Scenario: Capture the current selected text
+- **WHEN** the user invokes selected-text capture while the frontmost app exposes a nonempty copyable text selection
+- **THEN** the command actively copies that selection, creates one Inbox to-do with `raycast` entry provenance and typed `selected_text` source provenance, uses the first nonempty line as the title, and preserves the captured excerpt in notes
+
+#### Scenario: Reject stale clipboard text
+- **WHEN** the frontmost app does not produce a new nonempty clipboard value after selected-text capture sends Cmd-C
+- **THEN** the command restores the prior plain-text clipboard value, explains that current text must be selected, and does not submit a task mutation
+
+#### Scenario: Capture a reading item
+- **WHEN** the user invokes reading-list capture on a supported normal browser page
+- **THEN** the command uses the verified AI webpage-title workflow with its deterministic fallback and creates one unassigned daytime Today to-do with `browser_capture` entry provenance, a typed `reading_item` source, and the source URL in notes
+
+#### Scenario: Present reading provenance structurally
+- **WHEN** reading-list capture creates a to-do
+- **THEN** the title does not retain the legacy glasses prefix because reading provenance is authoritative in the typed source
+
+#### Scenario: Gate Mail capture on a complete source contract
+- **WHEN** the task source schema cannot preserve Mail account identity and integration-specific source-retirement lifecycle alongside message identity and its deep link
+- **THEN** Mail capture remains disabled and Inbox Manager does not dual-write to BathOS
+
 ### Requirement: Parallel Use with Things
 The system SHALL support indefinite parallel use without requiring the user to migrate, delete, or modify the existing Things library.
 

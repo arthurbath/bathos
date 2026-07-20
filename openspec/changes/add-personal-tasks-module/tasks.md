@@ -80,7 +80,10 @@
 - [x] 6.5 Add MCP tests for authentication, RLS boundaries, invalid transitions, retries, and destructive guardrails.
 - [x] 6.6 Build a Raycast quick-entry command with a configurable global hotkey.
 - [x] 6.7 Add dependable browser context capture with structured webpage origin.
-- [ ] 6.8 Add Mail, Finder, selected-text, and reading-list capture only for sources with verified contracts.
+- [x] 6.8a Add Finder capture for exactly one selected item with a typed local file source.
+- [x] 6.8b Add selected-text capture that actively copies the current selection and rejects stale clipboard content.
+- [x] 6.8c Add AI-enriched reading-list capture with typed reading provenance and Today placement.
+- [ ] 6.8d Add Mail capture after the structured source contract preserves account identity, message identity, deep link, and source-retirement lifecycle.
 - [ ] 6.9 Connect Inbox Manager output after the BathOS Inbox is approved for parallel use.
 
 ## 7. Trust Validation
