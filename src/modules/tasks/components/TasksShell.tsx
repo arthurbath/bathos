@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -88,6 +89,7 @@ import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
 import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView';
 import { TaskPermanentDeletionButton } from '@/modules/tasks/components/TaskPermanentDeletionButton';
 import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
+import { TaskPlanningProjects } from '@/modules/tasks/components/TaskPlanningProjects';
 import {
   getTasksStorageStatusLabel,
   type TasksSyncState,
@@ -95,6 +97,7 @@ import {
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
+import { deriveTaskViewProjects } from '@/modules/tasks/domain/taskProjectViews';
 
 type TasksShellProps = {
   userId: string;
@@ -159,6 +162,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     transitionTask,
     planningDate,
   } = useTaskList(userId, taskListView);
+  const planningProjects = useMemo(() => deriveTaskViewProjects(
+    hierarchy.projects,
+    userId,
+    taskListView,
+    planningDate,
+  ), [hierarchy.projects, planningDate, taskListView, userId]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [creating, setCreating] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -186,7 +195,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const trashTasks = tasks.filter((task) => !permanentlyDeletedKeys.has(`todo:${task.id}`));
   const taskViewIsEmpty = view === 'trash'
     ? trashTasks.length === 0 && trashRoots.length === 0
-    : tasks.length === 0;
+    : tasks.length === 0 && planningProjects.length === 0;
   const permanentDeletionAvailable = mode === 'connected'
     && syncState === 'connected'
     && pendingUploadCount === 0;
@@ -817,15 +826,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               ownerId={userId}
               projectId={projectId}
               hierarchy={hierarchy}
+              planningDate={planningDate}
             />
           ) : view === 'projects' ? <TaskProjectsView hierarchy={hierarchy} />
             : view === 'templates' ? <TaskTemplatesView ownerId={userId} hierarchy={hierarchy} />
               : <section aria-label={getTaskSectionLabel(view)}>
-            {loading || (view === 'trash' && hierarchyTrash.loading) ? (
+            {loading || hierarchy.loading || (view === 'trash' && hierarchyTrash.loading) ? (
               <div className="flex min-h-40 items-center justify-center">
                 <LoadingSpinner />
               </div>
-            ) : error || (view === 'trash' && hierarchyTrash.error) ? (
+            ) : error || hierarchy.error || (view === 'trash' && hierarchyTrash.error) ? (
               <p role="alert" className="py-12 text-center text-sm text-destructive">
                 Tasks Could Not Be Loaded
               </p>
@@ -901,35 +911,114 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 ) : null}
               </div>
             ) : view === 'today' ? (
-              <TodayTaskSections
-                tasks={tasks}
-                planningDate={planningDate}
-                renderTask={renderActiveTask}
-              />
+              <div className="space-y-7">
+                <TaskPlanningProjects
+                  projects={planningProjects}
+                  areas={hierarchy.areas}
+                  basePath={basePath}
+                  view={taskListView}
+                  planningDate={planningDate}
+                  onMove={async (project, input) => {
+                    try {
+                      await hierarchy.moveProjectInPlanning(project.id, input);
+                    } catch (moveError) {
+                      showTaskError('Project Could Not Be Moved', moveError);
+                      throw moveError;
+                    }
+                  }}
+                  onReorder={async (project, direction) => {
+                    try {
+                      await hierarchy.reorderProjectInPlanning(
+                        project.id,
+                        direction,
+                        taskListView,
+                        planningDate,
+                      );
+                    } catch (reorderError) {
+                      showTaskError('Project Could Not Be Reordered', reorderError);
+                      throw reorderError;
+                    }
+                  }}
+                  onReopen={async (project) => hierarchy.transitionProject(
+                    project.id,
+                    'reopen_project',
+                  )}
+                />
+                <TodayTaskSections
+                  tasks={tasks}
+                  planningDate={planningDate}
+                  renderTask={renderActiveTask}
+                />
+              </div>
             ) : (
-              <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-                {tasks.map((task) => (
-                  view === 'logbook' ? (
-                    <LogbookTaskRow
-                      key={task.id}
-                      task={task}
-                      onReopen={async () => {
-                        try {
-                          await transitionTask(task.id, 'reopen');
-                        } catch (reopenError) {
-                          showTaskError('Task Could Not Be Reopened', reopenError);
-                        }
-                      }}
-                      onDelete={async () => {
-                        try {
-                          await transitionTask(task.id, 'delete');
-                        } catch (deleteError) {
-                          showTaskError('Task Could Not Be Deleted', deleteError);
-                        }
-                      }}
-                    />
-                  ) : renderActiveTask(task, tasks)
-                ))}
+              <div className="space-y-7">
+                <TaskPlanningProjects
+                  projects={planningProjects}
+                  areas={hierarchy.areas}
+                  basePath={basePath}
+                  view={taskListView}
+                  planningDate={planningDate}
+                  onMove={async (project, input) => {
+                    try {
+                      await hierarchy.moveProjectInPlanning(project.id, input);
+                    } catch (moveError) {
+                      showTaskError('Project Could Not Be Moved', moveError);
+                      throw moveError;
+                    }
+                  }}
+                  onReorder={async (project, direction) => {
+                    try {
+                      await hierarchy.reorderProjectInPlanning(
+                        project.id,
+                        direction,
+                        taskListView,
+                        planningDate,
+                      );
+                    } catch (reorderError) {
+                      showTaskError('Project Could Not Be Reordered', reorderError);
+                      throw reorderError;
+                    }
+                  }}
+                  onReopen={async (project) => {
+                    try {
+                      await hierarchy.transitionProject(project.id, 'reopen_project');
+                    } catch (reopenError) {
+                      showTaskError('Project Could Not Be Reopened', reopenError);
+                      throw reopenError;
+                    }
+                  }}
+                />
+                {tasks.length > 0 ? (
+                  <section aria-label={view === 'logbook' ? 'To-Dos' : 'Tasks'}>
+                    <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
+                      {view === 'logbook' ? `To-Dos (${tasks.length})` : `Tasks (${tasks.length})`}
+                    </h3>
+                    <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+                      {tasks.map((task) => (
+                        view === 'logbook' ? (
+                          <LogbookTaskRow
+                            key={task.id}
+                            task={task}
+                            onReopen={async () => {
+                              try {
+                                await transitionTask(task.id, 'reopen');
+                              } catch (reopenError) {
+                                showTaskError('Task Could Not Be Reopened', reopenError);
+                              }
+                            }}
+                            onDelete={async () => {
+                              try {
+                                await transitionTask(task.id, 'delete');
+                              } catch (deleteError) {
+                                showTaskError('Task Could Not Be Deleted', deleteError);
+                              }
+                            }}
+                          />
+                        ) : renderActiveTask(task, tasks)
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
               </div>
             )}
           </section>}

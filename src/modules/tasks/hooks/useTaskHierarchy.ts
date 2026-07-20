@@ -11,8 +11,25 @@ import {
   generateTaskMoveOrderKey,
   generateTaskOrderKey,
 } from '@/modules/tasks/domain/taskOrder';
+import {
+  deriveTaskViewProjects,
+  projectPlanningOrderSection,
+} from '@/modules/tasks/domain/taskProjectViews';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
-import type { TaskArea, TaskHeading, TaskProject } from '@/modules/tasks/types/tasks';
+import type {
+  TaskArea,
+  TaskDestination,
+  TaskHeading,
+  TaskProject,
+  TaskTodaySection,
+} from '@/modules/tasks/types/tasks';
+import type { TaskListView } from '@/modules/tasks/hooks/useTaskList';
+
+export type TaskProjectPlanningMoveInput = {
+  destination: Exclude<TaskDestination, 'inbox'>;
+  todaySection: TaskTodaySection;
+  startDate: string | null;
+};
 
 export function useTaskHierarchy(ownerId: string) {
   const { hierarchyOperationsRepository, hierarchyRepository } = useTasksRuntime();
@@ -137,6 +154,59 @@ export function useTaskHierarchy(ownerId: string) {
     });
   }, [projects, updateProject]);
 
+  const moveProjectInPlanning = useCallback(async (
+    projectId: string,
+    input: TaskProjectPlanningMoveInput,
+  ) => {
+    const peers = projects
+      .filter((project) => (
+        project.id !== projectId
+        && project.lifecycle === 'open'
+        && project.disposition === 'present'
+        && project.destination === input.destination
+        && project.today_section === input.todaySection
+      ))
+      .sort((left, right) => compareTaskOrder(
+        { id: left.id, orderKey: left.planning_order_key },
+        { id: right.id, orderKey: right.planning_order_key },
+      ));
+    return updateProject(projectId, {
+      destination: input.destination,
+      today_section: input.todaySection,
+      start_date: input.startDate,
+      planning_order_key: generateTaskOrderKey(
+        peers.at(-1)?.planning_order_key ?? null,
+        null,
+      ),
+    });
+  }, [projects, updateProject]);
+
+  const reorderProjectInPlanning = useCallback(async (
+    projectId: string,
+    direction: 'up' | 'down',
+    view: TaskListView,
+    planningDate: string,
+  ) => {
+    const visible = deriveTaskViewProjects(projects, ownerId, view, planningDate);
+    const current = visible.find((project) => project.id === projectId);
+    if (!current) return undefined;
+    const section = projectPlanningOrderSection(current, view, planningDate);
+    const peers = visible.filter((project) => (
+      projectPlanningOrderSection(project, view, planningDate) === section
+    ));
+    const currentIndex = peers.findIndex((project) => project.id === projectId);
+    const destinationIndex = currentIndex + (direction === 'up' ? -1 : 1);
+    if (currentIndex < 0 || destinationIndex < 0 || destinationIndex >= peers.length) {
+      return current;
+    }
+    const planningOrderKey = generateTaskMoveOrderKey(
+      peers.map((project) => ({ id: project.id, orderKey: project.planning_order_key })),
+      projectId,
+      destinationIndex,
+    );
+    return updateProject(projectId, { planning_order_key: planningOrderKey });
+  }, [ownerId, projects, updateProject]);
+
   const reorderHeading = useCallback(async (headingId: string, direction: 'up' | 'down') => {
     const heading = headings.find(({ id }) => id === headingId);
     if (!heading) return undefined;
@@ -194,6 +264,8 @@ export function useTaskHierarchy(ownerId: string) {
     reorderProject,
     reorderHeading,
     moveProjectToArea,
+    moveProjectInPlanning,
+    reorderProjectInPlanning,
     transitionProject,
     deleteHierarchy,
   };

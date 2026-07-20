@@ -153,6 +153,54 @@ describe('useTaskHierarchy', () => {
       cleanup(root, container);
     }
   });
+
+  it('moves and reorders projects in planning without changing structural order', async () => {
+    const hierarchyRepository = {
+      createArea: vi.fn(),
+      createProject: vi.fn(),
+      updateArea: vi.fn(),
+      updateProject: vi.fn().mockImplementation(
+        async (_ownerId: string, projectId: string, patch: Partial<TaskProject>) => ({
+          ...projectRows.find(({ id }) => id === projectId)!,
+          ...patch,
+          revision: 2,
+          client_mutation_id: `${projectId}-planned`,
+        }),
+      ),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ hierarchyRepository });
+    const { container, root } = renderHarness();
+
+    try {
+      await act(async () => {
+        await latest.moveProjectInPlanning(alpha.id, {
+          destination: 'today',
+          todaySection: 'evening',
+          startDate: '2026-07-20',
+        });
+      });
+      expect(hierarchyRepository.updateProject).toHaveBeenCalledWith(
+        'owner-a',
+        alpha.id,
+        expect.objectContaining({
+          destination: 'today',
+          today_section: 'evening',
+          start_date: '2026-07-20',
+          planning_order_key: expect.any(String),
+        }),
+      );
+      expect(hierarchyRepository.updateProject.mock.calls[0][2]).not.toHaveProperty('order_key');
+
+      await act(async () => {
+        await latest.reorderProjectInPlanning(beta.id, 'up', 'anytime', '2026-07-20');
+      });
+      const reorderPatch = hierarchyRepository.updateProject.mock.calls[1][2];
+      expect(reorderPatch).toHaveProperty('planning_order_key');
+      expect(reorderPatch).not.toHaveProperty('order_key');
+    } finally {
+      cleanup(root, container);
+    }
+  });
 });
 
 function hierarchyArea(id: string, title: string, orderKey: string): TaskArea {
@@ -163,6 +211,7 @@ function hierarchyArea(id: string, title: string, orderKey: string): TaskArea {
     order_key: orderKey,
     disposition: 'present',
     deleted_at: null,
+    deletion_root_id: null,
     entry_channel: 'web',
     last_mutation_channel: 'web',
     last_actor_type: 'user',
@@ -190,12 +239,21 @@ function hierarchyProject(
     canceled_at: null,
     disposition: 'present',
     deleted_at: null,
+    deletion_root_id: null,
     destination: 'anytime',
     today_section: 'daytime',
     order_key: orderKey,
     planning_order_key: orderKey,
     start_date: null,
     deadline: null,
+    template_definition_id: null,
+    template_revision: null,
+    template_instantiation_id: null,
+    template_node_id: null,
+    recurrence_definition_id: null,
+    recurrence_revision: null,
+    recurrence_occurrence_id: null,
+    recurrence_logical_key: null,
     entry_channel: 'web',
     last_mutation_channel: 'web',
     last_actor_type: 'user',

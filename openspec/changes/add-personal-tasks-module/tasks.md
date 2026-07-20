@@ -69,6 +69,7 @@
 - [x] 5.2c Add project headings, to-do placement, checklist editing, and hierarchy-context presentation in planning views.
 - [x] 5.2d Add explicit project lifecycle, descendant transition, recoverable hierarchy deletion, history, export/restore, and trust tests.
 - [x] 5.2e Keep long project identity and lifecycle controls on separate narrow-mobile rows.
+- [x] 5.2f Project task-like planning state appears in every applicable web planning view, with project-specific ordering, temporal actions, detail links, lifecycle recovery, and date editing.
 - [x] 5.3 Add Today and This Evening with manual ordering and unfinished-item rescheduling.
 - [x] 5.4 Add Upcoming with future start-date planning.
 - [x] 5.5 Add Anytime and Someday with the specified active/inactive semantics.

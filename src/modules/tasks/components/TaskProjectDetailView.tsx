@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -9,10 +9,12 @@ import {
   Plus,
   RotateCcw,
   Trash2,
+  X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import { DatePickerField } from '@/components/ui/date-picker-field';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,10 +43,12 @@ export function TaskProjectDetailView({
   ownerId,
   projectId,
   hierarchy,
+  planningDate,
 }: {
   ownerId: string;
   projectId: string;
   hierarchy: TaskHierarchyModel;
+  planningDate: string;
 }) {
   const detail = useTaskProjectDetail(ownerId, projectId);
   const navigate = useNavigate();
@@ -187,6 +191,14 @@ export function TaskProjectDetailView({
         </div>
       </div>
 
+      {project.lifecycle === 'open' ? (
+        <ProjectPlanningForm
+          project={project}
+          planningDate={planningDate}
+          onSave={(patch) => hierarchy.updateProject(project.id, patch)}
+        />
+      ) : null}
+
       {project.lifecycle === 'open' ? <div className="grid gap-4 md:grid-cols-2">
         <form onSubmit={createHeading} className="flex gap-2">
           <Input
@@ -301,6 +313,178 @@ export function TaskProjectDetailView({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function ProjectPlanningForm({
+  project,
+  planningDate,
+  onSave,
+}: {
+  project: NonNullable<TaskHierarchyModel['projects'][number]>;
+  planningDate: string;
+  onSave: (patch: Parameters<TaskHierarchyModel['updateProject']>[1]) => Promise<unknown>;
+}) {
+  const [destination, setDestination] = useState(project.destination);
+  const [todaySection, setTodaySection] = useState(project.today_section);
+  const [startDate, setStartDate] = useState(project.start_date ?? '');
+  const [deadline, setDeadline] = useState(project.deadline ?? '');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDestination(project.destination);
+    setTodaySection(project.today_section);
+    setStartDate(project.start_date ?? '');
+    setDeadline(project.deadline ?? '');
+  }, [
+    project.deadline,
+    project.destination,
+    project.start_date,
+    project.today_section,
+  ]);
+
+  const normalizedStartDate = destination === 'someday'
+    ? null
+    : startDate || (destination === 'today' ? planningDate : null);
+  const normalizedTodaySection = destination === 'today' ? todaySection : 'daytime';
+  const invalidDateRange = Boolean(
+    normalizedStartDate && deadline && deadline < normalizedStartDate,
+  );
+  const changed = destination !== project.destination
+    || normalizedTodaySection !== project.today_section
+    || normalizedStartDate !== project.start_date
+    || (deadline || null) !== project.deadline;
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!changed || invalidDateRange || saving) return;
+    setSaving(true);
+    try {
+      await onSave({
+        destination,
+        today_section: normalizedTodaySection,
+        start_date: normalizedStartDate,
+        deadline: deadline || null,
+      });
+    } catch (error) {
+      showError('Project Planning Could Not Be Saved', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form
+      aria-label="Project Planning"
+      onSubmit={save}
+      className="space-y-4 rounded-md border border-[hsl(var(--grid-sticky-line))] p-4"
+    >
+      <h4 className="text-sm font-semibold text-foreground">Planning</h4>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground" htmlFor={`project-destination-${project.id}`}>
+            Destination
+          </label>
+          <select
+            id={`project-destination-${project.id}`}
+            value={destination}
+            disabled={saving}
+            onChange={(event) => {
+              const next = event.target.value as typeof destination;
+              setDestination(next);
+              if (next === 'someday') setStartDate('');
+              if (next !== 'today') setTodaySection('daytime');
+            }}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="today">Today</option>
+            <option value="anytime">Anytime</option>
+            <option value="someday">Someday</option>
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground" htmlFor={`project-today-section-${project.id}`}>
+            Today Section
+          </label>
+          <select
+            id={`project-today-section-${project.id}`}
+            value={normalizedTodaySection}
+            disabled={saving || destination !== 'today'}
+            onChange={(event) => setTodaySection(event.target.value as typeof todaySection)}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          >
+            <option value="daytime">Today</option>
+            <option value="evening">This Evening</option>
+          </select>
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground" htmlFor={`project-start-date-${project.id}`}>
+            Start Date
+          </label>
+          <div className="flex gap-2">
+            <DatePickerField
+              id={`project-start-date-${project.id}`}
+              value={destination === 'someday' ? '' : startDate}
+              onValueChange={setStartDate}
+              disabled={saving || destination === 'someday'}
+              placeholder="No Start Date"
+              aria-label="Project Start Date"
+            />
+            {destination !== 'someday' && startDate ? (
+              <Button
+                type="button"
+                variant="clear"
+                size="icon"
+                disabled={saving}
+                aria-label="Clear Project Start Date"
+                onClick={() => setStartDate('')}
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground" htmlFor={`project-deadline-${project.id}`}>
+            Deadline
+          </label>
+          <div className="flex gap-2">
+            <DatePickerField
+              id={`project-deadline-${project.id}`}
+              value={deadline}
+              onValueChange={setDeadline}
+              disabled={saving}
+              placeholder="No Deadline"
+              aria-label="Project Deadline"
+            />
+            {deadline ? (
+              <Button
+                type="button"
+                variant="clear"
+                size="icon"
+                disabled={saving}
+                aria-label="Clear Project Deadline"
+                onClick={() => setDeadline('')}
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      {invalidDateRange ? (
+        <p role="alert" className="text-sm text-destructive">
+          Deadline cannot be earlier than the start date.
+        </p>
+      ) : null}
+      <div className="flex justify-end">
+        <Button type="submit" disabled={saving || invalidDateRange || !changed}>
+          Save Planning
+        </Button>
+      </div>
+    </form>
   );
 }
 

@@ -21,7 +21,16 @@ const secondItem = checklistItem('item-b', 'Step two', 'a1');
 function hierarchy(): TaskHierarchyModel {
   return {
     areas: [{ id: 'area-a', title: 'Work' }],
-    projects: [{ id: 'project-a', title: 'Launch', area_id: 'area-a', lifecycle: 'open' }],
+    projects: [{
+      id: 'project-a',
+      title: 'Launch',
+      area_id: 'area-a',
+      lifecycle: 'open',
+      destination: 'anytime',
+      today_section: 'daytime',
+      start_date: '2026-07-24',
+      deadline: '2026-07-25',
+    }],
     headings: [{ id: 'heading-a', title: 'Next', project_id: 'project-a' }],
     loading: false,
     error: null,
@@ -65,6 +74,7 @@ function renderDetail(hierarchyModel: TaskHierarchyModel) {
         ownerId="owner-a"
         projectId="project-a"
         hierarchy={hierarchyModel}
+        planningDate="2026-07-20"
       />
     </MemoryRouter>,
   ));
@@ -187,6 +197,35 @@ describe('TaskProjectDetailView', () => {
         container.querySelector<HTMLButtonElement>('[aria-label="Move Step two Up"]')?.click();
       });
       expect(detailModel.reorderChecklistItem).toHaveBeenCalledWith('item-b', 'up');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('edits project planning and clears availability when moved to Someday', async () => {
+    const hierarchyModel = hierarchy();
+    mockUseTaskProjectDetail.mockReturnValue(detail());
+    const { container, root } = renderDetail(hierarchyModel);
+
+    try {
+      const destination = container.querySelector<HTMLSelectElement>(
+        '#project-destination-project-a',
+      )!;
+      await act(async () => setControlValue(destination, 'someday'));
+      expect(container.querySelector<HTMLButtonElement>('[aria-label="Project Start Date"]')
+        ?.hasAttribute('disabled')).toBe(true);
+
+      await act(async () => {
+        Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+          .find((button) => button.textContent?.trim() === 'Save Planning')
+          ?.click();
+      });
+      expect(hierarchyModel.updateProject).toHaveBeenCalledWith('project-a', {
+        destination: 'someday',
+        today_section: 'daytime',
+        start_date: null,
+        deadline: '2026-07-25',
+      });
     } finally {
       cleanup(root, container);
     }

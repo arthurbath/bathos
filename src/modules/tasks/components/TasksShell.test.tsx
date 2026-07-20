@@ -129,6 +129,37 @@ const task = {
   updated_at: '2026-07-20T04:00:00.000Z',
 };
 
+const planningProject = {
+  id: 'project-plan',
+  owner_id: 'owner-a',
+  area_id: null,
+  title: 'Plan the launch',
+  notes: '',
+  lifecycle: 'open' as const,
+  completed_at: null,
+  canceled_at: null,
+  disposition: 'present' as const,
+  deleted_at: null,
+  deletion_root_id: null,
+  destination: 'today' as const,
+  today_section: 'daytime' as const,
+  order_key: 'a0',
+  planning_order_key: 'a0',
+  start_date: '2026-07-20',
+  deadline: null,
+  template_definition_id: null,
+  template_revision: null,
+  template_instantiation_id: null,
+  template_node_id: null,
+  entry_channel: 'web' as const,
+  last_mutation_channel: 'web' as const,
+  last_actor_type: 'user' as const,
+  revision: 1,
+  client_mutation_id: 'project-plan-mutation',
+  created_at: '2026-07-20T04:00:00.000Z',
+  updated_at: '2026-07-20T04:00:00.000Z',
+};
+
 function defaultTaskList() {
   return {
     tasks: [task],
@@ -246,6 +277,9 @@ describe('TasksShell', () => {
       headings: [],
       loading: false,
       error: null,
+      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
+      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
+      transitionProject: vi.fn().mockResolvedValue(undefined),
     });
     mockTaskHierarchyTrash.mockReset().mockReturnValue({
       roots: [],
@@ -1512,6 +1546,87 @@ describe('TasksShell', () => {
         todaySection: 'evening',
         startDate: '2026-07-20',
       });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('renders projects in Today and applies project-specific planning actions', async () => {
+    const taskList = { ...defaultTaskList(), tasks: [] };
+    const hierarchy = {
+      areas: [],
+      projects: [planningProject],
+      headings: [],
+      loading: false,
+      error: null,
+      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
+      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
+      transitionProject: vi.fn().mockResolvedValue(undefined),
+    };
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskHierarchy.mockReturnValue(hierarchy);
+    const { container, root } = renderShell('/tasks/today');
+
+    try {
+      expect(container.querySelector('#task-planning-projects-heading')?.textContent)
+        .toContain('Projects (1)');
+      expect(container.querySelector<HTMLAnchorElement>('a[href="/tasks/projects/project-plan"]')
+        ?.textContent).toBe('Plan the launch');
+
+      const actions = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Planning actions for Plan the launch"]',
+      );
+      await act(async () => {
+        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      const tomorrow = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent === 'Move to Tomorrow');
+      await act(async () => {
+        tomorrow?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(hierarchy.moveProjectInPlanning).toHaveBeenCalledWith('project-plan', {
+        destination: 'today',
+        todaySection: 'daytime',
+        startDate: '2026-07-21',
+      });
+      expect(taskList.moveTask).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('renders terminal projects in Logbook and reopens them through hierarchy operations', async () => {
+    const completedProject = {
+      ...planningProject,
+      lifecycle: 'completed' as const,
+      completed_at: '2026-07-20T05:00:00.000Z',
+    };
+    const taskList = { ...defaultTaskList(), tasks: [] };
+    const hierarchy = {
+      areas: [],
+      projects: [completedProject],
+      headings: [],
+      loading: false,
+      error: null,
+      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
+      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
+      transitionProject: vi.fn().mockResolvedValue(undefined),
+    };
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskHierarchy.mockReturnValue(hierarchy);
+    const { container, root } = renderShell('/tasks/logbook');
+
+    try {
+      expect(container.textContent).toContain('Completed');
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[aria-label="Reopen Plan the launch"]')?.click();
+      });
+      expect(hierarchy.transitionProject).toHaveBeenCalledWith(
+        'project-plan',
+        'reopen_project',
+      );
+      expect(taskList.transitionTask).not.toHaveBeenCalled();
     } finally {
       cleanup(root, container);
     }
