@@ -548,6 +548,10 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** an open connected client cannot claim due reminder deliveries
 - **THEN** the interface shows a content-free degraded state, preserves scheduled reminders and any previously claimed items, and exposes a bounded explicit retry
 
+#### Scenario: Report a reminder acknowledgement failure
+- **WHEN** a visible or notification-opened reminder cannot be acknowledged
+- **THEN** the interface reports fixed content-free failure copy, preserves the reminder for retry, and does not expose the underlying provider or transport error
+
 #### Scenario: Protect schedules while the reminder projection is untrustworthy
 - **WHEN** current reminder data is loading or fails to load
 - **THEN** to-do and project reminder editors distinguish that state from local-only operation, disable reminder mutation, and do not treat an unknown current schedule as an empty schedule
@@ -575,6 +579,10 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 #### Scenario: Inspect Web Push without implicit registration
 - **WHEN** a connected user opens Tasks before enabling browser reminders
 - **THEN** the client passively inspects any existing service-worker registration and does not create a registration, subscription, or permission prompt until the user invokes Enable
+
+#### Scenario: Keep browser reminder failures content-free
+- **WHEN** browser-reminder inspection, registration, or revocation fails
+- **THEN** the interface reports fixed degraded capability and operation-failure copy, does not expose the underlying provider or transport error, keeps in-app reminders available, and permits an explicit retry when safe
 
 #### Scenario: Report delivery outcome
 - **WHEN** a notification provider accepts a delivery request

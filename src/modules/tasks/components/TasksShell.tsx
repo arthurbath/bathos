@@ -273,9 +273,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         search: remainingSearch ? `?${remainingSearch}` : '',
         hash: location.hash,
       }, { replace: true });
-    }).catch((reminderError) => {
+    }).catch(() => {
       acknowledgedPushDeliveriesRef.current.delete(deliveryId);
-      showTaskError('Reminder Could Not Be Acknowledged', reminderError);
+      showReminderDeliveryError('Reminder Could Not Be Acknowledged');
     });
   }, [acknowledgeReminderDelivery, location.hash, location.pathname, location.search, navigate]);
 
@@ -784,8 +784,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               onAcknowledge={async (deliveryId) => {
                 try {
                   await reminders.acknowledge(deliveryId);
-                } catch (reminderError) {
-                  showTaskError('Reminder Could Not Be Acknowledged', reminderError);
+                } catch {
+                  showReminderDeliveryError('Reminder Could Not Be Acknowledged');
                 }
               }}
             />
@@ -804,15 +804,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               onEnable={async () => {
                 try {
                   await reminders.webPush.enable();
-                } catch (reminderError) {
-                  showTaskError('Browser Reminders Could Not Be Enabled', reminderError);
+                } catch {
+                  showBrowserReminderError('Browser Reminders Could Not Be Enabled');
                 }
               }}
               onDisable={async () => {
                 try {
                   await reminders.webPush.disable();
-                } catch (reminderError) {
-                  showTaskError('Browser Reminders Could Not Be Disabled', reminderError);
+                } catch {
+                  showBrowserReminderError('Browser Reminders Could Not Be Disabled');
                 }
               }}
             />
@@ -1383,7 +1383,7 @@ function TaskWebPushCapability({
       case 'revoked':
         return 'The notification provider expired this browser subscription. Enable it again to register a new one.';
       case 'error':
-        return model.error?.message ?? 'The browser reminder capability could not be verified.';
+        return 'The browser reminder capability could not be verified. In-app reminders remain available.';
       default:
         return 'The Web Push provider keys have not been configured for this installation.';
     }
@@ -2337,6 +2337,22 @@ function showTaskError(title: string, error: unknown): void {
   toast({
     title,
     description: error instanceof Error ? error.message : 'Unknown error',
+    variant: 'destructive',
+  });
+}
+
+function showBrowserReminderError(title: string): void {
+  toast({
+    title,
+    description: 'The browser reminder operation failed. In-app reminders remain available.',
+    variant: 'destructive',
+  });
+}
+
+function showReminderDeliveryError(title: string): void {
+  toast({
+    title,
+    description: 'The reminder acknowledgement failed. The reminder remains available to retry.',
     variant: 'destructive',
   });
 }

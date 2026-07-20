@@ -88,6 +88,8 @@
 - [x] 5.8d Surface in-app due-reminder claim failure through content-free degraded state and explicit retry.
 - [x] 5.8e Keep service-worker registration and notification permission behind the explicit browser-reminder Enable action.
 - [x] 5.8f Disable reminder mutation while current schedules are loading or unavailable so unknown data cannot be treated as empty.
+- [x] 5.8g Keep browser-reminder capability and operation failures content-free while preserving in-app reminders and explicit retry.
+- [x] 5.8h Keep reminder acknowledgement failures content-free and preserve the claimed delivery for explicit retry.
 - [x] 5.9 Add recurrence definitions and idempotent occurrence generation.
 - [x] 5.9a Report recurrence catch-up failure independently from accepted definition changes and expose bounded explicit retry.
 - [x] 5.9b Distinguish recurrence projection loading and failure from a trustworthy empty state.

@@ -14,6 +14,7 @@ import { normalizeTaskEditorPlanningPatch } from './taskEditorPlanning';
 import { getTasksStorageStatusLabel } from './tasksStorageStatus';
 import { TasksShell } from './TasksShell';
 
+const { mockToast } = vi.hoisted(() => ({ mockToast: vi.fn() }));
 const mockTaskList = vi.fn();
 const mockTaskSearch = vi.fn();
 const mockTaskHierarchy = vi.fn();
@@ -22,6 +23,11 @@ const mockTaskReminders = vi.fn();
 const mockTaskUndo = vi.fn();
 const mockPrepareForSignOut = vi.fn();
 const mockTasksRuntime = vi.fn();
+
+vi.mock('@/hooks/use-toast', () => ({
+  toast: mockToast,
+  useToast: () => ({ toast: mockToast }),
+}));
 
 vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
   useTaskList: (...args: unknown[]) => mockTaskList(...args),
@@ -287,6 +293,7 @@ async function openTaskMenuSurface(
 
 describe('TasksShell', () => {
   beforeEach(() => {
+    mockToast.mockReset();
     mockPrepareForSignOut.mockReset().mockResolvedValue(undefined);
     mockTasksRuntime.mockReset().mockReturnValue(defaultTasksRuntime());
     mockTaskList.mockReset();
@@ -1469,6 +1476,43 @@ describe('TasksShell', () => {
     }
   });
 
+  it('keeps reminder acknowledgement failures content-free and retryable', async () => {
+    const acknowledge = vi.fn().mockRejectedValue(new Error('provider receipt and endpoint detail'));
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), mode: 'connected',
+      planningTimeZone: 'America/Los_Angeles', loading: false, error: null,
+      save: vi.fn(), cancel: vi.fn(), acknowledge, claimDue: vi.fn(),
+      dueItems: [{
+        delivery_id: 'delivery-a', occurrence_id: 'occurrence-a',
+        reminder_id: 'reminder-a', root_type: 'todo', root_id: 'task-a',
+        title: 'Existing task', resolved_at: '2026-07-20T16:00:00Z', attempt_count: 1,
+      }],
+    });
+    const { container, root } = renderShell();
+
+    try {
+      const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find(({ textContent }) => textContent === 'Acknowledge');
+      await act(async () => {
+        button?.click();
+        await Promise.resolve();
+      });
+
+      expect(acknowledge).toHaveBeenCalledWith('delivery-a');
+      expect(container.querySelector('section[aria-label="Due Reminders"]')?.textContent)
+        .toContain('Existing task');
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Reminder Could Not Be Acknowledged',
+        description: 'The reminder acknowledgement failed. The reminder remains available to retry.',
+        variant: 'destructive',
+      });
+      expect(JSON.stringify(mockToast.mock.calls)).not.toContain('provider receipt');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('reports a failed due-reminder check without exposing provider diagnostics and retries explicitly', async () => {
     const claimDue = vi.fn().mockResolvedValue(undefined);
     mockTaskList.mockReturnValue(defaultTaskList());
@@ -1561,6 +1605,46 @@ describe('TasksShell', () => {
         .find(({ textContent }) => textContent === 'Enable');
       await act(async () => button?.click());
       expect(enable).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('keeps browser-reminder failures content-free in the capability panel and toast', async () => {
+    const enable = vi.fn().mockRejectedValue(new Error('provider endpoint and subscription detail'));
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), mode: 'connected', dueItems: [],
+      planningTimeZone: 'America/Los_Angeles', loading: false, error: null,
+      save: vi.fn(), cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+      webPush: {
+        status: 'error', busy: false,
+        error: new Error('provider endpoint and subscription detail'),
+        enable, disable: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+    const { container, root } = renderShell();
+
+    try {
+      const capability = container.querySelector('section[aria-label="Browser Reminder Capability"]');
+      expect(capability?.textContent).toContain('Background Reminders Degraded');
+      expect(capability?.textContent).toContain('In-app reminders remain available');
+      expect(capability?.textContent).not.toContain('provider endpoint');
+
+      const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find(({ textContent }) => textContent === 'Enable');
+      await act(async () => {
+        button?.click();
+        await Promise.resolve();
+      });
+
+      expect(enable).toHaveBeenCalledTimes(1);
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Browser Reminders Could Not Be Enabled',
+        description: 'The browser reminder operation failed. In-app reminders remain available.',
+        variant: 'destructive',
+      });
+      expect(JSON.stringify(mockToast.mock.calls)).not.toContain('provider endpoint');
     } finally {
       cleanup(root, container);
     }
