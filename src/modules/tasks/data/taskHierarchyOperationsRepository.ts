@@ -312,9 +312,12 @@ async function restoreOptimistically(
     for (const candidate of candidates.filter(({ entity_type }) => entity_type === entityType)) {
       const patch = await restorationPatch(transaction, input.ownerId, entityType, candidate.id);
       const columns = Object.keys(patch);
+      const restorationColumns = columns.length === 0
+        ? ''
+        : `${columns.map((column) => `${column} = ?`).join(', ')},`;
       await transaction.execute(
         `UPDATE ${tableFor(entityType)} SET
-          ${columns.map((column) => `${column} = ?`).join(', ')},
+          ${restorationColumns}
           disposition = 'present', deleted_at = NULL, deletion_root_id = NULL,
           revision = revision + 1, client_mutation_id = ?,
           last_mutation_channel = ?, last_actor_type = ?, updated_at = ?

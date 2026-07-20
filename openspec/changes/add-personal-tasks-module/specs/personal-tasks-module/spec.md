@@ -182,6 +182,10 @@ The system SHALL support reusable, revisioned to-do and project template definit
 - **WHEN** a user deletes a template that has generated instances
 - **THEN** the system archives the definition, excludes it from new-template selection, and preserves readable provenance for existing work
 
+#### Scenario: Hydrate an owner-safe template response
+- **WHEN** an authenticated template RPC omits the owner identifier from its returned definition, revision, or instantiation
+- **THEN** the client assigns the already authenticated owner to the parsed result without requiring the server to echo an owner identifier
+
 ### Requirement: Orthogonal Task State
 The system SHALL model lifecycle, record disposition, planning placement, and structured actionability as separate dimensions with revision-checked transitions and append-only history.
 
@@ -282,6 +286,10 @@ The system SHALL keep recurrence definitions separate from generated task occurr
 #### Scenario: Pause recurrence
 - **WHEN** a user pauses or archives a recurrence definition
 - **THEN** the system stops future generation without deleting existing occurrences
+
+#### Scenario: Hydrate an owner-safe recurrence response
+- **WHEN** an authenticated recurrence RPC omits the owner identifier from its returned definition or revision
+- **THEN** the client assigns the already authenticated owner to the parsed result while synchronized recurrence rows continue to validate their stored owner identifier
 
 ### Requirement: Stable Manual Ordering
 The system SHALL preserve intentional manual ordering across saves, refreshes, offline operation, and synchronization.

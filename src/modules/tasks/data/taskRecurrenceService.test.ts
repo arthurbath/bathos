@@ -65,11 +65,17 @@ describe('TaskRecurrenceService', () => {
   });
 
   it('saves a structured rule through the server-authoritative RPC', async () => {
+    const { owner_id: _definitionOwner, ...ownerSafeDefinition } = definition;
+    const { owner_id: _revisionOwner, ...ownerSafeRevision } = revision;
     const rpc = vi.fn().mockResolvedValue({
-      data: { outcome: 'accepted', definition, revision },
+      data: {
+        outcome: 'accepted',
+        definition: ownerSafeDefinition,
+        revision: ownerSafeRevision,
+      },
       error: null,
     });
-    const service = new TaskRecurrenceService({ rpc } as never);
+    const service = new TaskRecurrenceService({ rpc } as never, definition.owner_id);
 
     await expect(service.save({
       name: definition.name,
@@ -82,7 +88,11 @@ describe('TaskRecurrenceService', () => {
       planningTimeZone: 'America/Los_Angeles',
       missedPolicy: 'latest',
       mutationId: definition.client_mutation_id,
-    })).resolves.toMatchObject({ outcome: 'accepted', definition: { id: definition.id } });
+    })).resolves.toMatchObject({
+      outcome: 'accepted',
+      definition: { id: definition.id, owner_id: definition.owner_id },
+      revision: { owner_id: definition.owner_id },
+    });
     expect(rpc).toHaveBeenCalledWith('tasks_save_recurrence', expect.objectContaining({
       _template_id: revision.template_id,
       _template_revision: 2,
@@ -104,7 +114,7 @@ describe('TaskRecurrenceService', () => {
       },
       error: null,
     });
-    const service = new TaskRecurrenceService({ rpc } as never);
+    const service = new TaskRecurrenceService({ rpc } as never, definition.owner_id);
 
     await expect(service.evaluate(
       definition.id,
@@ -115,7 +125,7 @@ describe('TaskRecurrenceService', () => {
 
   it('rejects malformed rule input before calling the database', async () => {
     const rpc = vi.fn();
-    const service = new TaskRecurrenceService({ rpc } as never);
+    const service = new TaskRecurrenceService({ rpc } as never, definition.owner_id);
     await expect(service.save({
       name: '',
       templateId: revision.template_id,
@@ -128,5 +138,12 @@ describe('TaskRecurrenceService', () => {
       missedPolicy: 'latest',
     })).rejects.toBeInstanceOf(InvalidTaskRecurrenceError);
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects an RPC record owned by a different authenticated user', () => {
+    expect(() => parseTaskRecurrenceDefinition(
+      { ...definition, owner_id: 'foreign-owner' },
+      definition.owner_id,
+    )).toThrow('Recurrence owner does not match the authenticated owner');
   });
 });

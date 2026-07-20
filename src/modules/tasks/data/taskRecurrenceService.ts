@@ -66,7 +66,12 @@ export class InvalidTaskRecurrenceError extends Error {
 }
 
 export class TaskRecurrenceService {
-  constructor(private readonly client: TaskRecurrenceClient) {}
+  constructor(
+    private readonly client: TaskRecurrenceClient,
+    private readonly ownerId: string,
+  ) {
+    requireText(ownerId, 'recurrence owner');
+  }
 
   async save(input: TaskRecurrenceSaveInput): Promise<TaskRecurrenceSaveResult> {
     const name = input.name.trim();
@@ -110,10 +115,10 @@ export class TaskRecurrenceService {
     );
     return {
       outcome,
-      definition: parseTaskRecurrenceDefinition(result.definition),
+      definition: parseTaskRecurrenceDefinition(result.definition, this.ownerId),
       ...(outcome === 'conflict'
         ? {}
-        : { revision: parseTaskRecurrenceRevision(result.revision) }),
+        : { revision: parseTaskRecurrenceRevision(result.revision, this.ownerId) }),
     };
   }
 
@@ -138,7 +143,7 @@ export class TaskRecurrenceService {
         ['accepted', 'already_applied', 'conflict'] as const,
         'recurrence status outcome',
       ),
-      definition: parseTaskRecurrenceDefinition(result.definition),
+      definition: parseTaskRecurrenceDefinition(result.definition, this.ownerId),
     };
   }
 
@@ -179,20 +184,24 @@ export class TaskRecurrenceService {
       through_date: requireCalendarDate(result.through_date, 'evaluation date'),
       generated_count: Number(result.generated_count),
       occurrence_ids: occurrenceIds as string[],
-      definition: parseTaskRecurrenceDefinition(result.definition),
+      definition: parseTaskRecurrenceDefinition(result.definition, this.ownerId),
     };
   }
 }
 
-export function parseTaskRecurrenceDefinition(value: unknown): TaskRecurrenceDefinition {
+export function parseTaskRecurrenceDefinition(
+  value: unknown,
+  ownerId?: string,
+): TaskRecurrenceDefinition {
   const record = requireRecord(value, 'Recurrence definition is invalid');
   requireText(record.id, 'recurrence identifier');
-  requireText(record.owner_id, 'recurrence owner');
+  const resolvedOwnerId = resolveOwner(record.owner_id, ownerId, 'recurrence owner');
   requireText(record.name, 'recurrence name');
   requirePositiveInteger(record.current_revision, 'recurrence current revision');
   requirePositiveInteger(record.record_revision, 'recurrence record revision');
   return {
     ...record,
+    owner_id: resolvedOwnerId,
     status: requireEnum(record.status, taskRecurrenceStatuses, 'recurrence status'),
     last_mutation_channel: requireEnum(
       record.last_mutation_channel,
@@ -203,10 +212,17 @@ export function parseTaskRecurrenceDefinition(value: unknown): TaskRecurrenceDef
   } as TaskRecurrenceDefinition;
 }
 
-export function parseTaskRecurrenceRevision(value: unknown): TaskRecurrenceRevision {
+export function parseTaskRecurrenceRevision(
+  value: unknown,
+  ownerId?: string,
+): TaskRecurrenceRevision {
   const record = requireRecord(value, 'Recurrence revision is invalid');
   requireText(record.id, 'recurrence revision identifier');
-  requireText(record.owner_id, 'recurrence revision owner');
+  const resolvedOwnerId = resolveOwner(
+    record.owner_id,
+    ownerId,
+    'recurrence revision owner',
+  );
   requireText(record.recurrence_id, 'recurrence identifier');
   requireText(record.template_id, 'recurrence template identifier');
   requirePositiveInteger(record.revision, 'recurrence revision');
@@ -216,6 +232,7 @@ export function parseTaskRecurrenceRevision(value: unknown): TaskRecurrenceRevis
   requireText(record.planning_timezone, 'recurrence planning time zone');
   return {
     ...record,
+    owner_id: resolvedOwnerId,
     rule_mode: requireEnum(record.rule_mode, taskRecurrenceRuleModes, 'recurrence mode'),
     frequency: requireEnum(record.frequency, taskRecurrenceFrequencies, 'recurrence frequency'),
     missed_policy: requireEnum(
@@ -226,10 +243,13 @@ export function parseTaskRecurrenceRevision(value: unknown): TaskRecurrenceRevis
   } as TaskRecurrenceRevision;
 }
 
-export function parseTaskRecurrenceOccurrence(value: unknown): TaskRecurrenceOccurrence {
+export function parseTaskRecurrenceOccurrence(
+  value: unknown,
+  ownerId?: string,
+): TaskRecurrenceOccurrence {
   const record = requireRecord(value, 'Recurrence occurrence is invalid');
   requireText(record.id, 'occurrence identifier');
-  requireText(record.owner_id, 'occurrence owner');
+  const resolvedOwnerId = resolveOwner(record.owner_id, ownerId, 'occurrence owner');
   requireText(record.recurrence_id, 'recurrence identifier');
   requirePositiveInteger(record.recurrence_revision, 'occurrence revision');
   requireCalendarDate(record.scheduled_date, 'occurrence date');
@@ -237,8 +257,21 @@ export function parseTaskRecurrenceOccurrence(value: unknown): TaskRecurrenceOcc
   requireText(record.root_id, 'occurrence root identifier');
   return {
     ...record,
+    owner_id: resolvedOwnerId,
     root_type: requireEnum(record.root_type, taskTemplateKinds, 'occurrence root type'),
   } as TaskRecurrenceOccurrence;
+}
+
+function resolveOwner(value: unknown, ownerId: string | undefined, field: string): string {
+  const resolved = value === undefined
+    ? requireText(ownerId, field)
+    : requireText(value, field);
+  if (ownerId !== undefined && resolved !== ownerId) {
+    throw new InvalidTaskRecurrenceError(
+      'Recurrence owner does not match the authenticated owner',
+    );
+  }
+  return resolved;
 }
 
 function requireRecord(value: unknown, message: string): Record<string, unknown> {

@@ -94,7 +94,7 @@
 
 ## 7. Trust Validation
 
-- [ ] 7.1 Test offline create, edit, complete, reschedule, reorder, delete, restore, and recurrence workflows.
+- [x] 7.1 Test offline create, edit, complete, reschedule, reorder, delete, restore, and recurrence workflows.
 - [ ] 7.2 Test overlapping mutations from web, MCP, Raycast, and any other active client.
 - [x] 7.3 Test time-zone and daylight-saving transitions for date-only planning and reminders.
 - [x] 7.4 Test recurrence retries, missed schedules, delayed clients, and duplicate-suppression behavior.

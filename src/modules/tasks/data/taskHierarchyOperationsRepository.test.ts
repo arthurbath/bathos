@@ -10,6 +10,7 @@ const timestamp = '2026-07-20T08:30:00.000Z';
 
 function createHarness(options: {
   all?: unknown[][];
+  get?: unknown[];
   optional?: unknown[];
 } = {}) {
   const transaction = {
@@ -20,6 +21,9 @@ function createHarness(options: {
   } as unknown as Transaction;
   for (const result of options.all ?? []) {
     vi.mocked(transaction.getAll).mockResolvedValueOnce(result);
+  }
+  for (const result of options.get ?? []) {
+    vi.mocked(transaction.get).mockResolvedValueOnce(result);
   }
   for (const result of options.optional ?? []) {
     vi.mocked(transaction.getOptional).mockResolvedValueOnce(result);
@@ -107,5 +111,46 @@ describe('task hierarchy operations repository', () => {
       expect(parameters).toContain('project-a');
     }
     expect(calls[4][0]).toContain('INSERT INTO tasks_hierarchy_operations');
+  });
+
+  it('restores an already-detached task without an empty SQL assignment', async () => {
+    const { repository, transaction } = createHarness({
+      all: [[{ entity_type: 'todo', id: 'task-a', revision: 4 }]],
+      get: [{ area_id: null, project_id: null, heading_id: null }],
+    });
+
+    await repository.request({
+      ownerId: 'owner-a',
+      rootType: 'todo',
+      rootId: 'task-a',
+      operation: 'restore',
+      descendantPolicy: 'cascade',
+    });
+
+    const [restoreQuery] = vi.mocked(transaction.execute).mock.calls[0];
+    expect(restoreQuery).toContain("disposition = 'present'");
+    expect(restoreQuery).not.toContain('SET\n          ,');
+  });
+
+  it('loads a restored project parent with the expected bound parameters', async () => {
+    const { repository, transaction } = createHarness({
+      all: [[{ entity_type: 'project', id: 'project-a', revision: 2 }]],
+      get: [{ area_id: 'area-a' }],
+      optional: [null],
+    });
+
+    await repository.request({
+      ownerId: 'owner-a',
+      rootType: 'project',
+      rootId: 'project-a',
+      operation: 'restore',
+      descendantPolicy: 'cascade',
+    });
+
+    expect(transaction.get).toHaveBeenCalledWith(
+      'SELECT area_id FROM tasks_projects WHERE id = ? AND owner_id = ?',
+      ['project-a', 'owner-a'],
+    );
+    expect(vi.mocked(transaction.execute).mock.calls[0][1]).toContain(null);
   });
 });

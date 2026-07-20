@@ -50,11 +50,11 @@ export function useTaskTemplates(ownerId: string) {
   const [optimisticRevisions, setOptimisticRevisions] = useState<Record<string, TaskTemplateRevision>>({});
 
   const queriedTemplates = useMemo(
-    () => templatesQuery.data.map(parseTaskTemplate),
+    () => templatesQuery.data.map((template) => parseTaskTemplate(template)),
     [templatesQuery.data],
   );
   const queriedRevisions = useMemo(
-    () => revisionsQuery.data.map(parseTaskTemplateRevision),
+    () => revisionsQuery.data.map((revision) => parseTaskTemplateRevision(revision)),
     [revisionsQuery.data],
   );
 

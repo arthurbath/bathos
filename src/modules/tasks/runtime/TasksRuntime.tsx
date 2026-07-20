@@ -56,8 +56,14 @@ export function TasksRuntimeProvider({
     () => new TaskHierarchyOperationsRepository(database),
     [database],
   );
-  const templateService = useMemo(() => new TaskTemplateService(supabase), []);
-  const recurrenceService = useMemo(() => new TaskRecurrenceService(supabase), []);
+  const templateService = useMemo(
+    () => new TaskTemplateService(supabase, ownerId),
+    [ownerId],
+  );
+  const recurrenceService = useMemo(
+    () => new TaskRecurrenceService(supabase, ownerId),
+    [ownerId],
+  );
   const reminderService = useMemo(() => new TaskReminderService(supabase), []);
 
   useEffect(() => {

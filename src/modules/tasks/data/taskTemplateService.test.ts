@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   InvalidTaskTemplateError,
   TaskTemplateService,
+  parseTaskTemplate,
   parseTaskTemplateSnapshot,
 } from './taskTemplateService';
 
@@ -66,11 +67,17 @@ function revision() {
 
 describe('TaskTemplateService', () => {
   it('captures a template through the guarded RPC and parses the result', async () => {
+    const { owner_id: _templateOwner, ...ownerSafeTemplate } = definition();
+    const { owner_id: _revisionOwner, ...ownerSafeRevision } = revision();
     const rpc = vi.fn().mockResolvedValue({
-      data: { outcome: 'accepted', template: definition(), revision: revision() },
+      data: {
+        outcome: 'accepted',
+        template: ownerSafeTemplate,
+        revision: ownerSafeRevision,
+      },
       error: null,
     });
-    const service = new TaskTemplateService({ rpc } as never);
+    const service = new TaskTemplateService({ rpc } as never, ownerId);
 
     const result = await service.capture({
       sourceType: 'todo',
@@ -81,6 +88,8 @@ describe('TaskTemplateService', () => {
     });
 
     expect(result.template.name).toBe('Weekly Review');
+    expect(result.template.owner_id).toBe(ownerId);
+    expect(result.revision.owner_id).toBe(ownerId);
     expect(result.revision.snapshot.kind).toBe('todo');
     expect(rpc).toHaveBeenCalledWith('tasks_capture_template', expect.objectContaining({
       _template_id: null,
@@ -121,7 +130,7 @@ describe('TaskTemplateService', () => {
       },
       error: null,
     });
-    const service = new TaskTemplateService({ rpc } as never);
+    const service = new TaskTemplateService({ rpc } as never, ownerId);
 
     await service.instantiate({
       templateId,
@@ -147,9 +156,16 @@ describe('TaskTemplateService', () => {
     );
   });
 
+  it('rejects an RPC record owned by a different authenticated user', () => {
+    const foreign = { ...definition(), owner_id: 'foreign-owner' };
+    expect(() => parseTaskTemplate(foreign, ownerId)).toThrow(
+      'Template owner does not match the authenticated owner',
+    );
+  });
+
   it('rejects invalid capture dates before making a request', async () => {
     const rpc = vi.fn();
-    const service = new TaskTemplateService({ rpc } as never);
+    const service = new TaskTemplateService({ rpc } as never, ownerId);
     await expect(service.capture({
       sourceType: 'todo',
       sourceId,

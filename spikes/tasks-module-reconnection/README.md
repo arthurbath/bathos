@@ -15,7 +15,19 @@ docker-compose -f spikes/tasks-module-reconnection/docker-compose.yaml up -d
 
 Start BathOS with local, client-safe Supabase values and the disposable endpoint supplied as process environment variables. Do not commit those values to `.env`.
 
-## Acceptance Exercise
+The publication and sync rules cover the current task hierarchy, templates, recurrence records, and active reminders needed by the client projection. Delivery credentials and other server-only records remain outside the local projection.
+
+## Automated Offline Workflow Gate
+
+After the services are healthy, run:
+
+```sh
+npm run test:tasks:offline
+```
+
+The test uses the official PowerSync Node SDK, a temporary SQLite file, a synthetic local account, and synthetic task titles. It proves offline create, edit, reschedule, reorder, completion, delete, restore, generated-occurrence completion, durable queue survival across a database restart, authoritative reconciliation, and a second clean restart. The test clears its local file and signs out when finished. A local Supabase reset removes the disposable remote records.
+
+## Browser Acceptance Exercise
 
 Use a synthetic local account and synthetic task titles only.
 

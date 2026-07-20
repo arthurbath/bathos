@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "spec:validate": "openspec validate --all --strict",
     "test": "NODE_ENV=test vitest run",
+    "test:tasks:offline": "NODE_ENV=test RUN_TASKS_OFFLINE_INTEGRATION=1 vitest run src/modules/tasks/integration/offlinePersistence.integration.test.ts --testTimeout=120000",
     "test:watch": "NODE_ENV=test vitest"
   },
   "dependencies": {
@@ -74,6 +75,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
+    "@powersync/node": "^0.19.4",
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",
@@ -82,6 +84,7 @@
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react-swc": "^3.11.0",
     "autoprefixer": "^10.4.21",
+    "better-sqlite3": "^12.11.1",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",

@@ -60,7 +60,12 @@ export class InvalidTaskTemplateError extends Error {
 }
 
 export class TaskTemplateService {
-  constructor(private readonly client: TaskTemplateClient) {}
+  constructor(
+    private readonly client: TaskTemplateClient,
+    private readonly ownerId: string,
+  ) {
+    requireText(ownerId, 'owner');
+  }
 
   async capture(input: TaskTemplateCaptureInput): Promise<TaskTemplateCaptureResult> {
     const name = input.name.trim();
@@ -81,8 +86,8 @@ export class TaskTemplateService {
     const result = requireRecord(data, 'Template capture returned an invalid result');
     return {
       outcome: requireEnum(result.outcome, ['accepted', 'already_applied'], 'capture outcome'),
-      template: parseTaskTemplate(result.template),
-      revision: parseTaskTemplateRevision(result.revision),
+      template: parseTaskTemplate(result.template, this.ownerId),
+      revision: parseTaskTemplateRevision(result.revision, this.ownerId),
     };
   }
 
@@ -106,7 +111,7 @@ export class TaskTemplateService {
         ['accepted', 'already_applied', 'conflict'],
         'archive outcome',
       ),
-      template: parseTaskTemplate(result.template),
+      template: parseTaskTemplate(result.template, this.ownerId),
     };
   }
 
@@ -138,30 +143,30 @@ export class TaskTemplateService {
         ['accepted', 'already_applied'],
         'instantiation outcome',
       ),
-      instantiation: parseTaskTemplateInstantiation(response.instantiation),
+      instantiation: parseTaskTemplateInstantiation(response.instantiation, this.ownerId),
       result: parseTaskTemplateInstanceResult(response.result),
     };
   }
 }
 
-export function parseTaskTemplate(value: unknown): TaskTemplate {
+export function parseTaskTemplate(value: unknown, ownerId?: string): TaskTemplate {
   const record = requireRecord(value, 'Template definition is invalid');
   const kind = requireEnum(record.kind, taskTemplateKinds, 'template kind');
   requireText(record.id, 'template identifier');
-  requireText(record.owner_id, 'template owner');
+  const resolvedOwnerId = resolveOwner(record.owner_id, ownerId, 'owner');
   requireText(record.name, 'template name');
   requirePositiveInteger(record.current_revision, 'current revision');
   requirePositiveInteger(record.record_revision, 'record revision');
   requireEnum(record.last_mutation_channel, taskEntryChannels, 'mutation channel');
   requireEnum(record.last_actor_type, taskActorTypes, 'actor type');
-  return { ...record, kind } as TaskTemplate;
+  return { ...record, owner_id: resolvedOwnerId, kind } as TaskTemplate;
 }
 
-export function parseTaskTemplateRevision(value: unknown): TaskTemplateRevision {
+export function parseTaskTemplateRevision(value: unknown, ownerId?: string): TaskTemplateRevision {
   const record = requireRecord(value, 'Template revision is invalid');
   const sourceType = requireEnum(record.source_type, taskTemplateKinds, 'template source type');
   requireText(record.id, 'template revision identifier');
-  requireText(record.owner_id, 'template revision owner');
+  const resolvedOwnerId = resolveOwner(record.owner_id, ownerId, 'revision owner');
   requireText(record.template_id, 'template identifier');
   requirePositiveInteger(record.revision, 'template revision');
   requirePositiveInteger(record.source_revision, 'source revision');
@@ -172,24 +177,47 @@ export function parseTaskTemplateRevision(value: unknown): TaskTemplateRevision 
   if (snapshot.kind !== sourceType) {
     throw new InvalidTaskTemplateError('Template revision kind does not match its snapshot');
   }
-  return { ...record, source_type: sourceType, snapshot } as TaskTemplateRevision;
+  return {
+    ...record,
+    owner_id: resolvedOwnerId,
+    source_type: sourceType,
+    snapshot,
+  } as TaskTemplateRevision;
 }
 
-export function parseTaskTemplateInstantiation(value: unknown): TaskTemplateInstantiation {
+export function parseTaskTemplateInstantiation(
+  value: unknown,
+  ownerId?: string,
+): TaskTemplateInstantiation {
   const record = requireRecord(value, 'Template instantiation is invalid');
   const rootType = requireEnum(record.root_type, taskTemplateKinds, 'template root type');
   const entryChannel = requireEnum(record.entry_channel, taskEntryChannels, 'entry channel');
   const actorType = requireEnum(record.actor_type, taskActorTypes, 'actor type');
   requireText(record.id, 'template instantiation identifier');
-  requireText(record.owner_id, 'template instantiation owner');
+  const resolvedOwnerId = resolveOwner(
+    record.owner_id,
+    ownerId,
+    'instantiation owner',
+  );
   requireText(record.template_id, 'template identifier');
   requirePositiveInteger(record.template_revision, 'template revision');
   return {
     ...record,
+    owner_id: resolvedOwnerId,
     root_type: rootType,
     entry_channel: entryChannel,
     actor_type: actorType,
   } as TaskTemplateInstantiation;
+}
+
+function resolveOwner(value: unknown, ownerId: string | undefined, field: string): string {
+  const resolved = value === undefined
+    ? requireText(ownerId, field)
+    : requireText(value, field);
+  if (ownerId !== undefined && resolved !== ownerId) {
+    throw new InvalidTaskTemplateError('Template owner does not match the authenticated owner');
+  }
+  return resolved;
 }
 
 export function parseTaskTemplateSnapshot(value: unknown): TaskTemplateSnapshot {

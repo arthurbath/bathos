@@ -48,19 +48,21 @@ function ensureGlobalStorage(name: "localStorage" | "sessionStorage") {
   });
 }
 
-ensureGlobalStorage("localStorage");
-ensureGlobalStorage("sessionStorage");
+if (typeof window !== "undefined") {
+  ensureGlobalStorage("localStorage");
+  ensureGlobalStorage("sessionStorage");
 
-Object.defineProperty(window, "matchMedia", {
-  writable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => {},
-  }),
-});
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => {},
+    }),
+  });
+}

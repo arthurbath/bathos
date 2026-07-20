@@ -50,15 +50,19 @@ export function useTaskRecurrences(ownerId: string) {
   const planningDate = taskCalendarDateInTimeZone(new Date(), planningTimeZone);
 
   const queriedDefinitions = useMemo(
-    () => definitionsQuery.data.map(parseTaskRecurrenceDefinition),
+    () => definitionsQuery.data.map((definition) => (
+      parseTaskRecurrenceDefinition(definition)
+    )),
     [definitionsQuery.data],
   );
   const queriedRevisions = useMemo(
-    () => revisionsQuery.data.map(parseTaskRecurrenceRevision),
+    () => revisionsQuery.data.map((revision) => parseTaskRecurrenceRevision(revision)),
     [revisionsQuery.data],
   );
   const occurrences = useMemo(
-    () => occurrencesQuery.data.map(parseTaskRecurrenceOccurrence),
+    () => occurrencesQuery.data.map((occurrence) => (
+      parseTaskRecurrenceOccurrence(occurrence)
+    )),
     [occurrencesQuery.data],
   );
 
