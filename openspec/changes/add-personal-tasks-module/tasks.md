@@ -34,7 +34,8 @@
 - [x] 3.4 Add module-local TypeScript types and state-transition utilities with focused tests.
 - [x] 3.5 Add the selected local persistence, mutation queue, reconciliation, and conflict primitives.
 - [x] 3.6 Add stable ordering primitives with focused concurrent-order tests.
-- [ ] 3.7 Add recoverable deletion and history primitives with restoration tests.
+- [x] 3.7a Add recoverable deletion and restoration primitives with restoration tests.
+- [ ] 3.7b Add append-only history, mutation receipts, and inverse-mutation undo primitives.
 - [ ] 3.8 Add an initial portable export and verified restore path using synthetic test data.
 - [x] 3.9 Regenerate or update Supabase TypeScript types for the new task objects.
 

@@ -148,6 +148,7 @@ function AppRoutes() {
         <Route path="/tasks" element={<Navigate to="/tasks/today" replace />} />
         <Route path="/tasks/inbox" element={<TasksRoute />} />
         <Route path="/tasks/today" element={<TasksRoute />} />
+        <Route path="/tasks/trash" element={<TasksRoute />} />
 
         {/* Legacy routes */}
         <Route path="/incomes" element={<Navigate to="/budget/incomes" replace />} />

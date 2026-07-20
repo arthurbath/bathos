@@ -6,18 +6,27 @@ import type { TaskStateTransition } from '@/modules/tasks/domain/taskState';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
 
-export function useTaskList(ownerId: string, destination: TaskDestination) {
+export type TaskListView = TaskDestination | 'trash';
+
+export function useTaskList(ownerId: string, view: TaskListView) {
   const { repository } = useTasksRuntime();
   const [optimisticTasks, setOptimisticTasks] = useState<Record<string, TaskTodo | null>>({});
+  const trash = view === 'trash';
   const query = useQuery<TaskTodo>(
-    `SELECT *
-     FROM tasks_todos
-     WHERE owner_id = ?
-       AND destination = ?
-       AND lifecycle = 'open'
-       AND disposition = 'present'
-     ORDER BY order_key, id`,
-    [ownerId, destination],
+    trash
+      ? `SELECT *
+         FROM tasks_todos
+         WHERE owner_id = ?
+           AND disposition = 'deleted'
+         ORDER BY deleted_at DESC, id`
+      : `SELECT *
+         FROM tasks_todos
+         WHERE owner_id = ?
+           AND destination = ?
+           AND lifecycle = 'open'
+           AND disposition = 'present'
+         ORDER BY order_key, id`,
+    trash ? [ownerId] : [ownerId, view],
   );
 
   useEffect(() => {
@@ -53,15 +62,10 @@ export function useTaskList(ownerId: string, destination: TaskDestination) {
 
     return Array.from(merged.values())
       .filter((task) => (
-        task.owner_id === ownerId
-        && task.destination === destination
-        && task.lifecycle === 'open'
-        && task.disposition === 'present'
+        taskIsVisible(task, ownerId, view)
       ))
-      .sort((left, right) => (
-        left.order_key.localeCompare(right.order_key) || left.id.localeCompare(right.id)
-      ));
-  }, [destination, optimisticTasks, ownerId, query.data]);
+      .sort((left, right) => compareTasksForView(left, right, view));
+  }, [optimisticTasks, ownerId, query.data, view]);
 
   const setOptimisticTask = useCallback((taskId: string, task: TaskTodo | null | undefined) => {
     setOptimisticTasks((current) => {
@@ -76,11 +80,14 @@ export function useTaskList(ownerId: string, destination: TaskDestination) {
 
   const createTask = useCallback(
     async (title: string) => {
-      const createdTask = await repository.createTask({ ownerId, title, destination });
+      if (view === 'trash') {
+        throw new Error('Tasks cannot be created in Trash');
+      }
+      const createdTask = await repository.createTask({ ownerId, title, destination: view });
       setOptimisticTask(createdTask.id, createdTask);
       return createdTask;
     },
-    [destination, ownerId, repository, setOptimisticTask],
+    [ownerId, repository, setOptimisticTask, view],
   );
   const updateTask = useCallback(
     async (taskId: string, patch: EditableTaskPatch) => {
@@ -108,14 +115,17 @@ export function useTaskList(ownerId: string, destination: TaskDestination) {
   );
   const transitionTask = useCallback(
     async (taskId: string, transition: TaskStateTransition) => {
-      const leavesOpenList = transition === 'complete' || transition === 'cancel' || transition === 'delete';
-      if (leavesOpenList) {
+      const leavesCurrentView = transition === 'complete'
+        || transition === 'cancel'
+        || transition === 'delete'
+        || (view === 'trash' && transition === 'restore');
+      if (leavesCurrentView) {
         setOptimisticTask(taskId, null);
       }
 
       try {
         const transitionedTask = await repository.transitionTask(ownerId, taskId, transition);
-        setOptimisticTask(taskId, taskIsVisible(transitionedTask, ownerId, destination)
+        setOptimisticTask(taskId, taskIsVisible(transitionedTask, ownerId, view)
           ? transitionedTask
           : null);
         return transitionedTask;
@@ -124,7 +134,7 @@ export function useTaskList(ownerId: string, destination: TaskDestination) {
         throw error;
       }
     },
-    [destination, ownerId, repository, setOptimisticTask],
+    [ownerId, repository, setOptimisticTask, view],
   );
 
   return {
@@ -137,9 +147,20 @@ export function useTaskList(ownerId: string, destination: TaskDestination) {
   };
 }
 
-function taskIsVisible(task: TaskTodo, ownerId: string, destination: TaskDestination): boolean {
-  return task.owner_id === ownerId
-    && task.destination === destination
-    && task.lifecycle === 'open'
-    && task.disposition === 'present';
+function taskIsVisible(task: TaskTodo, ownerId: string, view: TaskListView): boolean {
+  if (task.owner_id !== ownerId) {
+    return false;
+  }
+  if (view === 'trash') {
+    return task.disposition === 'deleted';
+  }
+  return task.destination === view && task.lifecycle === 'open' && task.disposition === 'present';
+}
+
+function compareTasksForView(left: TaskTodo, right: TaskTodo, view: TaskListView): number {
+  if (view === 'trash') {
+    return (right.deleted_at ?? '').localeCompare(left.deleted_at ?? '')
+      || left.id.localeCompare(right.id);
+  }
+  return left.order_key.localeCompare(right.order_key) || left.id.localeCompare(right.id);
 }

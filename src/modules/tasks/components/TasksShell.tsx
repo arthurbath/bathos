@@ -8,6 +8,8 @@ import {
   Inbox,
   MoreHorizontal,
   Plus,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -24,9 +26,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import { CARD_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
-import { useTaskList } from '@/modules/tasks/hooks/useTaskList';
+import { useTaskList, type TaskListView } from '@/modules/tasks/hooks/useTaskList';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
-import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
+import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
@@ -40,17 +42,22 @@ type TasksShellProps = {
 const taskViews = [
   { path: '/inbox', label: 'Inbox', icon: Inbox },
   { path: '/today', label: 'Today', icon: CalendarDays },
+  { path: '/trash', label: 'Trash', icon: Trash2 },
 ] as const;
 
 export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
-  const destination: TaskDestination = location.pathname.endsWith('/inbox') ? 'inbox' : 'today';
+  const view: TaskListView = location.pathname.endsWith('/inbox')
+    ? 'inbox'
+    : location.pathname.endsWith('/trash')
+      ? 'trash'
+      : 'today';
   const { mode, prepareForSignOut } = useTasksRuntime();
   const { tasks, loading, error, createTask, updateTask, transitionTask } = useTaskList(
     userId,
-    destination,
+    view,
   );
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [creating, setCreating] = useState(false);
@@ -60,7 +67,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   useEffect(() => {
     setSelectedTaskId(null);
     captureInputRef.current?.focus();
-  }, [destination]);
+  }, [view]);
 
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault();
@@ -104,17 +111,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <main className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
         <div className="space-y-7">
           <h2 className="text-3xl font-semibold leading-none tracking-tight">
-            <span className="md:hidden">{destination === 'inbox' ? 'Inbox' : 'Today'}</span>
+            <span className="md:hidden">{view === 'inbox' ? 'Inbox' : view === 'trash' ? 'Trash' : 'Today'}</span>
             <span className="hidden md:inline">Tasks</span>
           </h2>
 
           <nav
             aria-label="Task views"
-            className="hidden grid-cols-2 rounded-md border border-[hsl(var(--grid-sticky-line))] p-1 md:grid"
+            className="hidden grid-cols-3 rounded-md border border-[hsl(var(--grid-sticky-line))] p-1 md:grid"
           >
             {taskViews.map(({ path, label, icon: Icon }) => {
               const href = `${basePath}${path}`;
-              const active = destination === path.slice(1);
+              const active = view === path.slice(1);
               return (
                 <a
                   key={path}
@@ -132,41 +139,43 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             })}
           </nav>
 
-          <form onSubmit={handleCreate} className="relative">
-            <Plus
-              className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              ref={captureInputRef}
-              value={newTaskTitle}
-              onChange={(event) => setNewTaskTitle(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }}
-              disabled={creating}
-              aria-label="Add a Task"
-              aria-keyshortcuts="Enter"
-              autoComplete="off"
-              placeholder="Add a Task"
-              className="h-14 rounded-md pl-12 pr-14 text-base"
-            />
-            <Button
-              type="submit"
-              variant="clear"
-              size="icon"
-              disabled={!newTaskTitle.trim() || creating}
-              aria-label="Add Task"
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-            >
-              <CornerDownLeft className="h-4 w-4" />
-            </Button>
-          </form>
+          {view !== 'trash' ? (
+            <form onSubmit={handleCreate} className="relative">
+              <Plus
+                className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                ref={captureInputRef}
+                value={newTaskTitle}
+                onChange={(event) => setNewTaskTitle(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                disabled={creating}
+                aria-label="Add a Task"
+                aria-keyshortcuts="Enter"
+                autoComplete="off"
+                placeholder="Add a Task"
+                className="h-14 rounded-md pl-12 pr-14 text-base"
+              />
+              <Button
+                type="submit"
+                variant="clear"
+                size="icon"
+                disabled={!newTaskTitle.trim() || creating}
+                aria-label="Add Task"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+              >
+                <CornerDownLeft className="h-4 w-4" />
+              </Button>
+            </form>
+          ) : null}
 
-          <section aria-label={destination === 'inbox' ? 'Inbox Tasks' : 'Today Tasks'}>
+          <section aria-label={view === 'inbox' ? 'Inbox Tasks' : view === 'trash' ? 'Deleted Tasks' : 'Today Tasks'}>
             {loading ? (
               <div className="flex min-h-40 items-center justify-center">
                 <LoadingSpinner />
@@ -176,11 +185,25 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 Tasks Could Not Be Loaded
               </p>
             ) : tasks.length === 0 ? (
-              <p className="py-12 text-center text-sm text-muted-foreground">No Tasks</p>
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                {view === 'trash' ? 'Trash Is Empty' : 'No Tasks'}
+              </p>
             ) : (
               <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
                 {tasks.map((task) => (
-                  <TaskRow
+                  view === 'trash' ? (
+                    <DeletedTaskRow
+                      key={task.id}
+                      task={task}
+                      onRestore={async () => {
+                        try {
+                          await transitionTask(task.id, 'restore');
+                        } catch (restoreError) {
+                          showTaskError('Task Could Not Be Restored', restoreError);
+                        }
+                      }}
+                    />
+                  ) : <TaskRow
                     key={task.id}
                     task={task}
                     selected={selectedTaskId === task.id}
@@ -204,7 +227,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                     onMove={async () => {
                       try {
                         await updateTask(task.id, {
-                          destination: destination === 'inbox' ? 'today' : 'inbox',
+                          destination: view === 'inbox' ? 'today' : 'inbox',
                         });
                       } catch (moveError) {
                         showTaskError('Task Could Not Be Moved', moveError);
@@ -217,7 +240,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         showTaskError('Task Could Not Be Deleted', deleteError);
                       }
                     }}
-                  />
+                    />
                 ))}
               </div>
             )}
@@ -227,11 +250,44 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
       <MobileBottomNav
         items={taskViews}
-        isActive={(path) => destination === path.slice(1)}
+        isActive={(path) => view === path.slice(1)}
         onNavigate={(path) => navigate(`${basePath}${path}`)}
         hrefForPath={(path) => `${basePath}${path}`}
       />
     </div>
+  );
+}
+
+function DeletedTaskRow({ task, onRestore }: { task: TaskTodo; onRestore: () => Promise<void> }) {
+  const [restoring, setRestoring] = useState(false);
+
+  return (
+    <article className="flex min-h-16 items-center gap-3 px-2 sm:px-4">
+      <Trash2 className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <div className="min-w-0 flex-1 py-3">
+        <p className="truncate text-[15px] font-medium leading-5 text-foreground">{task.title}</p>
+        <p className="text-xs text-muted-foreground">
+          {task.lifecycle === 'open' ? 'Open' : task.lifecycle === 'completed' ? 'Completed' : 'Canceled'}
+          {' · '}
+          {task.destination === 'inbox' ? 'Inbox' : 'Today'}
+        </p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={restoring}
+        aria-label={`Restore ${task.title}`}
+        className="gap-1.5"
+        onClick={() => {
+          setRestoring(true);
+          void onRestore().finally(() => setRestoring(false));
+        }}
+      >
+        <RotateCcw className="h-4 w-4" aria-hidden="true" />
+        Restore
+      </Button>
+    </article>
   );
 }
 

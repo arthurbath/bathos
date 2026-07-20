@@ -64,14 +64,14 @@ function defaultTaskList() {
   };
 }
 
-function renderShell() {
+function renderShell(initialEntry = '/tasks/today') {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
 
   act(() => {
     root.render(
-      <MemoryRouter initialEntries={['/tasks/today']}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <TasksShell
           userId="owner-a"
           displayName="Owner"
@@ -243,6 +243,35 @@ describe('TasksShell', () => {
       expect(mockPrepareForSignOut.mock.invocationCallOrder[0]).toBeLessThan(
         onSignOut.mock.invocationCallOrder[0],
       );
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('shows deleted tasks in Trash and restores them without exposing task capture', async () => {
+    const deletedTask = {
+      ...task,
+      disposition: 'deleted' as const,
+      deleted_at: '2026-07-20T04:05:00.000Z',
+    };
+    const taskList = {
+      ...defaultTaskList(),
+      tasks: [deletedTask],
+    };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/trash');
+
+    try {
+      expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
+      const restore = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Restore Existing task"]',
+      );
+      await act(async () => {
+        restore?.click();
+      });
+
+      expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'trash');
+      expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'restore');
     } finally {
       cleanup(root, container);
     }

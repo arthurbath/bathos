@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
-import { useTaskList } from './useTaskList';
+import { useTaskList, type TaskListView } from './useTaskList';
 
 const mocks = vi.hoisted(() => ({
   useQuery: vi.fn(),
@@ -44,9 +44,10 @@ const originalTask: TaskTodo = {
 
 let latest: ReturnType<typeof useTaskList>;
 let queryData: TaskTodo[];
+let harnessView: TaskListView;
 
 function Harness() {
-  latest = useTaskList('owner-a', 'today');
+  latest = useTaskList('owner-a', harnessView);
   return null;
 }
 
@@ -79,6 +80,7 @@ function deferred<T>() {
 
 describe('useTaskList optimistic display', () => {
   beforeEach(() => {
+    harnessView = 'today';
     queryData = [originalTask];
     mocks.useQuery.mockReset().mockImplementation(() => ({
       data: queryData,
@@ -154,6 +156,56 @@ describe('useTaskList optimistic display', () => {
         await expect(completionPromise).rejects.toThrow('write failed');
       });
       expect(latest.tasks).toEqual([originalTask]);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('orders deleted tasks newest first and removes a restored task immediately', async () => {
+    harnessView = 'trash';
+    const olderDeletedTask = {
+      ...originalTask,
+      id: 'task-older',
+      disposition: 'deleted' as const,
+      deleted_at: '2026-07-20T04:01:00.000Z',
+    };
+    const newerDeletedTask = {
+      ...originalTask,
+      id: 'task-newer',
+      disposition: 'deleted' as const,
+      deleted_at: '2026-07-20T04:02:00.000Z',
+    };
+    queryData = [olderDeletedTask, newerDeletedTask];
+    const pendingRestore = deferred<TaskTodo>();
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      transitionTask: vi.fn().mockReturnValue(pendingRestore.promise),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository });
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.tasks.map((task) => task.id)).toEqual(['task-newer', 'task-older']);
+
+      let restorePromise!: Promise<TaskTodo>;
+      act(() => {
+        restorePromise = latest.transitionTask('task-newer', 'restore');
+      });
+      expect(latest.tasks.map((task) => task.id)).toEqual(['task-older']);
+
+      const restoredTask = {
+        ...newerDeletedTask,
+        disposition: 'present' as const,
+        deleted_at: null,
+        revision: 2,
+        client_mutation_id: 'mutation-restored',
+      };
+      await act(async () => {
+        pendingRestore.resolve(restoredTask);
+        await restorePromise;
+      });
+      expect(latest.tasks.map((task) => task.id)).toEqual(['task-older']);
     } finally {
       cleanup(root, container);
     }
