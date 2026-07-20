@@ -410,6 +410,18 @@ The system SHALL provide append-only history, mutation receipts, inverse-mutatio
 - **WHEN** a user restores an export into existing data
 - **THEN** the system assigns records to the authenticated owner, matches by stable identifier, remains idempotent on retry, and reports conflicts without overwriting newer records
 
+#### Scenario: Recover after complete source loss
+- **WHEN** the source account and its server rows no longer exist and the user merges a verified current backup under another authenticated owner
+- **THEN** every portable collection is rebound to that owner atomically, including append-only history and recoverably deleted work, while excluded credentials and delivery diagnostics remain absent
+
+#### Scenario: Replay an exact current backup
+- **WHEN** the user retries a current-schema backup after its complete merge already succeeded
+- **THEN** every collection is reported as an exact match, no row is rewritten or duplicated, and legacy compatibility conversion does not create a false conflict
+
+#### Scenario: Reject backup tampering
+- **WHEN** exported content no longer matches its manifest checksum
+- **THEN** preview and merge reject the envelope before any task data is written
+
 #### Scenario: Replace data from a restore
 - **WHEN** a user explicitly selects replace restore
 - **THEN** the system requires a verified pre-restore backup and separate confirmation before atomically replacing task data

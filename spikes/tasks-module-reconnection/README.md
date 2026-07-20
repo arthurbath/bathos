@@ -37,6 +37,16 @@ npm run test:tasks:multi-client
 
 The test begins with two concurrent retries of one Raycast-channel capture, downloads that task to a web client, and then forces overlapping web and MCP edits from the same revision in both winner orders. It proves exact-once capture, first-accepted revision authority, content-free conflict receipts, queue drainage, immutable entry provenance, and convergence without duplicates.
 
+## Automated Preservation and Recovery Gate
+
+With the same disposable services running, run:
+
+```sh
+npm run test:tasks:preservation
+```
+
+The test creates at least one record in every current portable collection, proves synchronized undo and Trash restoration, serializes a checksummed backup, rejects tampering, deletes the complete synthetic source account, previews and merges restoration into another owner, replays the backup as exact matches, and recovers a task that remained in Trash inside the backup.
+
 ## Browser Acceptance Exercise
 
 Use a synthetic local account and synthetic task titles only.

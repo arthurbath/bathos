@@ -108,6 +108,7 @@ describe('task hierarchy repository', () => {
     expect(vi.mocked(transaction.execute).mock.calls[1][0]).toContain(
       'INSERT INTO tasks_checklist_items',
     );
+    expect(vi.mocked(transaction.execute).mock.calls[1][1]).toContain(0);
   });
 
   it('completes a checklist item with one revision-safe mutation', async () => {
@@ -142,6 +143,7 @@ describe('task hierarchy repository', () => {
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain(
       'revision = ?, client_mutation_id = ?',
     );
+    expect(vi.mocked(transaction.execute).mock.calls[0][1]).toContain(1);
   });
 
   it('normalizes SQLite checklist booleans before unrelated edits', async () => {

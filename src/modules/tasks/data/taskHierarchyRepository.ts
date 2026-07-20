@@ -373,7 +373,7 @@ export class TaskHierarchyRepository {
         `UPDATE ${table}
          SET ${columns.map((columnName) => `${String(columnName)} = ?`).join(', ')}
          WHERE id = ? AND owner_id = ?`,
-        [...columns.map((columnName) => next[columnName]), id, ownerId],
+        [...columns.map((columnName) => toSqliteValue(next[columnName])), id, ownerId],
       );
       return next;
     });
@@ -409,8 +409,12 @@ async function insertRow(
   await transaction.execute(
     `INSERT INTO ${table} (${columns.join(', ')})
      VALUES (${columns.map(() => '?').join(', ')})`,
-    columns.map((columnName) => row[columnName]),
+    columns.map((columnName) => toSqliteValue(row[columnName])),
   );
+}
+
+function toSqliteValue(value: unknown): unknown {
+  return typeof value === 'boolean' ? Number(value) : value;
 }
 
 async function assertOwnedParent(

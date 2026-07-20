@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(46);
+SELECT plan(50);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -120,26 +120,42 @@ INSERT INTO public.tasks_user_settings (
   '97000000-0000-4000-8000-000000000011'
 );
 INSERT INTO public.tasks_todos (
-  id, owner_id, title, destination, order_key, client_mutation_id
+  id, owner_id, title, destination, order_key, client_mutation_id,
+  source_kind, source_url, source_external_id
 ) VALUES
   (
     '97000000-0000-4000-8000-000000000020',
     '97000000-0000-4000-8000-000000000001',
     'Scheduled task', 'today', 'a0',
-    '97000000-0000-4000-8000-000000000021'
+    '97000000-0000-4000-8000-000000000021',
+    'mail_message', 'message://reminder-export', '<reminder@example.test>'
   ),
   (
     '97000000-0000-4000-8000-000000000022',
     '97000000-0000-4000-8000-000000000001',
     'Second scheduled task', 'today', 'a1',
-    '97000000-0000-4000-8000-000000000023'
+    '97000000-0000-4000-8000-000000000023',
+    NULL, NULL, NULL
   ),
   (
     '97000000-0000-4000-8000-000000000024',
     '97000000-0000-4000-8000-000000000001',
     'Completing task', 'today', 'a2',
-    '97000000-0000-4000-8000-000000000025'
+    '97000000-0000-4000-8000-000000000025',
+    NULL, NULL, NULL
   );
+
+INSERT INTO public.tasks_mail_sources (
+  task_id, owner_id, account_identifier, mailbox_identifier,
+  message_identifier, deep_link, retirement_destination_identifier,
+  client_mutation_id
+) VALUES (
+  '97000000-0000-4000-8000-000000000020',
+  '97000000-0000-4000-8000-000000000001',
+  'synthetic-account', 'synthetic-inbox', '<reminder@example.test>',
+  'message://reminder-export', 'synthetic-archive',
+  '97000000-0000-4000-8000-000000000022'
+);
 
 SELECT lives_ok(
   $$
@@ -442,6 +458,38 @@ SELECT is(
   true,
   'reports an applied reminder merge restore'
 );
+SELECT set_config(
+  'test.reminder_replay',
+  public.tasks_restore_export_v10(
+    current_setting('test.reminder_export')::jsonb, false
+  )::text,
+  false
+);
+SELECT is(
+  current_setting('test.reminder_replay')::jsonb ->> 'code',
+  'already_applied',
+  'classifies an exact current-schema replay without legacy conflicts'
+);
+SELECT is(
+  (
+    current_setting('test.reminder_replay')::jsonb
+      #>> '{tasks_mail_sources,matches}'
+  )::integer,
+  1,
+  'reports the task-keyed Mail source as an exact replay match'
+);
+SELECT throws_ok(
+  format(
+    'SELECT public.tasks_restore_export_v10(%L::jsonb, true)',
+    jsonb_set(
+      current_setting('test.reminder_export')::jsonb,
+      '{data,tasks_mail_sources,0,account_identifier}',
+      '"tampered-account"'::jsonb
+    )::text
+  ),
+  'Task export checksum mismatch for tasks_mail_sources',
+  'rejects Mail source tampering before adding its temporary validator identity'
+);
 SELECT ok(
   (SELECT count(*) FROM public.tasks_reminder_occurrences) > 0,
   'rebinds restored reminder occurrences to the authenticated owner'
@@ -450,6 +498,11 @@ SELECT is(
   (SELECT count(*) FROM public.tasks_delivery_targets),
   0::bigint,
   'does not restore excluded delivery targets'
+);
+SELECT is(
+  (SELECT count(*) FROM public.tasks_mail_sources),
+  1::bigint,
+  'restores task-keyed Mail sources through the current export validator'
 );
 
 SELECT * FROM finish();
