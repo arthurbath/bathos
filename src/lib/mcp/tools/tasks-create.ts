@@ -342,12 +342,15 @@ function creationResult(existing: ExistingCreation, idempotencyOutcome: 'created
     idempotency_outcome: idempotencyOutcome,
     receipt: {
       client_mutation_id: existing.event.client_mutation_id,
+      actor_type: 'automation',
+      mutation_channel: 'mcp',
       affected_ids: existing.event.affected_ids,
       base_revision: existing.event.base_revision,
       result_revision: existing.event.result_revision,
       transition: existing.event.transition,
       occurred_at: existing.event.occurred_at,
       outcome: existing.event.outcome,
+      code: null,
     },
     task: withoutOwner(existing.task),
   };

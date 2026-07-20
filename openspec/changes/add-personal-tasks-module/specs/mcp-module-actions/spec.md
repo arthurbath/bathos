@@ -35,9 +35,41 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 - **WHEN** an authenticated MCP client updates a supported task record by stable identifier
 - **THEN** the server applies the valid state transition only within the signed-in user's scope and returns the resulting state
 
+#### Scenario: Use explicit to-do mutation tools
+- **WHEN** an authenticated MCP client edits content or source metadata, moves planning or container placement, schedules dates, or requests a lifecycle or recovery transition
+- **THEN** the server exposes `update_task`, `move_task`, `schedule_task`, or `transition_task` respectively instead of a generic record or arbitrary-patch mutation
+
+#### Scenario: Require an optimistic mutation boundary
+- **WHEN** an MCP client calls a to-do mutation tool
+- **THEN** the request requires the stable to-do identifier, its expected positive revision, and a caller-generated UUID that identifies the logical mutation
+
+#### Scenario: Detect a stale MCP mutation
+- **WHEN** the requested expected revision does not match the current owned to-do revision
+- **THEN** the server leaves the to-do unchanged and returns a content-free conflict receipt with the current owner-safe state
+
+#### Scenario: Retry an accepted MCP mutation
+- **WHEN** an MCP client retries the exact accepted edit, movement, schedule, or lifecycle request with the same mutation identifier
+- **THEN** the server resolves the immutable task-history event, returns its original receipt and the current to-do state, and does not append another event
+
+#### Scenario: Retry an accepted recovery mutation
+- **WHEN** an MCP client retries the exact accepted recoverable delete or restore request with the same mutation identifier
+- **THEN** the server resolves the atomic hierarchy-operation receipt, returns the current to-do state, and does not repeat the hierarchy mutation
+
+#### Scenario: Reject a mutation-key payload change
+- **WHEN** an MCP client reuses a mutation identifier for a different task, expected base revision, operation, or normalized payload
+- **THEN** the server rejects the request without changing task data
+
+#### Scenario: Return a current-state no-op
+- **WHEN** a new MCP mutation identifier requests an already-current lifecycle, recovery, content, placement, or schedule state from the current revision
+- **THEN** the server returns a no-op receipt without incrementing the revision or appending task history
+
 #### Scenario: Delete task data recoverably
 - **WHEN** an authenticated MCP client requests normal deletion of a supported task record
 - **THEN** the server moves the record to the module's recoverable deleted state unless a separately authorized permanent-deletion operation exists
+
+#### Scenario: Delete a to-do hierarchy atomically
+- **WHEN** an MCP client recoverably deletes or restores a to-do that has checklist descendants
+- **THEN** the server uses one owner-scoped hierarchy operation, validates the complete expected-revision set, and never exposes a partially deleted or restored hierarchy
 
 ### Requirement: Structured Task Automation Contract
 The BathOS MCP server SHALL expose explicit task fields for actionability, source/origin, templates, scheduling, recurrence, and completion without requiring clients to encode meaning in generic tags or task titles.
@@ -75,7 +107,7 @@ Task MCP mutations SHALL use stable identifiers, enforce ownership and valid sta
 
 #### Scenario: Return mutation receipt
 - **WHEN** an MCP task mutation succeeds
-- **THEN** the server returns the client mutation identifier, affected stable identifiers, base and resulting revisions, transition, resulting state, timestamp, and outcome required by the audit contract
+- **THEN** the server returns the client mutation identifier, actor, channel, affected stable identifiers, base and resulting revisions, transition, timestamp, outcome, applicable code, and current owner-safe task state required by the audit contract
 
 #### Scenario: Exclude permanent deletion
 - **WHEN** an MCP client requests permanent deletion through the initial task mutation surface

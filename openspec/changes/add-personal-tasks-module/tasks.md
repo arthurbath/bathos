@@ -75,9 +75,9 @@
 
 - [x] 6.1 Add read-only MCP tools for task hierarchy, individual records, and defined planning views.
 - [x] 6.2 Add guarded MCP task creation with stable IDs, structured origin, and idempotency support.
-- [ ] 6.3 Add guarded MCP update, completion, movement, scheduling, and recoverable deletion operations.
-- [ ] 6.4 Add MCP mutation receipts and task-domain audit history.
-- [ ] 6.5 Add MCP tests for authentication, RLS boundaries, invalid transitions, retries, and destructive guardrails.
+- [x] 6.3 Add guarded MCP update, completion, movement, scheduling, and recoverable deletion operations.
+- [x] 6.4 Add MCP mutation receipts and task-domain audit history.
+- [x] 6.5 Add MCP tests for authentication, RLS boundaries, invalid transitions, retries, and destructive guardrails.
 - [ ] 6.6 Build a Raycast quick-entry command with a configurable global hotkey.
 - [ ] 6.7 Add dependable browser context capture with structured webpage origin.
 - [ ] 6.8 Add Mail, Finder, selected-text, and reading-list capture only for sources with verified contracts.
