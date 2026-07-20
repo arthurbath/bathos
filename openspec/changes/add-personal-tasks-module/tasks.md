@@ -116,6 +116,7 @@
 - [x] 7.7 Measure task-view and search performance with a synthetic dataset larger than the current Things library.
 - [x] 7.8 Run a sustained parallel-use evaluation and record unresolved trust failures before any migration decision.
 - [x] 7.9 Add an executable Tasks-only TypeScript contract gate and repair all current module and task-MCP type failures.
+- [x] 7.10 Add direct connected-hook contract tests for owner-local template dates, recurrence evaluation, reminder claims, optimistic state, and local-only mutation gates.
 
 ## 8. Optional Native Apple Companion
 

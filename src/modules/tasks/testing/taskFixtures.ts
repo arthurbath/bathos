@@ -3,6 +3,12 @@ import type {
   TaskChecklistItem,
   TaskHeading,
   TaskProject,
+  TaskRecurrenceDefinition,
+  TaskRecurrenceOccurrence,
+  TaskRecurrenceRevision,
+  TaskReminder,
+  TaskTemplate,
+  TaskTemplateRevision,
   TaskTodo,
 } from '@/modules/tasks/types/tasks';
 
@@ -160,6 +166,149 @@ export function taskChecklistItemFixture(
     last_actor_type: 'user',
     revision: 1,
     client_mutation_id: 'mutation-checklist-a',
+    created_at: timestamp,
+    updated_at: timestamp,
+    ...patch,
+  };
+}
+
+export function taskTemplateFixture(patch: Partial<TaskTemplate> = {}): TaskTemplate {
+  return {
+    id: 'template-a',
+    owner_id: 'owner-a',
+    name: 'Template',
+    kind: 'todo',
+    current_revision: 1,
+    archived_at: null,
+    record_revision: 1,
+    last_mutation_channel: 'web',
+    last_actor_type: 'user',
+    client_mutation_id: 'mutation-template-a',
+    created_at: timestamp,
+    updated_at: timestamp,
+    ...patch,
+  };
+}
+
+export function taskTemplateRevisionFixture(
+  patch: Partial<TaskTemplateRevision> = {},
+): TaskTemplateRevision {
+  return {
+    id: 'template-revision-a',
+    owner_id: 'owner-a',
+    template_id: 'template-a',
+    revision: 1,
+    source_type: 'todo',
+    source_id: 'task-a',
+    source_revision: 1,
+    name: 'Template',
+    anchor_date: '2026-07-20',
+    snapshot: {
+      version: 1,
+      kind: 'todo',
+      root: {
+        node_id: 'template-node-a',
+        title: 'Template Task',
+        notes: '',
+        actionability: 'actionable',
+        destination: 'inbox',
+        today_section: 'daytime',
+        order_key: 'a0',
+        start_offset_days: null,
+        deadline_offset_days: null,
+        checklist: [],
+      },
+    },
+    client_mutation_id: 'mutation-template-revision-a',
+    created_at: timestamp,
+    ...patch,
+  };
+}
+
+export function taskRecurrenceDefinitionFixture(
+  patch: Partial<TaskRecurrenceDefinition> = {},
+): TaskRecurrenceDefinition {
+  return {
+    id: 'recurrence-a',
+    owner_id: 'owner-a',
+    name: 'Recurrence',
+    status: 'active',
+    current_revision: 1,
+    evaluated_through_date: '2026-07-19',
+    archived_at: null,
+    record_revision: 1,
+    last_mutation_channel: 'web',
+    last_actor_type: 'user',
+    client_mutation_id: 'mutation-recurrence-a',
+    created_at: timestamp,
+    updated_at: timestamp,
+    ...patch,
+  };
+}
+
+export function taskRecurrenceRevisionFixture(
+  patch: Partial<TaskRecurrenceRevision> = {},
+): TaskRecurrenceRevision {
+  return {
+    id: 'recurrence-revision-a',
+    owner_id: 'owner-a',
+    recurrence_id: 'recurrence-a',
+    revision: 1,
+    name: 'Recurrence',
+    template_id: 'template-a',
+    template_revision: 1,
+    rule_mode: 'calendar',
+    frequency: 'daily',
+    interval_count: 1,
+    start_date: '2026-07-20',
+    planning_timezone: 'America/Los_Angeles',
+    missed_policy: 'latest',
+    catch_up_limit: 30,
+    target_area_id: null,
+    client_mutation_id: 'mutation-recurrence-revision-a',
+    created_at: timestamp,
+    ...patch,
+  };
+}
+
+export function taskRecurrenceOccurrenceFixture(
+  patch: Partial<TaskRecurrenceOccurrence> = {},
+): TaskRecurrenceOccurrence {
+  return {
+    id: 'recurrence-occurrence-a',
+    owner_id: 'owner-a',
+    recurrence_id: 'recurrence-a',
+    recurrence_revision: 1,
+    scheduled_date: '2026-07-20',
+    logical_key: 'recurrence-a:2026-07-20',
+    predecessor_occurrence_id: null,
+    root_type: 'todo',
+    root_id: 'task-a',
+    template_instantiation_id: 'template-instantiation-a',
+    client_mutation_id: 'mutation-recurrence-occurrence-a',
+    generated_at: timestamp,
+    ...patch,
+  };
+}
+
+export function taskReminderFixture(patch: Partial<TaskReminder> = {}): TaskReminder {
+  return {
+    id: 'reminder-a',
+    owner_id: 'owner-a',
+    root_type: 'todo',
+    task_id: 'task-a',
+    project_id: null,
+    status: 'active',
+    local_date: '2026-07-20',
+    local_time: '09:00:00',
+    time_zone: 'America/Los_Angeles',
+    ambiguity_choice: 'earlier',
+    resolved_at: '2026-07-20T16:00:00.000Z',
+    resolution_kind: 'exact',
+    record_revision: 1,
+    last_mutation_channel: 'web',
+    last_actor_type: 'user',
+    client_mutation_id: 'mutation-reminder-a',
     created_at: timestamp,
     updated_at: timestamp,
     ...patch,
