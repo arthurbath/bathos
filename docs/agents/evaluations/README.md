@@ -14,6 +14,7 @@ This folder contains dated agent-facing security, performance, and technology ev
 
 | Date | File | Topic |
 |---|---|---|
+| 2026-07-20 | `2026-07-20_tasks_product_identity.md` | Personal Tasks product-name shortlist, collision screen, and icon-direction recommendation |
 | 2026-07-20 | `2026-07-20_tasks_production_sync_readiness.md` | Personal Tasks production PowerSync package, projection-drift correction, and local acceptance proof |
 | 2026-07-20 | `2026-07-20_tasks_production_sync_topology.md` | Personal Tasks PowerSync Cloud and self-hosted production topology recommendation |
 | 2026-07-20 | `2026-07-20_tasks_sustained_parallel_use.md` | Personal Tasks sustained local multi-client, retry, conflict, and restart endurance validation |
