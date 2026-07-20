@@ -5,11 +5,13 @@ import {
   taskEntryChannels,
   taskMutationTransitions,
   taskSourceKinds,
+  taskTodaySections,
   type TaskActorType,
   type TaskDestination,
   type TaskEntryChannel,
   type TaskMutationTransition,
   type TaskSourceKind,
+  type TaskTodaySection,
   type TaskTodo,
 } from '@/modules/tasks/types/tasks';
 
@@ -23,6 +25,7 @@ export type TaskHistorySnapshot = Pick<
   | 'disposition'
   | 'deleted_at'
   | 'destination'
+  | 'today_section'
   | 'order_key'
   | 'start_date'
   | 'deadline'
@@ -119,6 +122,7 @@ export function snapshotTask(task: TaskTodo): TaskHistorySnapshot {
     disposition: task.disposition,
     deleted_at: task.deleted_at,
     destination: task.destination,
+    today_section: task.today_section,
     order_key: task.order_key,
     start_date: task.start_date ?? null,
     deadline: task.deadline ?? null,
@@ -144,6 +148,9 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
     disposition: requireEnum(parsed.disposition, ['present', 'deleted'] as const, 'disposition'),
     deleted_at: optionalText(parsed.deleted_at, 'deleted_at'),
     destination: requireEnum(parsed.destination, taskDestinations, 'destination') as TaskDestination,
+    today_section: parsed.today_section === undefined
+      ? 'daytime'
+      : requireEnum(parsed.today_section, taskTodaySections, 'Today section') as TaskTodaySection,
     order_key: requireText(parsed.order_key, 'order_key'),
     start_date: optionalTextOrMissing(parsed.start_date, 'start_date'),
     deadline: optionalTextOrMissing(parsed.deadline, 'deadline'),
@@ -227,6 +234,7 @@ function snapshotsEqual(left: TaskHistorySnapshot, right: TaskHistorySnapshot): 
     && left.disposition === right.disposition
     && left.deleted_at === right.deleted_at
     && left.destination === right.destination
+    && left.today_section === right.today_section
     && left.order_key === right.order_key
     && left.start_date === right.start_date
     && left.deadline === right.deadline

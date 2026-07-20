@@ -83,3 +83,17 @@ export function taskCalendarDateInTimeZone(
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
 }
+
+export function addTaskCalendarDays(value: string, days: number): string {
+  const normalized = normalizeTaskCalendarDate(value, 'Calendar date');
+  if (normalized === undefined || normalized === null || !Number.isSafeInteger(days)) {
+    throw new InvalidTaskCalendarRangeError('A calendar date and whole-day offset are required');
+  }
+  const [year, month, day] = normalized.split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  return [
+    shifted.getUTCFullYear().toString().padStart(4, '0'),
+    (shifted.getUTCMonth() + 1).toString().padStart(2, '0'),
+    shifted.getUTCDate().toString().padStart(2, '0'),
+  ].join('-');
+}

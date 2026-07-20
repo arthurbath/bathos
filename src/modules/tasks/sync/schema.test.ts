@@ -25,6 +25,7 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('undo_source_event_id');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('start_date');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('deadline');
+    expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('today_section');
     expect(tables.tasks_history_events.columns.map(({ name }) => name)).toContain('before_state');
     expect(tables.tasks_sync_issues.columns.map(({ name }) => name)).not.toContain('title');
     expect(tables.tasks_sync_issues.columns.map(({ name }) => name)).not.toContain('notes');

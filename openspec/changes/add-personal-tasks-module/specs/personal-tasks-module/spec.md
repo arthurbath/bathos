@@ -39,7 +39,15 @@ The system SHALL derive Today, This Evening, Upcoming, Anytime, Someday, and Log
 
 #### Scenario: Plan work for today
 - **WHEN** a user assigns an open to-do to today
-- **THEN** the system includes it in Today and allows the user to place it in the This Evening section
+- **THEN** the system records the owner's current planning date, includes the to-do in Today, and allows the user to place it in the This Evening section
+
+#### Scenario: Carry unfinished work across midnight
+- **WHEN** an open Today to-do remains unfinished after its assigned planning date
+- **THEN** the system keeps it visible in an Unfinished section until the user completes, moves, or explicitly reschedules it
+
+#### Scenario: Reschedule unfinished work
+- **WHEN** a user reschedules unfinished work for Today, This Evening, or Tomorrow
+- **THEN** the system records the selected owner-local calendar date, places Today work in the selected Today section, and moves Tomorrow work into Upcoming
 
 #### Scenario: Defer work to a future date
 - **WHEN** a user assigns a future start date to a to-do or project
@@ -159,7 +167,7 @@ The system SHALL store start dates and deadlines as local calendar dates, derive
 
 #### Scenario: Place work in This Evening
 - **WHEN** a user places work in This Evening
-- **THEN** the system treats the value as a section of Today and does not convert it into an independent date or reminder time
+- **THEN** the system records an evening section value only on work assigned to the owner's current planning date and does not convert it into an independent date or reminder time
 
 #### Scenario: Resolve a reminder
 - **WHEN** a caller schedules a reminder with a local date, wall-clock time, and IANA time zone
@@ -214,6 +222,10 @@ The system SHALL preserve intentional manual ordering across saves, refreshes, o
 #### Scenario: Reorder active work
 - **WHEN** a user moves an item within an ordered task view
 - **THEN** the system saves the new order without changing unrelated items
+
+#### Scenario: Reorder sections of Today independently
+- **WHEN** a user reorders work in Unfinished, Today, or This Evening
+- **THEN** the system changes only that item's order within the same visible section and does not move it across planning dates or Today sections
 
 #### Scenario: Restore after asynchronous save
 - **WHEN** a reorder is saved asynchronously and the view refreshes

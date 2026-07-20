@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assertTaskCalendarRange,
+  addTaskCalendarDays,
   isTaskCalendarDate,
   isTaskPlanningTimeZone,
   normalizeTaskCalendarDate,
@@ -49,5 +50,11 @@ describe('task calendar dates', () => {
     expect(() => assertTaskCalendarRange('2026-07-20', '2026-07-19')).toThrow(
       'Deadline cannot be earlier than the start date',
     );
+  });
+
+  it('adds whole calendar days across month, year, and leap-day boundaries', () => {
+    expect(addTaskCalendarDays('2026-12-31', 1)).toBe('2027-01-01');
+    expect(addTaskCalendarDays('2028-02-28', 1)).toBe('2028-02-29');
+    expect(addTaskCalendarDays('2028-03-01', -1)).toBe('2028-02-29');
   });
 });

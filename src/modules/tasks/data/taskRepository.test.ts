@@ -24,6 +24,7 @@ const existingTask: TaskTodo = {
   disposition: 'present',
   deleted_at: null,
   destination: 'inbox',
+  today_section: 'daytime',
   order_key: 'a0',
   start_date: null,
   deadline: null,
@@ -104,6 +105,7 @@ describe('task repository', () => {
       ownerId: 'owner-a',
       title: '  New task  ',
       destination: 'today',
+      today_section: 'daytime',
       entryChannel: 'raycast',
     });
 
@@ -145,6 +147,43 @@ describe('task repository', () => {
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain(
       'revision = ?, client_mutation_id = ?, updated_at = ?',
     );
+  });
+
+  it('moves work to a Today section at the end of that section order', async () => {
+    const { repository, transaction } = createHarness(existingTask);
+    vi.mocked(transaction.getOptional)
+      .mockResolvedValueOnce(existingTask)
+      .mockResolvedValueOnce({ order_key: 'a0' });
+
+    const moved = await repository.moveTask('owner-a', 'task-a', {
+      destination: 'today',
+      todaySection: 'evening',
+      startDate: '2026-07-20',
+    });
+
+    expect(moved).toMatchObject({
+      destination: 'today',
+      today_section: 'evening',
+      start_date: '2026-07-20',
+      revision: 2,
+    });
+    expect(moved.order_key > 'a0').toBe(true);
+    expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain('today_section = ?');
+  });
+
+  it('rejects This Evening outside Today and scheduled placement in Inbox', async () => {
+    const { repository } = createHarness(existingTask);
+
+    await expect(repository.createTask({
+      ownerId: 'owner-a',
+      title: 'Invalid section',
+      destination: 'inbox',
+      todaySection: 'evening',
+    })).rejects.toThrow('This Evening is available only within Today');
+    await expect(repository.moveTask('owner-a', 'task-a', {
+      destination: 'inbox',
+      startDate: '2026-07-20',
+    })).rejects.toThrow('Inbox work cannot retain Today planning placement');
   });
 
   it('restores the prior snapshot as a revision-checked inverse mutation', async () => {

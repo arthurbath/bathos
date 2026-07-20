@@ -1,13 +1,18 @@
 import { useQuery } from '@powersync/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
+import type {
+  EditableTaskPatch,
+  TaskPlanningMoveInput,
+} from '@/modules/tasks/data/taskRepository';
+import { compareTaskOrder, generateTaskMoveOrderKey } from '@/modules/tasks/domain/taskOrder';
 import { taskCalendarDateInTimeZone } from '@/modules/tasks/domain/taskDates';
 import type { TaskStateTransition } from '@/modules/tasks/domain/taskState';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
 
 export type TaskListView = TaskDestination | 'upcoming' | 'logbook' | 'trash';
+export type TodayTaskSection = 'unfinished' | 'daytime' | 'evening';
 
 export function useTaskList(ownerId: string, view: TaskListView) {
   const { repository, planningTimeZone } = useTasksRuntime();
@@ -87,7 +92,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
       .filter((task) => (
         taskIsVisible(task, ownerId, view, planningDate)
       ))
-      .sort((left, right) => compareTasksForView(left, right, view));
+      .sort((left, right) => compareTasksForView(left, right, view, planningDate));
   }, [optimisticTasks, ownerId, planningDate, query.data, view]);
 
   const setOptimisticTask = useCallback((taskId: string, task: TaskTodo | null | undefined) => {
@@ -107,11 +112,16 @@ export function useTaskList(ownerId: string, view: TaskListView) {
         const label = view === 'trash' ? 'Trash' : view === 'logbook' ? 'Logbook' : 'Upcoming';
         throw new Error(`Tasks cannot be created in ${label}`);
       }
-      const createdTask = await repository.createTask({ ownerId, title, destination: view });
+      const createdTask = await repository.createTask({
+        ownerId,
+        title,
+        destination: view,
+        startDate: view === 'today' ? planningDate : null,
+      });
       setOptimisticTask(createdTask.id, createdTask);
       return createdTask;
     },
-    [ownerId, repository, setOptimisticTask, view],
+    [ownerId, planningDate, repository, setOptimisticTask, view],
   );
   const updateTask = useCallback(
     async (taskId: string, patch: EditableTaskPatch) => {
@@ -161,6 +171,62 @@ export function useTaskList(ownerId: string, view: TaskListView) {
     },
     [ownerId, planningDate, repository, setOptimisticTask, view],
   );
+  const moveTask = useCallback(
+    async (taskId: string, input: TaskPlanningMoveInput) => {
+      const currentTask = tasks.find((task) => task.id === taskId);
+      if (currentTask) {
+        const optimisticTask = {
+          ...currentTask,
+          destination: input.destination,
+          today_section: input.todaySection ?? 'daytime',
+          start_date: input.startDate ?? null,
+          revision: currentTask.revision + 1,
+          client_mutation_id: `optimistic:${currentTask.client_mutation_id}`,
+          updated_at: new Date().toISOString(),
+        };
+        setOptimisticTask(
+          taskId,
+          taskIsVisible(optimisticTask, ownerId, view, planningDate) ? optimisticTask : null,
+        );
+      }
+
+      try {
+        const movedTask = await repository.moveTask(ownerId, taskId, input);
+        setOptimisticTask(
+          taskId,
+          taskIsVisible(movedTask, ownerId, view, planningDate) ? movedTask : null,
+        );
+        return movedTask;
+      } catch (error) {
+        setOptimisticTask(taskId, undefined);
+        throw error;
+      }
+    },
+    [ownerId, planningDate, repository, setOptimisticTask, tasks, view],
+  );
+  const reorderTask = useCallback(
+    async (taskId: string, direction: 'up' | 'down') => {
+      const currentTask = tasks.find((task) => task.id === taskId);
+      if (!currentTask) {
+        return undefined;
+      }
+      const sectionTasks = tasks.filter((task) => (
+        taskOrderSection(task, view, planningDate) === taskOrderSection(currentTask, view, planningDate)
+      ));
+      const currentIndex = sectionTasks.findIndex((task) => task.id === taskId);
+      const destinationIndex = currentIndex + (direction === 'up' ? -1 : 1);
+      if (currentIndex < 0 || destinationIndex < 0 || destinationIndex >= sectionTasks.length) {
+        return currentTask;
+      }
+      const orderKey = generateTaskMoveOrderKey(
+        sectionTasks.map((task) => ({ id: task.id, orderKey: task.order_key })),
+        taskId,
+        destinationIndex,
+      );
+      return updateTask(taskId, { order_key: orderKey });
+    },
+    [planningDate, tasks, updateTask, view],
+  );
 
   return {
     tasks,
@@ -168,6 +234,8 @@ export function useTaskList(ownerId: string, view: TaskListView) {
     error: query.error,
     createTask,
     updateTask,
+    moveTask,
+    reorderTask,
     transitionTask,
     planningDate,
   };
@@ -200,7 +268,12 @@ function taskIsVisible(
     && (view !== 'today' || task.start_date === null || task.start_date <= planningDate);
 }
 
-function compareTasksForView(left: TaskTodo, right: TaskTodo, view: TaskListView): number {
+function compareTasksForView(
+  left: TaskTodo,
+  right: TaskTodo,
+  view: TaskListView,
+  planningDate: string,
+): number {
   if (view === 'trash') {
     return (right.deleted_at ?? '').localeCompare(left.deleted_at ?? '')
       || left.id.localeCompare(right.id);
@@ -212,10 +285,45 @@ function compareTasksForView(left: TaskTodo, right: TaskTodo, view: TaskListView
   }
   if (view === 'upcoming') {
     return (left.start_date ?? '').localeCompare(right.start_date ?? '')
-      || left.order_key.localeCompare(right.order_key)
-      || left.id.localeCompare(right.id);
+      || compareTaskOrder(
+        { id: left.id, orderKey: left.order_key },
+        { id: right.id, orderKey: right.order_key },
+      );
   }
-  return left.order_key.localeCompare(right.order_key) || left.id.localeCompare(right.id);
+  if (view === 'today') {
+    return compareTodaySection(left, right, planningDate)
+      || compareTaskOrder(
+        { id: left.id, orderKey: left.order_key },
+        { id: right.id, orderKey: right.order_key },
+      );
+  }
+  return compareTaskOrder(
+    { id: left.id, orderKey: left.order_key },
+    { id: right.id, orderKey: right.order_key },
+  );
+}
+
+export function getTodayTaskSection(task: TaskTodo, planningDate: string): TodayTaskSection {
+  if (task.start_date !== null && task.start_date < planningDate) {
+    return 'unfinished';
+  }
+  return task.today_section;
+}
+
+function compareTodaySection(left: TaskTodo, right: TaskTodo, planningDate: string): number {
+  const ranks: Record<TodayTaskSection, number> = { unfinished: 0, daytime: 1, evening: 2 };
+  return ranks[getTodayTaskSection(left, planningDate)]
+    - ranks[getTodayTaskSection(right, planningDate)];
+}
+
+function taskOrderSection(task: TaskTodo, view: TaskListView, planningDate: string): string {
+  if (view === 'today') {
+    return getTodayTaskSection(task, planningDate);
+  }
+  if (view === 'upcoming') {
+    return `upcoming:${task.start_date ?? ''}`;
+  }
+  return view;
 }
 
 function useTaskPlanningDate(planningTimeZone: string): string {

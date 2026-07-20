@@ -11,6 +11,9 @@ const mockPrepareForSignOut = vi.fn();
 
 vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
   useTaskList: (...args: unknown[]) => mockTaskList(...args),
+  getTodayTaskSection: (value: { start_date: string | null; today_section: string }, date: string) => (
+    value.start_date !== null && value.start_date < date ? 'unfinished' : value.today_section
+  ),
 }));
 
 vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
@@ -45,6 +48,7 @@ const task = {
   disposition: 'present' as const,
   deleted_at: null,
   destination: 'today' as const,
+  today_section: 'daytime' as const,
   order_key: 'a0',
   start_date: null,
   deadline: null,
@@ -69,6 +73,8 @@ function defaultTaskList() {
     error: null,
     createTask: vi.fn().mockResolvedValue(undefined),
     updateTask: vi.fn().mockResolvedValue(undefined),
+    moveTask: vi.fn().mockResolvedValue(undefined),
+    reorderTask: vi.fn().mockResolvedValue(undefined),
     transitionTask: vi.fn().mockResolvedValue(undefined),
     planningDate: '2026-07-20',
   };
@@ -229,6 +235,44 @@ describe('TasksShell', () => {
     }
   });
 
+  it('moves an evening task back to daytime when its Today date is cleared', async () => {
+    const eveningTask = {
+      ...task,
+      today_section: 'evening' as const,
+      start_date: '2026-07-20',
+    };
+    const taskList = { ...defaultTaskList(), tasks: [eveningTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      const titleButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+        (button) => button.getAttribute('aria-expanded') === 'false',
+      );
+      await act(async () => {
+        titleButton?.click();
+      });
+
+      const clearStartDate = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Clear Start Date"]',
+      );
+      await act(async () => {
+        clearStartDate?.click();
+      });
+      const form = container.querySelector<HTMLFormElement>(`#task-title-${task.id}`)?.form;
+      await act(async () => {
+        form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+        start_date: null,
+        today_section: 'daytime',
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('closes editing with Escape and restores focus to the task title', async () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const { container, root } = renderShell();
@@ -343,9 +387,10 @@ describe('TasksShell', () => {
       await act(async () => {
         makeAvailable?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
-      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+      expect(taskList.moveTask).toHaveBeenCalledWith('task-a', {
         destination: 'today',
-        start_date: '2026-07-20',
+        todaySection: 'daytime',
+        startDate: '2026-07-20',
       });
     } finally {
       cleanup(root, container);
@@ -377,6 +422,84 @@ describe('TasksShell', () => {
 
       expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'logbook');
       expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'reopen');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('renders Unfinished, Today, and This Evening as distinct sections and reschedules carryover', async () => {
+    const unfinishedTask = {
+      ...task,
+      id: 'task-unfinished',
+      title: 'Carryover task',
+      start_date: '2026-07-19',
+    };
+    const eveningTask = {
+      ...task,
+      id: 'task-evening',
+      title: 'Evening task',
+      start_date: '2026-07-20',
+      today_section: 'evening' as const,
+    };
+    const taskList = {
+      ...defaultTaskList(),
+      tasks: [unfinishedTask, { ...task, start_date: '2026-07-20' }, eveningTask],
+    };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/today');
+
+    try {
+      expect(container.querySelector('#tasks-unfinished-heading')?.textContent).toContain('Unfinished (1)');
+      expect(container.querySelector('#tasks-daytime-heading')?.textContent).toContain('Today (1)');
+      expect(container.querySelector('#tasks-evening-heading')?.textContent).toContain('This Evening (1)');
+
+      const actions = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Actions for Carryover task"]',
+      );
+      await act(async () => {
+        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      const moveEvening = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent === 'Move to This Evening');
+      await act(async () => {
+        moveEvening?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(taskList.moveTask).toHaveBeenCalledWith('task-unfinished', {
+        destination: 'today',
+        todaySection: 'evening',
+        startDate: '2026-07-20',
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('offers section-scoped manual reorder actions', async () => {
+    const secondTask = {
+      ...task,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+    };
+    const taskList = { ...defaultTaskList(), tasks: [task, secondTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/today');
+
+    try {
+      const actions = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Actions for Second task"]',
+      );
+      await act(async () => {
+        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      const moveUp = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent === 'Move Up');
+      await act(async () => {
+        moveUp?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(taskList.reorderTask).toHaveBeenCalledWith('task-b', 'up');
     } finally {
       cleanup(root, container);
     }

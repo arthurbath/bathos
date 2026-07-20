@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
-import { useTaskList, type TaskListView } from './useTaskList';
+import { getTodayTaskSection, useTaskList, type TaskListView } from './useTaskList';
 
 const mocks = vi.hoisted(() => ({
   useQuery: vi.fn(),
@@ -30,6 +30,7 @@ const originalTask: TaskTodo = {
   disposition: 'present',
   deleted_at: null,
   destination: 'today',
+  today_section: 'daytime',
   order_key: 'a0',
   start_date: null,
   deadline: null,
@@ -299,6 +300,101 @@ describe('useTaskList optimistic display', () => {
       rerender(root);
       expect(latest.tasks).toEqual([]);
       expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain('start_date <= ?');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('assigns the canonical planning date when capturing directly into Today', async () => {
+    const repository = {
+      createTask: vi.fn().mockResolvedValue(originalTask),
+      updateTask: vi.fn(),
+      moveTask: vi.fn(),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      await act(async () => {
+        await latest.createTask('Today capture');
+      });
+      expect(repository.createTask).toHaveBeenCalledWith({
+        ownerId: 'owner-a',
+        title: 'Today capture',
+        destination: 'today',
+        startDate: latest.planningDate,
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('groups unfinished, daytime, and evening work while reordering only within a section', async () => {
+    const unfinished = {
+      ...originalTask,
+      id: 'task-unfinished',
+      start_date: '2000-01-01',
+      order_key: 'a0',
+    };
+    const daytimeFirst = {
+      ...originalTask,
+      id: 'task-day-first',
+      start_date: null,
+      order_key: 'a0',
+    };
+    const daytimeSecond = {
+      ...originalTask,
+      id: 'task-day-second',
+      start_date: null,
+      order_key: 'a1',
+    };
+    const evening = {
+      ...originalTask,
+      id: 'task-evening',
+      today_section: 'evening' as const,
+      start_date: null,
+      order_key: 'a0',
+    };
+    queryData = [evening, daytimeSecond, unfinished, daytimeFirst];
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn().mockImplementation(async (_owner: string, id: string, patch: object) => ({
+        ...queryData.find((task) => task.id === id)!,
+        ...patch,
+        revision: 2,
+        client_mutation_id: 'mutation-reordered',
+      })),
+      moveTask: vi.fn(),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.tasks.map((task) => task.id)).toEqual([
+        'task-unfinished',
+        'task-day-first',
+        'task-day-second',
+        'task-evening',
+      ]);
+      expect(getTodayTaskSection(unfinished, latest.planningDate)).toBe('unfinished');
+
+      await act(async () => {
+        await latest.reorderTask('task-day-second', 'up');
+      });
+      expect(repository.updateTask).toHaveBeenCalledWith(
+        'owner-a',
+        'task-day-second',
+        { order_key: expect.any(String) },
+      );
+      expect(repository.updateTask.mock.calls[0][2].order_key < 'a0').toBe(true);
+      expect(latest.tasks.map((task) => task.id)).toEqual([
+        'task-unfinished',
+        'task-day-second',
+        'task-day-first',
+        'task-evening',
+      ]);
     } finally {
       cleanup(root, container);
     }

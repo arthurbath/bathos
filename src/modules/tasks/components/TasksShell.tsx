@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import {
   Archive,
   CalendarDays,
@@ -11,6 +18,7 @@ import {
   HardDrive,
   Inbox,
   MoreHorizontal,
+  Moon,
   Plus,
   RotateCcw,
   Trash2,
@@ -24,6 +32,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -33,7 +42,13 @@ import { toast } from '@/hooks/use-toast';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import { CARD_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
-import { useTaskList, type TaskListView } from '@/modules/tasks/hooks/useTaskList';
+import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
+import {
+  getTodayTaskSection,
+  useTaskList,
+  type TaskListView,
+  type TodayTaskSection,
+} from '@/modules/tasks/hooks/useTaskList';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
@@ -44,6 +59,11 @@ type TasksShellProps = {
   userId: string;
   displayName: string;
   onSignOut: () => Promise<void> | void;
+};
+
+type TaskRowAction = {
+  label: string;
+  run: () => Promise<void>;
 };
 
 const taskViews = [
@@ -60,10 +80,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const basePath = useModuleBasePath();
   const view = getTaskViewFromPath(location.pathname);
   const { mode, prepareForSignOut } = useTasksRuntime();
-  const { tasks, loading, error, createTask, updateTask, transitionTask, planningDate } = useTaskList(
-    userId,
-    view,
-  );
+  const {
+    tasks,
+    loading,
+    error,
+    createTask,
+    updateTask,
+    moveTask,
+    reorderTask,
+    transitionTask,
+    planningDate,
+  } = useTaskList(userId, view);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [creating, setCreating] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -100,6 +127,131 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     } catch (signOutError) {
       showTaskError('Tasks Could Not Sign Out Safely', signOutError);
     }
+  };
+
+  const planningActionsForTask = (task: TaskTodo): TaskRowAction[] => {
+    const action = (
+      label: string,
+      input: Parameters<typeof moveTask>[1],
+    ): TaskRowAction => ({
+      label,
+      run: async () => {
+        try {
+          await moveTask(task.id, input);
+        } catch (moveError) {
+          showTaskError('Task Could Not Be Moved', moveError);
+        }
+      },
+    });
+
+    if (view === 'upcoming') {
+      return [action('Make Available Today', {
+        destination: 'today',
+        todaySection: 'daytime',
+        startDate: planningDate,
+      })];
+    }
+    if (view === 'inbox') {
+      return [action('Move to Today', {
+        destination: 'today',
+        todaySection: 'daytime',
+        startDate: planningDate,
+      })];
+    }
+
+    const section = getTodayTaskSection(task, planningDate);
+    const actions: TaskRowAction[] = [];
+    if (section === 'unfinished') {
+      actions.push(action('Reschedule for Today', {
+        destination: 'today',
+        todaySection: 'daytime',
+        startDate: planningDate,
+      }));
+    }
+    if (section !== 'evening') {
+      actions.push(action('Move to This Evening', {
+        destination: 'today',
+        todaySection: 'evening',
+        startDate: planningDate,
+      }));
+    } else {
+      actions.push(action('Move to Earlier Today', {
+        destination: 'today',
+        todaySection: 'daytime',
+        startDate: planningDate,
+      }));
+    }
+    actions.push(
+      action('Move to Tomorrow', {
+        destination: 'today',
+        todaySection: 'daytime',
+        startDate: addTaskCalendarDays(planningDate, 1),
+      }),
+      action('Move to Inbox', {
+        destination: 'inbox',
+        todaySection: 'daytime',
+        startDate: null,
+      }),
+    );
+    return actions;
+  };
+
+  const renderActiveTask = (task: TaskTodo, sectionTasks: TaskTodo[]) => {
+    const index = sectionTasks.findIndex((candidate) => candidate.id === task.id);
+    return (
+      <TaskRow
+        key={task.id}
+        task={task}
+        selected={selectedTaskId === task.id}
+        onSelect={() => setSelectedTaskId((current) => (current === task.id ? null : task.id))}
+        onUpdate={async (patch) => {
+          try {
+            const normalizedPatch = task.today_section === 'evening'
+              && patch.start_date !== undefined
+              && patch.start_date !== planningDate
+              ? { ...patch, today_section: 'daytime' as const }
+              : patch;
+            await updateTask(task.id, normalizedPatch);
+            setSelectedTaskId(null);
+          } catch (updateError) {
+            showTaskError('Task Could Not Be Updated', updateError);
+            throw updateError;
+          }
+        }}
+        onComplete={async () => {
+          try {
+            await transitionTask(task.id, 'complete');
+          } catch (completeError) {
+            showTaskError('Task Could Not Be Completed', completeError);
+          }
+        }}
+        planningActions={planningActionsForTask(task)}
+        onMoveUp={view === 'today' && index > 0 ? async () => {
+          try {
+            await reorderTask(task.id, 'up');
+          } catch (reorderError) {
+            showTaskError('Task Could Not Be Reordered', reorderError);
+          }
+        } : undefined}
+        onMoveDown={view === 'today' && index >= 0 && index < sectionTasks.length - 1 ? async () => {
+          try {
+            await reorderTask(task.id, 'down');
+          } catch (reorderError) {
+            showTaskError('Task Could Not Be Reordered', reorderError);
+          }
+        } : undefined}
+        planningLabel={view === 'today' && getTodayTaskSection(task, planningDate) === 'unfinished'
+          ? `Unfinished Since ${formatTaskCalendarDate(task.start_date ?? planningDate)}`
+          : view === 'today' ? null : undefined}
+        onDelete={async () => {
+          try {
+            await transitionTask(task.id, 'delete');
+          } catch (deleteError) {
+            showTaskError('Task Could Not Be Deleted', deleteError);
+          }
+        }}
+      />
+    );
   };
 
   return (
@@ -193,6 +345,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               <p className="py-12 text-center text-sm text-muted-foreground">
                 {view === 'trash' ? 'Trash Is Empty' : view === 'logbook' ? 'Logbook Is Empty' : 'No Tasks'}
               </p>
+            ) : view === 'today' ? (
+              <TodayTaskSections
+                tasks={tasks}
+                planningDate={planningDate}
+                renderTask={renderActiveTask}
+              />
             ) : (
               <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
                 {tasks.map((task) => (
@@ -227,47 +385,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         }
                       }}
                     />
-                  ) : <TaskRow
-                    key={task.id}
-                    task={task}
-                    selected={selectedTaskId === task.id}
-                    onSelect={() => setSelectedTaskId((current) => (current === task.id ? null : task.id))}
-                    onUpdate={async (patch) => {
-                      try {
-                        await updateTask(task.id, patch);
-                        setSelectedTaskId(null);
-                      } catch (updateError) {
-                        showTaskError('Task Could Not Be Updated', updateError);
-                        throw updateError;
-                      }
-                    }}
-                    onComplete={async () => {
-                      try {
-                        await transitionTask(task.id, 'complete');
-                      } catch (completeError) {
-                        showTaskError('Task Could Not Be Completed', completeError);
-                      }
-                    }}
-                    onMove={async () => {
-                      try {
-                        await updateTask(task.id, view === 'upcoming'
-                          ? { destination: 'today', start_date: planningDate }
-                          : { destination: view === 'inbox' ? 'today' : 'inbox' });
-                      } catch (moveError) {
-                        showTaskError('Task Could Not Be Moved', moveError);
-                      }
-                    }}
-                    moveLabel={view === 'upcoming'
-                      ? 'Make Available Today'
-                      : `Move to ${task.destination === 'inbox' ? 'Today' : 'Inbox'}`}
-                    onDelete={async () => {
-                      try {
-                        await transitionTask(task.id, 'delete');
-                      } catch (deleteError) {
-                        showTaskError('Task Could Not Be Deleted', deleteError);
-                      }
-                    }}
-                    />
+                  ) : renderActiveTask(task, tasks)
                 ))}
               </div>
             )}
@@ -399,14 +517,62 @@ function DeletedTaskRow({ task, onRestore }: { task: TaskTodo; onRestore: () => 
   );
 }
 
+function TodayTaskSections({
+  tasks,
+  planningDate,
+  renderTask,
+}: {
+  tasks: TaskTodo[];
+  planningDate: string;
+  renderTask: (task: TaskTodo, sectionTasks: TaskTodo[]) => ReactNode;
+}) {
+  const sections: Array<{
+    id: TodayTaskSection;
+    label: string;
+    icon?: typeof Moon;
+    className?: string;
+  }> = [
+    { id: 'unfinished', label: 'Unfinished', className: 'text-warning' },
+    { id: 'daytime', label: 'Today' },
+    { id: 'evening', label: 'This Evening', icon: Moon },
+  ];
+
+  return (
+    <div className="space-y-7">
+      {sections.map(({ id, label, icon: Icon, className }) => {
+        const sectionTasks = tasks.filter((task) => getTodayTaskSection(task, planningDate) === id);
+        if (sectionTasks.length === 0) {
+          return null;
+        }
+        return (
+          <section key={id} aria-labelledby={`tasks-${id}-heading`}>
+            <h3
+              id={`tasks-${id}-heading`}
+              className={`mb-2 flex items-center gap-2 text-sm font-semibold ${className ?? 'text-muted-foreground'}`}
+            >
+              {Icon ? <Icon className="h-4 w-4" aria-hidden="true" /> : null}
+              {label} ({sectionTasks.length})
+            </h3>
+            <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+              {sectionTasks.map((task) => renderTask(task, sectionTasks))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 function TaskRow({
   task,
   selected,
   onSelect,
   onUpdate,
   onComplete,
-  onMove,
-  moveLabel,
+  planningActions,
+  onMoveUp,
+  onMoveDown,
+  planningLabel,
   onDelete,
 }: {
   task: TaskTodo;
@@ -414,8 +580,10 @@ function TaskRow({
   onSelect: () => void;
   onUpdate: (patch: EditableTaskPatch) => Promise<void>;
   onComplete: () => Promise<void>;
-  onMove: () => Promise<void>;
-  moveLabel: string;
+  planningActions: TaskRowAction[];
+  onMoveUp?: () => Promise<void>;
+  onMoveDown?: () => Promise<void>;
+  planningLabel?: string | null;
   onDelete: () => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
@@ -453,10 +621,15 @@ function TaskRow({
           className="min-w-0 flex-1 py-4 text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span className="block">{task.title}</span>
-          {task.start_date || task.deadline ? (
+          {(
+            (planningLabel !== null && (planningLabel || task.start_date))
+            || task.deadline
+          ) ? (
             <span className="mt-1 block text-xs font-normal text-muted-foreground">
-              {task.start_date ? `Starts ${formatTaskCalendarDate(task.start_date)}` : null}
-              {task.start_date && task.deadline ? ' · ' : null}
+              {planningLabel !== null
+                ? planningLabel ?? (task.start_date ? `Starts ${formatTaskCalendarDate(task.start_date)}` : null)
+                : null}
+              {planningLabel !== null && (planningLabel || task.start_date) && task.deadline ? ' · ' : null}
               {task.deadline ? `Due ${formatTaskCalendarDate(task.deadline)}` : null}
             </span>
           ) : null}
@@ -475,9 +648,19 @@ function TaskRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => void run(onMove)}>
-              {moveLabel}
-            </DropdownMenuItem>
+            {planningActions.map((action) => (
+              <DropdownMenuItem key={action.label} onSelect={() => void run(action.run)}>
+                {action.label}
+              </DropdownMenuItem>
+            ))}
+            {onMoveUp || onMoveDown ? <DropdownMenuSeparator /> : null}
+            {onMoveUp ? (
+              <DropdownMenuItem onSelect={() => void run(onMoveUp)}>Move Up</DropdownMenuItem>
+            ) : null}
+            {onMoveDown ? (
+              <DropdownMenuItem onSelect={() => void run(onMoveDown)}>Move Down</DropdownMenuItem>
+            ) : null}
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
               onSelect={() => void run(onDelete)}

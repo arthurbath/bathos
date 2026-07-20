@@ -2,6 +2,7 @@ import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase
 import type { TaskDisposition, TaskLifecycle } from '@/modules/tasks/domain/taskState';
 
 export const taskDestinations = ['inbox', 'today'] as const;
+export const taskTodaySections = ['daytime', 'evening'] as const;
 export const taskEntryChannels = [
   'web',
   'raycast',
@@ -36,6 +37,7 @@ export const taskMutationTransitions = [
 ] as const;
 
 export type TaskDestination = (typeof taskDestinations)[number];
+export type TaskTodaySection = (typeof taskTodaySections)[number];
 export type TaskEntryChannel = (typeof taskEntryChannels)[number];
 export type TaskSourceKind = (typeof taskSourceKinds)[number];
 export type TaskActorType = (typeof taskActorTypes)[number];
@@ -49,6 +51,7 @@ type RefinedTaskFields = {
   lifecycle: TaskLifecycle;
   disposition: TaskDisposition;
   destination: TaskDestination;
+  today_section: TaskTodaySection;
   entry_channel: TaskEntryChannel;
   last_mutation_channel: TaskEntryChannel;
   last_actor_type: TaskActorType;

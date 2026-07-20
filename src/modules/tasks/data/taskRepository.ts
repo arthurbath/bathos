@@ -21,6 +21,7 @@ import type {
   TaskDestination,
   TaskEntryChannel,
   TaskSourceKind,
+  TaskTodaySection,
   TaskTodo,
   TaskUserSettings,
 } from '@/modules/tasks/types/tasks';
@@ -32,6 +33,7 @@ export type CreateTaskInput = {
   title: string;
   notes?: string;
   destination?: TaskDestination;
+  todaySection?: TaskTodaySection;
   orderKey?: string;
   startDate?: string | null;
   deadline?: string | null;
@@ -48,12 +50,19 @@ export type TaskMutationContext = {
   actorType?: TaskActorType;
 };
 
+export type TaskPlanningMoveInput = {
+  destination: TaskDestination;
+  todaySection?: TaskTodaySection;
+  startDate?: string | null;
+};
+
 export type EditableTaskPatch = Partial<
   Pick<
     TaskTodo,
     | 'title'
     | 'notes'
     | 'destination'
+    | 'today_section'
     | 'order_key'
     | 'start_date'
     | 'deadline'
@@ -80,6 +89,7 @@ const insertColumns = [
   'disposition',
   'deleted_at',
   'destination',
+  'today_section',
   'order_key',
   'start_date',
   'deadline',
@@ -145,6 +155,8 @@ export class TaskRepository {
 
     return this.database.writeTransaction(async (transaction) => {
       const destination = input.destination ?? 'inbox';
+      const todaySection = input.todaySection ?? 'daytime';
+      assertTodaySection(destination, todaySection);
       const lastTask = input.orderKey
         ? null
         : await transaction.getOptional<{ order_key: string }>(
@@ -152,11 +164,12 @@ export class TaskRepository {
              FROM tasks_todos
              WHERE owner_id = ?
                AND destination = ?
+               AND today_section = ?
                AND lifecycle = 'open'
                AND disposition = 'present'
              ORDER BY order_key DESC, id DESC
              LIMIT 1`,
-            [input.ownerId, destination],
+            [input.ownerId, destination, todaySection],
           );
       const timestamp = this.now();
       const entryChannel = input.entryChannel ?? 'web';
@@ -171,6 +184,7 @@ export class TaskRepository {
         disposition: 'present',
         deleted_at: null,
         destination,
+        today_section: todaySection,
         order_key: input.orderKey ?? generateTaskOrderKey(lastTask?.order_key ?? null, null),
         start_date: startDate,
         deadline,
@@ -253,6 +267,52 @@ export class TaskRepository {
     return this.mutateTask(ownerId, taskId, normalizeEditablePatch(patch), context);
   }
 
+  async moveTask(
+    ownerId: string,
+    taskId: string,
+    input: TaskPlanningMoveInput,
+    context?: TaskMutationContext,
+  ): Promise<TaskTodo> {
+    assertOwner(ownerId);
+    const todaySection = input.todaySection ?? 'daytime';
+    assertTodaySection(input.destination, todaySection);
+    const startDate = normalizeTaskCalendarDate(input.startDate, 'Start date') ?? null;
+    if (input.destination === 'inbox' && (todaySection !== 'daytime' || startDate !== null)) {
+      throw new InvalidTaskMutationError('Inbox work cannot retain Today planning placement');
+    }
+
+    return this.database.writeTransaction(async (transaction) => {
+      const current = await getOwnedTask(transaction, ownerId, taskId);
+      assertTaskCalendarRange(startDate, current.deadline);
+      const lastTask = await transaction.getOptional<{ order_key: string }>(
+        `SELECT order_key
+         FROM tasks_todos
+         WHERE owner_id = ?
+           AND destination = ?
+           AND today_section = ?
+           AND lifecycle = 'open'
+           AND disposition = 'present'
+           AND id <> ?
+         ORDER BY order_key DESC, id DESC
+         LIMIT 1`,
+        [ownerId, input.destination, todaySection, taskId],
+      );
+      return updateOwnedTask(
+        transaction,
+        current,
+        {
+          destination: input.destination,
+          today_section: todaySection,
+          start_date: startDate,
+          order_key: generateTaskOrderKey(lastTask?.order_key ?? null, null),
+        },
+        this.createId(),
+        this.now(),
+        normalizeMutationContext(context),
+      );
+    });
+  }
+
   async transitionTask(
     ownerId: string,
     taskId: string,
@@ -324,6 +384,10 @@ export class TaskRepository {
         patch.start_date === undefined ? current.start_date : patch.start_date,
         patch.deadline === undefined ? current.deadline : patch.deadline,
       );
+      assertTodaySection(
+        patch.destination === undefined ? current.destination : patch.destination,
+        patch.today_section === undefined ? current.today_section : patch.today_section,
+      );
 
       return updateOwnedTask(
         transaction,
@@ -361,6 +425,10 @@ export class TaskRepository {
       assertTaskCalendarRange(
         patch.start_date === undefined ? current.start_date : patch.start_date,
         patch.deadline === undefined ? current.deadline : patch.deadline,
+      );
+      assertTodaySection(
+        patch.destination === undefined ? current.destination : patch.destination,
+        patch.today_section === undefined ? current.today_section : patch.today_section,
       );
 
       return updateOwnedTask(
@@ -488,6 +556,15 @@ function assertSource(
   }
   if ((sourceKind === 'webpage' || sourceKind === 'reading_item') && !sourceUrl?.trim()) {
     throw new InvalidTaskMutationError('Web and reading sources require a URL');
+  }
+}
+
+function assertTodaySection(
+  destination: TaskDestination,
+  todaySection: TaskTodaySection,
+): void {
+  if (todaySection === 'evening' && destination !== 'today') {
+    throw new InvalidTaskMutationError('This Evening is available only within Today');
   }
 }
 

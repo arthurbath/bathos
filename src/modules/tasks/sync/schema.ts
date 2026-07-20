@@ -11,6 +11,7 @@ const taskTodos = new Table(
     disposition: column.text,
     deleted_at: column.text,
     destination: column.text,
+    today_section: column.text,
     order_key: column.text,
     start_date: column.text,
     deadline: column.text,
@@ -29,7 +30,14 @@ const taskTodos = new Table(
   },
   {
     indexes: {
-      ownerDestinationOrder: ['owner_id', 'destination', 'disposition', 'lifecycle', 'order_key'],
+      ownerDestinationOrder: [
+        'owner_id',
+        'destination',
+        'today_section',
+        'disposition',
+        'lifecycle',
+        'order_key',
+      ],
       ownerStartDate: ['owner_id', 'start_date', 'disposition', 'lifecycle', 'order_key'],
       ownerDeadline: ['owner_id', 'deadline', 'disposition', 'lifecycle'],
       ownerUpdated: ['owner_id', '-updated_at'],

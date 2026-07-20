@@ -54,7 +54,7 @@
 
 - [ ] 5.1 Add Inbox behavior for unprocessed captures.
 - [ ] 5.2 Add areas, projects, headings, and checklist items with stable hierarchy behavior.
-- [ ] 5.3 Add Today and This Evening with manual ordering and unfinished-item rescheduling.
+- [x] 5.3 Add Today and This Evening with manual ordering and unfinished-item rescheduling.
 - [x] 5.4 Add Upcoming with future start-date planning.
 - [ ] 5.5 Add Anytime and Someday with the specified active/inactive semantics.
 - [x] 5.6 Add Logbook, completion history, cancellation history, and recovery flows.

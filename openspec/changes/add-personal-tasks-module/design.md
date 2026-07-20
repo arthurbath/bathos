@@ -94,6 +94,8 @@ The first calendar-planning foundation stores optional start dates and deadlines
 
 The following derived-view slice persists one owner-scoped IANA planning time zone rather than recomputing intent from each browser's transient location. A new installation initializes the setting once from the browser's recognized IANA zone, then retains and synchronizes that value. Today withholds work whose start date is later than the owner-local planning date. Upcoming contains present open work with a future start date, sorts it by date and manual order, and offers one action that moves the work to Today while changing its start date to the current planning date. The client re-evaluates the owner-local date at least once per minute so an open view crosses midnight without requiring a reload. A later settings surface may let the owner deliberately change the canonical zone; travel alone does not rewrite it.
 
+The Today execution slice assigns every newly created or newly moved Today task the owner's current planning date. A synchronized `today_section` value distinguishes the normal daytime section from This Evening without inventing a time, reminder, or separate destination. Open work whose assigned start date is earlier than the current planning date remains visible at the top of Today under Unfinished. Explicit rescheduling can retain it in Today, place it in This Evening, or move it to Tomorrow and therefore Upcoming. Moving work to Inbox clears its Today date and evening placement. Each visible Today section preserves its own fractional manual order; accessible move-up and move-down actions change only the selected task's order key inside that section.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -219,6 +221,8 @@ Rationale: Orthogonal dimensions prevent view placement, actionability, history,
 Start dates and deadlines are ISO calendar dates without a time-zone offset. A start date controls when work becomes available in active views. A deadline communicates the completion boundary but never hides work before that date. A deadline earlier than the start date is invalid.
 
 Today is derived from the owner's IANA planning time zone. Date-only values do not shift when the owner travels, changes the planning time zone, or crosses a daylight-saving boundary. `This Evening` is a section of Today, not a reminder time or independent date. An item may be placed there only while it belongs to Today.
+
+Every explicit Today assignment stores the owner's current planning date as its start date. At the next owner-local midnight, unfinished work does not silently roll forward or disappear. It remains visible in an Unfinished section with explicit choices to reschedule it for Today, This Evening, or Tomorrow. Rescheduling to Today preserves daytime placement, rescheduling to This Evening records the evening section, and Tomorrow uses the next ISO calendar date and returns the section to daytime. Moving a task to Inbox clears its start date and evening section because Inbox is an unprocessed surface rather than a schedule.
 
 A reminder stores the intended local date and wall-clock time, the IANA time zone used to interpret that intent, and the resulting UTC instant. Once resolved, changing the owner's current time zone changes display conversion but does not move the reminder instant. Editing the reminder resolves a new instant from the newly supplied intent.
 

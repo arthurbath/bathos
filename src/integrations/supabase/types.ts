@@ -1167,6 +1167,7 @@ export type Database = {
           source_title: string | null
           source_url: string | null
           start_date: string | null
+          today_section: string
           title: string
           undo_source_event_id: string | null
           updated_at: string
@@ -1194,6 +1195,7 @@ export type Database = {
           source_title?: string | null
           source_url?: string | null
           start_date?: string | null
+          today_section?: string
           title: string
           undo_source_event_id?: string | null
           updated_at?: string
@@ -1221,6 +1223,7 @@ export type Database = {
           source_title?: string | null
           source_url?: string | null
           start_date?: string | null
+          today_section?: string
           title?: string
           undo_source_event_id?: string | null
           updated_at?: string
@@ -1516,11 +1519,16 @@ export type Database = {
       }
       tasks_create_export_v1: { Args: never; Returns: Json }
       tasks_create_export_v2: { Args: never; Returns: Json }
+      tasks_create_export_v3: { Args: never; Returns: Json }
       tasks_restore_export_v1: {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
       }
       tasks_restore_export_v2: {
+        Args: { _dry_run?: boolean; _envelope: Json }
+        Returns: Json
+      }
+      tasks_restore_export_v3: {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
       }
