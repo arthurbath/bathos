@@ -15,6 +15,7 @@ import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceServic
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
 import { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
+import { cleanupProductionTopology } from '@/modules/tasks/integration/productionTopologyCleanup';
 import { bindTasksDatabaseOwner } from '@/modules/tasks/sync/database';
 import { createTasksSupabaseConnector } from '@/modules/tasks/sync/connector';
 import { tasksPowerSyncSchema } from '@/modules/tasks/sync/schema';
@@ -64,21 +65,14 @@ const signedInClients = new Set<SupabaseClient<Database>>();
 const syntheticUserIds = new Set<string>();
 
 afterAll(async () => {
-  for (const database of openedDatabases) {
-    await database.disconnectAndClear().catch(() => undefined);
-    await database.close().catch(() => undefined);
-  }
-  for (const client of signedInClients) {
-    await client.auth.signOut().catch(() => undefined);
-  }
-  if (admin !== null) {
-    for (const userId of syntheticUserIds) {
-      await admin.auth.admin.deleteUser(userId).catch(() => undefined);
-    }
-  }
-  if (testDirectory !== null) {
-    await rm(testDirectory, { recursive: true, force: true });
-  }
+  await cleanupProductionTopology({
+    databases: openedDatabases,
+    signedInClients,
+    syntheticUserIds,
+    admin,
+    testDirectory,
+    removeTestDirectory: (directory) => rm(directory, { recursive: true, force: true }),
+  });
 });
 
 describe.skipIf(!integrationEnabled)('Tasks production topology integration', () => {
@@ -280,6 +274,8 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     await disposeClient(primary);
     await disposeClient(secondary);
     await disposeClient(unrelated);
+    await signOutSyntheticClient(ownerA.client);
+    await signOutSyntheticClient(ownerB.client);
     await deleteSyntheticOwner(ownerA.id);
     await deleteSyntheticOwner(ownerB.id);
     const { count: residueCount, error: residueError } = await admin
@@ -333,6 +329,12 @@ async function deleteSyntheticOwner(userId: string): Promise<void> {
   const { error } = await admin.auth.admin.deleteUser(userId);
   if (error) throw error;
   syntheticUserIds.delete(userId);
+}
+
+async function signOutSyntheticClient(client: SupabaseClient<Database>): Promise<void> {
+  const { error } = await client.auth.signOut({ scope: 'local' });
+  if (error) throw error;
+  signedInClients.delete(client);
 }
 
 async function openClient(

@@ -30,6 +30,10 @@ The system SHALL deploy remote task synchronization only through an explicitly a
 - **WHEN** the production service, publication, stream rules, authentication, and client endpoint are configured
 - **THEN** a synthetic owner proves cross-client download, queued upload, conflict handling, restart recovery, owner isolation, and cleanup before the user stores personal task content
 
+#### Scenario: Report incomplete synthetic cleanup
+- **WHEN** production-topology validation exits after a failed assertion or another interrupted test path
+- **THEN** it attempts every local-database, session, synthetic-owner, and temporary-artifact cleanup step and reports every cleanup failure as uncertain residue
+
 #### Scenario: Evolve the synchronized task projection
 - **WHEN** a nonlocal task collection is added to or removed from the client schema
 - **THEN** the production and disposable streams, production and disposable publications, replication-role grants, database preflight, replica identity, RLS, and regression test change together as one exact owner-scoped set

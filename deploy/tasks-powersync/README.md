@@ -64,7 +64,7 @@ TASKS_PRODUCTION_TEST_POWERSYNC_URL=https://POWERSYNC_INSTANCE \
 npm run test:tasks:production-topology
 ```
 
-The gate creates two synthetic owners, proves owner isolation, exact Raycast capture retry, two-client download, offline-web versus MCP conflict convergence, exactly-once completion, persisted-client restart, authoritative history counts, and account-cascade cleanup. It refuses to run without the exact confirmation value.
+The gate creates two synthetic owners, proves owner isolation, exact Raycast capture retry, two-client download, offline-web versus MCP conflict convergence, exactly-once completion, persisted-client restart, authoritative history counts, and account-cascade cleanup. It refuses to run without the exact confirmation value. Its emergency cleanup attempts every database, session, user, and temporary-directory step even after an earlier failure, and fails conspicuously if any cleanup step leaves uncertain residue.
 
 After it passes, independently confirm that the two synthetic users and their task rows are absent. Only then add the public HTTPS endpoint as `VITE_TASKS_POWERSYNC_ENDPOINT` to the intended BathOS deployment and repeat a browser-level acceptance pass with synthetic data.
 

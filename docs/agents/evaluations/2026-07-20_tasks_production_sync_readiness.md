@@ -31,6 +31,7 @@ The five reminder-domain tables also lacked `REPLICA IDENTITY FULL`. A connected
 - Added a database preflight that rejects table-set drift, missing RLS, missing full replica identity, unsafe role attributes, missing grants, explicit non-task grants, and server-only task tables.
 - Added a self-hosting fallback template with managed environment secrets and `verify-full` TLS.
 - Added a production-topology acceptance test that refuses to run without explicit synthetic-only confirmation and deletes both synthetic owners through a managed service-role client.
+- Hardened the acceptance test's emergency cleanup so an earlier assertion failure still attempts every local database, synthetic session, synthetic owner, and temporary-directory cleanup, then reports every cleanup failure instead of silently leaving uncertain production residue.
 
 ## Regression Boundary
 
