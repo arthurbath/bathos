@@ -102,9 +102,11 @@ export function useTaskWebPush(
         return;
       }
       try {
-        const registration = await navigator.serviceWorker.register(SERVICE_WORKER_PATH, {
-          scope: '/',
-        });
+        const registration = await navigator.serviceWorker.getRegistration('/');
+        if (!registration) {
+          if (!canceled) setStatus('available');
+          return;
+        }
         const subscription = await registration.pushManager.getSubscription();
         if (!subscription) {
           if (!canceled) setStatus('available');

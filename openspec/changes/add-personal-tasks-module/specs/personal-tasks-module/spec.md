@@ -568,6 +568,10 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** a user invokes the browser-reminder Enable action on a supported secure client and grants notification permission
 - **THEN** the client registers one standards-based service-worker subscription, the server stores its provider credentials outside the synchronized target projection, and repeated registration reuses the target identity
 
+#### Scenario: Inspect Web Push without implicit registration
+- **WHEN** a connected user opens Tasks before enabling browser reminders
+- **THEN** the client passively inspects any existing service-worker registration and does not create a registration, subscription, or permission prompt until the user invokes Enable
+
 #### Scenario: Report delivery outcome
 - **WHEN** a notification provider accepts a delivery request
 - **THEN** the system records provider acceptance separately from user acknowledgement and does not claim that the user saw the reminder
