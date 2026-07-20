@@ -401,6 +401,30 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **WHEN** a user invokes the completion command on the focused to-do
 - **THEN** the system completes that to-do and moves focus according to the documented next-item behavior
 
+#### Scenario: Invoke a task command safely
+- **WHEN** focus is on a task title and no editor, unrelated modal, or composition event owns keyboard input
+- **THEN** Enter opens editing, `C` completes the task, `M` opens structural movement, `W` opens temporal planning, Up or Down moves task focus, and Option+Up or Option+Down reorders within the current scope
+
+#### Scenario: Preserve keyboard focus after a task leaves the view
+- **WHEN** completion, movement, or recoverable deletion removes the focused task from the current view
+- **THEN** focus moves to the task now occupying the same visual position, then the prior task, then task capture or the primary view heading when no task remains
+
+#### Scenario: Navigate with web-safe commands
+- **WHEN** a keyboard user invokes the `G` navigation sequence outside an editable control
+- **THEN** the documented second key navigates to Inbox, Today, Upcoming, Anytime, Someday, Logbook, Projects, or Trash without claiming browser tab-number shortcuts
+
+#### Scenario: Open task capture, search, or keyboard help
+- **WHEN** a keyboard user presses `N`, `/`, or `?` outside an editable control or unrelated modal
+- **THEN** the module respectively focuses task capture, opens unified search and navigation, or opens a visible keyboard-command reference
+
+#### Scenario: Save or cancel an open editor
+- **WHEN** a keyboard user presses Command+Enter or Escape in an open task editor
+- **THEN** the module respectively saves valid changes or cancels editing and restores focus to the task title
+
+#### Scenario: Leave browser and text-entry commands intact
+- **WHEN** focus is in an input, textarea, select, content-editable surface, or unrelated modal
+- **THEN** app-level single-key commands remain inactive, native Tab traversal continues, and the module does not claim Command+1 through Command+9, Command+T, Command+L, Command+R, or Command+W
+
 #### Scenario: Open global quick entry on Mac
 - **WHEN** the user invokes the configured Raycast task-entry hotkey
 - **THEN** Raycast presents required title and optional notes inputs without requiring the BathOS browser tab to be focused

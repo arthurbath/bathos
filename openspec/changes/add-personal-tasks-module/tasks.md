@@ -6,7 +6,7 @@
 - [ ] 1.4 Define the actionability states that will replace the current tag conventions.
 - [x] 1.5 Define supported source/origin types and the behaviors attached to each origin.
 - [x] 1.6 Define to-do template and project template creation, editing, instantiation, and provenance behavior.
-- [ ] 1.7 Inventory relevant Things keyboard behaviors and choose the BathOS keyboard contract for the first daily workflow.
+- [x] 1.7 Inventory relevant Things keyboard behaviors and choose the BathOS keyboard contract for the first daily workflow.
 - [x] 1.8 Select the smallest end-to-end workflow that can provide useful parallel operation.
 - [x] 1.9 Confirm or revise the working `/tasks` route, `tasks_` database namespace, and `src/modules/tasks` source path.
 - [ ] 1.10 Select an original user-facing product name and initial icon direction before launcher implementation.
