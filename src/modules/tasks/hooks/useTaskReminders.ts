@@ -133,6 +133,7 @@ export function useTaskReminders(ownerId: string) {
     reminders,
     byRootId,
     dueItems,
+    claimError,
     mode,
     planningTimeZone,
     loading: remindersQuery.isLoading,

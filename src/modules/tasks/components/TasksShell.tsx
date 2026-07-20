@@ -781,6 +781,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             />
           ) : null}
 
+          {reminders.claimError ? (
+            <TaskReminderClaimFailure onRetry={reminders.claimDue} />
+          ) : null}
+
           {reminders.webPush ? (
             <TaskWebPushCapability
               model={reminders.webPush}
@@ -1267,6 +1271,44 @@ function TaskDueReminders({
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function TaskReminderClaimFailure({
+  onRetry,
+}: {
+  onRetry: () => Promise<void>;
+}) {
+  const [retrying, setRetrying] = useState(false);
+
+  return (
+    <section
+      aria-label="Reminder Delivery Check"
+      aria-live="polite"
+      className="flex flex-col gap-3 rounded-md border border-warning/40 bg-warning/5 p-4 sm:flex-row sm:items-center"
+    >
+      <div className="flex min-w-0 flex-1 gap-3">
+        <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-foreground">Reminder Check Failed</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Due reminders could not be checked. Scheduled reminders remain unchanged.
+          </p>
+        </div>
+      </div>
+      <Button
+        type="button"
+        variant="outline-warning"
+        size="sm"
+        disabled={retrying}
+        onClick={() => {
+          setRetrying(true);
+          void onRetry().finally(() => setRetrying(false));
+        }}
+      >
+        Retry
+      </Button>
     </section>
   );
 }

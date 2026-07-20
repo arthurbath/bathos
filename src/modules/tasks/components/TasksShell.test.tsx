@@ -323,6 +323,7 @@ describe('TasksShell', () => {
       reminders: [],
       byRootId: new Map(),
       dueItems: [],
+      claimError: null,
       mode: 'local',
       planningTimeZone: 'America/Los_Angeles',
       loading: false,
@@ -1462,6 +1463,31 @@ describe('TasksShell', () => {
         .find(({ textContent }) => textContent === 'Acknowledge');
       await act(async () => button?.click());
       expect(acknowledge).toHaveBeenCalledWith('delivery-a');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('reports a failed due-reminder check without exposing provider diagnostics and retries explicitly', async () => {
+    const claimDue = vi.fn().mockResolvedValue(undefined);
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), dueItems: [], mode: 'connected',
+      planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: new Error('provider detail'), claimError: new Error('provider detail'),
+      save: vi.fn(), cancel: vi.fn(), acknowledge: vi.fn(), claimDue,
+    });
+    const { container, root } = renderShell();
+
+    try {
+      const status = container.querySelector('section[aria-label="Reminder Delivery Check"]');
+      expect(status?.textContent).toContain('Reminder Check Failed');
+      expect(status?.textContent).toContain('Scheduled reminders remain unchanged');
+      expect(status?.textContent).not.toContain('provider detail');
+      const retry = Array.from(status?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+        .find(({ textContent }) => textContent === 'Retry');
+      await act(async () => retry?.click());
+      expect(claimDue).toHaveBeenCalledTimes(1);
     } finally {
       cleanup(root, container);
     }

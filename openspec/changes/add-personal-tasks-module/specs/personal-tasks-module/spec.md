@@ -540,6 +540,10 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** a user saves or clears a reminder from an open project detail
 - **THEN** the web interface uses the existing project-root reminder contract, owner planning time zone, daylight-saving ambiguity choice, connected-only mutation gate, and visible degraded-state explanation
 
+#### Scenario: Report an in-app reminder claim failure
+- **WHEN** an open connected client cannot claim due reminder deliveries
+- **THEN** the interface shows a content-free degraded state, preserves scheduled reminders and any previously claimed items, and exposes a bounded explicit retry
+
 #### Scenario: Retry one delivery target
 - **WHEN** a provider request is retried for the same occurrence and registered target
 - **THEN** the system reuses the target-delivery identifier and does not create another logical delivery

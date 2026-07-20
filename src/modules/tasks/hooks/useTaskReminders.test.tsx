@@ -120,6 +120,39 @@ describe('useTaskReminders', () => {
     expect(result.current.byRootId.get('task-b')).toEqual(saved);
   });
 
+  it('exposes a content-free due-claim failure until an explicit retry succeeds', async () => {
+    const reminderService = {
+      claimDue: vi.fn()
+        .mockRejectedValueOnce(new Error('provider detail'))
+        .mockResolvedValue({
+          outcome: 'accepted',
+          through_at: '2026-07-20T16:00:00.000Z',
+          items: [],
+        }),
+      save: vi.fn(),
+      cancel: vi.fn(),
+      acknowledge: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'connected',
+      planningTimeZone,
+      reminderService,
+    });
+    const { result } = renderHook(() => useTaskReminders('owner-a'));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.claimError).toBeInstanceOf(Error);
+
+    await act(async () => {
+      await result.current.claimDue();
+    });
+    expect(reminderService.claimDue).toHaveBeenCalledTimes(2);
+    expect(result.current.claimError).toBeNull();
+  });
+
   it('does not claim or mutate reminders in local-only mode', async () => {
     const reminderService = {
       claimDue: vi.fn(),
