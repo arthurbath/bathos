@@ -25,6 +25,12 @@ vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
   }),
 }));
 
+vi.mock('./TaskProjectsView', () => ({
+  TaskProjectsView: ({ ownerId }: { ownerId: string }) => (
+    <section data-testid="projects-view">Projects for {ownerId}</section>
+  ),
+}));
+
 vi.mock('@/platform/components/ToplineHeader', () => ({
   ToplineHeader: ({ title, onSignOut }: { title: string; onSignOut: () => void }) => (
     <header>
@@ -36,6 +42,10 @@ vi.mock('@/platform/components/ToplineHeader', () => ({
 
 vi.mock('@/platform/components/MobileBottomNav', () => ({
   MobileBottomNav: () => <nav data-testid="mobile-nav" />,
+}));
+
+vi.mock('@/platform/hooks/useHostModule', () => ({
+  useModuleBasePath: () => '/tasks',
 }));
 
 const task = {
@@ -141,6 +151,32 @@ describe('TasksShell', () => {
       expect(taskList.createTask).toHaveBeenCalledWith('New local task');
     } finally {
       cleanup(root, container);
+    }
+  });
+
+  it('provides a real mobile link into Projects and a Today return link', () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const today = renderShell('/tasks/today');
+
+    try {
+      const projectsLink = today.container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Open Projects"]',
+      );
+      expect(projectsLink?.getAttribute('href')).toBe('/tasks/projects');
+    } finally {
+      cleanup(today.root, today.container);
+    }
+
+    const projects = renderShell('/tasks/projects');
+    try {
+      expect(projects.container.querySelector('[data-testid="projects-view"]')?.textContent)
+        .toContain('owner-a');
+      const todayLink = projects.container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Return to Today"]',
+      );
+      expect(todayLink?.getAttribute('href')).toBe('/tasks/today');
+    } finally {
+      cleanup(projects.root, projects.container);
     }
   });
 

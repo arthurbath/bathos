@@ -2,10 +2,12 @@ import type { PowerSyncDatabase } from '@powersync/web';
 import { createContext, useContext } from 'react';
 
 import type { TaskRepository } from '@/modules/tasks/data/taskRepository';
+import type { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
 
 export type TasksRuntimeValue = {
   database: PowerSyncDatabase;
   repository: TaskRepository;
+  hierarchyRepository: TaskHierarchyRepository;
   mode: 'local' | 'connected';
   planningTimeZone: string;
   prepareForSignOut: () => Promise<void>;

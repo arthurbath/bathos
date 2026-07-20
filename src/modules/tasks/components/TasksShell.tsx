@@ -24,6 +24,7 @@ import {
   Plus,
   RotateCcw,
   Trash2,
+  FolderKanban,
   X,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -54,6 +55,7 @@ import {
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/taskEditorPlanning';
+import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
@@ -77,13 +79,17 @@ const taskViews = [
   { path: '/someday', label: 'Someday', icon: CircleDashed },
   { path: '/logbook', label: 'Logbook', icon: Archive },
   { path: '/trash', label: 'Trash', icon: Trash2 },
+  { path: '/projects', label: 'Projects', icon: FolderKanban },
 ] as const;
+
+type TaskShellView = TaskListView | 'projects';
 
 export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
   const view = getTaskViewFromPath(location.pathname);
+  const taskListView: TaskListView = view === 'projects' ? 'inbox' : view;
   const { mode, prepareForSignOut } = useTasksRuntime();
   const {
     tasks,
@@ -95,7 +101,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     reorderTask,
     transitionTask,
     planningDate,
-  } = useTaskList(userId, view);
+  } = useTaskList(userId, taskListView);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [creating, setCreating] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -291,10 +297,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
       <main className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
         <div className="space-y-7">
-          <h2 className="text-3xl font-semibold leading-none tracking-tight">
-            <span className="md:hidden">{getTaskViewLabel(view)}</span>
-            <span className="hidden md:inline">Tasks</span>
-          </h2>
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-3xl font-semibold leading-none tracking-tight">
+              <span className="md:hidden">{getTaskViewLabel(view)}</span>
+              <span className="hidden md:inline">Tasks</span>
+            </h2>
+            <MobileProjectsLink view={view} basePath={basePath} navigate={navigate} />
+          </div>
 
           <nav
             aria-label="Task views"
@@ -321,7 +330,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             })}
           </nav>
 
-          {view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday' ? (
+          {view !== 'projects' && (view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday') ? (
             <form onSubmit={handleCreate} className="relative">
               <Plus
                 className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
@@ -357,7 +366,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             </form>
           ) : null}
 
-          <section aria-label={getTaskSectionLabel(view)}>
+          {view === 'projects' ? <TaskProjectsView ownerId={userId} /> : <section aria-label={getTaskSectionLabel(view)}>
             {loading ? (
               <div className="flex min-h-40 items-center justify-center">
                 <LoadingSpinner />
@@ -414,12 +423,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 ))}
               </div>
             )}
-          </section>
+          </section>}
         </div>
       </main>
 
       <MobileBottomNav
-        items={taskViews}
+        items={taskViews.filter(({ path }) => path !== '/projects')}
         isActive={(path) => view === path.slice(1)}
         onNavigate={(path) => navigate(`${basePath}${path}`)}
         hrefForPath={(path) => `${basePath}${path}`}
@@ -893,23 +902,51 @@ function showTaskError(title: string, error: unknown): void {
   });
 }
 
-function getTaskViewLabel(view: TaskListView): string {
+function getTaskViewLabel(view: TaskShellView): string {
   if (view === 'inbox') return 'Inbox';
   if (view === 'anytime') return 'Anytime';
   if (view === 'someday') return 'Someday';
   if (view === 'logbook') return 'Logbook';
   if (view === 'upcoming') return 'Upcoming';
   if (view === 'trash') return 'Trash';
+  if (view === 'projects') return 'Projects';
   return 'Today';
 }
 
-function getTaskViewFromPath(pathname: string): TaskListView {
+function MobileProjectsLink({
+  view,
+  basePath,
+  navigate,
+}: {
+  view: TaskShellView;
+  basePath: string;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const projects = view !== 'projects';
+  const href = `${basePath}${projects ? '/projects' : '/today'}`;
+  const Icon = projects ? FolderKanban : CalendarDays;
+  const label = projects ? 'Projects' : 'Today';
+  return (
+    <a
+      href={href}
+      aria-label={projects ? 'Open Projects' : 'Return to Today'}
+      onClick={(event) => handleClientSideLinkNavigation(event, navigate, href)}
+      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[hsl(var(--grid-sticky-line))] px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+    >
+      <Icon className="h-4 w-4" aria-hidden="true" />
+      {label}
+    </a>
+  );
+}
+
+function getTaskViewFromPath(pathname: string): TaskShellView {
   if (pathname.endsWith('/inbox')) return 'inbox';
   if (pathname.endsWith('/anytime')) return 'anytime';
   if (pathname.endsWith('/someday')) return 'someday';
   if (pathname.endsWith('/logbook')) return 'logbook';
   if (pathname.endsWith('/upcoming')) return 'upcoming';
   if (pathname.endsWith('/trash')) return 'trash';
+  if (pathname.endsWith('/projects')) return 'projects';
   return 'today';
 }
 

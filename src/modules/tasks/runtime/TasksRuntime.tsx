@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { supabase } from '@/integrations/supabase/client';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
+import { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
 import { resolveTaskPlanningTimeZone } from '@/modules/tasks/domain/taskDates';
 import {
   bindTasksDatabaseOwner,
@@ -38,6 +39,10 @@ export function TasksRuntimeProvider({
   >({ status: 'loading' });
   const [database, setDatabase] = useState<PowerSyncDatabase>(createTasksPowerSyncDatabase);
   const repository = useMemo(() => new TaskRepository(database), [database]);
+  const hierarchyRepository = useMemo(
+    () => new TaskHierarchyRepository(database),
+    [database],
+  );
 
   useEffect(() => {
     let active = true;
@@ -98,11 +103,12 @@ export function TasksRuntimeProvider({
     () => ({
       database,
       repository,
+      hierarchyRepository,
       mode: state.status === 'ready' ? state.mode : 'local',
       planningTimeZone: state.status === 'ready' ? state.planningTimeZone : 'UTC',
       prepareForSignOut,
     }),
-    [database, prepareForSignOut, repository, state],
+    [database, hierarchyRepository, prepareForSignOut, repository, state],
   );
 
   if (state.status === 'loading') {
