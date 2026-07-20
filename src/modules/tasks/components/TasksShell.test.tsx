@@ -8,6 +8,7 @@ import { normalizeTaskEditorPlanningPatch } from './taskEditorPlanning';
 import { TasksShell } from './TasksShell';
 
 const mockTaskList = vi.fn();
+const mockTaskHierarchy = vi.fn();
 const mockPrepareForSignOut = vi.fn();
 
 vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
@@ -15,6 +16,10 @@ vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
   getTodayTaskSection: (value: { start_date: string | null; today_section: string }, date: string) => (
     value.start_date !== null && value.start_date < date ? 'unfinished' : value.today_section
   ),
+}));
+
+vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({
+  useTaskHierarchy: (...args: unknown[]) => mockTaskHierarchy(...args),
 }));
 
 vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
@@ -26,8 +31,14 @@ vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
 }));
 
 vi.mock('./TaskProjectsView', () => ({
-  TaskProjectsView: ({ ownerId }: { ownerId: string }) => (
-    <section data-testid="projects-view">Projects for {ownerId}</section>
+  TaskProjectsView: () => (
+    <section data-testid="projects-view">Projects</section>
+  ),
+}));
+
+vi.mock('./TaskProjectDetailView', () => ({
+  TaskProjectDetailView: ({ projectId }: { projectId: string }) => (
+    <section data-testid="project-detail-view">Project {projectId}</section>
   ),
 }));
 
@@ -51,6 +62,9 @@ vi.mock('@/platform/hooks/useHostModule', () => ({
 const task = {
   id: 'task-a',
   owner_id: 'owner-a',
+  area_id: null,
+  project_id: null,
+  heading_id: null,
   title: 'Existing task',
   notes: 'Existing notes',
   lifecycle: 'open' as const,
@@ -61,6 +75,7 @@ const task = {
   destination: 'today' as const,
   today_section: 'daytime' as const,
   order_key: 'a0',
+  hierarchy_order_key: null,
   start_date: null,
   deadline: null,
   entry_channel: 'web' as const,
@@ -125,10 +140,22 @@ function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: str
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function setSelectValue(select: HTMLSelectElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(select, value);
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 describe('TasksShell', () => {
   beforeEach(() => {
     mockPrepareForSignOut.mockReset().mockResolvedValue(undefined);
     mockTaskList.mockReset();
+    mockTaskHierarchy.mockReset().mockReturnValue({
+      areas: [],
+      projects: [],
+      headings: [],
+      loading: false,
+      error: null,
+    });
   });
 
   it('creates a task from the keyboard-first capture field', async () => {
@@ -170,13 +197,28 @@ describe('TasksShell', () => {
     const projects = renderShell('/tasks/projects');
     try {
       expect(projects.container.querySelector('[data-testid="projects-view"]')?.textContent)
-        .toContain('owner-a');
+        .toBe('Projects');
       const todayLink = projects.container.querySelector<HTMLAnchorElement>(
         'a[aria-label="Return to Today"]',
       );
       expect(todayLink?.getAttribute('href')).toBe('/tasks/today');
     } finally {
       cleanup(projects.root, projects.container);
+    }
+  });
+
+  it('routes a project detail path without exposing task capture', () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const project = renderShell('/tasks/projects/project-alpha');
+    try {
+      expect(project.container.querySelector('[data-testid="project-detail-view"]')?.textContent)
+        .toBe('Project project-alpha');
+      expect(project.container.querySelector('[aria-label="Add a Task"]')).toBeNull();
+      expect(project.container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Return to Projects"]',
+      )?.getAttribute('href')).toBe('/tasks/projects');
+    } finally {
+      cleanup(project.root, project.container);
     }
   });
 
@@ -262,6 +304,48 @@ describe('TasksShell', () => {
         (button) => button.textContent === 'Existing task',
       );
       expect(document.activeElement).toBe(restoredTitleButton);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('shows hierarchy context and moves a task structurally without changing planning state', async () => {
+    const organizedTask = {
+      ...task,
+      area_id: null,
+      project_id: 'project-launch',
+      heading_id: 'heading-next',
+      hierarchy_order_key: 'a0',
+    };
+    const taskList = { ...defaultTaskList(), tasks: [organizedTask] };
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskHierarchy.mockReturnValue({
+      areas: [{ id: 'area-work', title: 'Work' }],
+      projects: [{ id: 'project-launch', title: 'Launch' }],
+      headings: [{ id: 'heading-next', project_id: 'project-launch', title: 'Next' }],
+      loading: false,
+      error: null,
+    });
+    const { container, root } = renderShell();
+
+    try {
+      expect(container.textContent).toContain('Launch / Next');
+      const titleButton = container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!;
+      await act(async () => titleButton.click());
+      const organization = container.querySelector<HTMLSelectElement>(
+        '#task-organization-task-a',
+      )!;
+      expect(organization.value).toBe('project:project-launch');
+      await act(async () => setSelectValue(organization, 'area:area-work'));
+      await act(async () => {
+        organization.form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+        area_id: 'area-work',
+        project_id: null,
+        heading_id: null,
+      });
     } finally {
       cleanup(root, container);
     }

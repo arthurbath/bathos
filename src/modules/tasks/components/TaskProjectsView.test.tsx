@@ -1,16 +1,11 @@
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { TaskArea, TaskProject } from '@/modules/tasks/types/tasks';
 import { TaskProjectsView } from './TaskProjectsView';
-
-const mockUseTaskHierarchy = vi.fn();
-
-vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({
-  useTaskHierarchy: (...args: unknown[]) => mockUseTaskHierarchy(...args),
-}));
 
 const areaWork = hierarchyArea('area-work', 'Work', 'a0');
 const areaPersonal = hierarchyArea('area-personal', 'Personal', 'a1');
@@ -34,11 +29,15 @@ function defaultHierarchy() {
   };
 }
 
-function renderView() {
+function renderView(hierarchy: ReturnType<typeof defaultHierarchy>) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
-  act(() => root.render(<TaskProjectsView ownerId="owner-a" />));
+  act(() => root.render(
+    <MemoryRouter>
+      <TaskProjectsView hierarchy={hierarchy} />
+    </MemoryRouter>,
+  ));
   return { container, root };
 }
 
@@ -59,17 +58,16 @@ function setControlValue(control: HTMLInputElement | HTMLSelectElement, value: s
 }
 
 describe('TaskProjectsView', () => {
-  beforeEach(() => mockUseTaskHierarchy.mockReset());
-
   it('creates areas and projects from separate keyboard-friendly forms', async () => {
     const hierarchy = defaultHierarchy();
-    mockUseTaskHierarchy.mockReturnValue(hierarchy);
-    const { container, root } = renderView();
+    const { container, root } = renderView(hierarchy);
 
     try {
       const areaInput = container.querySelector<HTMLInputElement>('[aria-label="New Area Name"]')!;
       const projectInput = container.querySelector<HTMLInputElement>('[aria-label="New Project Name"]')!;
       const projectArea = container.querySelector<HTMLSelectElement>('[aria-label="New Project Area"]')!;
+      expect(container.querySelector<HTMLAnchorElement>('[aria-label="Open Alpha"]')
+        ?.getAttribute('href')).toBe('/projects/project-alpha');
 
       await act(async () => {
         areaInput.focus();
@@ -94,8 +92,7 @@ describe('TaskProjectsView', () => {
 
   it('renames an area and restores focus to its title control', async () => {
     const hierarchy = defaultHierarchy();
-    mockUseTaskHierarchy.mockReturnValue(hierarchy);
-    const { container, root } = renderView();
+    const { container, root } = renderView(hierarchy);
 
     try {
       const titleButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
@@ -123,8 +120,7 @@ describe('TaskProjectsView', () => {
 
   it('moves and reorders projects only within their structural hierarchy', async () => {
     const hierarchy = defaultHierarchy();
-    mockUseTaskHierarchy.mockReturnValue(hierarchy);
-    const { container, root } = renderView();
+    const { container, root } = renderView(hierarchy);
 
     try {
       const areaSelect = container.querySelector<HTMLSelectElement>(

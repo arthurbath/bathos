@@ -7,4 +7,5 @@ export const TASK_ROUTE_PATHS = [
   '/tasks/logbook',
   '/tasks/trash',
   '/tasks/projects',
+  '/tasks/projects/:projectId',
 ] as const;

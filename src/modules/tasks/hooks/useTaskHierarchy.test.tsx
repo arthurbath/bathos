@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TaskArea, TaskProject } from '@/modules/tasks/types/tasks';
+import type { TaskArea, TaskHeading, TaskProject } from '@/modules/tasks/types/tasks';
 import { useTaskHierarchy } from './useTaskHierarchy';
 
 const mocks = vi.hoisted(() => ({
@@ -28,6 +28,7 @@ const loose = hierarchyProject('project-loose', 'Loose', 'a0', null);
 let latest: ReturnType<typeof useTaskHierarchy>;
 let areaRows: TaskArea[];
 let projectRows: TaskProject[];
+let headingRows: TaskHeading[];
 
 function Harness() {
   latest = useTaskHierarchy('owner-a');
@@ -51,8 +52,11 @@ describe('useTaskHierarchy', () => {
   beforeEach(() => {
     areaRows = [personal, work];
     projectRows = [beta, loose, alpha];
+    headingRows = [];
     mocks.useQuery.mockReset().mockImplementation((query: string) => ({
-      data: query.includes('tasks_areas') ? areaRows : projectRows,
+      data: query.includes('tasks_areas')
+        ? areaRows
+        : query.includes('tasks_projects') ? projectRows : headingRows,
       isLoading: false,
       error: null,
     }));

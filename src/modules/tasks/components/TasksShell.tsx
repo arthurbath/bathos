@@ -52,9 +52,11 @@ import {
   type TaskListView,
   type TodayTaskSection,
 } from '@/modules/tasks/hooks/useTaskList';
+import { useTaskHierarchy, type TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/taskEditorPlanning';
+import { TaskProjectDetailView } from '@/modules/tasks/components/TaskProjectDetailView';
 import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
@@ -82,15 +84,17 @@ const taskViews = [
   { path: '/projects', label: 'Projects', icon: FolderKanban },
 ] as const;
 
-type TaskShellView = TaskListView | 'projects';
+type TaskShellView = TaskListView | 'projects' | 'project';
 
 export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
   const view = getTaskViewFromPath(location.pathname);
-  const taskListView: TaskListView = view === 'projects' ? 'inbox' : view;
+  const projectId = getTaskProjectIdFromPath(location.pathname);
+  const taskListView: TaskListView = view === 'projects' || view === 'project' ? 'inbox' : view;
   const { mode, prepareForSignOut } = useTasksRuntime();
+  const hierarchy = useTaskHierarchy(userId);
   const {
     tasks,
     loading,
@@ -230,6 +234,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <TaskRow
         key={task.id}
         task={task}
+        hierarchy={hierarchy}
         selected={selectedTaskId === task.id}
         onSelect={() => setSelectedTaskId((current) => (current === task.id ? null : task.id))}
         onUpdate={async (patch) => {
@@ -312,7 +317,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           >
             {taskViews.map(({ path, label, icon: Icon }) => {
               const href = `${basePath}${path}`;
-              const active = view === path.slice(1);
+              const active = view === path.slice(1) || (path === '/projects' && view === 'project');
               return (
                 <a
                   key={path}
@@ -330,7 +335,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             })}
           </nav>
 
-          {view !== 'projects' && (view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday') ? (
+          {view !== 'projects' && view !== 'project' && (view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday') ? (
             <form onSubmit={handleCreate} className="relative">
               <Plus
                 className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
@@ -366,7 +371,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             </form>
           ) : null}
 
-          {view === 'projects' ? <TaskProjectsView ownerId={userId} /> : <section aria-label={getTaskSectionLabel(view)}>
+          {view === 'project' && projectId ? (
+            <TaskProjectDetailView
+              ownerId={userId}
+              projectId={projectId}
+              hierarchy={hierarchy}
+            />
+          ) : view === 'projects' ? <TaskProjectsView hierarchy={hierarchy} /> : <section aria-label={getTaskSectionLabel(view)}>
             {loading ? (
               <div className="flex min-h-40 items-center justify-center">
                 <LoadingSpinner />
@@ -599,6 +610,7 @@ function TodayTaskSections({
 
 function TaskRow({
   task,
+  hierarchy,
   selected,
   onSelect,
   onUpdate,
@@ -610,6 +622,7 @@ function TaskRow({
   onDelete,
 }: {
   task: TaskTodo;
+  hierarchy: TaskHierarchyModel;
   selected: boolean;
   onSelect: () => void;
   onUpdate: (patch: EditableTaskPatch) => Promise<void>;
@@ -622,6 +635,7 @@ function TaskRow({
 }) {
   const [pending, setPending] = useState(false);
   const titleButtonRef = useRef<HTMLButtonElement>(null);
+  const hierarchyLabel = getTaskHierarchyLabel(task, hierarchy);
 
   const run = async (operation: () => Promise<void>) => {
     if (pending) {
@@ -655,6 +669,9 @@ function TaskRow({
           className="min-w-0 flex-1 py-4 text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span className="block">{task.title}</span>
+          {hierarchyLabel ? (
+            <span className="mt-1 block text-xs font-normal text-info">{hierarchyLabel}</span>
+          ) : null}
           {(
             (planningLabel !== null && (planningLabel || task.start_date))
             || task.deadline
@@ -707,6 +724,7 @@ function TaskRow({
       {selected ? (
         <TaskEditor
           task={task}
+          hierarchy={hierarchy}
           returnFocusRef={titleButtonRef}
           onCancel={onSelect}
           onSave={onUpdate}
@@ -718,11 +736,13 @@ function TaskRow({
 
 function TaskEditor({
   task,
+  hierarchy,
   returnFocusRef,
   onCancel,
   onSave,
 }: {
   task: TaskTodo;
+  hierarchy: TaskHierarchyModel;
   returnFocusRef: RefObject<HTMLButtonElement>;
   onCancel: () => void;
   onSave: (patch: EditableTaskPatch) => Promise<void>;
@@ -731,6 +751,8 @@ function TaskEditor({
   const [notes, setNotes] = useState(task.notes);
   const [startDate, setStartDate] = useState(task.start_date ?? '');
   const [deadline, setDeadline] = useState(task.deadline ?? '');
+  const [organization, setOrganization] = useState(taskOrganizationValue(task));
+  const [headingId, setHeadingId] = useState(task.heading_id ?? '');
   const [saving, setSaving] = useState(false);
   const invalidDateRange = Boolean(startDate && deadline && deadline < startDate);
 
@@ -762,6 +784,14 @@ function TaskEditor({
     }
     if (deadline !== (task.deadline ?? '')) {
       patch.deadline = deadline || null;
+    }
+    const container = parseTaskOrganization(organization, headingId);
+    if (
+      container.area_id !== task.area_id
+      || container.project_id !== task.project_id
+      || container.heading_id !== task.heading_id
+    ) {
+      Object.assign(patch, container);
     }
     if (Object.keys(patch).length === 0) {
       handleCancel();
@@ -811,6 +841,58 @@ function TaskEditor({
         placeholder="Notes"
         className="min-h-28 resize-y"
       />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground" htmlFor={`task-organization-${task.id}`}>
+            Organization
+          </label>
+          <select
+            id={`task-organization-${task.id}`}
+            value={organization}
+            onChange={(event) => {
+              setOrganization(event.target.value);
+              setHeadingId('');
+            }}
+            disabled={saving || hierarchy.loading}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="none">No Area or Project</option>
+            {hierarchy.areas.length > 0 ? (
+              <optgroup label="Areas">
+                {hierarchy.areas.map((area) => (
+                  <option key={area.id} value={`area:${area.id}`}>{area.title}</option>
+                ))}
+              </optgroup>
+            ) : null}
+            {hierarchy.projects.length > 0 ? (
+              <optgroup label="Projects">
+                {hierarchy.projects.map((project) => (
+                  <option key={project.id} value={`project:${project.id}`}>{project.title}</option>
+                ))}
+              </optgroup>
+            ) : null}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground" htmlFor={`task-heading-${task.id}`}>
+            Heading
+          </label>
+          <select
+            id={`task-heading-${task.id}`}
+            value={headingId}
+            onChange={(event) => setHeadingId(event.target.value)}
+            disabled={saving || !organization.startsWith('project:')}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">No Heading</option>
+            {hierarchy.headings
+              .filter(({ project_id }) => organization === `project:${project_id}`)
+              .map((heading) => (
+                <option key={heading.id} value={heading.id}>{heading.title}</option>
+              ))}
+          </select>
+        </div>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor={`task-start-date-${task.id}`}>
@@ -910,6 +992,7 @@ function getTaskViewLabel(view: TaskShellView): string {
   if (view === 'upcoming') return 'Upcoming';
   if (view === 'trash') return 'Trash';
   if (view === 'projects') return 'Projects';
+  if (view === 'project') return 'Project';
   return 'Today';
 }
 
@@ -922,14 +1005,16 @@ function MobileProjectsLink({
   basePath: string;
   navigate: ReturnType<typeof useNavigate>;
 }) {
-  const projects = view !== 'projects';
-  const href = `${basePath}${projects ? '/projects' : '/today'}`;
-  const Icon = projects ? FolderKanban : CalendarDays;
-  const label = projects ? 'Projects' : 'Today';
+  const destination = view === 'project' ? 'projects' : view === 'projects' ? 'today' : 'projects';
+  const href = `${basePath}/${destination}`;
+  const Icon = destination === 'today' ? CalendarDays : FolderKanban;
+  const label = destination === 'today' ? 'Today' : 'Projects';
   return (
     <a
       href={href}
-      aria-label={projects ? 'Open Projects' : 'Return to Today'}
+      aria-label={view === 'project'
+        ? 'Return to Projects'
+        : destination === 'projects' ? 'Open Projects' : 'Return to Today'}
       onClick={(event) => handleClientSideLinkNavigation(event, navigate, href)}
       className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[hsl(var(--grid-sticky-line))] px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
     >
@@ -946,8 +1031,14 @@ function getTaskViewFromPath(pathname: string): TaskShellView {
   if (pathname.endsWith('/logbook')) return 'logbook';
   if (pathname.endsWith('/upcoming')) return 'upcoming';
   if (pathname.endsWith('/trash')) return 'trash';
+  if (getTaskProjectIdFromPath(pathname)) return 'project';
   if (pathname.endsWith('/projects')) return 'projects';
   return 'today';
+}
+
+function getTaskProjectIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/\/projects\/([^/]+)$/);
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 function getTaskSectionLabel(view: TaskListView): string {
@@ -958,6 +1049,46 @@ function getTaskSectionLabel(view: TaskListView): string {
   if (view === 'upcoming') return 'Upcoming Tasks';
   if (view === 'trash') return 'Deleted Tasks';
   return 'Today Tasks';
+}
+
+function getTaskHierarchyLabel(task: TaskTodo, hierarchy: TaskHierarchyModel): string | null {
+  if (task.project_id) {
+    const project = hierarchy.projects.find(({ id }) => id === task.project_id);
+    const heading = hierarchy.headings.find(({ id }) => id === task.heading_id);
+    if (!project) return 'Unavailable Project';
+    return heading ? `${project.title} / ${heading.title}` : project.title;
+  }
+  if (task.area_id) {
+    return hierarchy.areas.find(({ id }) => id === task.area_id)?.title ?? 'Unavailable Area';
+  }
+  return null;
+}
+
+function taskOrganizationValue(task: TaskTodo): string {
+  if (task.project_id) return `project:${task.project_id}`;
+  if (task.area_id) return `area:${task.area_id}`;
+  return 'none';
+}
+
+function parseTaskOrganization(
+  organization: string,
+  headingId: string,
+): Pick<TaskTodo, 'area_id' | 'project_id' | 'heading_id'> {
+  if (organization.startsWith('project:')) {
+    return {
+      area_id: null,
+      project_id: organization.slice('project:'.length),
+      heading_id: headingId || null,
+    };
+  }
+  if (organization.startsWith('area:')) {
+    return {
+      area_id: organization.slice('area:'.length),
+      project_id: null,
+      heading_id: null,
+    };
+  }
+  return { area_id: null, project_id: null, heading_id: null };
 }
 
 function formatTaskTerminalDate(timestamp: string): string {

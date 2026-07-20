@@ -56,7 +56,7 @@
 - [x] 5.1 Add Inbox behavior for unprocessed captures.
 - [x] 5.2a Add the owner-safe hierarchy schema, independent ordering, offline projection, and mutation primitives.
 - [x] 5.2b Add area and project navigation, creation, editing, movement, and manual ordering.
-- [ ] 5.2c Add project headings, to-do placement, checklist editing, and hierarchy-context presentation in planning views.
+- [x] 5.2c Add project headings, to-do placement, checklist editing, and hierarchy-context presentation in planning views.
 - [ ] 5.2d Add explicit project lifecycle, descendant transition, recoverable hierarchy deletion, history, export/restore, and trust tests.
 - [x] 5.3 Add Today and This Evening with manual ordering and unfinished-item rescheduling.
 - [x] 5.4 Add Upcoming with future start-date planning.

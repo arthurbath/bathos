@@ -1,15 +1,19 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { ArrowDown, ArrowUp, Check, FolderKanban, Pencil, Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ChevronRight, FolderKanban, Pencil, Plus, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { toast } from '@/hooks/use-toast';
-import { useTaskHierarchy } from '@/modules/tasks/hooks/useTaskHierarchy';
+import { handleClientSideLinkNavigation } from '@/lib/navigation';
+import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type { TaskArea, TaskProject } from '@/modules/tasks/types/tasks';
+import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 
-export function TaskProjectsView({ ownerId }: { ownerId: string }) {
-  const hierarchy = useTaskHierarchy(ownerId);
+export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel }) {
+  const navigate = useNavigate();
+  const basePath = useModuleBasePath();
   const [newAreaTitle, setNewAreaTitle] = useState('');
   const [newProjectTitle, setNewProjectTitle] = useState('');
   const [newProjectAreaId, setNewProjectAreaId] = useState('');
@@ -131,6 +135,8 @@ export function TaskProjectsView({ ownerId }: { ownerId: string }) {
               onReorderProject={(project, direction) => (
                 hierarchy.reorderProject(project.id, direction)
               )}
+              projectHref={(project) => `${basePath}/projects/${project.id}`}
+              onNavigate={navigate}
             />
           ))}
           {unassigned.length > 0 ? (
@@ -143,6 +149,8 @@ export function TaskProjectsView({ ownerId }: { ownerId: string }) {
               onReorderProject={(project, direction) => (
                 hierarchy.reorderProject(project.id, direction)
               )}
+              projectHref={(project) => `${basePath}/projects/${project.id}`}
+              onNavigate={navigate}
             />
           ) : null}
         </div>
@@ -161,6 +169,8 @@ function AreaSection({
   onRenameProject,
   onMoveProject,
   onReorderProject,
+  projectHref,
+  onNavigate,
 }: {
   area: TaskArea | null;
   areas: TaskArea[];
@@ -171,6 +181,8 @@ function AreaSection({
   onRenameProject: (project: TaskProject, title: string) => Promise<unknown>;
   onMoveProject: (project: TaskProject, areaId: string | null) => Promise<unknown>;
   onReorderProject: (project: TaskProject, direction: 'up' | 'down') => Promise<unknown>;
+  projectHref: (project: TaskProject) => string;
+  onNavigate: ReturnType<typeof useNavigate>;
 }) {
   const sectionId = `task-area-${area?.id ?? 'none'}`;
   return (
@@ -178,7 +190,7 @@ function AreaSection({
       <div className="mb-2 flex min-h-9 items-center gap-2">
         <FolderKanban className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         {area ? (
-          <EditableTitle id={sectionId} value={area.title} onSave={onRename!} />
+          <TaskHierarchyEditableTitle id={sectionId} value={area.title} onSave={onRename!} />
         ) : (
           <h3 id={sectionId} className="text-sm font-semibold text-muted-foreground">
             No Area ({projects.length})
@@ -187,8 +199,8 @@ function AreaSection({
         {area ? (
           <div className="ml-auto flex gap-1">
             <span className="self-center text-xs text-muted-foreground">{projects.length}</span>
-            <OrderButton label={`Move ${area.title} Up`} icon={ArrowUp} action={onMoveUp} />
-            <OrderButton label={`Move ${area.title} Down`} icon={ArrowDown} action={onMoveDown} />
+            <TaskHierarchyOrderButton label={`Move ${area.title} Up`} icon={ArrowUp} action={onMoveUp} />
+            <TaskHierarchyOrderButton label={`Move ${area.title} Down`} icon={ArrowDown} action={onMoveDown} />
           </div>
         ) : null}
       </div>
@@ -197,10 +209,22 @@ function AreaSection({
           <p className="px-4 py-5 text-sm text-muted-foreground">No Projects</p>
         ) : projects.map((project, index) => (
           <div key={project.id} className="flex min-h-14 items-center gap-2 px-2 sm:px-4">
-            <EditableTitle
+            <TaskHierarchyEditableTitle
               value={project.title}
               onSave={(title) => onRenameProject(project, title)}
             />
+            <a
+              href={projectHref(project)}
+              aria-label={`Open ${project.title}`}
+              onClick={(event) => handleClientSideLinkNavigation(
+                event,
+                onNavigate,
+                projectHref(project),
+              )}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </a>
             <select
               value={project.area_id ?? ''}
               onChange={(event) => {
@@ -216,12 +240,12 @@ function AreaSection({
                 <option key={candidate.id} value={candidate.id}>{candidate.title}</option>
               ))}
             </select>
-            <OrderButton
+            <TaskHierarchyOrderButton
               label={`Move ${project.title} Up`}
               icon={ArrowUp}
               action={index > 0 ? () => onReorderProject(project, 'up') : undefined}
             />
-            <OrderButton
+            <TaskHierarchyOrderButton
               label={`Move ${project.title} Down`}
               icon={ArrowDown}
               action={index < projects.length - 1
@@ -235,7 +259,7 @@ function AreaSection({
   );
 }
 
-function EditableTitle({
+export function TaskHierarchyEditableTitle({
   id,
   value,
   onSave,
@@ -339,7 +363,7 @@ function EditableTitle({
   );
 }
 
-function OrderButton({
+export function TaskHierarchyOrderButton({
   label,
   icon: Icon,
   action,

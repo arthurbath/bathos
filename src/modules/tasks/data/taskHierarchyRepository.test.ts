@@ -143,4 +143,34 @@ describe('task hierarchy repository', () => {
       'revision = ?, client_mutation_id = ?',
     );
   });
+
+  it('normalizes SQLite checklist booleans before unrelated edits', async () => {
+    const stored = {
+      id: 'item-a',
+      owner_id: 'owner-a',
+      task_id: 'task-a',
+      title: 'Confirm details',
+      completed: 0,
+      completed_at: null,
+      order_key: 'a0',
+      disposition: 'present',
+      deleted_at: null,
+      entry_channel: 'web',
+      last_mutation_channel: 'web',
+      last_actor_type: 'user',
+      revision: 1,
+      client_mutation_id: 'mutation-old',
+      created_at: '2026-07-20T06:00:00.000Z',
+      updated_at: '2026-07-20T06:00:00.000Z',
+    } as unknown as TaskChecklistItem;
+    const { repository } = createHarness([stored]);
+
+    await expect(
+      repository.updateChecklistItem('owner-a', 'item-a', { order_key: 'a1' }),
+    ).resolves.toMatchObject({
+      completed: false,
+      completed_at: null,
+      order_key: 'a1',
+    });
+  });
 });

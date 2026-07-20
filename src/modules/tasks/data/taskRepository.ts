@@ -202,6 +202,15 @@ export class TaskRepository {
              LIMIT 1`,
             [input.ownerId, destination, todaySection],
           );
+      const hierarchyOrderKey = input.hierarchyOrderKey !== undefined
+        ? input.hierarchyOrderKey
+        : await nextHierarchyOrderKey(
+          transaction,
+          input.ownerId,
+          input.areaId ?? null,
+          input.projectId ?? null,
+          input.headingId ?? null,
+        );
       const timestamp = this.now();
       const entryChannel = input.entryChannel ?? 'web';
       const task: TaskTodo = {
@@ -220,7 +229,7 @@ export class TaskRepository {
         destination,
         today_section: todaySection,
         order_key: input.orderKey ?? generateTaskOrderKey(lastTask?.order_key ?? null, null),
-        hierarchy_order_key: input.hierarchyOrderKey ?? null,
+        hierarchy_order_key: hierarchyOrderKey,
         start_date: startDate,
         deadline,
         entry_channel: entryChannel,
@@ -409,6 +418,16 @@ export class TaskRepository {
         projectId,
         headingId,
       );
+      const hierarchyOrderKey = input.hierarchyOrderKey !== undefined
+        ? input.hierarchyOrderKey
+        : await nextHierarchyOrderKey(
+          transaction,
+          ownerId,
+          areaId,
+          projectId,
+          headingId,
+          taskId,
+        );
       return updateOwnedTask(
         transaction,
         current,
@@ -416,7 +435,7 @@ export class TaskRepository {
           area_id: areaId,
           project_id: projectId,
           heading_id: headingId,
-          hierarchy_order_key: input.hierarchyOrderKey ?? null,
+          hierarchy_order_key: hierarchyOrderKey,
         },
         this.createId(),
         this.now(),
@@ -513,29 +532,43 @@ export class TaskRepository {
         patch.today_section === undefined ? current.today_section : patch.today_section,
         patch.start_date === undefined ? current.start_date : patch.start_date,
       );
-      assertTaskContainer(
-        patch.area_id === undefined ? current.area_id : patch.area_id,
-        patch.project_id === undefined ? current.project_id : patch.project_id,
-        patch.heading_id === undefined ? current.heading_id : patch.heading_id,
-      );
-      if (
+      const areaId = patch.area_id === undefined ? current.area_id : patch.area_id;
+      const projectId = patch.project_id === undefined ? current.project_id : patch.project_id;
+      const headingId = patch.heading_id === undefined ? current.heading_id : patch.heading_id;
+      assertTaskContainer(areaId, projectId, headingId);
+      const containerChanged = (
         patch.area_id !== undefined
         || patch.project_id !== undefined
         || patch.heading_id !== undefined
-      ) {
+      );
+      if (containerChanged) {
         await assertOwnedTaskContainer(
           transaction,
           ownerId,
-          patch.area_id === undefined ? current.area_id : patch.area_id,
-          patch.project_id === undefined ? current.project_id : patch.project_id,
-          patch.heading_id === undefined ? current.heading_id : patch.heading_id,
+          areaId,
+          projectId,
+          headingId,
         );
       }
+
+      const preparedPatch = containerChanged && patch.hierarchy_order_key === undefined
+        ? {
+          ...patch,
+          hierarchy_order_key: await nextHierarchyOrderKey(
+            transaction,
+            ownerId,
+            areaId,
+            projectId,
+            headingId,
+            taskId,
+          ),
+        }
+        : patch;
 
       return updateOwnedTask(
         transaction,
         current,
-        patch,
+        preparedPatch,
         this.createId(),
         this.now(),
         normalizeMutationContext(context),
@@ -687,6 +720,34 @@ async function assertOwnedTaskContainer(
       );
     }
   }
+}
+
+async function nextHierarchyOrderKey(
+  transaction: Transaction,
+  ownerId: string,
+  areaId: string | null,
+  projectId: string | null,
+  headingId: string | null,
+  excludeTaskId?: string,
+): Promise<string | null> {
+  if (areaId === null && projectId === null && headingId === null) return null;
+  const excludedTaskClause = excludeTaskId ? 'AND id <> ?' : '';
+  const lastTask = await transaction.getOptional<{ hierarchy_order_key: string }>(
+    `SELECT hierarchy_order_key
+     FROM tasks_todos
+     WHERE owner_id = ?
+       AND area_id IS ?
+       AND project_id IS ?
+       AND heading_id IS ?
+       AND lifecycle = 'open'
+       AND disposition = 'present'
+       AND hierarchy_order_key IS NOT NULL
+       ${excludedTaskClause}
+     ORDER BY hierarchy_order_key DESC, id DESC
+     LIMIT 1`,
+    [ownerId, areaId, projectId, headingId, ...(excludeTaskId ? [excludeTaskId] : [])],
+  );
+  return generateTaskOrderKey(lastTask?.hierarchy_order_key ?? null, null);
 }
 
 function assertOwner(ownerId: string): void {

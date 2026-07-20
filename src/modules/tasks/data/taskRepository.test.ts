@@ -252,6 +252,32 @@ describe('task repository', () => {
     );
   });
 
+  it('assigns a hierarchy tail key when an edit places a task into a project', async () => {
+    const { repository, transaction } = createHarness(existingTask);
+    vi.mocked(transaction.getOptional)
+      .mockResolvedValueOnce(existingTask)
+      .mockResolvedValueOnce({ id: 'project-a' })
+      .mockResolvedValueOnce({ hierarchy_order_key: 'a0' });
+
+    const moved = await repository.updateTask('owner-a', 'task-a', {
+      area_id: null,
+      project_id: 'project-a',
+      heading_id: null,
+    });
+
+    expect(moved).toMatchObject({
+      area_id: null,
+      project_id: 'project-a',
+      heading_id: null,
+      destination: 'inbox',
+      order_key: 'a0',
+    });
+    expect(moved.hierarchy_order_key! > 'a0').toBe(true);
+    expect(vi.mocked(transaction.getOptional).mock.calls.at(-1)?.[0]).toContain(
+      'hierarchy_order_key IS NOT NULL',
+    );
+  });
+
   it('rejects Today-only placement outside Today and start dates in inactive destinations', async () => {
     const { repository } = createHarness(existingTask);
 

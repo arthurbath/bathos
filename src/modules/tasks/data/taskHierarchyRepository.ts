@@ -341,11 +341,12 @@ export class TaskHierarchyRepository {
     assertOwner(ownerId);
     requireId(id, `A ${kind} identifier is required`);
     return this.database.writeTransaction(async (transaction) => {
-      const current = await transaction.getOptional<T>(
+      const stored = await transaction.getOptional<T>(
         `SELECT * FROM ${table} WHERE id = ? AND owner_id = ?`,
         [id, ownerId],
       );
-      if (current === null) throw new TaskHierarchyNotFoundError(kind);
+      if (stored === null) throw new TaskHierarchyNotFoundError(kind);
+      const current = normalizeStoredHierarchyRow(table, stored);
       if (Object.keys(patch).length === 0) return current;
 
       const mutationContext = normalizeContext(context);
@@ -384,6 +385,17 @@ type HierarchyTable =
   | 'tasks_projects'
   | 'tasks_headings'
   | 'tasks_checklist_items';
+
+function normalizeStoredHierarchyRow<T extends HierarchyRow>(
+  table: HierarchyTable,
+  row: T,
+): T {
+  if (table !== 'tasks_checklist_items') return row;
+  return {
+    ...row,
+    completed: Boolean((row as TaskChecklistItem).completed),
+  } as T;
+}
 
 type HierarchyParentTable = 'tasks_areas' | 'tasks_projects' | 'tasks_todos';
 
