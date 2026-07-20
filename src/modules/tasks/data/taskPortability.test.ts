@@ -12,14 +12,30 @@ import {
   previewTaskRestore,
   serializeTaskExport,
   taskExportV5Collections,
+  taskExportV6Collections,
   type TaskExportV5,
+  type TaskExportV6,
 } from './taskPortability';
 
 const checksum = 'a'.repeat(64);
 const taskExport = {
   format: 'garden.bath.tasks.export',
-  schema_version: 5,
+  schema_version: 6,
   created_at: '2026-07-20T05:30:00.000Z',
+  manifest: {
+    collections: [...taskExportV6Collections],
+    counts: Object.fromEntries(taskExportV6Collections.map((name) => [name, 0])),
+    checksums: {
+      algorithm: 'sha256',
+      ...Object.fromEntries(taskExportV6Collections.map((name) => [name, checksum])),
+    },
+  },
+  data: Object.fromEntries(taskExportV6Collections.map((name) => [name, []])),
+} as TaskExportV6;
+
+const versionFiveExport = {
+  ...taskExport,
+  schema_version: 5,
   manifest: {
     collections: [...taskExportV5Collections],
     counts: Object.fromEntries(taskExportV5Collections.map((name) => [name, 0])),
@@ -44,7 +60,7 @@ describe('task portability', () => {
     const client = createClient([taskExport]);
 
     await expect(createTaskExport(client)).resolves.toEqual(taskExport);
-    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v5');
+    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v6');
     expect(serializeTaskExport(taskExport)).toBe(`${JSON.stringify(taskExport, null, 2)}\n`);
     expect(getTaskExportFilename(taskExport.created_at)).toBe('bathos-tasks-2026-07-20.json');
   });
@@ -52,8 +68,8 @@ describe('task portability', () => {
   it('previews and executes restore through distinct explicit calls', async () => {
     const preview = {
       dry_run: true,
-      schema_version: 5,
-      ...Object.fromEntries(taskExportV5Collections.map((name) => [name, report(0)])),
+      schema_version: 6,
+      ...Object.fromEntries(taskExportV6Collections.map((name) => [name, report(0)])),
       tasks_todos: report(2),
       tasks_history_events: report(4),
       tasks_user_settings: report(1),
@@ -63,18 +79,34 @@ describe('task portability', () => {
 
     await expect(previewTaskRestore(client, taskExport)).resolves.toEqual(preview);
     await expect(mergeTaskRestore(client, taskExport)).resolves.toEqual(merge);
-    expect(client.rpc).toHaveBeenNthCalledWith(1, 'tasks_restore_export_v5', {
+    expect(client.rpc).toHaveBeenNthCalledWith(1, 'tasks_restore_export_v6', {
       _envelope: taskExport,
       _dry_run: true,
     });
-    expect(client.rpc).toHaveBeenNthCalledWith(2, 'tasks_restore_export_v5', {
+    expect(client.rpc).toHaveBeenNthCalledWith(2, 'tasks_restore_export_v6', {
       _envelope: taskExport,
       _dry_run: false,
     });
   });
 
+  it('retains restore compatibility with version five exports', async () => {
+    const preview = {
+      dry_run: true,
+      schema_version: 5,
+      ...Object.fromEntries(taskExportV5Collections.map((name) => [name, report(0)])),
+    };
+    const client = createClient([preview]);
+
+    expect(parseTaskExport(versionFiveExport)).toEqual(versionFiveExport);
+    await expect(previewTaskRestore(client, versionFiveExport)).resolves.toEqual(preview);
+    expect(client.rpc).toHaveBeenCalledWith('tasks_restore_export_v5', {
+      _envelope: versionFiveExport,
+      _dry_run: true,
+    });
+  });
+
   it('rejects incompatible envelopes and inconsistent reports', async () => {
-    expect(() => parseTaskExport({ ...taskExport, schema_version: 6 })).toThrow(
+    expect(() => parseTaskExport({ ...taskExport, schema_version: 7 })).toThrow(
       InvalidTaskExportError,
     );
     expect(() => parseTaskExport({
@@ -88,8 +120,8 @@ describe('task portability', () => {
 
     const client = createClient([{
       dry_run: true,
-      schema_version: 5,
-      ...Object.fromEntries(taskExportV5Collections.map((name) => [name, report(0)])),
+      schema_version: 6,
+      ...Object.fromEntries(taskExportV6Collections.map((name) => [name, report(0)])),
       tasks_todos: { ...report(1), inserts: 2 },
     }]);
     await expect(previewTaskRestore(client, taskExport)).rejects.toThrow(

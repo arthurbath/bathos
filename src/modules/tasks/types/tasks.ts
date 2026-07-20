@@ -27,6 +27,11 @@ export const taskMailSourceLifecycles = [
   'retirement_failed',
   'retired',
 ] as const;
+export const taskMailSourceTransitions = [
+  'retirement_started',
+  'retirement_failed',
+  'retired',
+] as const;
 export const taskActorTypes = ['user', 'automation', 'system', 'import'] as const;
 export const taskHierarchyRootTypes = [
   'area',
@@ -69,6 +74,7 @@ export type TaskTodaySection = (typeof taskTodaySections)[number];
 export type TaskEntryChannel = (typeof taskEntryChannels)[number];
 export type TaskSourceKind = (typeof taskSourceKinds)[number];
 export type TaskMailSourceLifecycle = (typeof taskMailSourceLifecycles)[number];
+export type TaskMailSourceTransition = (typeof taskMailSourceTransitions)[number];
 export type TaskActorType = (typeof taskActorTypes)[number];
 export type TaskHierarchyRootType = (typeof taskHierarchyRootTypes)[number];
 export type TaskHierarchyOperationKind = (typeof taskHierarchyOperations)[number];
@@ -86,6 +92,7 @@ type TaskProjectRow = Tables<'tasks_projects'>;
 type TaskHeadingRow = Tables<'tasks_headings'>;
 type TaskChecklistItemRow = Tables<'tasks_checklist_items'>;
 type TaskMailSourceRow = Tables<'tasks_mail_sources'>;
+type TaskMailSourceEventRow = Tables<'tasks_mail_source_events'>;
 type TaskHierarchyOperationRow = Tables<'tasks_hierarchy_operations'>;
 type TaskHierarchyHistoryRow = Tables<'tasks_hierarchy_history_events'>;
 
@@ -137,6 +144,15 @@ export type TaskChecklistItem = Omit<
 
 export type TaskMailSource = Omit<TaskMailSourceRow, 'lifecycle'> & {
   lifecycle: TaskMailSourceLifecycle;
+};
+
+export type TaskMailSourceEvent = Omit<
+  TaskMailSourceEventRow,
+  'transition' | 'base_lifecycle' | 'result_lifecycle'
+> & {
+  transition: TaskMailSourceTransition;
+  base_lifecycle: Exclude<TaskMailSourceLifecycle, 'retired'>;
+  result_lifecycle: Exclude<TaskMailSourceLifecycle, 'retained'>;
 };
 
 type RefinedHierarchyOperationFields = {

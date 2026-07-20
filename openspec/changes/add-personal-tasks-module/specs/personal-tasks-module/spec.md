@@ -479,7 +479,7 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 
 #### Scenario: Export and restore Mail source state
 - **WHEN** the user exports and restores task data containing a Mail-sourced task
-- **THEN** the versioned portable envelope preserves the owner-safe Mail source record, explicit retirement lifecycle, revision, and mutation identity while excluding owner identifiers and Mail content
+- **THEN** the versioned portable envelope preserves the owner-safe Mail source record and its complete append-only retirement event chain, validates that the current lifecycle and revision match the audit tip, rebinds restored ownership to the authenticated user, and excludes owner identifiers and Mail content
 
 #### Scenario: Gate Mail capture on a complete integration contract
 - **WHEN** parallel-use approval has not passed verification
