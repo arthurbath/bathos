@@ -33,7 +33,8 @@ import { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
 import { bindTasksDatabaseOwner } from '@/modules/tasks/sync/database';
 import { createTasksSupabaseConnector } from '@/modules/tasks/sync/connector';
 import { tasksPowerSyncSchema } from '@/modules/tasks/sync/schema';
-import type { TaskHistoryEvent, TaskTodo } from '@/modules/tasks/types/tasks';
+import type { TaskHistoryEvent } from '@/modules/tasks/domain/taskHistory';
+import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
 const integrationEnabled = process.env.RUN_TASKS_PRESERVATION_INTEGRATION === '1';
 const localSupabaseUrl = process.env.TASKS_TEST_SUPABASE_URL ?? 'http://127.0.0.1:54321';

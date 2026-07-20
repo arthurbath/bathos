@@ -47,7 +47,7 @@ export function useTaskRecurrences(ownerId: string) {
     Record<string, TaskRecurrenceRevision>
   >({});
   const evaluationRequests = useRef(new Set<string>());
-  const planningDate = taskCalendarDateInTimeZone(new Date(), planningTimeZone);
+  const planningDate = taskCalendarDateInTimeZone(planningTimeZone);
 
   const queriedDefinitions = useMemo(
     () => definitionsQuery.data.map((definition) => (

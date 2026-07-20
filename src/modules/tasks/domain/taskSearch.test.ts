@@ -7,6 +7,7 @@ import {
   type TaskSearchFilters,
 } from './taskSearch';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
+import { taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 
 const allFilters: TaskSearchFilters = {
   destination: 'all',
@@ -57,39 +58,11 @@ describe('task search documents', () => {
 });
 
 function task(overrides: Partial<TaskTodo> = {}): TaskTodo {
-  return {
-    id: 'task-a',
-    owner_id: 'owner-a',
-    area_id: null,
-    project_id: null,
-    heading_id: null,
+  return taskTodoFixture({
     title: 'Synthetic task',
     notes: 'Synthetic notes',
-    lifecycle: 'open',
-    completed_at: null,
-    canceled_at: null,
-    disposition: 'present',
-    deleted_at: null,
-    deletion_root_id: null,
     destination: 'today',
-    today_section: 'daytime',
-    actionability: 'actionable',
-    order_key: 'a0',
-    hierarchy_order_key: null,
     start_date: '2026-07-20',
-    deadline: null,
-    entry_channel: 'web',
-    last_mutation_channel: 'web',
-    last_actor_type: 'user',
-    undo_source_event_id: null,
-    source_kind: null,
-    source_url: null,
-    source_title: null,
-    source_external_id: null,
-    revision: 1,
-    client_mutation_id: 'mutation-a',
-    created_at: '2026-07-20T00:00:00.000Z',
-    updated_at: '2026-07-20T00:00:00.000Z',
     ...overrides,
-  };
+  });
 }

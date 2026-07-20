@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "spec:validate": "openspec validate --all --strict",
     "test": "NODE_ENV=test vitest run",
+    "typecheck:tasks": "tsc -p tsconfig.tasks.json --pretty false",
     "test:tasks:offline": "NODE_ENV=test RUN_TASKS_OFFLINE_INTEGRATION=1 vitest run src/modules/tasks/integration/offlinePersistence.integration.test.ts --testTimeout=120000",
     "test:tasks:multi-client": "NODE_ENV=test RUN_TASKS_MULTI_CLIENT_INTEGRATION=1 vitest run src/modules/tasks/integration/multiClientConvergence.integration.test.ts --testTimeout=120000",
     "test:tasks:performance": "NODE_ENV=test RUN_TASKS_PERFORMANCE=1 vitest run src/modules/tasks/performance --maxWorkers=1 --minWorkers=1",

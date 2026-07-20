@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { taskProjectFixture, taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 import { normalizeTaskEditorPlanningPatch } from './taskEditorPlanning';
 import { getTasksStorageStatusLabel } from './tasksStorageStatus';
 import { TasksShell } from './TasksShell';
@@ -94,71 +95,20 @@ vi.mock('@/platform/hooks/useHostModule', () => ({
   useModuleBasePath: () => '/tasks',
 }));
 
-const task = {
+const task = taskTodoFixture({
   id: 'task-a',
-  owner_id: 'owner-a',
-  area_id: null,
-  project_id: null,
-  heading_id: null,
   title: 'Existing task',
   notes: 'Existing notes',
-  lifecycle: 'open' as const,
-  completed_at: null,
-  canceled_at: null,
-  disposition: 'present' as const,
-  deleted_at: null,
-  deletion_root_id: null,
-  destination: 'today' as const,
-  today_section: 'daytime' as const,
-  actionability: 'actionable' as const,
-  order_key: 'a0',
-  hierarchy_order_key: null,
-  start_date: null,
-  deadline: null,
-  entry_channel: 'web' as const,
-  last_mutation_channel: 'web' as const,
-  last_actor_type: 'user' as const,
-  undo_source_event_id: null,
-  source_kind: null,
-  source_url: null,
-  source_title: null,
-  source_external_id: null,
-  revision: 1,
-  client_mutation_id: 'mutation-a',
-  created_at: '2026-07-20T04:00:00.000Z',
-  updated_at: '2026-07-20T04:00:00.000Z',
-};
+  destination: 'today',
+});
 
-const planningProject = {
+const planningProject = taskProjectFixture({
   id: 'project-plan',
-  owner_id: 'owner-a',
-  area_id: null,
   title: 'Plan the launch',
-  notes: '',
-  lifecycle: 'open' as const,
-  completed_at: null,
-  canceled_at: null,
-  disposition: 'present' as const,
-  deleted_at: null,
-  deletion_root_id: null,
-  destination: 'today' as const,
-  today_section: 'daytime' as const,
-  order_key: 'a0',
-  planning_order_key: 'a0',
+  destination: 'today',
   start_date: '2026-07-20',
-  deadline: null,
-  template_definition_id: null,
-  template_revision: null,
-  template_instantiation_id: null,
-  template_node_id: null,
-  entry_channel: 'web' as const,
-  last_mutation_channel: 'web' as const,
-  last_actor_type: 'user' as const,
-  revision: 1,
   client_mutation_id: 'project-plan-mutation',
-  created_at: '2026-07-20T04:00:00.000Z',
-  updated_at: '2026-07-20T04:00:00.000Z',
-};
+});
 
 function defaultTaskList() {
   return {

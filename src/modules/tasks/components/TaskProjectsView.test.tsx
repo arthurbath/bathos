@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
+import { taskAreaFixture, taskProjectFixture } from '@/modules/tasks/testing/taskFixtures';
 import type { TaskArea, TaskProject } from '@/modules/tasks/types/tasks';
 import { TaskProjectsView } from './TaskProjectsView';
 
@@ -17,15 +18,23 @@ function defaultHierarchy() {
   return {
     areas: [areaWork, areaPersonal],
     projects: [projectAlpha, projectBeta, projectLoose],
+    headings: [],
     loading: false,
     error: null,
     createArea: vi.fn().mockResolvedValue(undefined),
     createProject: vi.fn().mockResolvedValue(undefined),
+    createHeading: vi.fn().mockResolvedValue(undefined),
     updateArea: vi.fn().mockResolvedValue(undefined),
     updateProject: vi.fn().mockResolvedValue(undefined),
+    updateHeading: vi.fn().mockResolvedValue(undefined),
     reorderArea: vi.fn().mockResolvedValue(undefined),
     reorderProject: vi.fn().mockResolvedValue(undefined),
+    reorderHeading: vi.fn().mockResolvedValue(undefined),
     moveProjectToArea: vi.fn().mockResolvedValue(undefined),
+    moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
+    reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
+    transitionProject: vi.fn().mockResolvedValue(undefined),
+    deleteHierarchy: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -142,21 +151,12 @@ describe('TaskProjectsView', () => {
 });
 
 function hierarchyArea(id: string, title: string, orderKey: string): TaskArea {
-  return {
+  return taskAreaFixture({
     id,
-    owner_id: 'owner-a',
     title,
     order_key: orderKey,
-    disposition: 'present',
-    deleted_at: null,
-    entry_channel: 'web',
-    last_mutation_channel: 'web',
-    last_actor_type: 'user',
-    revision: 1,
     client_mutation_id: `${id}-mutation`,
-    created_at: '2026-07-20T04:00:00.000Z',
-    updated_at: '2026-07-20T04:00:00.000Z',
-  };
+  });
 }
 
 function hierarchyProject(
@@ -165,29 +165,12 @@ function hierarchyProject(
   orderKey: string,
   areaId: string | null,
 ): TaskProject {
-  return {
+  return taskProjectFixture({
     id,
-    owner_id: 'owner-a',
     area_id: areaId,
     title,
-    notes: '',
-    lifecycle: 'open',
-    completed_at: null,
-    canceled_at: null,
-    disposition: 'present',
-    deleted_at: null,
-    destination: 'anytime',
-    today_section: 'daytime',
     order_key: orderKey,
     planning_order_key: orderKey,
-    start_date: null,
-    deadline: null,
-    entry_channel: 'web',
-    last_mutation_channel: 'web',
-    last_actor_type: 'user',
-    revision: 1,
     client_mutation_id: `${id}-mutation`,
-    created_at: '2026-07-20T04:00:00.000Z',
-    updated_at: '2026-07-20T04:00:00.000Z',
-  };
+  });
 }

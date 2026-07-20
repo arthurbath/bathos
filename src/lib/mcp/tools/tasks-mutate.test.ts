@@ -69,6 +69,14 @@ function task(overrides: Partial<Tables['tasks_todos']['Row']> = {}): Tables['ta
     source_url: null,
     source_title: null,
     source_external_id: null,
+    template_definition_id: null,
+    template_revision: null,
+    template_instantiation_id: null,
+    template_node_id: null,
+    recurrence_definition_id: null,
+    recurrence_revision: null,
+    recurrence_occurrence_id: null,
+    recurrence_logical_key: null,
     revision: 1,
     client_mutation_id: '60000000-0000-4000-8000-000000000001',
     created_at: '2026-07-20T08:00:00.000Z',
@@ -89,6 +97,10 @@ function checklist(): Tables['tasks_checklist_items']['Row'] {
     disposition: 'present',
     deleted_at: null,
     deletion_root_id: null,
+    template_definition_id: null,
+    template_revision: null,
+    template_instantiation_id: null,
+    template_node_id: null,
     entry_channel: 'web',
     last_mutation_channel: 'web',
     last_actor_type: 'user',
@@ -294,7 +306,13 @@ describe('Tasks MCP mutation tools', () => {
 
   it('requires an authenticated MCP context before mutation work begins', () => {
     expect(() => updateTask.handler(
-      { ...base(), title: 'Unauthenticated edit' },
+      {
+        ...base(),
+        title: 'Unauthenticated edit',
+        notes: undefined,
+        actionability: undefined,
+        source: undefined,
+      },
       { isAuthenticated: () => false } as never,
     )).toThrow('Not authenticated');
   });

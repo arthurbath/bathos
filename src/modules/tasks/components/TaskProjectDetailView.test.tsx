@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
+import { taskChecklistItemFixture, taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 import type { TaskChecklistItem, TaskTodo } from '@/modules/tasks/types/tasks';
 import { TaskProjectDetailView } from './TaskProjectDetailView';
 
@@ -238,58 +239,23 @@ function projectTask(
   headingId: string | null,
   hierarchyOrderKey: string,
 ): TaskTodo {
-  return {
+  return taskTodoFixture({
     id,
-    owner_id: 'owner-a',
-    area_id: null,
     project_id: 'project-a',
     heading_id: headingId,
     title,
-    notes: '',
-    lifecycle: 'open',
-    completed_at: null,
-    canceled_at: null,
-    disposition: 'present',
-    deleted_at: null,
     destination: 'anytime',
-    today_section: 'daytime',
-    actionability: 'actionable',
-    order_key: 'a0',
     hierarchy_order_key: hierarchyOrderKey,
-    start_date: null,
-    deadline: null,
-    entry_channel: 'web',
-    last_mutation_channel: 'web',
-    last_actor_type: 'user',
-    undo_source_event_id: null,
-    source_kind: null,
-    source_url: null,
-    source_title: null,
-    source_external_id: null,
-    revision: 1,
     client_mutation_id: `${id}-mutation`,
-    created_at: '2026-07-20T04:00:00.000Z',
-    updated_at: '2026-07-20T04:00:00.000Z',
-  };
+  });
 }
 
 function checklistItem(id: string, title: string, orderKey: string): TaskChecklistItem {
-  return {
+  return taskChecklistItemFixture({
     id,
-    owner_id: 'owner-a',
     task_id: 'task-a',
     title,
-    completed: false,
-    completed_at: null,
     order_key: orderKey,
-    disposition: 'present',
-    deleted_at: null,
-    entry_channel: 'web',
-    last_mutation_channel: 'web',
-    last_actor_type: 'user',
-    revision: 1,
     client_mutation_id: `${id}-mutation`,
-    created_at: '2026-07-20T04:00:00.000Z',
-    updated_at: '2026-07-20T04:00:00.000Z',
-  };
+  });
 }

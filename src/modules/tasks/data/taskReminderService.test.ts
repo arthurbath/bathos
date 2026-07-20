@@ -104,7 +104,10 @@ describe('TaskReminderService', () => {
       });
     const service = new TaskReminderService({ rpc } as never);
 
-    const claim = await service.claimDue('2026-07-20T16:00:00Z', 'claim-a');
+    const claim = await service.claimDue(
+      '2026-07-20T16:00:00Z',
+      '10000000-0000-4000-8000-000000000001',
+    );
     expect(claim.items).toHaveLength(1);
     await expect(service.acknowledge(delivery.id)).resolves.toMatchObject({
       outcome: 'accepted', delivery: { status: 'acknowledged' },

@@ -830,7 +830,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             />
           ) : view === 'projects' ? <TaskProjectsView hierarchy={hierarchy} />
             : view === 'templates' ? <TaskTemplatesView ownerId={userId} hierarchy={hierarchy} />
-              : <section aria-label={getTaskSectionLabel(view)}>
+              : <section aria-label={getTaskSectionLabel(taskListView)}>
             {loading || hierarchy.loading || (view === 'trash' && hierarchyTrash.loading) ? (
               <div className="flex min-h-40 items-center justify-center">
                 <LoadingSpinner />

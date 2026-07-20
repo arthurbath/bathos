@@ -8,6 +8,7 @@ import {
   type TaskSearchFilters,
 } from '@/modules/tasks/domain/taskSearch';
 import { deriveTaskViewTasks } from '@/modules/tasks/hooks/useTaskList';
+import { taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 import type { TaskDestination, TaskSourceKind, TaskTodo } from '@/modules/tasks/types/tasks';
 
 const describePerformance = process.env.RUN_TASKS_PERFORMANCE === '1' ? describe : describe.skip;
@@ -118,7 +119,7 @@ function syntheticTask(index: number): TaskTodo {
     ? index % 5 === 0 ? '2026-08-01' : planningDate
     : null;
 
-  return {
+  return taskTodoFixture({
     id: taskId,
     owner_id: ownerId,
     area_id: usesProject ? null : `area-${index % 100}`,
@@ -139,19 +140,14 @@ function syntheticTask(index: number): TaskTodo {
     hierarchy_order_key: null,
     start_date: startDate,
     deadline: index % 11 === 0 ? '2026-08-15' : null,
-    entry_channel: 'web',
-    last_mutation_channel: 'web',
-    last_actor_type: 'user',
-    undo_source_event_id: null,
     source_kind: sourceKind,
     source_url: sourceKind ? `https://example.test/source/${index}` : null,
     source_title: sourceKind ? `Source ${index}` : null,
     source_external_id: sourceKind ? `external-${index}` : null,
-    revision: 1,
     client_mutation_id: `mutation-${index}`,
     created_at: '2026-07-01T00:00:00.000Z',
     updated_at: `2026-07-20T${hour(index)}:00:00.000Z`,
-  };
+  });
 }
 
 function hour(index: number): string {

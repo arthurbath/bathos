@@ -2008,9 +2008,16 @@ function hierarchyReceipt(operation) {
     }])),
     transition: operation.operation,
     occurred_at: operation.completed_at ?? operation.requested_at,
-    outcome: operation.outcome === "pending" ? "rejected" : operation.outcome,
+    outcome: parseHierarchyMutationOutcome(operation.outcome),
     code: operation.outcome === "pending" ? "operation_pending" : operation.code
   };
+}
+function parseHierarchyMutationOutcome(value) {
+  if (value === "pending") return "rejected";
+  if (value === "accepted" || value === "noop" || value === "rejected" || value === "conflict") {
+    return value;
+  }
+  throw new Error("The hierarchy mutation receipt has an invalid outcome.");
 }
 function assertExactHierarchyRetry(input, operation) {
   const base = parseRevisionMap(operation.expected_revisions);

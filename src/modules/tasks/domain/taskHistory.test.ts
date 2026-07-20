@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
+import { taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 
 import {
   createTaskUndoPatch,
@@ -11,35 +12,16 @@ import {
   type TaskHistoryStorageRow,
 } from './taskHistory';
 
-const currentTask: TaskTodo = {
+const currentTask: TaskTodo = taskTodoFixture({
   id: 'task-a',
-  owner_id: 'owner-a',
   title: 'Completed task',
-  notes: '',
   lifecycle: 'completed',
   completed_at: '2026-07-20T04:30:00.000Z',
-  canceled_at: null,
-  disposition: 'present',
-  deleted_at: null,
   destination: 'today',
-  today_section: 'daytime',
-  actionability: 'actionable',
-  order_key: 'a0',
-  start_date: null,
-  deadline: null,
-  entry_channel: 'web',
-  last_mutation_channel: 'web',
-  last_actor_type: 'user',
-  undo_source_event_id: null,
-  source_kind: null,
-  source_url: null,
-  source_title: null,
-  source_external_id: null,
   revision: 2,
   client_mutation_id: 'mutation-b',
-  created_at: '2026-07-20T04:00:00.000Z',
   updated_at: '2026-07-20T04:30:00.000Z',
-};
+});
 
 function historyRow(overrides: Partial<TaskHistoryStorageRow> = {}): TaskHistoryStorageRow {
   const before = { ...snapshotTask(currentTask), lifecycle: 'open', completed_at: null };

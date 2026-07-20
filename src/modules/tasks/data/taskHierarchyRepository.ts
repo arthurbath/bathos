@@ -152,6 +152,10 @@ export class TaskHierarchyRepository {
         template_revision: null,
         template_instantiation_id: null,
         template_node_id: null,
+        recurrence_definition_id: null,
+        recurrence_revision: null,
+        recurrence_occurrence_id: null,
+        recurrence_logical_key: null,
       };
       await insertRow(transaction, 'tasks_projects', project);
       return project;
@@ -236,7 +240,9 @@ export class TaskHierarchyRepository {
     patch: TaskAreaPatch,
     context?: TaskMutationContext,
   ): Promise<TaskArea> {
-    return this.updateRow('tasks_areas', 'area', ownerId, areaId, normalizePatch(patch), context);
+    return this.updateRow<TaskArea>(
+      'tasks_areas', 'area', ownerId, areaId, normalizePatch(patch), context,
+    );
   }
 
   updateProject(
@@ -247,7 +253,7 @@ export class TaskHierarchyRepository {
   ): Promise<TaskProject> {
     const normalized = normalizePatch(patch);
     if (normalized.title !== undefined) normalized.title = normalizeTitle(normalized.title);
-    return this.updateRow(
+    return this.updateRow<TaskProject>(
       'tasks_projects',
       'project',
       ownerId,
@@ -277,7 +283,9 @@ export class TaskHierarchyRepository {
   ): Promise<TaskHeading> {
     const normalized = normalizePatch(patch);
     if (normalized.title !== undefined) normalized.title = normalizeTitle(normalized.title);
-    return this.updateRow('tasks_headings', 'heading', ownerId, headingId, normalized, context);
+    return this.updateRow<TaskHeading>(
+      'tasks_headings', 'heading', ownerId, headingId, normalized, context,
+    );
   }
 
   updateChecklistItem(
@@ -288,7 +296,7 @@ export class TaskHierarchyRepository {
   ): Promise<TaskChecklistItem> {
     const normalized = normalizePatch(patch);
     if (normalized.title !== undefined) normalized.title = normalizeTitle(normalized.title);
-    return this.updateRow(
+    return this.updateRow<TaskChecklistItem>(
       'tasks_checklist_items',
       'checklist item',
       ownerId,

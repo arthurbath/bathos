@@ -160,6 +160,14 @@ function project(
     planning_order_key: 'a0',
     start_date: null,
     deadline: null,
+    template_definition_id: null,
+    template_revision: null,
+    template_instantiation_id: null,
+    template_node_id: null,
+    recurrence_definition_id: null,
+    recurrence_revision: null,
+    recurrence_occurrence_id: null,
+    recurrence_logical_key: null,
     ...overrides,
   };
 }
@@ -172,6 +180,10 @@ function heading(): Tables['tasks_headings']['Row'] {
     disposition: 'present',
     deleted_at: null,
     deletion_root_id: null,
+    template_definition_id: null,
+    template_revision: null,
+    template_instantiation_id: null,
+    template_node_id: null,
   };
 }
 
@@ -196,11 +208,20 @@ function todo(
     hierarchy_order_key: 'a0',
     start_date: null,
     deadline: null,
+    actionability: 'actionable',
     undo_source_event_id: null,
     source_kind: null,
     source_url: null,
     source_title: null,
     source_external_id: null,
+    template_definition_id: null,
+    template_revision: null,
+    template_instantiation_id: null,
+    template_node_id: null,
+    recurrence_definition_id: null,
+    recurrence_revision: null,
+    recurrence_occurrence_id: null,
+    recurrence_logical_key: null,
     ...overrides,
   };
 }
@@ -215,6 +236,10 @@ function checklistItem(): Tables['tasks_checklist_items']['Row'] {
     disposition: 'present',
     deleted_at: null,
     deletion_root_id: null,
+    template_definition_id: null,
+    template_revision: null,
+    template_instantiation_id: null,
+    template_node_id: null,
   };
 }
 
@@ -338,6 +363,7 @@ describe('Tasks MCP read tools', () => {
       tasks_projects: [],
     }));
 
+    if (!('todos' in result)) throw new Error('Expected a planning view result.');
     expect(result.todos.map(({ id }) => id)).toEqual([unfinishedId, daytimeId, eveningId]);
     expect(result.todos.map((row) => row.derived_section)).toEqual(['unfinished', 'daytime', 'evening']);
     expect(result.todos.every((row) => !('owner_id' in row))).toBe(true);
@@ -368,6 +394,7 @@ describe('Tasks MCP read tools', () => {
     }));
 
     expect(result.planning_date).toBe('2026-07-20');
+    if (!('roots' in result)) throw new Error('Expected a Trash view result.');
     expect(result.roots).toHaveLength(1);
     expect(result.roots[0]).toMatchObject({ root_type: 'todo', record: { id: deletedRoot.id } });
   });

@@ -96,7 +96,7 @@ export function useTaskTemplates(ownerId: string) {
     requireConnected();
     const result = await templateService.capture({
       ...input,
-      anchorDate: input.anchorDate ?? taskCalendarDateInTimeZone(new Date(), planningTimeZone),
+      anchorDate: input.anchorDate ?? taskCalendarDateInTimeZone(planningTimeZone),
     });
     setOptimisticTemplates((current) => ({ ...current, [result.template.id]: result.template }));
     setOptimisticRevisions((current) => ({
@@ -132,7 +132,7 @@ export function useTaskTemplates(ownerId: string) {
     todos: todosQuery.data,
     projects: projectsQuery.data,
     mode,
-    planningDate: taskCalendarDateInTimeZone(new Date(), planningTimeZone),
+    planningDate: taskCalendarDateInTimeZone(planningTimeZone),
     loading: templatesQuery.isLoading
       || revisionsQuery.isLoading
       || todosQuery.isLoading

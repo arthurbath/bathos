@@ -30,6 +30,7 @@ const preview: TaskPermanentDeletionPreview = {
   erased_record_count: 11,
   scope_digest: 'a'.repeat(64),
 };
+const requestId = '10000000-0000-4000-8000-000000000001';
 
 describe('TaskPermanentDeletionService', () => {
   it('previews the exact server-authoritative deletion scope', async () => {
@@ -48,7 +49,7 @@ describe('TaskPermanentDeletionService', () => {
       ...preview,
       root: { type: 'project', id: 'project-a' },
       outcome: 'accepted',
-      request_id: 'request-a',
+      request_id: requestId,
       completed_at: '2026-07-20T20:00:00Z',
     };
     const rpc = vi.fn().mockResolvedValue({ data: result, error: null });
@@ -57,13 +58,13 @@ describe('TaskPermanentDeletionService', () => {
     await expect(service.execute(
       preview,
       TASK_PERMANENT_DELETION_CONFIRMATION,
-      'request-a',
+      requestId,
     )).resolves.toEqual(result);
     expect(rpc).toHaveBeenCalledWith('tasks_permanently_delete', {
       _root_type: 'project',
       _root_id: 'project-a',
       _scope_digest: 'a'.repeat(64),
-      _request_id: 'request-a',
+      _request_id: requestId,
       _confirmation: TASK_PERMANENT_DELETION_CONFIRMATION,
     });
   });
@@ -72,7 +73,7 @@ describe('TaskPermanentDeletionService', () => {
     const rpc = vi.fn();
     const service = new TaskPermanentDeletionService({ rpc } as never);
 
-    await expect(service.execute(preview, 'DELETE', 'request-a'))
+    await expect(service.execute(preview, 'DELETE', requestId))
       .rejects.toBeInstanceOf(InvalidTaskPermanentDeletionError);
     expect(rpc).not.toHaveBeenCalled();
   });
@@ -96,7 +97,7 @@ describe('TaskPermanentDeletionService', () => {
     await expect(service.execute(
       preview,
       TASK_PERMANENT_DELETION_CONFIRMATION,
-      'request-a',
+      requestId,
     )).rejects.toBe(error);
   });
 });

@@ -23,6 +23,7 @@ import {
   type TaskExportV7,
   type TaskExportV8,
   type TaskExportV10,
+  type TaskExportV10Collection,
 } from './taskPortability';
 
 const checksum = 'a'.repeat(64);
@@ -219,11 +220,17 @@ describe('task portability', () => {
         schema_version: 10,
         backup: currentTaskExport,
         backup_digest: checksum,
-        current_counts: Object.fromEntries(taskExportV10Collections.map((name) => [name, 0])),
-        incoming_counts: Object.fromEntries(taskExportV10Collections.map((name) => [name, 0])),
+        current_counts: Object.fromEntries(
+          taskExportV10Collections.map((name) => [name, 0]),
+        ) as Record<TaskExportV10Collection, number>,
+        incoming_counts: Object.fromEntries(
+          taskExportV10Collections.map((name) => [name, 0]),
+        ) as Record<TaskExportV10Collection, number>,
         restore_preview: {
           dry_run: true,
           schema_version: 10,
+          tasks_todos: report(0),
+          tasks_history_events: report(0),
           ...Object.fromEntries(taskExportV10Collections.map((name) => [name, report(0)])),
         },
       },

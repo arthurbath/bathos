@@ -1,6 +1,7 @@
 import type { Transaction } from '@powersync/web';
 import { describe, expect, it, vi } from 'vitest';
 
+import { taskChecklistItemFixture } from '@/modules/tasks/testing/taskFixtures';
 import type { TaskChecklistItem } from '@/modules/tasks/types/tasks';
 
 import {
@@ -112,24 +113,14 @@ describe('task hierarchy repository', () => {
   });
 
   it('completes a checklist item with one revision-safe mutation', async () => {
-    const existing: TaskChecklistItem = {
+    const existing: TaskChecklistItem = taskChecklistItemFixture({
       id: 'item-a',
-      owner_id: 'owner-a',
       task_id: 'task-a',
       title: 'Confirm details',
-      completed: false,
-      completed_at: null,
-      order_key: 'a0',
-      disposition: 'present',
-      deleted_at: null,
-      entry_channel: 'web',
-      last_mutation_channel: 'web',
-      last_actor_type: 'user',
-      revision: 1,
       client_mutation_id: 'mutation-old',
       created_at: '2026-07-20T06:00:00.000Z',
       updated_at: '2026-07-20T06:00:00.000Z',
-    };
+    });
     const { repository, transaction } = createHarness([existing]);
 
     await expect(

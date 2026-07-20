@@ -32,7 +32,7 @@ function createHarness(options: {
     writeTransaction: vi.fn(async (callback: (value: Transaction) => Promise<unknown>) => (
       callback(transaction)
     )),
-  };
+  } as unknown as ConstructorParameters<typeof TaskHierarchyOperationsRepository>[0];
   const ids = ['operation-a', 'mutation-project', 'mutation-task', 'mutation-other'];
   const repository = new TaskHierarchyOperationsRepository(database, {
     createId: () => ids.shift() ?? 'mutation-fallback',

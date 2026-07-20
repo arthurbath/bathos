@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import { getTodayTaskSection, useTaskList, type TaskListView } from './useTaskList';
 
@@ -19,35 +20,11 @@ vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
   useTasksRuntime: () => mocks.useTasksRuntime(),
 }));
 
-const originalTask: TaskTodo = {
+const originalTask: TaskTodo = taskTodoFixture({
   id: 'task-a',
-  owner_id: 'owner-a',
   title: 'Original title',
-  notes: '',
-  lifecycle: 'open',
-  completed_at: null,
-  canceled_at: null,
-  disposition: 'present',
-  deleted_at: null,
-  deletion_root_id: null,
   destination: 'today',
-  today_section: 'daytime',
-  order_key: 'a0',
-  start_date: null,
-  deadline: null,
-  entry_channel: 'web',
-  last_mutation_channel: 'web',
-  last_actor_type: 'user',
-  undo_source_event_id: null,
-  source_kind: null,
-  source_url: null,
-  source_title: null,
-  source_external_id: null,
-  revision: 1,
-  client_mutation_id: 'mutation-a',
-  created_at: '2026-07-20T04:00:00.000Z',
-  updated_at: '2026-07-20T04:00:00.000Z',
-};
+});
 
 let latest: ReturnType<typeof useTaskList>;
 let queryData: TaskTodo[];

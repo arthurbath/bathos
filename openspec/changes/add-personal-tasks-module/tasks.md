@@ -115,6 +115,7 @@
 - [x] 7.6 Test keyboard traversal, focus restoration, screen-reader labels, and reduced-motion behavior.
 - [x] 7.7 Measure task-view and search performance with a synthetic dataset larger than the current Things library.
 - [x] 7.8 Run a sustained parallel-use evaluation and record unresolved trust failures before any migration decision.
+- [x] 7.9 Add an executable Tasks-only TypeScript contract gate and repair all current module and task-MCP type failures.
 
 ## 8. Optional Native Apple Companion
 

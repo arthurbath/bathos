@@ -466,8 +466,7 @@ export class TasksSupabaseRemoteStore implements TasksRemoteStore {
     const query = await this.supabase
       .from(table)
       .update(patch as never)
-      .eq('id', id)
-      .eq('revision', baseRevision)
+      .match({ id, revision: baseRevision } as never)
       .select('id, revision, client_mutation_id')
       .maybeSingle();
     if (query.error) return classifyRemoteError(query.error);
@@ -848,7 +847,9 @@ async function recordSyncIssue(
   );
 }
 
-function classifyRemoteError(error: { code?: string; message: string }): TasksRemoteWriteOutcome {
+function classifyRemoteError(
+  error: { code?: string; message: string },
+): Extract<TasksRemoteWriteOutcome, { status: 'rejected' }> {
   const code = error.code ?? '';
   if (
     !code ||

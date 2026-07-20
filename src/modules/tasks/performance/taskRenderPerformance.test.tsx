@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TasksShell } from '@/modules/tasks/components/TasksShell';
+import { taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
 const mockTaskList = vi.fn();
@@ -135,7 +136,7 @@ describePerformance('Tasks rendered-view performance', () => {
 });
 
 function syntheticTask(index: number): TaskTodo {
-  return {
+  return taskTodoFixture({
     id: `render-task-${index}`,
     owner_id: 'synthetic-owner',
     area_id: null,
@@ -156,17 +157,12 @@ function syntheticTask(index: number): TaskTodo {
     hierarchy_order_key: null,
     start_date: '2026-07-20',
     deadline: null,
-    entry_channel: 'web',
-    last_mutation_channel: 'web',
-    last_actor_type: 'user',
-    undo_source_event_id: null,
     source_kind: index % 4 === 0 ? 'mail_message' : null,
     source_url: index % 4 === 0 ? `message://synthetic-${index}` : null,
     source_title: index % 4 === 0 ? `Synthetic Source ${index}` : null,
     source_external_id: index % 4 === 0 ? `synthetic-${index}` : null,
-    revision: 1,
     client_mutation_id: `render-mutation-${index}`,
     created_at: '2026-07-20T00:00:00.000Z',
     updated_at: '2026-07-20T00:00:00.000Z',
-  };
+  });
 }
