@@ -74,7 +74,7 @@ The slice includes:
 
 The slice excludes areas, projects, headings, checklists, recurrence, reminders, templates, Mail integration, broad MCP mutation access, and native Apple surfaces. Those capabilities remain required roadmap work, but none is necessary to answer the first trust question: can the module reliably capture a task, keep it ordered and available offline, and complete it without losing or duplicating state?
 
-Implementation of this slice begins only after the offline, reconciliation, conflict, and ordering spikes select its technical foundation.
+The offline, reconciliation, conflict, and ordering architecture gate passed on 2026 Jul 19. Implementation of this slice can proceed on the selected module-local PowerSync foundation.
 
 ## Goals / Non-Goals
 
@@ -150,15 +150,45 @@ Rationale: A task system that becomes unavailable, loses a completion, reorders 
 
 Alternative considered: Build an online-only Supabase client first and add offline support later. Rejected as the default because it would defer the highest-risk architectural concern.
 
-### Spike PowerSync before fallback approaches
+### Use PowerSync for the first production foundation
 
-The first disposable offline spike will evaluate PowerSync with local Supabase and synthetic task data. PowerSync is the provisional leader because it provides local SQLite, a durable upload queue, live queries, documented Supabase integration, Safari-oriented web storage options, and client SDKs that preserve a path to native Apple software.
+The task module will use PowerSync as its module-local persistence and synchronization foundation for the first production slice. The browser application will read and write a local SQLite projection, PowerSync will persist queued mutations, and a task-domain connector will upload those mutations through Supabase. Postgres, RLS, and stable server revisions remain authoritative.
 
-The spike must test restart survival, exact-once logical outcomes, server-originated changes, conflicting edits, manual reorder convergence, recoverable deletion, multi-tab behavior, Safari, and owner isolation. It will not connect production data or create a paid service dependency.
+The disposable local spike proved restart survival, exact-once logical outcomes, server-originated changes, conflicting edits, manual reorder convergence, recoverable deletion, multi-tab behavior, real Safari operation, and owner isolation. It used only local services, synthetic accounts, and synthetic data. No production database or paid service was connected.
 
-Rationale: PowerSync covers more of the risky offline write loop than the other evaluated options while retaining Supabase as the authoritative database and RLS boundary for uploaded mutations.
+Rationale: PowerSync covers the risky offline write loop while retaining Supabase as the authoritative database and RLS boundary for uploaded mutations. Two independent browser installations converged after offline writes and conflicts, and OPFS plus the multi-tab worker preserved state across reloads and tabs.
 
-Fallback considered: RxDB with its direct Supabase replication plugin. It will receive the same spike if PowerSync fails a defined acceptance condition. Electric was not selected first because its current product handles read-path sync but leaves write-path synchronization to the application. A custom IndexedDB mutation queue remains an escape hatch, not the preferred foundation.
+Fallback considered: RxDB with its direct Supabase replication plugin remains the first fallback if production integration exposes a failure that the disposable spike could not reveal. Electric was not selected because its current product handles read-path sync but leaves write-path synchronization to the application. A custom IndexedDB mutation queue remains an escape hatch, not the preferred foundation.
+
+The production deployment topology remains open. PowerSync Cloud and self-hosting have different privacy, uptime, cost, and operational trade-offs. That choice must be made before a remotely available production task module is deployed, but it does not block the local domain foundation.
+
+### Use whole-record optimistic revisions and server-authoritative conflicts
+
+Every mutable task record will carry an integer revision. A client mutation increments the revision and may update the server only when the stored revision matches the mutation's base revision. If the predicate no longer matches, the client removes the stale mutation from its retry queue, records a content-free conflict receipt, and accepts the authoritative server row on download.
+
+Rationale: The spike proved this rule for title-versus-title and completion-versus-title conflicts across independent local databases. It prevents silent last-writer-wins overwrites while guaranteeing that a stale mutation does not retry forever.
+
+Trade-off: The first foundation detects conflicts at task-record granularity rather than merging independent fields. This is intentionally conservative. A later field-aware merge policy may be specified only when a concrete workflow demonstrates that automatic merging is safer than an explicit conflict.
+
+### Use fractional order keys with stable-ID tie-breaking
+
+Ordered task views will sort by fractional order key and then stable task ID. Moving an item changes only that item's order key. Different tasks moved into the same gap may legitimately receive the same fractional key, and the stable ID produces the same total order on every client. Concurrent moves of the same task use the task revision conflict rule.
+
+Rationale: Two independent installations generated the same `a0V` key for different tasks and converged to an identical order without rewriting unrelated rows, losing an item, or creating a duplicate.
+
+### Mirror owner authorization in RLS and Sync Streams
+
+Postgres RLS remains authoritative for uploads and direct service access. The PowerSync owner stream is a second, security-critical rule that limits downloaded rows to `owner_id = auth.user_id()`. Every production schema change that affects ownership must update and test both boundaries together.
+
+The client must also bind its local database to the authenticated owner. On account change, it must clear or rebind the local projection before rendering task data for the new owner rather than relying on eventual synchronization to remove cached rows.
+
+Rationale: The spike proved an empty owner-B download, isolation of a new owner-B task from owner A, zero cross-owner reads and updates under the authenticated database role, rejection of an owner-spoofed insert, and removal of owner-B rows when the same installation switched to owner A. The explicit client rule keeps that final boundary deterministic.
+
+### Treat synchronization diagnostics as multidimensional state
+
+The module will expose mutation queue depth, last successful synchronization, upload activity and failure, download activity and failure, and content-free conflict receipts. A single connected or offline badge is not sufficient because the synchronization stream and Supabase upload path can fail independently.
+
+Rationale: During the forced outage, a client could retain a connected stream status while the write API reported an upload error and the durable queue remained nonzero. The actionable state was the combination, not the connection boolean.
 
 ### Keep Supabase as the authoritative service boundary
 
@@ -293,7 +323,7 @@ The following concerns are roadmap requirements and must not be dismissed as pol
 - What exact actionability states should replace the current tag conventions?
 - Which source/origin types need first-class behavior, and which are informational only?
 - How should template updates affect instances that were already created?
-- Which offline and synchronization approach best fits web, Supabase, MCP, and a possible native client?
+- Should the production PowerSync service use PowerSync Cloud or a self-hosted deployment?
 - Should reminders be scheduled by the server, a native client, Web Push, or a layered combination?
 - What user-facing name and iconography should distinguish the module from Things?
 - Which native Apple surface, if any, is valuable enough to justify the first companion build?

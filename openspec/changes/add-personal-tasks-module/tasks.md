@@ -14,14 +14,14 @@
 ## 2. Architecture Gates
 
 - [x] 2.1 Compare module-local offline persistence and synchronization approaches against web, Supabase, MCP, and possible native-client requirements.
-- [ ] 2.2 Build a disposable spike for offline task creation, restart persistence, reconnection, and server reconciliation.
-- [ ] 2.3 Build a disposable spike for stable manual ordering and overlapping reorder conflicts.
+- [x] 2.2 Build a disposable spike for offline task creation, restart persistence, reconnection, and server reconciliation.
+- [x] 2.3 Build a disposable spike for stable manual ordering and overlapping reorder conflicts.
 - [ ] 2.4 Define the task state machine, including open, completed, canceled, recoverably deleted, and structured actionability states.
 - [ ] 2.5 Define start-date, deadline, reminder, time-zone, and daylight-saving semantics.
 - [ ] 2.6 Define recurrence definitions, occurrence identity, generation idempotency, and after-completion behavior.
 - [ ] 2.7 Define undo, history, mutation receipt, trash, permanent deletion, backup, restore, and export contracts.
 - [ ] 2.8 Define notification responsibility across server, web, and possible native clients.
-- [ ] 2.9 Record the selected architecture and update OpenSpec requirements when the spikes resolve current questions.
+- [x] 2.9 Record the selected architecture and update OpenSpec requirements when the spikes resolve current questions.
 
 ## 3. Database and Domain Foundation
 

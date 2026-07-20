@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-19
 **Category:** Technology / Architecture
-**Status:** Provisional recommendation pending executable spike
+**Status:** PowerSync selected for the first production foundation
 
 ## Decision Context
 
@@ -111,13 +111,13 @@ PowerSync maintains a local SQLite database in the browser, streams an owner-sco
 
 **Assessment:** Best first spike. It addresses the complete offline write loop, documents the exact Supabase pairing BathOS needs, and offers the strongest native-client continuity. Its additional service and duplicated download authorization are serious costs that the spike must expose rather than assume away.
 
-## Provisional Recommendation
+## Decision
 
-Spike PowerSync first, using local self-hosted PowerSync with local Supabase where practical. Do not create production tables, connect the production Supabase project, or open a paid PowerSync account during the disposable spike.
+Use PowerSync as the module-local persistence and synchronization foundation for the first production task slice. Browser clients will read and write local SQLite, PowerSync will persist the upload queue, and a task-domain connector will upload queued mutations through Supabase. Postgres, RLS, and integer task revisions remain authoritative.
 
-Treat the choice as provisional until the spike proves all acceptance tests. If PowerSync fails the security, Safari, operational, or complexity tests, run the same fixture and scenarios against RxDB with its Supabase replication plugin. Do not fall back directly to a custom mutation queue without documenting why both maintained engines failed.
+The disposable local spike passed the security, Safari, persistence, reconciliation, ordering, and conflict tests defined below. RxDB remains the first fallback if production integration exposes a material failure that the spike did not reveal. Do not fall back directly to a custom mutation queue without documenting why both maintained engines failed.
 
-PowerSync Cloud versus self-hosting is a later deployment decision. A personal production workload would fit comfortably within current free usage limits, but free-instance deactivation makes that tier unsuitable for a trusted daily tool. Cost, privacy, uptime, and maintenance should be revisited only after the local spike establishes technical fit.
+PowerSync Cloud versus self-hosting remains a separate deployment decision. Cost, privacy, uptime, and maintenance must be resolved before a remotely available production module is deployed. That choice does not block the local domain foundation.
 
 ## Disposable Spike Scope
 
@@ -149,6 +149,44 @@ The spike must demonstrate:
 11. Exercise two browser tabs and a real Safari session, including reload and reconnect.
 12. Capture queue depth, last successful sync, upload failures, and actionable diagnostics without logging task content.
 
+## Executed Spike Results
+
+The spike ran against local Supabase, self-hosted PowerSync 1.23.3, PowerSync Web 1.39.0, Playwright WebKit 26.5, and real macOS Safari. It used isolated synthetic accounts and task titles. No production database, personal task content, or paid service was connected.
+
+All required cases passed:
+
+1. Online creation appeared in local SQLite and exactly one Postgres row.
+2. A task created with both PowerSync and Supabase unavailable survived a full WebKit reload with one queued mutation.
+3. Reconnection drained the queue and produced one logical server row by stable UUID.
+4. Offline completion survived a reload and reconciled as the next task revision.
+5. A server-originated row downloaded into both independent installations.
+6. Two independent OPFS databases edited the same base revision. The first accepted revision remained authoritative, the stale queue drained, and the stale client recorded a content-free conflict receipt before converging.
+7. Completion uploaded from one installation defeated a stale title edit from another through the same revision rule.
+8. Two different tasks moved into the same fractional gap received the same `a0V` key and converged to the same `(order_key, id)` total order on both installations.
+9. Recoverable deletion and restoration converged when queued together offline and when synchronized as separate revisions.
+10. A second owner downloaded none of owner A's rows. A rollback-only authenticated-role probe returned zero cross-owner reads and updates and rejected an owner-spoofed insert. An owner-B task never appeared for owner A, and the same installation removed owner-B rows when it switched to owner A.
+11. Two same-origin WebKit tabs shared one local database and one durable mutation queue. A task created while disconnected in one tab appeared immediately in the other and uploaded once after reconnection.
+12. Real Safari synchronized the dataset, created a task while disconnected, exposed a queue depth of one, retained the task through reload, and reconnected with a zero queue.
+
+## Selected Reconciliation Contract
+
+- Every task has a stable UUID and monotonically increasing integer revision.
+- A mutation may update the server only when the server still has the mutation's base revision.
+- A stale mutation does not retry indefinitely or overwrite the accepted row. It produces a local conflict receipt containing identifiers, revisions, operation type, timestamp, and error code only, then accepts the authoritative server row on download.
+- The first foundation treats the task record as the conflict unit. It does not automatically merge fields from concurrent revisions.
+- Creation is logically idempotent through stable task UUIDs and a unique client mutation identifier.
+- Manual order uses fractional keys and stable task ID as a tie-break. Equal keys are valid for different tasks.
+- Concurrent changes to the same task, including reorders, use the revision conflict rule.
+
+## Operational Findings
+
+- The PowerSync download rule is a second authorization boundary because its replication connection bypasses RLS. Owner predicates in Sync Streams and Postgres RLS must be changed and tested together.
+- Production clients must clear or rebind their local projection before rendering after an account change, even though the spike's same-installation switch removed the prior owner's rows successfully.
+- The Supabase upload API and PowerSync stream can fail independently. A single connected boolean can therefore be misleading. Production diagnostics need queue depth, last successful sync, upload error, download error, and conflict state.
+- Forced-outage browser diagnostics contained blocked local endpoint URLs but no task content.
+- OPFS plus PowerSync's multi-tab worker behaved correctly in macOS Safari and Playwright WebKit. iOS storage behavior remains part of sustained validation rather than being inferred from the macOS result.
+- The production service topology is not selected. Cloud and self-hosted operation require a separate privacy, cost, uptime, backup, upgrade, and observability decision.
+
 ## Failure Conditions
 
 Stop and evaluate RxDB if the spike finds any of the following without a small, well-contained remedy:
@@ -177,6 +215,8 @@ Stop and evaluate RxDB if the spike finds any of the following without a small, 
 
 ## Changes Made
 
-- Added this evaluation to the technology decision log.
-- Recorded PowerSync as the first disposable spike and RxDB as the fallback comparison.
-- No runtime code, dependency, database, production service, or configuration was changed.
+- Added and executed the isolated spike in `spikes/tasks-offline-sync-powersync`.
+- Selected PowerSync for the first production foundation and retained RxDB as the fallback comparison.
+- Recorded the revision, ordering, authorization, and diagnostics contracts in OpenSpec.
+- Added a rollback-only RLS verification script.
+- Changed only local disposable services and synthetic data. No production service or database was modified.

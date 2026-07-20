@@ -11,6 +11,14 @@ The system SHALL provide a single-owner task module whose records are accessible
 - **WHEN** a client attempts to read or mutate task data owned by another user
 - **THEN** the system rejects the operation through the task module's RLS and service boundaries
 
+#### Scenario: Synchronize owned task data
+- **WHEN** a client subscribes to task synchronization
+- **THEN** the synchronization service downloads only rows whose owner matches the authenticated user and mirrors the ownership boundary enforced by RLS
+
+#### Scenario: Change accounts on one installation
+- **WHEN** one owner signs out and another owner signs in on the same client installation
+- **THEN** the client clears or rebinds its local task projection before rendering the new owner's task data and never exposes the prior owner's cached rows
+
 ### Requirement: Core Task Organization
 The system SHALL organize active work through Inbox, areas, projects, headings, to-dos, and checklist items without requiring generic tags.
 
@@ -113,6 +121,14 @@ The system SHALL preserve intentional manual ordering across saves, refreshes, o
 - **WHEN** two clients change overlapping ordered items before synchronization completes
 - **THEN** the system applies the documented deterministic conflict policy and does not lose or duplicate an item
 
+#### Scenario: Concurrently insert items into the same order gap
+- **WHEN** two clients assign the same fractional order key to different items before synchronization
+- **THEN** both items remain present and every client derives the same total order by sorting on order key and then stable item identifier
+
+#### Scenario: Concurrently reorder the same item
+- **WHEN** two clients reorder the same item from the same base revision
+- **THEN** the first accepted revision remains authoritative and the stale reorder produces a conflict receipt rather than silently overwriting the accepted order
+
 ### Requirement: Offline Task Operation
 The system SHALL allow core task work to continue during temporary network loss and SHALL reconcile valid local changes when connectivity returns.
 
@@ -127,6 +143,32 @@ The system SHALL allow core task work to continue during temporary network loss 
 #### Scenario: Reconnect after multiple changes
 - **WHEN** a client reconnects after local and remote task changes occurred
 - **THEN** the system reconciles the changes according to the documented conflict rules and reports any state it cannot reconcile safely
+
+#### Scenario: Preserve the durable mutation queue
+- **WHEN** a client restarts while one or more mutations have not reached the server
+- **THEN** the client retains the queued mutations, exposes their count, and retries them without creating duplicate logical tasks
+
+### Requirement: Deterministic Task Reconciliation
+The system SHALL use stable task identifiers and optimistic integer revisions so stale task mutations are detected, reported, and resolved to an authoritative server state.
+
+#### Scenario: Upload a current task revision
+- **WHEN** a queued task mutation increments the server's current revision by one
+- **THEN** the server accepts the mutation and the client removes it from the durable queue
+
+#### Scenario: Reject a stale task revision
+- **WHEN** another client has already advanced the task beyond a queued mutation's base revision
+- **THEN** the stale mutation does not overwrite the server row, the client records a content-free conflict receipt, and the local task converges to the authoritative server row
+
+#### Scenario: Reconcile completion against a stale edit
+- **WHEN** one client completes a task and another client uploads an edit based on the same earlier revision
+- **THEN** the first accepted mutation remains authoritative and the later stale mutation follows the conflict-receipt behavior
+
+### Requirement: Actionable Synchronization Diagnostics
+The system SHALL expose synchronization state without logging task content, including durable queue depth, last successful synchronization, upload and download activity or errors, and conflict receipts.
+
+#### Scenario: Upload path fails while the client is otherwise active
+- **WHEN** the task upload API is unavailable but the application and synchronization stream remain active
+- **THEN** the client retains the queued mutation and reports the upload failure separately from its general connection state
 
 ### Requirement: Recoverable History
 The system SHALL provide undo, recoverable deletion, history, backup, and export behavior before the module is considered replacement-ready.
@@ -194,4 +236,3 @@ The task module SHALL remain removable without importing code from another BathO
 #### Scenario: Remove the task module
 - **WHEN** the task module's files, routes, launcher entry, and `tasks_` database objects are removed
 - **THEN** unrelated BathOS modules continue to function
-
