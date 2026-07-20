@@ -118,6 +118,16 @@ Rationale: A permanent neutral namespace keeps routes, migrations, synchronizati
 
 Alternative considered: Delay all artifacts until a product name exists. Rejected because the product name does not need to determine the internal namespace.
 
+### Stage the production schema by trusted product slice
+
+The first production migration adds only `tasks_todos`, the owner-scoped record needed by Capture and Run Today. It includes client-generated stable identifiers, Inbox/Today destination, manual order key, title, notes, immutable entry channel, typed source fields, lifecycle, recoverable-deletion disposition, optimistic revision, client mutation identifier, and synchronization timestamps.
+
+Authenticated clients may select, insert, and update owned to-dos. They cannot hard-delete rows. Normal deletion is an update to recoverable disposition, and permanent deletion remains a separately authorized future operation. A database trigger keeps identity, owner, creation time, and entry channel immutable and requires every update to advance the revision by exactly one with a new mutation identifier.
+
+Area, project, heading, checklist, template, recurrence, reminder, history, and delivery tables will be added in later dependency-ordered migrations when their product slices begin. Future hierarchy tables must use owner-inclusive foreign keys so a relationship cannot cross the ownership boundary even when RLS is bypassed by trusted service code.
+
+Rationale: The first migration should be production-grade for the behavior it exposes without freezing speculative hierarchy storage before those slices are implemented.
+
 ### Do not implement tags
 
 The domain model will not include a generic many-to-many label system. Current tag usage will be translated into explicit task state or workflow fields after the exact vocabulary is defined.

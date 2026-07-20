@@ -1081,6 +1081,75 @@ export type Database = {
           },
         ]
       }
+      tasks_todos: {
+        Row: {
+          canceled_at: string | null
+          client_mutation_id: string
+          completed_at: string | null
+          created_at: string
+          deleted_at: string | null
+          destination: string
+          disposition: string
+          entry_channel: string
+          id: string
+          lifecycle: string
+          notes: string
+          order_key: string
+          owner_id: string
+          revision: number
+          source_external_id: string | null
+          source_kind: string | null
+          source_title: string | null
+          source_url: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          canceled_at?: string | null
+          client_mutation_id: string
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          destination?: string
+          disposition?: string
+          entry_channel?: string
+          id: string
+          lifecycle?: string
+          notes?: string
+          order_key: string
+          owner_id: string
+          revision?: number
+          source_external_id?: string | null
+          source_kind?: string | null
+          source_title?: string | null
+          source_url?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          canceled_at?: string | null
+          client_mutation_id?: string
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          destination?: string
+          disposition?: string
+          entry_channel?: string
+          id?: string
+          lifecycle?: string
+          notes?: string
+          order_key?: string
+          owner_id?: string
+          revision?: number
+          source_external_id?: string | null
+          source_kind?: string | null
+          source_title?: string | null
+          source_url?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       wardrobe_items: {
         Row: {
           brand: string | null

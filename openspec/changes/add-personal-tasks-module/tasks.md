@@ -26,15 +26,17 @@
 
 ## 3. Database and Domain Foundation
 
-- [ ] 3.1 Add owner-scoped `tasks_` tables for the minimum task, hierarchy, planning, and ordering model.
-- [ ] 3.2 Add RLS policies and grants that restrict every task record to its signed-in owner.
-- [ ] 3.3 Add database constraints and indexes for valid hierarchy, stable identifiers, planning queries, and synchronization.
-- [ ] 3.4 Add module-local TypeScript types and state-transition utilities with focused tests.
+- [x] 3.1a Add the owner-scoped `tasks_todos` table for the first-slice task, planning, source, lifecycle, recovery, and ordering model.
+- [ ] 3.1b Add owner-scoped area, project, heading, checklist, template, recurrence, reminder, history, and delivery tables when their product slices begin.
+- [x] 3.2 Add RLS policies and grants that restrict every current task record to its signed-in owner and withhold hard deletion from authenticated clients.
+- [x] 3.3a Add first-slice constraints and indexes for stable identifiers, provenance, valid lifecycle/disposition, planning queries, and synchronization.
+- [ ] 3.3b Add owner-inclusive hierarchy constraints and indexes with the later hierarchy tables.
+- [x] 3.4 Add module-local TypeScript types and state-transition utilities with focused tests.
 - [ ] 3.5 Add the selected local persistence, mutation queue, reconciliation, and conflict primitives.
 - [ ] 3.6 Add stable ordering primitives with focused concurrent-order tests.
 - [ ] 3.7 Add recoverable deletion and history primitives with restoration tests.
 - [ ] 3.8 Add an initial portable export and verified restore path using synthetic test data.
-- [ ] 3.9 Regenerate or update Supabase TypeScript types for the new task objects.
+- [x] 3.9 Regenerate or update Supabase TypeScript types for the new task objects.
 
 ## 4. Minimal End-to-End Module
 
