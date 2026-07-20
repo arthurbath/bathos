@@ -570,6 +570,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             throw completeError;
           }
         }}
+        onCancel={async () => {
+          try {
+            await transitionTask(task.id, 'cancel');
+          } catch (cancelError) {
+            showTaskError('Task Could Not Be Canceled', cancelError);
+            throw cancelError;
+          }
+        }}
         planningActions={planningActionsForTask(task)}
         onMoveUp={(view === 'today' || view === 'anytime' || view === 'someday') && index > 0 ? async () => {
           try {
@@ -623,6 +631,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             await transitionTask(task.id, 'delete');
           } catch (deleteError) {
             showTaskError('Task Could Not Be Deleted', deleteError);
+            throw deleteError;
           }
         }}
       />
@@ -1463,6 +1472,7 @@ function TaskRow({
   bulkSelection,
   onUpdate,
   onComplete,
+  onCancel,
   planningActions,
   onMoveUp,
   onMoveDown,
@@ -1484,6 +1494,7 @@ function TaskRow({
   };
   onUpdate: (patch: EditableTaskPatch) => Promise<void>;
   onComplete: () => Promise<void>;
+  onCancel: () => Promise<void>;
   planningActions: TaskTemporalAction[];
   onMoveUp?: () => Promise<void>;
   onMoveDown?: () => Promise<void>;
@@ -1545,6 +1556,18 @@ function TaskRow({
     }, 0);
   };
 
+  const runTerminalAction = async (operation: () => Promise<void>) => {
+    const controls = getTaskTitleControls();
+    const currentIndex = controls.indexOf(titleButtonRef.current!);
+    const main = titleButtonRef.current?.closest('main') ?? null;
+    const applied = await run(operation);
+    if (applied) {
+      focusAfterRemoval(main, currentIndex);
+    } else {
+      window.setTimeout(() => titleButtonRef.current?.focus(), 0);
+    }
+  };
+
   return (
     <article className={selected || bulkSelection?.selected ? 'bg-foreground/[0.04]' : undefined}>
       <div className="flex min-h-14 items-center gap-3 px-2 sm:px-4">
@@ -1568,7 +1591,7 @@ function TaskRow({
             type="button"
             disabled={pending}
             aria-label={`Complete ${task.title}`}
-            onClick={() => void run(onComplete)}
+            onClick={() => void runTerminalAction(onComplete)}
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
             <Circle className="h-6 w-6" aria-hidden="true" />
@@ -1612,16 +1635,7 @@ function TaskRow({
             }
             if (event.key.toLowerCase() === 'c') {
               event.preventDefault();
-              const controls = getTaskTitleControls();
-              const currentIndex = controls.indexOf(event.currentTarget);
-              const main = event.currentTarget.closest('main');
-              void run(onComplete).then((applied) => {
-                if (applied) {
-                  focusAfterRemoval(main, currentIndex);
-                } else {
-                  window.setTimeout(() => titleButtonRef.current?.focus(), 0);
-                }
-              });
+              void runTerminalAction(onComplete);
               return;
             }
             if (event.key.toLowerCase() === 'm') {
@@ -1705,9 +1719,12 @@ function TaskRow({
               <DropdownMenuItem onSelect={() => void run(onMoveDown)}>Move Down</DropdownMenuItem>
             ) : null}
             <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => void runTerminalAction(onCancel)}>
+              Cancel
+            </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              onSelect={() => void run(onDelete)}
+              onSelect={() => void runTerminalAction(onDelete)}
             >
               Delete
             </DropdownMenuItem>

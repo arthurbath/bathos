@@ -240,6 +240,10 @@ The system SHALL model lifecycle, record disposition, planning placement, and st
 - **WHEN** a caller cancels present open work from the current revision
 - **THEN** the system sets the lifecycle to canceled, records `canceled_at`, removes the work from active views, and appends one cancellation event
 
+#### Scenario: Cancel an active to-do from the web interface
+- **WHEN** a user invokes the visible Cancel action for an active to-do
+- **THEN** the web client submits the ordinary revision-checked cancellation transition, removes the to-do from the active view, and makes the canceled record available in Logbook rather than deleting it
+
 #### Scenario: Reopen terminal work
 - **WHEN** a caller reopens completed or canceled work from the current revision
 - **THEN** the system returns the lifecycle to open, clears the current terminal timestamp, and retains the prior completion or cancellation event in history
@@ -579,7 +583,7 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **THEN** Enter opens editing, `C` completes the task, `M` opens structural movement, `W` opens temporal planning, Up or Down moves task focus, and Option+Up or Option+Down reorders within the current scope
 
 #### Scenario: Preserve keyboard focus after a task leaves the view
-- **WHEN** completion, movement, or recoverable deletion removes the focused task from the current view
+- **WHEN** completion, cancellation, movement, or recoverable deletion removes the focused task from the current view
 - **THEN** focus moves to the task now occupying the same visual position, then the prior task, then task capture or the primary view heading when no task remains
 
 #### Scenario: Navigate with web-safe commands

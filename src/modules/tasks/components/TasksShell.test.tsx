@@ -801,11 +801,61 @@ describe('TasksShell', () => {
 
     try {
       const complete = container.querySelector<HTMLButtonElement>('button[aria-label="Complete Existing task"]');
+      const capture = container.querySelector<HTMLInputElement>('input[aria-label="Add a Task"]');
+      complete?.focus();
       await act(async () => {
         complete?.click();
       });
 
       expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'complete');
+      await act(async () => {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.activeElement).toBe(capture);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it.each([
+    ['Cancel', 'cancel'],
+    ['Delete', 'delete'],
+  ] as const)('%ss an active task from its actions and focuses the next row', async (
+    actionLabel,
+    transition,
+  ) => {
+    const secondTask = {
+      ...task,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    };
+    const taskList = { ...defaultTaskList(), tasks: [task, secondTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      const actions = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Actions for Existing task"]',
+      );
+      await act(async () => {
+        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      const action = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent === actionLabel);
+      await act(async () => {
+        action?.click();
+      });
+
+      expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', transition);
+      await act(async () => {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.activeElement).toBe(
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-b"]'),
+      );
     } finally {
       cleanup(root, container);
     }
