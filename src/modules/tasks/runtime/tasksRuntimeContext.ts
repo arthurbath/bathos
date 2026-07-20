@@ -6,6 +6,7 @@ import type { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchy
 import type { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHierarchyOperationsRepository';
 import type { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
 import type { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
+import type { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
 
 export type TasksRuntimeValue = {
@@ -15,6 +16,7 @@ export type TasksRuntimeValue = {
   hierarchyOperationsRepository: TaskHierarchyOperationsRepository;
   templateService: TaskTemplateService;
   recurrenceService: TaskRecurrenceService;
+  reminderService: TaskReminderService;
   mode: 'local' | 'connected';
   syncState: TasksSyncState;
   pendingUploadCount: number;

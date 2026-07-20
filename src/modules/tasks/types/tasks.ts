@@ -38,6 +38,24 @@ export const taskRecurrenceStatuses = ['active', 'paused', 'archived'] as const;
 export const taskRecurrenceRuleModes = ['calendar', 'after_completion'] as const;
 export const taskRecurrenceFrequencies = ['daily', 'weekly', 'monthly', 'yearly'] as const;
 export const taskRecurrenceMissedPolicies = ['skip', 'latest', 'all'] as const;
+export const taskReminderStatuses = ['active', 'canceled'] as const;
+export const taskReminderAmbiguityChoices = ['earlier', 'later'] as const;
+export const taskReminderResolutionKinds = [
+  'exact',
+  'gap_forward',
+  'ambiguous_earlier',
+  'ambiguous_later',
+] as const;
+export const taskDeliveryChannels = ['in_app', 'web_push', 'native_push'] as const;
+export const taskDeliveryCapabilityStatuses = ['active', 'degraded', 'revoked'] as const;
+export const taskReminderDeliveryStatuses = [
+  'scheduled',
+  'attempted',
+  'provider_accepted',
+  'failed',
+  'acknowledged',
+  'canceled',
+] as const;
 export const taskActorTypes = ['user', 'automation', 'system', 'import'] as const;
 export const taskHierarchyRootTypes = [
   'area',
@@ -88,6 +106,12 @@ export type TaskRecurrenceStatus = (typeof taskRecurrenceStatuses)[number];
 export type TaskRecurrenceRuleMode = (typeof taskRecurrenceRuleModes)[number];
 export type TaskRecurrenceFrequency = (typeof taskRecurrenceFrequencies)[number];
 export type TaskRecurrenceMissedPolicy = (typeof taskRecurrenceMissedPolicies)[number];
+export type TaskReminderStatus = (typeof taskReminderStatuses)[number];
+export type TaskReminderAmbiguityChoice = (typeof taskReminderAmbiguityChoices)[number];
+export type TaskReminderResolutionKind = (typeof taskReminderResolutionKinds)[number];
+export type TaskDeliveryChannel = (typeof taskDeliveryChannels)[number];
+export type TaskDeliveryCapabilityStatus = (typeof taskDeliveryCapabilityStatuses)[number];
+export type TaskReminderDeliveryStatus = (typeof taskReminderDeliveryStatuses)[number];
 export type TaskActorType = (typeof taskActorTypes)[number];
 export type TaskHierarchyRootType = (typeof taskHierarchyRootTypes)[number];
 export type TaskHierarchyOperationKind = (typeof taskHierarchyOperations)[number];
@@ -116,6 +140,11 @@ type TaskRecurrenceRevisionRow = Tables<'tasks_recurrence_revisions'>;
 type TaskRecurrenceOccurrenceRow = Tables<'tasks_recurrence_occurrences'>;
 type TaskRecurrenceEvaluationRow = Tables<'tasks_recurrence_evaluations'>;
 type TaskRecurrenceStatusEventRow = Tables<'tasks_recurrence_status_events'>;
+type TaskReminderRow = Tables<'tasks_reminders'>;
+type TaskReminderOccurrenceRow = Tables<'tasks_reminder_occurrences'>;
+type TaskDeliveryTargetRow = Tables<'tasks_delivery_targets'>;
+type TaskReminderDeliveryRow = Tables<'tasks_reminder_deliveries'>;
+type TaskReminderClaimRow = Tables<'tasks_reminder_claims'>;
 
 type RefinedTaskFields = {
   lifecycle: TaskLifecycle;
@@ -300,5 +329,40 @@ export type TaskRecurrenceOccurrence = Omit<
 
 export type TaskRecurrenceEvaluation = TaskRecurrenceEvaluationRow;
 export type TaskRecurrenceStatusEvent = TaskRecurrenceStatusEventRow;
+
+export type TaskReminder = Omit<
+  TaskReminderRow,
+  | 'root_type'
+  | 'status'
+  | 'ambiguity_choice'
+  | 'resolution_kind'
+  | 'last_mutation_channel'
+  | 'last_actor_type'
+> & {
+  root_type: TaskTemplateKind;
+  status: TaskReminderStatus;
+  ambiguity_choice: TaskReminderAmbiguityChoice;
+  resolution_kind: TaskReminderResolutionKind;
+  last_mutation_channel: TaskEntryChannel;
+  last_actor_type: TaskActorType;
+};
+
+export type TaskReminderOccurrence = Omit<TaskReminderOccurrenceRow, 'status'> & {
+  status: 'scheduled' | 'canceled';
+};
+
+export type TaskDeliveryTarget = Omit<
+  TaskDeliveryTargetRow,
+  'channel' | 'capability_status'
+> & {
+  channel: TaskDeliveryChannel;
+  capability_status: TaskDeliveryCapabilityStatus;
+};
+
+export type TaskReminderDelivery = Omit<TaskReminderDeliveryRow, 'status'> & {
+  status: TaskReminderDeliveryStatus;
+};
+
+export type TaskReminderClaim = TaskReminderClaimRow;
 
 export type TaskUserSettings = Tables<'tasks_user_settings'>;

@@ -1200,6 +1200,48 @@ export type Database = {
           },
         ]
       }
+      tasks_delivery_targets: {
+        Row: {
+          capability_status: string
+          channel: string
+          configuration: Json
+          created_at: string
+          endpoint_key: string
+          id: string
+          label: string
+          last_error_code: string | null
+          last_seen_at: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          capability_status?: string
+          channel: string
+          configuration?: Json
+          created_at?: string
+          endpoint_key: string
+          id?: string
+          label?: string
+          last_error_code?: string | null
+          last_seen_at?: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          capability_status?: string
+          channel?: string
+          configuration?: Json
+          created_at?: string
+          endpoint_key?: string
+          id?: string
+          label?: string
+          last_error_code?: string | null
+          last_seen_at?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       tasks_headings: {
         Row: {
           client_mutation_id: string
@@ -1994,6 +2036,207 @@ export type Database = {
           },
         ]
       }
+      tasks_reminder_claims: {
+        Row: {
+          created_at: string
+          id: string
+          owner_id: string
+          result: Json
+          through_at: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          owner_id: string
+          result: Json
+          through_at: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          owner_id?: string
+          result?: Json
+          through_at?: string
+        }
+        Relationships: []
+      }
+      tasks_reminder_deliveries: {
+        Row: {
+          acknowledged_at: string | null
+          attempt_count: number
+          created_at: string
+          id: string
+          last_attempted_at: string | null
+          last_error_code: string | null
+          occurrence_id: string
+          owner_id: string
+          provider_accepted_at: string | null
+          provider_message_id: string | null
+          status: string
+          target_id: string
+          updated_at: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          attempt_count?: number
+          created_at?: string
+          id?: string
+          last_attempted_at?: string | null
+          last_error_code?: string | null
+          occurrence_id: string
+          owner_id: string
+          provider_accepted_at?: string | null
+          provider_message_id?: string | null
+          status?: string
+          target_id: string
+          updated_at?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          attempt_count?: number
+          created_at?: string
+          id?: string
+          last_attempted_at?: string | null
+          last_error_code?: string | null
+          occurrence_id?: string
+          owner_id?: string
+          provider_accepted_at?: string | null
+          provider_message_id?: string | null
+          status?: string
+          target_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_reminder_deliveries_occurrence_owner_fkey"
+            columns: ["occurrence_id", "owner_id"]
+            referencedRelation: "tasks_reminder_occurrences"
+            referencedColumns: ["id", "owner_id"]
+          },
+          {
+            foreignKeyName: "tasks_reminder_deliveries_target_owner_fkey"
+            columns: ["target_id", "owner_id"]
+            referencedRelation: "tasks_delivery_targets"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
+      tasks_reminder_occurrences: {
+        Row: {
+          client_mutation_id: string
+          created_at: string
+          id: string
+          owner_id: string
+          reminder_id: string
+          reminder_revision: number
+          resolved_at: string
+          status: string
+        }
+        Insert: {
+          client_mutation_id: string
+          created_at?: string
+          id?: string
+          owner_id: string
+          reminder_id: string
+          reminder_revision: number
+          resolved_at: string
+          status?: string
+        }
+        Update: {
+          client_mutation_id?: string
+          created_at?: string
+          id?: string
+          owner_id?: string
+          reminder_id?: string
+          reminder_revision?: number
+          resolved_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_reminder_occurrences_reminder_owner_fkey"
+            columns: ["reminder_id", "owner_id"]
+            referencedRelation: "tasks_reminders"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
+      tasks_reminders: {
+        Row: {
+          ambiguity_choice: string
+          client_mutation_id: string
+          created_at: string
+          id: string
+          last_actor_type: string
+          last_mutation_channel: string
+          local_date: string
+          local_time: string
+          owner_id: string
+          project_id: string | null
+          record_revision: number
+          resolution_kind: string
+          resolved_at: string
+          root_type: string
+          status: string
+          task_id: string | null
+          time_zone: string
+          updated_at: string
+        }
+        Insert: {
+          ambiguity_choice?: string
+          client_mutation_id: string
+          created_at?: string
+          id?: string
+          last_actor_type?: string
+          last_mutation_channel?: string
+          local_date: string
+          local_time: string
+          owner_id: string
+          project_id?: string | null
+          record_revision?: number
+          resolution_kind: string
+          resolved_at: string
+          root_type: string
+          status?: string
+          task_id?: string | null
+          time_zone: string
+          updated_at?: string
+        }
+        Update: {
+          ambiguity_choice?: string
+          client_mutation_id?: string
+          created_at?: string
+          id?: string
+          last_actor_type?: string
+          last_mutation_channel?: string
+          local_date?: string
+          local_time?: string
+          owner_id?: string
+          project_id?: string | null
+          record_revision?: number
+          resolution_kind?: string
+          resolved_at?: string
+          root_type?: string
+          status?: string
+          task_id?: string | null
+          time_zone?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_reminders_project_owner_fkey"
+            columns: ["project_id", "owner_id"]
+            referencedRelation: "tasks_projects"
+            referencedColumns: ["id", "owner_id"]
+          },
+          {
+            foreignKeyName: "tasks_reminders_task_owner_fkey"
+            columns: ["task_id", "owner_id"]
+            referencedRelation: "tasks_todos"
+            referencedColumns: ["id", "owner_id"]
+          },
+        ]
+      }
       tasks_template_instantiations: {
         Row: {
           actor_type: string
@@ -2621,6 +2864,10 @@ export type Database = {
         Args: { _household_id: string }
         Returns: Json
       }
+      tasks_acknowledge_reminder_delivery: {
+        Args: { _delivery_id: string }
+        Returns: Json
+      }
       tasks_archive_template: {
         Args: {
           _actor_type?: string
@@ -2639,6 +2886,16 @@ export type Database = {
         }
         Returns: Json
       }
+      tasks_cancel_reminder: {
+        Args: {
+          _actor_type?: string
+          _expected_record_revision: number
+          _mutation_channel?: string
+          _mutation_id: string
+          _reminder_id: string
+        }
+        Returns: Json
+      }
       tasks_capture_template: {
         Args: {
           _actor_type?: string
@@ -2652,7 +2909,12 @@ export type Database = {
         }
         Returns: Json
       }
+      tasks_claim_due_reminders: {
+        Args: { _request_id: string; _through_at: string }
+        Returns: Json
+      }
       tasks_create_export_v1: { Args: never; Returns: Json }
+      tasks_create_export_v10: { Args: never; Returns: Json }
       tasks_create_export_v2: { Args: never; Returns: Json }
       tasks_create_export_v3: { Args: never; Returns: Json }
       tasks_create_export_v4: { Args: never; Returns: Json }
@@ -2716,6 +2978,10 @@ export type Database = {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
       }
+      tasks_restore_export_v10: {
+        Args: { _dry_run?: boolean; _envelope: Json }
+        Returns: Json
+      }
       tasks_restore_export_v2: {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
@@ -2774,6 +3040,22 @@ export type Database = {
           _target_area_id: string
           _template_id: string
           _template_revision: number
+        }
+        Returns: Json
+      }
+      tasks_save_reminder: {
+        Args: {
+          _actor_type?: string
+          _ambiguity_choice: string
+          _expected_record_revision: number
+          _local_date: string
+          _local_time: string
+          _mutation_channel?: string
+          _mutation_id: string
+          _reminder_id: string
+          _root_id: string
+          _root_type: string
+          _time_zone: string
         }
         Returns: Json
       }

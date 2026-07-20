@@ -8,6 +8,8 @@ import {
 } from 'react';
 import {
   Archive,
+  Bell,
+  BellRing,
   CalendarDays,
   CalendarRange,
   CheckCircle2,
@@ -65,12 +67,13 @@ import {
 } from '@/modules/tasks/hooks/useTaskList';
 import { useTaskHierarchy, type TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import { useTaskSearch } from '@/modules/tasks/hooks/useTaskSearch';
+import { useTaskReminders } from '@/modules/tasks/hooks/useTaskReminders';
 import {
   useTaskHierarchyTrash,
   type DeletedTaskHierarchyRoot,
 } from '@/modules/tasks/hooks/useTaskHierarchyTrash';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
-import type { TaskTodo } from '@/modules/tasks/types/tasks';
+import type { TaskReminder, TaskTodo } from '@/modules/tasks/types/tasks';
 import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/taskEditorPlanning';
 import { TaskProjectDetailView } from '@/modules/tasks/components/TaskProjectDetailView';
 import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
@@ -145,6 +148,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
   const [searchTargetTaskId, setSearchTargetTaskId] = useState<string | null>(null);
   const taskSearch = useTaskSearch(userId, searchOpen);
+  const reminders = useTaskReminders(userId);
   const captureInputRef = useRef<HTMLInputElement>(null);
   const commandReturnFocusRef = useRef<HTMLElement | null>(null);
   const pendingNavigationRef = useRef(false);
@@ -423,6 +427,32 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         planningLabel={view === 'today' && getTodayTaskSection(task, planningDate) === 'unfinished'
           ? `Unfinished Since ${formatTaskCalendarDate(task.start_date ?? planningDate)}`
           : view === 'today' ? null : undefined}
+        reminder={reminders.byRootId.get(task.id) ?? null}
+        reminderMode={reminders.mode}
+        reminderTimeZone={reminders.planningTimeZone}
+        onSaveReminder={async (input) => {
+          try {
+            await reminders.save({
+              ...input,
+              rootType: 'todo',
+              rootId: task.id,
+              reminder: reminders.byRootId.get(task.id) ?? null,
+            });
+          } catch (reminderError) {
+            showTaskError('Reminder Could Not Be Saved', reminderError);
+            throw reminderError;
+          }
+        }}
+        onCancelReminder={async () => {
+          const reminder = reminders.byRootId.get(task.id);
+          if (!reminder) return;
+          try {
+            await reminders.cancel(reminder);
+          } catch (reminderError) {
+            showTaskError('Reminder Could Not Be Canceled', reminderError);
+            throw reminderError;
+          }
+        }}
         onDelete={async () => {
           try {
             await transitionTask(task.id, 'delete');
@@ -489,6 +519,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               <MobileTemplatesLink view={view} basePath={basePath} navigate={navigate} />
             </div>
           </div>
+
+          {reminders.dueItems.length > 0 ? (
+            <TaskDueReminders
+              items={reminders.dueItems}
+              onAcknowledge={async (deliveryId) => {
+                try {
+                  await reminders.acknowledge(deliveryId);
+                } catch (reminderError) {
+                  showTaskError('Reminder Could Not Be Acknowledged', reminderError);
+                }
+              }}
+            />
+          ) : null}
 
           <nav
             aria-label="Task views"
@@ -679,6 +722,53 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onCloseAutoFocus={restoreCommandFocus}
       />
     </div>
+  );
+}
+
+function TaskDueReminders({
+  items,
+  onAcknowledge,
+}: {
+  items: Array<{
+    delivery_id: string;
+    title: string;
+    resolved_at: string;
+  }>;
+  onAcknowledge: (deliveryId: string) => Promise<void>;
+}) {
+  return (
+    <section
+      aria-label="Due Reminders"
+      className="rounded-md border border-info/40 bg-info/5 p-4"
+    >
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-info">
+        <BellRing className="h-4 w-4" aria-hidden="true" />
+        Due Reminders
+      </h3>
+      <div className="mt-3 divide-y divide-info/20">
+        {items.map((item) => (
+          <div key={item.delivery_id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
+              <time className="text-xs text-muted-foreground" dateTime={item.resolved_at}>
+                {new Intl.DateTimeFormat(undefined, {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                }).format(new Date(item.resolved_at))}
+              </time>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void onAcknowledge(item.delivery_id)}
+            >
+              Acknowledge
+            </Button>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -881,6 +971,11 @@ function TaskRow({
   onMoveUp,
   onMoveDown,
   planningLabel,
+  reminder,
+  reminderMode,
+  reminderTimeZone,
+  onSaveReminder,
+  onCancelReminder,
   onDelete,
 }: {
   task: TaskTodo;
@@ -893,6 +988,15 @@ function TaskRow({
   onMoveUp?: () => Promise<void>;
   onMoveDown?: () => Promise<void>;
   planningLabel?: string | null;
+  reminder: TaskReminder | null;
+  reminderMode: 'local' | 'connected';
+  reminderTimeZone: string;
+  onSaveReminder: (input: {
+    localDate: string;
+    localTime: string;
+    ambiguityChoice: 'earlier' | 'later';
+  }) => Promise<void>;
+  onCancelReminder: () => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
@@ -1037,6 +1141,12 @@ function TaskRow({
               {task.deadline ? `Due ${formatTaskCalendarDate(task.deadline)}` : null}
             </span>
           ) : null}
+          {reminder ? (
+            <span className="mt-1 inline-flex items-center gap-1 text-xs font-normal text-info">
+              <Bell className="h-3.5 w-3.5" aria-hidden="true" />
+              {formatReminderIntent(reminder)}
+            </span>
+          ) : null}
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -1086,6 +1196,11 @@ function TaskRow({
           returnFocusRef={titleButtonRef}
           onCancel={onSelect}
           onSave={onUpdate}
+          reminder={reminder}
+          reminderMode={reminderMode}
+          reminderTimeZone={reminderTimeZone}
+          onSaveReminder={onSaveReminder}
+          onCancelReminder={onCancelReminder}
         />
       ) : null}
       <TaskMoveDialog
@@ -1117,22 +1232,45 @@ function TaskEditor({
   returnFocusRef,
   onCancel,
   onSave,
+  reminder,
+  reminderMode,
+  reminderTimeZone,
+  onSaveReminder,
+  onCancelReminder,
 }: {
   task: TaskTodo;
   hierarchy: TaskHierarchyModel;
   returnFocusRef: RefObject<HTMLButtonElement>;
   onCancel: () => void;
   onSave: (patch: EditableTaskPatch) => Promise<void>;
+  reminder: TaskReminder | null;
+  reminderMode: 'local' | 'connected';
+  reminderTimeZone: string;
+  onSaveReminder: (input: {
+    localDate: string;
+    localTime: string;
+    ambiguityChoice: 'earlier' | 'later';
+  }) => Promise<void>;
+  onCancelReminder: () => Promise<void>;
 }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes);
   const [actionability, setActionability] = useState(task.actionability);
   const [startDate, setStartDate] = useState(task.start_date ?? '');
   const [deadline, setDeadline] = useState(task.deadline ?? '');
+  const [reminderDate, setReminderDate] = useState(reminder?.local_date ?? '');
+  const [reminderTime, setReminderTime] = useState(reminder?.local_time.slice(0, 5) ?? '09:00');
+  const [ambiguityChoice, setAmbiguityChoice] = useState<'earlier' | 'later'>(
+    reminder?.ambiguity_choice ?? 'earlier',
+  );
   const [organization, setOrganization] = useState(taskOrganizationValue(task));
   const [headingId, setHeadingId] = useState(task.heading_id ?? '');
   const [saving, setSaving] = useState(false);
   const invalidDateRange = Boolean(startDate && deadline && deadline < startDate);
+  const reminderChanged = reminderDate !== (reminder?.local_date ?? '')
+    || (reminderDate !== '' && reminderTime !== (reminder?.local_time.slice(0, 5) ?? '09:00'))
+    || ambiguityChoice !== (reminder?.ambiguity_choice ?? 'earlier');
+  const invalidReminder = Boolean(reminderDate && !reminderTime);
 
   const restoreTitleFocus = () => {
     window.setTimeout(() => returnFocusRef.current?.focus(), 0);
@@ -1146,7 +1284,7 @@ function TaskEditor({
   const handleSave = async (event: FormEvent) => {
     event.preventDefault();
     const normalizedTitle = title.trim();
-    if (!normalizedTitle || saving || invalidDateRange) {
+    if (!normalizedTitle || saving || invalidDateRange || invalidReminder) {
       return;
     }
 
@@ -1174,14 +1312,25 @@ function TaskEditor({
     ) {
       Object.assign(patch, container);
     }
-    if (Object.keys(patch).length === 0) {
+    if (Object.keys(patch).length === 0 && !reminderChanged) {
       handleCancel();
       return;
     }
 
     setSaving(true);
     try {
-      await onSave(patch);
+      if (reminderChanged) {
+        if (reminderDate) {
+          await onSaveReminder({ localDate: reminderDate, localTime: reminderTime, ambiguityChoice });
+        } else if (reminder) {
+          await onCancelReminder();
+        }
+      }
+      if (Object.keys(patch).length > 0) {
+        await onSave(patch);
+      } else {
+        onCancel();
+      }
       restoreTitleFocus();
     } catch {
       // The parent reports the error and keeps the editor open for retry.
@@ -1355,6 +1504,84 @@ function TaskEditor({
           </div>
         </div>
       </div>
+      <fieldset className="space-y-3 rounded-md border border-[hsl(var(--grid-sticky-line))] p-3">
+        <legend className="px-1 text-sm font-medium text-foreground">Reminder</legend>
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground" htmlFor={`task-reminder-date-${task.id}`}>
+              Date
+            </label>
+            <div className="flex gap-2">
+              <DatePickerField
+                id={`task-reminder-date-${task.id}`}
+                value={reminderDate}
+                onValueChange={setReminderDate}
+                disabled={saving || reminderMode !== 'connected'}
+                placeholder="No Reminder"
+                aria-label="Reminder Date"
+              />
+              {reminderDate ? (
+                <Button
+                  type="button"
+                  variant="clear"
+                  size="icon"
+                  disabled={saving || reminderMode !== 'connected'}
+                  aria-label="Clear Reminder"
+                  onClick={() => setReminderDate('')}
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground" htmlFor={`task-reminder-time-${task.id}`}>
+              Time
+            </label>
+            <Input
+              id={`task-reminder-time-${task.id}`}
+              type="time"
+              value={reminderTime}
+              onChange={(event) => setReminderTime(event.target.value)}
+              disabled={saving || reminderMode !== 'connected' || !reminderDate}
+            />
+          </div>
+        </div>
+        {reminderDate ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground" htmlFor={`task-reminder-ambiguity-${task.id}`}>
+                Repeated Local Time
+              </label>
+              <select
+                id={`task-reminder-ambiguity-${task.id}`}
+                value={ambiguityChoice}
+                onChange={(event) => setAmbiguityChoice(event.target.value as 'earlier' | 'later')}
+                disabled={saving || reminderMode !== 'connected'}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="earlier">Earlier Instance</option>
+                <option value="later">Later Instance</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <span className="text-sm font-medium text-foreground">Time Zone</span>
+              <p className="flex h-10 items-center text-sm text-muted-foreground">
+                {reminderTimeZone}
+              </p>
+            </div>
+          </div>
+        ) : null}
+        {reminderMode !== 'connected' ? (
+          <p className="text-xs text-warning">
+            Reminders require connected task storage so the server can own delivery identity.
+          </p>
+        ) : reminder?.resolution_kind === 'gap_forward' ? (
+          <p className="text-xs text-warning">
+            This local time was adjusted to the first valid instant after a daylight-saving gap.
+          </p>
+        ) : null}
+      </fieldset>
       {invalidDateRange ? (
         <p role="alert" className="text-sm text-destructive">
           Deadline cannot be earlier than the start date.
@@ -1364,7 +1591,17 @@ function TaskEditor({
         <Button type="button" variant="clear" size="sm" disabled={saving} onClick={handleCancel}>
           Cancel
         </Button>
-        <Button type="submit" size="sm" disabled={!title.trim() || saving || invalidDateRange}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={
+            !title.trim()
+            || saving
+            || invalidDateRange
+            || invalidReminder
+            || (reminderChanged && reminderMode !== 'connected')
+          }
+        >
           Save
         </Button>
       </div>
@@ -1397,6 +1634,11 @@ function showTaskError(title: string, error: unknown): void {
     description: error instanceof Error ? error.message : 'Unknown error',
     variant: 'destructive',
   });
+}
+
+function formatReminderIntent(reminder: TaskReminder): string {
+  const localTime = reminder.local_time.slice(0, 5);
+  return `Remind ${formatTaskCalendarDate(reminder.local_date)} at ${localTime}`;
 }
 
 function getTaskViewLabel(view: TaskShellView): string {

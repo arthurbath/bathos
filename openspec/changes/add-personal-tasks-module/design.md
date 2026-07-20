@@ -330,6 +330,8 @@ Clients may cache near-term schedules to improve responsiveness, but a local sch
 
 The service records scheduled, attempted, provider-accepted, failed, and acknowledged states separately. Provider acceptance is not reported as proof that the user saw the notification. Permission denial, missing platform support, expired targets, and persistent delivery failure are visible as degraded reminder capability without blocking task operation.
 
+The implemented reminder foundation stores one active reminder per to-do or project, including its original local date, wall-clock time, IANA time zone, ambiguity choice, resolved UTC instant, and resolution kind. Each revision creates one immutable logical occurrence. Per-target delivery rows are unique by occurrence and registered target. The in-app client claims due delivery rows through a short server lease and an immutable request receipt, which prevents multiple tabs from creating another logical delivery while permitting recovery after an abandoned attempt. Portable export version 10 includes reminder intent and occurrence history but deliberately excludes delivery endpoints, subscription material, attempt diagnostics, and claim receipts. Web Push target registration and provider transport remain part of task 5.8 and will use this established identity contract.
+
 Notification payloads contain only the minimum user-approved content required for the selected preview setting. Delivery diagnostics never contain task titles or notes.
 
 Rationale: Server ownership supports delivery while the task app is closed and gives web and later native clients one deduplication contract.

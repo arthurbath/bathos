@@ -14,12 +14,12 @@ import {
   taskExportV5Collections,
   taskExportV6Collections,
   taskExportV8Collections,
-  taskExportV9Collections,
+  taskExportV10Collections,
   type TaskExportV5,
   type TaskExportV6,
   type TaskExportV7,
   type TaskExportV8,
-  type TaskExportV9,
+  type TaskExportV10,
 } from './taskPortability';
 
 const checksum = 'a'.repeat(64);
@@ -60,18 +60,18 @@ const versionEightExport = {
 
 const currentTaskExport = {
   format: 'garden.bath.tasks.export',
-  schema_version: 9,
+  schema_version: 10,
   created_at: '2026-07-20T05:30:00.000Z',
   manifest: {
-    collections: [...taskExportV9Collections],
-    counts: Object.fromEntries(taskExportV9Collections.map((name) => [name, 0])),
+    collections: [...taskExportV10Collections],
+    counts: Object.fromEntries(taskExportV10Collections.map((name) => [name, 0])),
     checksums: {
       algorithm: 'sha256',
-      ...Object.fromEntries(taskExportV9Collections.map((name) => [name, checksum])),
+      ...Object.fromEntries(taskExportV10Collections.map((name) => [name, checksum])),
     },
   },
-  data: Object.fromEntries(taskExportV9Collections.map((name) => [name, []])),
-} as TaskExportV9;
+  data: Object.fromEntries(taskExportV10Collections.map((name) => [name, []])),
+} as TaskExportV10;
 
 const versionFiveExport = {
   ...versionSixExport,
@@ -100,7 +100,7 @@ describe('task portability', () => {
     const client = createClient([currentTaskExport]);
 
     await expect(createTaskExport(client)).resolves.toEqual(currentTaskExport);
-    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v9');
+    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v10');
     expect(serializeTaskExport(currentTaskExport)).toBe(`${JSON.stringify(currentTaskExport, null, 2)}\n`);
     expect(getTaskExportFilename(currentTaskExport.created_at)).toBe('bathos-tasks-2026-07-20.json');
   });
@@ -162,7 +162,7 @@ describe('task portability', () => {
   });
 
   it('rejects incompatible envelopes and inconsistent reports', async () => {
-    expect(() => parseTaskExport({ ...taskExport, schema_version: 10 })).toThrow(
+    expect(() => parseTaskExport({ ...taskExport, schema_version: 11 })).toThrow(
       InvalidTaskExportError,
     );
     expect(() => parseTaskExport({

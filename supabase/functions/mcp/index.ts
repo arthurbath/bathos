@@ -2374,13 +2374,124 @@ var evaluateTaskRecurrence = defineTool({
   handler: (input, ctx) => toMcpResult(evaluateTaskRecurrenceData(input, requireAuthenticated(ctx)))
 });
 
+// src/lib/mcp/tools/tasks-reminders.ts
+async function readMany5(query) {
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+function stripOwner4(row) {
+  const { owner_id: _ownerId, ...record } = row;
+  return record;
+}
+async function getTaskRemindersData(input, auth2) {
+  let query = auth2.supabase.from("tasks_reminders").select("*").eq("owner_id", auth2.userId);
+  if (!input.include_canceled) query = query.eq("status", "active");
+  const reminders = await readMany5(query.order("resolved_at").order("id").limit(input.limit + 1));
+  const visible = reminders.slice(0, input.limit);
+  const ids = visible.map(({ id }) => id);
+  const occurrences = !input.include_occurrences || ids.length === 0 ? [] : await readMany5(auth2.supabase.from("tasks_reminder_occurrences").select("*").eq("owner_id", auth2.userId).in("reminder_id", ids).order("resolved_at", { ascending: false }).limit(501));
+  const occurrencesByReminder = /* @__PURE__ */ new Map();
+  for (const occurrence of occurrences.slice(0, 500)) {
+    const rows = occurrencesByReminder.get(occurrence.reminder_id) ?? [];
+    rows.push(stripOwner4(occurrence));
+    occurrencesByReminder.set(occurrence.reminder_id, rows);
+  }
+  return {
+    reminders: visible.map((reminder) => ({
+      ...stripOwner4(reminder),
+      root_id: reminder.task_id ?? reminder.project_id,
+      ...input.include_occurrences ? { occurrences: occurrencesByReminder.get(reminder.id) ?? [] } : {}
+    })),
+    truncated: reminders.length > input.limit,
+    occurrences_truncated: input.include_occurrences && occurrences.length > 500
+  };
+}
+async function saveTaskReminderData(input, auth2) {
+  const { data, error } = await auth2.supabase.rpc("tasks_save_reminder", {
+    _reminder_id: input.reminder_id ?? null,
+    _expected_record_revision: input.expected_record_revision ?? null,
+    _root_type: input.root_type,
+    _root_id: input.root_id,
+    _local_date: input.local_date,
+    _local_time: input.local_time,
+    _time_zone: input.time_zone,
+    _ambiguity_choice: input.ambiguity_choice,
+    _mutation_id: input.idempotency_key,
+    _mutation_channel: "mcp",
+    _actor_type: "automation"
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function cancelTaskReminderData(input, auth2) {
+  const { data, error } = await auth2.supabase.rpc("tasks_cancel_reminder", {
+    _reminder_id: input.reminder_id,
+    _expected_record_revision: input.expected_record_revision,
+    _mutation_id: input.idempotency_key,
+    _mutation_channel: "mcp",
+    _actor_type: "automation"
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+var calendarDateSchema4 = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+var localTimeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/);
+var getTaskReminders = defineTool({
+  name: "get_task_reminders",
+  title: "Get Task Reminders",
+  description: "Read owner-scoped reminder intent, resolved UTC instants, resolution decisions, and optionally immutable occurrence identities.",
+  inputSchema: {
+    include_canceled: z.boolean().default(false),
+    include_occurrences: z.boolean().default(false),
+    limit: z.number().int().min(1).max(500).default(250)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(getTaskRemindersData(input, requireAuthenticated(ctx)))
+});
+var saveTaskReminder = defineTool({
+  name: "save_task_reminder",
+  title: "Save Task Reminder",
+  description: "Create or revise one task or project reminder from explicit local date, wall-clock time, IANA time zone, and daylight-saving ambiguity choice.",
+  inputSchema: {
+    reminder_id: uuidSchema.optional().describe("Existing reminder to revise. Omit to create."),
+    expected_record_revision: z.number().int().positive().optional().describe("Required current record revision when revising an existing reminder."),
+    root_type: z.enum(["todo", "project"]),
+    root_id: uuidSchema,
+    local_date: calendarDateSchema4,
+    local_time: localTimeSchema,
+    time_zone: z.string().min(1).max(255),
+    ambiguity_choice: z.enum(["earlier", "later"]).default("earlier"),
+    idempotency_key: uuidSchema.describe("Stable UUID for this exact save request.")
+  },
+  annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+  handler: (input, ctx) => toMcpResult(saveTaskReminderData(input, requireAuthenticated(ctx)))
+});
+var cancelTaskReminder = defineTool({
+  name: "cancel_task_reminder",
+  title: "Cancel Task Reminder",
+  description: "Cancel one reminder and every still-pending delivery occurrence without deleting its portable schedule history.",
+  inputSchema: {
+    reminder_id: uuidSchema,
+    expected_record_revision: z.number().int().positive(),
+    idempotency_key: uuidSchema.describe("Stable UUID for this exact cancellation request.")
+  },
+  annotations: {
+    readOnlyHint: false,
+    idempotentHint: true,
+    destructiveHint: false,
+    openWorldHint: false
+  },
+  handler: (input, ctx) => toMcpResult(cancelTaskReminderData(input, requireAuthenticated(ctx)))
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "rsqfokyqntmtdejfwmjs";
 var mcp_default = defineMcp({
   name: "bathos-mcp",
   title: "BathOS",
   version: "0.1.0",
-  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, planning views, native templates, and explicit recurrence definitions plus guarded create, update, move, schedule, template-instantiation, recurrence, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates and planning time zones, never tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
+  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, planning views, native templates, recurrence definitions, and resolved reminders plus guarded create, update, move, schedule, template-instantiation, recurrence, reminder, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates. Reminders use explicit local date, wall-clock time, IANA time zone, and daylight-saving ambiguity choice. Neither uses tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -2400,6 +2511,7 @@ var mcp_default = defineMcp({
     getTaskView,
     getTaskTemplates,
     getTaskRecurrences,
+    getTaskReminders,
     createTask,
     createMailTask,
     beginMailRetirement,
@@ -2411,7 +2523,9 @@ var mcp_default = defineMcp({
     instantiateTaskTemplate,
     saveTaskRecurrence,
     setTaskRecurrenceStatus,
-    evaluateTaskRecurrence
+    evaluateTaskRecurrence,
+    saveTaskReminder,
+    cancelTaskReminder
   ]
 });
 

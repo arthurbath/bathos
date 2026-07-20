@@ -452,6 +452,91 @@ const taskRecurrenceStatusEvents = new Table(
   },
 );
 
+const taskReminders = new Table(
+  {
+    owner_id: column.text,
+    root_type: column.text,
+    task_id: column.text,
+    project_id: column.text,
+    local_date: column.text,
+    local_time: column.text,
+    time_zone: column.text,
+    ambiguity_choice: column.text,
+    resolved_at: column.text,
+    resolution_kind: column.text,
+    status: column.text,
+    record_revision: column.integer,
+    last_mutation_channel: column.text,
+    last_actor_type: column.text,
+    client_mutation_id: column.text,
+    created_at: column.text,
+    updated_at: column.text,
+  },
+  {
+    indexes: {
+      ownerRoot: ['owner_id', 'root_type', 'task_id', 'project_id', 'status'],
+      ownerResolved: ['owner_id', 'status', 'resolved_at'],
+    },
+  },
+);
+
+const taskReminderOccurrences = new Table(
+  {
+    owner_id: column.text,
+    reminder_id: column.text,
+    reminder_revision: column.integer,
+    resolved_at: column.text,
+    status: column.text,
+    client_mutation_id: column.text,
+    created_at: column.text,
+  },
+  { indexes: { ownerDue: ['owner_id', 'status', 'resolved_at'] } },
+);
+
+const taskDeliveryTargets = new Table(
+  {
+    owner_id: column.text,
+    channel: column.text,
+    endpoint_key: column.text,
+    label: column.text,
+    capability_status: column.text,
+    configuration: column.text,
+    last_error_code: column.text,
+    last_seen_at: column.text,
+    created_at: column.text,
+    updated_at: column.text,
+  },
+  { indexes: { ownerChannel: ['owner_id', 'channel', 'capability_status'] } },
+);
+
+const taskReminderDeliveries = new Table(
+  {
+    owner_id: column.text,
+    occurrence_id: column.text,
+    target_id: column.text,
+    status: column.text,
+    attempt_count: column.integer,
+    last_attempted_at: column.text,
+    provider_accepted_at: column.text,
+    acknowledged_at: column.text,
+    provider_message_id: column.text,
+    last_error_code: column.text,
+    created_at: column.text,
+    updated_at: column.text,
+  },
+  { indexes: { ownerStatus: ['owner_id', 'status', '-updated_at'] } },
+);
+
+const taskReminderClaims = new Table(
+  {
+    owner_id: column.text,
+    through_at: column.text,
+    result: column.text,
+    created_at: column.text,
+  },
+  { indexes: { ownerCreated: ['owner_id', '-created_at'] } },
+);
+
 const taskSyncIssues = new Table(
   {
     task_id: column.text,
@@ -496,6 +581,11 @@ export const tasksPowerSyncSchema = new Schema({
   tasks_recurrence_occurrences: taskRecurrenceOccurrences,
   tasks_recurrence_evaluations: taskRecurrenceEvaluations,
   tasks_recurrence_status_events: taskRecurrenceStatusEvents,
+  tasks_reminders: taskReminders,
+  tasks_reminder_occurrences: taskReminderOccurrences,
+  tasks_delivery_targets: taskDeliveryTargets,
+  tasks_reminder_deliveries: taskReminderDeliveries,
+  tasks_reminder_claims: taskReminderClaims,
   tasks_sync_issues: taskSyncIssues,
   tasks_owner_binding: taskOwnerBinding,
 });

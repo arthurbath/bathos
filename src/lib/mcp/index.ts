@@ -19,6 +19,11 @@ import {
   saveTaskRecurrence,
   setTaskRecurrenceStatus,
 } from "./tools/tasks-recurrence";
+import {
+  cancelTaskReminder,
+  getTaskReminders,
+  saveTaskReminder,
+} from "./tools/tasks-reminders";
 
 // Direct Supabase host for OAuth issuer (must not be a proxy URL).
 // VITE_SUPABASE_PROJECT_ID is inlined by Vite at build time, keeping this
@@ -30,7 +35,7 @@ export default defineMcp({
   title: "BathOS",
   version: "0.1.0",
   instructions:
-    "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, planning views, native templates, and explicit recurrence definitions plus guarded create, update, move, schedule, template-instantiation, recurrence, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates and planning time zones, never tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
+    "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, planning views, native templates, recurrence definitions, and resolved reminders plus guarded create, update, move, schedule, template-instantiation, recurrence, reminder, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates. Reminders use explicit local date, wall-clock time, IANA time zone, and daylight-saving ambiguity choice. Neither uses tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated",
@@ -50,6 +55,7 @@ export default defineMcp({
     getTaskView,
     getTaskTemplates,
     getTaskRecurrences,
+    getTaskReminders,
     createTask,
     createMailTask,
     beginMailRetirement,
@@ -62,5 +68,7 @@ export default defineMcp({
     saveTaskRecurrence,
     setTaskRecurrenceStatus,
     evaluateTaskRecurrence,
+    saveTaskReminder,
+    cancelTaskReminder,
   ],
 });

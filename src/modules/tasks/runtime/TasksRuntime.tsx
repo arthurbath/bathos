@@ -16,6 +16,7 @@ import { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepos
 import { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHierarchyOperationsRepository';
 import { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
+import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import { resolveTaskPlanningTimeZone } from '@/modules/tasks/domain/taskDates';
 import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
 import {
@@ -57,6 +58,7 @@ export function TasksRuntimeProvider({
   );
   const templateService = useMemo(() => new TaskTemplateService(supabase), []);
   const recurrenceService = useMemo(() => new TaskRecurrenceService(supabase), []);
+  const reminderService = useMemo(() => new TaskReminderService(supabase), []);
 
   useEffect(() => {
     let active = true;
@@ -152,6 +154,7 @@ export function TasksRuntimeProvider({
       hierarchyOperationsRepository,
       templateService,
       recurrenceService,
+      reminderService,
       mode: state.status === 'ready' ? state.mode : 'local',
       syncState,
       pendingUploadCount,
@@ -165,6 +168,7 @@ export function TasksRuntimeProvider({
       prepareForSignOut,
       repository,
       recurrenceService,
+      reminderService,
       templateService,
       syncState,
       pendingUploadCount,

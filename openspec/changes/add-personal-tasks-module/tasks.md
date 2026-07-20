@@ -29,7 +29,7 @@
 - [x] 3.1a Add the owner-scoped `tasks_todos` table for the first-slice task, planning, source, lifecycle, recovery, and ordering model.
 - [x] 3.1b Add owner-scoped area, project, heading, and checklist tables for the hierarchy slice.
 - [x] 3.1c Add owner-scoped planning-time-zone settings for date-derived views.
-- [ ] 3.1d Add owner-scoped template, recurrence, reminder, and delivery tables when their product slices begin.
+- [x] 3.1d Add owner-scoped template, recurrence, reminder, and delivery tables when their product slices begin.
 - [x] 3.1e Add a normalized owner-scoped Mail source identity and retirement-lifecycle record.
 - [x] 3.2 Add RLS policies and grants that restrict every current task record to its signed-in owner and withhold hard deletion from authenticated clients.
 - [x] 3.3a Add first-slice constraints and indexes for stable identifiers, provenance, valid lifecycle/disposition, planning queries, and synchronization.
@@ -96,7 +96,7 @@
 
 - [ ] 7.1 Test offline create, edit, complete, reschedule, reorder, delete, restore, and recurrence workflows.
 - [ ] 7.2 Test overlapping mutations from web, MCP, Raycast, and any other active client.
-- [ ] 7.3 Test time-zone and daylight-saving transitions for date-only planning and reminders.
+- [x] 7.3 Test time-zone and daylight-saving transitions for date-only planning and reminders.
 - [x] 7.4 Test recurrence retries, missed schedules, delayed clients, and duplicate-suppression behavior.
 - [ ] 7.5 Test undo, trash restoration, backup, export, and restore with synthetic and disposable personal test data.
 - [ ] 7.6 Test keyboard traversal, focus restoration, screen-reader labels, and reduced-motion behavior.

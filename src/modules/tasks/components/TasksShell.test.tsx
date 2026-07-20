@@ -12,6 +12,7 @@ const mockTaskList = vi.fn();
 const mockTaskSearch = vi.fn();
 const mockTaskHierarchy = vi.fn();
 const mockTaskHierarchyTrash = vi.fn();
+const mockTaskReminders = vi.fn();
 const mockPrepareForSignOut = vi.fn();
 
 vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
@@ -31,6 +32,10 @@ vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({
 
 vi.mock('@/modules/tasks/hooks/useTaskHierarchyTrash', () => ({
   useTaskHierarchyTrash: (...args: unknown[]) => mockTaskHierarchyTrash(...args),
+}));
+
+vi.mock('@/modules/tasks/hooks/useTaskReminders', () => ({
+  useTaskReminders: (...args: unknown[]) => mockTaskReminders(...args),
 }));
 
 vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
@@ -221,6 +226,19 @@ describe('TasksShell', () => {
       loading: false,
       error: null,
       restore: vi.fn().mockResolvedValue(undefined),
+    });
+    mockTaskReminders.mockReset().mockReturnValue({
+      reminders: [],
+      byRootId: new Map(),
+      dueItems: [],
+      mode: 'local',
+      planningTimeZone: 'America/Los_Angeles',
+      loading: false,
+      error: null,
+      save: vi.fn().mockResolvedValue(undefined),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      acknowledge: vi.fn().mockResolvedValue(undefined),
+      claimDue: vi.fn().mockResolvedValue(undefined),
     });
   });
 
@@ -765,6 +783,72 @@ describe('TasksShell', () => {
       });
 
       expect(taskList.updateTask).toHaveBeenCalledWith('task-a', { deadline: null });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('saves a canonical reminder from the task editor', async () => {
+    const saveReminder = vi.fn().mockResolvedValue(undefined);
+    const reminder = {
+      id: 'reminder-a', owner_id: 'owner-a', root_type: 'todo' as const,
+      task_id: 'task-a', project_id: null, local_date: '2026-07-20',
+      local_time: '09:00:00', time_zone: 'America/Los_Angeles',
+      ambiguity_choice: 'earlier' as const, resolved_at: '2026-07-20T16:00:00Z',
+      resolution_kind: 'exact' as const, status: 'active' as const,
+      record_revision: 1, last_mutation_channel: 'web' as const,
+      last_actor_type: 'user' as const, client_mutation_id: 'mutation-a',
+      created_at: '2026-07-20T15:00:00Z', updated_at: '2026-07-20T15:00:00Z',
+    };
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [reminder], byRootId: new Map([['task-a', reminder]]), dueItems: [],
+      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      const time = container.querySelector<HTMLInputElement>('#task-reminder-time-task-a')!;
+      await act(async () => setInputValue(time, '10:30'));
+      await act(async () => {
+        time.form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+
+      expect(saveReminder).toHaveBeenCalledWith(expect.objectContaining({
+        rootType: 'todo', rootId: 'task-a', reminder,
+        localDate: '2026-07-20', localTime: '10:30', ambiguityChoice: 'earlier',
+      }));
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('shows and acknowledges a claimed due reminder', async () => {
+    const acknowledge = vi.fn().mockResolvedValue(undefined);
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), mode: 'connected',
+      planningTimeZone: 'America/Los_Angeles', loading: false, error: null,
+      save: vi.fn(), cancel: vi.fn(), acknowledge, claimDue: vi.fn(),
+      dueItems: [{
+        delivery_id: 'delivery-a', occurrence_id: 'occurrence-a',
+        reminder_id: 'reminder-a', root_type: 'todo', root_id: 'task-a',
+        title: 'Existing task', resolved_at: '2026-07-20T16:00:00Z', attempt_count: 1,
+      }],
+    });
+    const { container, root } = renderShell();
+
+    try {
+      expect(container.querySelector('section[aria-label="Due Reminders"]')?.textContent)
+        .toContain('Existing task');
+      const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find(({ textContent }) => textContent === 'Acknowledge');
+      await act(async () => button?.click());
+      expect(acknowledge).toHaveBeenCalledWith('delivery-a');
     } finally {
       cleanup(root, container);
     }
