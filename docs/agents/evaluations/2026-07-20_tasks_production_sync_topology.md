@@ -13,11 +13,11 @@ This decision is independent from the permanent product name and launcher icon. 
 ## Current Facts
 
 - The linked BathOS Supabase project is active and healthy in `us-east-1`.
+- A read-only 2026 Jul 20 check confirmed that the Bath Supabase organization is already on the Pro plan and the BathOS database runs Postgres 17.
 - The repository contains tested task-only PowerSync schema and owner-scoped Sync Streams for all currently synchronized collections.
 - The public committed `.env` has no PowerSync endpoint. Adding the eventual HTTPS endpoint there is safe, but database passwords and service configuration secrets are not.
 - No production replication role, publication, or PowerSync instance has been created by this evaluation.
 - The PowerSync CLI is not currently installed.
-- The BathOS Supabase billing plan and its external-replication eligibility have not been confirmed.
 
 ## Requirements for the Parallel-Use Phase
 
@@ -63,16 +63,16 @@ RxDB remains the documented fallback if production integration exposes a materia
 
 ## Supabase Prerequisite
 
-PowerSync requires direct logical replication, a dedicated replication role, a `powersync` publication, and a replication slot. Supabase states that pooler connections do not support logical replication and its current pricing marks external replication unavailable on the Free plan. The deployment must therefore confirm the BathOS organization plan before any production change. A plan change, if required, is a separate user-approved cost.
+PowerSync requires direct logical replication, a dedicated replication role, a `powersync` publication, and a replication slot. Supabase states that pooler connections do not support logical replication and its current pricing marks external replication unavailable on the Free plan. The Bath organization is already on Pro, so no Supabase plan upgrade gate remains. The activation must still show any incremental billing before accepting it.
 
 The eventual setup must use a least-privilege task-only role and publication rather than `FOR ALL TABLES`. Sync Streams must retain the explicit authenticated-owner predicate because the replication connection bypasses RLS. Production setup must also monitor inactive slots and WAL retention.
 
 ## Recommendation
 
-Use PowerSync Cloud Free for a bounded real-world parallel-use trial, subject to two approvals:
+Use PowerSync Cloud Free for a bounded real-world parallel-use trial, subject to two external-action approvals:
 
-1. Confirm that the BathOS Supabase plan permits external logical replication or approve the required Supabase plan change.
-2. Approve a PowerSync Cloud account and the addition of PowerSync as a processor of personal task data.
+1. Approve a PowerSync Cloud account and the addition of PowerSync as a processor of personal task data.
+2. Approve the production replication role, publication, slot, owner stream, Auth configuration, and public endpoint changes after the dashboard shows any incremental billing.
 
 Provision one US-region development instance first. Configure Supabase Auth through the project's JWKS endpoint, a task-only replication role and publication, the committed owner-only Sync Streams, and the public client endpoint. Validate with a synthetic production account before allowing personal tasks. Clear the synthetic records after validation.
 

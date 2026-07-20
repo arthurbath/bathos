@@ -2,6 +2,14 @@
 
 This package prepares the production Web Push dispatcher and its one-minute Supabase Cron trigger without committing credentials. Running the files locally or reading this package does not provision production.
 
+## Files
+
+- `extensions-enable.sql` enables the `pg_cron` and `pg_net` extensions required by the scheduled dispatcher.
+- `cron-create.sql` creates the fixed-name, once-per-minute job after checking the extension and Vault prerequisites.
+- `verify.sql` rejects missing or duplicate secrets and jobs, endpoint or cadence drift, and embedded decrypted secrets.
+- `cron-remove.sql` stops the Tasks reminder job without removing shared extensions or delivery evidence.
+- `test-local.sql` exercises the exact extension, Vault, Cron, and verification sequence inside one rolled-back transaction.
+
 ## Required configuration
 
 The Edge Function needs these managed secrets:
@@ -34,15 +42,16 @@ The bundle gate compiles the dispatcher with the newest locally cached official 
 4. Set the four server values as Supabase Edge Function secrets.
 5. Set `VITE_TASKS_WEB_PUSH_PUBLIC_KEY` in the production web-build environment and deploy that build.
 6. Deploy `dispatch-task-reminders` with JWT verification disabled. The function authenticates only the separate dispatch secret.
-7. Create the matching `tasks_reminder_dispatch_secret` value in Supabase Vault.
-8. Run `cron-create.sql`, followed immediately by `verify.sql`.
-9. Verify that `GET` returns `405`, an unauthenticated `POST` returns `401`, and the configured Cron run returns a content-free dispatch summary.
-10. Complete one synthetic-device acceptance test for permission, subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and cleanup.
+7. Run `extensions-enable.sql` and confirm that `pg_cron` and `pg_net` are enabled. The current BathOS production project does not have either extension enabled.
+8. Create the matching `tasks_reminder_dispatch_secret` value in Supabase Vault.
+9. Run `cron-create.sql`, followed immediately by `verify.sql`.
+10. Verify that `GET` returns `405`, an unauthenticated `POST` returns `401`, and the configured Cron run returns a content-free dispatch summary.
+11. Complete one synthetic-device acceptance test for permission, subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and cleanup.
 
 The fixed production endpoint in the SQL belongs to the BathOS Supabase project `rsqfokyqntmtdejfwmjs`. If production moves to another project, update and revalidate this package before running it.
 
 ## Rollback
 
-Run `cron-remove.sql` first to stop new dispatch claims. The Tasks module remains usable when push delivery is absent or degraded. Remove or rotate the Edge Function secrets only after the Cron job is confirmed absent. Subscription and delivery records remain available for diagnosis and do not need destructive cleanup.
+Run `cron-remove.sql` first to stop new dispatch claims. The Tasks module remains usable when push delivery is absent or degraded. Remove or rotate the Edge Function secrets only after the Cron job is confirmed absent. Subscription and delivery records remain available for diagnosis and do not need destructive cleanup. Do not remove `pg_cron` or `pg_net` automatically because another Supabase workflow may begin sharing them after activation.
 
 `test-local.sql` validates the SQL package inside one uncommitted database transaction. It creates only a synthetic transaction-local Vault secret, schedules the job invisibly to the Cron worker, runs all assertions, and rolls back.

@@ -2,8 +2,7 @@
 
 BEGIN;
 
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
+\ir extensions-enable.sql
 
 SELECT vault.create_secret(
   repeat('local-synthetic-secret-', 2),

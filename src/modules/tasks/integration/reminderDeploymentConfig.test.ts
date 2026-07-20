@@ -83,6 +83,10 @@ describe('task reminder deployment configuration', () => {
   });
 
   it('pins Cron to the approved job, endpoint, cadence, and Vault lookup', () => {
+    const extensionsSql = readFileSync(
+      join(process.cwd(), 'deploy/tasks-reminders/extensions-enable.sql'),
+      'utf8',
+    );
     const createSql = readFileSync(
       join(process.cwd(), 'deploy/tasks-reminders/cron-create.sql'),
       'utf8',
@@ -91,6 +95,14 @@ describe('task reminder deployment configuration', () => {
       join(process.cwd(), 'deploy/tasks-reminders/verify.sql'),
       'utf8',
     );
+    const localTestSql = readFileSync(
+      join(process.cwd(), 'deploy/tasks-reminders/test-local.sql'),
+      'utf8',
+    );
+    expect(extensionsSql).toContain('CREATE EXTENSION IF NOT EXISTS pg_cron');
+    expect(extensionsSql).toContain('CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions');
+    expect(localTestSql).toContain('\\ir extensions-enable.sql');
+    expect(localTestSql).not.toContain('CREATE EXTENSION IF NOT EXISTS pg_cron');
     for (const value of [createSql, verifySql]) {
       expect(value).toContain('tasks-dispatch-reminders');
       expect(value).toContain('* * * * *');

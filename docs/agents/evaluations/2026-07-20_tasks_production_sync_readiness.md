@@ -69,7 +69,7 @@ The replication role must use `BYPASSRLS` because PowerSync reads the source ind
 
 ## Remaining Approval
 
-No production state changed. Production work still requires confirmation of Supabase external-replication eligibility and explicit approval to add PowerSync Cloud as a processor of personal task data. The permanent module name, launcher registration, Inbox Manager dual-writing, and migration remain separate decisions.
+No production state changed. A later read-only audit confirmed that the Bath Supabase organization is already on Pro, resolving the plan-level external-replication prerequisite. Production work still requires explicit approval to add PowerSync Cloud as a processor of personal task data, approve any incremental billing shown at activation, and create the production replication boundary. The permanent module name, launcher registration, Inbox Manager dual writing, and migration remain separate decisions.
 
 ## Evidence
 

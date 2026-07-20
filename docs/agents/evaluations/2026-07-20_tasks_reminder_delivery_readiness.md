@@ -1,7 +1,7 @@
 # Tasks Reminder Delivery Readiness
 
-**Date:** July 20, 2026
-**Status:** Locally prepared, production activation pending approval
+**Date:** 2026-07-20
+**Status:** Locally Prepared, Production Activation Pending Approval
 
 ## Decision
 
@@ -28,17 +28,19 @@ Do not activate production reminder delivery until production infrastructure cha
 - Added `npm run verify:tasks:reminders` to validate secret length, public/private P-256 key pairing, server/client public-key equality, and contact-subject shape without printing credentials.
 - Added `npm run verify:tasks:edge-bundle` to repeat the direct Edge Runtime compilation proof, report a bundle hash and size, and remove the ignored artifact in all outcomes.
 - Added `deploy/tasks-reminders/` with a deployment sequence, one-minute fixed-endpoint Cron SQL, Vault-backed header lookup, structural verification, targeted rollback, and rollback-only local validation.
+- Added an explicit `extensions-enable.sql` production step after a read-only audit confirmed that the BathOS project does not yet have `pg_cron` or `pg_net`. The rollback-only test now reuses that exact file instead of enabling the extensions through test-only statements.
 - Updated the Edge Function documentation and OpenSpec contract.
 
 ## Local Evidence
 
-- Dispatcher and configuration tests: 18 passing focused tests.
-- Full application suite: 503 passing tests and 9 intentional skips across 93 files.
+- Dispatcher and configuration tests: 20 passing focused tests.
+- Full application suite: 527 passing tests and 9 intentional skips across 97 files.
 - Database suite: 574 passing pgTAP assertions across 21 files, including the Web Push delivery contract.
 - Repository lint, TypeScript, production build, and strict OpenSpec validation: passing.
 - Edge compatibility: the repeatable bundle gate used Supabase Edge Runtime `v1.74.2` to produce a 10 MB dispatcher eszip successfully, reported its digest, and removed the ignored temporary artifact.
 - Cron package: created the required local extensions, one synthetic Vault secret, one active minute schedule, and the approved command in a database transaction. All assertions passed and the transaction rolled back.
 - Cleanup proof: no synthetic reminder secret and no Cron schema artifact remained after rollback.
+- Production read-only audit: no dispatcher function, reminder Vault secret, Cron schema, `pg_cron`, or `pg_net` is present, so activation will use the documented fresh-install path.
 - Database lint reported one pre-existing Drawers function error and one pre-existing unused-variable warning in a Tasks restore helper. It reported no reminder-delivery finding.
 - Production effects: none.
 
@@ -49,7 +51,7 @@ Activation requires all of the following:
 1. Explicit approval to modify production infrastructure.
 2. Fresh VAPID and dispatch-secret generation outside the repository.
 3. A passing preflight using the exact intended server and web values.
-4. Edge Function, Vault, Cron, and web-build configuration in the approved Supabase and hosting environments.
+4. `pg_cron` and `pg_net` enablement followed by Edge Function, Vault, Cron, and web-build configuration in the approved Supabase and hosting environments.
 5. Structural SQL verification immediately after provisioning.
 6. Hosted function smoke tests for method and authentication boundaries.
 7. One synthetic-device test covering subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and cleanup.

@@ -17,7 +17,7 @@ The repository test `src/modules/tasks/sync/deploymentConfig.test.ts` keeps thes
 
 ## Approval Preconditions
 
-1. Confirm the linked BathOS Supabase plan supports external logical replication.
+1. Reconfirm that the BathOS project remains in the Pro organization verified on 2026 Jul 20 and review any incremental replication billing shown by the dashboard.
 2. Approve PowerSync Cloud as an additional processor of personal task data.
 3. Create or sign in to the owner's PowerSync account.
 4. Select a US-region development instance for the bounded parallel-use phase.
