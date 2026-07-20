@@ -13,10 +13,12 @@ import {
   Plus,
   RotateCcw,
   Trash2,
+  X,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import { DatePickerField } from '@/components/ui/date-picker-field';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +31,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import { CARD_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
+import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
 import { useTaskList, type TaskListView } from '@/modules/tasks/hooks/useTaskList';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
@@ -403,7 +406,7 @@ function TaskRow({
   task: TaskTodo;
   selected: boolean;
   onSelect: () => void;
-  onUpdate: (patch: { title?: string; notes?: string }) => Promise<void>;
+  onUpdate: (patch: EditableTaskPatch) => Promise<void>;
   onComplete: () => Promise<void>;
   onMove: () => Promise<void>;
   onDelete: () => Promise<void>;
@@ -442,7 +445,14 @@ function TaskRow({
           aria-expanded={selected}
           className="min-w-0 flex-1 py-4 text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          {task.title}
+          <span className="block">{task.title}</span>
+          {task.start_date || task.deadline ? (
+            <span className="mt-1 block text-xs font-normal text-muted-foreground">
+              {task.start_date ? `Starts ${formatTaskCalendarDate(task.start_date)}` : null}
+              {task.start_date && task.deadline ? ' · ' : null}
+              {task.deadline ? `Due ${formatTaskCalendarDate(task.deadline)}` : null}
+            </span>
+          ) : null}
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -491,11 +501,14 @@ function TaskEditor({
   task: TaskTodo;
   returnFocusRef: RefObject<HTMLButtonElement>;
   onCancel: () => void;
-  onSave: (patch: { title?: string; notes?: string }) => Promise<void>;
+  onSave: (patch: EditableTaskPatch) => Promise<void>;
 }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes);
+  const [startDate, setStartDate] = useState(task.start_date ?? '');
+  const [deadline, setDeadline] = useState(task.deadline ?? '');
   const [saving, setSaving] = useState(false);
+  const invalidDateRange = Boolean(startDate && deadline && deadline < startDate);
 
   const restoreTitleFocus = () => {
     window.setTimeout(() => returnFocusRef.current?.focus(), 0);
@@ -509,16 +522,22 @@ function TaskEditor({
   const handleSave = async (event: FormEvent) => {
     event.preventDefault();
     const normalizedTitle = title.trim();
-    if (!normalizedTitle || saving) {
+    if (!normalizedTitle || saving || invalidDateRange) {
       return;
     }
 
-    const patch: { title?: string; notes?: string } = {};
+    const patch: EditableTaskPatch = {};
     if (normalizedTitle !== task.title) {
       patch.title = normalizedTitle;
     }
     if (notes !== task.notes) {
       patch.notes = notes;
+    }
+    if (startDate !== (task.start_date ?? '')) {
+      patch.start_date = startDate || null;
+    }
+    if (deadline !== (task.deadline ?? '')) {
+      patch.deadline = deadline || null;
     }
     if (Object.keys(patch).length === 0) {
       handleCancel();
@@ -568,11 +587,72 @@ function TaskEditor({
         placeholder="Notes"
         className="min-h-28 resize-y"
       />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground" htmlFor={`task-start-date-${task.id}`}>
+            Start Date
+          </label>
+          <div className="flex gap-2">
+            <DatePickerField
+              id={`task-start-date-${task.id}`}
+              value={startDate}
+              onValueChange={setStartDate}
+              disabled={saving}
+              placeholder="No Start Date"
+              aria-label="Start Date"
+            />
+            {startDate ? (
+              <Button
+                type="button"
+                variant="clear"
+                size="icon"
+                disabled={saving}
+                aria-label="Clear Start Date"
+                onClick={() => setStartDate('')}
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground" htmlFor={`task-deadline-${task.id}`}>
+            Deadline
+          </label>
+          <div className="flex gap-2">
+            <DatePickerField
+              id={`task-deadline-${task.id}`}
+              value={deadline}
+              onValueChange={setDeadline}
+              disabled={saving}
+              placeholder="No Deadline"
+              aria-label="Deadline"
+            />
+            {deadline ? (
+              <Button
+                type="button"
+                variant="clear"
+                size="icon"
+                disabled={saving}
+                aria-label="Clear Deadline"
+                onClick={() => setDeadline('')}
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      {invalidDateRange ? (
+        <p role="alert" className="text-sm text-destructive">
+          Deadline cannot be earlier than the start date.
+        </p>
+      ) : null}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="clear" size="sm" disabled={saving} onClick={handleCancel}>
           Cancel
         </Button>
-        <Button type="submit" size="sm" disabled={!title.trim() || saving}>
+        <Button type="submit" size="sm" disabled={!title.trim() || saving || invalidDateRange}>
           Save
         </Button>
       </div>
@@ -623,5 +703,12 @@ function formatTaskTerminalDate(timestamp: string): string {
   const date = new Date(timestamp);
   return Number.isNaN(date.valueOf())
     ? timestamp
+    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
+}
+
+function formatTaskCalendarDate(value: string): string {
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.valueOf())
+    ? value
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
 }

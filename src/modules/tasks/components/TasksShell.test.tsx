@@ -42,6 +42,8 @@ const task = {
   deleted_at: null,
   destination: 'today' as const,
   order_key: 'a0',
+  start_date: null,
+  deadline: null,
   entry_channel: 'web' as const,
   last_mutation_channel: 'web' as const,
   last_actor_type: 'user' as const,
@@ -182,6 +184,41 @@ describe('TasksShell', () => {
         (button) => button.textContent === 'Existing task',
       );
       expect(document.activeElement).toBe(restoredTitleButton);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('clears a date-only deadline through the task editor', async () => {
+    const datedTask = {
+      ...task,
+      start_date: '2026-07-20',
+      deadline: '2026-07-24',
+    };
+    const taskList = { ...defaultTaskList(), tasks: [datedTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      const titleButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+        (button) => button.getAttribute('aria-expanded') === 'false',
+      );
+      await act(async () => {
+        titleButton?.click();
+      });
+
+      const clearDeadline = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Clear Deadline"]',
+      );
+      await act(async () => {
+        clearDeadline?.click();
+      });
+      const form = container.querySelector<HTMLFormElement>(`#task-title-${task.id}`)?.form;
+      await act(async () => {
+        form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', { deadline: null });
     } finally {
       cleanup(root, container);
     }

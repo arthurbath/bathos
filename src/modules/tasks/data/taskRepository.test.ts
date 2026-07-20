@@ -25,6 +25,8 @@ const existingTask: TaskTodo = {
   deleted_at: null,
   destination: 'inbox',
   order_key: 'a0',
+  start_date: null,
+  deadline: null,
   entry_channel: 'web',
   last_mutation_channel: 'web',
   last_actor_type: 'user',
@@ -233,5 +235,26 @@ describe('task repository', () => {
       repository.updateTask('owner-a', 'task-a', { source_url: null }),
     ).rejects.toThrow('Web and reading sources require a URL');
     expect(transaction.execute).not.toHaveBeenCalled();
+  });
+
+  it('validates date-only planning ranges against the complete current task', async () => {
+    const { repository, transaction } = createHarness({
+      ...existingTask,
+      start_date: '2026-07-20',
+    });
+
+    await expect(
+      repository.updateTask('owner-a', 'task-a', { deadline: '2026-07-24' }),
+    ).resolves.toMatchObject({ start_date: '2026-07-20', deadline: '2026-07-24' });
+    expect(transaction.execute).toHaveBeenCalledOnce();
+
+    const invalidHarness = createHarness({
+      ...existingTask,
+      start_date: '2026-07-24',
+    });
+    await expect(
+      invalidHarness.repository.updateTask('owner-a', 'task-a', { deadline: '2026-07-20' }),
+    ).rejects.toThrow('Deadline cannot be earlier than the start date');
+    expect(invalidHarness.transaction.execute).not.toHaveBeenCalled();
   });
 });

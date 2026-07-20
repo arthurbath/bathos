@@ -90,6 +90,8 @@ The minimal recovery slice exposes `/tasks/trash` as a first-class view without 
 
 The first Logbook slice exposes `/tasks/logbook` as the current terminal-work view. Present completed and canceled tasks are ordered by their respective terminal timestamp, display their terminal state and date, and cannot create new work in place. Reopen is an optimistic inverse lifecycle transition that returns the task to its retained Inbox or Today destination; Delete remains recoverable and moves terminal work to Trash without rewriting completion or cancellation state. Accepted completion, cancellation, reopen, and deletion events remain independently preserved in append-only history.
 
+The first calendar-planning foundation stores optional start dates and deadlines as Postgres `date` values and PowerSync text projections, preserving the selected ISO calendar day without converting it to an instant. The database and local repository reject a deadline earlier than its start date, while either value may exist independently. Task editing uses the shared calendar popover and supports clearing either field. History snapshots, inverse undo, portable export and merge restore, optimistic state, and remote upload all carry the fields together. Owner-planning-time-zone settings, future-start availability, Upcoming grouping, and richer deadline presentation remain the next derived-view slice rather than being inferred from a browser's transient time zone.
+
 ## Goals / Non-Goals
 
 **Goals:**

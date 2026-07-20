@@ -12,6 +12,8 @@ const taskTodos = new Table(
     deleted_at: column.text,
     destination: column.text,
     order_key: column.text,
+    start_date: column.text,
+    deadline: column.text,
     entry_channel: column.text,
     last_mutation_channel: column.text,
     last_actor_type: column.text,
@@ -28,6 +30,8 @@ const taskTodos = new Table(
   {
     indexes: {
       ownerDestinationOrder: ['owner_id', 'destination', 'disposition', 'lifecycle', 'order_key'],
+      ownerStartDate: ['owner_id', 'start_date', 'disposition', 'lifecycle', 'order_key'],
+      ownerDeadline: ['owner_id', 'deadline', 'disposition', 'lifecycle'],
       ownerUpdated: ['owner_id', '-updated_at'],
     },
   },

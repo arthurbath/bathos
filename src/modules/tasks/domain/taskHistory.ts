@@ -24,6 +24,8 @@ export type TaskHistorySnapshot = Pick<
   | 'deleted_at'
   | 'destination'
   | 'order_key'
+  | 'start_date'
+  | 'deadline'
   | 'source_kind'
   | 'source_url'
   | 'source_title'
@@ -118,6 +120,8 @@ export function snapshotTask(task: TaskTodo): TaskHistorySnapshot {
     deleted_at: task.deleted_at,
     destination: task.destination,
     order_key: task.order_key,
+    start_date: task.start_date ?? null,
+    deadline: task.deadline ?? null,
     source_kind: task.source_kind,
     source_url: task.source_url,
     source_title: task.source_title,
@@ -141,6 +145,8 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
     deleted_at: optionalText(parsed.deleted_at, 'deleted_at'),
     destination: requireEnum(parsed.destination, taskDestinations, 'destination') as TaskDestination,
     order_key: requireText(parsed.order_key, 'order_key'),
+    start_date: optionalTextOrMissing(parsed.start_date, 'start_date'),
+    deadline: optionalTextOrMissing(parsed.deadline, 'deadline'),
     source_kind: parsed.source_kind === null
       ? null
       : requireEnum(parsed.source_kind, taskSourceKinds, 'source kind') as TaskSourceKind,
@@ -201,6 +207,13 @@ function optionalText(value: unknown, field: string): string | null {
   return requireText(value, field, true);
 }
 
+function optionalTextOrMissing(value: unknown, field: string): string | null {
+  if (value === undefined) {
+    return null;
+  }
+  return optionalText(value, field);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -215,6 +228,8 @@ function snapshotsEqual(left: TaskHistorySnapshot, right: TaskHistorySnapshot): 
     && left.deleted_at === right.deleted_at
     && left.destination === right.destination
     && left.order_key === right.order_key
+    && left.start_date === right.start_date
+    && left.deadline === right.deadline
     && left.source_kind === right.source_kind
     && left.source_url === right.source_url
     && left.source_title === right.source_title

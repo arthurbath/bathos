@@ -57,7 +57,8 @@
 - [ ] 5.4 Add Upcoming with future start-date planning.
 - [ ] 5.5 Add Anytime and Someday with the specified active/inactive semantics.
 - [x] 5.6 Add Logbook, completion history, cancellation history, and recovery flows.
-- [ ] 5.7 Add start dates, deadlines, and date-aware planning interactions.
+- [x] 5.7a Add date-only start-date and deadline storage, range validation, history, undo, export/restore, synchronization, and editing.
+- [ ] 5.7b Apply owner-time-zone availability and deadline presentation across derived planning views.
 - [ ] 5.8 Add reminders using the responsibility model selected in the architecture gate.
 - [ ] 5.9 Add recurrence definitions and idempotent occurrence generation.
 - [ ] 5.10 Add native to-do and project templates with provenance-aware instantiation.

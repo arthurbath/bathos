@@ -2,6 +2,10 @@ import type { AbstractPowerSyncDatabase, Transaction } from '@powersync/web';
 
 import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
 import {
+  assertTaskCalendarRange,
+  normalizeTaskCalendarDate,
+} from '@/modules/tasks/domain/taskDates';
+import {
   createTaskUndoPatch,
   parseTaskHistoryEvent,
   type TaskHistorySnapshot,
@@ -27,6 +31,8 @@ export type CreateTaskInput = {
   notes?: string;
   destination?: TaskDestination;
   orderKey?: string;
+  startDate?: string | null;
+  deadline?: string | null;
   entryChannel?: TaskEntryChannel;
   sourceKind?: TaskSourceKind | null;
   sourceUrl?: string | null;
@@ -47,6 +53,8 @@ export type EditableTaskPatch = Partial<
     | 'notes'
     | 'destination'
     | 'order_key'
+    | 'start_date'
+    | 'deadline'
     | 'source_kind'
     | 'source_url'
     | 'source_title'
@@ -71,6 +79,8 @@ const insertColumns = [
   'deleted_at',
   'destination',
   'order_key',
+  'start_date',
+  'deadline',
   'entry_channel',
   'last_mutation_channel',
   'last_actor_type',
@@ -127,6 +137,9 @@ export class TaskRepository {
       input.sourceTitle ?? null,
       input.sourceExternalId ?? null,
     );
+    const startDate = normalizeTaskCalendarDate(input.startDate, 'Start date') ?? null;
+    const deadline = normalizeTaskCalendarDate(input.deadline, 'Deadline') ?? null;
+    assertTaskCalendarRange(startDate, deadline);
 
     return this.database.writeTransaction(async (transaction) => {
       const destination = input.destination ?? 'inbox';
@@ -157,6 +170,8 @@ export class TaskRepository {
         deleted_at: null,
         destination,
         order_key: input.orderKey ?? generateTaskOrderKey(lastTask?.order_key ?? null, null),
+        start_date: startDate,
+        deadline,
         entry_channel: entryChannel,
         last_mutation_channel: entryChannel,
         last_actor_type: input.actorType ?? 'user',
@@ -257,6 +272,10 @@ export class TaskRepository {
         patch.source_title,
         patch.source_external_id,
       );
+      assertTaskCalendarRange(
+        patch.start_date === undefined ? current.start_date : patch.start_date,
+        patch.deadline === undefined ? current.deadline : patch.deadline,
+      );
 
       return updateOwnedTask(
         transaction,
@@ -290,6 +309,10 @@ export class TaskRepository {
         patch.source_external_id === undefined
           ? current.source_external_id
           : patch.source_external_id,
+      );
+      assertTaskCalendarRange(
+        patch.start_date === undefined ? current.start_date : patch.start_date,
+        patch.deadline === undefined ? current.deadline : patch.deadline,
       );
 
       return updateOwnedTask(
@@ -377,6 +400,12 @@ function normalizeEditablePatch(patch: EditableTaskPatch): EditableTaskPatch {
   const normalized = { ...patch };
   if (patch.title !== undefined) {
     normalized.title = normalizeTitle(patch.title);
+  }
+  if (patch.start_date !== undefined) {
+    normalized.start_date = normalizeTaskCalendarDate(patch.start_date, 'Start date') ?? null;
+  }
+  if (patch.deadline !== undefined) {
+    normalized.deadline = normalizeTaskCalendarDate(patch.deadline, 'Deadline') ?? null;
   }
   return Object.fromEntries(
     Object.entries(normalized).filter(([, value]) => value !== undefined),

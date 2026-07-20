@@ -31,6 +31,8 @@ const originalTask: TaskTodo = {
   deleted_at: null,
   destination: 'today',
   order_key: 'a0',
+  start_date: null,
+  deadline: null,
   entry_channel: 'web',
   last_mutation_channel: 'web',
   last_actor_type: 'user',

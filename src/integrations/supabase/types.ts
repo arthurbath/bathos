@@ -1149,6 +1149,7 @@ export type Database = {
           client_mutation_id: string
           completed_at: string | null
           created_at: string
+          deadline: string | null
           deleted_at: string | null
           destination: string
           disposition: string
@@ -1165,6 +1166,7 @@ export type Database = {
           source_kind: string | null
           source_title: string | null
           source_url: string | null
+          start_date: string | null
           title: string
           undo_source_event_id: string | null
           updated_at: string
@@ -1174,6 +1176,7 @@ export type Database = {
           client_mutation_id: string
           completed_at?: string | null
           created_at?: string
+          deadline?: string | null
           deleted_at?: string | null
           destination?: string
           disposition?: string
@@ -1190,6 +1193,7 @@ export type Database = {
           source_kind?: string | null
           source_title?: string | null
           source_url?: string | null
+          start_date?: string | null
           title: string
           undo_source_event_id?: string | null
           updated_at?: string
@@ -1199,6 +1203,7 @@ export type Database = {
           client_mutation_id?: string
           completed_at?: string | null
           created_at?: string
+          deadline?: string | null
           deleted_at?: string | null
           destination?: string
           disposition?: string
@@ -1215,6 +1220,7 @@ export type Database = {
           source_kind?: string | null
           source_title?: string | null
           source_url?: string | null
+          start_date?: string | null
           title?: string
           undo_source_event_id?: string | null
           updated_at?: string

@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(34);
+SELECT plan(35);
 
 INSERT INTO auth.users (
   id,
@@ -73,6 +73,8 @@ SELECT lives_ok(
       title,
       destination,
       order_key,
+      start_date,
+      deadline,
       client_mutation_id
     )
     VALUES (
@@ -81,6 +83,8 @@ SELECT lives_ok(
       'Completed export task',
       'today',
       'a0',
+      '2026-07-20',
+      '2026-07-24',
       '41000000-0000-4000-8000-000000000020'
     )
   $$,
@@ -311,6 +315,15 @@ SELECT is(
   ),
   'deleted',
   'preserves recoverable deletion through restore'
+);
+SELECT is(
+  (
+    SELECT deadline::text
+    FROM public.tasks_todos
+    WHERE id = '41000000-0000-4000-8000-000000000010'
+  ),
+  '2026-07-24',
+  'preserves date-only planning values through export and restore'
 );
 SELECT is(
   (
