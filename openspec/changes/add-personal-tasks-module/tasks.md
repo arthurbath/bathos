@@ -39,9 +39,11 @@
 - [x] 3.6 Add stable ordering primitives with focused concurrent-order tests.
 - [x] 3.7a Add recoverable deletion and restoration primitives with restoration tests.
 - [x] 3.7b Add append-only history, mutation receipts, and inverse-mutation undo primitives.
+- [x] 3.7c Add server-authoritative permanent-deletion preview, stale-scope rejection, confirmed execution, and idempotent content-free receipts for deleted to-do and project roots.
 - [x] 3.8 Add an initial portable export and verified restore path using synthetic test data.
 - [x] 3.8a Advance portable export and restore to include normalized Mail source records.
 - [x] 3.8b Advance portable export and restore to include append-only Mail retirement events.
+- [ ] 3.8c Add replace restore with a verified pre-restore backup, separate confirmation, atomic replacement, and failure recovery tests.
 - [x] 3.9 Regenerate or update Supabase TypeScript types for the new task objects.
 
 ## 4. Minimal End-to-End Module
@@ -50,6 +52,7 @@
 - [ ] 4.2 Register the task module in platform module detection, launcher metadata, PWA metadata, and related tests.
 - [x] 4.3 Add the minimum owner-scoped task query and mutation hooks.
 - [x] 4.4 Add keyboard-accessible task creation, editing, completion, and recoverable deletion.
+- [x] 4.4a Add a connected-only Trash preview and explicit confirmation surface for permanent deletion without exposing the operation through MCP.
 - [x] 4.5 Prove offline creation and completion across a client restart and later reconnection.
 - [x] 4.6 Prove optimistic task display without stale-value snapback or focus disruption.
 - [x] 4.7 Add focused accessibility and keyboard tests for the minimal workflow.
@@ -107,6 +110,7 @@
 - [x] 7.3 Test time-zone and daylight-saving transitions for date-only planning and reminders.
 - [x] 7.4 Test recurrence retries, missed schedules, delayed clients, and duplicate-suppression behavior.
 - [x] 7.5 Test undo, trash restoration, backup, export, and restore with synthetic and disposable personal test data.
+- [x] 7.5a Test permanent-deletion scope reporting, stale preview rejection, exact retry, related-data erasure, preserved integrity receipts, and client availability gates.
 - [x] 7.6 Test keyboard traversal, focus restoration, screen-reader labels, and reduced-motion behavior.
 - [x] 7.7 Measure task-view and search performance with a synthetic dataset larger than the current Things library.
 - [x] 7.8 Run a sustained parallel-use evaluation and record unresolved trust failures before any migration decision.

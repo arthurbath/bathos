@@ -429,6 +429,26 @@ The system SHALL provide append-only history, mutation receipts, inverse-mutatio
 - **WHEN** a user invokes the separately authorized and confirmed permanent-deletion operation for work already in Trash
 - **THEN** the system reports and then erases the selected hierarchy and related owner data without presenting the operation as undoable
 
+#### Scenario: Preview permanent deletion
+- **WHEN** a user requests permanent deletion for a deleted to-do or project root
+- **THEN** the server reports every hierarchy and related-data identifier that will be erased, every content-free integrity receipt that will remain, and a digest of that exact scope before accepting confirmation
+
+#### Scenario: Reject a stale permanent-deletion preview
+- **WHEN** the hierarchy or related-data scope changes after preview and before confirmed execution
+- **THEN** the server rejects the stale digest without deleting any record and requires a fresh preview
+
+#### Scenario: Keep permanent deletion server-authoritative
+- **WHEN** the task client is local-only, disconnected, or has queued local mutations
+- **THEN** the interface leaves permanent deletion unavailable so unsynchronized work cannot be erased from an incomplete server view
+
+#### Scenario: Retry confirmed permanent deletion
+- **WHEN** the client retries the exact confirmed permanent-deletion request UUID after an ambiguous response
+- **THEN** the server returns the original content-free receipt without recreating, re-erasing, or misreporting the deleted hierarchy
+
+#### Scenario: Preserve duplicate-suppression receipts
+- **WHEN** permanently deleted work originated from a template, recurrence, or prior hierarchy operation
+- **THEN** the system erases task content and related personal lifecycle data while retaining and reporting the content-free receipts required to prevent old idempotency keys or logical recurrence events from recreating that work
+
 #### Scenario: Export task data
 - **WHEN** a user requests an export
 - **THEN** the system produces a versioned JSON envelope with a manifest, counts, checksums, stable identifiers, active data, templates, recurrence definitions, source metadata, history, and recoverably deleted records without credentials or delivery tokens

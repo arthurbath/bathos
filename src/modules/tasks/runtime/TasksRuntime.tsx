@@ -17,6 +17,7 @@ import { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHier
 import { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
+import { TaskPermanentDeletionService } from '@/modules/tasks/data/taskPermanentDeletionService';
 import { resolveTaskPlanningTimeZone } from '@/modules/tasks/domain/taskDates';
 import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
 import {
@@ -65,6 +66,10 @@ export function TasksRuntimeProvider({
     [ownerId],
   );
   const reminderService = useMemo(() => new TaskReminderService(supabase), []);
+  const permanentDeletionService = useMemo(
+    () => new TaskPermanentDeletionService(supabase),
+    [],
+  );
 
   useEffect(() => {
     let active = true;
@@ -161,6 +166,7 @@ export function TasksRuntimeProvider({
       templateService,
       recurrenceService,
       reminderService,
+      permanentDeletionService,
       mode: state.status === 'ready' ? state.mode : 'local',
       syncState,
       pendingUploadCount,
@@ -175,6 +181,7 @@ export function TasksRuntimeProvider({
       repository,
       recurrenceService,
       reminderService,
+      permanentDeletionService,
       templateService,
       syncState,
       pendingUploadCount,

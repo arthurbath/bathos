@@ -2954,6 +2954,20 @@ export type Database = {
         Args: { _limit?: number; _through_at: string }
         Returns: Json
       }
+      tasks_permanently_delete: {
+        Args: {
+          _confirmation: string
+          _request_id: string
+          _root_id: string
+          _root_type: string
+          _scope_digest: string
+        }
+        Returns: Json
+      }
+      tasks_preview_permanent_deletion: {
+        Args: { _root_id: string; _root_type: string }
+        Returns: Json
+      }
       tasks_create_export_v1: { Args: never; Returns: Json }
       tasks_create_export_v10: { Args: never; Returns: Json }
       tasks_create_export_v2: { Args: never; Returns: Json }

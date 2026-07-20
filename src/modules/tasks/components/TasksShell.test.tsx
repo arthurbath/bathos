@@ -15,6 +15,7 @@ const mockTaskHierarchy = vi.fn();
 const mockTaskHierarchyTrash = vi.fn();
 const mockTaskReminders = vi.fn();
 const mockPrepareForSignOut = vi.fn();
+const mockTasksRuntime = vi.fn();
 
 vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
   useTaskList: (...args: unknown[]) => mockTaskList(...args),
@@ -40,13 +41,7 @@ vi.mock('@/modules/tasks/hooks/useTaskReminders', () => ({
 }));
 
 vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
-  useTasksRuntime: () => ({
-    mode: 'local',
-    syncState: 'local',
-    pendingUploadCount: 0,
-    planningTimeZone: 'America/Los_Angeles',
-    prepareForSignOut: mockPrepareForSignOut,
-  }),
+  useTasksRuntime: () => mockTasksRuntime(),
 }));
 
 describe('getTasksStorageStatusLabel', () => {
@@ -149,6 +144,17 @@ function defaultTaskList() {
   };
 }
 
+function defaultTasksRuntime() {
+  return {
+    mode: 'local' as const,
+    syncState: 'local' as const,
+    pendingUploadCount: 0,
+    planningTimeZone: 'America/Los_Angeles',
+    permanentDeletionService: { preview: vi.fn(), execute: vi.fn() },
+    prepareForSignOut: mockPrepareForSignOut,
+  };
+}
+
 function renderShell(initialEntry = '/tasks/today') {
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -227,6 +233,7 @@ async function openTaskMenuSurface(
 describe('TasksShell', () => {
   beforeEach(() => {
     mockPrepareForSignOut.mockReset().mockResolvedValue(undefined);
+    mockTasksRuntime.mockReset().mockReturnValue(defaultTasksRuntime());
     mockTaskList.mockReset();
     mockTaskSearch.mockReset().mockReturnValue({
       tasks: [task],
@@ -1316,8 +1323,49 @@ describe('TasksShell', () => {
 
       expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'trash');
       expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'restore');
+      expect(container.querySelector('button[aria-label="Permanently Delete Existing task"]'))
+        .toBeNull();
     } finally {
       cleanup(root, container);
+    }
+  });
+
+  it('exposes server-authoritative permanent deletion only when connected and synchronized', () => {
+    const deletedTask = {
+      ...task,
+      disposition: 'deleted' as const,
+      deleted_at: '2026-07-20T04:05:00.000Z',
+      deletion_root_id: 'task-a',
+    };
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [deletedTask] });
+    mockTasksRuntime.mockReturnValue({
+      ...defaultTasksRuntime(),
+      mode: 'connected',
+      syncState: 'connected',
+    });
+    const { container, root } = renderShell('/tasks/trash');
+
+    try {
+      expect(container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Permanently Delete Existing task"]',
+      )).toBeEnabled();
+    } finally {
+      cleanup(root, container);
+    }
+
+    mockTasksRuntime.mockReturnValue({
+      ...defaultTasksRuntime(),
+      mode: 'connected',
+      syncState: 'connected',
+      pendingUploadCount: 1,
+    });
+    const pendingRender = renderShell('/tasks/trash');
+    try {
+      expect(pendingRender.container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Permanently Delete Existing task"]',
+      )).toBeDisabled();
+    } finally {
+      cleanup(pendingRender.root, pendingRender.container);
     }
   });
 

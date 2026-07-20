@@ -86,6 +86,7 @@ import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/tas
 import { TaskProjectDetailView } from '@/modules/tasks/components/TaskProjectDetailView';
 import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
 import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView';
+import { TaskPermanentDeletionButton } from '@/modules/tasks/components/TaskPermanentDeletionButton';
 import {
   getTasksStorageStatusLabel,
   type TasksSyncState,
@@ -135,7 +136,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const taskListView: TaskListView = view === 'projects' || view === 'project' || view === 'templates'
     ? 'inbox'
     : view;
-  const { mode, syncState, pendingUploadCount, prepareForSignOut } = useTasksRuntime();
+  const {
+    mode,
+    syncState,
+    pendingUploadCount,
+    permanentDeletionService,
+    prepareForSignOut,
+  } = useTasksRuntime();
   const hierarchy = useTaskHierarchy(userId);
   const hierarchyTrash = useTaskHierarchyTrash(userId);
   const {
@@ -160,6 +167,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [searchOpen, setSearchOpen] = useState(false);
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
   const [searchTargetTaskId, setSearchTargetTaskId] = useState<string | null>(null);
+  const [permanentlyDeletedKeys, setPermanentlyDeletedKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
   const taskSearch = useTaskSearch(userId, searchOpen);
   const reminders = useTaskReminders(userId);
   const acknowledgeReminderDelivery = reminders.acknowledge;
@@ -168,6 +178,21 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
   const pendingNavigationRef = useRef(false);
   const navigationResetRef = useRef<number | null>(null);
+  const trashRoots = hierarchyTrash.roots.filter((root) => (
+    !permanentlyDeletedKeys.has(`${root.root_type}:${root.id}`)
+  ));
+  const trashTasks = tasks.filter((task) => !permanentlyDeletedKeys.has(`todo:${task.id}`));
+  const taskViewIsEmpty = view === 'trash'
+    ? trashTasks.length === 0 && trashRoots.length === 0
+    : tasks.length === 0;
+  const permanentDeletionAvailable = mode === 'connected'
+    && syncState === 'connected'
+    && pendingUploadCount === 0;
+  const permanentDeletionUnavailableReason = pendingUploadCount > 0
+    ? 'Wait for pending task changes to synchronize'
+    : syncState !== 'connected'
+      ? 'Reconnect to preview the current server deletion scope'
+      : undefined;
 
   useEffect(() => {
     const previousMotionScope = document.body.getAttribute('data-tasks-motion-scope');
@@ -795,15 +820,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               <p role="alert" className="py-12 text-center text-sm text-destructive">
                 Tasks Could Not Be Loaded
               </p>
-            ) : tasks.length === 0 && (view !== 'trash' || hierarchyTrash.roots.length === 0) ? (
+            ) : taskViewIsEmpty ? (
               <p className="py-12 text-center text-sm text-muted-foreground">
                 {view === 'trash' ? 'Trash Is Empty' : view === 'logbook' ? 'Logbook Is Empty' : 'No Tasks'}
               </p>
             ) : view === 'trash' ? (
               <div className="space-y-5">
-                {hierarchyTrash.roots.length > 0 ? (
+                {trashRoots.length > 0 ? (
                   <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-                    {hierarchyTrash.roots.map((root) => (
+                    {trashRoots.map((root) => (
                       <DeletedHierarchyRow
                         key={`${root.root_type}:${root.id}`}
                         root={root}
@@ -814,13 +839,28 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                             showTaskError('Hierarchy Could Not Be Restored', restoreError);
                           }
                         }}
+                        permanentDeleteControl={mode === 'connected' && root.root_type === 'project' ? (
+                          <TaskPermanentDeletionButton
+                            rootType="project"
+                            rootId={root.id}
+                            title={root.title}
+                            service={permanentDeletionService}
+                            available={permanentDeletionAvailable}
+                            unavailableReason={permanentDeletionUnavailableReason}
+                            onDeleted={(result) => {
+                              setPermanentlyDeletedKeys((current) => new Set(current).add(
+                                `${result.root.type}:${result.root.id}`,
+                              ));
+                            }}
+                          />
+                        ) : undefined}
                       />
                     ))}
                   </div>
                 ) : null}
-                {tasks.length > 0 ? (
+                {trashTasks.length > 0 ? (
                   <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-                    {tasks.map((task) => (
+                    {trashTasks.map((task) => (
                       <DeletedTaskRow
                         key={task.id}
                         task={task}
@@ -831,6 +871,21 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                             showTaskError('Task Could Not Be Restored', restoreError);
                           }
                         }}
+                        permanentDeleteControl={mode === 'connected' ? (
+                          <TaskPermanentDeletionButton
+                            rootType="todo"
+                            rootId={task.id}
+                            title={task.title}
+                            service={permanentDeletionService}
+                            available={permanentDeletionAvailable}
+                            unavailableReason={permanentDeletionUnavailableReason}
+                            onDeleted={(result) => {
+                              setPermanentlyDeletedKeys((current) => new Set(current).add(
+                                `${result.root.type}:${result.root.id}`,
+                              ));
+                            }}
+                          />
+                        ) : undefined}
                       />
                     ))}
                   </div>
@@ -1184,9 +1239,11 @@ function LogbookTaskRow({
 function DeletedHierarchyRow({
   root,
   onRestore,
+  permanentDeleteControl,
 }: {
   root: DeletedTaskHierarchyRoot;
   onRestore: () => Promise<void>;
+  permanentDeleteControl?: ReactNode;
 }) {
   const label = root.root_type === 'checklist_item'
     ? 'Checklist Item'
@@ -1197,15 +1254,26 @@ function DeletedHierarchyRow({
         <p className="truncate text-sm font-medium text-foreground">{root.title}</p>
         <p className="text-xs text-muted-foreground">Deleted {label}</p>
       </div>
-      <Button type="button" variant="outline" size="sm" onClick={() => void onRestore()}>
-        <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden="true" />
-        Restore
-      </Button>
+      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => void onRestore()}>
+          <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Restore
+        </Button>
+        {permanentDeleteControl}
+      </div>
     </article>
   );
 }
 
-function DeletedTaskRow({ task, onRestore }: { task: TaskTodo; onRestore: () => Promise<void> }) {
+function DeletedTaskRow({
+  task,
+  onRestore,
+  permanentDeleteControl,
+}: {
+  task: TaskTodo;
+  onRestore: () => Promise<void>;
+  permanentDeleteControl?: ReactNode;
+}) {
   const [restoring, setRestoring] = useState(false);
 
   return (
@@ -1219,21 +1287,24 @@ function DeletedTaskRow({ task, onRestore }: { task: TaskTodo; onRestore: () => 
           {getTaskViewLabel(task.destination)}
         </p>
       </div>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={restoring}
-        aria-label={`Restore ${task.title}`}
-        className="gap-1.5"
-        onClick={() => {
-          setRestoring(true);
-          void onRestore().finally(() => setRestoring(false));
-        }}
-      >
-        <RotateCcw className="h-4 w-4" aria-hidden="true" />
-        Restore
-      </Button>
+      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={restoring}
+          aria-label={`Restore ${task.title}`}
+          className="gap-1.5"
+          onClick={() => {
+            setRestoring(true);
+            void onRestore().finally(() => setRestoring(false));
+          }}
+        >
+          <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          Restore
+        </Button>
+        {permanentDeleteControl}
+      </div>
     </article>
   );
 }
