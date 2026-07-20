@@ -19,9 +19,7 @@ import {
   CircleDashed,
   CircleHelp,
   CircleSlash2,
-  Cloud,
   CornerDownLeft,
-  HardDrive,
   Hourglass,
   Inbox,
   ListChecks,
@@ -94,10 +92,7 @@ import { TaskPermanentDeletionButton } from '@/modules/tasks/components/TaskPerm
 import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
 import { TaskPlanningProjects } from '@/modules/tasks/components/TaskPlanningProjects';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
-import {
-  getTasksStorageStatusLabel,
-  type TasksSyncState,
-} from '@/modules/tasks/components/tasksStorageStatus';
+import { TaskSyncDiagnosticsDialog } from '@/modules/tasks/components/TaskSyncDiagnosticsDialog';
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
@@ -690,11 +685,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               replaceAvailable={permanentDeletionAvailable}
               replaceUnavailableReason={permanentDeletionUnavailableReason}
             />
-            <TasksStorageStatus
-              mode={mode}
-              syncState={syncState}
-              pendingUploadCount={pendingUploadCount}
-            />
+            <TaskSyncDiagnosticsDialog />
           </div>
         )}
       />
@@ -2224,25 +2215,6 @@ function TaskEditor({
         </Button>
       </div>
     </form>
-  );
-}
-
-function TasksStorageStatus({
-  mode,
-  syncState,
-  pendingUploadCount,
-}: {
-  mode: 'local' | 'connected';
-  syncState: TasksSyncState;
-  pendingUploadCount: number;
-}) {
-  const Icon = mode === 'connected' ? Cloud : HardDrive;
-  const label = getTasksStorageStatusLabel({ mode, syncState, pendingUploadCount });
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-info" aria-label="Task Sync Status">
-      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-      {label}
-    </span>
   );
 }
 

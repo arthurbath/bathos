@@ -440,6 +440,8 @@ Rationale: The spike proved an empty owner-B download, isolation of a new owner-
 
 The module will expose mutation queue depth, last successful synchronization, upload activity and failure, download activity and failure, and content-free conflict receipts. A single connected or offline badge is not sufficient because the synchronization stream and Supabase upload path can fail independently.
 
+The implemented header status is an accessible dialog trigger backed by PowerSync's reactive transfer status, the durable upload-queue count, and the local content-free conflict-receipt table. The compact label elevates upload or download failure rather than presenting a misleading connected state. Details report both transfer directions independently, the last successful synchronization, pending changes, and the ten most recent conflict receipts without rendering provider error text or task content. In local-only mode, the same surface explicitly states that cross-device and MCP changes do not converge.
+
 Rationale: During the forced outage, a client could retain a connected stream status while the write API reported an upload error and the durable queue remained nonzero. The actionable state was the combination, not the connection boolean.
 
 ### Keep Supabase as the authoritative service boundary

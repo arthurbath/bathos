@@ -57,11 +57,35 @@ describe('getTasksStorageStatusLabel', () => {
     expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'connected', pendingUploadCount: 0 }))
       .toBe('Synced');
     expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'connected', pendingUploadCount: 2 }))
-      .toBe('Syncing 2');
+      .toBe('2 Pending');
+    expect(getTasksStorageStatusLabel({
+      mode: 'connected',
+      syncState: 'connected',
+      pendingUploadCount: 2,
+      uploadState: 'active',
+    })).toBe('Syncing 2');
+    expect(getTasksStorageStatusLabel({
+      mode: 'connected',
+      syncState: 'connected',
+      pendingUploadCount: 0,
+      downloadState: 'active',
+    })).toBe('Downloading');
     expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'offline', pendingUploadCount: 2 }))
       .toBe('Offline - 2 Pending');
     expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'offline', pendingUploadCount: 0 }))
       .toBe('Offline');
+    expect(getTasksStorageStatusLabel({
+      mode: 'connected',
+      syncState: 'connected',
+      pendingUploadCount: 2,
+      uploadState: 'error',
+    })).toBe('Upload Error - 2 Pending');
+    expect(getTasksStorageStatusLabel({
+      mode: 'connected',
+      syncState: 'connected',
+      pendingUploadCount: 0,
+      downloadState: 'error',
+    })).toBe('Download Error');
   });
 });
 

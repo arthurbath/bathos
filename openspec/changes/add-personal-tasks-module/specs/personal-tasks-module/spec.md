@@ -410,9 +410,17 @@ The system SHALL use stable task identifiers and optimistic integer revisions so
 ### Requirement: Actionable Synchronization Diagnostics
 The system SHALL expose synchronization state without logging task content, including durable queue depth, last successful synchronization, upload and download activity or errors, and conflict receipts.
 
+#### Scenario: Inspect synchronization details
+- **WHEN** a user opens the visible task synchronization status
+- **THEN** the interface reports connection mode, durable pending-change count, last successful synchronization, upload and download activity or failure independently, and recent content-free conflict receipts
+
 #### Scenario: Upload path fails while the client is otherwise active
 - **WHEN** the task upload API is unavailable but the application and synchronization stream remain active
 - **THEN** the client retains the queued mutation and reports the upload failure separately from its general connection state
+
+#### Scenario: Inspect local-only storage
+- **WHEN** the module has no approved synchronization endpoint
+- **THEN** synchronization details identify the installation as local-only and explicitly withhold any implication of cross-device or MCP convergence
 
 ### Requirement: Recoverable History
 The system SHALL provide append-only history, mutation receipts, inverse-mutation undo, recoverable deletion, versioned export, and verified restore behavior before the module is considered replacement-ready.
