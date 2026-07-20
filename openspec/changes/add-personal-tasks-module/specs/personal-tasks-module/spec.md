@@ -417,6 +417,22 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **WHEN** delivery of a submitted Raycast capture is retried after an ambiguous response
 - **THEN** the command reuses that capture's creation UUID and the service does not create a duplicate to-do
 
+#### Scenario: Capture the active browser page
+- **WHEN** the user invokes page capture while Safari, Safari Technology Preview, Google Chrome, or Google Chrome Canary has a normal HTTP(S) active tab
+- **THEN** the system creates one Inbox to-do with a cleaned deterministic title, `browser_capture` entry provenance, and a typed `webpage` source containing the exact accepted URL and optional browser title
+
+#### Scenario: Reject unavailable browser context
+- **WHEN** the frontmost application is unsupported, has no browser window, or exposes an invalid, blank, non-HTTP(S), or browser-owned URL
+- **THEN** page capture explains that no supported page is available and does not submit a task mutation
+
+#### Scenario: Present browser provenance structurally
+- **WHEN** page capture creates a to-do
+- **THEN** the title contains no required emoji or textual source prefix and the URL remains available through structured source fields and provisional notes
+
+#### Scenario: Retry browser capture safely
+- **WHEN** a page-capture response is ambiguous and the pending request is retried
+- **THEN** the complete original title, notes, channel, typed source, and creation UUID are reused so the source fields are preserved and no duplicate to-do is created
+
 ### Requirement: Parallel Use with Things
 The system SHALL support indefinite parallel use without requiring the user to migrate, delete, or modify the existing Things library.
 
