@@ -66,6 +66,15 @@ function setControlValue(control: HTMLInputElement | HTMLSelectElement, value: s
   ));
 }
 
+function pressEnter(control: HTMLInputElement, isComposing = false) {
+  control.dispatchEvent(new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    isComposing,
+    key: 'Enter',
+  }));
+}
+
 describe('TaskProjectsView', () => {
   it('creates areas and projects from separate keyboard-friendly forms', async () => {
     const hierarchy = defaultHierarchy();
@@ -81,7 +90,12 @@ describe('TaskProjectsView', () => {
       await act(async () => {
         areaInput.focus();
         setControlValue(areaInput, 'Health');
-        areaInput.form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        pressEnter(areaInput, true);
+      });
+      expect(hierarchy.createArea).not.toHaveBeenCalled();
+
+      await act(async () => {
+        pressEnter(areaInput);
       });
       expect(hierarchy.createArea).toHaveBeenCalledWith('Health');
       expect(document.activeElement).toBe(areaInput);
@@ -90,7 +104,7 @@ describe('TaskProjectsView', () => {
         projectInput.focus();
         setControlValue(projectInput, 'Launch');
         setControlValue(projectArea, areaWork.id);
-        projectInput.form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        pressEnter(projectInput);
       });
       expect(hierarchy.createProject).toHaveBeenCalledWith('Launch', areaWork.id);
       expect(document.activeElement).toBe(projectInput);

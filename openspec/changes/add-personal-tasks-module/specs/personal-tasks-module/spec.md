@@ -582,6 +582,10 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 - **WHEN** a keyboard user presses `N`, `/`, or `?` outside an editable control or unrelated modal
 - **THEN** the module respectively focuses task capture, opens unified search and navigation, or opens a visible keyboard-command reference
 
+#### Scenario: Submit inline hierarchy capture
+- **WHEN** a keyboard user enters a nonblank area or project name and presses Enter without an active composition event
+- **THEN** the corresponding hierarchy form submits exactly as its visible add button would
+
 #### Scenario: Search and filter without unstructured labels
 - **WHEN** a user searches present work or filters the result set
 - **THEN** the module matches task text and structured source or hierarchy context, filters through explicit planning destination, lifecycle, actionability, and source-kind fields, and does not introduce generic tags
