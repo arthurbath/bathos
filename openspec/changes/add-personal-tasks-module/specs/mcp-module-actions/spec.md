@@ -111,6 +111,22 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 - **WHEN** a hierarchy lifecycle or recovery request is already current, stale, rejected by descendant policy, or accepted
 - **THEN** the server returns a no-op, conflict, rejected, or accepted receipt respectively, never exposes a partial hierarchy, and keeps permanent deletion outside the MCP schema
 
+#### Scenario: Move a project through an explicit tool
+- **WHEN** an authenticated MCP client calls `move_task_project` with the current project revision and a new area, planning placement, or both
+- **THEN** the server validates the owned present area, project lifecycle, owner-local Today date, calendar range, and supported placement, appends generated structural and planning order keys when their scopes change, and never accepts raw order keys
+
+#### Scenario: Schedule a project through an explicit tool
+- **WHEN** an authenticated MCP client calls `schedule_task_project` with the current project revision and a start-date or deadline change
+- **THEN** the server validates date-only calendar values and range, activates scheduled Someday work into Anytime, preserves valid project placement, and never exposes lifecycle or arbitrary project fields through the scheduling operation
+
+#### Scenario: Retry an accepted project movement or schedule
+- **WHEN** an MCP client retries the exact accepted project movement or scheduling request with the same mutation UUID after the current project has changed
+- **THEN** the server validates the normalized historical before-and-after states, returns the immutable hierarchy-history receipt and current owner-safe project without another write, and rejects changed reuse or a key used by another task or hierarchy operation
+
+#### Scenario: Return safe project mutation outcomes
+- **WHEN** a project movement or schedule request is already current, stale, deleted, or terminal
+- **THEN** the server returns a content-free no-op or revision conflict when applicable, otherwise rejects the invalid state, and never changes append-only history for an unaccepted request
+
 #### Scenario: Use explicit to-do mutation tools
 - **WHEN** an authenticated MCP client edits content or source metadata, moves planning or container placement, schedules dates, or requests a lifecycle or recovery transition
 - **THEN** the server exposes `update_task`, `move_task`, `schedule_task`, or `transition_task` respectively instead of a generic record or arbitrary-patch mutation

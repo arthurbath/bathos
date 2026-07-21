@@ -111,6 +111,7 @@
 - [x] 6.3 Add guarded MCP update, completion, movement, scheduling, and recoverable deletion operations.
 - [x] 6.3a Add revision-guarded MCP content and checklist-completion updates for hierarchy records.
 - [x] 6.3b Add atomic MCP project lifecycle and hierarchy recovery operations with server-derived revision sets.
+- [x] 6.3c Add explicit revision-guarded MCP project movement and date scheduling with generated order keys and immutable-history retry validation.
 - [x] 6.4 Add MCP mutation receipts and task-domain audit history.
 - [x] 6.5 Add MCP tests for authentication, RLS boundaries, invalid transitions, retries, and destructive guardrails.
 - [x] 6.6 Build a Raycast quick-entry command with a configurable global hotkey.
