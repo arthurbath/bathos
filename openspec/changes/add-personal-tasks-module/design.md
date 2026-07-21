@@ -150,6 +150,7 @@ A later requirement-to-rendered-behavior audit found that project planning state
 - Apple Watch support in the initial product.
 - A complete Apple Shortcuts action library in the initial product.
 - App Store publication as an initial delivery requirement.
+- Selected-text capture without a recurring personal workflow that justifies its own dependable integration.
 - Capturing every future differentiator before foundation work begins.
 
 ## Decisions
@@ -226,7 +227,7 @@ Alternative considered: Preserve separate states for the two current emoji label
 
 ### Separate entry channel from source identity
 
-Every created task will record an immutable entry channel that identifies how the mutation entered the task service. Supported channels are `web`, `raycast`, `mcp`, `mail_automation`, `browser_capture`, `native`, and `import`. A task may also have one typed primary source reference whose kind is `webpage`, `mail_message`, `file`, `selected_text`, `reading_item`, `template`, or `other`. Manual tasks have no source reference.
+Every created task will record an immutable entry channel that identifies how the mutation entered the task service. Supported channels are `web`, `raycast`, `mcp`, `mail_automation`, `browser_capture`, `native`, and `import`. A task may also have one typed primary source reference whose kind is `webpage`, `mail_message`, `file`, `reading_item`, `template`, or `other`. Manual tasks have no source reference. The deployed source enum retains `selected_text` as a dormant compatibility value, but no current Raycast command or documented workflow creates it.
 
 Entry channel and source kind answer different questions. An MCP client can create a webpage-sourced task, and a Raycast command can capture a Mail message. Neither field will be inferred from the other, the title, or an icon.
 
@@ -235,7 +236,6 @@ Source behavior is type-specific:
 - Webpage and reading-item sources preserve a canonical URL and optional source title.
 - Mail sources preserve a durable message identifier, account identifier, deep link, and integration lifecycle status. Moving or retiring source mail remains a Mail integration operation, not generic task behavior.
 - File sources preserve a reopenable file reference supported by the originating client. They must not assume that a local path is portable to every device.
-- Selected-text sources may preserve the captured excerpt and an optional parent source, subject to the same owner and export boundaries as task notes.
 - Template sources are assigned only by the template-instantiation operation and preserve the definition and revision used.
 - Import sources preserve an import-run identifier and external stable identifier for deduplication without treating imported owner identifiers as authoritative.
 
@@ -506,13 +506,15 @@ The first context-aware companion is a separate `Add Page to Tasks` Raycast Scri
 
 Accepted page capture cleans the browser title and falls back to the hostname when the title is empty or generic. It creates an Inbox to-do through the same OAuth and MCP client, records `browser_capture` as the immutable entry channel, and stores a typed `webpage` source containing the exact accepted URL and optional source title. The URL remains in notes for compatibility with parallel capture clients, while the task interface exposes the structured URL through its first-class source control. The title does not carry a glasses emoji or textual source prefix because structured provenance is authoritative. Pending capture state retains the complete logical request and creation UUID in Keychain so an ambiguous response can be replayed without losing source fields or creating a duplicate.
 
-Three additional Raycast commands cover verified source contracts. Finder capture accepts exactly one selected file or folder, uses its name for the task, and records a typed `file` source with the local `file://` reference in both structured provenance and provisional notes. That reference is explicitly originating-Mac context and is not presumed portable. Selected-text capture writes a unique marker to the clipboard, actively sends Cmd-C to the front app, polls for a fresh nonempty value, and restores the previous plain-text clipboard value on failure. It uses the first nonempty line for the title, retains the bounded excerpt in notes, and records a typed `selected_text` source. It never falls back to pre-existing clipboard content.
+Finder capture accepts exactly one selected file or folder, uses its name for the task, and records a typed `file` source with the local `file://` reference in both structured provenance and provisional notes. That reference is explicitly originating-Mac context and is not presumed portable.
 
 The AI-enriched reading command reuses Inbox Manager's verified `prepare-webpage-task.mjs` contract, including web-assisted title refinement and its deterministic browser-title or hostname fallback. It strips the legacy glasses prefix because typed provenance is authoritative, stores `reading_item` and the exact URL structurally, retains the URL in provisional notes, and creates an unassigned daytime Today task with `browser_capture` entry provenance. This remains distinct from generic page capture, which is deterministic, local, and Inbox-first. The Things reading command remains intact for indefinite parallel use.
 
 All Raycast capture commands share the same OAuth client and Keychain-backed pending-capture journal. A retry replays the entire original logical payload, including destination, entry channel, typed source fields, and creation UUID. If a different capture follows an unresolved request, the command recovers the older request before sending the new one.
 
-Production acceptance on 2026 Jul 20 proved browser-page, Finder-item, and AI-enriched reading capture through the real OAuth, MCP, PowerSync, and Safari path. Each accepted source arrived once in its intended Inbox or Today placement with the exact typed link exposed by the web interface. A setup run also confirmed that reading capture follows the actual active Safari tab rather than a merely open background tab. Selected-text attempts launched from Codex rejected stale clipboard content safely, but they cannot prove the ordinary Raycast-hosted Accessibility path. That success and deliberate-failure clipboard restoration remain a separate live acceptance item.
+Production acceptance on 2026 Jul 20 proved browser-page, Finder-item, and AI-enriched reading capture through the real OAuth, MCP, PowerSync, and Safari path. Each accepted source arrived once in its intended Inbox or Today placement with the exact typed link exposed by the web interface. A setup run also confirmed that reading capture follows the actual active Safari tab rather than a merely open background tab.
+
+A later real-Raycast exercise demonstrated that selected-text capture could not dependably recover the originating application selection from a Script Command because Raycast remained frontmost while the command ran. Raycast's reliable selected-text API would require a full extension. The user does not regularly send arbitrary selected text into task capture, so the command, tests, guide registration, and acceptance task were removed instead of expanding the integration. Reintroduction requires a later OpenSpec change backed by a recurring workflow.
 
 Mail is deliberately not activated in this slice. The observed Inbox Manager contract needs a durable message identifier, Mail account and mailbox identity, deep link, retirement destination, and integration-specific source-retirement state. Rather than widen every task with Mail-only nullable fields or hide the missing semantics in opaque strings, the domain adds one owner-scoped `tasks_mail_sources` record for each Mail-sourced task. The record has a composite owner-safe task relationship, per-owner account-and-message uniqueness, explicit `retained`, `retirement_pending`, `retirement_failed`, and `retired` states, revision and mutation guards, bounded diagnostics, RLS, and deferred pair constraints. A Mail task and source must be created atomically, and their message identifier and deep link must match.
 

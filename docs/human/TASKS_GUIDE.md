@@ -26,7 +26,7 @@ BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/ta
 
 Capture first, then plan. Press `N` from most Tasks views to focus the capture field or return to Inbox. New inline captures go to the current view when that view accepts direct capture. Raycast quick entry always goes to Inbox unless its command has a narrower documented destination.
 
-Use start dates for availability, deadlines for the last acceptable date, and reminders for a specific local time. Mark work as `Waiting` when it cannot be acted upon now. Structured webpage, file, selected-text, reading-item, and Mail sources remain distinct from the task title and notes.
+Use start dates for availability, deadlines for the last acceptable date, and reminders for a specific local time. Mark work as `Waiting` when it cannot be acted upon now. Structured webpage, file, reading-item, and Mail sources remain distinct from the task title and notes.
 
 ## Keyboard Commands
 
@@ -54,7 +54,6 @@ The sibling Raycast project provides these authenticated commands:
 - `Add Task`: Add a title and optional notes to Inbox
 - `Add Page to Tasks`: Capture the active Safari or Chrome page with webpage provenance
 - `Add Finder Item to Tasks`: Capture exactly one selected file or folder with a local file reference
-- `Add Selected Text to Tasks`: Copy and capture the current text selection
 - `Add to Tasks Reading List`: Create an AI-titled reading item in Today
 
 The first use of any command opens BathOS authorization in the browser. Later uses refresh the delegated token automatically. Raycast keeps its rotating token and any ambiguous pending capture in the macOS login Keychain under `garden.bath.tasks-raycast`.

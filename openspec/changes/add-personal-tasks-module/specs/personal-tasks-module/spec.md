@@ -156,7 +156,7 @@ The system SHALL represent workflow meaning through explicit structured concepts
 - **THEN** the system stores that immutable entry channel separately from any typed source reference
 
 #### Scenario: Preserve a typed source
-- **WHEN** a task is captured from a webpage, Mail message, file, selected text, reading item, template, or import
+- **WHEN** a task is captured from a webpage, Mail message, file, reading item, template, or import
 - **THEN** the system stores the stable source fields and source-specific lifecycle metadata defined for that type without requiring an emoji or text prefix
 
 #### Scenario: Reopen a structured task source
@@ -733,14 +733,6 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 #### Scenario: Reject an ambiguous Finder selection
 - **WHEN** Finder has no selected item or more than one selected item
 - **THEN** Finder capture explains that exactly one item is required and does not submit a task mutation
-
-#### Scenario: Capture the current selected text
-- **WHEN** the user invokes selected-text capture while the frontmost app exposes a nonempty copyable text selection
-- **THEN** the command actively copies that selection, creates one Inbox to-do with `raycast` entry provenance and typed `selected_text` source provenance, uses the first nonempty line as the title, and preserves the captured excerpt in notes
-
-#### Scenario: Reject stale clipboard text
-- **WHEN** the frontmost app does not produce a new nonempty clipboard value after selected-text capture sends Cmd-C
-- **THEN** the command restores the prior plain-text clipboard value, explains that current text must be selected, and does not submit a task mutation
 
 #### Scenario: Capture a reading item
 - **WHEN** the user invokes reading-list capture on a supported normal browser page

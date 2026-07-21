@@ -24,12 +24,11 @@ On iOS and iPadOS 16.4 or later, Home Screen web apps support Web Push after a d
 
 ### Raycast
 
-The sibling Raycast project already supplies five narrow capture surfaces:
+The sibling Raycast project already supplies four narrow capture surfaces:
 
 - Quick task entry
 - Current webpage capture
 - One Finder item capture
-- Selected-text capture
 - AI-enriched reading-list capture
 
 These commands provide the global macOS invocation layer that would otherwise motivate an early native overlay. They share OAuth, Keychain-backed pending-capture recovery, structured provenance, and stable request identities.
