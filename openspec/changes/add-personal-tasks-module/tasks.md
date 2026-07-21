@@ -128,7 +128,9 @@
 - [x] 6.8d Add Mail capture after the structured source contract preserves account identity, message identity, deep link, and source-retirement lifecycle.
 - [x] 6.8d1 Add specialized atomic Mail task creation with request and source-identity deduplication.
 - [x] 6.8d2 Add guarded, auditable Mail source-retirement lifecycle mutations.
-- [ ] 6.9 Connect Inbox Manager output after the BathOS Inbox is approved for parallel use.
+- [x] 6.9 Keep Inbox Manager dual-writing unactivated until the BathOS Inbox is explicitly approved for parallel use.
+
+Inbox Manager integration remains deferred for this change. Future activation requires explicit approval and a separate OpenSpec change that preserves existing Things delivery during the parallel-use transition.
 
 ## 7. Trust Validation
 
