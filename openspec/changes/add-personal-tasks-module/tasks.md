@@ -107,6 +107,7 @@
 
 - [x] 6.1 Add read-only MCP tools for task hierarchy, individual records, and defined planning views.
 - [x] 6.2 Add guarded MCP task creation with stable IDs, structured origin, and idempotency support.
+- [x] 6.2a Add explicit idempotent MCP creation for areas, projects, headings, and checklist items.
 - [x] 6.3 Add guarded MCP update, completion, movement, scheduling, and recoverable deletion operations.
 - [x] 6.4 Add MCP mutation receipts and task-domain audit history.
 - [x] 6.5 Add MCP tests for authentication, RLS boundaries, invalid transitions, retries, and destructive guardrails.

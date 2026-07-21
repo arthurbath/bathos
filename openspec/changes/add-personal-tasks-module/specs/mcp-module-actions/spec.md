@@ -31,6 +31,22 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 - **WHEN** an authenticated MCP client calls `create_task` with a new idempotency key and valid title, planning, container, optional typed-source fields, and an optional supported integration channel
 - **THEN** the server creates one open present to-do with immutable declared integration provenance or default `mcp` provenance, an automation actor, stable identifiers, owner-local Today semantics, and append-only creation history
 
+#### Scenario: Create task hierarchy records through explicit tools
+- **WHEN** an authenticated MCP client calls `create_task_area`, `create_task_project`, `create_task_heading`, or `create_task_checklist_item` with a new idempotency key and valid structured input
+- **THEN** the server creates exactly one owner-scoped present record with MCP automation provenance, a server-generated stable identifier, deterministic append ordering, and append-only hierarchy creation history
+
+#### Scenario: Validate a hierarchy creation parent
+- **WHEN** an MCP client creates a project within an area, a heading within a project, or a checklist item within a to-do
+- **THEN** the server requires the parent to be present, owned by the signed-in user, and open when the parent has a lifecycle, without disclosing an inaccessible record
+
+#### Scenario: Retry hierarchy creation after later changes
+- **WHEN** an MCP client retries an exact hierarchy-creation request after the resulting record has changed
+- **THEN** the server resolves the immutable hierarchy creation event, returns its original receipt and the current owner-safe record, and does not create another record or event
+
+#### Scenario: Reject a changed hierarchy creation retry
+- **WHEN** an MCP client reuses a hierarchy-creation idempotency key for another record type or changed normalized input
+- **THEN** the server rejects the request without creating or changing hierarchy data
+
 #### Scenario: Create a Mail task atomically
 - **WHEN** a verified integration calls `create_mail_task` with complete structured Mail identity, retirement destination, AI-processed content, an optional accessible area, and a new idempotency key
 - **THEN** the server atomically creates one daytime Today task with `mail_automation` provenance and one retained Mail source record, then returns the creation receipt and both owner-safe records
