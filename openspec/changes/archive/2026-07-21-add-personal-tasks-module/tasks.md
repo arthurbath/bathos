@@ -170,4 +170,4 @@ The native companion gate is closed for this change. Future native work requires
 - [x] 9.4 Run `npm run lint`, `npm run build`, and `npm run test` before declaring an implementation phase complete.
 - [x] 9.5 Run `npm run spec:validate` throughout the change.
 - [x] 9.6 Sync completed delta specs into canonical specs and archive the OpenSpec change only after all required behavior is implemented and verified.
-- [ ] 9.7 Commit, push, and verify a clean synchronized repository only when the user requests publication or closeout.
+- [x] 9.7 Commit, push, and verify a clean synchronized repository only when the user requests publication or closeout.
