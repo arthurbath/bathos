@@ -14,6 +14,7 @@ This folder contains dated agent-facing security, performance, and technology ev
 
 | Date | File | Topic |
 |---|---|---|
+| 2026-07-21 | `2026-07-21_tasks_sync_reliability.md` | Tasks first-full-sync truthfulness, local degradation evidence, and privacy-bounded Sentry reporting |
 | 2026-07-21 | `2026-07-21_tasks_production_topology_hardening.md` | Tasks production migrations, reminder dispatcher, RLS optimization, and PowerSync boundary acceptance |
 | 2026-07-20 | `2026-07-20_tasks_reminder_delivery_readiness.md` | Personal Tasks Web Push dispatcher, secret-free Cron package, and production reminder acceptance gate |
 | 2026-07-20 | `2026-07-20_tasks_product_identity.md` | Personal Tasks product-name shortlist, collision screen, and icon-direction recommendation |

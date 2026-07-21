@@ -555,6 +555,25 @@ const taskSyncIssues = new Table(
   },
 );
 
+const taskSyncHealthEvents = new Table(
+  {
+    state: column.text,
+    started_at: column.text,
+    resolved_at: column.text,
+    pending_upload_bucket: column.text,
+    had_completed_sync: column.integer,
+    last_successful_sync_at: column.text,
+    reported_at: column.text,
+  },
+  {
+    localOnly: true,
+    indexes: {
+      startedAt: ['-started_at'],
+      openState: ['resolved_at', 'state', '-started_at'],
+    },
+  },
+);
+
 const taskOwnerBinding = new Table(
   {
     owner_id: column.text,
@@ -587,6 +606,7 @@ export const tasksPowerSyncSchema = new Schema({
   tasks_reminder_deliveries: taskReminderDeliveries,
   tasks_reminder_claims: taskReminderClaims,
   tasks_sync_issues: taskSyncIssues,
+  tasks_sync_health_events: taskSyncHealthEvents,
   tasks_owner_binding: taskOwnerBinding,
 });
 

@@ -1,16 +1,22 @@
-export type TasksSyncState = 'local' | 'connecting' | 'connected' | 'offline';
-export type TaskSyncActivityState = 'idle' | 'active' | 'error';
+import type {
+  TaskSyncActivityState,
+  TasksSyncState,
+} from '@/modules/tasks/domain/taskSyncReliability';
+
+export type { TaskSyncActivityState, TasksSyncState };
 
 export function getTasksStorageStatusLabel({
   mode,
   syncState,
   pendingUploadCount,
+  hasCompletedSync,
   uploadState = 'idle',
   downloadState = 'idle',
 }: {
   mode: 'local' | 'connected';
   syncState: TasksSyncState;
   pendingUploadCount: number;
+  hasCompletedSync: boolean;
   uploadState?: TaskSyncActivityState;
   downloadState?: TaskSyncActivityState;
 }): string {
@@ -21,13 +27,17 @@ export function getTasksStorageStatusLabel({
       : 'Upload Error';
   }
   if (downloadState === 'error') return 'Download Error';
+  if (syncState === 'connecting') return 'Connecting';
+  if (syncState === 'offline') {
+    return pendingUploadCount > 0
+      ? `Offline - ${pendingUploadCount} Pending`
+      : 'Offline';
+  }
+  if (!hasCompletedSync) return 'Preparing Sync';
   if (uploadState === 'active') {
     return pendingUploadCount > 0 ? `Syncing ${pendingUploadCount}` : 'Uploading';
   }
-  if (pendingUploadCount > 0 && syncState === 'connected') return `${pendingUploadCount} Pending`;
-  if (pendingUploadCount > 0) return `Offline - ${pendingUploadCount} Pending`;
+  if (pendingUploadCount > 0) return `${pendingUploadCount} Pending`;
   if (downloadState === 'active') return 'Downloading';
-  if (syncState === 'connecting') return 'Connecting';
-  if (syncState === 'offline') return 'Offline';
   return 'Synced';
 }

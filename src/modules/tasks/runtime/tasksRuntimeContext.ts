@@ -9,7 +9,7 @@ import type { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceS
 import type { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import type { TaskPermanentDeletionService } from '@/modules/tasks/data/taskPermanentDeletionService';
 import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
-import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
+import type { TasksSyncState } from '@/modules/tasks/domain/taskSyncReliability';
 
 export type TasksRuntimeValue = {
   database: PowerSyncDatabase;

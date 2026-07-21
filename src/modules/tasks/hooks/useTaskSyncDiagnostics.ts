@@ -2,6 +2,12 @@ import { useQuery, useStatus } from '@powersync/react';
 import { useMemo } from 'react';
 
 import type { TaskSyncActivityState } from '@/modules/tasks/components/tasksStorageStatus';
+import {
+  parseTaskSyncHealthEvent,
+  type TaskSyncHealthEvent,
+  type TaskSyncHealthEventStorageRow,
+} from '@/modules/tasks/data/taskSyncHealthEventStore';
+import { deriveTaskSyncHealthState } from '@/modules/tasks/domain/taskSyncReliability';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 
 type TaskConflictReceiptStorageRow = {
@@ -32,35 +38,77 @@ const recentConflictReceiptsQuery = `
   LIMIT 10
 `;
 
+const recentHealthEventsQuery = `
+  SELECT id, state, started_at, resolved_at, pending_upload_bucket,
+         had_completed_sync, last_successful_sync_at, reported_at
+  FROM tasks_sync_health_events
+  ORDER BY started_at DESC, id DESC
+  LIMIT 10
+`;
+
 export function useTaskSyncDiagnostics() {
   const { mode, syncState, pendingUploadCount } = useTasksRuntime();
   const status = useStatus();
   const conflictsQuery = useQuery<TaskConflictReceiptStorageRow>(recentConflictReceiptsQuery);
+  const healthEventsQuery = useQuery<TaskSyncHealthEventStorageRow>(recentHealthEventsQuery);
   const parsedConflicts = useMemo(
     () => parseTaskConflictReceipts(conflictsQuery.data),
     [conflictsQuery.data],
   );
+  const parsedHealthEvents = useMemo(
+    () => parseTaskSyncHealthEvents(healthEventsQuery.data),
+    [healthEventsQuery.data],
+  );
   const connected = mode === 'connected';
   const dataFlow = status.dataFlowStatus;
+  const hasCompletedSync = connected && status.hasSynced === true;
+  const uploadState = connected
+    ? deriveTaskSyncActivityState(dataFlow.uploading, dataFlow.uploadError)
+    : 'idle';
+  const downloadState = connected
+    ? deriveTaskSyncActivityState(dataFlow.downloading, dataFlow.downloadError)
+    : 'idle';
 
   return {
     mode,
     syncState,
     pendingUploadCount,
+    hasCompletedSync,
     lastSuccessfulSyncAt: connected && status.lastSyncedAt instanceof Date
       && !Number.isNaN(status.lastSyncedAt.getTime())
       ? status.lastSyncedAt.toISOString()
       : null,
-    uploadState: connected
-      ? deriveTaskSyncActivityState(dataFlow.uploading, dataFlow.uploadError)
-      : 'idle',
-    downloadState: connected
-      ? deriveTaskSyncActivityState(dataFlow.downloading, dataFlow.downloadError)
-      : 'idle',
+    uploadState,
+    downloadState,
+    healthState: deriveTaskSyncHealthState({
+      mode,
+      syncState,
+      pendingUploadCount,
+      hasCompletedSync,
+      uploadState,
+      downloadState,
+    }),
+    healthEvents: parsedHealthEvents.events,
+    healthEventsLoading: healthEventsQuery.isLoading,
+    healthEventsError: healthEventsQuery.error ?? parsedHealthEvents.error,
     conflictReceipts: parsedConflicts.receipts,
     conflictReceiptsLoading: conflictsQuery.isLoading,
     conflictReceiptsError: conflictsQuery.error ?? parsedConflicts.error,
   };
+}
+
+function parseTaskSyncHealthEvents(rows: readonly TaskSyncHealthEventStorageRow[]): {
+  events: TaskSyncHealthEvent[];
+  error: Error | null;
+} {
+  try {
+    return { events: rows.map(parseTaskSyncHealthEvent), error: null };
+  } catch {
+    return {
+      events: [],
+      error: new Error('Task synchronization health history could not be read'),
+    };
+  }
 }
 
 function deriveTaskSyncActivityState(

@@ -14,6 +14,11 @@ import {
   type TaskSyncActivityState,
   type TasksSyncState,
 } from '@/modules/tasks/components/tasksStorageStatus';
+import type { TaskSyncHealthEvent } from '@/modules/tasks/data/taskSyncHealthEventStore';
+import {
+  isTaskSyncDegradationState,
+  type TaskSyncHealthState,
+} from '@/modules/tasks/domain/taskSyncReliability';
 import {
   useTaskSyncDiagnostics,
   type TaskConflictReceipt,
@@ -25,6 +30,8 @@ export function TaskSyncDiagnosticsDialog() {
   const Icon = diagnostics.mode === 'connected' ? Cloud : HardDrive;
   const hasError = diagnostics.uploadState === 'error'
     || diagnostics.downloadState === 'error'
+    || isTaskSyncDegradationState(diagnostics.healthState)
+    || diagnostics.healthEventsError !== null
     || diagnostics.conflictReceiptsError !== null;
 
   return (
@@ -57,6 +64,11 @@ export function TaskSyncDiagnosticsDialog() {
 
           <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 pt-2 text-sm">
             <DiagnosticRow label="Connection" value={formatConnection(diagnostics.syncState)} />
+            <DiagnosticRow label="Health" value={formatHealth(diagnostics.healthState)} />
+            <DiagnosticRow
+              label="Full Synchronization"
+              value={diagnostics.hasCompletedSync ? 'Complete' : 'Preparing'}
+            />
             <DiagnosticRow
               label="Pending Changes"
               value={String(diagnostics.pendingUploadCount)}
@@ -68,6 +80,17 @@ export function TaskSyncDiagnosticsDialog() {
             <DiagnosticRow label="Upload" value={formatActivity(diagnostics.uploadState)} />
             <DiagnosticRow label="Download" value={formatActivity(diagnostics.downloadState)} />
           </dl>
+
+          <section className="space-y-2" aria-labelledby="task-sync-reliability-heading">
+            <h3 id="task-sync-reliability-heading" className="text-sm font-medium">
+              Recent Reliability Events
+            </h3>
+            <HealthEvents
+              events={diagnostics.healthEvents}
+              loading={diagnostics.healthEventsLoading}
+              error={diagnostics.healthEventsError}
+            />
+          </section>
 
           <section className="space-y-2" aria-labelledby="task-sync-conflicts-heading">
             <h3 id="task-sync-conflicts-heading" className="text-sm font-medium">
@@ -82,6 +105,47 @@ export function TaskSyncDiagnosticsDialog() {
         </DialogBody>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function HealthEvents({
+  events,
+  loading,
+  error,
+}: {
+  events: readonly TaskSyncHealthEvent[];
+  loading: boolean;
+  error: Error | null;
+}) {
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Loading reliability history...</p>;
+  }
+  if (error !== null) {
+    return <p className="text-sm text-destructive">Reliability history could not be read.</p>;
+  }
+  if (events.length === 0) {
+    return <p className="text-sm text-muted-foreground">No degradation recorded.</p>;
+  }
+  return (
+    <ol className="divide-y divide-border rounded-md border border-border">
+      {events.map((event) => (
+        <li key={event.id} className="space-y-1 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium text-foreground">{formatHealth(event.state)}</span>
+            <time className="text-muted-foreground" dateTime={event.startedAt}>
+              {formatTaskSyncTimestamp(event.startedAt)}
+            </time>
+          </div>
+          <p className="text-muted-foreground">
+            {event.resolvedAt === null
+              ? 'Active'
+              : `Recovered ${formatTaskSyncTimestamp(event.resolvedAt)}`}
+            {' - '}Pending Queue {event.pendingUploadBucket}
+            {event.reportedAt === null ? '' : ' - Reported'}
+          </p>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -146,6 +210,17 @@ function formatActivity(state: TaskSyncActivityState): string {
   if (state === 'active') return 'Active';
   if (state === 'error') return 'Error';
   return 'Idle';
+}
+
+function formatHealth(state: TaskSyncHealthState): string {
+  if (state === 'local-only') return 'Local Only';
+  if (state === 'upload-error') return 'Upload Error';
+  if (state === 'download-error') return 'Download Error';
+  if (state === 'offline') return 'Offline';
+  if (state === 'connecting') return 'Connecting';
+  if (state === 'first-sync-pending') return 'Preparing Sync';
+  if (state === 'synchronizing') return 'Synchronizing';
+  return 'Healthy';
 }
 
 function formatLastSuccessfulSync(value: string | null): string {

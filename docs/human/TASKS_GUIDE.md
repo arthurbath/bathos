@@ -5,7 +5,7 @@ BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/ta
 ## Start Here
 
 1. Sign in to BathOS and open Tasks.
-2. Check the synchronization control in the header. `Synced` means local changes have uploaded and current server changes have downloaded.
+2. Check the synchronization control in the header. `Synced` means this installation has completed a full synchronization, local changes have uploaded, current server changes have downloaded, and no transfer is active or failing.
 3. In the Browser Reminder Capability panel, choose `Enable` and allow notifications when Safari asks. Each browser or device must be enabled separately.
 4. Optionally install Tasks from Safari. Use `File > Add to Dock` on macOS or `Share > Add to Home Screen` on iPhone and iPad.
 5. Capture a few disposable or low-risk tasks before relying on the module for important work.
@@ -62,7 +62,11 @@ The first use of any command opens BathOS authorization in the browser. Later us
 
 Tasks writes through a local database first. Existing task data remains available during a temporary network interruption, and accepted local changes wait in the upload queue. The header status distinguishes synchronized operation, pending uploads, download failure, upload failure, and local-only operation.
 
-Do not treat `Local` as cross-device synchronization. In that state, the current installation can continue local work, but changes from other browsers, MCP clients, and Raycast cannot converge til the production connection returns.
+`Preparing Sync` means the installation is connected but has not completed its first full synchronization. Do not treat it as synchronized yet. Choose the header status to inspect connection state, full-synchronization completion, queue depth, transfer activity, recent reliability events, and conflict receipts.
+
+An upload error, download error, or offline state opens one content-free reliability event on the current installation. Tasks retains the 50 most recent events and closes the active event when synchronization recovers or changes failure category. A production event that remains active for 2 minutes sends one warning to monitoring. The local event and warning contain only bounded health, queue, completion, and duration categories. They do not contain task content, task identifiers, owner identifiers, source metadata, or raw provider errors.
+
+Do not treat `Local` as cross-device synchronization. In that state, the current installation can continue local work, but changes from other browsers, MCP clients, and Raycast cannot converge until the production connection returns.
 
 ## Reminders
 

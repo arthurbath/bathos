@@ -69,6 +69,7 @@ Plan and complete personal tasks through a private-first, keyboard-focused workf
 - Areas, projects, headings, checklists, templates, reminders, and recurrence
 - Structured actionability and source provenance without generic tags
 - Offline local operation, recoverable deletion, history, export, and restore
+- First-full-sync status, bounded local reliability history, and content-free production warnings
 - Narrow task-domain MCP tools and Raycast capture commands
 
 Accessible at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Production synchronization and browser reminder delivery are active.

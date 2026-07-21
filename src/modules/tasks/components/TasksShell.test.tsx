@@ -62,38 +62,44 @@ vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
 
 describe('getTasksStorageStatusLabel', () => {
   it('distinguishes local, connected, pending, and offline states', () => {
-    expect(getTasksStorageStatusLabel({ mode: 'local', syncState: 'local', pendingUploadCount: 0 }))
+    expect(getTasksStorageStatusLabel({ mode: 'local', syncState: 'local', pendingUploadCount: 0, hasCompletedSync: false }))
       .toBe('Local');
-    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'connected', pendingUploadCount: 0 }))
+    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'connected', pendingUploadCount: 0, hasCompletedSync: false }))
+      .toBe('Preparing Sync');
+    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'connected', pendingUploadCount: 0, hasCompletedSync: true }))
       .toBe('Synced');
-    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'connected', pendingUploadCount: 2 }))
+    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'connected', pendingUploadCount: 2, hasCompletedSync: true }))
       .toBe('2 Pending');
     expect(getTasksStorageStatusLabel({
       mode: 'connected',
       syncState: 'connected',
       pendingUploadCount: 2,
+      hasCompletedSync: true,
       uploadState: 'active',
     })).toBe('Syncing 2');
     expect(getTasksStorageStatusLabel({
       mode: 'connected',
       syncState: 'connected',
       pendingUploadCount: 0,
+      hasCompletedSync: true,
       downloadState: 'active',
     })).toBe('Downloading');
-    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'offline', pendingUploadCount: 2 }))
+    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'offline', pendingUploadCount: 2, hasCompletedSync: true }))
       .toBe('Offline - 2 Pending');
-    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'offline', pendingUploadCount: 0 }))
+    expect(getTasksStorageStatusLabel({ mode: 'connected', syncState: 'offline', pendingUploadCount: 0, hasCompletedSync: true }))
       .toBe('Offline');
     expect(getTasksStorageStatusLabel({
       mode: 'connected',
       syncState: 'connected',
       pendingUploadCount: 2,
+      hasCompletedSync: true,
       uploadState: 'error',
     })).toBe('Upload Error - 2 Pending');
     expect(getTasksStorageStatusLabel({
       mode: 'connected',
       syncState: 'connected',
       pendingUploadCount: 0,
+      hasCompletedSync: true,
       downloadState: 'error',
     })).toBe('Download Error');
   });

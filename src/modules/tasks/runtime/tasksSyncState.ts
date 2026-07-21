@@ -1,4 +1,4 @@
-import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
+import type { TasksSyncState } from '@/modules/tasks/domain/taskSyncReliability';
 
 export type TasksPowerSyncStatus = {
   connected: boolean;

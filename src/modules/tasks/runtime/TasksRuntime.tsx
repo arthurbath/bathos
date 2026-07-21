@@ -20,7 +20,7 @@ import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import { TaskPermanentDeletionService } from '@/modules/tasks/data/taskPermanentDeletionService';
 import { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import { resolveTaskPlanningTimeZone } from '@/modules/tasks/domain/taskDates';
-import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
+import type { TasksSyncState } from '@/modules/tasks/domain/taskSyncReliability';
 import {
   bindTasksDatabaseOwner,
   createTasksPowerSyncDatabase,
@@ -32,6 +32,7 @@ import {
 } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import { observeTasksSyncState } from '@/modules/tasks/runtime/tasksSyncState';
 import { prepareTasksForSignOut } from '@/modules/tasks/runtime/taskSignOut';
+import { TasksSyncReliabilityObserver } from '@/modules/tasks/runtime/TasksSyncReliabilityObserver';
 
 export function TasksRuntimeProvider({
   ownerId,
@@ -222,7 +223,10 @@ export function TasksRuntimeProvider({
 
   return (
     <PowerSyncContext.Provider value={database}>
-      <TasksRuntimeContext.Provider value={runtime}>{children}</TasksRuntimeContext.Provider>
+      <TasksRuntimeContext.Provider value={runtime}>
+        <TasksSyncReliabilityObserver />
+        {children}
+      </TasksRuntimeContext.Provider>
     </PowerSyncContext.Provider>
   );
 }
