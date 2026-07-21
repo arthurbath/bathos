@@ -4,7 +4,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { MemoryRouter, Routes, Route, Link } from "react-router-dom";
 import { TASK_ROUTE_PATHS } from "@/modules/tasks/routes";
-import { ScrollToTopOnPathnameChange } from "./App";
+import { BROWSER_ROUTER_FUTURE } from "@/platform/routingCompatibility";
+import {
+  BathOSBrowserRouter,
+  ScrollToTopOnPathnameChange,
+} from "./App";
 
 describe("task route registry", () => {
   it("registers the Upcoming task view", () => {
@@ -14,9 +18,46 @@ describe("task route registry", () => {
   });
 });
 
+describe("BathOSBrowserRouter", () => {
+  it("enables both React Router v7 compatibility behaviors without opt-in warnings", () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+      act(() => {
+        root.render(
+          <BathOSBrowserRouter>
+            <div>Router Ready</div>
+          </BathOSBrowserRouter>,
+        );
+      });
+
+      expect(BROWSER_ROUTER_FUTURE).toEqual({
+        v7_relativeSplatPath: true,
+        v7_startTransition: true,
+      });
+      expect(container).toHaveTextContent("Router Ready");
+      expect(
+        consoleWarn.mock.calls.some(([message]) => (
+          String(message).includes("v7_startTransition")
+          || String(message).includes("v7_relativeSplatPath")
+        )),
+      ).toBe(false);
+    } finally {
+      cleanup(root, container);
+      consoleWarn.mockRestore();
+    }
+  });
+});
+
 function TestRoutes() {
   return (
-    <MemoryRouter initialEntries={["/budget/summary"]}>
+    <MemoryRouter
+      initialEntries={["/budget/summary"]}
+      future={BROWSER_ROUTER_FUTURE}
+    >
       <ScrollToTopOnPathnameChange />
       <Routes>
         <Route

@@ -13,6 +13,7 @@ import TermsPage from "@/platform/components/TermsPage";
 import AdminPage from "@/platform/components/AdminPage";
 import HelpPage from "@/platform/components/HelpPage";
 import OAuthConsentPage from "@/platform/components/OAuthConsentPage";
+import { BROWSER_ROUTER_FUTURE } from "@/platform/routingCompatibility";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import TermsGate from "@/platform/components/TermsGate";
 import AuthCallbackToasts from "@/platform/components/AuthCallbackToasts";
@@ -174,20 +175,28 @@ function RouteScopedDataGridHistory({ children }: { children: ReactNode }) {
   );
 }
 
+export function BathOSBrowserRouter({ children }: { children: ReactNode }) {
+  return (
+    <BrowserRouter future={BROWSER_ROUTER_FUTURE}>
+      {children}
+    </BrowserRouter>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
+        <BathOSBrowserRouter>
           <AuthCallbackToasts />
           <DocumentHead />
           <TermsGate />
           <RouteScopedDataGridHistory>
             <AppRoutes />
           </RouteScopedDataGridHistory>
-        </BrowserRouter>
+        </BathOSBrowserRouter>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
