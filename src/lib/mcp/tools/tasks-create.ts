@@ -25,7 +25,6 @@ const sourceKindSchema = z.enum([
   'webpage',
   'mail_message',
   'file',
-  'selected_text',
   'reading_item',
   'other',
 ]);

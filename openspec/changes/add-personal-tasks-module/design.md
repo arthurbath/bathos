@@ -227,7 +227,7 @@ Alternative considered: Preserve separate states for the two current emoji label
 
 ### Separate entry channel from source identity
 
-Every created task will record an immutable entry channel that identifies how the mutation entered the task service. Supported channels are `web`, `raycast`, `mcp`, `mail_automation`, `browser_capture`, `native`, and `import`. A task may also have one typed primary source reference whose kind is `webpage`, `mail_message`, `file`, `reading_item`, `template`, or `other`. Manual tasks have no source reference. The deployed source enum retains `selected_text` as a dormant compatibility value, but no current Raycast command or documented workflow creates it.
+Every created task will record an immutable entry channel that identifies how the mutation entered the task service. Supported channels are `web`, `raycast`, `mcp`, `mail_automation`, `browser_capture`, `native`, and `import`. A task may also have one typed primary source reference whose kind is `webpage`, `mail_message`, `file`, `reading_item`, `template`, or `other`. Manual tasks have no source reference. The deployed source enum retains `selected_text` as a dormant compatibility value for readable historical records, but current Raycast commands, documented workflows, and MCP create or update schemas do not create it.
 
 Entry channel and source kind answer different questions. An MCP client can create a webpage-sourced task, and a Raycast command can capture a Mail message. Neither field will be inferred from the other, the title, or an icon.
 

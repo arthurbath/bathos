@@ -209,6 +209,8 @@ describe('Tasks MCP creation tool', () => {
       idempotentHint: true,
       openWorldHint: false,
     });
+    expect(createTask.inputSchema.source.safeParse({ kind: 'selected_text' }).success)
+      .toBe(false);
   });
 
   it('creates owner-scoped Today work with immutable MCP and typed-source provenance', async () => {

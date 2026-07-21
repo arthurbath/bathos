@@ -292,6 +292,11 @@ function base(overrides: Partial<{ task_id: string; expected_revision: number; c
 }
 
 describe('Tasks MCP mutation tools', () => {
+  it('keeps retired selected-text provenance out of the update contract', () => {
+    expect(updateTask.inputSchema.source.safeParse({ kind: 'selected_text' }).success)
+      .toBe(false);
+  });
+
   it('advertises four explicit idempotent closed-world mutation tools', () => {
     for (const tool of [updateTask, moveTask, scheduleTask]) {
       expect(tool.annotations).toEqual({ readOnlyHint: false, idempotentHint: true, openWorldHint: false });

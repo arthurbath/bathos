@@ -1081,7 +1081,6 @@ var sourceKindSchema = z.enum([
   "webpage",
   "mail_message",
   "file",
-  "selected_text",
   "reading_item",
   "other"
 ]);
@@ -2931,7 +2930,6 @@ var sourceKindSchema2 = z.enum([
   "webpage",
   "mail_message",
   "file",
-  "selected_text",
   "reading_item",
   "other"
 ]);
