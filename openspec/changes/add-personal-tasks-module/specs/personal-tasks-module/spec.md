@@ -604,6 +604,10 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** the user opens a Web Push notification for a logical occurrence
 - **THEN** the authenticated Tasks route acknowledges that occurrence and later in-app or provider claims do not create another delivery after acknowledgement
 
+#### Scenario: Open a reminder without replacing unrelated BathOS work
+- **WHEN** a user opens a Web Push notification while browser windows include another BathOS module, an existing Tasks route, or no Tasks route
+- **THEN** the service worker accepts only a same-origin Tasks destination, reuses and focuses an existing Tasks client when available, otherwise opens a new Tasks window, and never navigates the unrelated BathOS module away from its current route
+
 ### Requirement: Evidence-Gated Native Apple Expansion
 The system SHALL treat native Apple surfaces as an optional extension of the shared task domain and SHALL require a specific observed workflow gap before creating a native companion.
 

@@ -27,23 +27,57 @@ self.addEventListener('push', (event) => {
   }));
 });
 
+const TASKS_FALLBACK_PATH = '/tasks/today';
+
+function isTasksPath(pathname) {
+  return pathname === '/tasks' || pathname.startsWith('/tasks/');
+}
+
+function resolveTasksDestination(value) {
+  try {
+    const destination = new URL(
+      typeof value === 'string' ? value : TASKS_FALLBACK_PATH,
+      self.location.origin,
+    );
+    if (destination.origin !== self.location.origin || !isTasksPath(destination.pathname)) {
+      return new URL(TASKS_FALLBACK_PATH, self.location.origin).href;
+    }
+    return destination.href;
+  } catch {
+    return new URL(TASKS_FALLBACK_PATH, self.location.origin).href;
+  }
+}
+
+function isTasksWindow(client) {
+  try {
+    const clientUrl = new URL(client.url);
+    return clientUrl.origin === self.location.origin && isTasksPath(clientUrl.pathname);
+  } catch {
+    return false;
+  }
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const navigateUrl = typeof event.notification.data?.navigateUrl === 'string'
     ? event.notification.data.navigateUrl
-    : '/tasks/today';
-  const destination = new URL(navigateUrl, self.location.origin).href;
+    : TASKS_FALLBACK_PATH;
+  const destination = resolveTasksDestination(navigateUrl);
 
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({
       type: 'window',
       includeUncontrolled: true,
     });
-    const existing = windows.find((client) => new URL(client.url).origin === self.location.origin);
+    const existing = windows.find(isTasksWindow);
     if (existing) {
-      await existing.navigate(destination);
-      await existing.focus();
-      return;
+      try {
+        await existing.navigate(destination);
+        await existing.focus();
+        return;
+      } catch {
+        // Open a fresh Tasks window if an existing client cannot be reused.
+      }
     }
     await self.clients.openWindow(destination);
   })());
