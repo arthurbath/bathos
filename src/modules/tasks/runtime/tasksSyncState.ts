@@ -12,7 +12,11 @@ type TasksPowerSyncStatusSource = {
   }): () => void;
 };
 
-export function resolveTasksSyncState(status: TasksPowerSyncStatus): TasksSyncState {
+export function resolveTasksSyncState(
+  status: TasksPowerSyncStatus,
+  browserOnline = true,
+): TasksSyncState {
+  if (!browserOnline) return 'offline';
   if (status.connected) return 'connected';
   if (status.connecting) return 'connecting';
   return 'offline';
@@ -21,9 +25,10 @@ export function resolveTasksSyncState(status: TasksPowerSyncStatus): TasksSyncSt
 export function observeTasksSyncState(
   source: TasksPowerSyncStatusSource,
   onStateChanged: (state: TasksSyncState) => void,
+  isBrowserOnline: () => boolean = () => true,
 ): () => void {
   const emit = (status: TasksPowerSyncStatus) => {
-    onStateChanged(resolveTasksSyncState(status));
+    onStateChanged(resolveTasksSyncState(status, isBrowserOnline()));
   };
   const dispose = source.registerListener({ statusChanged: emit });
 

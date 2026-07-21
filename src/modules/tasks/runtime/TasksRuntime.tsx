@@ -30,7 +30,10 @@ import {
   TasksRuntimeContext,
   type TasksRuntimeValue,
 } from '@/modules/tasks/runtime/tasksRuntimeContext';
-import { observeTasksSyncState } from '@/modules/tasks/runtime/tasksSyncState';
+import {
+  observeTasksSyncState,
+  resolveTasksSyncState,
+} from '@/modules/tasks/runtime/tasksSyncState';
 import { prepareTasksForSignOut } from '@/modules/tasks/runtime/taskSignOut';
 import { TasksSyncReliabilityObserver } from '@/modules/tasks/runtime/TasksSyncReliabilityObserver';
 import { registerTasksServiceWorker } from '@/modules/tasks/pwa/taskServiceWorker';
@@ -85,6 +88,14 @@ export function TasksRuntimeProvider({
     let disposeStatusListener: (() => void) | undefined;
     let queuePoll: ReturnType<typeof setInterval> | undefined;
     const endpoint = import.meta.env.VITE_TASKS_POWERSYNC_ENDPOINT?.trim();
+    const isBrowserOnline = () => window.navigator.onLine !== false;
+    const refreshBrowserNetworkState = () => {
+      if (!active || !endpoint) return;
+      setSyncState(resolveTasksSyncState(database.currentStatus, isBrowserOnline()));
+    };
+
+    window.addEventListener('offline', refreshBrowserNetworkState);
+    window.addEventListener('online', refreshBrowserNetworkState);
 
     const refreshQueueDepth = async () => {
       const queue = await database.getUploadQueueStats();
@@ -112,13 +123,17 @@ export function TasksRuntimeProvider({
         if (endpoint) {
           const connector = createTasksSupabaseConnector({ endpoint, supabase });
           setSyncState('connecting');
-          disposeStatusListener = observeTasksSyncState(database, (nextSyncState) => {
-            if (!active) {
-              return;
-            }
-            setSyncState(nextSyncState);
-            void refreshQueueDepth().catch(() => undefined);
-          });
+          disposeStatusListener = observeTasksSyncState(
+            database,
+            (nextSyncState) => {
+              if (!active) {
+                return;
+              }
+              setSyncState(nextSyncState);
+              void refreshQueueDepth().catch(() => undefined);
+            },
+            isBrowserOnline,
+          );
           await refreshQueueDepth();
           queuePoll = setInterval(() => {
             void refreshQueueDepth().catch(() => undefined);
@@ -151,6 +166,8 @@ export function TasksRuntimeProvider({
 
     return () => {
       active = false;
+      window.removeEventListener('offline', refreshBrowserNetworkState);
+      window.removeEventListener('online', refreshBrowserNetworkState);
       disposeStatusListener?.();
       if (queuePoll !== undefined) {
         clearInterval(queuePoll);

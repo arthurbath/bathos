@@ -16,6 +16,7 @@ The correction must preserve one root-scoped registration and the existing push 
 - Refresh the offline shell after an online navigation without exposing a partially updated shell.
 - Preserve Web Push delivery, notification clicks, sign-out cleanup, and immediate backward-compatible worker activation.
 - Leave every non-Tasks navigation, API request, and nonversioned resource outside fetch interception.
+- Stop connection-dependent administrator-role probes while the browser reports offline, resume them on reconnect, and label Tasks synchronization as offline immediately.
 
 **Non-Goals:**
 
@@ -61,12 +62,19 @@ The activate event claims clients and removes abandoned Tasks staging caches whi
 
 Do not add a new banner or claim offline readiness before the worker and cache are actually available. The final iPhone acceptance will verify installation, standalone launch, offline restart, local mutation, reconnection, and Web Push explicitly. Automated tests cover registration isolation and service-worker cache behavior without asserting browser-specific storage guarantees that only the device can prove.
 
+### Treat browser connectivity as an immediate offline boundary
+
+PowerSync remains authoritative for synchronization progress while the browser is online, but a shared worker can briefly retain a stale connected status after a tab cold-reloads under network emulation. The Tasks runtime therefore reports `Offline` whenever `navigator.onLine` is false and resumes the current PowerSync status when the browser returns online.
+
+The shared administrator-role hook does not call Supabase while the browser is offline. It cancels pending retries on the `offline` event, resumes immediately on `online`, and uses exponential backoff capped at 30 seconds for transient online failures. Cached authorization remains usable, and the offline Tasks shell avoids a tight remote-fetch loop.
+
 ## Risks / Trade-offs
 
 - [Risk] A deployment refresh fails while fetching one new asset -> Mitigation: Keep the prior pointer and cache active until the complete new shell is staged.
 - [Risk] A root-scoped fetch handler affects another BathOS module -> Mitigation: Call `respondWith` only for Tasks navigation and the reserved `/tasks-offline-assets/` namespace present exclusively in cached offline Tasks HTML, and test ordinary assets, unrelated navigation, and API pass-through.
 - [Risk] Cached code outlives a breaking server contract -> Mitigation: Prefer network navigation, use content-addressed assets, refresh atomically whenever online, and keep durable Tasks server contracts backward compatible.
 - [Risk] Cache Storage grows across interrupted staging attempts -> Mitigation: Delete failed staging caches immediately and remove every nonactive Tasks shell cache during successful refresh and activation.
+- [Risk] Offline startup repeatedly probes Supabase or falsely reports synchronization as healthy -> Mitigation: Pause administrator-role probes on the browser offline signal and let that signal override stale shared-worker connectivity until reconnection.
 - [Trade-off] First installation requires a complete online shell fetch -> This is explicit and preferable to claiming offline readiness from an incomplete cache.
 
 ## Migration Plan

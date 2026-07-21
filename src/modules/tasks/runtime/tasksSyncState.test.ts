@@ -33,5 +33,24 @@ describe('tasksSyncState', () => {
   it('resolves connecting and offline states without reporting false connectivity', () => {
     expect(resolveTasksSyncState({ connected: false, connecting: true })).toBe('connecting');
     expect(resolveTasksSyncState({ connected: false, connecting: false })).toBe('offline');
+    expect(resolveTasksSyncState({ connected: true, connecting: false }, false)).toBe('offline');
+  });
+
+  it('lets browser connectivity override a stale shared-worker connection', () => {
+    const statusChanged = vi.fn();
+    const source = {
+      currentStatus: { connected: true, connecting: false },
+      registerListener: vi.fn((listener: {
+        statusChanged: (status: TasksPowerSyncStatus) => void;
+      }) => {
+        statusChanged.mockImplementation(listener.statusChanged);
+        return vi.fn();
+      }),
+    };
+    const onStateChanged = vi.fn();
+
+    observeTasksSyncState(source, onStateChanged, () => false);
+
+    expect(onStateChanged).toHaveBeenCalledWith('offline');
   });
 });

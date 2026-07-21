@@ -93,6 +93,10 @@ async function waitForCondition(assertion: () => void, timeoutMs = 1500) {
 
 describe('useIsAdmin', () => {
   beforeEach(() => {
+    Object.defineProperty(window.navigator, 'onLine', {
+      configurable: true,
+      value: true,
+    });
     window.localStorage.clear();
     fromMock.mockClear();
     queryBuilder.select.mockClear();
@@ -199,12 +203,51 @@ describe('useIsAdmin', () => {
 
       await waitForCondition(() => {
         expect(maybeSingleMock).toHaveBeenCalledTimes(4);
-      }, 2000);
+      }, 4500);
 
       await waitForCondition(() => {
         expect(state.getAttribute('data-loading')).toBe('false');
         expect(state.getAttribute('data-resolved')).toBe('true');
         expect(state.getAttribute('data-admin')).toBe('false');
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('pauses role probes offline and resumes when connectivity returns', async () => {
+    Object.defineProperty(window.navigator, 'onLine', {
+      configurable: true,
+      value: false,
+    });
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-offline' } }, error: null });
+    maybeSingleMock.mockResolvedValue({ data: { role: 'admin' }, error: null });
+
+    const { container, root } = mount('user-offline');
+    try {
+      const state = getStateElement(container);
+      expect(state.getAttribute('data-loading')).toBe('true');
+      expect(getUserMock).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 600));
+      });
+      expect(getUserMock).not.toHaveBeenCalled();
+
+      Object.defineProperty(window.navigator, 'onLine', {
+        configurable: true,
+        value: true,
+      });
+      act(() => {
+        window.dispatchEvent(new Event('online'));
+      });
+
+      await waitForCondition(() => {
+        expect(getUserMock).toHaveBeenCalledOnce();
+        expect(maybeSingleMock).toHaveBeenCalledOnce();
+        expect(state.getAttribute('data-admin')).toBe('true');
+        expect(state.getAttribute('data-loading')).toBe('false');
+        expect(state.getAttribute('data-resolved')).toBe('true');
       });
     } finally {
       cleanup(root, container);

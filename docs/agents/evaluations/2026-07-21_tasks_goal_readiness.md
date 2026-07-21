@@ -6,7 +6,7 @@
 
 ## Outcome
 
-BathOS Tasks satisfies the implemented V1 contract across the web application, offline synchronization, production PowerSync, MCP, Raycast capture, Mail capture, Web Push reminders, recovery, accessibility, and large-library behavior. The module is available for personal parallel use while Things remains authoritative. A final audit identified that durable task data alone did not guarantee an installed PWA could cold-launch its application shell without a network connection. That offline-launch gap is now implemented, published, and accepted in local and isolated production browsers under the active `enable-tasks-offline-pwa-launch` change. Its remaining gates are a literal disconnected relaunch in the authenticated Safari installation and the user-assisted iPhone pass.
+BathOS Tasks satisfies the implemented V1 contract across the web application, offline synchronization, production PowerSync, MCP, Raycast capture, Mail capture, Web Push reminders, recovery, accessibility, and large-library behavior. The module is available for personal parallel use while Things remains authoritative. A final audit identified that durable task data alone did not guarantee an installed PWA could cold-launch its application shell without a network connection. That offline-launch gap is now implemented, published, and accepted in local, isolated production, authenticated Safari staging, and authenticated Chrome offline-emulation passes under the active `enable-tasks-offline-pwa-launch` change. Its remaining device gate is the user-assisted iPhone pass. The Chrome pass also identified a high-frequency administrator-role retry loop and a stale `Synced` label during browser-offline state; their narrow hardening is in progress before final publication.
 
 The remaining completion gates are the calendar-bound Inbox Manager trial and production acceptance of the new offline PWA shell. Inbox Manager's approved 24-hour or 10-accepted-task parallel trial remains healthy and must reach one boundary before its final production evidence can be recorded and its OpenSpec change can be archived.
 
@@ -31,7 +31,7 @@ The remaining completion gates are the calendar-bound Inbox Manager trial and pr
 
 ## Remaining Completion Work
 
-1. Prove the authenticated production Safari installation reopens Tasks while the Mac is literally disconnected. Worker version 6, the complete shell, notification permission, and the active push subscription are already accepted.
+1. Publish and repeat the authenticated Chrome offline/reconnect pass with paused administrator-role probes and a truthful `Offline` synchronization label.
 2. Complete one user-assisted production acceptance pass on the actual iPhone using the exact Home Screen checklist in the Tasks guide.
 3. Let the bounded trial reach its 24-hour or 10-task boundary without artificially creating personal work for the test.
 4. Confirm the runtime disabled at the intended boundary, no post-boundary credential or network work occurred, the queue is empty, and ordinary Mail and Things outcomes remain healthy.
@@ -61,7 +61,9 @@ A 2026 Jul 21 local production-build pass used a disposable local Supabase accou
 
 Commit `c236b99` was pushed to `main` and published through Lovable deployment `891c310c-2a40-4bc6-8dbc-b6138bca122a`. Production serves Tasks worker version 6. On 2026 Jul 21, the authenticated Safari installation refreshed cleanly and returned to `Synced`. A read-only Web Inspector probe confirmed that `/tasks-service-worker.js` was activated and controlling the page at version 6, the active atomic shell held its HTML document and 25 offline assets, notification permission remained `granted`, and the Web Push subscription remained present. The actual disconnected Safari relaunch remains pending because completing it requires temporarily changing the Mac's network state.
 
-An isolated production browser then registered the deployed worker without signing in or enabling notifications. Production staged 25 public assets plus the shell document, retained notification permission as `default`, and cold-launched `/tasks/today` offline into the ordinary signed-out BathOS surface. This confirms the published hosting and CDN artifact. It does not replace the pending authenticated Safari and installed-iPhone acceptance gates.
+An isolated production browser then registered the deployed worker without signing in or enabling notifications. Production staged 25 public assets plus the shell document, retained notification permission as `default`, and cold-launched `/tasks/today` offline into the ordinary signed-out BathOS surface. This confirms the published hosting and CDN artifact.
+
+On 2026 Jul 21, authenticated production Chrome cold-reloaded `/tasks/today` under DevTools Offline emulation. The navigation loaded from `/tasks-offline-assets/`, reopened the local database, rendered all seven Today tasks, preserved the Waiting state, and degraded the due-reminder check without changing schedules. Failed Supabase fetches proved that the remote network boundary was active. The pass also revealed that the shared administrator-role hook retried `getUser()` every 250 milliseconds while offline and that a stale shared-worker status could leave the header labeled `Synced`. Those defects do not invalidate shell or local-data recovery, but they require a bounded retry and truthful status correction before the desktop gate is considered fully polished. The actual iPhone Home Screen restart and queued-mutation exercise remains the definitive device acceptance gate.
 
 ## Connector Discovery Note
 

@@ -19,11 +19,14 @@
 - [x] 3.2 Run Tasks-focused tests, the complete suite, lint, production build, and strict OpenSpec validation.
 - [x] 3.3 Complete a local real-browser online load, offline relaunch, local mutation, restart, and reconnection acceptance gate without personal data.
 - [x] 3.4 Update the Tasks guide and readiness evaluation with the exact first-load and iPhone PWA acceptance contract.
+- [x] 3.5 Pause administrator-role probes during browser-offline state, add bounded online retry backoff, and make browser connectivity override stale shared-worker sync status.
+- [x] 3.6 Add focused tests for offline probe suppression, reconnect resumption, and truthful offline synchronization state; then rerun validation.
 
 ## 4. Production Acceptance
 
 - [x] 4.1 Commit, push, and publish the validated worker through the normal BathOS deployment path.
 - [x] 4.2a Verify authenticated production Safari installs worker version 6, refreshes the complete shell, returns to synchronized operation, and retains notification permission and its active Web Push subscription.
-- [ ] 4.2b Verify authenticated production Safari can reopen Tasks while the Mac is literally disconnected from the network.
+- [x] 4.2b Verify authenticated production Chrome cold-reloads the cached Tasks shell and local database under DevTools Offline emulation without disconnecting the Codex host.
+- [ ] 4.2c Publish the offline retry/status hardening and repeat the Chrome offline/reconnect acceptance without a high-frequency remote-fetch loop or false `Synced` label.
 - [ ] 4.3 Complete the user-assisted iPhone Home Screen installation, offline restart, queued mutation, reconnection, and notification-delivery pass.
 - [ ] 4.4 Sync the durable specification, archive the change, validate the final repository, commit, and push.

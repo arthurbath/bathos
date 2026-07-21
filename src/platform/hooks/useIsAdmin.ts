@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 const roleCacheByUserId = new Map<string, boolean>();
-const ROLE_RETRY_DELAY_MS = 250;
+const ROLE_RETRY_INITIAL_DELAY_MS = 500;
+const ROLE_RETRY_MAX_DELAY_MS = 30_000;
 const FALSE_CONFIRMATION_ATTEMPTS = 4;
 const ADMIN_ROLE_PERSIST_KEY = 'bathos_admin_role_v1';
 const ADMIN_ROLE_PERSIST_TTL_MS = 12 * 60 * 60 * 1000;
@@ -84,16 +85,25 @@ export function useIsAdmin(userId: string | undefined) {
 
     let cancelled = false;
     let retryTimer: number | null = null;
+    let retryAttempt = 0;
     let consecutiveFalseCount = 0;
     let seenAdmin = cachedRole === true;
 
     const scheduleRetry = () => {
+      if (cancelled || window.navigator.onLine === false) return;
+      const delay = Math.min(
+        ROLE_RETRY_INITIAL_DELAY_MS * (2 ** retryAttempt),
+        ROLE_RETRY_MAX_DELAY_MS,
+      );
+      retryAttempt += 1;
       retryTimer = window.setTimeout(() => {
+        retryTimer = null;
         void check();
-      }, ROLE_RETRY_DELAY_MS);
+      }, delay);
     };
 
     const check = async () => {
+      if (cancelled || window.navigator.onLine === false) return;
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (cancelled) return;
 
@@ -122,6 +132,7 @@ export function useIsAdmin(userId: string | undefined) {
 
       const nextIsAdmin = !!data;
       if (nextIsAdmin) {
+        retryAttempt = 0;
         consecutiveFalseCount = 0;
         seenAdmin = true;
         roleCacheByUserId.set(userId, true);
@@ -144,16 +155,38 @@ export function useIsAdmin(userId: string | undefined) {
       }
 
       roleCacheByUserId.set(userId, false);
+      retryAttempt = 0;
       clearPersistedAdminRole(userId);
       setIsAdmin(false);
       setLoading(false);
       setResolved(true);
     };
 
+    const handleOffline = () => {
+      if (retryTimer !== null) {
+        window.clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+    };
+
+    const handleOnline = () => {
+      if (retryTimer !== null) {
+        window.clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      retryAttempt = 0;
+      void check();
+    };
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
     void check();
 
     return () => {
       cancelled = true;
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
       if (retryTimer !== null) {
         window.clearTimeout(retryTimer);
       }

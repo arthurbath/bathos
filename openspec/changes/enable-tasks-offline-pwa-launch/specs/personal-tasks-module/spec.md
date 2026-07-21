@@ -35,6 +35,14 @@ The system SHALL allow core task work to continue during temporary network loss,
 - **WHEN** the root-scoped Tasks service worker observes another BathOS module navigation, authentication traffic, Supabase, PowerSync, MCP, reminder-provider, or other non-shell request
 - **THEN** it does not intercept or cache that request and stores no task content, owner data, credential, provider secret, or API response in Cache Storage
 
+#### Scenario: Pause remote role probes while offline
+- **WHEN** the Tasks shell opens while the browser reports that network connectivity is unavailable
+- **THEN** the client retains cached authorization state, makes no administrator-role network probes, labels synchronization as offline, and resumes authorization and synchronization checks when connectivity returns
+
+#### Scenario: Back off transient role-probe failures
+- **WHEN** an administrator-role probe fails while the browser still reports online
+- **THEN** the client retries with bounded exponential backoff instead of issuing a fixed high-frequency request loop
+
 ### Requirement: Layered Reminder Delivery
 The system SHALL keep the server authoritative for reminder scheduling and logical delivery identity while supporting Web Push, in-app delivery, and later native delivery targets through one idempotent contract.
 
