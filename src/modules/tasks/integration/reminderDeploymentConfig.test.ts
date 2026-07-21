@@ -5,6 +5,10 @@ import { describe, expect, it } from 'vitest';
 
 import { validateTaskReminderConfiguration } from '../../../../scripts/verify-tasks-web-push-config.mjs';
 import { selectEdgeRuntimeImage } from '../../../../scripts/verify-tasks-edge-bundle.mjs';
+import {
+  buildLocalFunctionsEnvironment,
+  resolveLocalFunctionsTempDirectory,
+} from '../../../../scripts/supabase-functions-local.mjs';
 
 function validEnvironment() {
   const key = createECDH('prime256v1');
@@ -20,6 +24,22 @@ function validEnvironment() {
 }
 
 describe('task reminder deployment configuration', () => {
+  it('keeps CLI temporary mounts under the Docker-shared repository root', () => {
+    const repositoryRoot = '/workspace/BathOS';
+    const tempDirectory = '/workspace/BathOS/supabase/.temp/functions-serve';
+
+    expect(resolveLocalFunctionsTempDirectory(repositoryRoot)).toBe(tempDirectory);
+    expect(buildLocalFunctionsEnvironment({
+      environment: { PATH: '/tools' },
+      repositoryRoot,
+    })).toEqual({
+      PATH: '/tools',
+      TMPDIR: tempDirectory,
+      TMP: tempDirectory,
+      TEMP: tempDirectory,
+    });
+  });
+
   it('selects the newest cached official Edge Runtime image', () => {
     expect(selectEdgeRuntimeImage([
       'unrelated/image:latest',
