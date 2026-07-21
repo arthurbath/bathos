@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import type { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
+import {
+  registerTasksServiceWorker,
+  TASKS_SERVICE_WORKER_SCOPE,
+} from '@/modules/tasks/pwa/taskServiceWorker';
 import type { TaskDeliveryTarget } from '@/modules/tasks/types/tasks';
 
 export type TaskWebPushStatus =
@@ -28,8 +32,6 @@ type WebPushEnvironment = {
   hasNotifications: boolean;
   publicKey: string;
 };
-
-const SERVICE_WORKER_PATH = '/tasks-service-worker.js';
 
 export function getTaskWebPushAvailability(environment: WebPushEnvironment):
   'available' | 'unsupported' | 'unconfigured' {
@@ -162,9 +164,11 @@ export function useTaskWebPush(
         setStatus('denied');
         return;
       }
-      const registration = await navigator.serviceWorker.register(SERVICE_WORKER_PATH, {
-        scope: '/',
-      });
+      const registration = await registerTasksServiceWorker();
+      if (!registration) {
+        setStatus('unsupported');
+        return;
+      }
       const existing = await registration.pushManager.getSubscription();
       if (existing && status === 'revoked') await existing.unsubscribe();
       const subscription = status === 'revoked' || !existing
@@ -203,7 +207,7 @@ export function useTaskWebPush(
     try {
       if (target) await reminderService.revokeWebPush(target.id);
       if ('serviceWorker' in navigator) {
-        const registration = await navigator.serviceWorker.getRegistration(SERVICE_WORKER_PATH);
+        const registration = await navigator.serviceWorker.getRegistration(TASKS_SERVICE_WORKER_SCOPE);
         const subscription = await registration?.pushManager.getSubscription();
         if (subscription) await subscription.unsubscribe();
       }

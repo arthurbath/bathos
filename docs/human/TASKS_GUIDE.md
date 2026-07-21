@@ -62,11 +62,26 @@ The first use of any command opens BathOS authorization in the browser. Later us
 
 Tasks writes through a local database first. Existing task data remains available during a temporary network interruption, and accepted local changes wait in the upload queue. The header status distinguishes synchronized operation, pending uploads, download failure, upload failure, and local-only operation.
 
+Before relying on an installed Tasks web app offline, open Tasks once with a network connection after installation and after each published update. Wait for the Tasks interface to finish loading. On a supported secure browser, that online visit silently stages one complete public application shell. It does not request notification permission, create a push subscription, or register a reminder target. Browser reminders remain separately opt-in through `Enable`.
+
+After that online stage, an installed Tasks app can reopen a `/tasks/*` route without a network connection. The service worker caches only the public HTML and versioned application assets needed to start Tasks. Task content, account data, credentials, API responses, PowerSync traffic, and other BathOS modules are not stored in that shell cache. Tasks continues reading and writing task data through its durable local database. A failed application update leaves the previous complete offline shell active instead of replacing it with a partial build.
+
 `Preparing Sync` means the installation is connected but has not completed its first full synchronization. Do not treat it as synchronized yet. Choose the header status to inspect connection state, full-synchronization completion, queue depth, transfer activity, recent reliability events, and conflict receipts.
 
 An upload error, download error, or offline state opens one content-free reliability event on the current installation. Tasks retains the 50 most recent events and closes the active event when synchronization recovers or changes failure category. A production event that remains active for 2 minutes sends one warning to monitoring. The local event and warning contain only bounded health, queue, completion, and duration categories. They do not contain task content, task identifiers, owner identifiers, source metadata, or raw provider errors.
 
 Do not treat `Local` as cross-device synchronization. In that state, the current installation can continue local work, but changes from other browsers, MCP clients, and Raycast cannot converge until the production connection returns.
+
+### iPhone Home Screen Acceptance
+
+Use this pass before relying on a new or refreshed iPhone installation offline:
+
+1. Open Tasks in Safari with a network connection, wait for the interface to load, and confirm the header reports `Synced`.
+2. Use `Share > Add to Home Screen`, then launch Tasks from its Home Screen icon once while still online.
+3. Disconnect the iPhone from Wi-Fi and cellular data, fully close the installed app, and reopen it into Today.
+4. Create one disposable task, fully close and reopen the app while still offline, and confirm the task remains visible.
+5. Restore connectivity, wait for `Synced`, and confirm the disposable task appears in another connected Tasks client before deleting it.
+6. If browser reminders are desired on that installation, choose `Enable` separately, allow notifications, and complete one reminder-delivery check.
 
 ## Reminders
 

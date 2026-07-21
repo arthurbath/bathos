@@ -2,13 +2,13 @@
 
 **Date:** 2026 Jul 21
 **Category:** Product / Production / Trust
-**Status:** Feature Complete, Bounded Trial in Progress
+**Status:** Final Offline Launch and Bounded Trial Acceptance in Progress
 
 ## Outcome
 
-BathOS Tasks now satisfies the implemented V1 contract across the web application, offline synchronization, production PowerSync, MCP, Raycast capture, Mail capture, Web Push reminders, recovery, accessibility, and large-library behavior. The module is available for personal parallel use while Things remains authoritative.
+BathOS Tasks satisfies the implemented V1 contract across the web application, offline synchronization, production PowerSync, MCP, Raycast capture, Mail capture, Web Push reminders, recovery, accessibility, and large-library behavior. The module is available for personal parallel use while Things remains authoritative. A final audit identified that durable task data alone did not guarantee an installed PWA could cold-launch its application shell without a network connection. That offline-launch gap is now implemented and locally accepted under the active `enable-tasks-offline-pwa-launch` change, but still requires publication and production-device acceptance.
 
-The remaining completion gate is intentionally calendar-bound rather than implementation-bound. Inbox Manager's approved 24-hour or 10-accepted-task parallel trial remains healthy and must reach one boundary before its final production evidence can be recorded and its OpenSpec change can be archived.
+The remaining completion gates are the calendar-bound Inbox Manager trial and production acceptance of the new offline PWA shell. Inbox Manager's approved 24-hour or 10-accepted-task parallel trial remains healthy and must reach one boundary before its final production evidence can be recorded and its OpenSpec change can be archived.
 
 ## Accepted Product Surfaces
 
@@ -31,12 +31,13 @@ The remaining completion gate is intentionally calendar-bound rather than implem
 
 ## Remaining Completion Work
 
-1. Let the bounded trial reach its 24-hour or 10-task boundary without artificially creating personal work for the test.
-2. Confirm the runtime disabled at the intended boundary, no post-boundary credential or network work occurred, the queue is empty, and ordinary Mail and Things outcomes remain healthy.
-3. Reconcile the final accepted receipts with the BathOS MCP and PowerSync projection, and record any real retry or failure evidence without exposing task content.
-4. Complete Inbox Manager OpenSpec task 6.4, sync its durable specification, archive the change, validate, commit, and push.
-5. Complete one user-assisted production acceptance pass on the actual iPhone: Install or refresh the Home Screen PWA, launch into Today, verify synchronized data, exercise offline restart and reconnection with one temporary task, and confirm notification permission and delivery from the installed web app.
-6. Perform one final cross-repository, route, MCP, synchronization, reminder, and health audit before declaring the implementation goal complete.
+1. Publish the validated offline-shell worker, verify production Safari stages the complete shell without changing notification permission or an active push subscription, and prove production Tasks reopens offline.
+2. Complete one user-assisted production acceptance pass on the actual iPhone using the exact Home Screen checklist in the Tasks guide.
+3. Let the bounded trial reach its 24-hour or 10-task boundary without artificially creating personal work for the test.
+4. Confirm the runtime disabled at the intended boundary, no post-boundary credential or network work occurred, the queue is empty, and ordinary Mail and Things outcomes remain healthy.
+5. Reconcile the final accepted receipts with the BathOS MCP and PowerSync projection, and record any real retry or failure evidence without exposing task content.
+6. Complete Inbox Manager OpenSpec task 6.4, sync its durable specification, archive the change, validate, commit, and push.
+7. Sync and archive `enable-tasks-offline-pwa-launch`, then perform one final cross-repository, route, MCP, synchronization, reminder, and health audit before declaring the implementation goal complete.
 
 Four recoverably deleted production-acceptance captures remain as roots in Tasks Trash. Permanent removal still requires explicit action-time confirmation because one setup capture originated from the user's active Safari tab. This cleanup is not a product-readiness blocker.
 
@@ -52,14 +53,20 @@ The current committed `main` branch passed the following broad gates during the 
 
 The performance gate derived every 10,000-record planning view below 1.4 ms at p95, built the reusable search index below 6.7 ms at p95, rendered a 1,000-row view in 904.5 ms, and opened 10,000-record search in 357.9 ms. The remaining opt-in integration suites already have stronger dated local or production acceptance evidence for offline persistence, multi-client convergence, preservation, sustained parallel use, and production topology. They are not substitutes for the still-running lived Mail handoff trial.
 
+## Offline PWA Shell Acceptance
+
+The active `enable-tasks-offline-pwa-launch` change registers the existing root-scoped Tasks service worker from the authenticated Tasks runtime without requesting notification permission. It stages one atomic, content-free application-shell cache containing rewritten HTML and the recursively discovered same-origin Vite module, worker, and WASM graph. Only same-origin Tasks navigations and the reserved `/tasks-offline-assets/*` namespace are intercepted. API traffic, task data, credentials, provider traffic, ordinary `/assets/*` requests, non-GET requests, cross-origin traffic, and other BathOS modules remain outside the cache path.
+
+A 2026 Jul 21 local production-build pass used a disposable local Supabase account and real Chromium service-worker, Cache Storage, worker, WASM, and OPFS behavior. It proved online staging of 25 public assets plus the shell document, cold offline Today launch, offline creation of one disposable task, offline restart with the mutation retained, and reconnection with the mutation still present. Notification permission remained `default`. The browser pass exposed and drove correction of four defects that simulation alone did not reveal: metadata-prefix self-deletion, encoded-slash asset rejection, `Vary: Origin` module mismatch, and incomplete dynamic module/worker/WASM staging.
+
 ## Connector Discovery Note
 
 The BathOS connector catalog attached to this long-running Codex task still exposes the older Budget, Garage, Snake, and Wardrobe tool set. A direct authenticated production `tools/list` request through the existing Raycast OAuth grant confirms that the deployed service includes the complete Tasks tool set. The discrepancy is therefore client-session discovery staleness, not a missing production deployment. A fresh Codex task or connector refresh should discover the current catalog.
 
 ## Completion Estimate
 
-No additional large implementation tranche is evident from the durable specifications, archived OpenSpec changes, production evaluations, or source audit. Assuming the bounded trial remains healthy, the earliest honest completion point is shortly after 2026 Jul 22 1:50 PM PDT. Final evidence reconciliation, specification closeout, validation, commit, publication, and a brief user-assisted iPhone pass should require approximately one to three focused hours after the boundary.
+No additional large implementation tranche is evident from the durable specifications, archived OpenSpec changes, production evaluations, or source audit. Assuming the bounded trial and offline-shell publication remain healthy, the earliest honest completion point is shortly after 2026 Jul 22 1:50 PM PDT. Production publication, Safari and iPhone acceptance, final evidence reconciliation, specification closeout, validation, and publication should require approximately two to four focused hours after the trial boundary.
 
 ## Specification Impact
 
-None. This document reconciles existing contracts and current production evidence. It does not change product behavior or introduce a new requirement.
+The active `enable-tasks-offline-pwa-launch` OpenSpec change modifies the personal Tasks offline-operation and layered-reminder requirements. It will be synced into the durable specification only after production acceptance.

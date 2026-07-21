@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
+import { resetTasksServiceWorkerRegistrationForTests } from '@/modules/tasks/pwa/taskServiceWorker';
 import {
   decodeVapidPublicKey,
   getTaskWebPushAvailability,
@@ -9,6 +10,7 @@ import {
 } from './useTaskWebPush';
 
 afterEach(() => {
+  resetTasksServiceWorkerRegistrationForTests();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(navigator, 'serviceWorker');
@@ -82,7 +84,10 @@ describe('task Web Push capability', () => {
       await result.current.enable();
     });
     expect(requestPermission).toHaveBeenCalledTimes(1);
-    expect(register).toHaveBeenCalledWith('/tasks-service-worker.js', { scope: '/' });
+    expect(register).toHaveBeenCalledWith('/tasks-service-worker.js', {
+      scope: '/',
+      updateViaCache: 'none',
+    });
     expect(pushManager.subscribe).toHaveBeenCalledTimes(1);
     expect(registerWebPush).toHaveBeenCalledWith(
       {

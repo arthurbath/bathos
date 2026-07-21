@@ -33,6 +33,7 @@ import {
 import { observeTasksSyncState } from '@/modules/tasks/runtime/tasksSyncState';
 import { prepareTasksForSignOut } from '@/modules/tasks/runtime/taskSignOut';
 import { TasksSyncReliabilityObserver } from '@/modules/tasks/runtime/TasksSyncReliabilityObserver';
+import { registerTasksServiceWorker } from '@/modules/tasks/pwa/taskServiceWorker';
 
 export function TasksRuntimeProvider({
   ownerId,
@@ -74,6 +75,10 @@ export function TasksRuntimeProvider({
     [],
   );
   const portabilityService = useMemo(() => new TaskPortabilityService(supabase), []);
+
+  useEffect(() => {
+    void registerTasksServiceWorker().catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let active = true;
