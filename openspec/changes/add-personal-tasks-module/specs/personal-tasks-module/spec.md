@@ -556,6 +556,10 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** current reminder data is loading or fails to load
 - **THEN** to-do and project reminder editors distinguish that state from local-only operation, disable reminder mutation, and do not treat an unknown current schedule as an empty schedule
 
+#### Scenario: Read synchronized reminder time precision
+- **WHEN** synchronization represents a canonical PostgreSQL reminder time with fractional-second precision
+- **THEN** the client accepts it as the original wall-clock intent, renders the Tasks route, and does not reject the reminder projection
+
 #### Scenario: Retry one delivery target
 - **WHEN** a provider request is retried for the same occurrence and registered target
 - **THEN** the system reuses the target-delivery identifier and does not create another logical delivery

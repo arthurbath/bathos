@@ -1,13 +1,13 @@
 # Tasks Reminder Delivery Readiness
 
 **Date:** 2026-07-20
-**Status:** Production Infrastructure Active, Synthetic Device Acceptance Pending
+**Status:** Production Reminder Delivery Accepted
 
 ## Decision
 
 Keep the existing server-authoritative reminder model and deliver Web Push through the `dispatch-task-reminders` Supabase Edge Function. Trigger it once per minute through one fixed-name Supabase Cron job. Store the provider private key and function dispatch secret in managed server secrets, store the matching Cron header value in Supabase Vault, and expose only the public VAPID key to the web build.
 
-The owner approved and activated the production infrastructure. Real-device notification permission and the final synthetic-device acceptance path remain deliberately untested because browser notification permission requires an explicit user gesture. The Tasks module remains fully usable when push delivery is unconfigured or degraded.
+The owner approved and activated the production infrastructure, granted Safari notification permission through an explicit user gesture, and completed the synthetic-device acceptance path. The Tasks module remains fully usable when push delivery is unconfigured or degraded.
 
 ## Audit Findings
 
@@ -33,6 +33,8 @@ The owner approved and activated the production infrastructure. Real-device noti
 - Added `deploy/tasks-reminders/` with a deployment sequence, one-minute fixed-endpoint Cron SQL, Vault-backed header lookup, structural verification, targeted rollback, and rollback-only local validation.
 - Added an explicit `extensions-enable.sql` production step after a read-only audit confirmed that the BathOS project does not yet have `pg_cron` or `pg_net`. The rollback-only test now reuses that exact file instead of enabling the extensions through test-only statements.
 - Updated the Edge Function documentation and OpenSpec contract.
+- Extended reminder-time validation to accept synchronized PostgreSQL `time` values with fractional-second precision after the first production notification deep link exposed PowerSync's `HH:mm:ss.sss` representation.
+- Added a focused regression test covering minute, second, millisecond, and nanosecond precision plus malformed fractional values.
 
 ## Local Evidence
 
@@ -57,6 +59,10 @@ The owner approved and activated the production infrastructure. Real-device noti
 - The structural verifier reports `ready`. The latest three Cron runs inspected on 2026 Jul 20 all succeeded.
 - Hosted boundary checks return HTTP 405 for GET and HTTP 401 for POST without the dispatch secret.
 - The public `.env` contains only the matching VAPID public key. Private provider and dispatch credentials remain outside the repository.
+- Safari registered one active Web Push target after an explicit permission gesture and remained synchronized after a production redeployment.
+- One synthetic notification was accepted by the provider on its first attempt and opened from Safari. The corrected deep link rendered Tasks and recorded user acknowledgement separately from provider acceptance.
+- One isolated synthetic expired endpoint produced the bounded `push_http_410` receipt, changed only that target to revoked, and removed its provider credential.
+- Cleanup removed the synthetic task, reminder, occurrences, deliveries, claim diagnostics, and expired target. One real active Safari target and one matching credential remained.
 
 ## Production Acceptance Gate
 
@@ -68,6 +74,6 @@ Production infrastructure acceptance requires all of the following:
 4. Complete: `pg_cron` and `pg_net` enablement followed by Edge Function, Vault, Cron, and public web-key configuration
 5. Complete: Structural SQL verification immediately after provisioning
 6. Complete: Hosted function smoke tests for method and authentication boundaries
-7. Pending: One synthetic-device test covering subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and cleanup
+7. Complete: One synthetic-device test covering subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and cleanup
 
 The local wrapper and direct-runtime gates cover local HTTP boot and compilation. They do not justify bypassing hosted HTTP acceptance or deploying unverified credentials.

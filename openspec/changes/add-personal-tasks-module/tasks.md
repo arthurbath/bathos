@@ -83,7 +83,7 @@
 - [x] 5.8 Add reminders using the responsibility model selected in the architecture gate.
 - [x] 5.8a Prepare and locally validate the secret-free Web Push and Cron deployment package, configuration preflight, dispatcher boundary tests, and outcome-receipt failure handling.
 - [x] 5.8a1 Add repeatable direct Edge Runtime bundle and local CLI HTTP boot gates for the reminder dispatcher.
-- [ ] 5.8b After production activation is approved, provision the reminder secrets, Edge Function, Vault entry, Cron job, public web key, and synthetic-device acceptance test.
+- [x] 5.8b After production activation is approved, provision the reminder secrets, Edge Function, Vault entry, Cron job, public web key, and synthetic-device acceptance test.
 - [x] 5.8c Expose project-root reminder creation, revision, and cancellation in project detail with the existing connected-only delivery contract.
 - [x] 5.8d Surface in-app due-reminder claim failure through content-free degraded state and explicit retry.
 - [x] 5.8e Keep service-worker registration and notification permission behind the explicit browser-reminder Enable action.
