@@ -27,6 +27,14 @@ The system SHALL allow core task work to continue during temporary network loss,
 - **WHEN** an installed Tasks web app completed one online shell stage and later launches a `/tasks/*` route during temporary network loss
 - **THEN** the service worker returns one internally consistent cached shell whose versioned application assets are available, and the Tasks runtime can open its durable local database and pending mutation queue
 
+#### Scenario: Prepare the Home Screen installation's independent storage
+- **WHEN** an iPhone or iPad user adds Tasks to the Home Screen and launches that installed app online
+- **THEN** Tasks uses its permanent same-origin manifest, establishes authentication and synchronization in the Home Screen app's own browsing partition, and reports offline launch as ready only after that partition contains the active complete shell
+
+#### Scenario: Expose incomplete offline preparation without overstating readiness
+- **WHEN** the current client does not yet have an active complete Tasks shell in its own Cache Storage
+- **THEN** Synchronization Details reports offline launch as preparing, failed, or unavailable instead of ready, even if another browser or installation has staged the shell
+
 #### Scenario: Preserve the previous shell after an incomplete refresh
 - **WHEN** an online Tasks navigation receives new shell HTML but one required versioned application asset cannot be staged
 - **THEN** the service worker leaves the prior complete shell active, removes the incomplete staging cache, and does not make the partial deployment the offline fallback

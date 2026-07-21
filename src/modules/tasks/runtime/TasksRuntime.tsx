@@ -36,7 +36,10 @@ import {
 } from '@/modules/tasks/runtime/tasksSyncState';
 import { prepareTasksForSignOut } from '@/modules/tasks/runtime/taskSignOut';
 import { TasksSyncReliabilityObserver } from '@/modules/tasks/runtime/TasksSyncReliabilityObserver';
-import { registerTasksServiceWorker } from '@/modules/tasks/pwa/taskServiceWorker';
+import {
+  prepareTasksOfflineLaunch,
+  type TasksOfflineLaunchState,
+} from '@/modules/tasks/pwa/taskServiceWorker';
 
 export function TasksRuntimeProvider({
   ownerId,
@@ -53,6 +56,7 @@ export function TasksRuntimeProvider({
   const [syncState, setSyncState] = useState<TasksSyncState>(
     import.meta.env.VITE_TASKS_POWERSYNC_ENDPOINT?.trim() ? 'connecting' : 'local',
   );
+  const [offlineLaunchState, setOfflineLaunchState] = useState<TasksOfflineLaunchState>('preparing');
   const [pendingUploadCount, setPendingUploadCount] = useState(0);
   const [database, setDatabase] = useState<PowerSyncDatabase>(createTasksPowerSyncDatabase);
   const repository = useMemo(() => new TaskRepository(database), [database]);
@@ -80,7 +84,21 @@ export function TasksRuntimeProvider({
   const portabilityService = useMemo(() => new TaskPortabilityService(supabase), []);
 
   useEffect(() => {
-    void registerTasksServiceWorker().catch(() => undefined);
+    let active = true;
+    const prepare = () => {
+      if (!active) return;
+      setOfflineLaunchState('preparing');
+      void prepareTasksOfflineLaunch().then((nextState) => {
+        if (active) setOfflineLaunchState(nextState);
+      });
+    };
+
+    prepare();
+    window.addEventListener('online', prepare);
+    return () => {
+      active = false;
+      window.removeEventListener('online', prepare);
+    };
   }, []);
 
   useEffect(() => {
@@ -197,6 +215,7 @@ export function TasksRuntimeProvider({
       portabilityService,
       mode: state.status === 'ready' ? state.mode : 'local',
       syncState,
+      offlineLaunchState,
       pendingUploadCount,
       planningTimeZone: state.status === 'ready' ? state.planningTimeZone : 'UTC',
       prepareForSignOut,
@@ -213,6 +232,7 @@ export function TasksRuntimeProvider({
       portabilityService,
       templateService,
       syncState,
+      offlineLaunchState,
       pendingUploadCount,
       state,
     ],

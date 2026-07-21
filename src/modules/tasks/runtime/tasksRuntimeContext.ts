@@ -10,6 +10,7 @@ import type { TaskReminderService } from '@/modules/tasks/data/taskReminderServi
 import type { TaskPermanentDeletionService } from '@/modules/tasks/data/taskPermanentDeletionService';
 import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import type { TasksSyncState } from '@/modules/tasks/domain/taskSyncReliability';
+import type { TasksOfflineLaunchState } from '@/modules/tasks/pwa/taskServiceWorker';
 
 export type TasksRuntimeValue = {
   database: PowerSyncDatabase;
@@ -23,6 +24,7 @@ export type TasksRuntimeValue = {
   portabilityService: TaskPortabilityService;
   mode: 'local' | 'connected';
   syncState: TasksSyncState;
+  offlineLaunchState: TasksOfflineLaunchState;
   pendingUploadCount: number;
   planningTimeZone: string;
   prepareForSignOut: () => Promise<void>;

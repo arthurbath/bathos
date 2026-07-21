@@ -13,6 +13,7 @@ export interface PlatformModule {
   iconPath?: string;
   installStartPath?: string;
   manifestId?: string;
+  manifestPath?: string;
   adminOnly?: boolean;
 }
 
@@ -70,6 +71,7 @@ const TASKS_MODULE: PlatformModule = {
   iconPath: '/module-tasks.png',
   installStartPath: '/tasks/today',
   manifestId: '/tasks',
+  manifestPath: '/tasks/manifest.json',
 };
 
 const ADMINISTRATION_MODULE: PlatformModule = {

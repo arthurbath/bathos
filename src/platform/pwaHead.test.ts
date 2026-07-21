@@ -92,7 +92,7 @@ describe('initial PWA document head', () => {
     expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href)
       .toBe('https://os.bath.garden/module-tasks.png');
     expect(document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.href)
-      .toBe('blob:test-manifest');
+      .toBe('https://os.bath.garden/tasks/manifest.json');
   });
 
   it('exposes route-relative Tasks icons without JavaScript for Safari installs', () => {

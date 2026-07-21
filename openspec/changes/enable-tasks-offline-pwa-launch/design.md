@@ -60,7 +60,11 @@ The activate event claims clients and removes abandoned Tasks staging caches whi
 
 ### Keep offline readiness silent and testable
 
-Do not add a new banner or claim offline readiness before the worker and cache are actually available. The final iPhone acceptance will verify installation, standalone launch, offline restart, local mutation, reconnection, and Web Push explicitly. Automated tests cover registration isolation and service-worker cache behavior without asserting browser-specific storage guarantees that only the device can prove.
+Do not add a new banner or claim offline readiness before the worker and cache are actually available. Synchronization Details reports `Offline Launch: Preparing`, `Ready`, `Failed`, or `Unavailable` by waiting for an active registration and then inspecting the atomic shell pointer and document in the current browsing partition's Cache Storage. This keeps the normal header quiet while giving installation acceptance a deterministic gate. The final iPhone acceptance will verify installation, standalone launch, offline restart, local mutation, reconnection, and Web Push explicitly. Automated tests cover registration isolation and service-worker cache behavior without asserting browser-specific storage guarantees that only the device can prove.
+
+### Treat the iPhone Home Screen app as a separate installation
+
+iOS and iPadOS Home Screen web apps use cookies and storage separate from Safari. Safari shell staging therefore proves only Safari's partition, not the newly installed app's. Tasks retains `/tasks/manifest.json` as a permanent same-origin manifest instead of replacing it with a generated `blob:` URL, and the acceptance flow requires launching the Home Screen app online, signing in there if needed, confirming `Synced`, and waiting for `Offline Launch: Ready` inside that app before disconnecting it.
 
 ### Treat browser connectivity as an immediate offline boundary
 
@@ -75,6 +79,7 @@ The shared administrator-role hook does not call Supabase while the browser is o
 - [Risk] Cached code outlives a breaking server contract -> Mitigation: Prefer network navigation, use content-addressed assets, refresh atomically whenever online, and keep durable Tasks server contracts backward compatible.
 - [Risk] Cache Storage grows across interrupted staging attempts -> Mitigation: Delete failed staging caches immediately and remove every nonactive Tasks shell cache during successful refresh and activation.
 - [Risk] Offline startup repeatedly probes Supabase or falsely reports synchronization as healthy -> Mitigation: Pause administrator-role probes on the browser offline signal and let that signal override stale shared-worker connectivity until reconnection.
+- [Risk] Safari appears ready but a newly installed iPhone Home Screen app has an empty independent storage partition -> Mitigation: Keep a permanent Tasks manifest and require the Home Screen instance itself to report both synchronized data and a complete partition-local offline shell.
 - [Trade-off] First installation requires a complete online shell fetch -> This is explicit and preferable to claiming offline readiness from an incomplete cache.
 
 ## Migration Plan
@@ -84,7 +89,7 @@ The shared administrator-role hook does not call Supabase while the browser is o
 3. Add focused registration, cache, fetch-isolation, update, push, and notification tests.
 4. Run lint, the full suite, production build, strict OpenSpec validation, and a local browser online/offline launch gate.
 5. Publish through the normal BathOS deployment path and verify production Safari before the iPhone exercise.
-6. On the iPhone, load Tasks online once, add it to the Home Screen, verify standalone offline restart and queued mutation recovery, reconnect, and then enable and test reminders through an explicit user gesture.
+6. On the iPhone, load Tasks online once, add it to the Home Screen, sign in inside the Home Screen app if needed, wait for both `Synced` and `Offline Launch: Ready`, verify standalone offline restart and queued mutation recovery, reconnect, and then enable and test reminders through an explicit user gesture.
 
 Rollback restores the prior worker source and runtime registration behavior. The browser will install that worker as the next script revision. Superseded public code caches contain no task data or credentials and can be deleted by the rollback worker or left for browser eviction.
 

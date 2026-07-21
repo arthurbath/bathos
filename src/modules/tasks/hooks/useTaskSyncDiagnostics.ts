@@ -47,7 +47,7 @@ const recentHealthEventsQuery = `
 `;
 
 export function useTaskSyncDiagnostics() {
-  const { mode, syncState, pendingUploadCount } = useTasksRuntime();
+  const { mode, syncState, offlineLaunchState, pendingUploadCount } = useTasksRuntime();
   const status = useStatus();
   const conflictsQuery = useQuery<TaskConflictReceiptStorageRow>(recentConflictReceiptsQuery);
   const healthEventsQuery = useQuery<TaskSyncHealthEventStorageRow>(recentHealthEventsQuery);
@@ -72,6 +72,7 @@ export function useTaskSyncDiagnostics() {
   return {
     mode,
     syncState,
+    offlineLaunchState,
     pendingUploadCount,
     hasCompletedSync,
     lastSuccessfulSyncAt: connected && status.lastSyncedAt instanceof Date

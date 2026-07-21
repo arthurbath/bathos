@@ -62,7 +62,9 @@ The first use of any command opens BathOS authorization in the browser. Later us
 
 Tasks writes through a local database first. Existing task data remains available during a temporary network interruption, and accepted local changes wait in the upload queue. The header status distinguishes synchronized operation, pending uploads, download failure, upload failure, and local-only operation.
 
-Before relying on an installed Tasks web app offline, open Tasks once with a network connection after installation and after each published update. Wait for the Tasks interface to finish loading. On a supported secure browser, that online visit silently stages one complete public application shell. It does not request notification permission, create a push subscription, or register a reminder target. Browser reminders remain separately opt-in through `Enable`.
+Before relying on an installed Tasks web app offline, open that specific installation once with a network connection after installation and after each published update. Wait for the Tasks interface to finish loading, choose the synchronization status in the header, and confirm `Offline Launch` reports `Ready`. On a supported secure browser, that online visit silently stages one complete public application shell. It does not request notification permission, create a push subscription, or register a reminder target. Browser reminders remain separately opt-in through `Enable`.
+
+An iPhone or iPad Home Screen web app has cookies and storage separate from Safari. A successful Safari load therefore does not prepare the installed app. Launch the Home Screen icon online, sign in there if requested, and confirm both `Synced` and `Offline Launch: Ready` inside the Home Screen app before testing or relying on offline startup.
 
 After that online stage, an installed Tasks app can reopen a `/tasks/*` route without a network connection. The service worker caches only the public HTML and versioned application assets needed to start Tasks. Task content, account data, credentials, API responses, PowerSync traffic, and other BathOS modules are not stored in that shell cache. Tasks continues reading and writing task data through its durable local database. A failed application update leaves the previous complete offline shell active instead of replacing it with a partial build.
 
@@ -77,11 +79,12 @@ Do not treat `Local` as cross-device synchronization. In that state, the current
 Use this pass before relying on a new or refreshed iPhone installation offline:
 
 1. Open Tasks in Safari with a network connection, wait for the interface to load, and confirm the header reports `Synced`.
-2. Use `Share > Add to Home Screen`, then launch Tasks from its Home Screen icon once while still online.
-3. Disconnect the iPhone from Wi-Fi and cellular data, fully close the installed app, and reopen it into Today.
-4. Create one disposable task, fully close and reopen the app while still offline, and confirm the task remains visible.
-5. Restore connectivity, wait for `Synced`, and confirm the disposable task appears in another connected Tasks client before deleting it.
-6. If browser reminders are desired on that installation, choose `Enable` separately, allow notifications, and complete one reminder-delivery check.
+2. Use `Share > Add to Home Screen`, then launch Tasks from its Home Screen icon while still online. Sign in inside the installed app if requested.
+3. In the installed app, confirm the header reports `Synced`, open Synchronization Details, and wait until `Offline Launch` reports `Ready`.
+4. Disconnect the iPhone from Wi-Fi and cellular data, fully close the installed app, and reopen it into Today.
+5. Create one disposable task, fully close and reopen the app while still offline, and confirm the task remains visible.
+6. Restore connectivity, wait for `Synced`, and confirm the disposable task appears in another connected Tasks client before deleting it.
+7. If browser reminders are desired on that installation, choose `Enable` separately, allow notifications, and complete one reminder-delivery check.
 
 ## Reminders
 

@@ -64,6 +64,10 @@ export function TaskSyncDiagnosticsDialog() {
 
           <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 pt-2 text-sm">
             <DiagnosticRow label="Connection" value={formatConnection(diagnostics.syncState)} />
+            <DiagnosticRow
+              label="Offline Launch"
+              value={formatOfflineLaunch(diagnostics.offlineLaunchState)}
+            />
             <DiagnosticRow label="Health" value={formatHealth(diagnostics.healthState)} />
             <DiagnosticRow
               label="Full Synchronization"
@@ -204,6 +208,15 @@ function formatConnection(syncState: TasksSyncState): string {
   if (syncState === 'connected') return 'Connected';
   if (syncState === 'connecting') return 'Connecting';
   return 'Offline';
+}
+
+function formatOfflineLaunch(
+  state: 'preparing' | 'ready' | 'unsupported' | 'failed',
+): string {
+  if (state === 'ready') return 'Ready';
+  if (state === 'unsupported') return 'Unavailable';
+  if (state === 'failed') return 'Failed';
+  return 'Preparing';
 }
 
 function formatActivity(state: TaskSyncActivityState): string {

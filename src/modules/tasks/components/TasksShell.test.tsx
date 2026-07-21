@@ -208,6 +208,7 @@ function defaultTasksRuntime() {
   return {
     mode: 'local' as const,
     syncState: 'local' as const,
+    offlineLaunchState: 'ready' as const,
     pendingUploadCount: 0,
     planningTimeZone: 'America/Los_Angeles',
     permanentDeletionService: { preview: vi.fn(), execute: vi.fn() },

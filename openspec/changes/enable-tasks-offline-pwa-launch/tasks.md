@@ -21,6 +21,7 @@
 - [x] 3.4 Update the Tasks guide and readiness evaluation with the exact first-load and iPhone PWA acceptance contract.
 - [x] 3.5 Pause administrator-role probes during browser-offline state, add bounded online retry backoff, and make browser connectivity override stale shared-worker sync status.
 - [x] 3.6 Add focused tests for offline probe suppression, reconnect resumption, and truthful offline synchronization state; then rerun validation.
+- [x] 3.7 Retain the permanent Tasks manifest and expose partition-local offline-shell readiness in synchronization diagnostics, with focused installation-state tests.
 
 ## 4. Production Acceptance
 

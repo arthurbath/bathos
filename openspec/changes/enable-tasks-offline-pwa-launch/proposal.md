@@ -11,6 +11,7 @@ Tasks persists task data and pending mutations locally, but the production servi
 - Pause administrator-role probes while the browser is offline, use bounded backoff for transient online failures, and report Tasks synchronization as offline even when a shared worker still holds a stale connected status.
 - Add browser-level and service-worker contract tests for installation, activation, online refresh, offline launch, scope isolation, update recovery, and notification compatibility.
 - Document the exact first-load requirement and the production iPhone acceptance sequence.
+- Keep Tasks installation metadata on a permanent same-origin manifest and expose whether the current browsing partition has completed its own offline shell stage.
 
 ## Capabilities
 
@@ -25,6 +26,7 @@ None.
 ## Impact
 
 - **Tasks runtime**: Add idempotent service-worker registration independent of reminder enablement and make browser connectivity authoritative over stale shared-worker connection status.
+- **Tasks installation**: Retain the permanent Tasks manifest and report partition-local offline-launch readiness in synchronization diagnostics.
 - **Platform authorization**: Pause remote administrator-role probes while offline and resume them on reconnect with bounded backoff.
 - **Service worker**: Add a versioned Tasks-only application-shell cache and bounded fetch handling while retaining existing push and notification-click behavior.
 - **Build and deployment**: Publish a deterministic shell asset manifest or equivalent current-build inputs without adding server credentials or changing hosting topology.

@@ -31,6 +31,7 @@ describe('useTaskSyncDiagnostics', () => {
     mocks.useTasksRuntime.mockReset().mockReturnValue({
       mode: 'connected',
       syncState: 'connected',
+      offlineLaunchState: 'ready',
       pendingUploadCount: 0,
     });
   });
@@ -40,6 +41,7 @@ describe('useTaskSyncDiagnostics', () => {
     mocks.useTasksRuntime.mockReturnValue({
       mode: 'connected',
       syncState: 'connected',
+      offlineLaunchState: 'ready',
       pendingUploadCount: 2,
     });
     mocks.useStatus.mockReturnValue({
@@ -100,6 +102,7 @@ describe('useTaskSyncDiagnostics', () => {
     mocks.useTasksRuntime.mockReturnValue({
       mode: 'local',
       syncState: 'local',
+      offlineLaunchState: 'unsupported',
       pendingUploadCount: 0,
     });
     mocks.useStatus.mockReturnValue({

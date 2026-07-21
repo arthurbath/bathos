@@ -72,10 +72,14 @@
           });
         }
 
-        var blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
         var link = document.querySelector('link[rel="manifest"]') || document.createElement('link');
         link.rel = 'manifest';
-        link.href = URL.createObjectURL(blob);
+        if (firstSegment === 'tasks') {
+          link.href = '/tasks/manifest.json';
+        } else {
+          var blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+          link.href = URL.createObjectURL(blob);
+        }
         if (!link.parentNode) document.head.appendChild(link);
       })();
     </script>

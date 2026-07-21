@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   canRegisterTasksServiceWorker,
+  prepareTasksOfflineLaunch,
   registerTasksServiceWorker,
   resetTasksServiceWorkerRegistrationForTests,
 } from './taskServiceWorker';
@@ -16,6 +17,23 @@ function supportedEnvironment(register: ReturnType<typeof vi.fn>) {
     secureContext: true,
     serviceWorker: { register } as unknown as ServiceWorkerContainer,
   };
+}
+
+function cacheStorageWithShell(complete: boolean) {
+  const cacheName = 'bathos-tasks-shell-device';
+  const metadata = {
+    match: vi.fn().mockResolvedValue(
+      complete ? new Response(cacheName) : undefined,
+    ),
+  };
+  const shell = {
+    match: vi.fn().mockResolvedValue(
+      complete ? new Response('<!doctype html>') : undefined,
+    ),
+  };
+  return {
+    open: vi.fn(async (name: string) => (name === 'bathos-tasks-meta-v1' ? metadata : shell)),
+  } as unknown as CacheStorage;
 }
 
 describe('Tasks service-worker registration', () => {
@@ -67,5 +85,66 @@ describe('Tasks service-worker registration', () => {
     await expect(registerTasksServiceWorker(environment)).rejects.toThrow('offline');
     await expect(registerTasksServiceWorker(environment)).resolves.toBe(registration);
     expect(register).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports ready only after this client partition has an active complete shell', async () => {
+    const registration = { scope: 'https://os.bath.garden/' } as ServiceWorkerRegistration;
+    const register = vi.fn().mockResolvedValue(registration);
+    const environment = {
+      secureContext: true,
+      serviceWorker: {
+        register,
+        ready: Promise.resolve(registration),
+      } as unknown as ServiceWorkerContainer,
+      cacheStorage: cacheStorageWithShell(true),
+      origin: 'https://os.bath.garden',
+    };
+
+    await expect(prepareTasksOfflineLaunch(environment)).resolves.toBe('ready');
+  });
+
+  it('does not treat another browsing partition as offline-ready', async () => {
+    const registration = { scope: 'https://os.bath.garden/' } as ServiceWorkerRegistration;
+    const environment = {
+      secureContext: true,
+      serviceWorker: {
+        register: vi.fn().mockResolvedValue(registration),
+        ready: Promise.resolve(registration),
+      } as unknown as ServiceWorkerContainer,
+      cacheStorage: cacheStorageWithShell(false),
+      origin: 'https://os.bath.garden',
+      preparationTimeoutMs: 0,
+    };
+
+    await expect(prepareTasksOfflineLaunch(environment)).resolves.toBe('failed');
+  });
+
+  it('waits for an updating worker to finish staging this partition', async () => {
+    const registration = { scope: 'https://os.bath.garden/' } as ServiceWorkerRegistration;
+    const cacheName = 'bathos-tasks-shell-device';
+    const metadata = {
+      match: vi.fn()
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValue(new Response(cacheName)),
+    };
+    const shell = { match: vi.fn().mockResolvedValue(new Response('<!doctype html>')) };
+    const environment = {
+      secureContext: true,
+      serviceWorker: {
+        register: vi.fn().mockResolvedValue(registration),
+        ready: Promise.resolve(registration),
+      } as unknown as ServiceWorkerContainer,
+      cacheStorage: {
+        open: vi.fn(async (name: string) => (
+          name === 'bathos-tasks-meta-v1' ? metadata : shell
+        )),
+      } as unknown as CacheStorage,
+      origin: 'https://os.bath.garden',
+      preparationTimeoutMs: 50,
+      preparationPollMs: 1,
+    };
+
+    await expect(prepareTasksOfflineLaunch(environment)).resolves.toBe('ready');
+    expect(metadata.match).toHaveBeenCalledTimes(2);
   });
 });

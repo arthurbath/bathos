@@ -22,6 +22,7 @@ describe('getAvailableModules', () => {
     expect(modules[4].iconPath).toBe('/module-tasks.png');
     expect(modules[4].installStartPath).toBe('/tasks/today');
     expect(modules[4].manifestId).toBe('/tasks');
+    expect(modules[4].manifestPath).toBe('/tasks/manifest.json');
     expect(modules[5].launchPath).toBe('/wardrobe/items');
     expect(modules[5].iconPath).toBe('/module-wardrobe.png');
   });

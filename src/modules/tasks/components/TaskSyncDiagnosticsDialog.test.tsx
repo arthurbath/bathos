@@ -17,6 +17,7 @@ describe('TaskSyncDiagnosticsDialog', () => {
     mocks.useTaskSyncDiagnostics.mockReset().mockReturnValue({
       mode: 'local',
       syncState: 'local',
+      offlineLaunchState: 'ready',
       pendingUploadCount: 0,
       hasCompletedSync: false,
       lastSuccessfulSyncAt: null,
@@ -44,6 +45,7 @@ describe('TaskSyncDiagnosticsDialog', () => {
       'This installation stores task data locally. Cross-device and MCP changes do not converge.',
     )).toBeVisible();
     expect(screen.getAllByText('Local Only')).toHaveLength(2);
+    expect(screen.getByText('Offline Launch').nextElementSibling).toHaveTextContent('Ready');
     expect(screen.getByText('Preparing')).toBeVisible();
     expect(screen.getByText('No degradation recorded.')).toBeVisible();
     expect(screen.getByText('No conflict receipts.')).toBeVisible();
@@ -53,6 +55,7 @@ describe('TaskSyncDiagnosticsDialog', () => {
     mocks.useTaskSyncDiagnostics.mockReturnValue({
       mode: 'connected',
       syncState: 'connected',
+      offlineLaunchState: 'failed',
       pendingUploadCount: 2,
       hasCompletedSync: true,
       lastSuccessfulSyncAt: '2026-07-20T16:30:00.000Z',
@@ -90,6 +93,7 @@ describe('TaskSyncDiagnosticsDialog', () => {
     }));
 
     expect(screen.getByText('Pending Changes').nextElementSibling).toHaveTextContent('2');
+    expect(screen.getByText('Offline Launch').nextElementSibling).toHaveTextContent('Failed');
     expect(screen.getByText('Upload').nextElementSibling).toHaveTextContent('Error');
     expect(screen.getByText('Download').nextElementSibling).toHaveTextContent('Active');
     expect(screen.getByText('Full Synchronization').nextElementSibling)

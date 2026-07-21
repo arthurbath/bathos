@@ -51,6 +51,14 @@ function updateManifest(name: string, startUrl: string, iconPath: string, id?: s
   }
 }
 
+function setStaticManifest(href: string) {
+  if (currentManifestBlobUrl) {
+    URL.revokeObjectURL(currentManifestBlobUrl);
+    currentManifestBlobUrl = null;
+  }
+  setLinkHref('manifest', href);
+}
+
 function setAppleWebAppTitle(title: string) {
   const meta = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
   if (meta) {
@@ -79,7 +87,11 @@ export function useDocumentHead() {
       setLinkHref('icon', icon);
       setAllAppleTouchIcons(icon);
       setAppleWebAppTitle(mod.name);
-      updateManifest(mod.name, mod.installStartPath ?? location.pathname, icon, mod.manifestId);
+      if (mod.manifestPath) {
+        setStaticManifest(mod.manifestPath);
+      } else {
+        updateManifest(mod.name, mod.installStartPath ?? location.pathname, icon, mod.manifestId);
+      }
     } else {
       document.title = DEFAULT_TITLE;
       setLinkHref('icon', DEFAULT_ICON);
