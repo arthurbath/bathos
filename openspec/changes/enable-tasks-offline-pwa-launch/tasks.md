@@ -23,6 +23,7 @@
 ## 4. Production Acceptance
 
 - [x] 4.1 Commit, push, and publish the validated worker through the normal BathOS deployment path.
-- [ ] 4.2 Verify production Safari installs the new worker, refreshes the shell, retains Web Push, and can reopen Tasks with the network unavailable.
+- [x] 4.2a Verify authenticated production Safari installs worker version 6, refreshes the complete shell, returns to synchronized operation, and retains notification permission and its active Web Push subscription.
+- [ ] 4.2b Verify authenticated production Safari can reopen Tasks while the Mac is literally disconnected from the network.
 - [ ] 4.3 Complete the user-assisted iPhone Home Screen installation, offline restart, queued mutation, reconnection, and notification-delivery pass.
 - [ ] 4.4 Sync the durable specification, archive the change, validate the final repository, commit, and push.
