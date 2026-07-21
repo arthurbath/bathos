@@ -3,7 +3,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { MemoryRouter, Routes, Route, Link } from "react-router-dom";
-import { TASK_ROUTE_PATHS } from "@/modules/tasks/routes";
+import {
+  TASK_ROUTE_PATHS,
+  isSupportedTaskRoute,
+} from "@/modules/tasks/routes";
 import { BROWSER_ROUTER_FUTURE } from "@/platform/routingCompatibility";
 import {
   BathOSBrowserRouter,
@@ -15,6 +18,15 @@ describe("task route registry", () => {
     expect(TASK_ROUTE_PATHS).toContain("/tasks/upcoming");
     expect(TASK_ROUTE_PATHS).toContain("/tasks/anytime");
     expect(TASK_ROUTE_PATHS).toContain("/tasks/someday");
+    expect(TASK_ROUTE_PATHS).toContain("/tasks/areas/:areaId");
+  });
+
+  it("matches only exact supported task routes", () => {
+    expect(isSupportedTaskRoute("/tasks/today")).toBe(true);
+    expect(isSupportedTaskRoute("/tasks/projects/project-a")).toBe(true);
+    expect(isSupportedTaskRoute("/tasks/areas/area-a")).toBe(true);
+    expect(isSupportedTaskRoute("/tasks/unknown")).toBe(false);
+    expect(isSupportedTaskRoute("/tasks/projects/project-a/extra")).toBe(false);
   });
 });
 

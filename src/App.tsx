@@ -27,7 +27,7 @@ import DrawersIndex from "@/modules/drawers/DrawersIndex";
 import GarageIndex from "@/modules/garage/GarageIndex";
 import SnakeIndex from "@/modules/snake/SnakeIndex";
 import WardrobeIndex from "@/modules/wardrobe/WardrobeIndex";
-import { TASK_ROUTE_PATHS } from "@/modules/tasks/routes";
+import { isSupportedTaskRoute } from "@/modules/tasks/routes";
 import NotFound from "./pages/NotFound";
 
 const TasksIndex = lazy(() => import("@/modules/tasks/TasksIndex"));
@@ -77,6 +77,12 @@ function GlobalCommandEnterSubmit() {
 }
 
 function TasksRoute() {
+  const location = useLocation();
+
+  if (!isSupportedTaskRoute(location.pathname)) {
+    return <DeferredNotFound />;
+  }
+
   return (
     <Suspense
       fallback={(
@@ -100,7 +106,7 @@ export function ScrollToTopOnPathnameChange() {
   return null;
 }
 
-function AppRoutes() {
+export function AppRoutes() {
   return (
     <PullToRefresh>
       <GlobalCommandEnterSubmit />
@@ -148,9 +154,7 @@ function AppRoutes() {
 
         {/* Tasks module */}
         <Route path="/tasks" element={<Navigate to="/tasks/today" replace />} />
-        {TASK_ROUTE_PATHS.map((path) => (
-          <Route key={path} path={path} element={<TasksRoute />} />
-        ))}
+        <Route path="/tasks/*" element={<TasksRoute />} />
 
         {/* Legacy routes */}
         <Route path="/incomes" element={<Navigate to="/budget/incomes" replace />} />
