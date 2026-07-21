@@ -35,7 +35,8 @@ The remaining completion gate is intentionally calendar-bound rather than implem
 2. Confirm the runtime disabled at the intended boundary, no post-boundary credential or network work occurred, the queue is empty, and ordinary Mail and Things outcomes remain healthy.
 3. Reconcile the final accepted receipts with the BathOS MCP and PowerSync projection, and record any real retry or failure evidence without exposing task content.
 4. Complete Inbox Manager OpenSpec task 6.4, sync its durable specification, archive the change, validate, commit, and push.
-5. Perform one final cross-repository, route, MCP, synchronization, reminder, and health audit before declaring the implementation goal complete.
+5. Complete one user-assisted production acceptance pass on the actual iPhone: Install or refresh the Home Screen PWA, launch into Today, verify synchronized data, exercise offline restart and reconnection with one temporary task, and confirm notification permission and delivery from the installed web app.
+6. Perform one final cross-repository, route, MCP, synchronization, reminder, and health audit before declaring the implementation goal complete.
 
 Four recoverably deleted production-acceptance captures remain as roots in Tasks Trash. Permanent removal still requires explicit action-time confirmation because one setup capture originated from the user's active Safari tab. This cleanup is not a product-readiness blocker.
 
@@ -57,7 +58,7 @@ The BathOS connector catalog attached to this long-running Codex task still expo
 
 ## Completion Estimate
 
-No additional large implementation tranche is evident from the durable specifications, archived OpenSpec changes, production evaluations, or source audit. Assuming the bounded trial remains healthy, the earliest honest completion point is shortly after 2026 Jul 22 1:50 PM PDT. Final evidence reconciliation, specification closeout, validation, commit, and publication should require approximately one to three focused hours after the boundary.
+No additional large implementation tranche is evident from the durable specifications, archived OpenSpec changes, production evaluations, or source audit. Assuming the bounded trial remains healthy, the earliest honest completion point is shortly after 2026 Jul 22 1:50 PM PDT. Final evidence reconciliation, specification closeout, validation, commit, publication, and a brief user-assisted iPhone pass should require approximately one to three focused hours after the boundary.
 
 ## Specification Impact
 
