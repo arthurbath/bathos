@@ -146,6 +146,7 @@
 - [ ] 7.11 Audit the production Tasks topology and optimize reminder RLS owner checks without weakening owner isolation.
 - [x] 7.12 Harden the Tasks replication role, destructive confirmation, replace preview, recurrence cursor, and browser-subscription account boundary with focused regression tests.
 - [x] 7.13 Restrict the privileged Web Push network sink to approved browser-provider endpoints and revoke rejected targets without sending.
+- [x] 7.14 Capture each template source revision and hierarchy from one database statement snapshot under concurrent edits.
 
 ## 8. Optional Native Apple Companion
 

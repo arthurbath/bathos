@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(54);
+SELECT plan(59);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -46,6 +46,41 @@ SELECT has_function(
   'public', 'tasks_capture_template',
   ARRAY['uuid', 'text', 'uuid', 'text', 'date', 'uuid', 'text', 'text'],
   'captures and revises templates through one guarded function'
+);
+SELECT has_function(
+  'tasks_private', 'capture_template_source',
+  ARRAY['uuid', 'text', 'uuid', 'date'],
+  'resolves source revision and hierarchy behind one private function boundary'
+);
+SELECT is(
+  (
+    SELECT routine.provolatile::text
+    FROM pg_catalog.pg_proc AS routine
+    WHERE routine.oid = 'tasks_private.capture_template_source(uuid,text,uuid,date)'::regprocedure
+  ),
+  's',
+  'keeps all source-capture reads on the calling statement snapshot'
+);
+SELECT is(
+  has_function_privilege(
+    'authenticated',
+    'tasks_private.capture_template_source(uuid,text,uuid,date)',
+    'EXECUTE'
+  ),
+  false,
+  'withholds the private source-capture boundary from authenticated callers'
+);
+SELECT ok(
+  pg_get_functiondef(
+    'public.tasks_capture_template(uuid,text,uuid,text,date,uuid,text,text)'::regprocedure
+  ) LIKE '%tasks_private.capture_template_source%',
+  'delegates capture provenance and hierarchy to the stable source boundary'
+);
+SELECT ok(
+  pg_get_functiondef(
+    'public.tasks_capture_template(uuid,text,uuid,text,date,uuid,text,text)'::regprocedure
+  ) NOT LIKE '%template_snapshot_from_%',
+  'does not rebuild hierarchy through a later public-capture statement'
 );
 SELECT has_function(
   'public', 'tasks_instantiate_template',

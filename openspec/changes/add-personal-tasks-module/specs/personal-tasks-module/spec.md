@@ -233,6 +233,10 @@ The system SHALL support reusable, revisioned to-do and project template definit
 - **WHEN** a user saves a current open to-do or project hierarchy as a template revision with an explicit reference date
 - **THEN** the system stores immutable relative start-date and deadline offsets, ordering, actionability, headings, and checklist content without treating the source work as the template definition
 
+#### Scenario: Capture a template during a concurrent edit
+- **WHEN** a source to-do or project hierarchy changes while template capture is reading it
+- **THEN** the stored source revision and complete hierarchy snapshot come from one database statement snapshot rather than mixing source state from different moments
+
 #### Scenario: Archive a used template
 - **WHEN** a user deletes a template that has generated instances
 - **THEN** the system archives the definition, excludes it from new-template selection, and preserves readable provenance for existing work
