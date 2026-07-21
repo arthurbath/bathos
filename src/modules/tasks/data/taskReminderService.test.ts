@@ -114,10 +114,15 @@ describe('TaskReminderService', () => {
     });
   });
 
-  it('recognizes minute and second precision reminder times', () => {
+  it('recognizes reminder times through synchronized fractional-second precision', () => {
     expect(isTaskReminderTime('09:30')).toBe(true);
     expect(isTaskReminderTime('09:30:00')).toBe(true);
+    expect(isTaskReminderTime('09:30:00.000')).toBe(true);
+    expect(isTaskReminderTime('09:30:00.123456789')).toBe(true);
     expect(isTaskReminderTime('24:00')).toBe(false);
+    expect(isTaskReminderTime('09:30.000')).toBe(false);
+    expect(isTaskReminderTime('09:30:00.')).toBe(false);
+    expect(isTaskReminderTime('09:30:00.1234567890')).toBe(false);
   });
 
   it('registers and revokes an owner-scoped Web Push target', async () => {

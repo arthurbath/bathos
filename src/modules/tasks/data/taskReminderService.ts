@@ -290,7 +290,7 @@ export function parseTaskReminderOccurrence(value: unknown): TaskReminderOccurre
 
 export function isTaskReminderTime(value: unknown): value is string {
   return typeof value === 'string'
-    && /^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(value);
+    && /^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,9})?)?$/.test(value);
 }
 
 export function isSecurePushEndpoint(value: unknown): value is string {
