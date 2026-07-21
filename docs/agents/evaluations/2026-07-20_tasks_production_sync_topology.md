@@ -8,7 +8,7 @@
 
 The Tasks module has passed local persistence, multi-client convergence, recovery, accessibility, performance, and ten-minute endurance gates. It is not yet remotely usable across the owner's devices because production BathOS does not configure `VITE_TASKS_POWERSYNC_ENDPOINT`. The current runtime therefore enters explicit browser-local mode. MCP and Raycast can write authoritative Supabase rows, but separate browser installations cannot receive those rows or synchronize their own queued changes without a production PowerSync service.
 
-This decision is independent from the permanent product name and launcher icon. The neutral `/tasks` route can validate real parallel use before public launcher registration.
+This decision is independent from the selected `Tasks` name, square-check icon, and launcher registration. The registered `/tasks` route remains fully usable in explicit local-only mode before remote synchronization is approved.
 
 ## Current Facts
 
@@ -76,7 +76,7 @@ Use PowerSync Cloud Free for a bounded real-world parallel-use trial, subject to
 
 Provision one US-region development instance first. Configure Supabase Auth through the project's JWKS endpoint, a task-only replication role and publication, the committed owner-only Sync Streams, and the public client endpoint. Validate with a synthetic production account before allowing personal tasks. Clear the synthetic records after validation.
 
-Do not connect Inbox Manager, register the launcher module, or treat the trial as migration approval during this step. If the free service deactivates unexpectedly, becomes operationally noisy, or presents an unacceptable privacy boundary, evaluate a small self-hosted trial before paying for Pro.
+Do not connect Inbox Manager or treat the trial as migration approval during this step. Launcher registration is complete and does not authorize production synchronization. If the free service deactivates unexpectedly, becomes operationally noisy, or presents an unacceptable privacy boundary, evaluate a small self-hosted trial before paying for Pro.
 
 ## Promotion Gate
 

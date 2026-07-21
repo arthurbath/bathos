@@ -9,7 +9,7 @@
 - [x] 1.7 Inventory relevant Things keyboard behaviors and choose the BathOS keyboard contract for the first daily workflow.
 - [x] 1.8 Select the smallest end-to-end workflow that can provide useful parallel operation.
 - [x] 1.9 Confirm or revise the working `/tasks` route, `tasks_` database namespace, and `src/modules/tasks` source path.
-- [ ] 1.10 Select an original user-facing product name and initial icon direction before launcher implementation.
+- [x] 1.10 Select the user-facing product name and initial icon direction before launcher implementation.
 
 ## 2. Architecture Gates
 
@@ -50,7 +50,7 @@
 ## 4. Minimal End-to-End Module
 
 - [x] 4.1 Add the isolated task module shell and working routes.
-- [ ] 4.2 Register the task module in platform module detection, launcher metadata, PWA metadata, and related tests.
+- [x] 4.2 Register the task module in platform module detection, launcher metadata, PWA metadata, and related tests.
 - [x] 4.3 Add the minimum owner-scoped task query and mutation hooks.
 - [x] 4.4 Add keyboard-accessible task creation, editing, completion, and recoverable deletion.
 - [x] 4.4a Add a connected-only Trash preview and explicit confirmation surface for permanent deletion without exposing the operation through MCP.

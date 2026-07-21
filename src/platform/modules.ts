@@ -1,8 +1,8 @@
 import type { LucideIcon } from 'lucide-react';
-import { CarFront, CircleDollarSign, ShelvingUnit, Shield, Shirt } from 'lucide-react';
+import { CarFront, CircleDollarSign, ShelvingUnit, Shield, Shirt, SquareCheckBig } from 'lucide-react';
 import { SnakeIcon } from '@/components/icons/SnakeIcon';
 
-export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'snake' | 'wardrobe' | 'admin';
+export type PlatformModuleId = 'budget' | 'drawers' | 'garage' | 'snake' | 'tasks' | 'wardrobe' | 'admin';
 
 export interface PlatformModule {
   id: PlatformModuleId;
@@ -11,6 +11,8 @@ export interface PlatformModule {
   launchPath: string;
   icon: LucideIcon;
   iconPath?: string;
+  installStartPath?: string;
+  manifestId?: string;
   adminOnly?: boolean;
 }
 
@@ -59,6 +61,17 @@ const SNAKE_MODULE: PlatformModule = {
   iconPath: '/module-snake.png',
 };
 
+const TASKS_MODULE: PlatformModule = {
+  id: 'tasks',
+  name: 'Tasks',
+  description: 'Plan and complete personal tasks',
+  launchPath: '/tasks/today',
+  icon: SquareCheckBig,
+  iconPath: '/module-tasks.png',
+  installStartPath: '/tasks/today',
+  manifestId: '/tasks',
+};
+
 const ADMINISTRATION_MODULE: PlatformModule = {
   id: 'admin',
   name: 'Administration',
@@ -69,7 +82,7 @@ const ADMINISTRATION_MODULE: PlatformModule = {
   adminOnly: true,
 };
 
-const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, DRAWERS_MODULE, GARAGE_MODULE, SNAKE_MODULE, WARDROBE_MODULE, ADMINISTRATION_MODULE];
+const PLATFORM_MODULES: PlatformModule[] = [BUDGET_MODULE, DRAWERS_MODULE, GARAGE_MODULE, SNAKE_MODULE, TASKS_MODULE, WARDROBE_MODULE, ADMINISTRATION_MODULE];
 
 interface GetAvailableModulesOptions {
   isAdmin?: boolean;

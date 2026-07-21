@@ -79,13 +79,7 @@ export function useDocumentHead() {
       setLinkHref('icon', icon);
       setAllAppleTouchIcons(icon);
       setAppleWebAppTitle(mod.name);
-      updateManifest(mod.name, location.pathname, icon);
-    } else if (firstSegment === 'tasks') {
-      document.title = 'Tasks';
-      setLinkHref('icon', '/icon-192.png');
-      setAllAppleTouchIcons('/icon-192.png');
-      setAppleWebAppTitle('Tasks');
-      updateManifest('Tasks', '/tasks/today', '/icon-192.png', '/tasks');
+      updateManifest(mod.name, mod.installStartPath ?? location.pathname, icon, mod.manifestId);
     } else {
       document.title = DEFAULT_TITLE;
       setLinkHref('icon', DEFAULT_ICON);

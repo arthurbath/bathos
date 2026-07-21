@@ -1,10 +1,10 @@
 ## Why
 
-Things is central to the user's daily planning, capture, reading, and work workflows, but its closed platform and fixed data model cannot support the structured personal semantics and AI access the user now needs. BathOS should add a private-first task module that preserves the calm, dependable interaction model the user values while developing an original identity and a more extensible system.
+Things is central to the user's daily planning, capture, reading, and work workflows, but its closed platform and fixed data model cannot support the structured personal semantics and AI access the user now needs. BathOS should add a private-first task module that preserves the calm, dependable interaction model the user values while using BathOS's direct product language and a more extensible system.
 
 ## What Changes
 
-- Add a private-first BathOS task module under the permanent `/tasks/...` route, `src/modules/tasks/` source path, and `tasks_` database namespace. The user-facing product name remains undecided.
+- Add the private-first BathOS Tasks module under the permanent `/tasks/...` route, `src/modules/tasks/` source path, and `tasks_` database namespace, with the launcher title `Tasks` and a standard Lucide square-check icon.
 - Provide a cross-platform web interface for capture, organization, scheduling, completion, search, and review.
 - Model Inbox, Today, This Evening, Upcoming, Anytime, Someday, Logbook, areas, projects, headings, checklists, start dates, deadlines, reminders, repeats, notes, and manual ordering without adding tags or another unstructured labeling system.
 - Replace existing tag and title-prefix workarounds with explicit structured concepts for actionability, source/origin, templates, and other personal workflow semantics as those concepts are defined.
@@ -13,7 +13,7 @@ Things is central to the user's daily planning, capture, reading, and work workf
 - Treat offline behavior, synchronization, conflict handling, ordering, recurrence, reminders, undo, recovery, history, backups, and safe automation as trust requirements rather than optional polish.
 - Keep Things in parallel use for an indefinite period. Migration and replacement are not initial delivery requirements.
 - Keep future native Apple distribution possible without making App Store publication, Apple Watch support, or a complete Shortcuts action library part of the initial build.
-- Establish an original visual and interaction identity that is inspired by the qualities of Things without reproducing its branding, assets, or interface.
+- Use the shared BathOS visual language and straightforward module naming while preserving original interaction details and avoiding reproduction of Things branding, assets, or interface.
 
 ## Capabilities
 

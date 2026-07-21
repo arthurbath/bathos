@@ -812,12 +812,16 @@ The system SHALL support indefinite parallel use without requiring the user to m
 - **WHEN** the BathOS module is not yet replacement-ready
 - **THEN** no implementation task requires a Things import or source-of-truth switch
 
-### Requirement: Original Product Expression
-The system SHALL use original product naming, visual language, copy, assets, and detailed interactions while preserving the functional planning principles selected for the BathOS module.
+### Requirement: BathOS Product Expression
+The system SHALL use BathOS's direct module naming, shared visual language, copy, assets, and interaction conventions while preserving the functional planning principles selected for the Tasks module.
 
 #### Scenario: Design a familiar planning concept
 - **WHEN** the module implements a concept also present in Things
 - **THEN** the implementation uses BathOS conventions and original expression rather than copying Cultured Code branding or assets
+
+#### Scenario: Identify the module directly
+- **WHEN** the module appears in the BathOS launcher or install metadata
+- **THEN** it is named `Tasks` and uses the standard BathOS monochrome treatment of Lucide `SquareCheckBig`
 
 ### Requirement: Module Isolation
 The task module SHALL remain removable without importing code from another BathOS module or requiring another module's data.

@@ -78,7 +78,7 @@ The offline, reconciliation, conflict, and ordering architecture gate passed on 
 
 ### First Integrated Local Slice
 
-The first integrated browser slice landed under `/tasks/today` and `/tasks/inbox` on 2026 Jul 19. It uses the neutral internal label `Tasks` until the permanent product name and icon are selected. The route is lazy-loaded so PowerSync, WA-SQLite, its workers, and its WebAssembly files do not enter the initial BathOS application chunk. Vite emits the worker graph as ES modules and excludes PowerSync and WA-SQLite from dependency pre-bundling so the development and production worker paths remain valid.
+The first integrated browser slice landed under `/tasks/today` and `/tasks/inbox` on 2026 Jul 19. `Tasks` is the permanent public and technical module name. The route is lazy-loaded so PowerSync, WA-SQLite, its workers, and its WebAssembly files do not enter the initial BathOS application chunk. Vite emits the worker graph as ES modules and excludes PowerSync and WA-SQLite from dependency pre-bundling so the development and production worker paths remain valid.
 
 The screen follows an original BathOS-native open-list composition: a restrained header status, Inbox/Today view switch, keyboard-first capture field, ordered task rows, quiet completion and action controls, and an in-place plain-text title and notes editor. It does not copy Things branding, iconography, sidebar anatomy, or exact row treatment. On small screens, Inbox and Today move to the shared BathOS bottom navigation and the active view becomes the page heading.
 
@@ -104,7 +104,7 @@ Bulk planning uses a separate, explicit selection mode in the five open planning
 
 The repository validates the unique selected identifiers, loads every owner-scoped record, validates lifecycle and date constraints, and moves the complete set inside one local PowerSync transaction. Destination order keys are assigned after the existing destination tail in selection order. Any invalid member rolls back the complete set, while successful planning or deliberate exit clears selection. Remote synchronization still uses the established whole-record revision and conflict contract for each resulting row.
 
-When no PowerSync service endpoint is configured, the module is fully usable in explicit local mode. A bounded browser exercise with synthetic data proved create-by-Enter, reload persistence, edit-and-notes persistence, completion, recoverable deletion, movement between Today and Inbox, owner-safe startup, and responsive rendering. The synthetic local records were cleared through the same full database-clear boundary used for an account change. The module remains intentionally absent from the launcher until its permanent public identity is resolved. The neutral Tasks route now has provisional install metadata and the shared BathOS icon so an installed Home Screen web app can use standards-based Web Push without pretending that the permanent product name or icon has been selected.
+When no PowerSync service endpoint is configured, the module is fully usable in explicit local mode. A bounded browser exercise with synthetic data proved create-by-Enter, reload persistence, edit-and-notes persistence, completion, recoverable deletion, movement between Today and Inbox, owner-safe startup, and responsive rendering. The synthetic local records were cleared through the same full database-clear boundary used for an account change. The module is registered in the BathOS launcher as `Tasks` with Lucide `SquareCheckBig`, and its static and runtime install metadata use the same name and matching monochrome square-check asset.
 
 The real module's restart-and-reconnection gate passed against the complete production task schema on 2026 Jul 20. With both the write API and sync stream unavailable, browser task capture produced one durable queued mutation and retained the task across reload. Offline completion produced a second queued mutation and retained the completed task in Logbook across another reload. Reconnection drained the queue to zero. Postgres contained exactly one completed task at revision two and exactly two accepted history events: create from revision zero to one and complete from revision one to two. A final reload retained one synchronized Logbook record without duplication. The disposable harness lives under `spikes/tasks-module-reconnection/`; this proof does not select a production PowerSync topology.
 
@@ -133,7 +133,7 @@ A later requirement-to-rendered-behavior audit found that project planning state
 **Goals:**
 
 - Build a private-first task system that can become the user's primary daily planning tool after it has earned that role.
-- Preserve the clarity of Things' core organizational and temporal concepts while establishing an original BathOS interaction and visual identity.
+- Preserve the clarity of Things' core organizational and temporal concepts while using BathOS interaction and visual conventions.
 - Make task data available through the web, authenticated MCP, and macOS capture workflows from one authoritative domain model.
 - Replace generic tags and title-prefix conventions with explicit structured semantics.
 - Treat offline behavior, synchronization, ordering, recurrence, reminders, undo, recovery, history, backups, and automation safety as foundational trust work.
@@ -164,9 +164,9 @@ Alternative considered: Create a task household from the beginning. Rejected bec
 
 ### Use `tasks` as the permanent technical namespace
 
-The module will use `/tasks/...`, `src/modules/tasks/`, and `tasks_` as its permanent route, source, and database namespaces. The user-facing product name remains open and may change without renaming internal engineering surfaces.
+The module uses `Tasks` as its permanent user-facing name and `/tasks/...`, `src/modules/tasks/`, and `tasks_` as its permanent route, source, and database namespaces.
 
-Rationale: A permanent neutral namespace keeps routes, migrations, synchronization rules, tests, and integrations stable while product naming remains a separate creative decision.
+Rationale: The direct name follows BathOS's concrete module grammar, tells users exactly what the module does, and keeps routes, migrations, synchronization rules, tests, and integrations aligned.
 
 Alternative considered: Delay all artifacts until a product name exists. Rejected because the product name does not need to determine the internal namespace.
 
@@ -398,7 +398,7 @@ The 2026 Jul 20 deployment refresh recommends PowerSync Cloud Free for the bound
 
 A read-only production audit later on 2026 Jul 20 confirmed that the Bath Supabase organization is already on Pro and BathOS is active on Postgres 17, resolving the plan-level external-replication prerequisite without a plan change. No Tasks replication role, publication, PowerSync endpoint, reminder dispatcher, reminder Vault entry, Cron schema, `pg_cron`, or `pg_net` exists yet. The prepared activation path is therefore a fresh installation. Production mutation, the new PowerSync processor, any incremental billing, and reminder infrastructure remain explicitly approval-gated.
 
-The 2026 Jul 20 identity evaluation recommends `Aplomb` with a centered plumb-line direction that avoids another task-checkbox mark. The name comes from the owner's original description of the qualities this system should preserve, fits the concrete one-word BathOS naming grammar, and had no direct task-product collision in the bounded screen. `Forth` and `Espalier` remain distinct alternatives with documented trade-offs. This is a recommendation, not a product-name selection. Launcher and permanent PWA registration remain blocked until the owner chooses the name and icon direction, and any later public release requires a fresh formal availability review.
+The owner selected `Tasks` as the permanent product name on 2026 Jul 20. BathOS modules use direct names for what they do rather than metaphorical identities, and this module does not need to be visually distinctive from every other task application. The launcher uses Lucide `SquareCheckBig`, while the PWA uses a matching monochrome square-check asset. The earlier `Aplomb`, `Forth`, and `Espalier` exploration remains documented as superseded decision history. Any later public release may still review store presentation and availability, but it does not require a different private-module identity.
 
 The production-readiness audit found that the browser schema had grown to 22 synchronized collections while the disposable stream and publication still contained 16. The missing server-generated recurrence and reminder receipts are now included, and every reminder projection table uses full replica identity. The secret-free deployment package derives its approval checks from the actual client schema and requires the production stream, disposable stream, fresh and existing publication scripts, role grants, and database preflight to contain one exact table set. A production-style local acceptance gate proved all six repaired collections on two owner replicas, zero leakage to another owner, persistent restart, conflict convergence, and complete synthetic account cleanup. Its emergency teardown now attempts every local database, session, synthetic owner, and temporary artifact after a failed test path and reports all incomplete cleanup as uncertain residue instead of swallowing it. This prepares deployment but does not authorize production provisioning.
 
@@ -635,5 +635,4 @@ The following concerns are roadmap requirements and must not be dismissed as pol
 ## Open Questions
 
 - Should the bounded parallel-use trial adopt the recommended PowerSync Cloud Free topology, subject to Supabase plan and privacy approval?
-- What user-facing name and iconography should distinguish the module from Things?
 - Which native Apple surface, if any, is valuable enough to justify the first companion build?

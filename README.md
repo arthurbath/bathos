@@ -61,6 +61,18 @@ Track snake weight records and growth expectations in a shared household. The fi
 
 Accessible at [os.bath.garden/snake/weights](https://os.bath.garden/snake/weights).
 
+### Tasks
+
+Plan and complete personal tasks through a private-first, keyboard-focused workflow. Features include:
+
+- Inbox, Today, Upcoming, Anytime, Someday, Logbook, and Trash views
+- Areas, projects, headings, checklists, templates, reminders, and recurrence
+- Structured actionability and source provenance without generic tags
+- Offline local operation, recoverable deletion, history, export, and restore
+- Narrow task-domain MCP tools and Raycast capture commands
+
+Accessible at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Remote synchronization and production reminder delivery remain disabled until their separate approval gates pass.
+
 ### Wardrobe
 
 Track clothing items for a personal wardrobe. Features include:
@@ -77,8 +89,8 @@ Accessible at [os.bath.garden/wardrobe/items](https://os.bath.garden/wardrobe/it
 
 - Built with React, TypeScript, Vite, Tailwind CSS, and Supabase
 - Modules are isolated under `src/modules/[name]/` — removing one should not break another
-- Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`, `snake_`, `wardrobe_`) for clarity
-- Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`, `/snake/...`, `/wardrobe/...`)
+- Database tables use namespace prefixes (`bathos_`, `budget_`, `drawers_`, `garage_`, `snake_`, `tasks_`, `wardrobe_`) for clarity
+- Module path routing is handled client-side using path prefixes (`/budget/...`, `/drawers/...`, `/garage/...`, `/snake/...`, `/tasks/...`, `/wardrobe/...`)
 - OpenSpec is used for non-trivial behavior, UI paradigm, shared component, routing, auth, data, and database changes; validate specs with `npm run spec:validate`
 - See `docs/agents/ARCHITECTURE.md` for structure, `docs/agents/MODULE_GUIDE.md` for adding modules, and `docs/human/STYLE_GUIDE.md` for design conventions
 

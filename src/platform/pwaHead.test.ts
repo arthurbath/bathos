@@ -82,7 +82,7 @@ describe('initial PWA document head', () => {
     );
   });
 
-  it('gives the hidden Tasks route provisional install metadata for Web Push', () => {
+  it('gives Tasks its permanent install metadata and icon', () => {
     const dom = renderInitialHead('/tasks/upcoming');
     const document = dom.window.document;
 
@@ -90,8 +90,27 @@ describe('initial PWA document head', () => {
     expect(document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]')?.content)
       .toBe('Tasks');
     expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href)
-      .toBe('https://os.bath.garden/icon-192.png');
+      .toBe('https://os.bath.garden/module-tasks.png');
     expect(document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.href)
       .toBe('blob:test-manifest');
+  });
+
+  it('exposes route-relative Tasks icons without JavaScript for Safari installs', () => {
+    const dom = renderStaticHead('/tasks/upcoming');
+    const document = dom.window.document;
+
+    expect(document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.href)
+      .toBe('https://os.bath.garden/tasks/manifest.json');
+    expect(document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href)
+      .toBe('https://os.bath.garden/tasks/favicon.png');
+    expect(
+      Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="apple-touch-icon"]'))
+        .map((link: HTMLLinkElement) => link.href),
+    ).toEqual([
+      'https://os.bath.garden/tasks/apple-touch-icon.png',
+      'https://os.bath.garden/tasks/apple-touch-icon.png',
+      'https://os.bath.garden/tasks/apple-touch-icon.png',
+      'https://os.bath.garden/tasks/apple-touch-icon.png',
+    ]);
   });
 });
