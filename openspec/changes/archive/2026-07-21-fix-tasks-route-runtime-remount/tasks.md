@@ -14,5 +14,5 @@
 
 - [x] 3.1 Run the full test suite, lint, production build, and strict OpenSpec validation.
 - [x] 3.2 Commit and push the validated change, then verify a clean synchronized repository.
-- [ ] 3.3 After publication, verify representative production Safari navigation remains Synced, keeps reminder health, renders area details, and preserves unknown-route handling.
-- [ ] 3.4 Record production evidence, sync the durable Tasks spec, and archive the completed change.
+- [x] 3.3 After publication, verify representative production Safari navigation remains Synced, keeps reminder health, renders area details, and preserves unknown-route handling.
+- [x] 3.4 Record production evidence, sync the durable Tasks spec, and archive the completed change.
