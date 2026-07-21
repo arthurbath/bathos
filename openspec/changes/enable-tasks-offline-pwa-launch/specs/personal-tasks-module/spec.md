@@ -39,6 +39,10 @@ The system SHALL allow core task work to continue during temporary network loss,
 - **WHEN** an online Tasks navigation receives new shell HTML but one required versioned application asset cannot be staged
 - **THEN** the service worker leaves the prior complete shell active, removes the incomplete staging cache, and does not make the partial deployment the offline fallback
 
+#### Scenario: Replace a CDN-cached worker release
+- **WHEN** a new backward-compatible Tasks worker is published while the hosting edge still retains the prior unversioned script response
+- **THEN** the client registers the new versioned worker script URL under the existing root scope so the published worker installs without creating a competing registration or push subscription
+
 #### Scenario: Isolate offline caching from other BathOS modules and data traffic
 - **WHEN** the root-scoped Tasks service worker observes another BathOS module navigation, authentication traffic, Supabase, PowerSync, MCP, reminder-provider, or other non-shell request
 - **THEN** it does not intercept or cache that request and stores no task content, owner data, credential, provider secret, or API response in Cache Storage

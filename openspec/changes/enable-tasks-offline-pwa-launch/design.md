@@ -30,7 +30,7 @@ The correction must preserve one root-scoped registration and the existing push 
 
 ### Keep one combined Tasks and reminder worker
 
-Register `/tasks-service-worker.js` idempotently when the authenticated Tasks runtime starts on a secure supported client. The reminder-enable action reuses that registration before creating a push subscription. Registration alone does not call `Notification.requestPermission`, `PushManager.subscribe`, or the server.
+Register the versioned `/tasks-service-worker.js?version=<worker-version>` URL idempotently when the authenticated Tasks runtime starts on a secure supported client. The query version changes only when the published worker changes, bypassing hosting-edge reuse of an older long-lived worker response while preserving the same root-scoped registration and push subscription. The reminder-enable action reuses that registration before creating a push subscription. Registration alone does not call `Notification.requestPermission`, `PushManager.subscribe`, or the server.
 
 Using one worker preserves the existing root-scoped push subscription and avoids competing registrations. A second worker with overlapping scope would let the newest registration replace the other behavior and make notification delivery or offline launch order-dependent.
 
@@ -80,6 +80,7 @@ The shared administrator-role hook does not call Supabase while the browser is o
 - [Risk] Cache Storage grows across interrupted staging attempts -> Mitigation: Delete failed staging caches immediately and remove every nonactive Tasks shell cache during successful refresh and activation.
 - [Risk] Offline startup repeatedly probes Supabase or falsely reports synchronization as healthy -> Mitigation: Pause administrator-role probes on the browser offline signal and let that signal override stale shared-worker connectivity until reconnection.
 - [Risk] Safari appears ready but a newly installed iPhone Home Screen app has an empty independent storage partition -> Mitigation: Keep a permanent Tasks manifest and require the Home Screen instance itself to report both synchronized data and a complete partition-local offline shell.
+- [Risk] The hosting CDN retains the prior unversioned worker response after a deployment -> Mitigation: Register a query-versioned worker script URL and advance it with each worker release while retaining the same scope and registration.
 - [Trade-off] First installation requires a complete online shell fetch -> This is explicit and preferable to claiming offline readiness from an incomplete cache.
 
 ## Migration Plan
