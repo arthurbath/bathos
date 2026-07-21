@@ -71,7 +71,7 @@ Plan and complete personal tasks through a private-first, keyboard-focused workf
 - Offline local operation, recoverable deletion, history, export, and restore
 - Narrow task-domain MCP tools and Raycast capture commands
 
-Accessible at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Remote synchronization and production reminder delivery remain disabled until their separate approval gates pass.
+Accessible at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Production synchronization and reminder infrastructure are active. Real-device notification acceptance remains pending.
 
 ### Wardrobe
 

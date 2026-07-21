@@ -75,7 +75,7 @@ PowerSync Cloud Free was selected for the bounded real-world parallel-use trial.
 
 The synthetic production gate created two temporary owners and proved owner isolation, exact capture retry, two-client download, offline-web versus MCP conflict convergence, exactly-once completion, persisted-client restart, authoritative history counts, and account-cascade cleanup. A separate production database audit then confirmed zero matching synthetic accounts and zero rows in all 25 Tasks tables.
 
-The selected instance is ready for the personal parallel-use phase after the updated BathOS build is deployed. The unused duplicate PowerSync project remains untouched because deleting it is a separate irreversible action requiring explicit confirmation.
+The selected instance is ready for the personal parallel-use phase after the updated BathOS build is deployed. After explicit owner authorization, the unused duplicate project and its unconfigured Development instance were permanently removed on 2026 Jul 20. The PowerSync organization contains only the active BathOS Tasks project.
 
 Do not connect Inbox Manager or treat the trial as migration approval. If the free service deactivates unexpectedly, becomes operationally noisy, or presents an unacceptable privacy boundary, evaluate a small self-hosted trial before paying for Pro.
 
