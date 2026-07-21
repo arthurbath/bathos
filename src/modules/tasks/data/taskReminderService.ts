@@ -251,6 +251,27 @@ export class TaskReminderService {
       target: parseTaskDeliveryTarget(result.target),
     };
   }
+
+  async revokeWebPushByEndpoint(endpoint: string): Promise<{
+    outcome: 'accepted' | 'already_applied' | 'not_registered';
+  }> {
+    if (!isSecurePushEndpoint(endpoint)) {
+      throw new InvalidTaskReminderError('A valid Web Push endpoint is required');
+    }
+    const { data, error } = await this.client.rpc('tasks_revoke_web_push_endpoint', {
+      _endpoint: endpoint,
+      _reason: 'account_signed_out',
+    });
+    if (error) throw error;
+    const result = requireRecord(data, 'Web Push endpoint revocation returned an invalid result');
+    return {
+      outcome: requireEnum(
+        result.outcome,
+        ['accepted', 'already_applied', 'not_registered'] as const,
+        'Web Push endpoint revocation outcome',
+      ),
+    };
+  }
 }
 
 async function settleReminderClaim<T>(

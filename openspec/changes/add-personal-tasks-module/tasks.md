@@ -144,6 +144,7 @@
 - [x] 7.9 Add an executable Tasks-only TypeScript contract gate and repair all current module and task-MCP type failures.
 - [x] 7.10 Add direct connected-hook contract tests for owner-local template dates, recurrence evaluation, reminder claims, optimistic state, and local-only mutation gates.
 - [ ] 7.11 Audit the production Tasks topology and optimize reminder RLS owner checks without weakening owner isolation.
+- [x] 7.12 Harden the Tasks replication role, destructive confirmation, replace preview, recurrence cursor, and browser-subscription account boundary with focused regression tests.
 
 ## 8. Optional Native Apple Companion
 

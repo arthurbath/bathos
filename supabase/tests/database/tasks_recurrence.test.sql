@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(49);
+SELECT plan(51);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -83,6 +83,20 @@ SELECT is(
   tasks_private.add_recurrence_interval('2024-02-29', 'yearly', 1, 1),
   '2025-02-28'::date,
   'yearly recurrence clamps leap-day schedules safely'
+);
+SELECT is(
+  tasks_private.first_recurrence_step_after(
+    '2024-01-31', 'monthly', 1, '2024-02-29'
+  ),
+  2,
+  'recurrence cursor advances past a clamped month-end occurrence'
+);
+SELECT is(
+  tasks_private.first_recurrence_step_after(
+    '1900-01-01', 'daily', 1, '2026-07-21'
+  ),
+  ('2026-07-21'::date - '1900-01-01'::date) + 1,
+  'recurrence cursor derives a distant daily step without interval scanning'
 );
 
 SET LOCAL ROLE authenticated;

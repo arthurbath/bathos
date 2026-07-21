@@ -171,7 +171,8 @@ describe('TaskReminderService', () => {
           target: { ...target, capability_status: 'revoked', last_error_code: 'user_disabled' },
         },
         error: null,
-      });
+      })
+      .mockResolvedValueOnce({ data: { outcome: 'accepted' }, error: null });
     const service = new TaskReminderService({ rpc } as never);
     const subscription = {
       endpoint: 'https://push.example.test/subscription-a',
@@ -190,6 +191,13 @@ describe('TaskReminderService', () => {
     });
     await expect(service.revokeWebPush('target-a')).resolves.toMatchObject({
       outcome: 'accepted', target: { capability_status: 'revoked' },
+    });
+    await expect(service.revokeWebPushByEndpoint(subscription.endpoint)).resolves.toEqual({
+      outcome: 'accepted',
+    });
+    expect(rpc).toHaveBeenLastCalledWith('tasks_revoke_web_push_endpoint', {
+      _endpoint: subscription.endpoint,
+      _reason: 'account_signed_out',
     });
   });
 

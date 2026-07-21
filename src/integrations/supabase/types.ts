@@ -2612,6 +2612,7 @@ export type Database = {
           auth_secret: string
           created_at: string
           endpoint: string
+          endpoint_key: string
           owner_id: string
           p256dh: string
           target_id: string
@@ -2621,6 +2622,7 @@ export type Database = {
           auth_secret: string
           created_at?: string
           endpoint: string
+          endpoint_key?: never
           owner_id: string
           p256dh: string
           target_id: string
@@ -2630,6 +2632,7 @@ export type Database = {
           auth_secret?: string
           created_at?: string
           endpoint?: string
+          endpoint_key?: never
           owner_id?: string
           p256dh?: string
           target_id?: string
@@ -3123,6 +3126,10 @@ export type Database = {
       }
       tasks_revoke_web_push_target: {
         Args: { _reason?: string; _target_id: string }
+        Returns: Json
+      }
+      tasks_revoke_web_push_endpoint: {
+        Args: { _endpoint: string; _reason?: string }
         Returns: Json
       }
       tasks_save_recurrence: {

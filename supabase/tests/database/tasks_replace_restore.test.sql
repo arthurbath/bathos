@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(21);
+SELECT plan(22);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -164,6 +164,24 @@ SELECT set_config(
     current_setting('test.replace_target')::jsonb
   )::text,
   false
+);
+
+SELECT is(
+  (
+    SELECT count(*)
+    FROM pg_catalog.pg_locks AS held_lock
+    JOIN pg_catalog.pg_class AS relation
+      ON relation.oid = held_lock.relation
+    JOIN pg_catalog.pg_namespace AS namespace
+      ON namespace.oid = relation.relnamespace
+    WHERE held_lock.pid = pg_catalog.pg_backend_pid()
+      AND held_lock.granted
+      AND held_lock.mode = 'ShareRowExclusiveLock'
+      AND namespace.nspname IN ('public', 'tasks_private')
+      AND relation.relname LIKE 'tasks_%'
+  ),
+  0::bigint,
+  'prepares a replacement snapshot without retaining a global task write lock'
 );
 
 SELECT is(

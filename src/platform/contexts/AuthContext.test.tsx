@@ -2,7 +2,7 @@ import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { Session } from '@supabase/supabase-js';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuthContext } from '@/platform/contexts/AuthContext';
 
 const getSessionMock = vi.fn();
@@ -33,8 +33,12 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 function Consumer() {
-  const { user, loading, displayName } = useAuthContext();
-  return <div data-testid="state" data-user-id={user?.id ?? ''} data-loading={String(loading)} data-display-name={displayName} />;
+  const { user, loading, displayName, signOut } = useAuthContext();
+  return (
+    <div data-testid="state" data-user-id={user?.id ?? ''} data-loading={String(loading)} data-display-name={displayName}>
+      <button type="button" onClick={() => void signOut()}>Sign Out</button>
+    </div>
+  );
 }
 
 function mount() {
@@ -89,6 +93,10 @@ async function waitForCondition(assertion: () => void, timeoutMs = 1500) {
 }
 
 describe('AuthProvider', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'serviceWorker');
+  });
+
   beforeEach(() => {
     authStateChangeHandler = null;
     getSessionMock.mockReset();
@@ -187,6 +195,38 @@ describe('AuthProvider', () => {
         expect(state?.getAttribute('data-user-id')).toBe('user-1');
         expect(state?.getAttribute('data-loading')).toBe('false');
       });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('unsubscribes user-bound browser push before completing sign-out', async () => {
+    const pushUnsubscribe = vi.fn().mockResolvedValue(true);
+    const getSubscription = vi.fn().mockResolvedValue({ unsubscribe: pushUnsubscribe });
+    const getRegistration = vi.fn().mockResolvedValue({ pushManager: { getSubscription } });
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { getRegistration },
+    });
+    signOutMock.mockResolvedValue({ error: null });
+
+    const { container, root } = mount();
+    try {
+      await waitForCondition(() => {
+        expect(container.querySelector<HTMLElement>('[data-testid="state"]')
+          ?.getAttribute('data-user-id')).toBe('user-1');
+      });
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('button')?.click();
+      });
+
+      expect(getRegistration).toHaveBeenCalledWith('/');
+      expect(pushUnsubscribe).toHaveBeenCalledOnce();
+      expect(signOutMock).toHaveBeenCalledOnce();
+      expect(pushUnsubscribe.mock.invocationCallOrder[0]).toBeLessThan(
+        signOutMock.mock.invocationCallOrder[0],
+      );
     } finally {
       cleanup(root, container);
     }

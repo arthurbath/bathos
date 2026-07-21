@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(32);
+SELECT plan(39);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -41,6 +41,10 @@ SELECT has_function(
 SELECT has_function(
   'public', 'tasks_revoke_web_push_target', ARRAY['uuid', 'text'],
   'revokes a browser target through an owner-scoped service'
+);
+SELECT has_function(
+  'public', 'tasks_revoke_web_push_endpoint', ARRAY['text', 'text'],
+  'revokes the current owner browser target by provider endpoint'
 );
 SELECT has_function(
   'public', 'tasks_claim_web_push_deliveries',
@@ -355,6 +359,74 @@ SELECT is(
   (SELECT count(*) FROM public.tasks_delivery_targets),
   0::bigint,
   'RLS hides another owner delivery targets'
+);
+
+SELECT set_config(
+  'test.transferred_push_target',
+  public.tasks_register_web_push_target(
+    'https://push.example.test/subscription-a',
+    'BD3ON8F5xP2N8xSjtbQ0vY4wRz9aV0H4k7g4wP9jQ5yX2zA1bC6dE8fG0hI2jK4lM6nO8pQ0rS2tU4vW6xY8z',
+    'aBcDeFgHiJkLmNoPqRsTuV',
+    'Shared Browser',
+    false
+  )::text,
+  false
+);
+SELECT is(
+  current_setting('test.transferred_push_target')::jsonb ->> 'outcome',
+  'accepted',
+  'transfers a browser endpoint to the newly signed-in owner'
+);
+
+RESET ROLE;
+SELECT is(
+  (
+    SELECT owner_id::text || ':' || count(*)::text
+    FROM public.tasks_web_push_subscriptions
+    GROUP BY owner_id
+  ),
+  '98000000-0000-4000-8000-000000000002:1',
+  'stores one provider credential for only the current browser owner'
+);
+SELECT is(
+  (
+    SELECT capability_status || ':' || last_error_code
+    FROM public.tasks_delivery_targets
+    WHERE id = (current_setting('test.push_target')::jsonb #>> '{target,id}')::uuid
+  ),
+  'revoked:account_changed',
+  'revokes the prior owner target when browser ownership changes'
+);
+
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'request.jwt.claim.sub', '98000000-0000-4000-8000-000000000002', true
+);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT is(
+  public.tasks_revoke_web_push_endpoint(
+    'https://push.example.test/subscription-a', 'account_signed_out'
+  ) ->> 'outcome',
+  'accepted',
+  'revokes the current account browser endpoint before sign-out'
+);
+
+RESET ROLE;
+SELECT is(
+  (SELECT count(*) FROM public.tasks_web_push_subscriptions),
+  0::bigint,
+  'removes provider credentials when the browser account signs out'
+);
+SELECT is(
+  (
+    SELECT capability_status || ':' || last_error_code
+    FROM public.tasks_delivery_targets
+    WHERE id = (
+      current_setting('test.transferred_push_target')::jsonb #>> '{target,id}'
+    )::uuid
+  ),
+  'revoked:account_signed_out',
+  'records the sign-out reason on the current owner target'
 );
 
 SELECT * FROM finish();

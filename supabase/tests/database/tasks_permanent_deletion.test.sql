@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(29);
+SELECT plan(30);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -292,6 +292,17 @@ SELECT throws_ok(
   ),
   '22023', 'Permanent deletion requires explicit confirmation',
   'rejects execution without the exact confirmation phrase'
+);
+SELECT throws_ok(
+  format(
+    $$SELECT public.tasks_permanently_delete(
+      'project', 'a1000000-0000-4000-8000-000000000010', %L,
+      'a1000000-0000-4000-8000-000000000070', NULL
+    )$$,
+    current_setting('test.permanent_fresh_preview')::jsonb ->> 'scope_digest'
+  ),
+  '22023', 'Permanent deletion requires explicit confirmation',
+  'rejects null confirmation before destructive scope evaluation'
 );
 
 SELECT set_config(

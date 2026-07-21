@@ -23,7 +23,6 @@ import { resolveTaskPlanningTimeZone } from '@/modules/tasks/domain/taskDates';
 import type { TasksSyncState } from '@/modules/tasks/components/tasksStorageStatus';
 import {
   bindTasksDatabaseOwner,
-  clearTasksDatabaseForSignOut,
   createTasksPowerSyncDatabase,
 } from '@/modules/tasks/sync/database';
 import { createTasksSupabaseConnector } from '@/modules/tasks/sync/connector';
@@ -32,6 +31,7 @@ import {
   type TasksRuntimeValue,
 } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import { observeTasksSyncState } from '@/modules/tasks/runtime/tasksSyncState';
+import { prepareTasksForSignOut } from '@/modules/tasks/runtime/taskSignOut';
 
 export function TasksRuntimeProvider({
   ownerId,
@@ -153,10 +153,13 @@ export function TasksRuntimeProvider({
     };
   }, [database, ownerId, repository]);
 
-  const prepareForSignOut = useCallback(
-    () => clearTasksDatabaseForSignOut(database),
-    [database],
-  );
+  const prepareForSignOut = useCallback(async () => {
+    await prepareTasksForSignOut({
+      database,
+      reminderService,
+      mode: state.status === 'ready' ? state.mode : 'local',
+    });
+  }, [database, reminderService, state]);
 
   const runtime = useMemo<TasksRuntimeValue>(
     () => ({

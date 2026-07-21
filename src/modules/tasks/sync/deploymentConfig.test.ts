@@ -11,6 +11,12 @@ const productionPublicationCreate = read('deploy/tasks-powersync/publication-cre
 const productionPublicationUpdate = read('deploy/tasks-powersync/publication-update.sql');
 const productionRole = read('deploy/tasks-powersync/database-role.sql');
 const productionVerify = read('deploy/tasks-powersync/verify.sql');
+const externalBoundaryMigration = read(
+  'supabase/migrations/20260721134118_harden_tasks_external_boundaries.sql',
+);
+const publicFunctionBoundaryMigration = read(
+  'supabase/migrations/20260721140852_close_powersync_public_function_path.sql',
+);
 const selfHostedExample = read('deploy/tasks-powersync/service.self-hosted.example.yaml');
 const disposableSyncConfig = read('spikes/tasks-module-reconnection/powersync/sync-config.yaml');
 const disposablePublication = read('spikes/tasks-module-reconnection/sql/setup.sql');
@@ -56,6 +62,24 @@ describe('Tasks PowerSync deployment configuration', () => {
     expect(selfHostedExample).toContain('uri: !env PS_DATA_SOURCE_URI');
     expect(selfHostedExample).toContain('uri: !env PS_STORAGE_URI');
     expect(selfHostedExample.match(/sslmode: verify-full/g)).toHaveLength(2);
+  });
+
+  it('normalizes and verifies the replication login as a bounded effective data surface', () => {
+    expect(productionRole).toContain('TASKS_POWERSYNC_ROLE_NORMALIZATION');
+    expect(productionRole).toContain('NOCREATEDB NOCREATEROLE NOINHERIT');
+    expect(productionRole).toContain('tasks_powersync_role is a superuser');
+    expect(productionRole).toContain('aclexplode(relation.relacl)');
+    expect(productionRole).toContain('aclexplode(attribute.attacl)');
+    expect(productionRole).toContain('REVOKE %I FROM tasks_powersync_role');
+    expect(productionVerify).toContain('has_schema_privilege');
+    expect(productionVerify).toContain('can create persistent database objects');
+    expect(productionVerify).toContain('public SECURITY DEFINER function');
+    expect(productionVerify).toContain('managed pg_net exception');
+    expect(productionVerify).toContain('unexpected role memberships');
+    expect(externalBoundaryMigration).not.toContain('REVOKE USAGE ON SCHEMA net FROM PUBLIC');
+    expect(publicFunctionBoundaryMigration).toContain(
+      'REVOKE EXECUTE ON FUNCTION public.is_snake_household_member(uuid, uuid)',
+    );
   });
 });
 

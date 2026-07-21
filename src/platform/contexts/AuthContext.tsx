@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { AuthError, Session, User } from '@supabase/supabase-js';
+import { unsubscribeUserBoundBrowserPush } from '@/platform/push/userBoundBrowserPush';
 
 interface AuthContextValue {
   user: User | null;
@@ -152,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
 
     try {
+      await unsubscribeUserBoundBrowserPush().catch(() => undefined);
       await supabase.auth.signOut();
     } finally {
       isSigningOutRef.current = false;

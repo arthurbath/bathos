@@ -7,10 +7,10 @@ Production provisioning was approved and completed on 2026 Jul 20. The active to
 ## Files
 
 - `sync-config.yaml` is the canonical owner-scoped PowerSync stream.
-- `database-role.sql` creates or rotates the dedicated least-privilege replication login using a password supplied through the process environment.
+- `database-role.sql` creates or rotates the dedicated least-privilege replication login using a password supplied through the process environment, removes stale memberships and explicit object grants, and reapplies only the approved Tasks access.
 - `publication-create.sql` creates the required fresh `powersync` publication.
 - `publication-update.sql` replaces the table set of an existing Tasks-only publication without dropping its replication slot.
-- `verify.sql` fails unless the role, publication, RLS, replica identity, grants, and exact table set match the approved contract.
+- `verify.sql` fails unless the role, publication, RLS, replica identity, grants, exact table set, and documented managed-schema exception match the approved contract.
 - `service.self-hosted.example.yaml` preserves the later self-hosting option without selecting it.
 
 The repository test `src/modules/tasks/sync/deploymentConfig.test.ts` keeps these files, the browser client schema, and the disposable integration harness synchronized.
@@ -37,7 +37,7 @@ ORDER BY pubname, schemaname, tablename;
 
 Use `publication-create.sql` only when `powersync` does not exist. Use `publication-update.sql` only after proving an existing `powersync` publication belongs exclusively to this Tasks deployment. The update intentionally removes unapproved tables from that publication.
 
-Run `verify.sql` before giving PowerSync the database connection. Its final row must report `ready` and 22 synchronized tables.
+Run `verify.sql` before giving PowerSync the database connection. Its final row must report `ready` and 22 synchronized tables. Verification evaluates schema usage together with effective relation and column privileges, and it rejects executable public `SECURITY DEFINER` functions. Hosted Supabase currently gives every database role inherited access to the `supabase_admin`-owned `net` schema, its two operational queue tables, and its request functions. The project `postgres` role cannot revoke that managed grant. Verification treats only that exact owner-controlled pg_net surface as an explicit infrastructure exception, rejects direct pg_net grants to the PowerSync role, and rejects every other non-Tasks schema or relation. The `powersync` publication and Sync Streams still contain only the approved 22 Tasks tables. Removing the pg_net exception requires Supabase support or replacement of the reminder scheduler.
 
 ## PowerSync Cloud Configuration
 

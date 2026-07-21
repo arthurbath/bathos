@@ -106,9 +106,10 @@ function provisionSyncDatabase(tempDirectory) {
     join(repositoryRoot, 'deploy/tasks-powersync/database-role.sql'),
     'utf8',
   );
-  const grantsStart = roleTemplate.indexOf('GRANT CONNECT ON DATABASE');
-  if (grantsStart < 0) fail('The PowerSync role grant contract could not be found');
-  const roleSql = `DO $tasks_powersync_role$\nBEGIN\n  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tasks_powersync_role') THEN\n    EXECUTE format('ALTER ROLE tasks_powersync_role WITH LOGIN REPLICATION BYPASSRLS PASSWORD %L', ${sqlLiteral(password)});\n  ELSE\n    EXECUTE format('CREATE ROLE tasks_powersync_role WITH LOGIN REPLICATION BYPASSRLS PASSWORD %L', ${sqlLiteral(password)});\n  END IF;\nEND\n$tasks_powersync_role$;\n\n${roleTemplate.slice(grantsStart)}`;
+  const normalizationMarker = '-- TASKS_POWERSYNC_ROLE_NORMALIZATION';
+  const normalizationStart = roleTemplate.indexOf(normalizationMarker);
+  if (normalizationStart < 0) fail('The PowerSync role normalization contract could not be found');
+  const roleSql = `DO $tasks_powersync_role$\nBEGIN\n  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tasks_powersync_role') THEN\n    EXECUTE format('ALTER ROLE tasks_powersync_role WITH LOGIN REPLICATION BYPASSRLS PASSWORD %L', ${sqlLiteral(password)});\n  ELSE\n    EXECUTE format('CREATE ROLE tasks_powersync_role WITH LOGIN REPLICATION BYPASSRLS PASSWORD %L', ${sqlLiteral(password)});\n  END IF;\nEND\n$tasks_powersync_role$;\n\n${roleTemplate.slice(normalizationStart)}`;
   const rolePath = join(tempDirectory, 'tasks-powersync-role.sql');
   const publicationPath = join(tempDirectory, 'tasks-powersync-publication.sql');
   const verifyPath = join(tempDirectory, 'tasks-powersync-verify.sql');

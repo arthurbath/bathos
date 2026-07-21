@@ -46,6 +46,10 @@ The system SHALL deploy remote task synchronization only through an explicitly a
 - **WHEN** the synchronized task projection is configured
 - **THEN** it excludes Web Push subscription material, Mail source lifecycle records, private operational context, and every non-Tasks module table
 
+#### Scenario: Bound non-Tasks database access
+- **WHEN** the dedicated synchronization role connects for logical replication
+- **THEN** its publication and application-data access contain exactly the approved synchronized Tasks tables, while deployment verification rejects every additional schema or relation except a documented, owner-controlled pg_net surface that hosted Supabase grants to all roles and the project database owner cannot revoke
+
 #### Scenario: Operate without an approved remote topology
 - **WHEN** no production PowerSync endpoint is configured
 - **THEN** the module identifies itself as local-only, preserves that installation's durable task data, and does not imply cross-device or MCP convergence
@@ -330,6 +334,10 @@ The system SHALL keep recurrence definitions separate from generated task occurr
 - **WHEN** clients or jobs concurrently request generation for the same logical recurrence event
 - **THEN** a uniqueness boundary returns the one existing occurrence instead of creating a duplicate
 
+#### Scenario: Continue calendar evaluation from its durable cursor
+- **WHEN** a calendar recurrence has already been evaluated through an earlier date and a new request evaluates it farther forward
+- **THEN** the server derives the first unevaluated and latest due logical steps directly, bounds catch-up work independently from the recurrence age, and does not rescan from the original start date
+
 #### Scenario: Evaluate missed calendar events
 - **WHEN** a calendar recurrence has one or more missed events
 - **THEN** the generator applies the definition's explicit `skip`, `latest`, or `all` policy and defaults to `latest`
@@ -477,6 +485,10 @@ The system SHALL provide append-only history, mutation receipts, inverse-mutatio
 - **WHEN** a user invokes the separately authorized and confirmed permanent-deletion operation for work already in Trash
 - **THEN** the system reports and then erases the selected hierarchy and related owner data without presenting the operation as undoable
 
+#### Scenario: Require the literal permanent-deletion confirmation
+- **WHEN** permanent deletion receives null, blank, differently cased, or otherwise changed confirmation input
+- **THEN** the server rejects the request before looking up or erasing task data and accepts only the exact documented phrase
+
 #### Scenario: Preview permanent deletion
 - **WHEN** a user requests permanent deletion for a deleted to-do or project root
 - **THEN** the server reports every hierarchy and related-data identifier that will be erased, every content-free integrity receipt that will remain, and a digest of that exact scope before accepting confirmation
@@ -524,6 +536,10 @@ The system SHALL provide append-only history, mutation receipts, inverse-mutatio
 #### Scenario: Replace data from a restore
 - **WHEN** a user explicitly selects replace restore
 - **THEN** the system limits replacement to the complete current export schema, returns a checksum-verified pre-restore server backup, requires that backup to be downloaded plus a separate exact confirmation, and atomically replaces task data only while the server snapshot still matches the downloaded backup digest
+
+#### Scenario: Prepare replacement without blocking task writes globally
+- **WHEN** an authenticated user validates an incoming replacement and requests the current pre-restore backup
+- **THEN** preparation reads one transaction-consistent snapshot without taking a table-wide task write lock, while confirmed replacement retains the atomic lock and stale-backup check
 
 #### Scenario: Reject a stale replacement backup
 - **WHEN** synchronized task data changes after the pre-restore backup is prepared and before replacement executes
@@ -587,6 +603,14 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 #### Scenario: Register Web Push explicitly
 - **WHEN** a user invokes the browser-reminder Enable action on a supported secure client and grants notification permission
 - **THEN** the client registers one standards-based service-worker subscription, the server stores its provider credentials outside the synchronized target projection, and repeated registration reuses the target identity
+
+#### Scenario: Transfer one browser subscription between accounts
+- **WHEN** a browser endpoint is registered by a different signed-in owner on the same installation
+- **THEN** the server cancels pending delivery for the prior owner, removes the prior provider credential, marks the prior target revoked, and assigns that endpoint only to the current owner
+
+#### Scenario: Invalidate browser delivery on sign-out
+- **WHEN** a signed-in owner signs out from Tasks or another BathOS route on an installation with a browser subscription
+- **THEN** the installation unsubscribes before completing sign-out, and the Tasks route also revokes the owner-scoped server target when that authenticated operation is available
 
 #### Scenario: Inspect Web Push without implicit registration
 - **WHEN** a connected user opens Tasks before enabling browser reminders
