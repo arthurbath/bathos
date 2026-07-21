@@ -151,12 +151,14 @@
 ## 8. Optional Native Apple Companion
 
 - [x] 8.1 Decide whether observed workflows justify a native Apple companion after the web and Raycast phases are usable.
-- [ ] 8.2 Select a native shell, native client, or hybrid architecture if the companion is approved.
-- [ ] 8.3 Establish stable Apple signing, bundle identifiers, entitlements, and local-device installation.
-- [ ] 8.4 Add native notifications and deep links only if web behavior is insufficient.
-- [ ] 8.5 Add selected WidgetKit widgets or controls tied to observed workflows.
-- [ ] 8.6 Enroll in the Apple Developer Program and configure TestFlight only if distribution or capabilities require it.
-- [ ] 8.7 Evaluate App Intents, Shortcuts actions, and Apple Watch support separately and implement only approved high-value surfaces.
+- [x] 8.2 Keep native architecture selection unactivated because no companion is currently approved.
+- [x] 8.3 Keep Apple signing, bundle identifiers, entitlements, and local-device installation unactivated until a native surface is approved.
+- [x] 8.4 Keep native notifications and deep links unactivated because the current web behavior is sufficient.
+- [x] 8.5 Keep WidgetKit widgets and controls unactivated until parallel use identifies a recurring workflow gap.
+- [x] 8.6 Keep Apple Developer Program enrollment and TestFlight unactivated until distribution or capabilities require them.
+- [x] 8.7 Keep App Intents, Shortcuts actions, and Apple Watch support unactivated until a separately approved high-value workflow justifies them.
+
+The native companion gate is closed for this change. Future native work requires a specific observed gap, explicit approval, and a new OpenSpec change that selects the smallest appropriate surface.
 
 ## 9. Documentation, Validation, and Closeout
 
