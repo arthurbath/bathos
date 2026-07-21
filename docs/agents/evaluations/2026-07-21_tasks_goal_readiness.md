@@ -61,6 +61,8 @@ A 2026 Jul 21 local production-build pass used a disposable local Supabase accou
 
 Commit `c236b99` was pushed to `main` and published through Lovable deployment `891c310c-2a40-4bc6-8dbc-b6138bca122a`. Production serves Tasks worker version 6. Before the deployment, the existing Safari Tasks installation reported `Synced` and `Browser Reminders On`. Post-deployment Safari offline relaunch remains pending because Safari became actively user-controlled during the acceptance pass, so automation stopped rather than taking over the foreground browser.
 
+An isolated production browser then registered the deployed worker without signing in or enabling notifications. Production staged 25 public assets plus the shell document, retained notification permission as `default`, and cold-launched `/tasks/today` offline into the ordinary signed-out BathOS surface. This confirms the published hosting and CDN artifact. It does not replace the pending authenticated Safari and installed-iPhone acceptance gates.
+
 ## Connector Discovery Note
 
 The BathOS connector catalog attached to this long-running Codex task still exposes the older Budget, Garage, Snake, and Wardrobe tool set. A direct authenticated production `tools/list` request through the existing Raycast OAuth grant confirms that the deployed service includes the complete Tasks tool set. The discrepancy is therefore client-session discovery staleness, not a missing production deployment. A fresh Codex task or connector refresh should discover the current catalog.
