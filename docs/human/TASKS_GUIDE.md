@@ -1,6 +1,6 @@
 # Tasks Guide
 
-BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Things remains authoritative during this trial. Tasks does not import, modify, or replace the Things library, and Inbox Manager does not send Mail tasks to BathOS yet.
+BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Things remains authoritative during this trial. Tasks does not import, modify, or replace the Things library. During an explicitly enabled, self-expiring Inbox Manager trial, each newly verified Mail task is created in Things first and then handed to BathOS Tasks as an independent parallel copy.
 
 ## Start Here
 
@@ -91,6 +91,7 @@ Use Tasks alongside Things for as long as needed. There is no migration deadline
 
 - Keep important established workflows in Things while Tasks earns trust through ordinary use.
 - Do not expect edits in either application to appear in the other.
-- Inbox Manager continues sending Mail tasks only to Things until dual writing receives separate approval.
+- The currently approved Inbox Manager trial ends automatically after 24 hours or 10 accepted parallel Mail tasks, whichever occurs first. Outside an explicitly enabled trial, Inbox Manager sends Mail tasks only to Things.
+- Parallel Mail handoff is creation-only. Things remains authoritative, no history is backfilled, and edits in either application do not appear in the other.
 - Report recurring friction, missed reminders, synchronization failures, or a specific desired widget or control. Those observations determine the next product slice.
 - Native Apple development remains deferred unless normal use reveals a gap that the installed web app, Web Push, Raycast, or MCP cannot serve adequately.
