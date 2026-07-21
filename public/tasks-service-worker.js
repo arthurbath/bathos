@@ -1,3 +1,7 @@
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
 self.addEventListener('push', (event) => {
   let payload = {};
   try {

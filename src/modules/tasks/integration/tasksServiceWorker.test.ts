@@ -5,7 +5,11 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-type ServiceWorkerListener = (event: {
+type InstallListener = (event: {
+  waitUntil: (operation: Promise<unknown>) => void;
+}) => void;
+
+type NotificationClickListener = (event: {
   notification: {
     close: () => void;
     data?: { navigateUrl?: unknown };
@@ -27,30 +31,38 @@ function createWindowClient(url: string): WindowClientStub {
   };
 }
 
-function loadNotificationClickListener(windows: WindowClientStub[]) {
-  const listeners = new Map<string, ServiceWorkerListener>();
+function loadServiceWorker(windows: WindowClientStub[]) {
+  const listeners = new Map<string, unknown>();
   const openWindow = vi.fn().mockResolvedValue(undefined);
+  const skipWaiting = vi.fn().mockResolvedValue(undefined);
   const serviceWorker = {
     location: { origin: 'https://os.bath.garden' },
     registration: { showNotification: vi.fn() },
+    skipWaiting,
     clients: {
       matchAll: vi.fn().mockResolvedValue(windows),
       openWindow,
     },
-    addEventListener: vi.fn((type: string, listener: ServiceWorkerListener) => {
+    addEventListener: vi.fn((type: string, listener: unknown) => {
       listeners.set(type, listener);
     }),
   };
   const source = readFileSync(resolve(process.cwd(), 'public/tasks-service-worker.js'), 'utf8');
   new Function('self', source)(serviceWorker);
 
-  const listener = listeners.get('notificationclick');
+  return { listeners, openWindow, skipWaiting };
+}
+
+function loadNotificationClickListener(windows: WindowClientStub[]) {
+  const { listeners, openWindow } = loadServiceWorker(windows);
+
+  const listener = listeners.get('notificationclick') as NotificationClickListener | undefined;
   if (!listener) throw new Error('The Tasks service worker did not register notificationclick');
   return { listener, openWindow };
 }
 
 async function clickNotification(
-  listener: ServiceWorkerListener,
+  listener: NotificationClickListener,
   navigateUrl: unknown,
 ) {
   let operation: Promise<unknown> | undefined;
@@ -64,6 +76,24 @@ async function clickNotification(
   await operation;
   return { close };
 }
+
+describe('Tasks service worker lifecycle', () => {
+  it('requests immediate activation when an updated worker installs', async () => {
+    const { listeners, skipWaiting } = loadServiceWorker([]);
+    const listener = listeners.get('install') as InstallListener | undefined;
+    if (!listener) throw new Error('The Tasks service worker did not register install');
+
+    let operation: Promise<unknown> | undefined;
+    listener({
+      waitUntil: (pending) => {
+        operation = pending;
+      },
+    });
+    await operation;
+
+    expect(skipWaiting).toHaveBeenCalledOnce();
+  });
+});
 
 describe('Tasks service worker notification routing', () => {
   it('reuses an existing Tasks client without replacing another BathOS module', async () => {

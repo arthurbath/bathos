@@ -608,6 +608,10 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** a user opens a Web Push notification while browser windows include another BathOS module, an existing Tasks route, or no Tasks route
 - **THEN** the service worker accepts only a same-origin Tasks destination, reuses and focuses an existing Tasks client when available, otherwise opens a new Tasks window, and never navigates the unrelated BathOS module away from its current route
 
+#### Scenario: Activate a published reminder worker promptly
+- **WHEN** a backward-compatible Tasks reminder service worker update installs while BathOS tabs remain open
+- **THEN** the worker requests immediate activation so future push and notification-click events use the published behavior without requiring every existing BathOS tab to close
+
 ### Requirement: Evidence-Gated Native Apple Expansion
 The system SHALL treat native Apple surfaces as an optional extension of the shared task domain and SHALL require a specific observed workflow gap before creating a native companion.
 
