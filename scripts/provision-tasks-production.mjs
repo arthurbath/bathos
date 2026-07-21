@@ -113,10 +113,21 @@ function provisionSyncDatabase(tempDirectory) {
   const rolePath = join(tempDirectory, 'tasks-powersync-role.sql');
   const publicationPath = join(tempDirectory, 'tasks-powersync-publication.sql');
   const verifyPath = join(tempDirectory, 'tasks-powersync-verify.sql');
+  const publicationStatus = JSON.parse(run('supabase', [
+    'db', 'query', '--linked', '--output-format', 'json',
+    "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_publication WHERE pubname = 'powersync') AS publication_exists",
+  ], { capture: true }));
+  const publicationExists = publicationStatus?.rows?.[0]?.publication_exists;
+  if (typeof publicationExists !== 'boolean') {
+    fail('Supabase returned an unexpected PowerSync publication status');
+  }
+  const publicationSource = publicationExists
+    ? 'publication-update.sql'
+    : 'publication-create.sql';
   writePrivate(rolePath, roleSql);
   writePrivate(
     publicationPath,
-    withoutPsqlMetaCommands(join(repositoryRoot, 'deploy/tasks-powersync/publication-create.sql')),
+    withoutPsqlMetaCommands(join(repositoryRoot, 'deploy/tasks-powersync', publicationSource)),
   );
   writePrivate(
     verifyPath,

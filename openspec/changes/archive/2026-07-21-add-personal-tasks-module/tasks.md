@@ -145,7 +145,7 @@ Inbox Manager integration remains deferred for this change. Future activation re
 - [x] 7.8 Run a sustained parallel-use evaluation and record unresolved trust failures before any migration decision.
 - [x] 7.9 Add an executable Tasks-only TypeScript contract gate and repair all current module and task-MCP type failures.
 - [x] 7.10 Add direct connected-hook contract tests for owner-local template dates, recurrence evaluation, reminder claims, optimistic state, and local-only mutation gates.
-- [ ] 7.11 Audit the production Tasks topology and optimize reminder RLS owner checks without weakening owner isolation.
+- [x] 7.11 Audit the production Tasks topology and optimize reminder RLS owner checks without weakening owner isolation.
 - [x] 7.12 Harden the Tasks replication role, destructive confirmation, replace preview, recurrence cursor, and browser-subscription account boundary with focused regression tests.
 - [x] 7.13 Restrict the privileged Web Push network sink to approved browser-provider endpoints and revoke rejected targets without sending.
 - [x] 7.14 Capture each template source revision and hierarchy from one database statement snapshot under concurrent edits.
@@ -164,10 +164,10 @@ The native companion gate is closed for this change. Future native work requires
 
 ## 9. Documentation, Validation, and Closeout
 
-- [ ] 9.1 Keep the proposal, design, specs, and task list current as discovery or implementation changes the contract.
+- [x] 9.1 Keep the proposal, design, specs, and task list current as discovery or implementation changes the contract.
 - [x] 9.2 Update README and human documentation when the task module becomes available to its intended users.
-- [ ] 9.3 Run focused task-domain and module tests after each implementation slice.
-- [ ] 9.4 Run `npm run lint`, `npm run build`, and `npm run test` before declaring an implementation phase complete.
-- [ ] 9.5 Run `npm run spec:validate` throughout the change.
-- [ ] 9.6 Sync completed delta specs into canonical specs and archive the OpenSpec change only after all required behavior is implemented and verified.
+- [x] 9.3 Run focused task-domain and module tests after each implementation slice.
+- [x] 9.4 Run `npm run lint`, `npm run build`, and `npm run test` before declaring an implementation phase complete.
+- [x] 9.5 Run `npm run spec:validate` throughout the change.
+- [x] 9.6 Sync completed delta specs into canonical specs and archive the OpenSpec change only after all required behavior is implemented and verified.
 - [ ] 9.7 Commit, push, and verify a clean synchronized repository only when the user requests publication or closeout.

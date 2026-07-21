@@ -11,6 +11,7 @@ const productionPublicationCreate = read('deploy/tasks-powersync/publication-cre
 const productionPublicationUpdate = read('deploy/tasks-powersync/publication-update.sql');
 const productionRole = read('deploy/tasks-powersync/database-role.sql');
 const productionVerify = read('deploy/tasks-powersync/verify.sql');
+const productionProvisioner = read('scripts/provision-tasks-production.mjs');
 const externalBoundaryMigration = read(
   'supabase/migrations/20260721134118_harden_tasks_external_boundaries.sql',
 );
@@ -79,6 +80,15 @@ describe('Tasks PowerSync deployment configuration', () => {
     expect(externalBoundaryMigration).not.toContain('REVOKE USAGE ON SCHEMA net FROM PUBLIC');
     expect(publicFunctionBoundaryMigration).toContain(
       'REVOKE EXECUTE ON FUNCTION public.is_snake_household_member(uuid, uuid)',
+    );
+  });
+
+  it('selects the existing-publication update path without losing the fresh-install path', () => {
+    expect(productionProvisioner).toContain('pg_catalog.pg_publication');
+    expect(productionProvisioner).toContain("? 'publication-update.sql'");
+    expect(productionProvisioner).toContain(": 'publication-create.sql'");
+    expect(productionProvisioner).toContain(
+      "typeof publicationExists !== 'boolean'",
     );
   });
 });
