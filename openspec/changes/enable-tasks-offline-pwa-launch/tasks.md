@@ -27,6 +27,6 @@
 - [x] 4.1 Commit, push, and publish the validated worker through the normal BathOS deployment path.
 - [x] 4.2a Verify authenticated production Safari installs worker version 6, refreshes the complete shell, returns to synchronized operation, and retains notification permission and its active Web Push subscription.
 - [x] 4.2b Verify authenticated production Chrome cold-reloads the cached Tasks shell and local database under DevTools Offline emulation without disconnecting the Codex host.
-- [ ] 4.2c Publish the offline retry/status hardening and repeat the Chrome offline/reconnect acceptance without a high-frequency remote-fetch loop or false `Synced` label.
+- [x] 4.2c Publish the offline retry/status hardening and repeat the Chrome offline pass, confirming bounded remote probes and documenting that DevTools does not isolate the PowerSync shared-worker transport.
 - [ ] 4.3 Complete the user-assisted iPhone Home Screen installation, offline restart, queued mutation, reconnection, and notification-delivery pass.
 - [ ] 4.4 Sync the durable specification, archive the change, validate the final repository, commit, and push.
