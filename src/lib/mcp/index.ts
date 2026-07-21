@@ -18,6 +18,7 @@ import {
   updateTaskHeading,
   updateTaskProject,
 } from "./tools/tasks-hierarchy-update";
+import { transitionTaskHierarchy } from "./tools/tasks-hierarchy-transition";
 import {
   beginMailRetirement,
   createMailTask,
@@ -77,6 +78,7 @@ export default defineMcp({
     updateTaskProject,
     updateTaskHeading,
     updateTaskChecklistItem,
+    transitionTaskHierarchy,
     createMailTask,
     beginMailRetirement,
     resolveMailRetirement,

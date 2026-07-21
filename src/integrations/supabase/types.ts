@@ -3052,6 +3052,17 @@ export type Database = {
         }
         Returns: Json
       }
+      tasks_request_mcp_hierarchy_operation: {
+        Args: {
+          _descendant_policy?: string
+          _expected_revision: number
+          _operation: string
+          _request_id: string
+          _root_id: string
+          _root_type: string
+        }
+        Returns: Json
+      }
       tasks_resolve_mail_retirement: {
         Args: {
           _error_code?: string

@@ -1936,13 +1936,244 @@ var updateTaskChecklistItem = defineTool({
   )
 });
 
+// src/lib/mcp/tools/tasks-hierarchy-transition.ts
+function stripOwner4(row) {
+  const { owner_id: _ownerId, ...record } = row;
+  return record;
+}
+function jsonObject(value) {
+  if (value === null || Array.isArray(value) || typeof value !== "object") {
+    throw new Error("The hierarchy operation receipt is invalid.");
+  }
+  return value;
+}
+function normalizeRequest2(input) {
+  if (input.transition === "complete" || input.transition === "cancel") {
+    if (input.root_type !== "project") {
+      throw new Error("Only projects can be completed or canceled through this hierarchy operation.");
+    }
+    return {
+      ...input,
+      operation: input.transition === "complete" ? "complete_project" : "cancel_project",
+      policy: input.descendant_policy ?? "reject"
+    };
+  }
+  if (input.transition === "reopen") {
+    if (input.root_type !== "project") {
+      throw new Error("Only projects can be reopened through this hierarchy operation.");
+    }
+    if (input.descendant_policy === "cascade") {
+      throw new Error("Reopening a project does not cascade to descendants.");
+    }
+    return { ...input, operation: "reopen_project", policy: "reject" };
+  }
+  if (input.descendant_policy !== void 0) {
+    throw new Error("Deletion and restoration use the required atomic cascade automatically.");
+  }
+  return { ...input, operation: input.transition, policy: "cascade" };
+}
+async function readOne5(query) {
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function readRoot(auth2, rootType, rootId) {
+  if (rootType === "area") {
+    return readOne5(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", rootId).maybeSingle());
+  }
+  if (rootType === "project") {
+    return readOne5(auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("id", rootId).maybeSingle());
+  }
+  if (rootType === "heading") {
+    return readOne5(auth2.supabase.from("tasks_headings").select("*").eq("owner_id", auth2.userId).eq("id", rootId).maybeSingle());
+  }
+  return readOne5(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", rootId).maybeSingle());
+}
+async function readOperation(auth2, mutationId) {
+  return readOne5(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
+}
+async function assertMutationIdAvailable(auth2, mutationId) {
+  const [taskEvent, hierarchyEvent] = await Promise.all([
+    readOne5(auth2.supabase.from("tasks_history_events").select("id").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle()),
+    readOne5(auth2.supabase.from("tasks_hierarchy_history_events").select("id").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle())
+  ]);
+  if (taskEvent !== null || hierarchyEvent !== null) {
+    throw new Error("The mutation identifier is unavailable. Use a new UUID for a new request.");
+  }
+}
+function expectedRootRevision(operation, rootId) {
+  const value = jsonObject(operation.expected_revisions)[rootId];
+  return typeof value === "number" && Number.isSafeInteger(value) ? value : null;
+}
+function assertExactRetry2(request, operation) {
+  if (operation.root_type !== request.root_type || operation.root_id !== request.root_id || operation.operation !== request.operation || operation.descendant_policy !== request.policy || operation.actor_type !== "automation" || operation.mutation_channel !== "mcp" || expectedRootRevision(operation, request.root_id) !== request.expected_revision) {
+    throw new Error("The mutation identifier was already used for a different hierarchy operation.");
+  }
+}
+function operationFromJson(value) {
+  const object = jsonObject(value);
+  if (typeof object.id !== "string" || typeof object.root_type !== "string" || typeof object.root_id !== "string" || typeof object.operation !== "string" || typeof object.descendant_policy !== "string" || typeof object.requested_at !== "string" || typeof object.outcome !== "string" || !Array.isArray(object.affected_ids)) {
+    throw new Error("The hierarchy operation receipt is invalid.");
+  }
+  return object;
+}
+function revisionMap(value) {
+  const object = jsonObject(value);
+  return Object.fromEntries(Object.entries(object).flatMap(([id, revision]) => typeof revision === "number" && Number.isSafeInteger(revision) ? [[id, revision]] : []));
+}
+function operationReceipt(request, operation, current) {
+  const before = revisionMap(operation.expected_revisions);
+  const after = revisionMap(operation.result_revisions);
+  const ids = /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)]);
+  const affectedRevisions = Object.fromEntries([...ids].map((id) => [id, {
+    base_revision: before[id] ?? null,
+    result_revision: after[id] ?? before[id] ?? null
+  }]));
+  const outcome = operation.outcome;
+  if (!["accepted", "noop", "rejected", "conflict"].includes(outcome)) {
+    throw new Error("The hierarchy operation has not reached a terminal outcome.");
+  }
+  return {
+    client_mutation_id: operation.id,
+    actor_type: "automation",
+    mutation_channel: "mcp",
+    affected_ids: operation.affected_ids,
+    base_revision: request.expected_revision,
+    result_revision: after[request.root_id] ?? current?.revision ?? request.expected_revision,
+    affected_revisions: affectedRevisions,
+    transition: request.transition,
+    occurred_at: operation.completed_at ?? operation.requested_at,
+    outcome,
+    code: operation.code
+  };
+}
+function ephemeralReceipt2(request, root, outcome, code) {
+  return {
+    client_mutation_id: request.client_mutation_id,
+    actor_type: "automation",
+    mutation_channel: "mcp",
+    affected_ids: [root.id],
+    base_revision: request.expected_revision,
+    result_revision: root.revision,
+    affected_revisions: {
+      [root.id]: { base_revision: request.expected_revision, result_revision: root.revision }
+    },
+    transition: request.transition,
+    occurred_at: (/* @__PURE__ */ new Date()).toISOString(),
+    outcome,
+    code
+  };
+}
+function mutationResult2(mutationOutcome, receipt2, request, root) {
+  return {
+    mutation_outcome: mutationOutcome,
+    receipt: receipt2,
+    record_type: request.root_type,
+    record: root === null ? null : stripOwner4(root)
+  };
+}
+function alreadyCurrent(request, root) {
+  if (request.transition === "delete") return root.disposition === "deleted";
+  if (request.transition === "restore") return root.disposition === "present";
+  const project = root;
+  return request.transition === "complete" && project.lifecycle === "completed" || request.transition === "cancel" && project.lifecycle === "canceled" || request.transition === "reopen" && project.lifecycle === "open";
+}
+function assertLifecycleSource(request, root) {
+  if (request.transition === "complete" || request.transition === "cancel") {
+    if (root.lifecycle !== "open") {
+      throw new Error("Reopen the project before completing or canceling it.");
+    }
+  }
+}
+function assertLifecycleRootPresent(request, root) {
+  if (request.operation.endsWith("_project") && root.disposition !== "present") {
+    throw new Error("Restore the project before changing its lifecycle.");
+  }
+}
+async function callOperation(request, auth2) {
+  const { data, error } = await auth2.supabase.rpc("tasks_request_mcp_hierarchy_operation", {
+    _request_id: request.client_mutation_id,
+    _root_type: request.root_type,
+    _root_id: request.root_id,
+    _expected_revision: request.expected_revision,
+    _operation: request.operation,
+    _descendant_policy: request.policy
+  });
+  if (error) throw new Error(error.message);
+  if (data === null) throw new Error("The hierarchy operation receipt is unavailable.");
+  return operationFromJson(data);
+}
+async function transitionTaskHierarchyData(input, auth2) {
+  const request = normalizeRequest2(input);
+  const replay = await readOperation(auth2, request.client_mutation_id);
+  if (replay !== null) {
+    assertExactRetry2(request, replay);
+    const current2 = await readRoot(auth2, request.root_type, request.root_id);
+    const outcome = replay.outcome === "accepted" || replay.outcome === "noop" ? "already_applied" : replay.outcome === "conflict" ? "conflict" : "rejected";
+    return mutationResult2(outcome, operationReceipt(request, replay, current2), request, current2);
+  }
+  await assertMutationIdAvailable(auth2, request.client_mutation_id);
+  const current = await readRoot(auth2, request.root_type, request.root_id);
+  if (current === null) throw new Error("The task hierarchy root is unavailable.");
+  if (current.revision !== request.expected_revision) {
+    return mutationResult2(
+      "conflict",
+      ephemeralReceipt2(request, current, "conflict", "revision_conflict"),
+      request,
+      current
+    );
+  }
+  assertLifecycleRootPresent(request, current);
+  if (alreadyCurrent(request, current)) {
+    return mutationResult2(
+      "noop",
+      ephemeralReceipt2(request, current, "noop", "already_current"),
+      request,
+      current
+    );
+  }
+  assertLifecycleSource(request, current);
+  const operation = await callOperation(request, auth2);
+  assertExactRetry2(request, operation);
+  const updated = await readRoot(auth2, request.root_type, request.root_id);
+  const mutationOutcome = operation.outcome === "accepted" ? "applied" : operation.outcome === "noop" ? "noop" : operation.outcome === "rejected" ? "rejected" : "conflict";
+  return mutationResult2(
+    mutationOutcome,
+    operationReceipt(request, operation, updated),
+    request,
+    updated
+  );
+}
+var transitionTaskHierarchy = defineTool({
+  name: "transition_task_hierarchy",
+  title: "Transition Task Hierarchy",
+  description: "Complete, cancel, or reopen one project, or recoverably delete or restore one area, project, heading, or checklist item with one atomic revision-checked hierarchy operation. Permanent deletion is not available.",
+  inputSchema: {
+    root_type: z.enum(["area", "project", "heading", "checklist_item"]),
+    root_id: uuidSchema.describe("Stable hierarchy root identifier."),
+    expected_revision: z.number().int().positive().describe("Current root revision returned by a task hierarchy read."),
+    client_mutation_id: uuidSchema.describe("Stable UUID for this logical mutation. Reuse it only to retry the exact same request."),
+    transition: z.enum(["complete", "cancel", "reopen", "delete", "restore"]),
+    descendant_policy: z.enum(["reject", "cascade"]).optional().describe("Project completion or cancellation policy. Omit for the safe reject default; cascade must be explicit.")
+  },
+  annotations: {
+    readOnlyHint: false,
+    idempotentHint: true,
+    destructiveHint: false,
+    openWorldHint: false
+  },
+  handler: (input, ctx) => toMcpResult(
+    transitionTaskHierarchyData(input, requireAuthenticated(ctx))
+  )
+});
+
 // src/lib/mcp/tools/tasks-mail.ts
 import { generateTaskOrderKey as generateTaskOrderKey3 } from "npm:@/modules/tasks/domain/taskOrder";
 var messageDeepLinkSchema = z.string().max(8e3).refine(
   (value) => value.startsWith("message://"),
   { message: "Expected a message:// Mail deep link." }
 );
-async function readOne5(query) {
+async function readOne6(query) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data;
@@ -1956,7 +2187,7 @@ function trimRequired2(value, label, maxLength) {
   return normalized;
 }
 async function planningDate(auth2) {
-  const settings = await readOne5(auth2.supabase.from("tasks_user_settings").select("planning_timezone").eq("owner_id", auth2.userId).maybeSingle());
+  const settings = await readOne6(auth2.supabase.from("tasks_user_settings").select("planning_timezone").eq("owner_id", auth2.userId).maybeSingle());
   if (!settings) {
     throw new Error("Task planning settings are not initialized. Open the Tasks module once.");
   }
@@ -1964,17 +2195,17 @@ async function planningDate(auth2) {
 }
 async function validateArea(areaId, auth2) {
   if (!areaId) return null;
-  const area = await readOne5(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle());
+  const area = await readOne6(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle());
   if (!area) throw new Error("The task area is unavailable.");
   return area.id;
 }
 async function nextPlanningOrderKey2(startDate, auth2) {
-  const last = await readOne5(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", "today").eq("today_section", "daytime").eq("start_date", startDate).eq("lifecycle", "open").eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne6(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", "today").eq("today_section", "daytime").eq("start_date", startDate).eq("lifecycle", "open").eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey3(last?.order_key ?? null, null);
 }
 async function nextAreaOrderKey2(areaId, auth2) {
   if (areaId === null) return null;
-  const last = await readOne5(auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("area_id", areaId).is("project_id", null).is("heading_id", null).eq("lifecycle", "open").eq("disposition", "present").not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne6(auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("area_id", areaId).is("project_id", null).is("heading_id", null).eq("lifecycle", "open").eq("disposition", "present").not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey3(last?.hierarchy_order_key ?? null, null);
 }
 async function createMailTaskData(input, auth2) {
@@ -2165,7 +2396,7 @@ function rowSnapshot(row) {
 function snapshotsMatch(actual, expected, ignored = /* @__PURE__ */ new Set()) {
   return snapshotKeys.every((key) => ignored.has(key) || actual[key] === expected[key]);
 }
-async function readOne6(query) {
+async function readOne7(query) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data;
@@ -2176,7 +2407,7 @@ async function readMany2(query) {
   return data ?? [];
 }
 async function readTask(auth2, taskId) {
-  return readOne6(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", taskId).maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", taskId).maybeSingle());
 }
 async function requireTask(auth2, taskId) {
   const task = await readTask(auth2, taskId);
@@ -2184,10 +2415,10 @@ async function requireTask(auth2, taskId) {
   return task;
 }
 async function readHistoryByMutation(auth2, mutationId) {
-  return readOne6(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
 }
 async function readHierarchyOperation(auth2, mutationId) {
-  return readOne6(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
 }
 function historyReceipt(event) {
   return {
@@ -2203,7 +2434,7 @@ function historyReceipt(event) {
     code: event.code
   };
 }
-function ephemeralReceipt2(input, transition, task, outcome, code) {
+function ephemeralReceipt3(input, transition, task, outcome, code) {
   return {
     client_mutation_id: input.client_mutation_id,
     actor_type: "automation",
@@ -2217,14 +2448,14 @@ function ephemeralReceipt2(input, transition, task, outcome, code) {
     code
   };
 }
-function mutationResult2(status, receipt2, task) {
+function mutationResult3(status, receipt2, task) {
   return { mutation_outcome: status, receipt: receipt2, task: withoutOwner2(task) };
 }
 function assertCurrentMutationBoundary(input, task, transition) {
   if (task.revision !== input.expected_revision) {
-    return mutationResult2(
+    return mutationResult3(
       "conflict",
-      ephemeralReceipt2(input, transition, task, "conflict", "revision_conflict"),
+      ephemeralReceipt3(input, transition, task, "conflict", "revision_conflict"),
       task
     );
   }
@@ -2289,7 +2520,7 @@ function changedPatch2(current, patch) {
   );
 }
 async function planningDateForOwner2(auth2, instant = /* @__PURE__ */ new Date()) {
-  const settings = await readOne6(auth2.supabase.from("tasks_user_settings").select("*").eq("owner_id", auth2.userId).maybeSingle());
+  const settings = await readOne7(auth2.supabase.from("tasks_user_settings").select("*").eq("owner_id", auth2.userId).maybeSingle());
   if (settings === null) {
     throw new Error("Task planning settings are not initialized. Open the Tasks module first.");
   }
@@ -2307,7 +2538,7 @@ function validatePlanningPlacement(destination, todaySection2, startDate, planni
   }
 }
 async function nextPlanningOrderKey3(auth2, taskId, destination, todaySection2) {
-  const last = await readOne6(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", destination).eq("today_section", todaySection2).eq("lifecycle", "open").eq("disposition", "present").neq("id", taskId).order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne7(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", destination).eq("today_section", todaySection2).eq("lifecycle", "open").eq("disposition", "present").neq("id", taskId).order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey4(last?.order_key ?? null, null);
 }
 async function validateContainer2(auth2, areaId, projectId, headingId) {
@@ -2318,9 +2549,9 @@ async function validateContainer2(auth2, areaId, projectId, headingId) {
     throw new Error("A task heading requires project membership.");
   }
   const [area, project, heading] = await Promise.all([
-    areaId === null ? null : readOne6(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle()),
-    projectId === null ? null : readOne6(auth2.supabase.from("tasks_projects").select("id").eq("owner_id", auth2.userId).eq("id", projectId).eq("disposition", "present").eq("lifecycle", "open").maybeSingle()),
-    headingId === null ? null : readOne6(auth2.supabase.from("tasks_headings").select("id, project_id").eq("owner_id", auth2.userId).eq("id", headingId).eq("disposition", "present").maybeSingle())
+    areaId === null ? null : readOne7(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle()),
+    projectId === null ? null : readOne7(auth2.supabase.from("tasks_projects").select("id").eq("owner_id", auth2.userId).eq("id", projectId).eq("disposition", "present").eq("lifecycle", "open").maybeSingle()),
+    headingId === null ? null : readOne7(auth2.supabase.from("tasks_headings").select("id, project_id").eq("owner_id", auth2.userId).eq("id", headingId).eq("disposition", "present").maybeSingle())
   ]);
   if (areaId !== null && area === null) throw new Error("The task area is unavailable.");
   if (projectId !== null && project === null) throw new Error("The task project is unavailable.");
@@ -2334,7 +2565,7 @@ async function nextHierarchyOrderKey2(auth2, taskId, areaId, projectId, headingI
   query = areaId === null ? query.is("area_id", null) : query.eq("area_id", areaId);
   query = projectId === null ? query.is("project_id", null) : query.eq("project_id", projectId);
   query = headingId === null ? query.is("heading_id", null) : query.eq("heading_id", headingId);
-  const last = await readOne6(query.not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne7(query.not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey4(last?.hierarchy_order_key ?? null, null);
 }
 function hasOwn(input, key) {
@@ -2530,14 +2761,14 @@ async function resolveDirectRetry(request, auth2) {
   if (event === null) return null;
   assertExactHistoryRetry(request, event);
   const task = await requireTask(auth2, event.task_id);
-  return mutationResult2("already_applied", historyReceipt(event), task);
+  return mutationResult3("already_applied", historyReceipt(event), task);
 }
 async function writeDirectMutation(request, current, patch, transition, auth2) {
   const logicalPatch = changedPatch2(rowSnapshot(current), patch);
   if (Object.keys(logicalPatch).length === 0) {
-    return mutationResult2(
+    return mutationResult3(
       "noop",
-      ephemeralReceipt2(request.input, transition, current, "noop", "already_current"),
+      ephemeralReceipt3(request.input, transition, current, "noop", "already_current"),
       current
     );
   }
@@ -2561,16 +2792,16 @@ async function writeDirectMutation(request, current, patch, transition, auth2) {
     const retry = await resolveDirectRetry(request, auth2);
     if (retry !== null) return retry;
     const authoritative = await requireTask(auth2, current.id);
-    return mutationResult2(
+    return mutationResult3(
       "conflict",
-      ephemeralReceipt2(request.input, transition, authoritative, "conflict", "revision_conflict"),
+      ephemeralReceipt3(request.input, transition, authoritative, "conflict", "revision_conflict"),
       authoritative
     );
   }
   const event = await readHistoryByMutation(auth2, request.input.client_mutation_id);
   if (event === null) throw new Error("The accepted task mutation receipt is unavailable.");
   assertExactHistoryRetry(request, event);
-  return mutationResult2("applied", historyReceipt(event), data);
+  return mutationResult3("applied", historyReceipt(event), data);
 }
 async function runDirectMutation(request, auth2) {
   const retry = await resolveDirectRetry(request, auth2);
@@ -2618,9 +2849,9 @@ async function runDirectMutation(request, auth2) {
   }
   const transitionResult = transitionPatch(request.input, current, (/* @__PURE__ */ new Date()).toISOString());
   if (transitionResult.noop) {
-    return mutationResult2(
+    return mutationResult3(
       "noop",
-      ephemeralReceipt2(
+      ephemeralReceipt3(
         request.input,
         request.input.transition,
         current,
@@ -2688,7 +2919,7 @@ async function hierarchyResult(input, operation, auth2, retry) {
   const task = await requireTask(auth2, input.task_id);
   const receipt2 = hierarchyReceipt(operation);
   const status = retry && (operation.outcome === "accepted" || operation.outcome === "noop") ? "already_applied" : operation.outcome === "accepted" ? "applied" : operation.outcome === "noop" ? "noop" : operation.outcome === "conflict" ? "conflict" : "rejected";
-  return mutationResult2(status, receipt2, task);
+  return mutationResult3(status, receipt2, task);
 }
 async function expectedHierarchyRevisions(input, current, auth2) {
   let query = auth2.supabase.from("tasks_checklist_items").select("id, revision").eq("owner_id", auth2.userId);
@@ -2708,11 +2939,11 @@ async function runRecoveryTransition(input, auth2) {
   const current = await requireTask(auth2, input.task_id);
   const conflict = assertCurrentMutationBoundary(input, current, input.transition);
   if (conflict !== null) return conflict;
-  const alreadyCurrent = input.transition === "delete" && current.disposition === "deleted" || input.transition === "restore" && current.disposition === "present";
-  if (alreadyCurrent) {
-    return mutationResult2(
+  const alreadyCurrent2 = input.transition === "delete" && current.disposition === "deleted" || input.transition === "restore" && current.disposition === "present";
+  if (alreadyCurrent2) {
+    return mutationResult3(
       "noop",
-      ephemeralReceipt2(input, input.transition, current, "noop", "already_current"),
+      ephemeralReceipt3(input, input.transition, current, "noop", "already_current"),
       current
     );
   }
@@ -2824,7 +3055,7 @@ async function readMany3(query) {
   if (error) throw new Error(error.message);
   return data ?? [];
 }
-function stripOwner4(row) {
+function stripOwner5(row) {
   const { owner_id: _ownerId, ...record } = row;
   return record;
 }
@@ -2841,10 +3072,10 @@ async function getTaskTemplatesData(input, auth2) {
   ]));
   return {
     templates: visible.map((definition) => ({
-      ...stripOwner4(definition),
+      ...stripOwner5(definition),
       current_revision_record: currentByTemplate.has(
         `${definition.id}:${definition.current_revision}`
-      ) ? stripOwner4(currentByTemplate.get(`${definition.id}:${definition.current_revision}`)) : null
+      ) ? stripOwner5(currentByTemplate.get(`${definition.id}:${definition.current_revision}`)) : null
     })),
     truncated: definitions.length > input.limit
   };
@@ -2897,7 +3128,7 @@ async function readMany4(query) {
   if (error) throw new Error(error.message);
   return data ?? [];
 }
-function stripOwner5(row) {
+function stripOwner6(row) {
   const { owner_id: _ownerId, ...record } = row;
   return record;
 }
@@ -2917,15 +3148,15 @@ async function getTaskRecurrencesData(input, auth2) {
   const occurrencesByDefinition = /* @__PURE__ */ new Map();
   for (const occurrence of occurrences) {
     const rows = occurrencesByDefinition.get(occurrence.recurrence_id) ?? [];
-    rows.push(stripOwner5(occurrence));
+    rows.push(stripOwner6(occurrence));
     occurrencesByDefinition.set(occurrence.recurrence_id, rows);
   }
   return {
     recurrences: visible.map((definition) => ({
-      ...stripOwner5(definition),
+      ...stripOwner6(definition),
       current_revision_record: currentByDefinition.has(
         `${definition.id}:${definition.current_revision}`
-      ) ? stripOwner5(currentByDefinition.get(`${definition.id}:${definition.current_revision}`)) : null,
+      ) ? stripOwner6(currentByDefinition.get(`${definition.id}:${definition.current_revision}`)) : null,
       ...input.include_occurrences ? { occurrences: occurrencesByDefinition.get(definition.id) ?? [] } : {}
     })),
     truncated: definitions.length > input.limit,
@@ -3045,7 +3276,7 @@ async function readMany5(query) {
   if (error) throw new Error(error.message);
   return data ?? [];
 }
-function stripOwner6(row) {
+function stripOwner7(row) {
   const { owner_id: _ownerId, ...record } = row;
   return record;
 }
@@ -3059,12 +3290,12 @@ async function getTaskRemindersData(input, auth2) {
   const occurrencesByReminder = /* @__PURE__ */ new Map();
   for (const occurrence of occurrences.slice(0, 500)) {
     const rows = occurrencesByReminder.get(occurrence.reminder_id) ?? [];
-    rows.push(stripOwner6(occurrence));
+    rows.push(stripOwner7(occurrence));
     occurrencesByReminder.set(occurrence.reminder_id, rows);
   }
   return {
     reminders: visible.map((reminder) => ({
-      ...stripOwner6(reminder),
+      ...stripOwner7(reminder),
       root_id: reminder.task_id ?? reminder.project_id,
       ...input.include_occurrences ? { occurrences: occurrencesByReminder.get(reminder.id) ?? [] } : {}
     })),
@@ -3186,6 +3417,7 @@ var mcp_default = defineMcp({
     updateTaskProject,
     updateTaskHeading,
     updateTaskChecklistItem,
+    transitionTaskHierarchy,
     createMailTask,
     beginMailRetirement,
     resolveMailRetirement,

@@ -91,6 +91,26 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 - **WHEN** a new hierarchy mutation UUID requests content or checklist completion that is already current
 - **THEN** the server returns a content-free no-op receipt without changing the revision, completion timestamp, or append-only hierarchy history
 
+#### Scenario: Transition hierarchy lifecycle and recovery explicitly
+- **WHEN** an authenticated MCP client calls `transition_task_hierarchy`
+- **THEN** the tool completes, cancels, or reopens only a project, or recoverably deletes or restores one area, project, heading, or checklist item, without exposing generic lifecycle fields, physical deletion, or to-do behavior already owned by `transition_task`
+
+#### Scenario: Derive the atomic hierarchy revision set on the server
+- **WHEN** an MCP client requests a hierarchy lifecycle or recovery operation with the stable root identifier, current positive root revision, and logical mutation UUID
+- **THEN** Postgres derives the complete owner-scoped candidate revision set, substitutes the caller's expected root revision, and applies the operation only when that exact authoritative set remains current
+
+#### Scenario: Protect project descendants explicitly
+- **WHEN** an MCP client completes or cancels a project
+- **THEN** the default `reject` policy returns a content-free rejection while open descendant to-dos remain, an explicit `cascade` applies the terminal transition atomically to the project and open descendants, and reopening changes only the project
+
+#### Scenario: Retry a hierarchy lifecycle or recovery operation
+- **WHEN** an MCP client retries the exact hierarchy transition with the same mutation UUID after the operation or root has changed
+- **THEN** the server returns the immutable original operation receipt and current owner-safe root when it remains available without repeating the mutation, while changed reuse is rejected
+
+#### Scenario: Return safe hierarchy transition outcomes
+- **WHEN** a hierarchy lifecycle or recovery request is already current, stale, rejected by descendant policy, or accepted
+- **THEN** the server returns a no-op, conflict, rejected, or accepted receipt respectively, never exposes a partial hierarchy, and keeps permanent deletion outside the MCP schema
+
 #### Scenario: Use explicit to-do mutation tools
 - **WHEN** an authenticated MCP client edits content or source metadata, moves planning or container placement, schedules dates, or requests a lifecycle or recovery transition
 - **THEN** the server exposes `update_task`, `move_task`, `schedule_task`, or `transition_task` respectively instead of a generic record or arbitrary-patch mutation
