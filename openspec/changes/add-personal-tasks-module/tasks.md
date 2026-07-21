@@ -121,6 +121,8 @@
 - [x] 6.8a Add Finder capture for exactly one selected item with a typed local file source.
 - [x] 6.8b Add selected-text capture that actively copies the current selection and rejects stale clipboard content.
 - [x] 6.8c Add AI-enriched reading-list capture with typed reading provenance and Today placement.
+- [x] 6.8c1 Validate production Safari page, Finder item, and AI-enriched reading capture through OAuth, MCP, PowerSync, structured source links, and recoverable cleanup.
+- [ ] 6.8c2 Validate selected-text capture through the real Raycast host, including current-selection capture and prior-clipboard restoration on failure.
 - [x] 6.8d Add Mail capture after the structured source contract preserves account identity, message identity, deep link, and source-retirement lifecycle.
 - [x] 6.8d1 Add specialized atomic Mail task creation with request and source-identity deduplication.
 - [x] 6.8d2 Add guarded, auditable Mail source-retirement lifecycle mutations.
