@@ -73,6 +73,8 @@ Plan and complete personal tasks through a private-first, keyboard-focused workf
 
 Accessible at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Production synchronization and browser reminder delivery are active.
 
+See the [Tasks Guide](docs/human/TASKS_GUIDE.md) for setup, daily workflow, keyboard commands, reminders, backup, recovery, and the current parallel-use boundary.
+
 ### Wardrobe
 
 Track clothing items for a personal wardrobe. Features include:

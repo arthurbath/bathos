@@ -141,7 +141,7 @@
 
 ## 8. Optional Native Apple Companion
 
-- [ ] 8.1 Decide whether observed workflows justify a native Apple companion after the web and Raycast phases are usable.
+- [x] 8.1 Decide whether observed workflows justify a native Apple companion after the web and Raycast phases are usable.
 - [ ] 8.2 Select a native shell, native client, or hybrid architecture if the companion is approved.
 - [ ] 8.3 Establish stable Apple signing, bundle identifiers, entitlements, and local-device installation.
 - [ ] 8.4 Add native notifications and deep links only if web behavior is insufficient.
@@ -152,7 +152,7 @@
 ## 9. Documentation, Validation, and Closeout
 
 - [ ] 9.1 Keep the proposal, design, specs, and task list current as discovery or implementation changes the contract.
-- [ ] 9.2 Update README and human documentation when the task module becomes available to its intended users.
+- [x] 9.2 Update README and human documentation when the task module becomes available to its intended users.
 - [ ] 9.3 Run focused task-domain and module tests after each implementation slice.
 - [ ] 9.4 Run `npm run lint`, `npm run build`, and `npm run test` before declaring an implementation phase complete.
 - [ ] 9.5 Run `npm run spec:validate` throughout the change.

@@ -2,9 +2,15 @@
 
 **Date:** 2026-07-20
 **Category:** Deployment / Privacy / Trust
-**Status:** Locally ready, awaiting bounded production approval
+**Status:** Production Activation Complete, Personal Parallel Use Available
 
-## Decision Requested
+## Activation Outcome
+
+The owner approved every external production step in the requested order. The exact 22-table PowerSync boundary, owner-scoped Sync Streams, Supabase Auth, and public client endpoint are active. The reminder Edge Function, managed secrets, Vault-backed once-per-minute Cron job, and public web key are active. Safari completed explicit subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and synthetic cleanup acceptance.
+
+Production retains one real active Safari target and its matching credential. All task-specific acceptance fixtures and the isolated expired target were removed. The neutral Tasks route is available for personal parallel use, Things remains authoritative, and Inbox Manager dual writing remains disabled pending separate approval.
+
+## Original Decision Request
 
 Approve one bounded production-activation exercise for the neutral `/tasks` route. The exercise will provision remote synchronization and Web Push infrastructure, use synthetic accounts and device data first, remove the synthetic data, and stop before Inbox Manager dual writing or personal migration.
 
@@ -18,7 +24,7 @@ The approval includes these external changes:
 
 This approval does not include a product-name selection, launcher publication, Inbox Manager dual writing, Things mutation, Things migration, native Apple development, or treating BathOS as authoritative.
 
-## Current Production State
+## Pre-activation Production State
 
 A read-only Supabase inspection on 2026 Jul 20 confirmed:
 
@@ -30,7 +36,7 @@ A read-only Supabase inspection on 2026 Jul 20 confirmed:
 - No `tasks_reminder_dispatch_secret` Vault entry exists
 - No `dispatch-task-reminders` Edge Function exists
 
-The project is therefore cleanly unprovisioned. The activation can follow the fresh-install paths without reconciling a partial Tasks deployment.
+The project was therefore cleanly unprovisioned. Activation followed the fresh-install paths without reconciling a partial Tasks deployment.
 
 Current Supabase pricing excludes external replication from Free. The existing Pro organization resolves the plan-level eligibility question, although the dashboard should still show any incremental billing before an external replication connection is accepted. PowerSync Cloud Free remains the recommended bounded-trial topology. It adds a new data processor and an external account even when its direct service cost is zero.
 
@@ -92,7 +98,7 @@ Reminder rollback removes the fixed-name Cron job first. The Edge Function and i
 
 No rollback action writes to Things or enables Inbox Manager.
 
-## Local Evidence
+## Local Evidence Before Approval
 
 - Repository lint passed
 - Production build passed with Tasks retained as a lazy module chunk

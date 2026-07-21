@@ -2,7 +2,11 @@
 
 **Date:** 2026-07-20
 **Category:** Trust / Deployment / Security
-**Status:** Prepared Locally, Production Approval Pending
+**Status:** Production Synchronization Active
+
+## Production Outcome
+
+The owner later approved PowerSync Cloud, the dedicated replication role, the exact Tasks-only publication, the owner-scoped stream, Supabase Auth, and the public client endpoint. The production topology passed the synthetic cross-client, conflict, restart, owner-isolation, and cleanup gate. Production retains the approved 22-table boundary, and the disposable acceptance owners and task data were removed.
 
 ## Purpose
 
@@ -67,9 +71,9 @@ The stream publishes no Web Push subscription endpoint or encryption key, no nor
 
 The replication role must use `BYPASSRLS` because PowerSync reads the source independently of an end-user session. Owner-scoped Sync Streams are therefore a security-critical peer of RLS. The exact-set regression test and database preflight make that duplicated boundary explicit and reviewable.
 
-## Remaining Approval
+## Approval History
 
-No production state changed. A later read-only audit confirmed that the Bath Supabase organization is already on Pro, resolving the plan-level external-replication prerequisite. Production work still requires explicit approval to add PowerSync Cloud as a processor of personal task data, approve any incremental billing shown at activation, and create the production replication boundary. The permanent module name, launcher registration, Inbox Manager dual writing, and migration remain separate decisions.
+No production state changed during the readiness preparation. A later read-only audit confirmed that the Bath Supabase organization was already on Pro, resolving the plan-level external-replication prerequisite. The owner then approved and completed the PowerSync processor and production replication boundary. Inbox Manager dual writing and migration remain separate decisions.
 
 ## Evidence
 

@@ -2,13 +2,13 @@
 
 **Date:** 2026-07-20
 **Category:** Product / Architecture
-**Status:** Native implementation deferred pending lived parallel-use evidence
+**Status:** Decision Complete - Native Implementation Not Currently Justified
 
 ## Decision
 
-Do not build a native Apple companion yet. The current web/PWA and Raycast surfaces cover the workflows that can be justified before production parallel use: Cross-platform task operation, offline task data, global and contextual macOS capture, browser reminder delivery while the app is closed, and notification deep links back to the relevant task view.
+Do not build a native Apple companion yet. The current web/PWA and Raycast surfaces cover the workflows justified by the available evidence: Cross-platform task operation, offline task data, global and contextual macOS capture, browser reminder delivery while the app is closed, and notification deep links back to the relevant task view.
 
-This is a provisional deferral, not a permanent rejection. OpenSpec task 8.1 remains open because the decision explicitly depends on observed use after production synchronization and reminders are available. The next native decision should begin with evidence from that trial, not with a speculative Swift client.
+This closes OpenSpec task 8.1 with a decision to defer implementation, not a permanent rejection. Production synchronization, explicit Safari registration, provider acceptance, notification opening, route rendering, and user acknowledgement now work. The first notification incident was an application parser defect, not a browser-delivery limitation, and the web fix resolved it without a native target. A future native change should begin with evidence from normal use, not with a speculative Swift client.
 
 ## Existing Coverage
 
@@ -81,9 +81,9 @@ Public App Store eligibility remains a design constraint, not a current launch r
 
 ## Consequence for the Roadmap
 
-- Keep OpenSpec task 8.1 open until production web and Raycast use supplies observed evidence
+- Close OpenSpec task 8.1 with native implementation deferred
 - Do not scaffold an Xcode project, reserve permanent bundle identifiers, or create Apple extensions now
-- Complete production PowerSync and Web Push provisioning before judging native notification value
+- Keep tasks 8.2-8.7 dormant until one activation criterion is met
 - Record concrete widget, control, intent, or notification gaps during parallel use
 - If a trigger appears, choose the smallest companion architecture before beginning tasks 8.2-8.7
 
@@ -103,5 +103,7 @@ Public App Store eligibility remains a design constraint, not a current launch r
 
 - Narrowed the native decision from a general app question to four evidence-driven system-integration gaps
 - Recorded the existing PWA, Web Push, paired Apple Watch, and Raycast coverage
+- Verified production Safari registration, provider acceptance, notification opening, and acknowledgement without a native delivery target
+- Classified and fixed the first notification-opening failure as a synchronized-time parser defect rather than a Web Push limitation
 - Defined activation criteria and the minimum companion architecture
 - Left every native implementation task open pending lived parallel-use evidence
