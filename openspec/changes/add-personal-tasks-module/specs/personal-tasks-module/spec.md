@@ -26,6 +26,10 @@ The system SHALL deploy remote task synchronization only through an explicitly a
 - **WHEN** a production PowerSync service is approved for parallel use
 - **THEN** it uses direct encrypted database replication, a least-privilege task-only role and publication, owner-scoped Sync Streams, Supabase Auth verification, managed secrets, and a public HTTPS client endpoint
 
+#### Scenario: Join an existing multi-tab synchronization session
+- **WHEN** a Tasks tab opens after the shared multi-tab database has already reported its connection state
+- **THEN** the tab initializes from the current PowerSync status before waiting for later events and does not remain in a synthetic Connecting state
+
 #### Scenario: Validate production synchronization before personal use
 - **WHEN** the production service, publication, stream rules, authentication, and client endpoint are configured
 - **THEN** a synthetic owner proves cross-client download, queued upload, conflict handling, restart recovery, owner isolation, and cleanup before the user stores personal task content
@@ -547,6 +551,10 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 #### Scenario: Report an in-app reminder claim failure
 - **WHEN** an open connected client cannot claim due reminder deliveries
 - **THEN** the interface shows a content-free degraded state, preserves scheduled reminders and any previously claimed items, and exposes a bounded explicit retry
+
+#### Scenario: Bound a stalled in-app reminder claim
+- **WHEN** a connected client's due-reminder claim does not settle within the configured request window
+- **THEN** the client aborts the request, reports the content-free failure state, releases its in-flight guard, and leaves Retry available without changing reminder schedules or previously claimed items
 
 #### Scenario: Report a reminder acknowledgement failure
 - **WHEN** a visible or notification-opened reminder cannot be acknowledged

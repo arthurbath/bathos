@@ -56,6 +56,7 @@
 - [x] 4.4a Add a connected-only Trash preview and explicit confirmation surface for permanent deletion without exposing the operation through MCP.
 - [x] 4.5 Prove offline creation and completion across a client restart and later reconnection.
 - [x] 4.5a Expose queue depth, last successful synchronization, independent upload and download state, local-only limitations, and recent content-free conflict receipts through the web interface.
+- [x] 4.5b Initialize each Tasks tab from the current shared PowerSync status before relying on later status events.
 - [x] 4.6 Prove optimistic task display without stale-value snapback or focus disruption.
 - [x] 4.7 Add focused accessibility and keyboard tests for the minimal workflow.
 - [x] 4.7a Keep the task header and named hierarchy actions inside a 390px mobile viewport.
@@ -92,6 +93,7 @@
 - [x] 5.8h Keep reminder acknowledgement failures content-free and preserve the claimed delivery for explicit retry.
 - [x] 5.8i Keep notification clicks inside Tasks, preserve unrelated BathOS tabs, and open a fresh Tasks window when no reusable Tasks client exists.
 - [x] 5.8j Activate backward-compatible reminder-worker updates without requiring every open BathOS tab to close.
+- [x] 5.8k Bound due-reminder claim requests so stalled retries release for another attempt.
 - [x] 5.9 Add recurrence definitions and idempotent occurrence generation.
 - [x] 5.9a Report recurrence catch-up failure independently from accepted definition changes and expose bounded explicit retry.
 - [x] 5.9b Distinguish recurrence projection loading and failure from a trustworthy empty state.

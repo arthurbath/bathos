@@ -31,6 +31,7 @@ import {
   TasksRuntimeContext,
   type TasksRuntimeValue,
 } from '@/modules/tasks/runtime/tasksRuntimeContext';
+import { observeTasksSyncState } from '@/modules/tasks/runtime/tasksSyncState';
 
 export function TasksRuntimeProvider({
   ownerId,
@@ -105,14 +106,12 @@ export function TasksRuntimeProvider({
         if (endpoint) {
           const connector = createTasksSupabaseConnector({ endpoint, supabase });
           setSyncState('connecting');
-          disposeStatusListener = database.registerListener({
-            statusChanged: (status) => {
-              if (!active) {
-                return;
-              }
-              setSyncState(status.connected ? 'connected' : status.connecting ? 'connecting' : 'offline');
-              void refreshQueueDepth().catch(() => undefined);
-            },
+          disposeStatusListener = observeTasksSyncState(database, (nextSyncState) => {
+            if (!active) {
+              return;
+            }
+            setSyncState(nextSyncState);
+            void refreshQueueDepth().catch(() => undefined);
           });
           await refreshQueueDepth();
           queuePoll = setInterval(() => {

@@ -21,6 +21,8 @@ import {
 
 type TaskReminderClient = Pick<SupabaseClient<Database>, 'rpc'>;
 
+export const TASK_REMINDER_CLAIM_TIMEOUT_MS = 10_000;
+
 export type TaskReminderSaveInput = {
   reminder?: TaskReminder | null;
   rootType: TaskTemplateKind;
@@ -146,14 +148,27 @@ export class TaskReminderService {
   async claimDue(
     throughAt = new Date().toISOString(),
     requestId = crypto.randomUUID(),
+    timeoutMs = TASK_REMINDER_CLAIM_TIMEOUT_MS,
   ): Promise<TaskReminderClaimResult> {
     if (Number.isNaN(new Date(throughAt).valueOf())) {
       throw new InvalidTaskReminderError('A valid reminder claim time is required');
     }
-    const { data, error } = await this.client.rpc('tasks_claim_due_reminders', {
+    const controller = new AbortController();
+    const request = this.client.rpc('tasks_claim_due_reminders', {
       _through_at: throughAt,
       _request_id: requestId,
     });
+    const abortableRequest = request as typeof request & {
+      abortSignal?: (signal: AbortSignal) => typeof request;
+    };
+    const boundedRequest = typeof abortableRequest.abortSignal === 'function'
+      ? abortableRequest.abortSignal(controller.signal)
+      : request;
+    const { data, error } = await settleReminderClaim(
+      boundedRequest,
+      controller,
+      timeoutMs,
+    );
     if (error) throw error;
     const result = requireRecord(data, 'Reminder claim returned an invalid result');
     const items = requireArray(result.items, 'Reminder claim items are invalid')
@@ -235,6 +250,26 @@ export class TaskReminderService {
       ),
       target: parseTaskDeliveryTarget(result.target),
     };
+  }
+}
+
+async function settleReminderClaim<T>(
+  request: PromiseLike<T>,
+  controller: AbortController,
+  timeoutMs: number,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error('Reminder check timed out'));
+      controller.abort();
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([Promise.resolve(request), deadline]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
   }
 }
 

@@ -114,6 +114,36 @@ describe('TaskReminderService', () => {
     });
   });
 
+  it('bounds a stalled due-reminder claim and aborts the request', async () => {
+    vi.useFakeTimers();
+    try {
+      let signal: AbortSignal | undefined;
+      const request = new Promise<never>(() => undefined) as Promise<never> & {
+        abortSignal: (nextSignal: AbortSignal) => Promise<never>;
+      };
+      request.abortSignal = vi.fn((nextSignal: AbortSignal) => {
+        signal = nextSignal;
+        return request;
+      });
+      const rpc = vi.fn().mockReturnValue(request);
+      const service = new TaskReminderService({ rpc } as never);
+
+      const claim = service.claimDue(
+        '2026-07-20T16:00:00Z',
+        '10000000-0000-4000-8000-000000000001',
+        25,
+      );
+      const rejection = expect(claim).rejects.toThrow('Reminder check timed out');
+
+      await vi.advanceTimersByTimeAsync(25);
+      await rejection;
+      expect(request.abortSignal).toHaveBeenCalledOnce();
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('recognizes reminder times through synchronized fractional-second precision', () => {
     expect(isTaskReminderTime('09:30')).toBe(true);
     expect(isTaskReminderTime('09:30:00')).toBe(true);
