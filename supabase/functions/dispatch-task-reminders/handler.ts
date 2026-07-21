@@ -45,6 +45,41 @@ type HandlerDependencies = {
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
+const exactWebPushProviderHosts = new Set([
+  'android.googleapis.com',
+  'fcm.googleapis.com',
+  'updates.push.services.mozilla.com',
+]);
+
+function isProviderHost(hostname: string, providerDomain: string): boolean {
+  return hostname === providerDomain || hostname.endsWith(`.${providerDomain}`);
+}
+
+export function isTrustedWebPushEndpoint(endpoint: unknown): boolean {
+  if (typeof endpoint !== 'string' || endpoint.length === 0 || endpoint.length > 2048) {
+    return false;
+  }
+
+  try {
+    const url = new URL(endpoint);
+    if (
+      url.protocol !== 'https:'
+      || url.username.length > 0
+      || url.password.length > 0
+      || url.hash.length > 0
+    ) {
+      return false;
+    }
+
+    const hostname = url.hostname.toLowerCase();
+    return exactWebPushProviderHosts.has(hostname)
+      || isProviderHost(hostname, 'push.apple.com')
+      || isProviderHost(hostname, 'notify.windows.com');
+  } catch {
+    return false;
+  }
+}
+
 function parseKeyMap(serialized: string | null): string | null {
   if (!serialized) return null;
   try {
@@ -190,10 +225,14 @@ export function createReminderDispatchHandler(dependencies: HandlerDependencies)
     const pushConfiguration = { publicKey, privateKey, subject };
     await runInBatches(claim.items, 10, async (delivery) => {
       let failure: { code: string; revoked: boolean } | null = null;
-      try {
-        await dependencies.sendPush(delivery, pushConfiguration);
-      } catch (deliveryError) {
-        failure = providerFailure(deliveryError);
+      if (!isTrustedWebPushEndpoint(delivery.subscription?.endpoint)) {
+        failure = { code: 'push_endpoint_untrusted', revoked: true };
+      } else {
+        try {
+          await dependencies.sendPush(delivery, pushConfiguration);
+        } catch (deliveryError) {
+          failure = providerFailure(deliveryError);
+        }
       }
 
       let receiptError = false;

@@ -145,6 +145,7 @@
 - [x] 7.10 Add direct connected-hook contract tests for owner-local template dates, recurrence evaluation, reminder claims, optimistic state, and local-only mutation gates.
 - [ ] 7.11 Audit the production Tasks topology and optimize reminder RLS owner checks without weakening owner isolation.
 - [x] 7.12 Harden the Tasks replication role, destructive confirmation, replace preview, recurrence cursor, and browser-subscription account boundary with focused regression tests.
+- [x] 7.13 Restrict the privileged Web Push network sink to approved browser-provider endpoints and revoke rejected targets without sending.
 
 ## 8. Optional Native Apple Companion
 

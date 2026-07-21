@@ -628,6 +628,10 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** the dispatcher cannot persist the provider-accepted or failed outcome after attempting delivery
 - **THEN** the invocation reports failure with content-free diagnostics and does not report a fully successful run
 
+#### Scenario: Reject an untrusted Web Push endpoint
+- **WHEN** a claimed Web Push subscription endpoint is not an HTTPS endpoint owned by an approved browser push provider
+- **THEN** the dispatcher makes no network request, records a content-free terminal failure, and revokes the target so it is not retried
+
 #### Scenario: Prepare production Web Push configuration
 - **WHEN** reminder delivery is activated in a production environment
 - **THEN** the server and web build use one verified public VAPID key, the server keeps the matching private key and an independent high-entropy dispatch secret outside the repository, and the scheduled request resolves its matching header value from managed secrets without embedding it in the Cron command

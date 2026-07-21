@@ -21,4 +21,6 @@ Then create a Supabase Cron job that sends a `POST` request to `/functions/v1/di
 
 Use the secret-free package in `deploy/tasks-reminders/` for configuration preflight, fixed-name Cron creation, verification, rollback, and a rollback-only local SQL test. If a provider outcome cannot be recorded after a send attempt, the invocation returns an HTTP failure with a content-free `receipt_errors` count instead of falsely reporting a successful run.
 
+Immediately before delivery, the dispatcher permits only HTTPS subscription endpoints on provider-controlled Apple, Google, Mozilla, or Microsoft push-service hosts. An untrusted endpoint receives no network request and is revoked through the ordinary content-free failure receipt. Adding another push provider is an intentional code and deployment change, not a runtime secret or database setting.
+
 On iPhone and iPad, standards-based Web Push requires the Tasks route to be installed as a Home Screen web app. Notification permission is requested only from the explicit Enable action in the Tasks interface.

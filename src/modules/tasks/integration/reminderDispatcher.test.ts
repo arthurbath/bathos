@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   createReminderDispatchHandler,
+  isTrustedWebPushEndpoint,
   providerFailure,
   resolveSupabaseSecretKey,
   type PushDelivery,
@@ -26,7 +27,7 @@ const delivery = (id: string): PushDelivery => ({
   preview: 'title',
   navigate_url: `/tasks/today?reminder_delivery=${id}`,
   subscription: {
-    endpoint: `https://push.example.test/${id}`,
+    endpoint: `https://web.push.apple.com/${id}`,
     keys: { p256dh: 'p256dh', auth: 'auth' },
   },
 });
@@ -59,6 +60,22 @@ function buildHandler(options?: {
 }
 
 describe('task reminder dispatcher handler', () => {
+  it('accepts only HTTPS endpoints owned by approved browser push providers', () => {
+    expect(isTrustedWebPushEndpoint('https://web.push.apple.com/Q-device')).toBe(true);
+    expect(isTrustedWebPushEndpoint('https://fcm.googleapis.com/fcm/send/device')).toBe(true);
+    expect(isTrustedWebPushEndpoint('https://android.googleapis.com/gcm/send/device')).toBe(true);
+    expect(isTrustedWebPushEndpoint(
+      'https://updates.push.services.mozilla.com/wpush/v2/device',
+    )).toBe(true);
+    expect(isTrustedWebPushEndpoint('https://db3.notify.windows.com/?token=device')).toBe(true);
+
+    expect(isTrustedWebPushEndpoint('http://web.push.apple.com/Q-device')).toBe(false);
+    expect(isTrustedWebPushEndpoint('https://127.0.0.1/internal')).toBe(false);
+    expect(isTrustedWebPushEndpoint('https://web.push.apple.com.attacker.test/device')).toBe(false);
+    expect(isTrustedWebPushEndpoint('https://user@web.push.apple.com/device')).toBe(false);
+    expect(isTrustedWebPushEndpoint('https://push.example.test/device')).toBe(false);
+  });
+
   it('resolves current hosted, current local, and legacy secret-key shapes', () => {
     expect(resolveSupabaseSecretKey((name) => name === 'SUPABASE_SECRET_KEYS'
       ? JSON.stringify({ default: 'hosted-key' })
@@ -152,6 +169,46 @@ describe('task reminder dispatcher handler', () => {
       claimed: 2,
       receipt_errors: 0,
     })]);
+  });
+
+  it('revokes an untrusted endpoint without issuing a provider request', async () => {
+    const item = delivery('delivery-untrusted');
+    item.subscription.endpoint = 'https://127.0.0.1/internal';
+    const record = vi.fn(async () => ({ error: null }));
+    const sendPush = vi.fn(async () => undefined);
+    const { handler } = buildHandler({
+      claim: vi.fn(async () => ({
+        data: {
+          outcome: 'accepted',
+          through_at: '2026-07-20T12:00:00.000Z',
+          items: [item],
+        },
+        error: null,
+      })),
+      record,
+      sendPush,
+    });
+
+    const response = await handler(new Request('https://example.test', {
+      method: 'POST',
+      headers: { 'x-tasks-dispatch-secret': dispatchSecret },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      claimed: 1,
+      accepted: 0,
+      failed: 1,
+      revoked: 1,
+      receipt_errors: 0,
+    });
+    expect(sendPush).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledWith({
+      deliveryId: 'delivery-untrusted',
+      outcome: 'failed',
+      errorCode: 'push_endpoint_untrusted',
+      targetRevoked: true,
+    });
   });
 
   it('fails the invocation when a provider outcome cannot be recorded', async () => {
