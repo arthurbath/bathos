@@ -19,5 +19,5 @@
 
 - [x] 4.1 Run focused Tasks tests and `npm run typecheck:tasks`.
 - [x] 4.2 Run `npm run lint`, `npm run build`, `npm run test`, and `npm run spec:validate`.
-- [ ] 4.3 Verify the production Safari surface remains healthy after publication without creating personal task content.
-- [ ] 4.4 Sync the delta specification, archive the completed change, commit, push, and verify a clean synchronized repository.
+- [x] 4.3 Verify the production Safari surface remains healthy after publication without creating personal task content.
+- [x] 4.4 Sync the delta specification, archive the completed change, commit, push, and verify a clean synchronized repository.

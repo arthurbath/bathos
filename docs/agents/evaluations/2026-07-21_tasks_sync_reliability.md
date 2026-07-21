@@ -1,7 +1,7 @@
 # Tasks Synchronization Reliability
 
 **Date:** 2026 Jul 21  
-**Status:** Accepted for publication and continued parallel use  
+**Status:** Published and accepted for continued parallel use  
 **Scope:** Installed-client synchronization truthfulness, local reliability evidence, and privacy-bounded production warning behavior
 
 ## Decision
@@ -53,7 +53,22 @@ The Sentry warning receives only fixed copy and allowlisted tags for the module,
 - Observer tests cover initial-status loading, reload continuation, delayed reporting, and recovery breadcrumbs.
 - Diagnostics and schema tests cover first-full-sync truthfulness, content-free parsing, local-only storage, and visible recovery evidence.
 
-Prepublication validation passed with 683 enabled tests, 9 intentionally skipped opt-in tests, a successful Tasks typecheck, a successful production build, clean lint, and strict OpenSpec validation. Post-publication Safari evidence will be recorded during change closeout.
+Prepublication validation passed with 683 enabled tests, 9 intentionally skipped opt-in tests, a successful Tasks typecheck, a successful production build, clean lint, and strict OpenSpec validation.
+
+Commit `b2f8f74` was published through Lovable deployment `e85907c4-51ab-4e72-91e5-3081e3558463`. Production served Tasks chunk `TasksIndex-D8Yp0IX7.js`, which contains the first-sync label, reliability event surface, local health table, and fixed warning copy.
+
+Safari verification after publication on 2026 Jul 21 at approximately 9:12 AM PDT showed:
+
+- Header status: `Synced`
+- Health: Healthy
+- Full synchronization: Complete
+- Pending changes: 0
+- Upload: Idle
+- Download: Idle
+- Browser reminders: On
+- Recent conflict receipts: None
+
+The watchdog recorded one brief offline transition during the deployment reload and resolved it in the same minute with queue bucket `0`. The event did not cross the 2-minute report threshold and was not reported. No task content was created or changed during verification.
 
 ## Remaining Boundary
 
