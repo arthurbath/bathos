@@ -1429,7 +1429,7 @@ function RouteScopedHistoryHarness() {
   const location = useLocation();
 
   return (
-    <DataGridHistoryProvider key={location.pathname}>
+    <DataGridHistoryProvider resetKey={location.pathname}>
       <Routes>
         <Route path="/view-a" element={<RouteView value="Alpha" nextHref="/view-b" />} />
         <Route path="/view-b" element={<RouteView value="Bravo" nextHref="/view-a" />} />
@@ -1442,6 +1442,10 @@ function RouteView({ value, nextHref }: { value: string; nextHref: string }) {
   const [rows, setRows] = React.useState<SimpleUndoRowData[]>([
     { id: "route-row", value },
   ]);
+
+  React.useEffect(() => {
+    setRows([{ id: "route-row", value }]);
+  }, [value]);
 
   return (
     <div>

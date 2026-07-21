@@ -24,6 +24,6 @@ None.
 ## Impact
 
 - **Tasks module:** Route rendering and runtime lifecycle under `src/modules/tasks/`.
-- **Platform routing:** Tasks route registration in `src/App.tsx` and focused routing tests.
+- **Platform routing and grid history:** Tasks route registration plus the path-scoped DataGrid undo reset in `src/App.tsx`, with focused routing tests around the complete application wrapper.
 - **Synchronization and reminders:** No protocol, schema, Supabase, PowerSync, or reminder-service changes. The change prevents unnecessary teardown and reconnection.
 - **Blast radius:** Supported Tasks paths and unknown `/tasks/...` path handling only. Other BathOS modules and shared route behavior remain unchanged.

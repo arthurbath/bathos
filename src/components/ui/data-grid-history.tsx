@@ -78,12 +78,27 @@ function scheduleFocus(callback: () => void) {
   callback();
 }
 
-export function DataGridHistoryProvider({ children }: { children: React.ReactNode }) {
+export function DataGridHistoryProvider({
+  children,
+  resetKey,
+}: {
+  children: React.ReactNode;
+  resetKey?: string;
+}) {
   const gridsRef = React.useRef(new Map<string, RegisteredGrid>());
   const undoStackRef = React.useRef<GridHistoryEntry[]>([]);
   const redoStackRef = React.useRef<GridHistoryEntry[]>([]);
   const entryCounterRef = React.useRef(0);
   const operationInFlightRef = React.useRef(false);
+  const resetGenerationRef = React.useRef(0);
+
+  React.useEffect(() => {
+    resetGenerationRef.current += 1;
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    entryCounterRef.current = 0;
+    operationInFlightRef.current = false;
+  }, [resetKey]);
 
   const registerGrid = React.useCallback((gridId: string, registration: RegisteredGrid) => {
     gridsRef.current.set(gridId, registration);
@@ -140,9 +155,11 @@ export function DataGridHistoryProvider({ children }: { children: React.ReactNod
       event.preventDefault();
       event.stopPropagation();
       operationInFlightRef.current = true;
+      const operationGeneration = resetGenerationRef.current;
 
       void Promise.resolve(direction === 'undo' ? entry.undo() : entry.redo())
         .then(() => {
+          if (resetGenerationRef.current !== operationGeneration) return;
           destinationStack.push(entry);
           const focusTarget = direction === 'undo' ? entry.undoFocusTarget : entry.redoFocusTarget;
           if (!focusTarget) return;
@@ -156,9 +173,11 @@ export function DataGridHistoryProvider({ children }: { children: React.ReactNod
           });
         })
         .catch(() => {
+          if (resetGenerationRef.current !== operationGeneration) return;
           sourceStack.push(entry);
         })
         .finally(() => {
+          if (resetGenerationRef.current !== operationGeneration) return;
           operationInFlightRef.current = false;
         });
     };

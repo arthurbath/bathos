@@ -1,6 +1,6 @@
 ## Context
 
-BathOS currently registers every supported Tasks path as a sibling React Router route whose element contains `TasksIndex`. Moving from `/tasks/today` to `/tasks/inbox` therefore replaces the matched route element. React unmounts `TasksRuntimeProvider`, its cleanup closes the PowerSync database asynchronously, and the replacement provider immediately opens the same shared local database and starts another connection.
+BathOS currently registers every supported Tasks path as a sibling React Router route whose element contains `TasksIndex`. The application also keys the surrounding `DataGridHistoryProvider` by `location.pathname` so grid undo history clears on navigation. Either boundary can replace the descendant `TasksRuntimeProvider`. Its cleanup closes the PowerSync database asynchronously, and the replacement provider immediately opens the same shared local database and starts another connection.
 
 A production Safari pass reproduced the resulting trust failure. Today initially reported Synced and healthy reminders. Plain-left-click navigation to Inbox reported Offline, then remained Connecting, and the due-reminder claim surfaced a failure. Returning to Today remained Connecting. A full page reload restored Synced and healthy reminder capability. Source inspection also found that implemented area-detail links target `/tasks/areas/:areaId`, but that route is absent from the route registry and falls through to Not Found.
 
@@ -36,14 +36,21 @@ This avoids a second list drifting from route registration and fixes the existin
 
 ### Test provider identity through the real route boundary
 
-A router-level test will mock `TasksIndex` with mount and cleanup counters, navigate among Today, Inbox, a project detail, and an area detail, and prove one mount with no cleanup. It will also navigate to an unknown Tasks path and prove the Tasks subtree unmounts so the not-found boundary remains intact.
+A router-level test will mock `TasksIndex` with mount and cleanup counters, render it through the path-scoped DataGrid history wrapper used by the application, navigate among Today, Inbox, a project detail, and an area detail, and prove one mount with no cleanup. It will also navigate to an unknown Tasks path and prove the Tasks subtree unmounts so the not-found boundary remains intact.
 
 Pure route tests alone are insufficient because every prior path was technically registered. The defect is the React lifecycle produced by the registration shape.
+
+### Reset DataGrid history without keying the application subtree
+
+`DataGridHistoryProvider` will accept the current pathname as a reset key and clear its undo/redo stacks internally when that value changes. The application wrapper will no longer use React's `key` prop to recreate the provider and all of its descendants. Async undo/redo completions from an earlier pathname will be ignored through a reset generation so they cannot repopulate history or restore focus after navigation.
+
+This preserves the existing route-scoped undo contract while allowing long-lived module runtimes to remain mounted across their internal routes.
 
 ## Risks / Trade-offs
 
 - [Risk] A wildcard route could accidentally accept unknown Tasks URLs. → Mitigation: Require an exact match against `TASK_ROUTE_PATHS` before rendering `TasksIndex` and test an unknown path.
 - [Risk] Persisting the shell across view changes could preserve view-local state unintentionally. → Mitigation: The shell already resets selection, bulk state, and capture focus from the derived view, and existing view-transition tests remain authoritative.
+- [Risk] Replacing provider remount with an internal history reset could allow an async undo from the previous route to finish late. → Mitigation: Increment a reset generation on pathname changes and ignore stale operation completion, focus restoration, and stack mutation.
 - [Risk] The production symptom could include a provider-specific connection issue beyond remounting. → Mitigation: Verify provider identity locally and repeat the exact Safari transition after publication. Continue investigation if Synced does not remain stable.
 - [Trade-off] The provider still closes and reconnects when leaving Tasks entirely. → This is intentional ownership cleanup and remains outside the defect.
 

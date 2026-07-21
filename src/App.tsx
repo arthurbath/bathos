@@ -169,11 +169,11 @@ export function AppRoutes() {
   );
 }
 
-function RouteScopedDataGridHistory({ children }: { children: ReactNode }) {
+export function RouteScopedDataGridHistory({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   return (
-    <DataGridHistoryProvider key={location.pathname}>
+    <DataGridHistoryProvider resetKey={location.pathname}>
       {children}
     </DataGridHistoryProvider>
   );
