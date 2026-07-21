@@ -8,7 +8,15 @@
 
 The owner approved every external production step in the requested order. The exact 22-table PowerSync boundary, owner-scoped Sync Streams, Supabase Auth, and public client endpoint are active. The reminder Edge Function, managed secrets, Vault-backed once-per-minute Cron job, and public web key are active. Safari completed explicit subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and synthetic cleanup acceptance.
 
-Production retains one real active Safari target and its matching credential. All task-specific acceptance fixtures and the isolated expired target were removed. The neutral Tasks route is available for personal parallel use, Things remains authoritative, and Inbox Manager dual writing remains disabled pending separate approval.
+Production retains one real active Safari target and its matching credential. Raycast also retains its approved rotating OAuth refresh grant in the macOS login Keychain. All task-specific acceptance fixtures and the isolated expired target were removed. The neutral Tasks route is available for personal parallel use, Things remains authoritative, and Inbox Manager dual writing remains disabled pending separate approval.
+
+## Raycast Production Acceptance
+
+The first production quick-entry run completed dynamic OAuth registration through Safari and stored the registered client plus rotating refresh grant under the `garden.bath.tasks-raycast` Keychain service. The authorized call then found that production MCP version 6 did not advertise `create_task`, even though the current authored and generated sources registered it.
+
+The first deployment attempt exposed a second defect. The generated Edge Function represented shared Tasks domain aliases as nonexistent `npm:@/` packages, which prevented Supabase from building the function. The MCP tool sources now use relative domain imports. The generator consequently inlines task date, order, and state logic into the Edge bundle, and an automated contract test rejects any future `npm:@/` alias in that artifact.
+
+After Supabase's server-side bundler deployed the corrected MCP function, the original Keychain-backed pending capture replayed successfully. Safari showed exactly one synthetic Raycast task in the synchronized Inbox with `Synced` status. Cleanup moved it to Trash, previewed an authoritative three-record deletion scope, permanently deleted the hierarchy and related history, retained the content-free duplicate-suppression receipt, and returned Trash to empty. The real OAuth grant remains for normal Raycast use.
 
 ## Original Decision Request
 

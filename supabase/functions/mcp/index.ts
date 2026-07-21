@@ -973,9 +973,100 @@ var getTaskView = defineTool({
   handler: (input, ctx) => toMcpResult(getTaskViewData(input, requireAuthenticated(ctx)))
 });
 
+// src/modules/tasks/domain/taskDates.ts
+var calendarDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+var InvalidTaskCalendarRangeError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "InvalidTaskCalendarRangeError";
+  }
+};
+function assertTaskCalendarRange(startDate, deadline) {
+  if (startDate !== null && deadline !== null && deadline < startDate) {
+    throw new InvalidTaskCalendarRangeError("Deadline cannot be earlier than the start date");
+  }
+}
+function isTaskCalendarDate(value) {
+  const match = calendarDatePattern.exec(value);
+  if (match === null) {
+    return false;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+// src/modules/tasks/domain/taskOrder.ts
+import { generateKeyBetween } from "npm:fractional-indexing@4.0.0";
+var InvalidTaskOrderError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "InvalidTaskOrderError";
+  }
+};
+function compareTaskOrder(left, right) {
+  const keyComparison = compareOrdinalText(left.orderKey, right.orderKey);
+  return keyComparison === 0 ? compareOrdinalText(left.id, right.id) : keyComparison;
+}
+function generateTaskOrderKey(previousKey, nextKey) {
+  if (previousKey !== null && nextKey !== null && previousKey >= nextKey) {
+    throw new InvalidTaskOrderError("The previous order key must sort before the next order key");
+  }
+  try {
+    return generateKeyBetween(previousKey, nextKey);
+  } catch (error) {
+    throw new InvalidTaskOrderError(
+      error instanceof Error ? error.message : "Unable to generate a task order key"
+    );
+  }
+}
+function generateTaskMoveOrderKey(tasks, movingTaskId, destinationIndex) {
+  const ordered = [...tasks].sort(compareTaskOrder);
+  const movingIndex = ordered.findIndex((task) => task.id === movingTaskId);
+  if (movingIndex === -1) {
+    throw new InvalidTaskOrderError("The moving task is not present in the ordered collection");
+  }
+  const remaining = ordered.filter((task) => task.id !== movingTaskId);
+  if (!Number.isInteger(destinationIndex) || destinationIndex < 0 || destinationIndex > remaining.length) {
+    throw new InvalidTaskOrderError("The destination index is outside the ordered collection");
+  }
+  const previousKey = remaining[destinationIndex - 1]?.orderKey ?? null;
+  const nextKey = remaining[destinationIndex]?.orderKey ?? null;
+  if (previousKey === null || nextKey === null || previousKey !== nextKey) {
+    return generateTaskOrderKey(previousKey, nextKey);
+  }
+  if (destinationIndex < movingIndex) {
+    let firstTiedIndex = destinationIndex - 1;
+    while (firstTiedIndex > 0 && remaining[firstTiedIndex - 1].orderKey === nextKey) {
+      firstTiedIndex -= 1;
+    }
+    return generateTaskOrderKey(
+      remaining[firstTiedIndex - 1]?.orderKey ?? null,
+      nextKey
+    );
+  }
+  let lastTiedIndex = destinationIndex;
+  while (lastTiedIndex + 1 < remaining.length && remaining[lastTiedIndex + 1].orderKey === previousKey) {
+    lastTiedIndex += 1;
+  }
+  return generateTaskOrderKey(
+    previousKey,
+    remaining[lastTiedIndex + 1]?.orderKey ?? null
+  );
+}
+function compareOrdinalText(left, right) {
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
+}
+
 // src/lib/mcp/tools/tasks-create.ts
-import { assertTaskCalendarRange, isTaskCalendarDate } from "npm:@/modules/tasks/domain/taskDates";
-import { generateTaskOrderKey } from "npm:@/modules/tasks/domain/taskOrder";
 var destinationSchema = z.enum(["inbox", "today", "anytime", "someday"]);
 var todaySectionSchema = z.enum(["daytime", "evening"]);
 var actionabilitySchema = z.enum(["actionable", "waiting"]);
@@ -1279,11 +1370,9 @@ var createTask = defineTool({
 });
 
 // src/lib/mcp/tools/tasks-hierarchy-create.ts
-import { assertTaskCalendarRange as assertTaskCalendarRange2, isTaskCalendarDate as isTaskCalendarDate2 } from "npm:@/modules/tasks/domain/taskDates";
-import { generateTaskOrderKey as generateTaskOrderKey2 } from "npm:@/modules/tasks/domain/taskOrder";
 var destinationSchema2 = z.enum(["today", "anytime", "someday"]);
 var todaySectionSchema2 = z.enum(["daytime", "evening"]);
-var calendarDateSchema2 = z.string().refine(isTaskCalendarDate2, {
+var calendarDateSchema2 = z.string().refine(isTaskCalendarDate, {
   message: "Expected a valid ISO calendar date."
 });
 function trimTitle(value) {
@@ -1398,7 +1487,7 @@ async function insertWithReplay(auth2, table, row, idempotencyKey, recordType, e
 }
 async function nextAreaOrderKey(auth2) {
   const last = await readOne3(auth2.supabase.from("tasks_areas").select("order_key").eq("owner_id", auth2.userId).eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey2(last?.order_key ?? null, null);
+  return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function nextProjectOrderKeys(auth2, areaId, destination, todaySection2) {
   let structuralQuery = auth2.supabase.from("tasks_projects").select("order_key").eq("owner_id", auth2.userId).eq("disposition", "present");
@@ -1410,17 +1499,17 @@ async function nextProjectOrderKeys(auth2, areaId, destination, todaySection2) {
     readOne3(planningQuery.order("planning_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle())
   ]);
   return {
-    orderKey: generateTaskOrderKey2(structural?.order_key ?? null, null),
-    planningOrderKey: generateTaskOrderKey2(planning?.planning_order_key ?? null, null)
+    orderKey: generateTaskOrderKey(structural?.order_key ?? null, null),
+    planningOrderKey: generateTaskOrderKey(planning?.planning_order_key ?? null, null)
   };
 }
 async function nextHeadingOrderKey(auth2, projectId) {
   const last = await readOne3(auth2.supabase.from("tasks_headings").select("order_key").eq("owner_id", auth2.userId).eq("project_id", projectId).eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey2(last?.order_key ?? null, null);
+  return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function nextChecklistOrderKey(auth2, taskId) {
   const last = await readOne3(auth2.supabase.from("tasks_checklist_items").select("order_key").eq("owner_id", auth2.userId).eq("task_id", taskId).eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey2(last?.order_key ?? null, null);
+  return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function createTaskAreaData(input, auth2) {
   const title = trimTitle(input.title);
@@ -1456,13 +1545,13 @@ async function createTaskProjectData(input, auth2) {
   if (input.destination === "someday" && startDate !== null) {
     throw new Error("Someday projects cannot retain a start date.");
   }
-  if (startDate !== null && !isTaskCalendarDate2(startDate)) {
+  if (startDate !== null && !isTaskCalendarDate(startDate)) {
     throw new Error("Start date must be a valid ISO calendar date.");
   }
-  if (deadline !== null && !isTaskCalendarDate2(deadline)) {
+  if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error("Deadline must be a valid ISO calendar date.");
   }
-  assertTaskCalendarRange2(startDate, deadline);
+  assertTaskCalendarRange(startDate, deadline);
   const expected = {
     title,
     notes: input.notes,
@@ -2168,11 +2257,9 @@ var transitionTaskHierarchy = defineTool({
 });
 
 // src/lib/mcp/tools/tasks-project-mutate.ts
-import { assertTaskCalendarRange as assertTaskCalendarRange3, isTaskCalendarDate as isTaskCalendarDate3 } from "npm:@/modules/tasks/domain/taskDates";
-import { generateTaskOrderKey as generateTaskOrderKey3 } from "npm:@/modules/tasks/domain/taskOrder";
 var destinationSchema3 = z.enum(["today", "anytime", "someday"]);
 var todaySectionSchema3 = z.enum(["daytime", "evening"]);
-var calendarDateSchema3 = z.string().refine(isTaskCalendarDate3, {
+var calendarDateSchema3 = z.string().refine(isTaskCalendarDate, {
   message: "Expected a valid ISO calendar date."
 });
 var snapshotKeys = [
@@ -2302,11 +2389,11 @@ async function nextStructuralOrderKey(auth2, projectId, areaId) {
   let query = auth2.supabase.from("tasks_projects").select("order_key").eq("owner_id", auth2.userId).eq("disposition", "present").neq("id", projectId);
   query = areaId === null ? query.is("area_id", null) : query.eq("area_id", areaId);
   const last = await readOne6(query.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey3(last?.order_key ?? null, null);
+  return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function nextPlanningOrderKey2(auth2, projectId, destination, todaySection2) {
   const last = await readOne6(auth2.supabase.from("tasks_projects").select("planning_order_key").eq("owner_id", auth2.userId).eq("destination", destination).eq("today_section", todaySection2).eq("lifecycle", "open").eq("disposition", "present").neq("id", projectId).order("planning_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey3(last?.planning_order_key ?? null, null);
+  return generateTaskOrderKey(last?.planning_order_key ?? null, null);
 }
 async function movePatch(input, current, auth2) {
   const areaRequested = hasOwn(input, "area_id");
@@ -2338,7 +2425,7 @@ async function movePatch(input, current, auth2) {
       startDate = planningDate2;
     }
     validatePlanningPlacement(destination, todaySection2, startDate, planningDate2);
-    assertTaskCalendarRange3(startDate, current.deadline);
+    assertTaskCalendarRange(startDate, current.deadline);
     if (destination === current.destination && todaySection2 === current.today_section && startDate !== current.start_date) {
       throw new Error("Use schedule_task_project to change dates without moving planning placement.");
     }
@@ -2362,13 +2449,13 @@ async function schedulePatch(input, current, auth2) {
   }
   const startDate = hasOwn(input, "start_date") ? input.start_date ?? null : current.start_date;
   const deadline = hasOwn(input, "deadline") ? input.deadline ?? null : current.deadline;
-  if (startDate !== null && !isTaskCalendarDate3(startDate)) {
+  if (startDate !== null && !isTaskCalendarDate(startDate)) {
     throw new Error("Start date must be a valid ISO calendar date.");
   }
-  if (deadline !== null && !isTaskCalendarDate3(deadline)) {
+  if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error("Deadline must be a valid ISO calendar date.");
   }
-  assertTaskCalendarRange3(startDate, deadline);
+  assertTaskCalendarRange(startDate, deadline);
   const planningDate2 = await planningDateForOwner2(auth2);
   let destination = current.destination;
   let todaySection2 = current.today_section;
@@ -2591,7 +2678,6 @@ var scheduleTaskProject = defineTool({
 });
 
 // src/lib/mcp/tools/tasks-mail.ts
-import { generateTaskOrderKey as generateTaskOrderKey4 } from "npm:@/modules/tasks/domain/taskOrder";
 var messageDeepLinkSchema = z.string().max(8e3).refine(
   (value) => value.startsWith("message://"),
   { message: "Expected a message:// Mail deep link." }
@@ -2624,12 +2710,12 @@ async function validateArea2(areaId, auth2) {
 }
 async function nextPlanningOrderKey3(startDate, auth2) {
   const last = await readOne7(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", "today").eq("today_section", "daytime").eq("start_date", startDate).eq("lifecycle", "open").eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey4(last?.order_key ?? null, null);
+  return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function nextAreaOrderKey2(areaId, auth2) {
   if (areaId === null) return null;
   const last = await readOne7(auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("area_id", areaId).is("project_id", null).is("heading_id", null).eq("lifecycle", "open").eq("disposition", "present").not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey4(last?.hierarchy_order_key ?? null, null);
+  return generateTaskOrderKey(last?.hierarchy_order_key ?? null, null);
 }
 async function createMailTaskData(input, auth2) {
   const title = trimRequired2(input.title, "Task title", 500);
@@ -2741,12 +2827,103 @@ var resolveMailRetirement = defineTool({
   handler: (input, ctx) => toMcpResult(resolveMailRetirementData(input, requireAuthenticated(ctx)))
 });
 
+// src/modules/tasks/domain/taskState.ts
+var InvalidTaskStateError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "InvalidTaskStateError";
+  }
+};
+var InvalidTaskStateTransitionError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "InvalidTaskStateTransitionError";
+  }
+};
+function assertValidTaskState(state) {
+  if (state.lifecycle === "open" && (state.completedAt !== null || state.canceledAt !== null)) {
+    throw new InvalidTaskStateError("Open tasks cannot have terminal timestamps");
+  }
+  if (state.lifecycle === "completed" && (state.completedAt === null || state.canceledAt !== null)) {
+    throw new InvalidTaskStateError("Completed tasks require only a completion timestamp");
+  }
+  if (state.lifecycle === "canceled" && (state.canceledAt === null || state.completedAt !== null)) {
+    throw new InvalidTaskStateError("Canceled tasks require only a cancellation timestamp");
+  }
+  if (state.disposition === "present" && state.deletedAt !== null) {
+    throw new InvalidTaskStateError("Present tasks cannot have a deletion timestamp");
+  }
+  if (state.disposition === "deleted" && state.deletedAt === null) {
+    throw new InvalidTaskStateError("Deleted tasks require a deletion timestamp");
+  }
+}
+function applyTaskStateTransition(state, transition, occurredAt) {
+  assertValidTaskState(state);
+  assertValidInstant(occurredAt);
+  if (transition === "delete") {
+    if (state.disposition === "deleted") {
+      return { outcome: "noop", state };
+    }
+    return applied({ ...state, disposition: "deleted", deletedAt: occurredAt });
+  }
+  if (transition === "restore") {
+    if (state.disposition === "present") {
+      return { outcome: "noop", state };
+    }
+    return applied({ ...state, disposition: "present", deletedAt: null });
+  }
+  if (state.disposition === "deleted") {
+    throw new InvalidTaskStateTransitionError("Deleted tasks must be restored before changing lifecycle");
+  }
+  if (transition === "complete") {
+    if (state.lifecycle === "completed") {
+      return { outcome: "noop", state };
+    }
+    if (state.lifecycle !== "open") {
+      throw new InvalidTaskStateTransitionError("Canceled tasks must be reopened before completion");
+    }
+    return applied({
+      ...state,
+      lifecycle: "completed",
+      completedAt: occurredAt,
+      canceledAt: null
+    });
+  }
+  if (transition === "cancel") {
+    if (state.lifecycle === "canceled") {
+      return { outcome: "noop", state };
+    }
+    if (state.lifecycle !== "open") {
+      throw new InvalidTaskStateTransitionError("Completed tasks must be reopened before cancellation");
+    }
+    return applied({
+      ...state,
+      lifecycle: "canceled",
+      completedAt: null,
+      canceledAt: occurredAt
+    });
+  }
+  if (state.lifecycle === "open") {
+    return { outcome: "noop", state };
+  }
+  return applied({
+    ...state,
+    lifecycle: "open",
+    completedAt: null,
+    canceledAt: null
+  });
+}
+function applied(state) {
+  assertValidTaskState(state);
+  return { outcome: "applied", state };
+}
+function assertValidInstant(value) {
+  if (!value || Number.isNaN(Date.parse(value))) {
+    throw new InvalidTaskStateTransitionError("Task transitions require a valid timestamp");
+  }
+}
+
 // src/lib/mcp/tools/tasks-mutate.ts
-import { assertTaskCalendarRange as assertTaskCalendarRange4, isTaskCalendarDate as isTaskCalendarDate4 } from "npm:@/modules/tasks/domain/taskDates";
-import { generateTaskOrderKey as generateTaskOrderKey5 } from "npm:@/modules/tasks/domain/taskOrder";
-import {
-  applyTaskStateTransition
-} from "npm:@/modules/tasks/domain/taskState";
 var destinationSchema4 = z.enum(["inbox", "today", "anytime", "someday"]);
 var todaySectionSchema4 = z.enum(["daytime", "evening"]);
 var actionabilitySchema2 = z.enum(["actionable", "waiting"]);
@@ -2758,7 +2935,7 @@ var sourceKindSchema2 = z.enum([
   "reading_item",
   "other"
 ]);
-var calendarDateSchema4 = z.string().refine(isTaskCalendarDate4, {
+var calendarDateSchema4 = z.string().refine(isTaskCalendarDate, {
   message: "Expected a valid ISO calendar date."
 });
 var sourceSchema2 = z.object({
@@ -2962,7 +3139,7 @@ function validatePlanningPlacement2(destination, todaySection2, startDate, plann
 }
 async function nextPlanningOrderKey4(auth2, taskId, destination, todaySection2) {
   const last = await readOne8(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", destination).eq("today_section", todaySection2).eq("lifecycle", "open").eq("disposition", "present").neq("id", taskId).order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey5(last?.order_key ?? null, null);
+  return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function validateContainer2(auth2, areaId, projectId, headingId) {
   if (areaId !== null && projectId !== null) {
@@ -2989,7 +3166,7 @@ async function nextHierarchyOrderKey2(auth2, taskId, areaId, projectId, headingI
   query = projectId === null ? query.is("project_id", null) : query.eq("project_id", projectId);
   query = headingId === null ? query.is("heading_id", null) : query.eq("heading_id", headingId);
   const last = await readOne8(query.not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey5(last?.hierarchy_order_key ?? null, null);
+  return generateTaskOrderKey(last?.hierarchy_order_key ?? null, null);
 }
 function hasOwn2(input, key) {
   return Object.prototype.hasOwnProperty.call(input, key);
@@ -3020,7 +3197,7 @@ async function movePatch2(input, current, auth2) {
       startDate = planningDate2;
     }
     validatePlanningPlacement2(destination, todaySection2, startDate, planningDate2);
-    assertTaskCalendarRange4(startDate, current.deadline);
+    assertTaskCalendarRange(startDate, current.deadline);
     if (destination === current.destination && todaySection2 === current.today_section && startDate !== current.start_date) {
       throw new Error("Use schedule_task to change dates without moving planning placement.");
     }
@@ -3062,13 +3239,13 @@ async function schedulePatch2(input, current, auth2) {
   }
   const startDate = hasOwn2(input, "start_date") ? input.start_date ?? null : current.start_date;
   const deadline = hasOwn2(input, "deadline") ? input.deadline ?? null : current.deadline;
-  if (startDate !== null && !isTaskCalendarDate4(startDate)) {
+  if (startDate !== null && !isTaskCalendarDate(startDate)) {
     throw new Error("Start date must be a valid ISO calendar date.");
   }
-  if (deadline !== null && !isTaskCalendarDate4(deadline)) {
+  if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error("Deadline must be a valid ISO calendar date.");
   }
-  assertTaskCalendarRange4(startDate, deadline);
+  assertTaskCalendarRange(startDate, deadline);
   const planningDate2 = await planningDateForOwner3(auth2);
   let destination = current.destination;
   let todaySection2 = current.today_section;
@@ -3473,18 +3650,13 @@ var transitionTask = defineTool({
 });
 
 // src/lib/mcp/tools/tasks-reorder.ts
-import { isTaskCalendarDate as isTaskCalendarDate5 } from "npm:@/modules/tasks/domain/taskDates";
-import {
-  compareTaskOrder,
-  generateTaskMoveOrderKey
-} from "npm:@/modules/tasks/domain/taskOrder";
 var directionSchema = z.enum(["up", "down"]);
 var taskScopeSchema = z.enum(["planning", "hierarchy"]);
 var hierarchyScopeSchema = z.enum(["structural", "planning"]);
 var taskPlanningViewSchema = z.enum(["inbox", "today", "upcoming", "anytime", "someday"]);
 var projectPlanningViewSchema = z.enum(["today", "upcoming", "anytime", "someday"]);
 var hierarchyTypeSchema = z.enum(["area", "project", "heading", "checklist_item"]);
-var calendarDateSchema5 = z.string().refine(isTaskCalendarDate5, {
+var calendarDateSchema5 = z.string().refine(isTaskCalendarDate, {
   message: "Use an ISO calendar date in YYYY-MM-DD format."
 });
 var PAGE_SIZE = 500;

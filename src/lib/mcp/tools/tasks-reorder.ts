@@ -1,10 +1,10 @@
 import type { Database, Json } from '@/integrations/supabase/types';
-import { isTaskCalendarDate } from '@/modules/tasks/domain/taskDates';
+import { isTaskCalendarDate } from '../../../modules/tasks/domain/taskDates';
 import {
   compareTaskOrder,
   generateTaskMoveOrderKey,
   type OrderedTask,
-} from '@/modules/tasks/domain/taskOrder';
+} from '../../../modules/tasks/domain/taskOrder';
 
 import { defineTool, z } from '../mcp-core';
 import {

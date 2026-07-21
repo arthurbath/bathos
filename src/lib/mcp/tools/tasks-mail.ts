@@ -1,4 +1,4 @@
-import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
+import { generateTaskOrderKey } from '../../../modules/tasks/domain/taskOrder';
 
 import { defineTool, z } from '../mcp-core';
 import {

@@ -116,6 +116,7 @@
 - [x] 6.4 Add MCP mutation receipts and task-domain audit history.
 - [x] 6.5 Add MCP tests for authentication, RLS boundaries, invalid transitions, retries, and destructive guardrails.
 - [x] 6.6 Build a Raycast quick-entry command with a configurable global hotkey.
+- [x] 6.6a Validate production OAuth, Keychain refresh, MCP creation, PowerSync projection, and synthetic cleanup through the Raycast command.
 - [x] 6.7 Add dependable browser context capture with structured webpage origin.
 - [x] 6.8a Add Finder capture for exactly one selected item with a typed local file source.
 - [x] 6.8b Add selected-text capture that actively copies the current selection and rejects stale clipboard content.

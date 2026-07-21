@@ -1,10 +1,10 @@
 import type { Database, Json } from '@/integrations/supabase/types';
-import { assertTaskCalendarRange, isTaskCalendarDate } from '@/modules/tasks/domain/taskDates';
-import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
+import { assertTaskCalendarRange, isTaskCalendarDate } from '../../../modules/tasks/domain/taskDates';
+import { generateTaskOrderKey } from '../../../modules/tasks/domain/taskOrder';
 import {
   applyTaskStateTransition,
   type TaskStateTransition,
-} from '@/modules/tasks/domain/taskState';
+} from '../../../modules/tasks/domain/taskState';
 
 import { defineTool, z } from '../mcp-core';
 import {
