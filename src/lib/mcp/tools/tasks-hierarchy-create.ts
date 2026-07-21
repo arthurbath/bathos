@@ -173,14 +173,19 @@ async function replayOrNull(
   recordType: HierarchyRecordType,
   expected: Record<string, Json>,
 ) {
-  const [existing, todoMutation] = await Promise.all([
+  const [existing, todoMutation, hierarchyOperation] = await Promise.all([
     findExistingCreation(auth, idempotencyKey),
     readOne<{ id: string }>(auth.supabase.from('tasks_history_events')
       .select('id').eq('owner_id', auth.userId)
       .eq('client_mutation_id', idempotencyKey).maybeSingle()),
+    readOne<{ id: string }>(auth.supabase.from('tasks_hierarchy_operations')
+      .select('id').eq('owner_id', auth.userId).eq('id', idempotencyKey).maybeSingle()),
   ]);
   if (todoMutation !== null) {
     throw new Error('The idempotency key was already used for a different task mutation.');
+  }
+  if (hierarchyOperation !== null) {
+    throw new Error('The idempotency key was already used for a different hierarchy operation.');
   }
   if (existing === null) return null;
   assertExactReplay(existing, recordType, expected);

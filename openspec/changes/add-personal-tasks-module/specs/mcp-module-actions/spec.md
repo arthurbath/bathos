@@ -71,6 +71,26 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 - **WHEN** an authenticated MCP client updates a supported task record by stable identifier
 - **THEN** the server applies the valid state transition only within the signed-in user's scope and returns the resulting state
 
+#### Scenario: Update hierarchy content through explicit tools
+- **WHEN** an authenticated MCP client calls `update_task_area`, `update_task_project`, `update_task_heading`, or `update_task_checklist_item` with supported content or checklist-completion input
+- **THEN** the server updates only those allowlisted fields on an owned present record and requires an open parent before changing a heading or checklist item
+
+#### Scenario: Require an optimistic hierarchy-update boundary
+- **WHEN** an MCP client calls a hierarchy content-update tool
+- **THEN** the request requires the stable record identifier, its expected positive revision, and a caller-generated mutation UUID, while owner, raw revision, lifecycle, disposition, order, and arbitrary metadata fields remain unavailable
+
+#### Scenario: Retry an accepted hierarchy update
+- **WHEN** an MCP client retries the exact accepted hierarchy content update with the same mutation UUID
+- **THEN** the server resolves the immutable hierarchy-history event, returns its original receipt and the current owner-safe record, and does not write again
+
+#### Scenario: Reject a stale or changed hierarchy update
+- **WHEN** a hierarchy update has a stale expected revision or reuses a mutation UUID with changed record, revision, or normalized input
+- **THEN** a stale request returns a content-free conflict receipt and current owner-safe state, while a changed retry is rejected without changing hierarchy data
+
+#### Scenario: Return a current hierarchy no-op
+- **WHEN** a new hierarchy mutation UUID requests content or checklist completion that is already current
+- **THEN** the server returns a content-free no-op receipt without changing the revision, completion timestamp, or append-only hierarchy history
+
 #### Scenario: Use explicit to-do mutation tools
 - **WHEN** an authenticated MCP client edits content or source metadata, moves planning or container placement, schedules dates, or requests a lifecycle or recovery transition
 - **THEN** the server exposes `update_task`, `move_task`, `schedule_task`, or `transition_task` respectively instead of a generic record or arbitrary-patch mutation

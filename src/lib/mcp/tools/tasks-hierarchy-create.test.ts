@@ -387,4 +387,17 @@ describe('Tasks MCP hierarchy creation tools', () => {
     }, authFor(ownerA, client))).rejects.toThrow('different task mutation');
     expect(client.insertCount).toBe(0);
   });
+
+  it('rejects an idempotency key already used by a hierarchy operation', async () => {
+    const idempotencyKey = '50000000-0000-4000-8000-000000000011';
+    const client = new FakeHierarchyClient({
+      tasks_hierarchy_operations: [{ id: idempotencyKey, owner_id: ownerA }],
+    });
+
+    await expect(createTaskAreaData({
+      idempotency_key: idempotencyKey,
+      title: 'Personal',
+    }, authFor(ownerA, client))).rejects.toThrow('different hierarchy operation');
+    expect(client.insertCount).toBe(0);
+  });
 });
