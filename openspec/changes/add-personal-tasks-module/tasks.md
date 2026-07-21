@@ -60,8 +60,8 @@
 - [x] 4.7 Add focused accessibility and keyboard tests for the minimal workflow.
 - [x] 4.7a Keep the task header and named hierarchy actions inside a 390px mobile viewport.
 - [x] 4.8a Prepare and locally validate the secret-free production PowerSync package, exact projection checks, least-privilege role, publication paths, and synthetic acceptance gate.
-- [ ] 4.8b Approve and provision the production PowerSync topology, task-only replication boundary, owner-scoped Sync Streams, Supabase Auth, secrets, and public client endpoint.
-- [ ] 4.9 Prove the production topology with synthetic cross-client, conflict, restart, isolation, and cleanup validation before personal parallel use.
+- [x] 4.8b Approve and provision the production PowerSync topology, task-only replication boundary, owner-scoped Sync Streams, Supabase Auth, secrets, and public client endpoint.
+- [x] 4.9 Prove the production topology with synthetic cross-client, conflict, restart, isolation, and cleanup validation before personal parallel use.
 
 ## 5. Daily Planning Workflow
 

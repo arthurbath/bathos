@@ -2,7 +2,7 @@
 
 This package prepares the remote synchronization boundary for the private Tasks parallel-use trial. It is safe to keep in the public repository because it contains no database password, service token, private endpoint credential, or personal task content.
 
-Production provisioning remains unapproved. Do not run a database or PowerSync mutation from this package until the user approves the Supabase plan and PowerSync Cloud privacy boundary recorded in `docs/agents/evaluations/2026-07-20_tasks_production_sync_topology.md`.
+Production provisioning was approved and completed on 2026 Jul 20. The active topology is recorded in `docs/agents/evaluations/2026-07-20_tasks_production_sync_topology.md`. Future mutations still require explicit approval and must preserve the exact task-only boundary described here.
 
 ## Files
 
@@ -15,15 +15,11 @@ Production provisioning remains unapproved. Do not run a database or PowerSync m
 
 The repository test `src/modules/tasks/sync/deploymentConfig.test.ts` keeps these files, the browser client schema, and the disposable integration harness synchronized.
 
-## Approval Preconditions
+## Production State
 
-1. Reconfirm that the BathOS project remains in the Pro organization verified on 2026 Jul 20 and review any incremental replication billing shown by the dashboard.
-2. Approve PowerSync Cloud as an additional processor of personal task data.
-3. Create or sign in to the owner's PowerSync account.
-4. Select a US-region development instance for the bounded parallel-use phase.
-5. Take a current Supabase database backup and record a rollback owner before changing replication state.
+The active `Tasks Development` instance is in a US region on PowerSync Cloud Free. It uses Supabase Auth, the dedicated `tasks_powersync_role`, the exact 22-table `powersync` publication, and the committed `owner_tasks` stream. The public client endpoint is configured only after the synthetic production topology gate passed and an independent cleanup audit found no residual synthetic users or task rows.
 
-Do not upgrade a billing plan, create an external account, add a processor, or alter the production database merely because this runbook exists.
+The replication password remains in macOS Keychain. Server-only Supabase keys are resolved only in memory by `scripts/provision-tasks-production.mjs` when the explicit synthetic gate is run. Do not upgrade a billing plan, rotate credentials, change the publication, or alter the production database merely because this runbook exists.
 
 ## Database Preparation
 

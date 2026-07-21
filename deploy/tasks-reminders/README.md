@@ -1,6 +1,10 @@
 # Task Reminder Delivery
 
-This package prepares the production Web Push dispatcher and its one-minute Supabase Cron trigger without committing credentials. Running the files locally or reading this package does not provision production.
+This package defines the production Web Push dispatcher and its one-minute Supabase Cron trigger without committing credentials. The approved production infrastructure was activated on 2026 Jul 20. Running the files locally or reading this package does not mutate production.
+
+## Current Production State
+
+Steps 1-10 below are complete in Supabase project `rsqfokyqntmtdejfwmjs`. The Edge Function is active, the structural verifier reports `ready`, recent Cron runs succeed, and the hosted method/authentication boundary checks pass. Step 11 remains pending because browser notification permission and notification opening require an explicit user gesture on a synthetic device.
 
 ## Files
 
@@ -42,7 +46,7 @@ The bundle gate compiles the dispatcher with the newest locally cached official 
 4. Set the four server values as Supabase Edge Function secrets.
 5. Set `VITE_TASKS_WEB_PUSH_PUBLIC_KEY` in the production web-build environment and deploy that build.
 6. Deploy `dispatch-task-reminders` with JWT verification disabled. The function authenticates only the separate dispatch secret.
-7. Run `extensions-enable.sql` and confirm that `pg_cron` and `pg_net` are enabled. The current BathOS production project does not have either extension enabled.
+7. Run `extensions-enable.sql` and confirm that `pg_cron` and `pg_net` are enabled.
 8. Create the matching `tasks_reminder_dispatch_secret` value in Supabase Vault.
 9. Run `cron-create.sql`, followed immediately by `verify.sql`.
 10. Verify that `GET` returns `405`, an unauthenticated `POST` returns `401`, and the configured Cron run returns a content-free dispatch summary.

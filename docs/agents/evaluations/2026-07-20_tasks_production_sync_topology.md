@@ -2,22 +2,24 @@
 
 **Date:** 2026-07-20
 **Category:** Technology / Operations / Privacy
-**Status:** Recommendation Ready, Awaiting Approval
+**Status:** Activated, Synthetic Gate Passed
 
-## Decision Needed
+## Outcome
 
-The Tasks module has passed local persistence, multi-client convergence, recovery, accessibility, performance, and ten-minute endurance gates. It is not yet remotely usable across the owner's devices because production BathOS does not configure `VITE_TASKS_POWERSYNC_ENDPOINT`. The current runtime therefore enters explicit browser-local mode. MCP and Raycast can write authoritative Supabase rows, but separate browser installations cannot receive those rows or synchronize their own queued changes without a production PowerSync service.
+The owner approved PowerSync Cloud Free, the dedicated production replication boundary, Supabase Auth, the owner-scoped stream, and the public client endpoint. The `Tasks Development` US-region instance is active. Production BathOS now configures `VITE_TASKS_POWERSYNC_ENDPOINT`, so separate browser installations can use the validated remote topology after the updated web build is deployed.
 
-This decision is independent from the selected `Tasks` name, square-check icon, and launcher registration. The registered `/tasks` route remains fully usable in explicit local-only mode before remote synchronization is approved.
+Things remains authoritative. This activation authorizes a bounded synthetic and personal parallel-use phase, not migration, Inbox Manager integration, or a claim that BathOS Tasks is ready to replace Things.
 
 ## Current Facts
 
-- The linked BathOS Supabase project is active and healthy in `us-east-1`.
-- A read-only 2026 Jul 20 check confirmed that the Bath Supabase organization is already on the Pro plan and the BathOS database runs Postgres 17.
-- The repository contains tested task-only PowerSync schema and owner-scoped Sync Streams for all currently synchronized collections.
-- The public committed `.env` has no PowerSync endpoint. Adding the eventual HTTPS endpoint there is safe, but database passwords and service configuration secrets are not.
-- No production replication role, publication, or PowerSync instance has been created by this evaluation.
-- The PowerSync CLI is not currently installed.
+- The linked BathOS Supabase project is active and healthy in `us-east-1` on Postgres 17.
+- `tasks_powersync_role` has `LOGIN`, `REPLICATION`, and `BYPASSRLS`, with `SELECT` limited to the approved 22 Tasks tables.
+- The `powersync` publication contains exactly those 22 tables.
+- Supabase reports one active logical `pgoutput` slot for the selected PowerSync instance, with restart and confirmed-flush positions present.
+- PowerSync uses the direct Supabase database connection with `verify-full` TLS and Supabase Auth.
+- Deployed Sync Streams version 1 contains the committed `owner_tasks` stream with 22 explicit `owner_id = auth.user_id()` queries.
+- The PowerSync health view reports no issues, an active stream, and a healthy source connection.
+- The public `.env` contains only the client-safe PowerSync instance endpoint. The replication password remains in macOS Keychain and was never committed or printed.
 
 ## Requirements for the Parallel-Use Phase
 
@@ -67,16 +69,15 @@ PowerSync requires direct logical replication, a dedicated replication role, a `
 
 The eventual setup must use a least-privilege task-only role and publication rather than `FOR ALL TABLES`. Sync Streams must retain the explicit authenticated-owner predicate because the replication connection bypasses RLS. Production setup must also monitor inactive slots and WAL retention.
 
-## Recommendation
+## Decision and Result
 
-Use PowerSync Cloud Free for a bounded real-world parallel-use trial, subject to two external-action approvals:
+PowerSync Cloud Free was selected for the bounded real-world parallel-use trial. No paid upgrade, billing address, billing email, or payment method was added.
 
-1. Approve a PowerSync Cloud account and the addition of PowerSync as a processor of personal task data.
-2. Approve the production replication role, publication, slot, owner stream, Auth configuration, and public endpoint changes after the dashboard shows any incremental billing.
+The synthetic production gate created two temporary owners and proved owner isolation, exact capture retry, two-client download, offline-web versus MCP conflict convergence, exactly-once completion, persisted-client restart, authoritative history counts, and account-cascade cleanup. A separate production database audit then confirmed zero matching synthetic accounts and zero rows in all 25 Tasks tables.
 
-Provision one US-region development instance first. Configure Supabase Auth through the project's JWKS endpoint, a task-only replication role and publication, the committed owner-only Sync Streams, and the public client endpoint. Validate with a synthetic production account before allowing personal tasks. Clear the synthetic records after validation.
+The selected instance is ready for the personal parallel-use phase after the updated BathOS build is deployed. The unused duplicate PowerSync project remains untouched because deleting it is a separate irreversible action requiring explicit confirmation.
 
-Do not connect Inbox Manager or treat the trial as migration approval during this step. Launcher registration is complete and does not authorize production synchronization. If the free service deactivates unexpectedly, becomes operationally noisy, or presents an unacceptable privacy boundary, evaluate a small self-hosted trial before paying for Pro.
+Do not connect Inbox Manager or treat the trial as migration approval. If the free service deactivates unexpectedly, becomes operationally noisy, or presents an unacceptable privacy boundary, evaluate a small self-hosted trial before paying for Pro.
 
 ## Promotion Gate
 

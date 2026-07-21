@@ -1,13 +1,13 @@
 # Tasks Reminder Delivery Readiness
 
 **Date:** 2026-07-20
-**Status:** Locally Prepared, Production Activation Pending Approval
+**Status:** Production Infrastructure Active, Synthetic Device Acceptance Pending
 
 ## Decision
 
-Keep the existing server-authoritative reminder model and deploy Web Push through the `dispatch-task-reminders` Supabase Edge Function. Trigger it once per minute through one fixed-name Supabase Cron job. Store the provider private key and function dispatch secret in managed server secrets, store the matching Cron header value in Supabase Vault, and expose only the public VAPID key to the web build.
+Keep the existing server-authoritative reminder model and deliver Web Push through the `dispatch-task-reminders` Supabase Edge Function. Trigger it once per minute through one fixed-name Supabase Cron job. Store the provider private key and function dispatch secret in managed server secrets, store the matching Cron header value in Supabase Vault, and expose only the public VAPID key to the web build.
 
-Do not activate production reminder delivery until production infrastructure changes are approved. The Tasks module remains fully usable when push delivery is unconfigured or degraded.
+The owner approved and activated the production infrastructure. Real-device notification permission and the final synthetic-device acceptance path remain deliberately untested because browser notification permission requires an explicit user gesture. The Tasks module remains fully usable when push delivery is unconfigured or degraded.
 
 ## Audit Findings
 
@@ -45,20 +45,29 @@ Do not activate production reminder delivery until production infrastructure cha
 - Local wrapper cleanup: both the automated gate and an interrupted development session left no generated function temp files or Edge Runtime container behind.
 - Cron package: created the required local extensions, one synthetic Vault secret, one active minute schedule, and the approved command in a database transaction. All assertions passed and the transaction rolled back.
 - Cleanup proof: no synthetic reminder secret and no Cron schema artifact remained after rollback.
-- Production read-only audit: no dispatcher function, reminder Vault secret, Cron schema, `pg_cron`, or `pg_net` is present, so activation will use the documented fresh-install path.
+- Production pre-activation audit: no dispatcher function, reminder Vault secret, Cron schema, `pg_cron`, or `pg_net` was present, so activation used the documented fresh-install path.
 - Database lint reported one pre-existing Drawers function error and one pre-existing unused-variable warning in a Tasks restore helper. It reported no reminder-delivery finding.
-- Production effects: none.
+
+## Production Evidence
+
+- `dispatch-task-reminders` version 1 is active with custom dispatch-secret authentication.
+- `pg_cron` 1.6.4 and `pg_net` 0.19.5 are enabled.
+- Supabase managed secrets contain the dispatch secret, VAPID key pair, and public subject. The matching dispatch header secret exists once in Vault.
+- `tasks-dispatch-reminders` is the only matching Cron job. It is active on `* * * * *` with job ID 1.
+- The structural verifier reports `ready`. The latest three Cron runs inspected on 2026 Jul 20 all succeeded.
+- Hosted boundary checks return HTTP 405 for GET and HTTP 401 for POST without the dispatch secret.
+- The public `.env` contains only the matching VAPID public key. Private provider and dispatch credentials remain outside the repository.
 
 ## Production Acceptance Gate
 
-Activation requires all of the following:
+Production infrastructure acceptance requires all of the following:
 
-1. Explicit approval to modify production infrastructure.
-2. Fresh VAPID and dispatch-secret generation outside the repository.
-3. A passing preflight using the exact intended server and web values.
-4. `pg_cron` and `pg_net` enablement followed by Edge Function, Vault, Cron, and web-build configuration in the approved Supabase and hosting environments.
-5. Structural SQL verification immediately after provisioning.
-6. Hosted function smoke tests for method and authentication boundaries.
-7. One synthetic-device test covering subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and cleanup.
+1. Complete: Explicit approval to modify production infrastructure
+2. Complete: Fresh VAPID and dispatch-secret generation outside the repository
+3. Complete: A passing preflight using the exact intended server and web values
+4. Complete: `pg_cron` and `pg_net` enablement followed by Edge Function, Vault, Cron, and public web-key configuration
+5. Complete: Structural SQL verification immediately after provisioning
+6. Complete: Hosted function smoke tests for method and authentication boundaries
+7. Pending: One synthetic-device test covering subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and cleanup
 
 The local wrapper and direct-runtime gates cover local HTTP boot and compilation. They do not justify bypassing hosted HTTP acceptance or deploying unverified credentials.
