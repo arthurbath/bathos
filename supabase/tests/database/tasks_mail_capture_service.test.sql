@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(17);
+SELECT plan(19);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -107,13 +107,25 @@ SELECT is(
     '71000000-0000-4000-8000-000000000099',
     'Reply to project update',
     'Review the source message and reply.',
-    '2026-07-20', 'a0', NULL, 'Work', 'INBOX',
+    '2026-07-21', 'z9', NULL, 'Work', 'INBOX',
     'mail-owner-a@example.test',
     'message://%3Cmail-owner-a%40example.test%3E',
     'Archive', 'Project update', NULL
   ) ->> 'idempotency_outcome',
   'already_applied',
-  'replays the exact idempotency key without duplication'
+  'replays exact caller fields despite different generated identity, date, and order'
+);
+
+SELECT is(
+  (SELECT count(*) FROM public.tasks_mail_sources),
+  1::bigint,
+  'keeps one structured Mail source after an exact retry'
+);
+
+SELECT is(
+  (SELECT count(*) FROM public.tasks_history_events WHERE transition = 'create'),
+  1::bigint,
+  'keeps one creation event after an exact retry'
 );
 
 SELECT is(
