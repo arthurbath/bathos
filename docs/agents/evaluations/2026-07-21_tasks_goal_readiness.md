@@ -24,7 +24,7 @@ The remaining completion gates are the calendar-bound Inbox Manager trial and pr
 
 - The production MCP service advertises 42 tools, including 33 Tasks operations covering bounded reads, structured creation, updates, movement, ordering, lifecycle transitions, templates, recurrence, reminders, and Mail retirement.
 - A read-only production MCP query for Today on 2026 Jul 21 returned five current to-dos, including four Mail-automation tasks, with no truncation or service error.
-- The installed Inbox Manager runtime is healthy. Three tasks have been accepted since the current trial began, seven accepted-task slots remain, the handoff queue is empty, and no handoff failure is recorded.
+- The installed Inbox Manager runtime is healthy. Four tasks have been accepted since the current trial began, six accepted-task slots remain, the handoff queue is empty, and no handoff failure is recorded. The latest accepted handoff completed at 2026 Jul 21 3:38 PM PDT, and the scheduled Mail workflow remained healthy through its 3:43 PM run.
 - The current trial began at 2026 Jul 21 1:50 PM PDT and expires at 2026 Jul 22 1:50 PM PDT unless the tenth accepted task ends it first.
 - The Mail workflow recovered from one stale enrichment-incident record without changing Mail rules, private mode, accepted task receipts, or scheduled success semantics. Two subsequent ordinary scheduled runs completed healthy.
 - BathOS and Inbox Manager are committed, pushed, clean, and synchronized with `origin/main`.
@@ -58,6 +58,8 @@ The performance gate derived every 10,000-record planning view below 1.4 ms at p
 The active `enable-tasks-offline-pwa-launch` change registers the existing root-scoped Tasks service worker from the authenticated Tasks runtime without requesting notification permission. It stages one atomic, content-free application-shell cache containing rewritten HTML and the recursively discovered same-origin Vite module, worker, and WASM graph. Only same-origin Tasks navigations and the reserved `/tasks-offline-assets/*` namespace are intercepted. API traffic, task data, credentials, provider traffic, ordinary `/assets/*` requests, non-GET requests, cross-origin traffic, and other BathOS modules remain outside the cache path.
 
 A 2026 Jul 21 local production-build pass used a disposable local Supabase account and real Chromium service-worker, Cache Storage, worker, WASM, and OPFS behavior. It proved online staging of 25 public assets plus the shell document, cold offline Today launch, offline creation of one disposable task, offline restart with the mutation retained, and reconnection with the mutation still present. Notification permission remained `default`. The browser pass exposed and drove correction of four defects that simulation alone did not reveal: metadata-prefix self-deletion, encoded-slash asset rejection, `Vary: Origin` module mismatch, and incomplete dynamic module/worker/WASM staging.
+
+Commit `c236b99` was pushed to `main` and published through Lovable deployment `891c310c-2a40-4bc6-8dbc-b6138bca122a`. Production serves Tasks worker version 6. Before the deployment, the existing Safari Tasks installation reported `Synced` and `Browser Reminders On`. Post-deployment Safari offline relaunch remains pending because Safari became actively user-controlled during the acceptance pass, so automation stopped rather than taking over the foreground browser.
 
 ## Connector Discovery Note
 
