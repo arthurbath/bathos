@@ -39,6 +39,18 @@ The remaining completion gate is intentionally calendar-bound rather than implem
 
 Four recoverably deleted production-acceptance captures remain as roots in Tasks Trash. Permanent removal still requires explicit action-time confirmation because one setup capture originated from the user's active Safari tab. This cleanup is not a product-readiness blocker.
 
+## Pre-Closeout Validation
+
+The current committed `main` branch passed the following broad gates during the live trial:
+
+- ESLint across the repository
+- A production Vite build
+- Strict validation of all seven durable OpenSpec specifications
+- The full default Vitest suite with 687 passing tests across 117 files and nine intentional opt-in cases skipped
+- The opt-in large-library performance suite with four passing tests
+
+The performance gate derived every 10,000-record planning view below 1.4 ms at p95, built the reusable search index below 6.7 ms at p95, rendered a 1,000-row view in 904.5 ms, and opened 10,000-record search in 357.9 ms. The remaining opt-in integration suites already have stronger dated local or production acceptance evidence for offline persistence, multi-client convergence, preservation, sustained parallel use, and production topology. They are not substitutes for the still-running lived Mail handoff trial.
+
 ## Connector Discovery Note
 
 The BathOS connector catalog attached to this long-running Codex task still exposes the older Budget, Garage, Snake, and Wardrobe tool set. A direct authenticated production `tools/list` request through the existing Raycast OAuth grant confirms that the deployed service includes the complete Tasks tool set. The discrepancy is therefore client-session discovery staleness, not a missing production deployment. A fresh Codex task or connector refresh should discover the current catalog.
