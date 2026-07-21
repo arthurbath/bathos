@@ -127,6 +127,22 @@ The BathOS MCP server SHALL allow an authenticated user to read and mutate their
 - **WHEN** a project movement or schedule request is already current, stale, deleted, or terminal
 - **THEN** the server returns a content-free no-op or revision conflict when applicable, otherwise rejects the invalid state, and never changes append-only history for an unaccepted request
 
+#### Scenario: Reorder through explicit direction-based tools
+- **WHEN** an authenticated MCP client calls `reorder_task` or `reorder_task_hierarchy` with a stable record identifier, current positive revision, logical mutation UUID, supported order scope, and `up` or `down`
+- **THEN** the server reorders only that present open record within its exact current planning section or structural peer collection and never accepts a raw order key or destination index
+
+#### Scenario: Derive a deterministic reorder scope
+- **WHEN** an MCP client reorders a planning record
+- **THEN** the request identifies the supported planning view and explicit planning date, Today remains section-scoped, Upcoming remains start-date-scoped, and the server reads the complete owner-scoped peer collection through ordered pagination before generating the replacement fractional key
+
+#### Scenario: Preserve independent ordering dimensions
+- **WHEN** an MCP client reorders a to-do or project structurally or within a planning view
+- **THEN** the server changes only `hierarchy_order_key` or structural `order_key` for hierarchy order and only the planning `order_key` or `planning_order_key` for planning order, leaving the other dimension unchanged
+
+#### Scenario: Return safe reorder outcomes
+- **WHEN** a reorder reaches a collection boundary, uses a stale expected revision, retries an exact accepted request, or reuses its mutation UUID with changed scope, direction, record, or revision
+- **THEN** the server returns a content-free no-op at the boundary, a content-free conflict for stale state, the immutable original history receipt and current owner-safe record for an exact retry, or rejects changed reuse without writing another revision or history event
+
 #### Scenario: Use explicit to-do mutation tools
 - **WHEN** an authenticated MCP client edits content or source metadata, moves planning or container placement, schedules dates, or requests a lifecycle or recovery transition
 - **THEN** the server exposes `update_task`, `move_task`, `schedule_task`, or `transition_task` respectively instead of a generic record or arbitrary-patch mutation

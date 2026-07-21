@@ -46,6 +46,23 @@ describe('task ordering', () => {
     expect(secondReplica).toEqual(firstReplica);
   });
 
+  it('crosses a complete equal-key block in the requested direction', () => {
+    const tasks = [
+      { id: 'task-a', orderKey: 'a0' },
+      { id: 'task-b', orderKey: 'a1' },
+      { id: 'task-c', orderKey: 'a1' },
+      { id: 'task-d', orderKey: 'a2' },
+    ];
+
+    const movedUp = generateTaskMoveOrderKey(tasks, 'task-d', 1);
+    const movedDown = generateTaskMoveOrderKey(tasks, 'task-a', 1);
+
+    expect(movedUp > 'a0').toBe(true);
+    expect(movedUp < 'a1').toBe(true);
+    expect(movedDown > 'a1').toBe(true);
+    expect(movedDown < 'a2').toBe(true);
+  });
+
   it('rejects invalid ranges and destinations', () => {
     expect(() => generateTaskOrderKey('a1', 'a0')).toThrow(InvalidTaskOrderError);
     expect(() =>

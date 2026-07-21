@@ -3472,13 +3472,500 @@ var transitionTask = defineTool({
   handler: (input, ctx) => toMcpResult(transitionTaskData(input, requireAuthenticated(ctx)))
 });
 
+// src/lib/mcp/tools/tasks-reorder.ts
+import { isTaskCalendarDate as isTaskCalendarDate5 } from "npm:@/modules/tasks/domain/taskDates";
+import {
+  compareTaskOrder,
+  generateTaskMoveOrderKey
+} from "npm:@/modules/tasks/domain/taskOrder";
+var directionSchema = z.enum(["up", "down"]);
+var taskScopeSchema = z.enum(["planning", "hierarchy"]);
+var hierarchyScopeSchema = z.enum(["structural", "planning"]);
+var taskPlanningViewSchema = z.enum(["inbox", "today", "upcoming", "anytime", "someday"]);
+var projectPlanningViewSchema = z.enum(["today", "upcoming", "anytime", "someday"]);
+var hierarchyTypeSchema = z.enum(["area", "project", "heading", "checklist_item"]);
+var calendarDateSchema5 = z.string().refine(isTaskCalendarDate5, {
+  message: "Use an ISO calendar date in YYYY-MM-DD format."
+});
+var PAGE_SIZE = 500;
+var MAX_PEERS = 1e5;
+function stripOwner5(row) {
+  const { owner_id: _ownerId, ...record } = row;
+  return record;
+}
+function jsonRecord6(value) {
+  if (value === null || Array.isArray(value) || typeof value !== "object") {
+    throw new Error("The reorder history receipt is invalid.");
+  }
+  return value;
+}
+function jsonEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+async function readOne9(query) {
+  const { data, error } = await query;
+  if (error) {
+    const failure = new Error(error.message);
+    failure.code = error.code;
+    throw failure;
+  }
+  return data;
+}
+async function readAll(loadPage) {
+  const rows = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await loadPage(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return rows;
+    if (rows.length === MAX_PEERS) {
+      const probe = await loadPage(MAX_PEERS, MAX_PEERS);
+      if (probe.error) throw new Error(probe.error.message);
+      if ((probe.data ?? []).length === 0) return rows;
+      throw new Error(`The reorder peer collection exceeds the ${MAX_PEERS}-record safety limit.`);
+    }
+  }
+}
+async function readTask2(auth2, id) {
+  return readOne9(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+}
+async function readHierarchyRecord3(auth2, type, id) {
+  if (type === "area") {
+    return readOne9(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+  }
+  if (type === "project") {
+    return readOne9(auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+  }
+  if (type === "heading") {
+    return readOne9(auth2.supabase.from("tasks_headings").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+  }
+  return readOne9(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+}
+async function readTaskHistory(auth2, mutationId) {
+  return readOne9(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
+}
+async function readHierarchyHistory(auth2, mutationId) {
+  return readOne9(auth2.supabase.from("tasks_hierarchy_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
+}
+async function readHierarchyOperation2(auth2, mutationId) {
+  return readOne9(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
+}
+function historyReceipt3(event) {
+  return {
+    client_mutation_id: event.client_mutation_id,
+    actor_type: event.actor_type,
+    mutation_channel: event.mutation_channel,
+    affected_ids: event.affected_ids,
+    base_revision: event.base_revision,
+    result_revision: event.result_revision,
+    transition: event.transition,
+    occurred_at: event.occurred_at,
+    outcome: "accepted",
+    code: null
+  };
+}
+function ephemeralReceipt5(input, id, revision, outcome, code) {
+  return {
+    client_mutation_id: input.client_mutation_id,
+    actor_type: "automation",
+    mutation_channel: "mcp",
+    affected_ids: [id],
+    base_revision: input.expected_revision,
+    result_revision: revision,
+    transition: "reorder",
+    occurred_at: (/* @__PURE__ */ new Date()).toISOString(),
+    outcome,
+    code
+  };
+}
+function taskResult(mutationOutcome, receipt2, task) {
+  return {
+    mutation_outcome: mutationOutcome,
+    receipt: receipt2,
+    task: stripOwner5(task)
+  };
+}
+function hierarchyResult2(mutationOutcome, receipt2, type, record) {
+  return {
+    mutation_outcome: mutationOutcome,
+    receipt: receipt2,
+    record_type: type,
+    record: stripOwner5(record)
+  };
+}
+function assertOpenPresent(record) {
+  if (record.disposition !== "present") throw new Error("Only present task records can be reordered.");
+  if (record.lifecycle !== void 0 && record.lifecycle !== "open") {
+    throw new Error("Only open task records can be reordered.");
+  }
+}
+function orderSection(record, view, planningDate2) {
+  if (view === "today") {
+    return typeof record.start_date === "string" && record.start_date < planningDate2 ? "unfinished" : String(record.today_section);
+  }
+  if (view === "upcoming") return `upcoming:${String(record.start_date ?? "")}`;
+  return view;
+}
+function visibleInPlanning(record, view, planningDate2) {
+  if (record.disposition !== "present" || record.lifecycle !== "open") return false;
+  if (view === "upcoming") {
+    return typeof record.start_date === "string" && record.start_date > planningDate2;
+  }
+  return record.destination === view && (view !== "today" && view !== "anytime" || record.start_date === null || typeof record.start_date === "string" && record.start_date <= planningDate2);
+}
+function requireTaskPlanning(input) {
+  if (!input.view || !input.planning_date) {
+    throw new Error("Planning reorder requires a view and explicit planning date.");
+  }
+  return { view: input.view, planningDate: input.planning_date };
+}
+function requireProjectPlanning(input) {
+  if (input.record_type !== "project" || !input.view || !input.planning_date) {
+    throw new Error("Project planning reorder requires a project, view, and explicit planning date.");
+  }
+  return { view: input.view, planningDate: input.planning_date };
+}
+function assertOnlyOrderChanged(before, after, orderKey, direction) {
+  const mutationMetadata = /* @__PURE__ */ new Set([
+    "revision",
+    "client_mutation_id",
+    "last_actor_type",
+    "last_mutation_channel",
+    "updated_at"
+  ]);
+  const beforeKey = before[orderKey];
+  const afterKey = after[orderKey];
+  if (typeof beforeKey !== "string" || typeof afterKey !== "string" || (direction === "up" ? afterKey >= beforeKey : afterKey <= beforeKey)) {
+    throw new Error("The mutation identifier was already used with a different reorder direction.");
+  }
+  for (const key of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (key !== orderKey && !mutationMetadata.has(key) && !jsonEqual(before[key], after[key])) {
+      throw new Error("The mutation identifier was already used for a different record change.");
+    }
+  }
+}
+function targetIndex(rows, id, direction) {
+  const ordered = [...rows].sort(compareTaskOrder);
+  const index = ordered.findIndex((row) => row.id === id);
+  const destination = index + (direction === "up" ? -1 : 1);
+  return index < 0 || destination < 0 || destination >= ordered.length ? null : destination;
+}
+async function taskPeers(input, current, auth2) {
+  const rows = await readAll((from, to) => auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("disposition", "present").eq("lifecycle", "open").order(input.scope === "planning" ? "order_key" : "hierarchy_order_key").order("id").range(from, to));
+  if (input.scope === "planning") {
+    const { view, planningDate: planningDate2 } = requireTaskPlanning(input);
+    if (!visibleInPlanning(current, view, planningDate2)) {
+      throw new Error("The to-do is not in the requested planning view.");
+    }
+    const section = orderSection(current, view, planningDate2);
+    return rows.filter((row) => visibleInPlanning(row, view, planningDate2) && orderSection(row, view, planningDate2) === section).map((row) => ({ id: row.id, orderKey: row.order_key }));
+  }
+  return rows.filter((row) => row.area_id === current.area_id && row.project_id === current.project_id && row.heading_id === current.heading_id && row.hierarchy_order_key !== null).map((row) => ({ id: row.id, orderKey: row.hierarchy_order_key }));
+}
+async function hierarchyPeers(input, current, auth2) {
+  const scope = input.scope ?? "structural";
+  if (scope === "planning") {
+    const project = current;
+    const { view, planningDate: planningDate2 } = requireProjectPlanning(input);
+    if (!visibleInPlanning(project, view, planningDate2)) {
+      throw new Error("The project is not in the requested planning view.");
+    }
+    const section = orderSection(project, view, planningDate2);
+    const rows2 = await readAll((from, to) => auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("disposition", "present").eq("lifecycle", "open").order("planning_order_key").order("id").range(from, to));
+    return rows2.filter((row) => visibleInPlanning(row, view, planningDate2) && orderSection(row, view, planningDate2) === section).map((row) => ({ id: row.id, orderKey: row.planning_order_key }));
+  }
+  if (input.view || input.planning_date) {
+    throw new Error("Structural reorder does not accept a planning view or date.");
+  }
+  if (input.record_type === "area") {
+    const rows2 = await readAll((from, to) => auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("disposition", "present").order("order_key").order("id").range(from, to));
+    return rows2.map((row) => ({ id: row.id, orderKey: row.order_key }));
+  }
+  if (input.record_type === "project") {
+    const project = current;
+    const rows2 = await readAll((from, to) => auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("disposition", "present").eq("lifecycle", "open").order("order_key").order("id").range(from, to));
+    return rows2.filter((row) => row.area_id === project.area_id).map((row) => ({ id: row.id, orderKey: row.order_key }));
+  }
+  if (input.record_type === "heading") {
+    const heading = current;
+    const project = await readHierarchyRecord3(auth2, "project", heading.project_id);
+    if (project === null) throw new Error("The heading parent is unavailable.");
+    assertOpenPresent(project);
+    const rows2 = await readAll((from, to) => auth2.supabase.from("tasks_headings").select("*").eq("owner_id", auth2.userId).eq("disposition", "present").order("order_key").order("id").range(from, to));
+    return rows2.filter((row) => row.project_id === heading.project_id).map((row) => ({ id: row.id, orderKey: row.order_key }));
+  }
+  const item = current;
+  const task = await readTask2(auth2, item.task_id);
+  if (task === null) throw new Error("The checklist parent is unavailable.");
+  assertOpenPresent(task);
+  const rows = await readAll((from, to) => auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("disposition", "present").order("order_key").order("id").range(from, to));
+  return rows.filter((row) => row.task_id === item.task_id).map((row) => ({ id: row.id, orderKey: row.order_key }));
+}
+function assertTaskRetry(input, event) {
+  if (event.task_id !== input.task_id || event.base_revision !== input.expected_revision || event.transition !== "reorder" || event.actor_type !== "automation" || event.mutation_channel !== "mcp") {
+    throw new Error("The mutation identifier was already used for a different to-do request.");
+  }
+  const before = jsonRecord6(event.before_state);
+  const after = jsonRecord6(event.after_state);
+  const orderKey = input.scope === "planning" ? "order_key" : "hierarchy_order_key";
+  assertOnlyOrderChanged(before, after, orderKey, input.direction);
+  if (input.scope === "planning") {
+    const { view, planningDate: planningDate2 } = requireTaskPlanning(input);
+    if (!visibleInPlanning(before, view, planningDate2) || orderSection(before, view, planningDate2) !== orderSection(after, view, planningDate2)) {
+      throw new Error("The mutation identifier was already used in a different planning scope.");
+    }
+  } else if (input.view || input.planning_date) {
+    throw new Error("Hierarchy reorder does not accept a planning view or date.");
+  }
+}
+function assertHierarchyRetry(input, event) {
+  if (event.entity_type !== input.record_type || event.entity_id !== input.record_id || event.base_revision !== input.expected_revision || event.transition !== "reorder" || event.actor_type !== "automation" || event.mutation_channel !== "mcp") {
+    throw new Error("The mutation identifier was already used for a different hierarchy request.");
+  }
+  const before = jsonRecord6(event.before_state);
+  const after = jsonRecord6(event.after_state);
+  const scope = input.scope ?? "structural";
+  assertOnlyOrderChanged(
+    before,
+    after,
+    scope === "planning" ? "planning_order_key" : "order_key",
+    input.direction
+  );
+  if (scope === "planning") {
+    const { view, planningDate: planningDate2 } = requireProjectPlanning(input);
+    if (!visibleInPlanning(before, view, planningDate2) || orderSection(before, view, planningDate2) !== orderSection(after, view, planningDate2)) {
+      throw new Error("The mutation identifier was already used in a different planning scope.");
+    }
+  } else if (input.view || input.planning_date) {
+    throw new Error("Structural reorder does not accept a planning view or date.");
+  }
+}
+async function resolveTaskRetry(input, auth2) {
+  const [event, hierarchyEvent, operation] = await Promise.all([
+    readTaskHistory(auth2, input.client_mutation_id),
+    readHierarchyHistory(auth2, input.client_mutation_id),
+    readHierarchyOperation2(auth2, input.client_mutation_id)
+  ]);
+  if (hierarchyEvent || operation) {
+    throw new Error("The mutation identifier was already used by another task operation.");
+  }
+  if (!event) return null;
+  assertTaskRetry(input, event);
+  const task = await readTask2(auth2, input.task_id);
+  if (!task) throw new Error("The accepted to-do reorder no longer has a current record.");
+  return taskResult("already_applied", historyReceipt3(event), task);
+}
+async function resolveHierarchyRetry(input, auth2) {
+  const [event, taskEvent, operation] = await Promise.all([
+    readHierarchyHistory(auth2, input.client_mutation_id),
+    readTaskHistory(auth2, input.client_mutation_id),
+    readHierarchyOperation2(auth2, input.client_mutation_id)
+  ]);
+  if (taskEvent || operation) {
+    throw new Error("The mutation identifier was already used by another task operation.");
+  }
+  if (!event) return null;
+  assertHierarchyRetry(input, event);
+  const record = await readHierarchyRecord3(auth2, input.record_type, input.record_id);
+  if (!record) throw new Error("The accepted hierarchy reorder no longer has a current record.");
+  return hierarchyResult2("already_applied", historyReceipt3(event), input.record_type, record);
+}
+async function updateTaskOrder(input, current, orderKey, auth2) {
+  const patch = {
+    [input.scope === "planning" ? "order_key" : "hierarchy_order_key"]: orderKey,
+    revision: current.revision + 1,
+    client_mutation_id: input.client_mutation_id,
+    last_actor_type: "automation",
+    last_mutation_channel: "mcp",
+    undo_source_event_id: null
+  };
+  return readOne9(auth2.supabase.from("tasks_todos").update(patch).eq("owner_id", auth2.userId).eq("id", input.task_id).eq("revision", input.expected_revision).eq("disposition", "present").eq("lifecycle", "open").select("*").maybeSingle());
+}
+async function updateHierarchyOrder(input, current, orderKey, auth2) {
+  const scope = input.scope ?? "structural";
+  const patch = {
+    [scope === "planning" ? "planning_order_key" : "order_key"]: orderKey,
+    revision: current.revision + 1,
+    client_mutation_id: input.client_mutation_id,
+    last_actor_type: "automation",
+    last_mutation_channel: "mcp"
+  };
+  if (input.record_type === "area") {
+    return readOne9(auth2.supabase.from("tasks_areas").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").select("*").maybeSingle());
+  }
+  if (input.record_type === "project") {
+    return readOne9(auth2.supabase.from("tasks_projects").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").eq("lifecycle", "open").select("*").maybeSingle());
+  }
+  if (input.record_type === "heading") {
+    return readOne9(auth2.supabase.from("tasks_headings").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").select("*").maybeSingle());
+  }
+  return readOne9(auth2.supabase.from("tasks_checklist_items").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").select("*").maybeSingle());
+}
+async function reorderTaskData(input, auth2) {
+  const retry = await resolveTaskRetry(input, auth2);
+  if (retry) return retry;
+  if (input.scope === "hierarchy" && (input.view || input.planning_date)) {
+    throw new Error("Hierarchy reorder does not accept a planning view or date.");
+  }
+  const current = await readTask2(auth2, input.task_id);
+  if (!current) throw new Error("The to-do is unavailable.");
+  assertOpenPresent(current);
+  if (current.revision !== input.expected_revision) {
+    return taskResult("conflict", ephemeralReceipt5(
+      input,
+      current.id,
+      current.revision,
+      "conflict",
+      "revision_conflict"
+    ), current);
+  }
+  const peers = await taskPeers(input, current, auth2);
+  const destination = targetIndex(peers, current.id, input.direction);
+  if (destination === null) {
+    return taskResult("noop", ephemeralReceipt5(
+      input,
+      current.id,
+      current.revision,
+      "noop",
+      "collection_boundary"
+    ), current);
+  }
+  const orderKey = generateTaskMoveOrderKey(peers, current.id, destination);
+  try {
+    const updated = await updateTaskOrder(input, current, orderKey, auth2);
+    if (updated) {
+      const event = await readTaskHistory(auth2, input.client_mutation_id);
+      if (!event) throw new Error("The accepted to-do reorder receipt is unavailable.");
+      assertTaskRetry(input, event);
+      return taskResult("applied", historyReceipt3(event), updated);
+    }
+  } catch (error) {
+    const accepted = await resolveTaskRetry(input, auth2);
+    if (accepted) return accepted;
+    if (error instanceof Error && "code" in error && error.code === "23505") {
+      throw new Error("The mutation identifier is unavailable. Use a new UUID for a new request.");
+    }
+    throw error;
+  }
+  const latest = await readTask2(auth2, input.task_id);
+  if (!latest) throw new Error("The to-do is unavailable.");
+  return taskResult("conflict", ephemeralReceipt5(
+    input,
+    latest.id,
+    latest.revision,
+    "conflict",
+    "revision_conflict"
+  ), latest);
+}
+async function reorderTaskHierarchyData(input, auth2) {
+  const retry = await resolveHierarchyRetry(input, auth2);
+  if (retry) return retry;
+  const scope = input.scope ?? "structural";
+  if (scope === "planning" && input.record_type !== "project") {
+    throw new Error("Planning reorder is available only for projects.");
+  }
+  const current = await readHierarchyRecord3(auth2, input.record_type, input.record_id);
+  if (!current) throw new Error(`The task ${input.record_type.replace("_", " ")} is unavailable.`);
+  assertOpenPresent(current);
+  if (current.revision !== input.expected_revision) {
+    return hierarchyResult2("conflict", ephemeralReceipt5(
+      input,
+      current.id,
+      current.revision,
+      "conflict",
+      "revision_conflict"
+    ), input.record_type, current);
+  }
+  const peers = await hierarchyPeers(input, current, auth2);
+  const destination = targetIndex(peers, current.id, input.direction);
+  if (destination === null) {
+    return hierarchyResult2("noop", ephemeralReceipt5(
+      input,
+      current.id,
+      current.revision,
+      "noop",
+      "collection_boundary"
+    ), input.record_type, current);
+  }
+  const orderKey = generateTaskMoveOrderKey(peers, current.id, destination);
+  try {
+    const updated = await updateHierarchyOrder(input, current, orderKey, auth2);
+    if (updated) {
+      const event = await readHierarchyHistory(auth2, input.client_mutation_id);
+      if (!event) throw new Error("The accepted hierarchy reorder receipt is unavailable.");
+      assertHierarchyRetry(input, event);
+      return hierarchyResult2("applied", historyReceipt3(event), input.record_type, updated);
+    }
+  } catch (error) {
+    const accepted = await resolveHierarchyRetry(input, auth2);
+    if (accepted) return accepted;
+    if (error instanceof Error && "code" in error && error.code === "23505") {
+      throw new Error("The mutation identifier is unavailable. Use a new UUID for a new request.");
+    }
+    throw error;
+  }
+  const latest = await readHierarchyRecord3(auth2, input.record_type, input.record_id);
+  if (!latest) throw new Error(`The task ${input.record_type.replace("_", " ")} is unavailable.`);
+  return hierarchyResult2("conflict", ephemeralReceipt5(
+    input,
+    latest.id,
+    latest.revision,
+    "conflict",
+    "revision_conflict"
+  ), input.record_type, latest);
+}
+var mutationBaseSchema3 = {
+  expected_revision: z.number().int().positive().describe("Current positive record revision."),
+  client_mutation_id: uuidSchema.describe(
+    "Stable UUID for this exact logical reorder. Reuse it only for an exact retry."
+  ),
+  direction: directionSchema.describe("Move one position up or down within the exact peer scope.")
+};
+var mutationAnnotations4 = {
+  readOnlyHint: false,
+  idempotentHint: true,
+  openWorldHint: false
+};
+var reorderTask = defineTool({
+  name: "reorder_task",
+  title: "Reorder Task",
+  description: "Move one open to-do up or down within its planning section or exact hierarchy peers without accepting a raw order key.",
+  inputSchema: {
+    ...mutationBaseSchema3,
+    task_id: uuidSchema.describe("Stable to-do identifier."),
+    scope: taskScopeSchema,
+    view: taskPlanningViewSchema.optional().describe("Required for planning order and omitted for hierarchy order."),
+    planning_date: calendarDateSchema5.optional().describe("Explicit deterministic planning date required for planning order.")
+  },
+  annotations: mutationAnnotations4,
+  handler: (input, ctx) => toMcpResult(reorderTaskData(input, requireAuthenticated(ctx)))
+});
+var reorderTaskHierarchy = defineTool({
+  name: "reorder_task_hierarchy",
+  title: "Reorder Task Hierarchy",
+  description: "Move one area, project, heading, or checklist item up or down within its exact structural peers, or reorder a project within one planning section.",
+  inputSchema: {
+    ...mutationBaseSchema3,
+    record_type: hierarchyTypeSchema,
+    record_id: uuidSchema.describe("Stable hierarchy record identifier."),
+    scope: hierarchyScopeSchema.optional().describe("Defaults to structural. Planning is available only for projects."),
+    view: projectPlanningViewSchema.optional().describe("Required only for project planning order."),
+    planning_date: calendarDateSchema5.optional().describe("Explicit deterministic date required only for project planning order.")
+  },
+  annotations: mutationAnnotations4,
+  handler: (input, ctx) => toMcpResult(
+    reorderTaskHierarchyData(input, requireAuthenticated(ctx))
+  )
+});
+
 // src/lib/mcp/tools/tasks-templates.ts
 async function readMany3(query) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data ?? [];
 }
-function stripOwner5(row) {
+function stripOwner6(row) {
   const { owner_id: _ownerId, ...record } = row;
   return record;
 }
@@ -3495,10 +3982,10 @@ async function getTaskTemplatesData(input, auth2) {
   ]));
   return {
     templates: visible.map((definition) => ({
-      ...stripOwner5(definition),
+      ...stripOwner6(definition),
       current_revision_record: currentByTemplate.has(
         `${definition.id}:${definition.current_revision}`
-      ) ? stripOwner5(currentByTemplate.get(`${definition.id}:${definition.current_revision}`)) : null
+      ) ? stripOwner6(currentByTemplate.get(`${definition.id}:${definition.current_revision}`)) : null
     })),
     truncated: definitions.length > input.limit
   };
@@ -3551,7 +4038,7 @@ async function readMany4(query) {
   if (error) throw new Error(error.message);
   return data ?? [];
 }
-function stripOwner6(row) {
+function stripOwner7(row) {
   const { owner_id: _ownerId, ...record } = row;
   return record;
 }
@@ -3571,15 +4058,15 @@ async function getTaskRecurrencesData(input, auth2) {
   const occurrencesByDefinition = /* @__PURE__ */ new Map();
   for (const occurrence of occurrences) {
     const rows = occurrencesByDefinition.get(occurrence.recurrence_id) ?? [];
-    rows.push(stripOwner6(occurrence));
+    rows.push(stripOwner7(occurrence));
     occurrencesByDefinition.set(occurrence.recurrence_id, rows);
   }
   return {
     recurrences: visible.map((definition) => ({
-      ...stripOwner6(definition),
+      ...stripOwner7(definition),
       current_revision_record: currentByDefinition.has(
         `${definition.id}:${definition.current_revision}`
-      ) ? stripOwner6(currentByDefinition.get(`${definition.id}:${definition.current_revision}`)) : null,
+      ) ? stripOwner7(currentByDefinition.get(`${definition.id}:${definition.current_revision}`)) : null,
       ...input.include_occurrences ? { occurrences: occurrencesByDefinition.get(definition.id) ?? [] } : {}
     })),
     truncated: definitions.length > input.limit,
@@ -3631,7 +4118,7 @@ async function evaluateTaskRecurrenceData(input, auth2) {
   if (error) throw new Error(error.message);
   return data;
 }
-var calendarDateSchema5 = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+var calendarDateSchema6 = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 var getTaskRecurrences = defineTool({
   name: "get_task_recurrences",
   title: "Get Task Recurrences",
@@ -3657,7 +4144,7 @@ var saveTaskRecurrence = defineTool({
     rule_mode: z.enum(["calendar", "after_completion"]),
     frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
     interval_count: z.number().int().min(1).max(1e3).default(1),
-    start_date: calendarDateSchema5,
+    start_date: calendarDateSchema6,
     planning_timezone: z.string().min(1).max(200),
     missed_policy: z.enum(["skip", "latest", "all"]).default("latest"),
     catch_up_limit: z.number().int().min(1).max(100).default(50),
@@ -3686,7 +4173,7 @@ var evaluateTaskRecurrence = defineTool({
   description: "Request idempotent server-side catch-up for one recurrence through an explicit local calendar date.",
   inputSchema: {
     recurrence_id: uuidSchema,
-    through_date: calendarDateSchema5,
+    through_date: calendarDateSchema6,
     idempotency_key: uuidSchema.describe("Stable UUID for this exact evaluation request.")
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
@@ -3699,7 +4186,7 @@ async function readMany5(query) {
   if (error) throw new Error(error.message);
   return data ?? [];
 }
-function stripOwner7(row) {
+function stripOwner8(row) {
   const { owner_id: _ownerId, ...record } = row;
   return record;
 }
@@ -3713,12 +4200,12 @@ async function getTaskRemindersData(input, auth2) {
   const occurrencesByReminder = /* @__PURE__ */ new Map();
   for (const occurrence of occurrences.slice(0, 500)) {
     const rows = occurrencesByReminder.get(occurrence.reminder_id) ?? [];
-    rows.push(stripOwner7(occurrence));
+    rows.push(stripOwner8(occurrence));
     occurrencesByReminder.set(occurrence.reminder_id, rows);
   }
   return {
     reminders: visible.map((reminder) => ({
-      ...stripOwner7(reminder),
+      ...stripOwner8(reminder),
       root_id: reminder.task_id ?? reminder.project_id,
       ...input.include_occurrences ? { occurrences: occurrencesByReminder.get(reminder.id) ?? [] } : {}
     })),
@@ -3754,7 +4241,7 @@ async function cancelTaskReminderData(input, auth2) {
   if (error) throw new Error(error.message);
   return data;
 }
-var calendarDateSchema6 = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+var calendarDateSchema7 = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 var localTimeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/);
 var getTaskReminders = defineTool({
   name: "get_task_reminders",
@@ -3777,7 +4264,7 @@ var saveTaskReminder = defineTool({
     expected_record_revision: z.number().int().positive().optional().describe("Required current record revision when revising an existing reminder."),
     root_type: z.enum(["todo", "project"]),
     root_id: uuidSchema,
-    local_date: calendarDateSchema6,
+    local_date: calendarDateSchema7,
     local_time: localTimeSchema,
     time_zone: z.string().min(1).max(255),
     ambiguity_choice: z.enum(["earlier", "later"]).default("earlier"),
@@ -3810,7 +4297,7 @@ var mcp_default = defineMcp({
   name: "bathos-mcp",
   title: "BathOS",
   version: "0.1.0",
-  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, planning views, native templates, recurrence definitions, and resolved reminders plus guarded creation and content updates for to-dos, areas, projects, headings, and checklist items; move, schedule, template-instantiation, recurrence, reminder, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates. Reminders use explicit local date, wall-clock time, IANA time zone, and daylight-saving ambiguity choice. Neither uses tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
+  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, planning views, native templates, recurrence definitions, and resolved reminders plus guarded creation and content updates for to-dos, areas, projects, headings, and checklist items; move, reorder, schedule, template-instantiation, recurrence, reminder, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates. Reminders use explicit local date, wall-clock time, IANA time zone, and daylight-saving ambiguity choice. Neither uses tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -3850,6 +4337,8 @@ var mcp_default = defineMcp({
     moveTask,
     scheduleTask,
     transitionTask,
+    reorderTask,
+    reorderTaskHierarchy,
     instantiateTaskTemplate,
     saveTaskRecurrence,
     setTaskRecurrenceStatus,

@@ -51,9 +51,37 @@ export function generateTaskMoveOrderKey(
     throw new InvalidTaskOrderError('The destination index is outside the ordered collection');
   }
 
+  const previousKey = remaining[destinationIndex - 1]?.orderKey ?? null;
+  const nextKey = remaining[destinationIndex]?.orderKey ?? null;
+  if (previousKey === null || nextKey === null || previousKey !== nextKey) {
+    return generateTaskOrderKey(previousKey, nextKey);
+  }
+
+  // Concurrent inserts may legitimately share a fractional key. A one-row
+  // mutation cannot place another item inside that tied block because stable
+  // identifiers provide the total-order tie-breaker, so cross the complete
+  // block in the requested direction.
+  if (destinationIndex < movingIndex) {
+    let firstTiedIndex = destinationIndex - 1;
+    while (firstTiedIndex > 0 && remaining[firstTiedIndex - 1].orderKey === nextKey) {
+      firstTiedIndex -= 1;
+    }
+    return generateTaskOrderKey(
+      remaining[firstTiedIndex - 1]?.orderKey ?? null,
+      nextKey,
+    );
+  }
+
+  let lastTiedIndex = destinationIndex;
+  while (
+    lastTiedIndex + 1 < remaining.length
+    && remaining[lastTiedIndex + 1].orderKey === previousKey
+  ) {
+    lastTiedIndex += 1;
+  }
   return generateTaskOrderKey(
-    remaining[destinationIndex - 1]?.orderKey ?? null,
-    remaining[destinationIndex]?.orderKey ?? null,
+    previousKey,
+    remaining[lastTiedIndex + 1]?.orderKey ?? null,
   );
 }
 
