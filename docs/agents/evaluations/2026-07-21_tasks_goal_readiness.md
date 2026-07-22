@@ -2,7 +2,7 @@
 
 **Date:** 2026 Jul 21
 **Category:** Product / Production / Trust
-**Status:** Final Offline Launch and Bounded Trial Acceptance in Progress
+**Status:** Bounded Trial Acceptance in Progress
 
 ## Outcome
 
@@ -20,6 +20,35 @@ The remaining completion gate is the calendar-bound Inbox Manager trial. Product
 - Inbox Manager creates Things tasks first and conditionally mirrors only accepted new creations into BathOS Tasks during the private bounded trial. Existing tasks, edits, completions, and Mail rules remain outside that handoff.
 - Native Apple surfaces and migration from Things remain deliberate future decisions rather than incomplete V1 obligations.
 
+## Durable Requirement Audit
+
+| Requirement | Authoritative Evidence | Status |
+| --- | --- | --- |
+| Private-First Task Module | Production owner-isolation, RLS, and cleanup gates in `2026-07-20_tasks_production_sync_readiness.md` and `2026-07-21_tasks_production_topology_hardening.md` | Accepted |
+| Production Task Synchronization | Exact 22-table production topology, restart, convergence, and current synchronized clients | Accepted |
+| Core Task Organization | Archived `add-personal-tasks-module` implementation evidence and `2026-07-20_tasks_live_browser_validation.md` | Accepted |
+| Date-Based Planning Views | Browser validation of Inbox, Today, Upcoming, Anytime, Someday, and Logbook with owner-local planning dates | Accepted |
+| Tagless Structured Semantics | Typed source, actionability, hierarchy, destination, lifecycle, and product-identity evidence without tags | Accepted |
+| Bulk Task Planning | Atomic selection and movement coverage in the archived module change and browser validation | Accepted |
+| Native Templates | Template definition, revision, instantiation, MCP, and synchronized-projection coverage in the archived module change | Accepted |
+| Orthogonal Task State | Independent planning, lifecycle, disposition, and actionability coverage in domain, repository, and rendered tests | Accepted |
+| Temporal Planning Semantics | Start-date, deadline, Today-section, planning-time-zone, and daylight-saving coverage in the archived module change | Accepted |
+| Recurrence Integrity | `2026-07-20_tasks_offline_workflow_validation.md`, preservation recovery, and recurrence database/MCP tests | Accepted |
+| Stable Manual Ordering | `2026-07-20_tasks_multi_client_convergence.md` and deterministic fractional-order tests | Accepted |
+| Offline Task Operation | Offline workflow acceptance plus archived `enable-tasks-offline-pwa-launch` production and iPhone evidence | Accepted |
+| Deterministic Task Reconciliation | Multi-client winner-order, stale-revision, conflict-receipt, and reconnection gates | Accepted |
+| Actionable Synchronization Diagnostics | `2026-07-21_tasks_sync_reliability.md` and current Safari, Chrome, and iPhone diagnostics | Accepted |
+| Recoverable History | `2026-07-20_tasks_preservation_recovery.md`, undo, Trash, export, merge, replace, and rollback gates | Accepted |
+| Layered Reminder Delivery | `2026-07-20_tasks_reminder_delivery_readiness.md` plus Safari and iPhone Web Push delivery/open acceptance | Accepted |
+| Evidence-Gated Native Apple Expansion | `2026-07-20_tasks_native_apple_companion.md`; lived evidence supports continued web/PWA/Raycast use without premature native scope | Accepted by deliberate deferral |
+| Keyboard-First Daily Operation | `2026-07-20_tasks_accessibility_validation.md`, browser keyboard passes, and focused component tests | Accepted |
+| Deterministic Mail Capture Retry | Archived `fix-tasks-mail-capture-retry` exact-replay, one-task/source/history, and fresh PowerSync-client proof | Accepted |
+| Large-Library Responsiveness | `2026-07-20_tasks_large_library_performance.md` and opt-in performance suite | Accepted |
+| Parallel Use with Things | Healthy bounded Inbox Manager trial with Things-first creation, six current-window receipts, and zero pending work or failures | Awaiting automatic trial boundary |
+| BathOS Product Expression | `2026-07-20_tasks_product_identity.md`, Lucide icon, dark-only BathOS styling, and tagless Tasks naming | Accepted |
+| Stable Tasks Route Runtime | `2026-07-21_tasks_route_runtime_stability.md` and route-runtime regression suite | Accepted |
+| Module Isolation | Tasks-only source, routes, tables, service-worker interception, MCP namespace, and removal-boundary coverage | Accepted |
+
 ## Current Production Evidence
 
 - The production MCP service advertises 42 tools, including 33 Tasks operations covering bounded reads, structured creation, updates, movement, ordering, lifecycle transitions, templates, recurrence, reminders, and Mail retirement.
@@ -35,7 +64,7 @@ The remaining completion gate is the calendar-bound Inbox Manager trial. Product
 2. Confirm the runtime disabled at the intended boundary, no post-boundary credential or network work occurred, the queue is empty, and ordinary Mail and Things outcomes remain healthy.
 3. Reconcile the final accepted receipts with the BathOS MCP and PowerSync projection, and record any real retry or failure evidence without exposing task content.
 4. Complete Inbox Manager OpenSpec task 6.4, sync its durable specification, archive the change, validate, commit, and push.
-5. Archive `enable-tasks-offline-pwa-launch`, then perform one final cross-repository, route, MCP, synchronization, reminder, and health audit before declaring the implementation goal complete.
+5. Perform one final cross-repository, route, MCP, synchronization, reminder, and health audit before declaring the implementation goal complete.
 
 Four recoverably deleted production-acceptance captures remain as roots in Tasks Trash. Permanent removal still requires explicit action-time confirmation because one setup capture originated from the user's active Safari tab. This cleanup is not a product-readiness blocker.
 
@@ -53,11 +82,11 @@ The performance gate derived every 10,000-record planning view below 1.4 ms at p
 
 ## Offline PWA Shell Acceptance
 
-The active `enable-tasks-offline-pwa-launch` change registers the existing root-scoped Tasks service worker from the authenticated Tasks runtime without requesting notification permission. It stages one atomic, content-free application-shell cache containing rewritten HTML and the recursively discovered same-origin Vite module, worker, and WASM graph. Only same-origin Tasks navigations and the reserved `/tasks-offline-assets/*` namespace are intercepted. API traffic, task data, credentials, provider traffic, ordinary `/assets/*` requests, non-GET requests, cross-origin traffic, and other BathOS modules remain outside the cache path.
+The archived `enable-tasks-offline-pwa-launch` change registers the existing root-scoped Tasks service worker from the authenticated Tasks runtime without requesting notification permission. It stages one atomic, content-free application-shell cache containing rewritten HTML and the recursively discovered same-origin Vite module, worker, and WASM graph. Only same-origin Tasks navigations and the reserved `/tasks-offline-assets/*` namespace are intercepted. API traffic, task data, credentials, provider traffic, ordinary `/assets/*` requests, non-GET requests, cross-origin traffic, and other BathOS modules remain outside the cache path.
 
 A 2026 Jul 21 local production-build pass used a disposable local Supabase account and real Chromium service-worker, Cache Storage, worker, WASM, and OPFS behavior. It proved online staging of 25 public assets plus the shell document, cold offline Today launch, offline creation of one disposable task, offline restart with the mutation retained, and reconnection with the mutation still present. Notification permission remained `default`. The browser pass exposed and drove correction of four defects that simulation alone did not reveal: metadata-prefix self-deletion, encoded-slash asset rejection, `Vary: Origin` module mismatch, and incomplete dynamic module/worker/WASM staging.
 
-Commit `c236b99` was pushed to `main` and published through Lovable deployment `891c310c-2a40-4bc6-8dbc-b6138bca122a`. Production serves Tasks worker version 6. On 2026 Jul 21, the authenticated Safari installation refreshed cleanly and returned to `Synced`. A read-only Web Inspector probe confirmed that `/tasks-service-worker.js` was activated and controlling the page at version 6, the active atomic shell held its HTML document and 25 offline assets, notification permission remained `granted`, and the Web Push subscription remained present. The actual disconnected Safari relaunch remains pending because completing it requires temporarily changing the Mac's network state.
+Commit `c236b99` was pushed to `main` and published through Lovable deployment `891c310c-2a40-4bc6-8dbc-b6138bca122a`. Production serves Tasks worker version 6. On 2026 Jul 21, the authenticated Safari installation refreshed cleanly and returned to `Synced`. A read-only Web Inspector probe confirmed that `/tasks-service-worker.js` was activated and controlling the page at version 6, the active atomic shell held its HTML document and 25 offline assets, notification permission remained `granted`, and the Web Push subscription remained present. A Mac-wide disconnected Safari relaunch was deliberately skipped because it would interrupt the Codex host; the later actual iPhone Home Screen Airplane Mode pass provides the authoritative full-transport device acceptance.
 
 An isolated production browser then registered the deployed worker without signing in or enabling notifications. Production staged 25 public assets plus the shell document, retained notification permission as `default`, and cold-launched `/tasks/today` offline into the ordinary signed-out BathOS surface. This confirms the published hosting and CDN artifact.
 
