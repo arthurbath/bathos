@@ -26,13 +26,13 @@
 
 ## 5. Documentation and local verification
 
-- [ ] 5.1 Update the Tasks human guide and readiness evidence for the refined planning, notes, lifecycle, and history behavior
+- [x] 5.1 Update the Tasks human guide and readiness evidence for the refined planning, notes, lifecycle, and history behavior
 - [x] 5.2 Run focused tests, the full test suite, lint, production build, strict OpenSpec validation, and database tests if schema changes are introduced
 - [x] 5.3 Verify desktop and mobile rendered behavior with the Browser plugin, including cross-horizon drag, Upcoming boundaries, notes wrapping and links, terminal motion, reduced motion, and console health
 
 ## 6. Release and closeout
 
 - [x] 6.1 Obtain explicit approval for any required production migration and the matching Tasks web release
-- [ ] 6.2 Apply approved production changes, run and clean up disposable acceptance data, and prove PowerSync and user-facing convergence
-- [ ] 6.3 Sync the delta spec, archive the OpenSpec change, update final readiness evidence, and rerun full validation
-- [ ] 6.4 Commit and push main, then prove the worktree, remote history, production release, database, and OpenSpec state are clean and synchronized
+- [x] 6.2 Apply approved production changes, run and clean up disposable acceptance data, and prove PowerSync and user-facing convergence
+- [x] 6.3 Sync the delta spec, archive the OpenSpec change, update final readiness evidence, and rerun full validation
+- [x] 6.4 Commit and push main, then prove the worktree, remote history, production release, database, and OpenSpec state are clean and synchronized

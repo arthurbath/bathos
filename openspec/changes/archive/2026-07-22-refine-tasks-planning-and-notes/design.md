@@ -69,7 +69,7 @@ Alternative considered: a styled content-editable overlay would require lossy HT
 - [Calendar boundaries can be ambiguous] -> Use date-only arithmetic and the owner's planning date rather than browser instants.
 - [Markdown can create unsafe or surprising links] -> Keep raw HTML disabled, use the parser's safe URL transform, add `noopener noreferrer`, and test disallowed protocols.
 - [Completion animation can delay mutation slightly] -> Keep the duration short, skip it for reduced motion, and disable repeat actions while pending.
-- [The referenced Things screenshot is unavailable] -> Implement the supplied text contract now and treat later screenshot comparison as visual tuning rather than a blocker.
+- [Installed clients can retain a prior atomic offline shell after a web release] -> Advance the versioned Tasks worker URL with each published shell, verify the deployed worker version, and reload an existing authenticated installation before closeout.
 
 ## Migration Plan
 
@@ -77,10 +77,10 @@ Alternative considered: a styled content-editable overlay would require lossy HT
 2. Add a Supabase migration only if the reproduced undo failure requires database behavior beyond the projection-order fix.
 3. Run focused Vitest, Tasks TypeScript, lint, production build, strict OpenSpec, and pgTAP when schema behavior changes.
 4. Verify desktop and mobile rendered behavior with the Browser plugin, including cross-horizon drag, Upcoming buckets, animation, Markdown links, and console health.
-5. Obtain explicit production approval for any new migration and for the matching web release, then use cleanup-backed synthetic acceptance before archiving.
+5. Obtain explicit production approval for any new migration and for the matching web release, advance the versioned Tasks worker URL, then use cleanup-backed synthetic and existing-installation acceptance before archiving.
 
 Rollback is a web release rollback when no schema change is needed. If a database migration is required, its replacement trigger or function will be versioned and reversible without rewriting personal task rows.
 
 ## Open Questions
 
-- The missing screenshot may inform later spacing, font, or list-indent refinements, but it does not change the requested Markdown semantics.
+None. The supplied screenshot confirms the implemented metadata, prose, bullet, long-link, and plain `message://` presentation contract.

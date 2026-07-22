@@ -126,8 +126,42 @@ The system SHALL organize active work through Anytime, Someday, areas, projects,
 - **WHEN** a user or supported integration creates a to-do without an explicit planning placement
 - **THEN** the system creates one open present Anytime to-do marked for Today Inbox
 
+### Requirement: Readable Markdown Task Notes
+The system SHALL retain task notes as plain text while presenting complete safe Markdown and a full-height editing surface in an expanded to-do.
+
+#### Scenario: Read complete formatted notes
+- **WHEN** an expanded to-do has nonempty notes and notes editing is inactive
+- **THEN** the interface renders the complete notes without an internal height limit and styles CommonMark paragraphs, emphasis, strong text, inline code, and asterisk-prefixed lists
+
+#### Scenario: Follow a note link
+- **WHEN** notes contain a Markdown link, autolink, or bare HTTP or HTTPS URL
+- **THEN** the rendered destination is a real safe link that preserves default browser opening behavior and does not make an unsafe protocol actionable
+
+#### Scenario: Edit complete notes
+- **WHEN** a user enters notes editing
+- **THEN** the interface shows the original Markdown source in an auto-growing plain-text control whose full content remains visible and whose changes save back to the same notes field
+
+#### Scenario: Start empty notes directly
+- **WHEN** an expanded to-do has empty notes
+- **THEN** the interface presents the editable notes control with its placeholder without requiring a separate preview step
+
+### Requirement: Legible Task Lifecycle Feedback
+The system SHALL distinguish task completion from bulk selection by shape and SHALL provide brief recoverable visual feedback before terminal work leaves an active list.
+
+#### Scenario: Distinguish completion from selection
+- **WHEN** an open task row renders outside selection mode
+- **THEN** its completion control is square, while selection mode uses circular selected and unselected controls with distinct accessible names
+
+#### Scenario: Complete a task with motion
+- **WHEN** a user completes or cancels an active to-do and reduced motion is not requested
+- **THEN** the row quickly fades and collapses before leaving the list, accepts no duplicate terminal action, and restores itself if the mutation fails
+
+#### Scenario: Respect reduced motion during completion
+- **WHEN** a user completes or cancels a to-do while reduced motion is requested
+- **THEN** the interface skips the decorative delay without changing mutation, error recovery, or focus behavior
+
 ### Requirement: Date-Based Planning Views
-The system SHALL derive Today, Upcoming, Anytime, Someday, and Done from task state, start dates, independent day horizons, and terminal timestamps.
+The system SHALL derive Today, Upcoming, Anytime, Someday, and Done from task state, owner-local start dates, deadlines, independent day horizons, and terminal timestamps.
 
 #### Scenario: Defer work to a future date
 - **WHEN** a user assigns a future start date to a to-do or project
@@ -151,14 +185,34 @@ The system SHALL derive Today, Upcoming, Anytime, Someday, and Done from task st
 
 #### Scenario: Review the Today projection
 - **WHEN** a user opens Today
-- **THEN** the system shows eligible open present Anytime work and groups it in Inbox, Now, Next, and Later order
+- **THEN** the system shows eligible open present Anytime work and groups it in Inbox, Now, Next, and Later order without rendering an empty horizon heading
 
 #### Scenario: Review the Anytime pool
 - **WHEN** a user opens Anytime
-- **THEN** the system shows every available open present Anytime item and marks its resolved Inbox, Now, Next, or Later placement when it also appears in Today
+- **THEN** the system shows every open present Anytime item whose start date is absent, today, or earlier and marks its resolved Inbox, Now, Next, or Later placement when it also appears in Today
 
-#### Scenario: Review a future horizon
-- **WHEN** a user opens Upcoming for an item with a future start date
+#### Scenario: Select the Upcoming controlling date
+- **WHEN** an open present Anytime item has a future start date
+- **THEN** Upcoming uses that start date for membership, ordering, and grouping even when the item also has a different deadline
+
+#### Scenario: Fall back to a future deadline
+- **WHEN** an open present Anytime item has no future start date and has a future deadline
+- **THEN** Upcoming includes and groups the item by that deadline while the item remains available in Anytime when otherwise eligible
+
+#### Scenario: Group the next seven days individually
+- **WHEN** an Upcoming controlling date falls from tomorrow through the seventh owner-local date after today
+- **THEN** the interface groups the item under that individual calendar date in chronological order
+
+#### Scenario: Group later work by month
+- **WHEN** an Upcoming controlling date is beyond the next seven dates and no later than the same owner-local calendar date 12 months from today
+- **THEN** the interface groups the item under its month and year in chronological order
+
+#### Scenario: Group distant work by year
+- **WHEN** an Upcoming controlling date is later than the same owner-local calendar date 12 months from today
+- **THEN** the interface groups the item under its calendar year in chronological order
+
+#### Scenario: Preserve a future day horizon
+- **WHEN** a user opens Upcoming for an item with a future controlling date
 - **THEN** the interface preserves and exposes its selected Inbox, Now, Next, or Later horizon without showing the item in Today early
 
 #### Scenario: Remove undated work from Today
@@ -436,19 +490,27 @@ The system SHALL keep recurrence definitions separate from generated task occurr
 - **THEN** the client assigns the already authenticated owner to the parsed result while synchronized recurrence rows continue to validate their stored owner identifier
 
 ### Requirement: Stable Manual Ordering
-The system SHALL preserve intentional manual ordering across direct drag, keyboard or menu moves, saves, refreshes, offline operation, and synchronization.
+The system SHALL preserve intentional manual ordering across direct drag, keyboard or menu moves, same-view Today horizon changes, saves, refreshes, offline operation, and synchronization.
 
 #### Scenario: Reorder active work by drag
 - **WHEN** a user drags an active task before or after another task in a supported ordered scope
 - **THEN** the system saves the new fractional order and displays the committed placement without opening the dragged task's editor
 
+#### Scenario: Move into another visible Today horizon
+- **WHEN** a user drops a Today to-do before or after a target to-do in another currently visible Inbox, Now, Next, or Later section
+- **THEN** the system changes the dragged to-do's horizon and fractional order together and displays it at the requested target position
+
+#### Scenario: Keep hidden Today horizons unavailable as drop targets
+- **WHEN** a Today horizon has no visible work
+- **THEN** the interface omits its heading and does not introduce a permanent empty drop zone for that horizon
+
 #### Scenario: Retain non-pointer ordering
 - **WHEN** a user cannot or does not use drag-and-drop
 - **THEN** the interface retains keyboard and menu commands that move the focused task within the same supported scope
 
-#### Scenario: Reorder sections of Today independently
-- **WHEN** a user reorders work in Inbox, Now, Next, or Later
-- **THEN** the system changes only that item's order within the same visible section and does not allow a drag or command to move it across Today sections
+#### Scenario: Reorder within a Today horizon by keyboard or menu
+- **WHEN** a user invokes a keyboard or menu reorder in Inbox, Now, Next, or Later
+- **THEN** the system changes only that item's order within the same visible section and does not infer a cross-section destination
 
 #### Scenario: Reorder active and inactive planning pools independently
 - **WHEN** a user reorders work in Anytime or Someday
@@ -592,10 +654,10 @@ The system SHALL expose trustworthy synchronization state without logging task c
 - **THEN** synchronization details identify the installation as local-only, create no remote-degradation episode, and explicitly withhold any implication of cross-device or MCP convergence
 
 ### Requirement: Recoverable History
-The system SHALL provide append-only history, a guarded 100-step task undo and redo cursor, mutation receipts, a recoverable Done queue, versioned export, verified restore, and automatic terminal-data expiry.
+The system SHALL provide append-only history, a projection-safe guarded 100-step task undo and redo cursor, mutation receipts, a recoverable Done queue, versioned export, verified restore, and automatic terminal-data expiry.
 
 #### Scenario: Undo a recent change
-- **WHEN** a user invokes undo for the latest supported forward task mutation
+- **WHEN** a user invokes undo for the latest supported forward task mutation after its task and history projections agree
 - **THEN** the system restores the source event's prior state and synchronizes the restoration as a new valid undo mutation
 
 #### Scenario: Undo a deep sequence
@@ -607,8 +669,12 @@ The system SHALL provide append-only history, a guarded 100-step task undo and r
 - **THEN** Command+Shift+Z on Mac or Control+Shift+Z on Windows reapplies the next source event's after-state as a new valid redo mutation
 
 #### Scenario: Reconstruct task history after refresh
-- **WHEN** the Tasks client starts with a synchronized append-only history projection
-- **THEN** it reconstructs the bounded undo and redo cursor from forward, undo, and redo events without treating inverse events as new forward steps
+- **WHEN** the Tasks client starts or receives projected history rows in any arrival order
+- **THEN** it reconstructs the bounded undo and redo cursor from the complete available forward, undo, and redo sequence without treating inverse events as new forward steps
+
+#### Scenario: Wait for matching projections
+- **WHEN** the cursor-tip event and its current task snapshot do not yet represent the required exact undo or redo pair
+- **THEN** the client withholds that history movement until synchronization makes the pair safe and does not skip to an older event
 
 #### Scenario: Invalidate redo after a new change
 - **WHEN** a user makes a new supported forward task mutation after undoing one or more events
