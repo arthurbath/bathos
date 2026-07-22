@@ -1,4 +1,4 @@
-self.__BATHOS_TASKS_WORKER_VERSION__ = 7;
+self.__BATHOS_TASKS_WORKER_VERSION__ = 8;
 
 const TASKS_SHELL_CACHE_PREFIX = 'bathos-tasks-shell-';
 const TASKS_SHELL_META_CACHE = 'bathos-tasks-meta-v1';

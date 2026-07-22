@@ -1,4 +1,4 @@
-export const TASKS_SERVICE_WORKER_PATH = '/tasks-service-worker.js?version=7';
+export const TASKS_SERVICE_WORKER_PATH = '/tasks-service-worker.js?version=8';
 export const TASKS_SERVICE_WORKER_SCOPE = '/';
 
 const TASKS_SHELL_CACHE_PREFIX = 'bathos-tasks-shell-';
