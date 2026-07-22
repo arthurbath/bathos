@@ -19,7 +19,9 @@ import {
   CircleDashed,
   CircleHelp,
   CircleSlash2,
+  Cloud,
   CornerDownLeft,
+  DatabaseBackup,
   Hourglass,
   Inbox,
   ListChecks,
@@ -30,6 +32,7 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Settings,
   Square,
   SquareCheckBig,
   Trash2,
@@ -58,6 +61,7 @@ import type {
   EditableTaskPatch,
   TaskPlanningMoveInput,
 } from '@/modules/tasks/data/taskRepository';
+import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import {
   TaskKeyboardHelpDialog,
@@ -110,17 +114,23 @@ type TasksShellProps = {
   onSignOut: () => Promise<void> | void;
 };
 
-const taskViews = [
+const primaryTaskViews = [
   { path: '/inbox', label: 'Inbox', icon: Inbox },
   { path: '/today', label: 'Today', icon: CalendarDays },
   { path: '/upcoming', label: 'Upcoming', icon: CalendarRange },
   { path: '/anytime', label: 'Anytime', icon: ListTodo },
+] as const;
+
+const secondaryTaskViews = [
   { path: '/someday', label: 'Someday', icon: CircleDashed },
-  { path: '/logbook', label: 'Logbook', icon: Archive },
-  { path: '/trash', label: 'Trash', icon: Trash2 },
   { path: '/projects', label: 'Projects', icon: FolderKanban },
   { path: '/templates', label: 'Templates', icon: LayoutTemplate },
+  { path: '/logbook', label: 'Logbook', icon: Archive },
+  { path: '/trash', label: 'Trash', icon: Trash2 },
+  { path: '/config', label: 'Config', icon: Settings },
 ] as const;
+
+const taskViews = [...primaryTaskViews, ...secondaryTaskViews] as const;
 
 const taskNavigationShortcuts: Record<string, string> = {
   i: '/inbox',
@@ -132,9 +142,10 @@ const taskNavigationShortcuts: Record<string, string> = {
   p: '/projects',
   r: '/trash',
   e: '/templates',
+  c: '/config',
 };
 
-type TaskShellView = TaskListView | 'projects' | 'project' | 'area' | 'templates';
+type TaskShellView = TaskListView | 'projects' | 'project' | 'area' | 'templates' | 'config';
 
 export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) {
   const location = useLocation();
@@ -147,6 +158,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     || view === 'project'
     || view === 'area'
     || view === 'templates'
+    || view === 'config'
     ? 'inbox'
     : view;
   const {
@@ -689,20 +701,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     <div className="min-h-screen bg-background">
       <ToplineHeader
         title="Tasks"
+        moduleId="tasks"
         userId={userId}
         displayName={displayName}
         onSignOut={handleSignOut}
         showAppSwitcher
-        actionsAccessory={(
-          <div className="flex items-center gap-1">
-            <TaskDataPortabilityDialog
-              service={portabilityService}
-              replaceAvailable={permanentDeletionAvailable}
-              replaceUnavailableReason={permanentDeletionUnavailableReason}
-            />
-            <TaskSyncDiagnosticsDialog />
-          </div>
-        )}
       />
 
       <main className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
@@ -713,8 +716,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               data-task-view-heading
               className="text-3xl font-semibold leading-none tracking-tight"
             >
-              <span className="md:hidden">{getTaskViewLabel(view)}</span>
-              <span className="hidden md:inline">Tasks</span>
+              {getTaskViewLabel(view)}
             </h2>
             <div className="flex items-center gap-1">
               {taskUndoAvailable ? (
@@ -773,8 +775,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               >
                 <CircleHelp className="h-4 w-4" aria-hidden="true" />
               </Button>
-              <MobileProjectsLink view={view} basePath={basePath} navigate={navigate} />
-              <MobileTemplatesLink view={view} basePath={basePath} navigate={navigate} />
             </div>
           </div>
 
@@ -797,52 +797,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
           {reminders.projectionError ? <TaskReminderProjectionFailure /> : null}
 
-          {reminders.webPush ? (
-            <TaskWebPushCapability
-              model={reminders.webPush}
-              connected={reminders.mode === 'connected'}
-              onEnable={async () => {
-                try {
-                  await reminders.webPush.enable();
-                } catch {
-                  showBrowserReminderError('Browser Reminders Could Not Be Enabled');
-                }
-              }}
-              onDisable={async () => {
-                try {
-                  await reminders.webPush.disable();
-                } catch {
-                  showBrowserReminderError('Browser Reminders Could Not Be Disabled');
-                }
-              }}
-            />
-          ) : null}
-
-          <nav
-            aria-label="Task views"
-            className="hidden rounded-md border border-[hsl(var(--grid-sticky-line))] p-1 md:grid"
-            style={{ gridTemplateColumns: `repeat(${taskViews.length}, minmax(0, 1fr))` }}
-          >
-            {taskViews.map(({ path, label, icon: Icon }) => {
-              const href = `${basePath}${path}`;
-              const active = view === path.slice(1)
-                || (path === '/projects' && (view === 'project' || view === 'area'));
-              return (
-                <a
-                  key={path}
-                  href={href}
-                  aria-current={active ? 'page' : undefined}
-                  onClick={(event) => handleClientSideLinkNavigation(event, navigate, href)}
-                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-sm text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                    active ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" aria-hidden="true" />
-                  {label}
-                </a>
-              );
-            })}
-          </nav>
+          <TaskDesktopNavigation view={view} basePath={basePath} navigate={navigate} />
 
           {bulkMode ? (
             <TaskBulkToolbar
@@ -860,7 +815,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             />
           ) : null}
 
-          {!bulkMode && view !== 'projects' && view !== 'project' && view !== 'area' && view !== 'templates' && (view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday') ? (
+          {!bulkMode && view !== 'projects' && view !== 'project' && view !== 'area' && view !== 'templates' && view !== 'config' && (view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday') ? (
             <form onSubmit={handleCreate} className="relative">
               <Plus
                 className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
@@ -942,6 +897,31 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             />
           ) : view === 'projects' ? <TaskProjectsView hierarchy={hierarchy} />
             : view === 'templates' ? <TaskTemplatesView ownerId={userId} hierarchy={hierarchy} />
+              : view === 'config' ? (
+                <TaskConfigView
+                  webPush={reminders.webPush}
+                  connected={reminders.mode === 'connected'}
+                  onEnableBrowserReminders={async () => {
+                    if (!reminders.webPush) return;
+                    try {
+                      await reminders.webPush.enable();
+                    } catch {
+                      showBrowserReminderError('Browser Reminders Could Not Be Enabled');
+                    }
+                  }}
+                  onDisableBrowserReminders={async () => {
+                    if (!reminders.webPush) return;
+                    try {
+                      await reminders.webPush.disable();
+                    } catch {
+                      showBrowserReminderError('Browser Reminders Could Not Be Disabled');
+                    }
+                  }}
+                  portabilityService={portabilityService}
+                  replaceAvailable={permanentDeletionAvailable}
+                  replaceUnavailableReason={permanentDeletionUnavailableReason}
+                />
+              )
               : <section aria-label={getTaskSectionLabel(taskListView)}>
             {loading || hierarchy.loading || (view === 'trash' && hierarchyTrash.loading) ? (
               <div className="flex min-h-40 items-center justify-center">
@@ -1138,8 +1118,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       </main>
 
       <MobileBottomNav
-        items={taskViews.filter(({ path }) => path !== '/projects' && path !== '/templates')}
-        isActive={(path) => view === path.slice(1)}
+        items={primaryTaskViews}
+        overflowItems={secondaryTaskViews}
+        isActive={(path) => isTaskNavigationActive(view, path)}
         onNavigate={(path) => navigate(`${basePath}${path}`)}
         hrefForPath={(path) => `${basePath}${path}`}
       />
@@ -1343,6 +1324,157 @@ function TaskReminderProjectionFailure() {
   );
 }
 
+function TaskDesktopNavigation({
+  view,
+  basePath,
+  navigate,
+}: {
+  view: TaskShellView;
+  basePath: string;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const overflowActive = secondaryTaskViews.some(({ path }) => (
+    isTaskNavigationActive(view, path)
+  ));
+  const itemClassName = (active: boolean) => (
+    `inline-flex h-10 items-center justify-center gap-2 rounded-sm px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+      active ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:text-foreground'
+    }`
+  );
+
+  return (
+    <nav
+      aria-label="Task views"
+      className="hidden grid-cols-5 rounded-md border border-[hsl(var(--grid-sticky-line))] p-1 md:grid"
+    >
+      {primaryTaskViews.map(({ path, label, icon: Icon }) => {
+        const href = `${basePath}${path}`;
+        const active = isTaskNavigationActive(view, path);
+        return (
+          <a
+            key={path}
+            href={href}
+            aria-current={active ? 'page' : undefined}
+            onClick={(event) => handleClientSideLinkNavigation(event, navigate, href)}
+            className={itemClassName(active)}
+          >
+            <Icon className="h-4 w-4" aria-hidden="true" />
+            {label}
+          </a>
+        );
+      })}
+      <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="More Task Views"
+            aria-pressed={overflowActive}
+            className={itemClassName(overflowActive)}
+          >
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+            More
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-48">
+          {secondaryTaskViews.map(({ path, label, icon: Icon }) => {
+            const href = `${basePath}${path}`;
+            const active = isTaskNavigationActive(view, path);
+            return (
+              <DropdownMenuItem key={path} onSelect={() => setMoreOpen(false)} asChild>
+                <a
+                  href={href}
+                  aria-current={active ? 'page' : undefined}
+                  onClick={(event) => {
+                    setMoreOpen(false);
+                    handleClientSideLinkNavigation(event, navigate, href);
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  {label}
+                </a>
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </nav>
+  );
+}
+
+function TaskConfigView({
+  webPush,
+  connected,
+  onEnableBrowserReminders,
+  onDisableBrowserReminders,
+  portabilityService,
+  replaceAvailable,
+  replaceUnavailableReason,
+}: {
+  webPush: TaskWebPushModel | null;
+  connected: boolean;
+  onEnableBrowserReminders: () => Promise<void>;
+  onDisableBrowserReminders: () => Promise<void>;
+  portabilityService: TaskPortabilityService;
+  replaceAvailable: boolean;
+  replaceUnavailableReason?: string;
+}) {
+  return (
+    <div className="space-y-4">
+      <TaskConfigSection title="Browser Reminders" icon={Bell}>
+        {webPush ? (
+          <TaskWebPushCapability
+            model={webPush}
+            connected={connected}
+            onEnable={onEnableBrowserReminders}
+            onDisable={onDisableBrowserReminders}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">Unavailable for this installation</p>
+        )}
+      </TaskConfigSection>
+
+      <TaskConfigSection title="Synchronization" icon={Cloud}>
+        <TaskSyncDiagnosticsDialog triggerVariant="config" />
+      </TaskConfigSection>
+
+      <TaskConfigSection title="Backup and Restore" icon={DatabaseBackup}>
+        <TaskDataPortabilityDialog
+          service={portabilityService}
+          replaceAvailable={replaceAvailable}
+          replaceUnavailableReason={replaceUnavailableReason}
+          triggerVariant="config"
+        />
+      </TaskConfigSection>
+    </div>
+  );
+}
+
+function TaskConfigSection({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon: typeof Bell;
+  children: ReactNode;
+}) {
+  const headingId = `task-config-${title.toLowerCase().replaceAll(' ', '-')}`;
+  return (
+    <section
+      aria-labelledby={headingId}
+      className="flex flex-col gap-4 rounded-md border border-[hsl(var(--grid-sticky-line))] p-4 sm:flex-row sm:items-center"
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <h3 id={headingId} className="text-sm font-semibold text-foreground">{title}</h3>
+      </div>
+      <div className="sm:ml-auto">{children}</div>
+    </section>
+  );
+}
+
 function TaskWebPushCapability({
   model,
   connected,
@@ -1390,19 +1522,14 @@ function TaskWebPushCapability({
   })();
 
   return (
-    <section
+    <div
       aria-label="Browser Reminder Capability"
       aria-live="polite"
-      className={`flex flex-col gap-3 rounded-md border p-4 sm:flex-row sm:items-center ${
-        active ? 'border-success/40 bg-success/5' : 'border-warning/40 bg-warning/5'
-      }`}
+      className="flex flex-col gap-3 sm:items-end"
     >
-      <div className="flex min-w-0 flex-1 gap-3">
-        <Bell className={`mt-0.5 h-4 w-4 shrink-0 ${active ? 'text-success' : 'text-warning'}`} aria-hidden="true" />
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-foreground">{heading}</h3>
-          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-        </div>
+      <div className="min-w-0 sm:text-right">
+        <p className={`text-sm font-medium ${active ? 'text-success' : 'text-warning'}`}>{heading}</p>
+        <p className="mt-1 max-w-xl text-xs text-muted-foreground">{detail}</p>
       </div>
       {active ? (
         <Button type="button" variant="outline" size="sm" disabled={model.busy} onClick={() => void onDisable()}>
@@ -1413,7 +1540,7 @@ function TaskWebPushCapability({
           Enable
         </Button>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -2373,62 +2500,13 @@ function getTaskViewLabel(view: TaskShellView): string {
   if (view === 'project') return 'Project';
   if (view === 'area') return 'Area';
   if (view === 'templates') return 'Templates';
+  if (view === 'config') return 'Config';
   return 'Today';
 }
 
-function MobileProjectsLink({
-  view,
-  basePath,
-  navigate,
-}: {
-  view: TaskShellView;
-  basePath: string;
-  navigate: ReturnType<typeof useNavigate>;
-}) {
-  const detailView = view === 'project' || view === 'area';
-  const destination = detailView ? 'projects' : view === 'projects' ? 'today' : 'projects';
-  const href = `${basePath}/${destination}`;
-  const Icon = destination === 'today' ? CalendarDays : FolderKanban;
-  const label = destination === 'today' ? 'Today' : 'Projects';
-  return (
-    <a
-      href={href}
-      aria-label={detailView
-        ? 'Return to Projects'
-        : destination === 'projects' ? 'Open Projects' : 'Return to Today'}
-      onClick={(event) => handleClientSideLinkNavigation(event, navigate, href)}
-      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[hsl(var(--grid-sticky-line))] px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
-    >
-      <Icon className="h-4 w-4" aria-hidden="true" />
-      <span className="sr-only sm:not-sr-only">{label}</span>
-    </a>
-  );
-}
-
-function MobileTemplatesLink({
-  view,
-  basePath,
-  navigate,
-}: {
-  view: TaskShellView;
-  basePath: string;
-  navigate: ReturnType<typeof useNavigate>;
-}) {
-  const destination = view === 'templates' ? 'today' : 'templates';
-  const href = `${basePath}/${destination}`;
-  const Icon = destination === 'today' ? CalendarDays : LayoutTemplate;
-  const label = destination === 'today' ? 'Today' : 'Templates';
-  return (
-    <a
-      href={href}
-      aria-label={destination === 'templates' ? 'Open Templates' : 'Return to Today'}
-      onClick={(event) => handleClientSideLinkNavigation(event, navigate, href)}
-      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[hsl(var(--grid-sticky-line))] px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
-    >
-      <Icon className="h-4 w-4" aria-hidden="true" />
-      <span className="sr-only sm:not-sr-only">{label}</span>
-    </a>
-  );
+function isTaskNavigationActive(view: TaskShellView, path: string): boolean {
+  return view === path.slice(1)
+    || (path === '/projects' && (view === 'project' || view === 'area'));
 }
 
 function isTaskKeyboardInput(target: EventTarget | null): boolean {
@@ -2445,6 +2523,7 @@ function getTaskViewFromPath(pathname: string): TaskShellView {
   if (pathname.endsWith('/upcoming')) return 'upcoming';
   if (pathname.endsWith('/trash')) return 'trash';
   if (pathname.endsWith('/templates')) return 'templates';
+  if (pathname.endsWith('/config')) return 'config';
   if (getTaskAreaIdFromPath(pathname)) return 'area';
   if (getTaskProjectIdFromPath(pathname)) return 'project';
   if (pathname.endsWith('/projects')) return 'projects';

@@ -39,10 +39,12 @@ export function TaskDataPortabilityDialog({
   service,
   replaceAvailable,
   replaceUnavailableReason,
+  triggerVariant = 'icon',
 }: {
   service: TaskPortabilityService;
   replaceAvailable: boolean;
   replaceUnavailableReason?: string;
+  triggerVariant?: 'icon' | 'config';
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -200,16 +202,30 @@ export function TaskDataPortabilityDialog({
 
   return (
     <>
-      <Button
-        type="button"
-        variant="clear"
-        size="icon"
-        className="h-9 w-9 text-muted-foreground"
-        aria-label="Task Backup and Restore"
-        onClick={() => setOpen(true)}
-      >
-        <DatabaseBackup className="h-4 w-4" aria-hidden="true" />
-      </Button>
+      {triggerVariant === 'config' ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          aria-label="Open Task Backup and Restore"
+          onClick={() => setOpen(true)}
+        >
+          <DatabaseBackup className="h-4 w-4" aria-hidden="true" />
+          Manage Backups
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="clear"
+          size="icon"
+          className="h-9 w-9 text-muted-foreground"
+          aria-label="Task Backup and Restore"
+          onClick={() => setOpen(true)}
+        >
+          <DatabaseBackup className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent aria-describedby={undefined}>

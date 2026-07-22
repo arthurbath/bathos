@@ -13,8 +13,10 @@ import {
   CircleDashed,
   FolderKanban,
   Inbox,
+  LayoutTemplate,
   ListTodo,
   Search,
+  Settings,
   Trash2,
 } from 'lucide-react';
 
@@ -53,7 +55,9 @@ const taskSearchViews = [
   { path: '/someday', label: 'Someday', icon: CircleDashed },
   { path: '/logbook', label: 'Logbook', icon: Archive },
   { path: '/projects', label: 'Projects', icon: FolderKanban },
+  { path: '/templates', label: 'Templates', icon: LayoutTemplate },
   { path: '/trash', label: 'Trash', icon: Trash2 },
+  { path: '/config', label: 'Config', icon: Settings },
 ] as const;
 
 const sourceKindLabels: Record<TaskSourceKind, string> = {
@@ -348,7 +352,7 @@ export function TaskKeyboardHelpDialog({
         ['N', 'Capture a Task'],
         ['/', 'Search Tasks and Views'],
         ['?', 'Show Keyboard Help'],
-        ['G then I/T/U/A/S/L/P/R/E', 'Navigate to a View'],
+        ['G then I/T/U/A/S/L/P/R/E/C', 'Navigate to a View'],
         ['Command+Z', 'Undo the Last Task Change'],
       ],
     },

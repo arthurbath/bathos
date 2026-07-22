@@ -1,5 +1,7 @@
 import React from 'react';
 import { act } from 'react';
+import { fireEvent, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -7,6 +9,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { taskAreaFixture, taskProjectFixture } from '@/modules/tasks/testing/taskFixtures';
 import type { TaskArea, TaskProject } from '@/modules/tasks/types/tasks';
 import { TaskProjectsView } from './TaskProjectsView';
+
+Object.defineProperties(HTMLElement.prototype, {
+  hasPointerCapture: { configurable: true, value: () => false },
+  setPointerCapture: { configurable: true, value: () => undefined },
+  releasePointerCapture: { configurable: true, value: () => undefined },
+  scrollIntoView: { configurable: true, value: () => undefined },
+});
 
 const areaWork = hierarchyArea('area-work', 'Work', 'a0');
 const areaPersonal = hierarchyArea('area-personal', 'Personal', 'a1');
@@ -76,21 +85,25 @@ function pressEnter(control: HTMLInputElement, isComposing = false) {
 }
 
 describe('TaskProjectsView', () => {
-  it('creates areas and projects from separate keyboard-friendly forms', async () => {
+  it('creates areas and projects from focused keyboard-friendly dialogs', async () => {
     const hierarchy = defaultHierarchy();
     const { container, root } = renderView(hierarchy);
 
     try {
-      const areaInput = container.querySelector<HTMLInputElement>('[aria-label="New Area Name"]')!;
-      const projectInput = container.querySelector<HTMLInputElement>('[aria-label="New Project Name"]')!;
-      const projectArea = container.querySelector<HTMLSelectElement>('[aria-label="New Project Area"]')!;
+      expect(container.querySelector('#new-task-area-title')).toBeNull();
+      expect(container.querySelector('#new-task-project-title')).toBeNull();
       expect(container.querySelector<HTMLAnchorElement>('[aria-label="Open Alpha"]')
         ?.getAttribute('href')).toBe('/projects/project-alpha');
       expect(container.querySelector<HTMLAnchorElement>('[aria-label="Open Work Area"]')
         ?.getAttribute('href')).toBe('/areas/area-work');
 
       await act(async () => {
-        areaInput.focus();
+        container.querySelector<HTMLButtonElement>('[aria-label="Add Area"]')?.click();
+      });
+      const areaInput = document.querySelector<HTMLInputElement>('#new-task-area-title')!;
+      expect(screen.getByRole('dialog', { name: 'Add Area' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+      await act(async () => {
         setControlValue(areaInput, 'Health');
         pressEnter(areaInput, true);
       });
@@ -100,16 +113,50 @@ describe('TaskProjectsView', () => {
         pressEnter(areaInput);
       });
       expect(hierarchy.createArea).toHaveBeenCalledWith('Health');
-      expect(document.activeElement).toBe(areaInput);
+      await act(async () => new Promise<void>((resolve) => window.setTimeout(resolve, 0)));
+      expect(document.activeElement).toBe(
+        container.querySelector<HTMLButtonElement>('[aria-label="Add Area"]'),
+      );
 
       await act(async () => {
-        projectInput.focus();
-        setControlValue(projectInput, 'Launch');
-        setControlValue(projectArea, areaWork.id);
-        pressEnter(projectInput);
+        container.querySelector<HTMLButtonElement>('[aria-label="Add Project"]')?.click();
       });
+      const projectInput = document.querySelector<HTMLInputElement>('#new-task-project-title')!;
+      await act(async () => {
+        setControlValue(projectInput, 'Launch');
+      });
+      const projectArea = screen.getByRole('combobox', { name: 'Area' });
+      projectArea.focus();
+      await userEvent.keyboard('{Enter}{ArrowDown}{Enter}');
+      await act(async () => pressEnter(projectInput));
       expect(hierarchy.createProject).toHaveBeenCalledWith('Launch', areaWork.id);
-      expect(document.activeElement).toBe(projectInput);
+      await act(async () => new Promise<void>((resolve) => window.setTimeout(resolve, 0)));
+      expect(document.activeElement).toBe(
+        container.querySelector<HTMLButtonElement>('[aria-label="Add Project"]'),
+      );
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('cancels creation without mutation and exposes named icon controls', async () => {
+    const hierarchy = defaultHierarchy();
+    const { container, root } = renderView(hierarchy);
+
+    try {
+      const addArea = container.querySelector<HTMLButtonElement>('[aria-label="Add Area"]')!;
+      const addProject = container.querySelector<HTMLButtonElement>('[aria-label="Add Project"]')!;
+      expect(addArea.textContent).toBe('');
+      expect(addProject.textContent).toBe('');
+
+      await act(async () => addProject.click());
+      const projectInput = document.querySelector<HTMLInputElement>('#new-task-project-title')!;
+      fireEvent.input(projectInput, { target: { value: 'Discard Me' } });
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(hierarchy.createProject).not.toHaveBeenCalled();
+      await act(async () => new Promise<void>((resolve) => window.setTimeout(resolve, 0)));
+      expect(document.activeElement).toBe(addProject);
+      expect(document.querySelector('#new-task-project-title')).toBeNull();
     } finally {
       cleanup(root, container);
     }

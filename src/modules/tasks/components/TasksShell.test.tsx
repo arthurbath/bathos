@@ -157,6 +157,18 @@ vi.mock('./TaskTemplatesView', () => ({
   ),
 }));
 
+vi.mock('./TaskSyncDiagnosticsDialog', () => ({
+  TaskSyncDiagnosticsDialog: ({ triggerVariant }: { triggerVariant?: string }) => (
+    <button type="button" data-trigger-variant={triggerVariant}>Synchronization Status</button>
+  ),
+}));
+
+vi.mock('./TaskDataPortabilityDialog', () => ({
+  TaskDataPortabilityDialog: ({ triggerVariant }: { triggerVariant?: string }) => (
+    <button type="button" data-trigger-variant={triggerVariant}>Manage Backups</button>
+  ),
+}));
+
 vi.mock('@/platform/components/ToplineHeader', () => ({
   ToplineHeader: ({ title, onSignOut }: { title: string; onSignOut: () => void }) => (
     <header>
@@ -167,7 +179,29 @@ vi.mock('@/platform/components/ToplineHeader', () => ({
 }));
 
 vi.mock('@/platform/components/MobileBottomNav', () => ({
-  MobileBottomNav: () => <nav data-testid="mobile-nav" />,
+  MobileBottomNav: ({
+    items,
+    overflowItems = [],
+    isActive,
+    hrefForPath,
+  }: {
+    items: Array<{ path: string; label: string }>;
+    overflowItems?: Array<{ path: string; label: string }>;
+    isActive: (path: string) => boolean;
+    hrefForPath: (path: string) => string;
+  }) => (
+    <nav data-testid="mobile-nav">
+      {[...items, ...overflowItems].map(({ path, label }) => (
+        <a
+          key={path}
+          href={hrefForPath(path)}
+          aria-current={isActive(path) ? 'page' : undefined}
+        >
+          {label}
+        </a>
+      ))}
+    </nav>
+  ),
 }));
 
 vi.mock('@/platform/hooks/useHostModule', () => ({
@@ -899,15 +933,17 @@ describe('TasksShell', () => {
     }
   });
 
-  it('provides a real mobile link into Projects and a Today return link', () => {
+  it('keeps Projects in the real-link More hierarchy without duplicate toolbar shortcuts', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const today = renderShell('/tasks/today');
 
     try {
       const projectsLink = today.container.querySelector<HTMLAnchorElement>(
-        'a[aria-label="Open Projects"]',
+        '[data-testid="mobile-nav"] a[href="/tasks/projects"]',
       );
       expect(projectsLink?.getAttribute('href')).toBe('/tasks/projects');
+      expect(today.container.querySelector('a[aria-label="Open Projects"]')).toBeNull();
+      expect(today.container.querySelector('a[aria-label="Open Templates"]')).toBeNull();
     } finally {
       cleanup(today.root, today.container);
     }
@@ -917,28 +953,59 @@ describe('TasksShell', () => {
       expect(projects.container.querySelector('[data-testid="projects-view"]')?.textContent)
         .toBe('Projects');
       const todayLink = projects.container.querySelector<HTMLAnchorElement>(
-        'a[aria-label="Return to Today"]',
+        '[data-testid="mobile-nav"] a[href="/tasks/today"]',
       );
       expect(todayLink?.getAttribute('href')).toBe('/tasks/today');
+      expect(projects.container.querySelector('[data-task-view-heading]')?.textContent)
+        .toBe('Projects');
     } finally {
       cleanup(projects.root, projects.container);
     }
   });
 
-  it('keeps narrow mobile hierarchy links compact without losing their names', () => {
+  it('uses exactly four direct mobile destinations plus six named overflow destinations', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const today = renderShell('/tasks/today');
 
     try {
-      for (const label of ['Open Projects', 'Open Templates']) {
-        const link = today.container.querySelector<HTMLAnchorElement>(
-          `a[aria-label="${label}"]`,
-        );
-        expect(link).not.toBeNull();
-        expect(link?.querySelector('span')?.className).toContain('sr-only sm:not-sr-only');
-      }
+      const mobileLinks = Array.from(today.container.querySelectorAll<HTMLAnchorElement>(
+        '[data-testid="mobile-nav"] a',
+      ));
+      expect(mobileLinks.slice(0, 4).map((link) => link.textContent)).toEqual([
+        'Inbox', 'Today', 'Upcoming', 'Anytime',
+      ]);
+      expect(mobileLinks.slice(4).map((link) => link.textContent)).toEqual([
+        'Someday', 'Projects', 'Templates', 'Logbook', 'Trash', 'Config',
+      ]);
     } finally {
       cleanup(today.root, today.container);
+    }
+  });
+
+  it('keeps maintenance surfaces on Config and out of the daily header and body', () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const today = renderShell('/tasks/today');
+
+    try {
+      expect(today.container.querySelector('[aria-label="Browser Reminder Capability"]')).toBeNull();
+      expect(today.container.querySelector('[data-trigger-variant="config"]')).toBeNull();
+    } finally {
+      cleanup(today.root, today.container);
+    }
+
+    const config = renderShell('/tasks/config');
+    try {
+      expect(config.container.querySelector('[data-task-view-heading]')?.textContent).toBe('Config');
+      for (const title of ['Browser Reminders', 'Synchronization', 'Backup and Restore']) {
+        expect(config.container.textContent).toContain(title);
+      }
+      expect(config.container.querySelectorAll('[data-trigger-variant="config"]')).toHaveLength(2);
+      expect(config.container.querySelector('[aria-label="Add a Task"]')).toBeNull();
+      expect(config.container.querySelector<HTMLAnchorElement>(
+        '[data-testid="mobile-nav"] a[href="/tasks/config"]',
+      )?.getAttribute('aria-current')).toBe('page');
+    } finally {
+      cleanup(config.root, config.container);
     }
   });
 
@@ -950,11 +1017,13 @@ describe('TasksShell', () => {
         .toBe('Templates');
       expect(templates.container.querySelector('[aria-label="Add a Task"]')).toBeNull();
       expect(templates.container.querySelector<HTMLAnchorElement>(
-        'nav[aria-label="Task views"] a[href="/tasks/templates"]',
+        '[data-testid="mobile-nav"] a[href="/tasks/templates"]',
       )?.getAttribute('aria-current')).toBe('page');
-      expect(templates.container.querySelector<HTMLAnchorElement>(
-        'a[aria-label="Return to Today"]',
-      )?.getAttribute('href')).toBe('/tasks/today');
+      expect(templates.container.querySelector<HTMLButtonElement>(
+        'nav[aria-label="Task views"] button[aria-label="More Task Views"]',
+      )?.getAttribute('aria-pressed')).toBe('true');
+      expect(templates.container.querySelector('[data-task-view-heading]')?.textContent)
+        .toBe('Templates');
     } finally {
       cleanup(templates.root, templates.container);
     }
@@ -968,8 +1037,8 @@ describe('TasksShell', () => {
         .toBe('Project project-alpha');
       expect(project.container.querySelector('[aria-label="Add a Task"]')).toBeNull();
       expect(project.container.querySelector<HTMLAnchorElement>(
-        'a[aria-label="Return to Projects"]',
-      )?.getAttribute('href')).toBe('/tasks/projects');
+        '[data-testid="mobile-nav"] a[href="/tasks/projects"]',
+      )?.getAttribute('aria-current')).toBe('page');
     } finally {
       cleanup(project.root, project.container);
     }
@@ -1034,11 +1103,8 @@ describe('TasksShell', () => {
         .toBe('Area area-work');
       expect(area.container.querySelector('[aria-label="Add a Task"]')).toBeNull();
       expect(area.container.querySelector<HTMLAnchorElement>(
-        'nav[aria-label="Task views"] a[href="/tasks/projects"]',
+        '[data-testid="mobile-nav"] a[href="/tasks/projects"]',
       )?.getAttribute('aria-current')).toBe('page');
-      expect(area.container.querySelector<HTMLAnchorElement>(
-        'a[aria-label="Return to Projects"]',
-      )?.getAttribute('href')).toBe('/tasks/projects');
     } finally {
       cleanup(area.root, area.container);
     }
@@ -1361,7 +1427,7 @@ describe('TasksShell', () => {
 
     try {
       expect(container.textContent).toContain('Launch / Next');
-      const titleButton = container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!;
+      const titleButton = container.querySelector<HTMLButtonElement>('button[data-task-id="task-a"]')!;
       await act(async () => titleButton.click());
       const organization = container.querySelector<HTMLSelectElement>(
         '#task-organization-task-a',
@@ -1393,9 +1459,7 @@ describe('TasksShell', () => {
     const { container, root } = renderShell();
 
     try {
-      const titleButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
-        (button) => button.getAttribute('aria-expanded') === 'false',
-      );
+      const titleButton = container.querySelector<HTMLButtonElement>('button[data-task-id="task-a"]');
       await act(async () => {
         titleButton?.click();
       });
@@ -1603,10 +1667,10 @@ describe('TasksShell', () => {
         enable, disable: vi.fn().mockResolvedValue(undefined),
       },
     });
-    const { container, root } = renderShell();
+    const { container, root } = renderShell('/tasks/config');
 
     try {
-      expect(container.querySelector('section[aria-label="Browser Reminder Capability"]')?.textContent)
+      expect(container.querySelector('[aria-label="Browser Reminder Capability"]')?.textContent)
         .toContain('Background Reminders Off');
       const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
         .find(({ textContent }) => textContent === 'Enable');
@@ -1630,10 +1694,10 @@ describe('TasksShell', () => {
         enable, disable: vi.fn().mockResolvedValue(undefined),
       },
     });
-    const { container, root } = renderShell();
+    const { container, root } = renderShell('/tasks/config');
 
     try {
-      const capability = container.querySelector('section[aria-label="Browser Reminder Capability"]');
+      const capability = container.querySelector('[aria-label="Browser Reminder Capability"]');
       expect(capability?.textContent).toContain('Background Reminders Degraded');
       expect(capability?.textContent).toContain('In-app reminders remain available');
       expect(capability?.textContent).not.toContain('provider endpoint');
@@ -1668,9 +1732,7 @@ describe('TasksShell', () => {
     const { container, root } = renderShell();
 
     try {
-      const titleButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
-        (button) => button.getAttribute('aria-expanded') === 'false',
-      );
+      const titleButton = container.querySelector<HTMLButtonElement>('button[data-task-id="task-a"]');
       await act(async () => {
         titleButton?.click();
       });

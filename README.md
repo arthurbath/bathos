@@ -66,6 +66,7 @@ Accessible at [os.bath.garden/snake/weights](https://os.bath.garden/snake/weight
 Plan and complete personal tasks through a private-first, keyboard-focused workflow. Features include:
 
 - Inbox, Today, Upcoming, Anytime, Someday, Logbook, and Trash views
+- Four primary navigation destinations with secondary views and maintenance tools under More and Config
 - Areas, projects, headings, checklists, templates, reminders, and recurrence
 - Structured actionability and source provenance without generic tags
 - Offline local operation, recoverable deletion, history, export, and restore

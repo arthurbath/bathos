@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
   getTasksStorageStatusLabel,
@@ -24,7 +25,11 @@ import {
   type TaskConflictReceipt,
 } from '@/modules/tasks/hooks/useTaskSyncDiagnostics';
 
-export function TaskSyncDiagnosticsDialog() {
+export function TaskSyncDiagnosticsDialog({
+  triggerVariant = 'status',
+}: {
+  triggerVariant?: 'status' | 'config';
+}) {
   const diagnostics = useTaskSyncDiagnostics();
   const label = getTasksStorageStatusLabel(diagnostics);
   const Icon = diagnostics.mode === 'connected' ? Cloud : HardDrive;
@@ -37,19 +42,32 @@ export function TaskSyncDiagnosticsDialog() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'inline-flex cursor-pointer items-center gap-1.5 rounded-sm text-xs font-medium transition-colors hover:text-foreground',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-            hasError ? 'text-destructive' : 'text-info',
-          )}
-          aria-label={`Task Sync Status: ${label}. Open Synchronization Details`}
-          title={`Task Sync Status: ${label}`}
-        >
-          <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-          <span className="max-sm:sr-only" aria-live="polite">{label}</span>
-        </button>
+        {triggerVariant === 'config' ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn('gap-2', hasError && 'border-destructive/40 text-destructive')}
+            aria-label={`Task Sync Status: ${label}. Open Synchronization Details`}
+          >
+            <Icon className="h-4 w-4" aria-hidden="true" />
+            <span aria-live="polite">{label}</span>
+          </Button>
+        ) : (
+          <button
+            type="button"
+            className={cn(
+              'inline-flex cursor-pointer items-center gap-1.5 rounded-sm text-xs font-medium transition-colors hover:text-foreground',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+              hasError ? 'text-destructive' : 'text-info',
+            )}
+            aria-label={`Task Sync Status: ${label}. Open Synchronization Details`}
+            title={`Task Sync Status: ${label}`}
+          >
+            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="max-sm:sr-only" aria-live="polite">{label}</span>
+          </button>
+        )}
       </DialogTrigger>
       <DialogContent aria-describedby={undefined}>
         <DialogHeader>

@@ -1,10 +1,35 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { ArrowDown, ArrowUp, Check, ChevronRight, FolderKanban, Pencil, Plus, X } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ChevronRight,
+  FolderKanban,
+  FolderPlus,
+  ListPlus,
+  Pencil,
+  X,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
@@ -20,6 +45,10 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
   const [newProjectAreaId, setNewProjectAreaId] = useState('');
   const [creatingArea, setCreatingArea] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
+  const [areaDialogOpen, setAreaDialogOpen] = useState(false);
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const addAreaButtonRef = useRef<HTMLButtonElement>(null);
+  const addProjectButtonRef = useRef<HTMLButtonElement>(null);
 
   const createArea = async (event: FormEvent) => {
     event.preventDefault();
@@ -28,6 +57,7 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
     try {
       await hierarchy.createArea(newAreaTitle);
       setNewAreaTitle('');
+      setAreaDialogOpen(false);
     } catch (error) {
       showError('Area Could Not Be Added', error);
     } finally {
@@ -42,6 +72,8 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
     try {
       await hierarchy.createProject(newProjectTitle, newProjectAreaId || null);
       setNewProjectTitle('');
+      setNewProjectAreaId('');
+      setProjectDialogOpen(false);
     } catch (error) {
       showError('Project Could Not Be Added', error);
     } finally {
@@ -68,55 +100,143 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
 
   return (
     <div className="space-y-8">
-      <div className="grid gap-4 md:grid-cols-2">
-        <form onSubmit={createArea} className="flex gap-2">
-          <Input
-            value={newAreaTitle}
-            onChange={(event) => setNewAreaTitle(event.target.value)}
-            onKeyDown={submitTaskFormOnEnter}
-            aria-label="New Area Name"
-            placeholder="New Area"
-          />
-          <Button
-            type="submit"
-            variant="outline-success"
-            size="icon"
-            disabled={creatingArea || !newAreaTitle.trim()}
-            aria-label="Add Area"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-        </form>
-        <form onSubmit={createProject} className="flex gap-2">
-          <Input
-            value={newProjectTitle}
-            onChange={(event) => setNewProjectTitle(event.target.value)}
-            onKeyDown={submitTaskFormOnEnter}
-            aria-label="New Project Name"
-            placeholder="New Project"
-          />
-          <select
-            value={newProjectAreaId}
-            onChange={(event) => setNewProjectAreaId(event.target.value)}
-            aria-label="New Project Area"
-            className="h-10 min-w-0 max-w-40 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">No Area</option>
-            {hierarchy.areas.map((area) => (
-              <option key={area.id} value={area.id}>{area.title}</option>
-            ))}
-          </select>
-          <Button
-            type="submit"
-            variant="outline-success"
-            size="icon"
-            disabled={creatingProject || !newProjectTitle.trim()}
-            aria-label="Add Project"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-        </form>
+      <div className="flex justify-end gap-2">
+        <Button
+          ref={addAreaButtonRef}
+          type="button"
+          variant="outline-success"
+          size="sm"
+          className="h-8 w-8 p-0"
+          aria-label="Add Area"
+          title="Add Area"
+          onClick={() => setAreaDialogOpen(true)}
+        >
+          <FolderPlus className="h-4 w-4" aria-hidden="true" />
+        </Button>
+        <Button
+          ref={addProjectButtonRef}
+          type="button"
+          variant="outline-success"
+          size="sm"
+          className="h-8 w-8 p-0"
+          aria-label="Add Project"
+          title="Add Project"
+          onClick={() => setProjectDialogOpen(true)}
+        >
+          <ListPlus className="h-4 w-4" aria-hidden="true" />
+        </Button>
       </div>
+
+      <Dialog
+        open={areaDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && creatingArea) return;
+          setAreaDialogOpen(open);
+          if (!open) setNewAreaTitle('');
+        }}
+      >
+        <DialogContent
+          aria-describedby={undefined}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            addAreaButtonRef.current?.focus();
+          }}
+        >
+          <DialogHeader><DialogTitle>Add Area</DialogTitle></DialogHeader>
+          <form className="contents" onSubmit={createArea}>
+            <DialogBody className="space-y-2 pt-4">
+              <label htmlFor="new-task-area-title" className="text-sm font-medium text-foreground">
+                Name <span className="text-destructive" aria-hidden="true">*</span>
+              </label>
+              <Input
+                id="new-task-area-title"
+                autoFocus
+                value={newAreaTitle}
+                onChange={(event) => setNewAreaTitle(event.target.value)}
+                onKeyDown={submitTaskFormOnEnter}
+                disabled={creatingArea}
+                autoComplete="off"
+              />
+            </DialogBody>
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={creatingArea} onClick={() => setAreaDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={creatingArea || !newAreaTitle.trim()}>
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={projectDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && creatingProject) return;
+          setProjectDialogOpen(open);
+          if (!open) {
+            setNewProjectTitle('');
+            setNewProjectAreaId('');
+          }
+        }}
+      >
+        <DialogContent
+          aria-describedby={undefined}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            addProjectButtonRef.current?.focus();
+          }}
+        >
+          <DialogHeader><DialogTitle>Add Project</DialogTitle></DialogHeader>
+          <form className="contents" onSubmit={createProject}>
+            <DialogBody className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <label htmlFor="new-task-project-title" className="text-sm font-medium text-foreground">
+                  Name <span className="text-destructive" aria-hidden="true">*</span>
+                </label>
+                <Input
+                  id="new-task-project-title"
+                  autoFocus
+                  value={newProjectTitle}
+                  onChange={(event) => setNewProjectTitle(event.target.value)}
+                  onKeyDown={submitTaskFormOnEnter}
+                  disabled={creatingProject}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="new-task-project-area" className="text-sm font-medium text-foreground">
+                  Area
+                </label>
+                <Select
+                  value={newProjectAreaId || 'none'}
+                  onValueChange={(value) => setNewProjectAreaId(value === 'none' ? '' : value)}
+                  disabled={creatingProject}
+                >
+                  <SelectTrigger id="new-task-project-area" aria-label="Area">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Area</SelectItem>
+                    {hierarchy.areas.map((area) => (
+                      <SelectItem key={area.id} value={area.id}>{area.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </DialogBody>
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={creatingProject} onClick={() => setProjectDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={creatingProject || !newProjectTitle.trim()}>
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {hierarchy.areas.length === 0 && unassigned.length === 0 ? (
         <p className="py-12 text-center text-sm text-muted-foreground">No Areas or Projects</p>
