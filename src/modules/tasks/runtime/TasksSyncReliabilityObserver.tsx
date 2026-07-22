@@ -24,6 +24,8 @@ type TaskSyncHealthEventStoreLike = Pick<
   'reconcile' | 'reportCurrentIfDue'
 >;
 
+export const TASK_SYNC_DEGRADATION_CONFIRM_DELAY_MS = 5_000;
+
 type TasksSyncReliabilityObserverProps = {
   store?: TaskSyncHealthEventStoreLike;
   now?: () => Date;
@@ -79,10 +81,11 @@ export function TasksSyncReliabilityObserver({
     if (!statusLoaded) return undefined;
 
     let active = true;
+    let confirmationTimer: ReturnType<typeof setTimeout> | undefined;
     let reportTimer: ReturnType<typeof setTimeout> | undefined;
 
-    void (async () => {
-      const observedAt = now().toISOString();
+    const observedAt = now().toISOString();
+    const reconcile = async () => {
       const result = await store.reconcile({
         state: healthState,
         pendingUploadCount,
@@ -92,8 +95,9 @@ export function TasksSyncReliabilityObserver({
       });
       if (!active) return;
 
+      const reconciledAt = now().toISOString();
       if (result.resolvedEvent !== null) {
-        addRecoveryBreadcrumb(result.resolvedEvent, observedAt);
+        addRecoveryBreadcrumb(result.resolvedEvent, reconciledAt);
       }
       if (
         !production
@@ -103,7 +107,7 @@ export function TasksSyncReliabilityObserver({
         return;
       }
 
-      const elapsedMs = Date.parse(observedAt) - Date.parse(result.openEvent.startedAt);
+      const elapsedMs = Date.parse(reconciledAt) - Date.parse(result.openEvent.startedAt);
       const remainingMs = Math.max(0, TASK_SYNC_DEGRADATION_REPORT_DELAY_MS - elapsedMs);
       reportTimer = setTimeout(() => {
         if (!active) return;
@@ -113,10 +117,20 @@ export function TasksSyncReliabilityObserver({
           capture,
         }).catch(() => undefined);
       }, remainingMs);
-    })().catch(() => undefined);
+    };
+
+    if (isTaskSyncDegradationState(healthState)) {
+      confirmationTimer = setTimeout(() => {
+        if (!active) return;
+        void reconcile().catch(() => undefined);
+      }, TASK_SYNC_DEGRADATION_CONFIRM_DELAY_MS);
+    } else {
+      void reconcile().catch(() => undefined);
+    }
 
     return () => {
       active = false;
+      if (confirmationTimer !== undefined) clearTimeout(confirmationTimer);
       if (reportTimer !== undefined) clearTimeout(reportTimer);
     };
   }, [

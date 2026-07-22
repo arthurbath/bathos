@@ -2,7 +2,10 @@ import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskSyncHealthEvent } from '@/modules/tasks/data/taskSyncHealthEventStore';
-import { TasksSyncReliabilityObserver } from './TasksSyncReliabilityObserver';
+import {
+  TASK_SYNC_DEGRADATION_CONFIRM_DELAY_MS,
+  TasksSyncReliabilityObserver,
+} from './TasksSyncReliabilityObserver';
 
 const mocks = vi.hoisted(() => ({
   useStatus: vi.fn(),
@@ -84,14 +87,17 @@ describe('TasksSyncReliabilityObserver', () => {
         now={() => new Date(Date.now())}
       />,
     );
-    await act(async () => Promise.resolve());
+    expect(store.reconcile).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TASK_SYNC_DEGRADATION_CONFIRM_DELAY_MS);
+    });
     expect(store.reconcile).toHaveBeenCalledWith(expect.objectContaining({
       state: 'offline',
       hasCompletedSync: true,
     }));
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(59_999);
+      await vi.advanceTimersByTimeAsync(54_999);
     });
     expect(store.reportCurrentIfDue).not.toHaveBeenCalled();
     await act(async () => {
@@ -102,6 +108,63 @@ describe('TasksSyncReliabilityObserver', () => {
       observedAt: '2026-07-21T15:02:00.000Z',
       capture,
     });
+  });
+
+  it('does not persist an offline startup blip that clears before confirmation', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-21T15:00:00.000Z'));
+    const store = {
+      reconcile: vi.fn().mockResolvedValue({ openEvent: null, resolvedEvent: null }),
+      reportCurrentIfDue: vi.fn(),
+    };
+    const now = () => new Date(Date.now());
+    const view = render(<TasksSyncReliabilityObserver store={store} now={now} />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TASK_SYNC_DEGRADATION_CONFIRM_DELAY_MS - 1);
+    });
+    expect(store.reconcile).not.toHaveBeenCalled();
+
+    mocks.useTasksRuntime.mockReturnValue({
+      database: {}, mode: 'connected', syncState: 'connected', pendingUploadCount: 0,
+    });
+    view.rerender(<TasksSyncReliabilityObserver store={store} now={now} />);
+    await act(async () => Promise.resolve());
+
+    expect(store.reconcile).toHaveBeenCalledTimes(1);
+    expect(store.reconcile).toHaveBeenCalledWith(expect.objectContaining({
+      state: 'healthy',
+    }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(store.reconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists a confirmed outage with its first-observed timestamp', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-21T15:00:00.000Z'));
+    const store = {
+      reconcile: vi.fn().mockResolvedValue({ openEvent: null, resolvedEvent: null }),
+      reportCurrentIfDue: vi.fn(),
+    };
+
+    render(
+      <TasksSyncReliabilityObserver
+        store={store}
+        now={() => new Date(Date.now())}
+      />,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TASK_SYNC_DEGRADATION_CONFIRM_DELAY_MS);
+    });
+
+    expect(store.reconcile).toHaveBeenCalledOnce();
+    expect(store.reconcile).toHaveBeenCalledWith(expect.objectContaining({
+      state: 'offline',
+      observedAt: '2026-07-21T15:00:00.000Z',
+    }));
   });
 
   it('records a bounded recovery breadcrumb without scheduling a report', async () => {
