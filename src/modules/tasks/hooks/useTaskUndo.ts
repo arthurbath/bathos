@@ -2,6 +2,8 @@ import { useQuery } from '@powersync/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
+  createTaskRedoPatch,
+  createTaskUndoPatch,
   parseTaskHistoryEvent,
   UnsafeTaskRedoError,
   UnsafeTaskUndoError,
@@ -10,6 +12,7 @@ import {
   type TaskHistoryStorageRow,
 } from '@/modules/tasks/domain/taskHistory';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
+import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
 export const TASK_HISTORY_LIMIT = 100;
 const TASK_HISTORY_REPLAY_LIMIT = 500;
@@ -35,39 +38,57 @@ export function useTaskUndo(ownerId: string) {
   const query = useQuery<TaskHistoryStorageRow>(taskHistoryQuery, [ownerId]);
   const pendingRef = useRef(false);
   const cursorRef = useRef<TaskHistoryCursor>(emptyCursor());
-  const processedEventIdsRef = useRef(new Set<string>());
-  const ownerIdRef = useRef(ownerId);
+  const projectedCursorRef = useRef<TaskHistoryCursor>(emptyCursor());
+  const projectedCursorKeyRef = useRef('');
   const [cursor, setCursor] = useState<TaskHistoryCursor>(emptyCursor);
   const [pending, setPending] = useState(false);
   const parsed = useMemo(() => parseHistoryEvents(query.data), [query.data]);
+  const projectionKey = `${ownerId}:${parsed.events.map(({ id }) => id).join(',')}`;
+  if (projectedCursorKeyRef.current !== projectionKey) {
+    projectedCursorKeyRef.current = projectionKey;
+    projectedCursorRef.current = replayTaskHistory(parsed.events);
+  }
+  const undoEvent = cursor.undo.at(-1) ?? null;
+  const redoEvent = cursor.redo.at(-1) ?? null;
+  const tipTaskIds = [...new Set(
+    [undoEvent?.task_id, redoEvent?.task_id].filter((value): value is string => Boolean(value)),
+  )];
+  const taskQuery = useQuery<TaskTodo>(
+    tipTaskIds.length > 0
+      ? `SELECT * FROM tasks_todos WHERE owner_id = ? AND id IN (${tipTaskIds.map(() => '?').join(', ')})`
+      : 'SELECT * FROM tasks_todos WHERE 0 = 1',
+    tipTaskIds.length > 0 ? [ownerId, ...tipTaskIds] : [],
+  );
+  const undoTask = undoEvent === null
+    ? null
+    : taskQuery.data.find((task) => task.id === undoEvent.task_id) ?? null;
+  const redoTask = redoEvent === null
+    ? null
+    : taskQuery.data.find((task) => task.id === redoEvent.task_id) ?? null;
+  const undoSafe = undoEvent !== null
+    && undoTask !== null
+    && taskHistoryMovementIsSafe(undoTask, undoEvent, 'undo');
+  const redoSafe = redoEvent !== null
+    && redoTask !== null
+    && taskHistoryMovementIsSafe(redoTask, redoEvent, 'redo');
 
   useEffect(() => {
-    if (ownerIdRef.current !== ownerId) {
-      ownerIdRef.current = ownerId;
-      processedEventIdsRef.current = new Set();
-      cursorRef.current = emptyCursor();
-      setCursor(cursorRef.current);
-    }
-
-    let next = cursorRef.current;
-    let changed = false;
-    for (const event of parsed.events) {
-      if (processedEventIdsRef.current.has(event.id)) {
-        continue;
-      }
-      processedEventIdsRef.current.add(event.id);
-      next = applyTaskHistoryEvent(next, event);
-      changed = true;
-    }
-    if (changed) {
-      cursorRef.current = next;
-      setCursor(next);
-    }
-  }, [ownerId, parsed.events]);
+    const next = projectedCursorRef.current;
+    cursorRef.current = next;
+    setCursor(next);
+  }, [projectionKey]);
 
   const undo = useCallback(async () => {
     const event = cursorRef.current.undo.at(-1) ?? null;
-    if (pendingRef.current || event === null) {
+    const currentTask = event === null
+      ? null
+      : taskQuery.data.find((task) => task.id === event.task_id) ?? null;
+    if (
+      pendingRef.current
+      || event === null
+      || currentTask === null
+      || !taskHistoryMovementIsSafe(currentTask, event, 'undo')
+    ) {
       throw new UnsafeTaskUndoError('There is no current task change available to undo');
     }
 
@@ -83,11 +104,19 @@ export function useTaskUndo(ownerId: string) {
       pendingRef.current = false;
       setPending(false);
     }
-  }, [ownerId, repository]);
+  }, [ownerId, repository, taskQuery.data]);
 
   const redo = useCallback(async () => {
     const event = cursorRef.current.redo.at(-1) ?? null;
-    if (pendingRef.current || event === null) {
+    const currentTask = event === null
+      ? null
+      : taskQuery.data.find((task) => task.id === event.task_id) ?? null;
+    if (
+      pendingRef.current
+      || event === null
+      || currentTask === null
+      || !taskHistoryMovementIsSafe(currentTask, event, 'redo')
+    ) {
       throw new UnsafeTaskRedoError('There is no current task change available to redo');
     }
 
@@ -103,21 +132,41 @@ export function useTaskUndo(ownerId: string) {
       pendingRef.current = false;
       setPending(false);
     }
-  }, [ownerId, repository]);
+  }, [ownerId, repository, taskQuery.data]);
 
   return {
-    available: cursor.undo.length > 0,
-    redoAvailable: cursor.redo.length > 0,
+    available: undoSafe && !pending,
+    redoAvailable: redoSafe && !pending,
     pending,
-    loading: query.isLoading,
-    error: query.error ?? parsed.error,
-    event: cursor.undo.at(-1) ?? null,
-    redoEvent: cursor.redo.at(-1) ?? null,
+    loading: query.isLoading || taskQuery.isLoading,
+    error: query.error ?? taskQuery.error ?? parsed.error,
+    event: undoEvent,
+    redoEvent,
     undoDepth: cursor.undo.length,
     redoDepth: cursor.redo.length,
     undo,
     redo,
   };
+}
+
+export function taskHistoryMovementIsSafe(
+  task: TaskTodo,
+  event: TaskHistoryEvent,
+  direction: 'undo' | 'redo',
+): boolean {
+  try {
+    if (direction === 'undo') {
+      createTaskUndoPatch(task, event);
+    } else {
+      createTaskRedoPatch(task, event);
+    }
+    return true;
+  } catch (error) {
+    if (error instanceof UnsafeTaskUndoError || error instanceof UnsafeTaskRedoError) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 export function replayTaskHistory(events: readonly TaskHistoryEvent[]): TaskHistoryCursor {

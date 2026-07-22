@@ -11,6 +11,7 @@ import {
 import { taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 import {
   replayTaskHistory,
+  taskHistoryMovementIsSafe,
   TASK_HISTORY_LIMIT,
   useTaskUndo,
 } from './useTaskUndo';
@@ -41,6 +42,10 @@ function renderHookHarness() {
   const root = createRoot(container);
   act(() => root.render(<Harness />));
   return { container, root };
+}
+
+function rerender(root: Root) {
+  act(() => root.render(<Harness />));
 }
 
 function cleanup(root: Root, container: HTMLElement) {
@@ -82,11 +87,17 @@ describe('useTaskUndo', () => {
 
   it('applies undo and redo optimistically from the authoritative source event', async () => {
     const event = historyRow(0);
+    const historyData = [event];
+    let taskData = [taskTodoFixture({ title: 'Title 1' })];
     const repository = {
       undoTask: vi.fn().mockResolvedValue(taskTodoFixture({ title: 'Title 0' })),
       redoTask: vi.fn().mockResolvedValue(taskTodoFixture({ title: 'Title 1' })),
     };
-    mocks.useQuery.mockReturnValue({ data: [event], isLoading: false, error: null });
+    mocks.useQuery.mockImplementation((sql: string) => ({
+      data: sql.includes('tasks_history_events') ? historyData : taskData,
+      isLoading: false,
+      error: null,
+    }));
     mocks.useTasksRuntime.mockReturnValue({ repository });
     const { container, root } = renderHookHarness();
 
@@ -101,14 +112,22 @@ describe('useTaskUndo', () => {
       });
       expect(repository.undoTask).toHaveBeenCalledWith('owner-a', event.id);
       expect(latest.available).toBe(false);
+      expect(latest.redoAvailable).toBe(false);
+
+      taskData = [taskTodoFixture({ title: 'Title 0' })];
+      rerender(root);
       expect(latest.redoAvailable).toBe(true);
 
       await act(async () => {
         await latest.redo();
       });
       expect(repository.redoTask).toHaveBeenCalledWith('owner-a', event.id);
-      expect(latest.available).toBe(true);
+      expect(latest.available).toBe(false);
       expect(latest.redoAvailable).toBe(false);
+
+      taskData = [taskTodoFixture({ title: 'Title 1' })];
+      rerender(root);
+      expect(latest.available).toBe(true);
     } finally {
       cleanup(root, container);
     }
@@ -143,6 +162,14 @@ describe('useTaskUndo', () => {
     expect(redone.undo).toHaveLength(TASK_HISTORY_LIMIT);
     expect(redone.undo.at(-1)?.id).toBe(source.id);
     expect(redone.redo).toHaveLength(0);
+
+    const branchedForward = parseTaskHistoryEvent(historyRow(202, {
+      id: 'event-branch',
+      occurred_at: '2026-07-21T00:02:00.000Z',
+    }));
+    const branched = replayTaskHistory([...forward, undo, branchedForward]);
+    expect(branched.redo).toHaveLength(0);
+    expect(branched.undo.at(-1)?.id).toBe('event-branch');
   });
 
   it('does not expose history movement without a supported source event', async () => {
@@ -157,6 +184,66 @@ describe('useTaskUndo', () => {
       expect(latest.redoAvailable).toBe(false);
       await expect(latest.undo()).rejects.toThrow('no current task change');
       await expect(latest.redo()).rejects.toThrow('no current task change');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('rebuilds the cursor when older history arrives after a newer event', () => {
+    const older = historyRow(0);
+    const newer = historyRow(1);
+    let historyData = [newer];
+    const taskData = [taskTodoFixture({ title: 'Title 2' })];
+    mocks.useQuery.mockImplementation((sql: string) => ({
+      data: sql.includes('tasks_history_events') ? historyData : taskData,
+      isLoading: false,
+      error: null,
+    }));
+    mocks.useTasksRuntime.mockReturnValue({
+      repository: { undoTask: vi.fn(), redoTask: vi.fn() },
+    });
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.event?.id).toBe(newer.id);
+      expect(latest.undoDepth).toBe(1);
+      historyData = [newer, older];
+      rerender(root);
+      expect(latest.event?.id).toBe(newer.id);
+      expect(latest.undoDepth).toBe(2);
+      expect(latest.available).toBe(true);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('withholds the latest movement during projection skew without skipping it', () => {
+    const older = historyRow(0);
+    const newer = historyRow(1);
+    let taskData = [taskTodoFixture({ title: 'Title 1' })];
+    mocks.useQuery.mockImplementation((sql: string) => ({
+      data: sql.includes('tasks_history_events') ? [newer, older] : taskData,
+      isLoading: false,
+      error: null,
+    }));
+    mocks.useTasksRuntime.mockReturnValue({
+      repository: { undoTask: vi.fn(), redoTask: vi.fn() },
+    });
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.event?.id).toBe(newer.id);
+      expect(latest.available).toBe(false);
+      expect(taskHistoryMovementIsSafe(
+        taskTodoFixture({ title: 'Title 1' }),
+        parseTaskHistoryEvent(newer),
+        'undo',
+      )).toBe(false);
+
+      taskData = [taskTodoFixture({ title: 'Title 2' })];
+      rerender(root);
+      expect(latest.event?.id).toBe(newer.id);
+      expect(latest.available).toBe(true);
     } finally {
       cleanup(root, container);
     }

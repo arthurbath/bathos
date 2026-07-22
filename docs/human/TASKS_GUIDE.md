@@ -15,7 +15,7 @@ BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/ta
 | View | Purpose |
 | --- | --- |
 | Today | Eligible Anytime work grouped into Inbox, Now, Next, and Later |
-| Upcoming | Work with a future start date, including its selected day horizon |
+| Upcoming | Work controlled by a future start date or, when no future start exists, a future deadline |
 | Anytime | All active work available now, including every Today task |
 | Someday | Inactive work kept for possible future attention |
 | Done | Completed, canceled, and recoverably deleted work retained for 30 full owner-local days |
@@ -26,9 +26,9 @@ Today, Upcoming, Anytime, and Someday remain directly available in the primary n
 
 Press `N` from Today, Anytime, or Someday to focus the capture field. Today and Anytime captures default to Anytime and Today Inbox. Someday captures remain outside Today. Raycast capture commands also default to Anytime and Today Inbox.
 
-Use Start Date for availability and Day Horizon for the Today section in which the work should appear. Inbox is the default triage section, followed by Now, Next, and Later. A future item keeps its selected day horizon while it remains in Upcoming, then enters Today in that section on its owner-local start date. A future item without a selected horizon enters Today Inbox when due. Removing the day horizon from undated work keeps it in Anytime and removes it from Today.
+Use Start Date for availability and Day Horizon for the Today section in which the work should appear. Inbox is the default triage section, followed by Now, Next, and Later. A future start date controls an item's Upcoming placement even when it also has a deadline. If no future start exists, a future deadline controls its placement instead. Upcoming groups tomorrow through the next seven days individually, later work through the next 12 months by month, and more distant work by year. A future item keeps its selected day horizon while it remains in Upcoming, then enters Today in that section on its owner-local start date. A future item without a selected horizon enters Today Inbox when due. Removing the day horizon from undated work keeps it in Anytime and removes it from Today.
 
-Use deadlines for the last acceptable date and reminders for a specific local time. Mark work as `Waiting` when it cannot be acted upon now. Structured webpage, file, reading-item, and Mail sources remain distinct from the task title and notes.
+Use deadlines for the last acceptable date and reminders for a specific local time. Mark work as `Waiting` when it cannot be acted upon now. Structured webpage, file, reading-item, and Mail sources remain distinct from the task title and notes. Expanded nonempty notes render complete safe Markdown, including emphasis, inline code, bulleted lists, and HTTP or HTTPS links. Choose Edit Notes to change the original plain-text Markdown. Empty notes open directly in the full-height editor.
 
 ## Keyboard Commands
 
@@ -50,11 +50,11 @@ Press `?` in Tasks to open the current keyboard and pointer reference. The panel
 | Save an open editor | `Command+Enter` | `Control+Enter` |
 | Cancel or close the current surface | `Escape` | `Escape` |
 
-Tasks retains up to 100 safe forward changes for keyboard undo and redo. A new forward change clears the redo path. Undo or redo stops when the current task no longer matches the exact recorded state, preventing an older action from overwriting intervening work.
+Tasks retains up to 100 safe forward changes for keyboard undo and redo. A new forward change clears the redo path. The client rebuilds that cursor when synchronized history changes and temporarily withholds undo or redo until the current task and cursor-tip snapshots agree. It never skips an unsafe latest event to reach older history. The server independently rejects any stale inverse, preventing older work from overwriting intervening changes.
 
 Command-click on Mac or Control-click on Windows enters selection mode and toggles a task. Shift-click replaces the selection with the contiguous range between the original anchor and the newly clicked task. Once selection mode is active, an ordinary click also toggles a task. Choose `Done` in the selection bar to return to ordinary single-click editing.
 
-Drag a task directly to another position inside the same Today section, Anytime list, or Someday list. Keyboard and row-menu reorder commands remain available.
+Drag a Today task before or after a task in another visible Today section to change its day horizon and order together. Empty Today sections remain hidden and do not act as drop zones. Dragging within Anytime or Someday changes order only. Keyboard and row-menu reorder commands remain section-bounded alternatives.
 
 ## Capture from Raycast
 

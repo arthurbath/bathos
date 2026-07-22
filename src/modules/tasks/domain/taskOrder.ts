@@ -85,6 +85,36 @@ export function generateTaskMoveOrderKey(
   );
 }
 
+export function generateTaskDropOrderKey(
+  tasks: readonly OrderedTask[],
+  targetTaskId: string,
+  placement: 'before' | 'after',
+): string {
+  const ordered = [...tasks].sort(compareTaskOrder);
+  const targetIndex = ordered.findIndex((task) => task.id === targetTaskId);
+  if (targetIndex === -1) {
+    throw new InvalidTaskOrderError('The target task is not present in the ordered collection');
+  }
+
+  const targetKey = ordered[targetIndex].orderKey;
+  if (placement === 'before') {
+    let firstTiedIndex = targetIndex;
+    while (firstTiedIndex > 0 && ordered[firstTiedIndex - 1].orderKey === targetKey) {
+      firstTiedIndex -= 1;
+    }
+    return generateTaskOrderKey(ordered[firstTiedIndex - 1]?.orderKey ?? null, targetKey);
+  }
+
+  let lastTiedIndex = targetIndex;
+  while (
+    lastTiedIndex + 1 < ordered.length
+    && ordered[lastTiedIndex + 1].orderKey === targetKey
+  ) {
+    lastTiedIndex += 1;
+  }
+  return generateTaskOrderKey(targetKey, ordered[lastTiedIndex + 1]?.orderKey ?? null);
+}
+
 function compareOrdinalText(left: string, right: string): number {
   if (left < right) {
     return -1;

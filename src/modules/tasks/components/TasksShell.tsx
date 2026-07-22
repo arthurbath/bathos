@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -11,13 +13,13 @@ import {
   type RefObject,
 } from 'react';
 import {
-  ArrowRight,
   Bell,
   BellRing,
   CalendarDays,
   CalendarRange,
   CheckCircle2,
   Circle,
+  CircleCheckBig,
   CircleDot,
   CircleDashed,
   CircleHelp,
@@ -27,6 +29,8 @@ import {
   CornerDownLeft,
   DatabaseBackup,
   Hourglass,
+  Inbox,
+  ListStart,
   ListTodo,
   LayoutTemplate,
   MoreHorizontal,
@@ -53,7 +57,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import { CARD_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
@@ -72,6 +75,7 @@ import {
   type TaskTemporalAction,
 } from '@/modules/tasks/components/TaskCommandSurfaces';
 import {
+  getTaskTodayMembershipSection,
   getTodayTaskSection,
   useTaskList,
   type TaskListView,
@@ -111,6 +115,10 @@ import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import { deriveTaskViewProjects } from '@/modules/tasks/domain/taskProjectViews';
 import {
+  getTaskUpcomingDate,
+  getTaskUpcomingGroup,
+} from '@/modules/tasks/domain/taskUpcoming';
+import {
   applyTaskSelectionGesture,
   isMacLikeTaskPlatform,
 } from '@/modules/tasks/domain/taskSelection';
@@ -120,6 +128,11 @@ type TasksShellProps = {
   displayName: string;
   onSignOut: () => Promise<void> | void;
 };
+
+const TaskMarkdownNotes = lazy(async () => {
+  const module = await import('@/modules/tasks/components/TaskMarkdownNotes');
+  return { default: module.TaskMarkdownNotes };
+});
 
 const primaryTaskViews = [
   { path: '/today', label: 'Today', icon: CalendarDays },
@@ -736,7 +749,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         } : undefined}
         draggableTask={!bulkMode
           && (view === 'today' || view === 'anytime' || view === 'someday')
-          && sectionTasks.length > 1}
+          && (view === 'today' ? tasks.length > 1 : sectionTasks.length > 1)}
         onDropTask={async (draggedTaskId, placement) => {
           try {
             await reorderTaskTo(draggedTaskId, task.id, placement);
@@ -746,9 +759,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           }
         }}
         planningLabel={view === 'today' ? null : undefined}
-        todayMarker={(view === 'anytime' || view === 'upcoming') && task.today_section !== 'none'
-          ? task.today_section
-          : undefined}
+        todayMarker={view === 'anytime'
+          ? getTaskTodayMembershipSection(task, planningDate) ?? undefined
+          : view === 'upcoming' && task.today_section !== 'none'
+            ? task.today_section
+            : undefined}
+        todayMarkerContext={view === 'upcoming' ? 'Day Horizon' : 'Today'}
         reminder={reminders.byRootId.get(task.id) ?? null}
         reminderMode={reminderAvailability}
         reminderTimeZone={reminders.planningTimeZone}
@@ -1150,7 +1166,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                     }
                   }}
                 />
-                {tasks.length > 0 ? (
+                {tasks.length > 0 && view === 'upcoming' ? (
+                  <UpcomingTaskSections
+                    tasks={tasks}
+                    planningDate={planningDate}
+                    renderTask={renderActiveTask}
+                  />
+                ) : tasks.length > 0 ? (
                   <section aria-label="Tasks">
                     <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
                       Tasks ({tasks.length})
@@ -1738,9 +1760,9 @@ function TodayTaskSections({
     label: string;
     icon: typeof CircleDot;
   }> = [
-    { id: 'inbox', label: 'Inbox', icon: ListTodo },
+    { id: 'inbox', label: 'Inbox', icon: Inbox },
     { id: 'now', label: 'Now', icon: CircleDot },
-    { id: 'next', label: 'Next', icon: ArrowRight },
+    { id: 'next', label: 'Next', icon: ListStart },
     { id: 'later', label: 'Later', icon: Clock3 },
   ];
 
@@ -1770,6 +1792,53 @@ function TodayTaskSections({
   );
 }
 
+function UpcomingTaskSections({
+  tasks,
+  planningDate,
+  renderTask,
+}: {
+  tasks: TaskTodo[];
+  planningDate: string;
+  renderTask: (task: TaskTodo, sectionTasks: TaskTodo[]) => ReactNode;
+}) {
+  const groups = new Map<string, {
+    label: string;
+    date: string;
+    tasks: TaskTodo[];
+  }>();
+  for (const task of tasks) {
+    const date = getTaskUpcomingDate(task, planningDate);
+    if (date === null) continue;
+    const group = getTaskUpcomingGroup(date, planningDate);
+    const current = groups.get(group.key);
+    if (current) {
+      current.tasks.push(task);
+    } else {
+      groups.set(group.key, { label: group.label, date: group.date, tasks: [task] });
+    }
+  }
+
+  return (
+    <div className="space-y-7" aria-label="Upcoming Tasks">
+      {[...groups.entries()]
+        .sort(([, left], [, right]) => left.date.localeCompare(right.date))
+        .map(([key, group]) => (
+          <section key={key} aria-labelledby={`tasks-${key.replace(':', '-')}-heading`}>
+            <h3
+              id={`tasks-${key.replace(':', '-')}-heading`}
+              className="mb-2 text-sm font-semibold text-muted-foreground"
+            >
+              {group.label} ({group.tasks.length})
+            </h3>
+            <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+              {group.tasks.map((task) => renderTask(task, group.tasks))}
+            </div>
+          </section>
+        ))}
+    </div>
+  );
+}
+
 function TaskRow({
   task,
   hierarchy,
@@ -1787,6 +1856,7 @@ function TaskRow({
   onDropTask,
   planningLabel,
   todayMarker,
+  todayMarkerContext,
   reminder,
   reminderMode,
   reminderTimeZone,
@@ -1813,6 +1883,7 @@ function TaskRow({
   onDropTask: (draggedTaskId: string, placement: 'before' | 'after') => Promise<void>;
   planningLabel?: string | null;
   todayMarker?: TodayTaskSection;
+  todayMarkerContext: 'Today' | 'Day Horizon';
   reminder: TaskReminder | null;
   reminderMode: TaskReminderAvailability;
   reminderTimeZone: string;
@@ -1828,21 +1899,24 @@ function TaskRow({
   const [moveOpen, setMoveOpen] = useState(false);
   const [whenOpen, setWhenOpen] = useState(false);
   const [dragPlacement, setDragPlacement] = useState<'before' | 'after' | null>(null);
+  const [terminalExiting, setTerminalExiting] = useState(false);
   const titleButtonRef = useRef<HTMLButtonElement>(null);
   const suppressClickUntilRef = useRef(0);
+  const pendingRef = useRef(false);
   const hierarchyLabel = getTaskHierarchyLabel(task, hierarchy);
   const TodayMarkerIcon = todayMarker === 'now'
     ? CircleDot
     : todayMarker === 'next'
-      ? ArrowRight
+      ? ListStart
       : todayMarker === 'later'
         ? Clock3
-        : ListTodo;
+        : Inbox;
 
   const run = async (operation: () => Promise<void>): Promise<boolean> => {
-    if (pending) {
+    if (pendingRef.current) {
       return false;
     }
+    pendingRef.current = true;
     setPending(true);
     try {
       await operation();
@@ -1850,6 +1924,7 @@ function TaskRow({
     } catch {
       return false;
     } finally {
+      pendingRef.current = false;
       setPending(false);
     }
   };
@@ -1877,6 +1952,7 @@ function TaskRow({
   const restoreTaskFocus = (
     { main, currentIndex }: ReturnType<typeof captureTaskFocus>,
     preferCurrentTask = false,
+    delay = 0,
   ) => {
     window.setTimeout(() => {
       if (preferCurrentTask && titleButtonRef.current?.isConnected) {
@@ -1891,16 +1967,33 @@ function TaskRow({
       const fallback = main?.querySelector<HTMLElement>('input[aria-label="Add a Task"]')
         ?? main?.querySelector<HTMLElement>('[data-task-view-heading]');
       (remaining[currentIndex] ?? remaining[currentIndex - 1] ?? fallback)?.focus();
-    }, 0);
+    }, delay);
   };
 
-  const runTerminalAction = async (operation: () => Promise<void>) => {
+  const runTerminalAction = async (
+    operation: () => Promise<void>,
+    animate = true,
+    focusDelay = 0,
+  ) => {
+    if (pendingRef.current) return;
     const focus = captureTaskFocus();
-    const applied = await run(operation);
-    if (applied) {
-      restoreTaskFocus(focus);
-    } else {
+    pendingRef.current = true;
+    setPending(true);
+    if (animate) {
+      setTerminalExiting(true);
+      if (!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 160));
+      }
+    }
+    try {
+      await operation();
+      restoreTaskFocus(focus, false, focusDelay);
+    } catch {
+      setTerminalExiting(false);
       window.setTimeout(() => titleButtonRef.current?.focus(), 0);
+    } finally {
+      pendingRef.current = false;
+      setPending(false);
     }
   };
 
@@ -1958,9 +2051,11 @@ function TaskRow({
         suppressClickUntilRef.current = Date.now() + 250;
       }}
       className={[
-        'relative',
+        'relative grid transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none',
+        terminalExiting ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100',
         selected || bulkSelection?.selected ? 'bg-foreground/[0.04]' : '',
       ].filter(Boolean).join(' ') || undefined}
+      data-terminal-exiting={terminalExiting ? 'true' : undefined}
     >
       {dragPlacement ? (
         <span
@@ -1970,6 +2065,7 @@ function TaskRow({
           }`}
         />
       ) : null}
+      <div className="min-h-0 overflow-hidden">
       <div className="flex min-h-14 items-center gap-3 px-2 sm:px-4">
         {bulkSelection ? (
           <button
@@ -1978,12 +2074,12 @@ function TaskRow({
             aria-checked={bulkSelection.selected}
             aria-label={`${bulkSelection.selected ? 'Deselect' : 'Select'} ${task.title}`}
             onClick={bulkSelection.onToggle}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-info transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-info transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {bulkSelection.selected ? (
-              <SquareCheckBig className="h-5 w-5" aria-hidden="true" />
+              <CircleCheckBig className="h-5 w-5" aria-hidden="true" />
             ) : (
-              <Square className="h-5 w-5" aria-hidden="true" />
+              <Circle className="h-5 w-5" aria-hidden="true" />
             )}
           </button>
         ) : (
@@ -1992,9 +2088,9 @@ function TaskRow({
             disabled={pending}
             aria-label={`Complete ${task.title}`}
             onClick={() => void runTerminalAction(onComplete)}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
-            <Circle className="h-6 w-6" aria-hidden="true" />
+            <Square className="h-6 w-6" aria-hidden="true" />
           </button>
         )}
         <button
@@ -2064,16 +2160,16 @@ function TaskRow({
           className={`min-w-0 flex-1 py-4 text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draggableTask ? 'cursor-grab active:cursor-grabbing' : ''}`}
         >
           <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate">{task.title}</span>
             {todayMarker ? (
               <span
-                className="inline-flex shrink-0 text-info"
-                aria-label={`Today ${todayMarker[0].toUpperCase()}${todayMarker.slice(1)}`}
-                title={`Today ${todayMarker[0].toUpperCase()}${todayMarker.slice(1)}`}
+                className="inline-flex shrink-0 text-warning"
+                aria-label={`${todayMarkerContext} ${todayMarker[0].toUpperCase()}${todayMarker.slice(1)}`}
+                title={`${todayMarkerContext} ${todayMarker[0].toUpperCase()}${todayMarker.slice(1)}`}
               >
                 <TodayMarkerIcon className="h-3.5 w-3.5" aria-hidden="true" />
               </span>
             ) : null}
+            <span className="truncate">{task.title}</span>
           </span>
           {hierarchyLabel ? (
             <span className="mt-1 block text-xs font-normal text-info">{hierarchyLabel}</span>
@@ -2136,12 +2232,12 @@ function TaskRow({
               <DropdownMenuItem onSelect={() => void run(onMoveDown)}>Move Down</DropdownMenuItem>
             ) : null}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => void runTerminalAction(onCancel)}>
+            <DropdownMenuItem onSelect={() => void runTerminalAction(onCancel, true, 50)}>
               Cancel
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              onSelect={() => void runTerminalAction(onDelete)}
+              onSelect={() => void runTerminalAction(onDelete, false, 50)}
             >
               Delete
             </DropdownMenuItem>
@@ -2182,6 +2278,7 @@ function TaskRow({
         onCloseAutoFocus={() => titleButtonRef.current?.focus()}
         onPlan={(patch) => runMovementAction(() => onUpdate(patch))}
       /> : null}
+      </div>
     </article>
   );
 }
@@ -2337,17 +2434,14 @@ function TaskEditor({
         onChange={(event) => setTitle(event.target.value)}
         disabled={saving}
       />
-      <label className="sr-only" htmlFor={`task-notes-${task.id}`}>
-        Notes
-      </label>
-      <Textarea
-        id={`task-notes-${task.id}`}
-        value={notes}
-        onChange={(event) => setNotes(event.target.value)}
-        disabled={saving}
-        placeholder="Notes"
-        className="min-h-28 resize-y"
-      />
+      <Suspense fallback={<div className="min-h-28" aria-label="Loading Task Notes" />}>
+        <TaskMarkdownNotes
+          id={`task-notes-${task.id}`}
+          notes={notes}
+          onChange={setNotes}
+          disabled={saving}
+        />
+      </Suspense>
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground" htmlFor={`task-actionability-${task.id}`}>
           Actionability

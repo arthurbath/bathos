@@ -263,7 +263,19 @@ describe('useTaskList optimistic display', () => {
       id: 'task-later',
       start_date: '2099-01-03',
     };
-    queryData = [laterTask, futureTask];
+    const deadlineOnlyTask = {
+      ...originalTask,
+      id: 'task-deadline',
+      start_date: null,
+      deadline: '2099-01-01',
+    };
+    const availableDeadlineTask = {
+      ...originalTask,
+      id: 'task-available-deadline',
+      start_date: '2000-01-01',
+      deadline: '2099-01-04',
+    };
+    queryData = [laterTask, availableDeadlineTask, futureTask, deadlineOnlyTask];
     const repository = {
       createTask: vi.fn(),
       updateTask: vi.fn(),
@@ -274,13 +286,28 @@ describe('useTaskList optimistic display', () => {
     const { container, root } = renderHookHarness();
 
     try {
-      expect(latest.tasks.map((task) => task.id)).toEqual(['task-future', 'task-later']);
+      expect(latest.tasks.map((task) => task.id)).toEqual([
+        'task-deadline',
+        'task-future',
+        'task-later',
+        'task-available-deadline',
+      ]);
       expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain('start_date > ?');
-      expect(mocks.useQuery.mock.calls.at(-1)?.[1]).toEqual(['owner-a', latest.planningDate]);
+      expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain('deadline > ?');
+      expect(mocks.useQuery.mock.calls.at(-1)?.[1]).toEqual([
+        'owner-a',
+        latest.planningDate,
+        latest.planningDate,
+        latest.planningDate,
+        latest.planningDate,
+      ]);
 
       harnessView = 'today';
       rerender(root);
-      expect(latest.tasks).toEqual([]);
+      expect(latest.tasks.map((task) => task.id)).toEqual([
+        'task-available-deadline',
+        'task-deadline',
+      ]);
       expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain('start_date <= ?');
     } finally {
       cleanup(root, container);
@@ -521,6 +548,25 @@ describe('useTaskList optimistic display', () => {
         'owner-a',
         'task-next-second',
         { order_key: expect.any(String) },
+      );
+      expect(latest.tasks.map((task) => task.id)).toEqual([
+        'task-inbox',
+        'task-now',
+        'task-next-first',
+        'task-next-second',
+        'task-later',
+      ]);
+
+      await act(async () => {
+        await latest.reorderTaskTo('task-next-second', 'task-later', 'before');
+      });
+      expect(repository.updateTask).toHaveBeenLastCalledWith(
+        'owner-a',
+        'task-next-second',
+        {
+          order_key: expect.any(String),
+          today_section: 'later',
+        },
       );
       expect(latest.tasks.map((task) => task.id)).toEqual([
         'task-inbox',

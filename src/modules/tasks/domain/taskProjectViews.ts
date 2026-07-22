@@ -1,4 +1,8 @@
 import { compareTaskOrder } from '@/modules/tasks/domain/taskOrder';
+import {
+  compareTaskUpcomingDates,
+  getTaskUpcomingDate,
+} from '@/modules/tasks/domain/taskUpcoming';
 import type { TaskDestination, TaskProject } from '@/modules/tasks/types/tasks';
 
 type TaskProjectListView = TaskDestination | 'today' | 'upcoming' | 'done';
@@ -31,7 +35,7 @@ export function projectPlanningOrderSection(
     return getTodayProjectSection(project, planningDate);
   }
   if (view === 'upcoming') {
-    return `upcoming:${project.start_date ?? ''}`;
+    return `upcoming:${getTaskUpcomingDate(project, planningDate) ?? ''}`;
   }
   return view;
 }
@@ -51,8 +55,8 @@ function projectIsVisible(
   if (view === 'upcoming') {
     return project.disposition === 'present'
       && project.lifecycle === 'open'
-      && project.start_date !== null
-      && project.start_date > planningDate;
+      && project.destination === 'anytime'
+      && getTaskUpcomingDate(project, planningDate) !== null;
   }
   if (view === 'today') {
     return project.destination === 'anytime'
@@ -83,7 +87,7 @@ function compareProjectsForView(
     ) || left.id.localeCompare(right.id);
   }
   if (view === 'upcoming') {
-    return (left.start_date ?? '').localeCompare(right.start_date ?? '')
+    return compareTaskUpcomingDates(left, right, planningDate)
       || compareProjectOrder(left, right);
   }
   if (view === 'today') {

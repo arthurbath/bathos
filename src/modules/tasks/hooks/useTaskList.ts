@@ -5,8 +5,16 @@ import type {
   EditableTaskPatch,
   TaskPlanningMoveInput,
 } from '@/modules/tasks/data/taskRepository';
-import { compareTaskOrder, generateTaskMoveOrderKey } from '@/modules/tasks/domain/taskOrder';
+import {
+  compareTaskOrder,
+  generateTaskDropOrderKey,
+  generateTaskMoveOrderKey,
+} from '@/modules/tasks/domain/taskOrder';
 import { taskCalendarDateInTimeZone } from '@/modules/tasks/domain/taskDates';
+import {
+  compareTaskUpcomingDates,
+  getTaskUpcomingDate,
+} from '@/modules/tasks/domain/taskUpcoming';
 import type { TaskStateTransition } from '@/modules/tasks/domain/taskState';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
@@ -31,10 +39,16 @@ export function useTaskList(ownerId: string, view: TaskListView) {
              FROM tasks_todos
              WHERE owner_id = ?
                AND destination = 'anytime'
-               AND start_date > ?
                AND lifecycle = 'open'
                AND disposition = 'present'
-             ORDER BY start_date, order_key, id`
+               AND (
+                 start_date > ?
+                 OR ((start_date IS NULL OR start_date <= ?) AND deadline > ?)
+               )
+             ORDER BY COALESCE(
+               CASE WHEN start_date > ? THEN start_date END,
+               deadline
+             ), order_key, id`
           : view === 'today'
             ? `SELECT *
          FROM tasks_todos
@@ -58,7 +72,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
     view === 'done'
       ? [ownerId]
       : view === 'upcoming'
-        ? [ownerId, planningDate]
+        ? [ownerId, planningDate, planningDate, planningDate, planningDate]
         : view === 'today'
           ? [ownerId, planningDate]
           : [ownerId, view, view, planningDate],
@@ -252,31 +266,29 @@ export function useTaskList(ownerId: string, view: TaskListView) {
       if (!currentTask || !targetTask || currentTask.id === targetTask.id) {
         return currentTask;
       }
-      if (
-        taskOrderSection(currentTask, view, planningDate)
-        !== taskOrderSection(targetTask, view, planningDate)
-      ) {
+      const currentSection = taskOrderSection(currentTask, view, planningDate);
+      const targetSection = taskOrderSection(targetTask, view, planningDate);
+      const isCrossHorizonTodayDrop = view === 'today' && currentSection !== targetSection;
+      if (currentSection !== targetSection && !isCrossHorizonTodayDrop) {
         return currentTask;
       }
-      const sectionTasks = tasks.filter((task) => (
-        taskOrderSection(task, view, planningDate) === taskOrderSection(currentTask, view, planningDate)
+      const targetSectionTasks = tasks.filter((task) => (
+        task.id !== currentTask.id
+        && taskOrderSection(task, view, planningDate) === targetSection
       ));
-      const remaining = sectionTasks.filter((task) => task.id !== taskId);
-      const targetIndex = remaining.findIndex((task) => task.id === targetTaskId);
-      if (targetIndex < 0) {
+      if (!targetSectionTasks.some((task) => task.id === targetTaskId)) {
         return currentTask;
       }
-      const destinationIndex = targetIndex + (placement === 'after' ? 1 : 0);
-      const currentIndex = sectionTasks.findIndex((task) => task.id === taskId);
-      if (currentIndex === destinationIndex) {
-        return currentTask;
-      }
-      const orderKey = generateTaskMoveOrderKey(
-        sectionTasks.map((task) => ({ id: task.id, orderKey: task.order_key })),
-        taskId,
-        destinationIndex,
+      const orderKey = generateTaskDropOrderKey(
+        targetSectionTasks.map((task) => ({ id: task.id, orderKey: task.order_key })),
+        targetTaskId,
+        placement,
       );
-      return updateTask(taskId, { order_key: orderKey });
+      const patch: EditableTaskPatch = { order_key: orderKey };
+      if (isCrossHorizonTodayDrop) {
+        patch.today_section = getTodayTaskSection(targetTask, planningDate);
+      }
+      return updateTask(taskId, patch);
     },
     [planningDate, tasks, updateTask, view],
   );
@@ -333,8 +345,8 @@ function taskIsVisible(
   if (view === 'upcoming') {
     return task.disposition === 'present'
       && task.lifecycle === 'open'
-      && task.start_date !== null
-      && task.start_date > planningDate;
+      && task.destination === 'anytime'
+      && getTaskUpcomingDate(task, planningDate) !== null;
   }
   if (view === 'today') {
     return task.destination === 'anytime'
@@ -365,7 +377,7 @@ function compareTasksForView(
     ) || left.id.localeCompare(right.id);
   }
   if (view === 'upcoming') {
-    return (left.start_date ?? '').localeCompare(right.start_date ?? '')
+    return compareTaskUpcomingDates(left, right, planningDate)
       || compareTaskOrder(
         { id: left.id, orderKey: left.order_key },
         { id: right.id, orderKey: right.order_key },
@@ -388,6 +400,20 @@ export function getTodayTaskSection(task: TaskTodo, _planningDate: string): Toda
   return task.today_section === 'none' ? 'inbox' : task.today_section;
 }
 
+export function getTaskTodayMembershipSection(
+  task: TaskTodo,
+  planningDate: string,
+): TodayTaskSection | null {
+  const belongsToToday = task.destination === 'anytime'
+    && task.lifecycle === 'open'
+    && task.disposition === 'present'
+    && (
+      (task.start_date === null && task.today_section !== 'none')
+      || (task.start_date !== null && task.start_date <= planningDate)
+    );
+  return belongsToToday ? getTodayTaskSection(task, planningDate) : null;
+}
+
 function compareTodaySection(left: TaskTodo, right: TaskTodo, planningDate: string): number {
   const ranks: Record<TodayTaskSection, number> = { inbox: 0, now: 1, next: 2, later: 3 };
   return ranks[getTodayTaskSection(left, planningDate)]
@@ -399,7 +425,7 @@ function taskOrderSection(task: TaskTodo, view: TaskListView, planningDate: stri
     return getTodayTaskSection(task, planningDate);
   }
   if (view === 'upcoming') {
-    return `upcoming:${task.start_date ?? ''}`;
+    return `upcoming:${getTaskUpcomingDate(task, planningDate) ?? ''}`;
   }
   return view;
 }

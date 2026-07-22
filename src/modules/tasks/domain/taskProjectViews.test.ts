@@ -14,6 +14,7 @@ describe('task project planning views', () => {
       project('due-inbox', { destination: 'anytime', today_section: 'none', start_date: planningDate }),
       project('anytime', { destination: 'anytime', start_date: null }),
       project('future-anytime', { destination: 'anytime', start_date: '2026-07-21' }),
+      project('deadline-anytime', { destination: 'anytime', deadline: '2026-07-23' }),
       project('someday', { destination: 'someday', start_date: null }),
       project('other-owner', { owner_id: 'owner-b', destination: 'anytime', today_section: 'next' }),
     ];
@@ -21,9 +22,9 @@ describe('task project planning views', () => {
     expect(deriveTaskViewProjects(projects, 'owner-a', 'today', planningDate)
       .map(({ id }) => id)).toEqual(['due-inbox', 'now', 'today']);
     expect(deriveTaskViewProjects(projects, 'owner-a', 'upcoming', planningDate)
-      .map(({ id }) => id)).toEqual(['future-anytime', 'future-today']);
+      .map(({ id }) => id)).toEqual(['future-anytime', 'future-today', 'deadline-anytime']);
     expect(deriveTaskViewProjects(projects, 'owner-a', 'anytime', planningDate)
-      .map(({ id }) => id)).toEqual(['anytime', 'due-inbox', 'now', 'today']);
+      .map(({ id }) => id)).toEqual(['anytime', 'deadline-anytime', 'due-inbox', 'now', 'today']);
     expect(deriveTaskViewProjects(projects, 'owner-a', 'someday', planningDate)
       .map(({ id }) => id)).toEqual(['someday']);
   });

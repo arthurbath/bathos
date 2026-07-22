@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   compareTaskOrder,
+  generateTaskDropOrderKey,
   generateTaskMoveOrderKey,
   generateTaskOrderKey,
   InvalidTaskOrderError,
@@ -61,6 +62,23 @@ describe('task ordering', () => {
     expect(movedUp < 'a1').toBe(true);
     expect(movedDown > 'a1').toBe(true);
     expect(movedDown < 'a2').toBe(true);
+  });
+
+  it('generates direct-drop keys before or after the complete target tie block', () => {
+    const tasks = [
+      { id: 'task-a', orderKey: 'a0' },
+      { id: 'task-b', orderKey: 'a1' },
+      { id: 'task-c', orderKey: 'a1' },
+      { id: 'task-d', orderKey: 'a2' },
+    ];
+
+    const before = generateTaskDropOrderKey(tasks, 'task-c', 'before');
+    const after = generateTaskDropOrderKey(tasks, 'task-b', 'after');
+
+    expect(before > 'a0').toBe(true);
+    expect(before < 'a1').toBe(true);
+    expect(after > 'a1').toBe(true);
+    expect(after < 'a2').toBe(true);
   });
 
   it('rejects invalid ranges and destinations', () => {
