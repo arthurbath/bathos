@@ -135,7 +135,7 @@ export class TaskHierarchyRepository {
         deleted_at: null,
         deletion_root_id: null,
         destination: 'anytime',
-        today_section: 'daytime',
+        today_section: 'none',
         order_key: input.orderKey ?? await nextOrderKey(
           transaction,
           'tasks_projects',
@@ -498,8 +498,9 @@ function requireId(value: string, message: string): void {
 }
 
 function assertProjectPlanning(patch: TaskProjectPatch): void {
-  if (patch.today_section === 'evening' && patch.destination !== 'today') {
-    throw new InvalidTaskMutationError('Evening projects must be in Today');
+  if (patch.destination === 'someday' && patch.today_section !== undefined
+    && patch.today_section !== 'none') {
+    throw new InvalidTaskMutationError('Someday projects cannot appear in Today');
   }
   if (
     patch.destination === 'someday'

@@ -19,7 +19,11 @@ The repository test `src/modules/tasks/sync/deploymentConfig.test.ts` keeps thes
 
 The active `Tasks Development` instance is in a US region on PowerSync Cloud Free. It uses Supabase Auth, the dedicated `tasks_powersync_role`, the exact 22-table `powersync` publication, and the committed `owner_tasks` stream. The public client endpoint is configured only after the synthetic production topology gate passed and an independent cleanup audit found no residual synthetic users or task rows.
 
+The Done-retention migration does not add a synchronized table. Its content-free duplicate-suppression receipts remain in `tasks_private`, outside the publication and PowerSync role. Expired rows disappearing from the existing 22 public tables project through the ordinary delete stream, so the approved publication and Sync Stream table sets remain unchanged.
+
 The replication password remains in macOS Keychain. Server-only Supabase keys are resolved only in memory by `scripts/provision-tasks-production.mjs` when the explicit synthetic gate is run. Do not upgrade a billing plan, rotate credentials, change the publication, or alter the production database merely because this runbook exists.
+
+Run `node scripts/provision-tasks-production.mjs verify-sync-database` for a read-only production check of the effective role, exact 22-table publication, RLS and replica identity, and the documented Supabase-managed `pg_net` exception. Unlike `sync-database`, this verification command never normalizes the role or changes the publication.
 
 ## Database Preparation
 

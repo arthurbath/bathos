@@ -65,11 +65,12 @@ Accessible at [os.bath.garden/snake/weights](https://os.bath.garden/snake/weight
 
 Plan and complete personal tasks through a private-first, keyboard-focused workflow. Features include:
 
-- Inbox, Today, Upcoming, Anytime, Someday, Logbook, and Trash views
+- Today, Upcoming, Anytime, Someday, and Done views
+- Now, Next, and Later sections inside Today, projected from Anytime
 - Four primary navigation destinations with secondary views and maintenance tools under More and Config
 - Areas, projects, headings, checklists, templates, reminders, and recurrence
 - Structured actionability and source provenance without generic tags
-- Offline local operation, recoverable deletion, history, export, and restore
+- Offline local operation, 30-day Done recovery, history, export, and restore
 - First-full-sync status, bounded local reliability history, and content-free production warnings
 - Narrow task-domain MCP tools and Raycast capture commands
 

@@ -1,16 +1,17 @@
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
-export type TaskPlanningRoute = 'inbox' | 'today' | 'upcoming' | 'anytime' | 'someday' | 'logbook';
+export type TaskPlanningRoute = 'today' | 'upcoming' | 'anytime' | 'someday' | 'done';
 
 export function getTaskPlanningRoute(
-  task: Pick<TaskTodo, 'destination' | 'lifecycle' | 'start_date'>,
+  task: Pick<TaskTodo, 'destination' | 'lifecycle' | 'disposition' | 'start_date' | 'today_section'>,
   planningDate: string,
 ): TaskPlanningRoute {
-  if (task.lifecycle !== 'open') return 'logbook';
+  if (task.lifecycle !== 'open' || task.disposition === 'deleted') return 'done';
   if (
     task.start_date
     && task.start_date > planningDate
-    && (task.destination === 'today' || task.destination === 'anytime')
+    && task.destination === 'anytime'
   ) return 'upcoming';
+  if (task.destination === 'anytime' && task.today_section !== 'none') return 'today';
   return task.destination;
 }

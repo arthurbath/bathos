@@ -26,7 +26,7 @@ vi.mock('@/modules/tasks/TasksIndex', async () => {
       return ReactModule.createElement(
         'main',
         { 'data-testid': 'tasks-index', 'data-pathname': location.pathname },
-        ReactModule.createElement(Router.Link, { to: '/tasks/inbox' }, 'Inbox'),
+        ReactModule.createElement(Router.Link, { to: '/tasks/anytime' }, 'Anytime'),
         ReactModule.createElement(Router.Link, { to: '/tasks/projects/project-a' }, 'Project'),
         ReactModule.createElement(Router.Link, { to: '/tasks/areas/area-a' }, 'Area'),
         ReactModule.createElement(Router.Link, { to: '/tasks/unknown' }, 'Unknown'),
@@ -94,9 +94,9 @@ describe('Tasks route runtime boundary', () => {
     try {
       expect(mockTasksLifecycle).toEqual({ mounts: 1, cleanups: 0 });
 
-      await followLink(container, 'Inbox');
+      await followLink(container, 'Anytime');
       expect(container.querySelector('[data-testid="tasks-index"]'))
-        .toHaveAttribute('data-pathname', '/tasks/inbox');
+        .toHaveAttribute('data-pathname', '/tasks/anytime');
       expect(mockTasksLifecycle).toEqual({ mounts: 1, cleanups: 0 });
 
       await followLink(container, 'Project');

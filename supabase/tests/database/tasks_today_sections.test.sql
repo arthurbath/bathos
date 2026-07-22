@@ -24,29 +24,29 @@ SELECT is(
       AND table_name = 'tasks_todos'
       AND column_name = 'today_section'
   ),
-  '''daytime''::text',
-  'defaults new work to daytime'
+  '''later''::text',
+  'defaults new work to Today Later'
 );
 SELECT ok(
   EXISTS (
     SELECT 1
     FROM pg_constraint
     WHERE conrelid = 'public.tasks_todos'::regclass
-      AND conname = 'tasks_todos_evening_within_today'
+      AND conname = 'tasks_todos_today_section_valid'
   ),
-  'constrains This Evening to Today'
+  'constrains Today membership to current sections'
 );
 SELECT ok(
-  pg_get_indexdef('public.tasks_todos_owner_active_destination_order_idx'::regclass)
+  pg_get_indexdef('public.tasks_todos_owner_today_section_order_idx'::regclass)
     LIKE '%today_section%',
   'indexes active manual order by Today section'
 );
-SELECT has_function('public', 'tasks_create_export_v3', ARRAY[]::text[], 'exports schema version three');
+SELECT has_function('public', 'tasks_create_export_v11', ARRAY[]::text[], 'exports schema version eleven');
 SELECT has_function(
   'public',
-  'tasks_restore_export_v3',
+  'tasks_restore_export_current',
   ARRAY['jsonb', 'boolean'],
-  'restores schema version three'
+  'restores every supported schema through current planning'
 );
 
 SET LOCAL ROLE authenticated;
@@ -62,7 +62,7 @@ SELECT lives_ok(
     VALUES (
       '71000000-0000-4000-8000-000000000010',
       '71000000-0000-4000-8000-000000000001',
-      'Synthetic evening task', 'today', 'evening', 'a0',
+      'Synthetic evening task', 'anytime', 'later', 'a0',
       '2026-07-20', '71000000-0000-4000-8000-000000000020'
     )
   $$,
@@ -74,7 +74,7 @@ SELECT is(
     FROM public.tasks_todos
     WHERE id = '71000000-0000-4000-8000-000000000010'
   ),
-  'evening',
+  'later',
   'reads the stored evening section'
 );
 SELECT is(
@@ -83,14 +83,14 @@ SELECT is(
     FROM public.tasks_history_events
     WHERE task_id = '71000000-0000-4000-8000-000000000010'
   ),
-  'evening',
+  'later',
   'records the section in append-only history'
 );
 SELECT lives_ok(
   $$
     UPDATE public.tasks_todos
     SET
-      today_section = 'daytime',
+      today_section = 'next',
       revision = 2,
       client_mutation_id = '71000000-0000-4000-8000-000000000021'
     WHERE id = '71000000-0000-4000-8000-000000000010'
@@ -114,7 +114,7 @@ SELECT is(
     WHERE task_id = '71000000-0000-4000-8000-000000000010'
       AND result_revision = 2
   ),
-  'evening',
+  'later',
   'preserves the prior section for undo'
 );
 SELECT throws_ok(
@@ -125,32 +125,32 @@ SELECT throws_ok(
     VALUES (
       '71000000-0000-4000-8000-000000000011',
       '71000000-0000-4000-8000-000000000001',
-      'Invalid evening task', 'inbox', 'evening', 'a1',
+      'Invalid retired section', 'anytime', 'evening', 'a1',
       '71000000-0000-4000-8000-000000000022'
     )
   $$,
   '23514',
   NULL,
-  'rejects This Evening outside Today'
+  'rejects a retired Today section'
 );
 
 UPDATE public.tasks_todos
 SET
-  today_section = 'evening',
+  today_section = 'later',
   revision = 3,
   client_mutation_id = '71000000-0000-4000-8000-000000000023'
 WHERE id = '71000000-0000-4000-8000-000000000010';
 
-SELECT set_config('test.tasks_today_export', public.tasks_create_export_v3()::text, false);
+SELECT set_config('test.tasks_today_export', public.tasks_create_export_v11()::text, false);
 SELECT is(
   (current_setting('test.tasks_today_export')::jsonb ->> 'schema_version')::integer,
-  3,
-  'uses portable export schema version three'
+  11,
+  'uses portable export schema version eleven'
 );
 SELECT is(
   current_setting('test.tasks_today_export')::jsonb
     #>> '{data,tasks_todos,0,today_section}',
-  'evening',
+  'later',
   'exports the current Today section'
 );
 SELECT ok(
@@ -184,7 +184,7 @@ SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 SELECT is(
   (
-    public.tasks_restore_export_v3(
+    public.tasks_restore_export_current(
       current_setting('test.tasks_today_export')::jsonb,
       true
     ) #>> '{tasks_todos,inserts}'
@@ -194,7 +194,7 @@ SELECT is(
 );
 SELECT is(
   (
-    public.tasks_restore_export_v3(
+    public.tasks_restore_export_current(
       current_setting('test.tasks_today_export')::jsonb,
       false
     ) #>> '{tasks_todos,inserts}'

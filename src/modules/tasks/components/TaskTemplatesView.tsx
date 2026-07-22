@@ -369,18 +369,15 @@ function getTodoTemplateDestination(
   snapshot: TaskTemplateSnapshot | undefined,
   anchorDate: string,
   planningDate: string,
-): 'inbox' | 'today' | 'upcoming' | 'anytime' | 'someday' {
+): 'today' | 'upcoming' | 'anytime' | 'someday' {
   if (!snapshot || snapshot.kind !== 'todo') return 'anytime';
-  if (snapshot.root.destination === 'inbox') return 'inbox';
   if (snapshot.root.destination === 'someday') return 'someday';
-  if (snapshot.root.destination === 'today') {
-    if (anchorDate === planningDate) return 'today';
-    return anchorDate > planningDate ? 'upcoming' : 'anytime';
-  }
   const startDate = snapshot.root.start_offset_days === null
     ? null
     : addTaskCalendarDays(anchorDate, snapshot.root.start_offset_days);
-  return startDate && startDate > planningDate ? 'upcoming' : 'anytime';
+  if (startDate && startDate > planningDate) return 'upcoming';
+  if (snapshot.root.today_section !== 'none') return 'today';
+  return 'anytime';
 }
 
 function showTemplateError(title: string, error: unknown): void {

@@ -155,7 +155,7 @@ function project(
     deleted_at: null,
     deletion_root_id: null,
     destination: 'anytime',
-    today_section: 'daytime',
+    today_section: 'none',
     order_key: 'a0',
     planning_order_key: 'a0',
     start_date: null,
@@ -203,7 +203,7 @@ function todo(
     deleted_at: null,
     deletion_root_id: null,
     destination: 'anytime',
-    today_section: 'daytime',
+    today_section: 'none',
     order_key: 'a0',
     hierarchy_order_key: 'a0',
     start_date: null,
@@ -343,9 +343,9 @@ describe('Tasks MCP read tools', () => {
   });
 
   it('derives and orders Today sections while excluding future and other-owner work', async () => {
-    const unfinishedId = '50000000-0000-4000-8000-000000000010';
-    const daytimeId = '50000000-0000-4000-8000-000000000011';
-    const eveningId = '50000000-0000-4000-8000-000000000012';
+    const nowId = '50000000-0000-4000-8000-000000000010';
+    const nextId = '50000000-0000-4000-8000-000000000011';
+    const laterId = '50000000-0000-4000-8000-000000000012';
     const futureId = '50000000-0000-4000-8000-000000000013';
     const result = await getTaskViewData({
       view: 'today',
@@ -354,22 +354,22 @@ describe('Tasks MCP read tools', () => {
     }, authFor(ownerA, {
       tasks_user_settings: [settings()],
       tasks_todos: [
-        todo({ id: unfinishedId, destination: 'today', start_date: '2026-07-19', order_key: 'a2' }),
-        todo({ id: daytimeId, destination: 'today', start_date: '2026-07-20', order_key: 'a1' }),
-        todo({ id: eveningId, destination: 'today', start_date: '2026-07-20', today_section: 'evening', order_key: 'a0' }),
-        todo({ id: futureId, destination: 'today', start_date: '2026-07-21' }),
-        todo({ id: '50000000-0000-4000-8000-000000000014', owner_id: ownerB, destination: 'today', start_date: '2026-07-20' }),
+        todo({ id: nowId, destination: 'anytime', today_section: 'now', start_date: '2026-07-19', order_key: 'a2' }),
+        todo({ id: nextId, destination: 'anytime', today_section: 'next', start_date: '2026-07-20', order_key: 'a1' }),
+        todo({ id: laterId, destination: 'anytime', today_section: 'later', start_date: '2026-07-20', order_key: 'a0' }),
+        todo({ id: futureId, destination: 'anytime', today_section: 'none', start_date: '2026-07-21' }),
+        todo({ id: '50000000-0000-4000-8000-000000000014', owner_id: ownerB, destination: 'anytime', today_section: 'next', start_date: '2026-07-20' }),
       ],
       tasks_projects: [],
     }));
 
     if (!('todos' in result)) throw new Error('Expected a planning view result.');
-    expect(result.todos.map(({ id }) => id)).toEqual([unfinishedId, daytimeId, eveningId]);
-    expect(result.todos.map((row) => row.derived_section)).toEqual(['unfinished', 'daytime', 'evening']);
+    expect(result.todos.map(({ id }) => id)).toEqual([nowId, nextId, laterId]);
+    expect(result.todos.map((row) => row.derived_section)).toEqual(['now', 'next', 'later']);
     expect(result.todos.every((row) => !('owner_id' in row))).toBe(true);
   });
 
-  it('returns only independent Trash roots with deterministic planning context', async () => {
+  it('returns independent deleted roots in Done with deterministic planning context', async () => {
     const deletedRoot = todo({
       id: '50000000-0000-4000-8000-000000000020',
       disposition: 'deleted',
@@ -381,7 +381,7 @@ describe('Tasks MCP read tools', () => {
     deletedChild.deleted_at = '2026-07-20T09:00:00.000Z';
     deletedChild.deletion_root_id = deletedRoot.id;
     const result = await getTaskViewData({
-      view: 'trash',
+      view: 'done',
       planning_date: '2026-07-20',
       limit: 50,
     }, authFor(ownerA, {
@@ -394,7 +394,7 @@ describe('Tasks MCP read tools', () => {
     }));
 
     expect(result.planning_date).toBe('2026-07-20');
-    if (!('roots' in result)) throw new Error('Expected a Trash view result.');
+    if (!('roots' in result)) throw new Error('Expected a Done view result.');
     expect(result.roots).toHaveLength(1);
     expect(result.roots[0]).toMatchObject({ root_type: 'todo', record: { id: deletedRoot.id } });
   });

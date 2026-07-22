@@ -8,30 +8,29 @@ const planningDate = '2026-07-20';
 describe('task project planning views', () => {
   it('derives active project views with owner-local availability semantics', () => {
     const projects = [
-      project('today', { destination: 'today', start_date: planningDate }),
-      project('unfinished', { destination: 'today', start_date: '2026-07-19' }),
-      project('future-today', { destination: 'today', start_date: '2026-07-22' }),
+      project('today', { destination: 'anytime', today_section: 'next', start_date: planningDate }),
+      project('now', { destination: 'anytime', today_section: 'now', start_date: '2026-07-19' }),
+      project('future-today', { destination: 'anytime', today_section: 'none', start_date: '2026-07-22' }),
       project('anytime', { destination: 'anytime', start_date: null }),
       project('future-anytime', { destination: 'anytime', start_date: '2026-07-21' }),
       project('someday', { destination: 'someday', start_date: null }),
-      project('other-owner', { owner_id: 'owner-b', destination: 'today' }),
+      project('other-owner', { owner_id: 'owner-b', destination: 'anytime', today_section: 'next' }),
     ];
 
     expect(deriveTaskViewProjects(projects, 'owner-a', 'today', planningDate)
-      .map(({ id }) => id)).toEqual(['unfinished', 'today']);
+      .map(({ id }) => id)).toEqual(['now', 'today']);
     expect(deriveTaskViewProjects(projects, 'owner-a', 'upcoming', planningDate)
       .map(({ id }) => id)).toEqual(['future-anytime', 'future-today']);
     expect(deriveTaskViewProjects(projects, 'owner-a', 'anytime', planningDate)
-      .map(({ id }) => id)).toEqual(['anytime']);
+      .map(({ id }) => id)).toEqual(['anytime', 'now', 'today']);
     expect(deriveTaskViewProjects(projects, 'owner-a', 'someday', planningDate)
       .map(({ id }) => id)).toEqual(['someday']);
-    expect(deriveTaskViewProjects(projects, 'owner-a', 'inbox', planningDate)).toEqual([]);
   });
 
   it('orders Today sections and terminal projects consistently', () => {
-    const evening = project('evening', {
-      destination: 'today',
-      today_section: 'evening',
+    const later = project('later', {
+      destination: 'anytime',
+      today_section: 'later',
       start_date: planningDate,
     });
     const completed = project('completed', {
@@ -43,8 +42,8 @@ describe('task project planning views', () => {
       canceled_at: '2026-07-20T04:02:00.000Z',
     });
 
-    expect(getTodayProjectSection(evening, planningDate)).toBe('evening');
-    expect(deriveTaskViewProjects([completed, canceled], 'owner-a', 'logbook', planningDate)
+    expect(getTodayProjectSection(later, planningDate)).toBe('later');
+    expect(deriveTaskViewProjects([completed, canceled], 'owner-a', 'done', planningDate)
       .map(({ id }) => id)).toEqual(['canceled', 'completed']);
   });
 });
@@ -63,7 +62,7 @@ function project(id: string, patch: Partial<TaskProject> = {}): TaskProject {
     deleted_at: null,
     deletion_root_id: null,
     destination: 'anytime',
-    today_section: 'daytime',
+    today_section: 'none',
     order_key: `h-${id}`,
     planning_order_key: `p-${id}`,
     start_date: null,

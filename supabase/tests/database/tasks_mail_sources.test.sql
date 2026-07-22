@@ -26,7 +26,7 @@ INSERT INTO public.tasks_todos (
 VALUES (
   '62000000-0000-4000-8000-000000000010',
   '62000000-0000-4000-8000-000000000002',
-  'Owner B Mail task', 'today', 'a0', 'mail_automation',
+  'Owner B Mail task', 'anytime', 'a0', 'mail_automation',
   'mail_message', 'message://%3Cowner-b%40example.test%3E', 'owner-b@example.test',
   '62000000-0000-4000-8000-000000000020'
 );
@@ -74,7 +74,7 @@ SELECT lives_ok(
     ) VALUES (
       '61000000-0000-4000-8000-000000000010',
       '61000000-0000-4000-8000-000000000001',
-      'Owner A Mail task', 'today', 'a0', 'mail_automation',
+      'Owner A Mail task', 'anytime', 'a0', 'mail_automation',
       'mail_message', 'message://%3Cowner-a%40example.test%3E', 'owner-a@example.test',
       '61000000-0000-4000-8000-000000000020'
     );
@@ -134,7 +134,7 @@ SELECT throws_ok(
     ) VALUES (
       '61000000-0000-4000-8000-000000000011',
       '61000000-0000-4000-8000-000000000001',
-      'Unpaired Mail task', 'today', 'a1', 'mail_automation',
+      'Unpaired Mail task', 'anytime', 'a1', 'mail_automation',
       'mail_message', 'message://%3Cunpaired%40example.test%3E', 'unpaired@example.test',
       '61000000-0000-4000-8000-000000000023'
     );
@@ -151,7 +151,7 @@ SELECT throws_ok(
     ) VALUES (
       '61000000-0000-4000-8000-000000000012',
       '61000000-0000-4000-8000-000000000001',
-      'Ordinary task', 'inbox', 'a2',
+      'Ordinary task', 'anytime', 'a2',
       '61000000-0000-4000-8000-000000000024'
     );
     INSERT INTO public.tasks_mail_sources (

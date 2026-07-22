@@ -367,8 +367,8 @@ async function restorationPatch(
       area_id: null,
       project_id: null,
       heading_id: null,
-      destination: 'inbox',
-      today_section: 'daytime',
+      destination: 'anytime',
+      today_section: 'none',
       start_date: null,
     };
   }

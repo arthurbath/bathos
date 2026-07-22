@@ -39,7 +39,7 @@ SELECT ok(
     SELECT 1
     FROM pg_constraint
     WHERE conrelid = 'public.tasks_todos'::regclass
-      AND conname = 'tasks_todos_unscheduled_placement_valid'
+      AND conname = 'tasks_todos_planning_placement_valid'
   ),
   'constrains inactive and unscheduled placement'
 );
@@ -57,12 +57,13 @@ SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT lives_ok(
   $$
     INSERT INTO public.tasks_todos (
-      id, owner_id, title, destination, order_key, deadline, client_mutation_id
+      id, owner_id, title, destination, today_section, order_key, deadline,
+      client_mutation_id
     )
     VALUES (
       '72000000-0000-4000-8000-000000000010',
       '72000000-0000-4000-8000-000000000001',
-      'Synthetic active task', 'anytime', 'a0', '2026-07-30',
+      'Synthetic active task', 'anytime', 'none', 'a0', '2026-07-30',
       '72000000-0000-4000-8000-000000000020'
     )
   $$,
@@ -85,12 +86,13 @@ SELECT lives_ok(
 SELECT lives_ok(
   $$
     INSERT INTO public.tasks_todos (
-      id, owner_id, title, destination, order_key, deadline, client_mutation_id
+      id, owner_id, title, destination, today_section, order_key, deadline,
+      client_mutation_id
     )
     VALUES (
       '72000000-0000-4000-8000-000000000012',
       '72000000-0000-4000-8000-000000000001',
-      'Synthetic inactive task', 'someday', 'a0', '2026-07-31',
+      'Synthetic inactive task', 'someday', 'none', 'a0', '2026-07-31',
       '72000000-0000-4000-8000-000000000022'
     )
   $$,
@@ -124,12 +126,13 @@ SELECT is(
 SELECT throws_ok(
   $$
     INSERT INTO public.tasks_todos (
-      id, owner_id, title, destination, order_key, start_date, client_mutation_id
+      id, owner_id, title, destination, today_section, order_key, start_date,
+      client_mutation_id
     )
     VALUES (
       '72000000-0000-4000-8000-000000000013',
       '72000000-0000-4000-8000-000000000001',
-      'Invalid inactive task', 'someday', 'a2', '2026-07-25',
+      'Invalid inactive task', 'someday', 'none', 'a2', '2026-07-25',
       '72000000-0000-4000-8000-000000000023'
     )
   $$,
@@ -140,18 +143,18 @@ SELECT throws_ok(
 SELECT throws_ok(
   $$
     INSERT INTO public.tasks_todos (
-      id, owner_id, title, destination, order_key, start_date, client_mutation_id
+      id, owner_id, title, destination, today_section, order_key, client_mutation_id
     )
     VALUES (
       '72000000-0000-4000-8000-000000000014',
       '72000000-0000-4000-8000-000000000001',
-      'Invalid Inbox task', 'inbox', 'a2', '2026-07-25',
+      'Invalid Someday membership', 'someday', 'later', 'a2',
       '72000000-0000-4000-8000-000000000024'
     )
   $$,
   '23514',
   NULL,
-  'rejects a start date on Inbox work'
+  'rejects Today membership on Someday work'
 );
 SELECT throws_ok(
   $$
@@ -161,19 +164,20 @@ SELECT throws_ok(
     VALUES (
       '72000000-0000-4000-8000-000000000015',
       '72000000-0000-4000-8000-000000000001',
-      'Invalid evening task', 'anytime', 'evening', 'a2',
+      'Invalid retired section', 'anytime', 'evening', 'a2',
       '72000000-0000-4000-8000-000000000025'
     )
   $$,
   '23514',
   NULL,
-  'rejects This Evening placement outside Today'
+  'rejects a retired Today section'
 );
 SELECT lives_ok(
   $$
     UPDATE public.tasks_todos
     SET
       destination = 'someday',
+      today_section = 'none',
       revision = 2,
       client_mutation_id = '72000000-0000-4000-8000-000000000026'
     WHERE id = '72000000-0000-4000-8000-000000000010'
@@ -205,6 +209,7 @@ SELECT throws_ok(
     UPDATE public.tasks_todos
     SET
       destination = 'someday',
+      today_section = 'none',
       revision = 2,
       client_mutation_id = '72000000-0000-4000-8000-000000000027'
     WHERE id = '72000000-0000-4000-8000-000000000011'
@@ -217,13 +222,13 @@ SELECT throws_ok(
 RESET ROLE;
 SELECT ok(
   tasks_private.todo_export_planning_is_valid_v3(
-    '{"destination":"anytime","today_section":"daytime","start_date":"2026-07-25"}'::jsonb
+    '{"destination":"anytime","today_section":"none","start_date":"2026-07-25"}'::jsonb
   ),
   'accepts future Anytime placement in export validation'
 );
 SELECT is(
   tasks_private.todo_export_planning_is_valid_v3(
-    '{"destination":"someday","today_section":"daytime","start_date":"2026-07-25"}'::jsonb
+    '{"destination":"someday","today_section":"none","start_date":"2026-07-25"}'::jsonb
   ),
   false,
   'rejects scheduled Someday placement in export validation'
@@ -232,7 +237,7 @@ SELECT is(
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '72000000-0000-4000-8000-000000000001', true);
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
-SELECT set_config('test.tasks_planning_export', public.tasks_create_export_v3()::text, false);
+SELECT set_config('test.tasks_planning_export', public.tasks_create_export_v11()::text, false);
 SELECT is(
   jsonb_array_length(
     jsonb_path_query_array(
@@ -254,7 +259,7 @@ SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 SELECT is(
   (
-    public.tasks_restore_export_v3(
+    public.tasks_restore_export_current(
       current_setting('test.tasks_planning_export')::jsonb,
       true
     ) #>> '{tasks_todos,inserts}'
@@ -264,7 +269,7 @@ SELECT is(
 );
 SELECT is(
   (
-    public.tasks_restore_export_v3(
+    public.tasks_restore_export_current(
       current_setting('test.tasks_planning_export')::jsonb,
       false
     ) #>> '{tasks_todos,inserts}'

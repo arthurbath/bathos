@@ -85,8 +85,8 @@ SELECT is(
 
 SELECT is(
   (SELECT result #>> '{task,destination}' FROM first_capture),
-  'today',
-  'places processed Mail capture in Today'
+  'anytime',
+  'places processed Mail capture in Anytime'
 );
 
 SELECT is(

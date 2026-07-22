@@ -84,16 +84,16 @@ async function validateArea(
 }
 
 async function nextPlanningOrderKey(
-  startDate: string,
+  _startDate: string,
   auth: AuthenticatedMcpContext,
 ): Promise<string> {
   const last = await readOne<{ order_key: string }>(auth.supabase
     .from('tasks_todos')
     .select('order_key')
     .eq('owner_id', auth.userId)
-    .eq('destination', 'today')
-    .eq('today_section', 'daytime')
-    .eq('start_date', startDate)
+    .eq('destination', 'anytime')
+    .eq('today_section', 'later')
+    .is('start_date', null)
     .eq('lifecycle', 'open')
     .eq('disposition', 'present')
     .order('order_key', { ascending: false })

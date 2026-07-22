@@ -83,8 +83,8 @@ describe('task repository', () => {
     const task = await repository.createTask({
       ownerId: 'owner-a',
       title: '  New task  ',
-      destination: 'today',
-      todaySection: 'daytime',
+      destination: 'anytime',
+      todaySection: 'next',
       actionability: 'actionable',
       entryChannel: 'raycast',
     });
@@ -93,7 +93,8 @@ describe('task repository', () => {
       id: 'task-new',
       owner_id: 'owner-a',
       title: 'New task',
-      destination: 'today',
+      destination: 'anytime',
+      today_section: 'next',
       entry_channel: 'raycast',
       last_mutation_channel: 'raycast',
       last_actor_type: 'user',
@@ -106,7 +107,7 @@ describe('task repository', () => {
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain('INSERT INTO tasks_todos');
   });
 
-  it('places unscheduled captures without an explicit destination in Inbox', async () => {
+  it('places unscheduled captures without an explicit destination in Today Later and Anytime', async () => {
     const { repository } = createHarness(null);
 
     await expect(repository.createTask({
@@ -114,8 +115,8 @@ describe('task repository', () => {
       title: 'Unprocessed capture',
     })).resolves.toMatchObject({
       title: 'Unprocessed capture',
-      destination: 'inbox',
-      today_section: 'daytime',
+      destination: 'anytime',
+      today_section: 'later',
       start_date: null,
     });
   });
@@ -125,12 +126,13 @@ describe('task repository', () => {
 
     const task = await repository.updateTask('owner-a', 'task-a', {
       title: '  Revised task  ',
-      destination: 'today',
+      today_section: 'next',
     });
 
     expect(task).toMatchObject({
       title: 'Revised task',
-      destination: 'today',
+      destination: 'anytime',
+      today_section: 'next',
       revision: 2,
       client_mutation_id: 'task-new',
       updated_at: timestamp,
@@ -150,7 +152,7 @@ describe('task repository', () => {
       actionability: 'waiting',
     })).resolves.toMatchObject({
       actionability: 'waiting',
-      destination: 'inbox',
+      destination: 'anytime',
       order_key: 'a0',
       revision: 2,
     });
@@ -176,14 +178,14 @@ describe('task repository', () => {
       .mockResolvedValueOnce({ order_key: 'a0' });
 
     const moved = await repository.moveTask('owner-a', 'task-a', {
-      destination: 'today',
-      todaySection: 'evening',
+      destination: 'anytime',
+      todaySection: 'later',
       startDate: '2026-07-20',
     });
 
     expect(moved).toMatchObject({
-      destination: 'today',
-      today_section: 'evening',
+      destination: 'anytime',
+      today_section: 'later',
       start_date: '2026-07-20',
       revision: 2,
     });
@@ -202,14 +204,14 @@ describe('task repository', () => {
       startDate: '2026-07-24',
     })).resolves.toMatchObject({
       destination: 'anytime',
-      today_section: 'daytime',
+      today_section: 'none',
       start_date: '2026-07-24',
     });
 
     const scheduledTask = {
       ...existingTask,
-      destination: 'today' as const,
-      today_section: 'evening' as const,
+      destination: 'anytime' as const,
+      today_section: 'later' as const,
       start_date: '2026-07-20',
       deadline: '2026-07-24',
     };
@@ -220,11 +222,11 @@ describe('task repository', () => {
 
     await expect(somedayHarness.repository.moveTask('owner-a', 'task-a', {
       destination: 'someday',
-      todaySection: 'daytime',
+      todaySection: 'none',
       startDate: null,
     })).resolves.toMatchObject({
       destination: 'someday',
-      today_section: 'daytime',
+      today_section: 'none',
       start_date: null,
       deadline: '2026-07-24',
     });
@@ -245,8 +247,8 @@ describe('task repository', () => {
       .mockResolvedValueOnce({ order_key: 'a9' });
 
     const moved = await repository.moveTasks('owner-a', ['task-a', 'task-b'], {
-      destination: 'today',
-      todaySection: 'evening',
+      destination: 'anytime',
+      todaySection: 'later',
       startDate: '2026-07-20',
     });
 
@@ -254,8 +256,8 @@ describe('task repository', () => {
     expect(moved).toHaveLength(2);
     expect(moved.map(({ id }) => id)).toEqual(['task-a', 'task-b']);
     expect(moved[0]).toMatchObject({
-      destination: 'today',
-      today_section: 'evening',
+      destination: 'anytime',
+      today_section: 'later',
       start_date: '2026-07-20',
       revision: 2,
     });
@@ -299,8 +301,8 @@ describe('task repository', () => {
       .mockResolvedValueOnce(constrainedTask);
 
     await expect(repository.moveTasks('owner-a', ['task-a', 'task-b'], {
-      destination: 'today',
-      todaySection: 'daytime',
+      destination: 'anytime',
+      todaySection: 'next',
       startDate: '2026-07-21',
     })).rejects.toThrow('Deadline cannot be earlier than the start date');
     expect(transaction.execute).not.toHaveBeenCalled();
@@ -321,7 +323,7 @@ describe('task repository', () => {
       project_id: 'project-a',
       heading_id: 'heading-a',
       hierarchy_order_key: 'a1',
-      destination: 'inbox',
+      destination: 'anytime',
       order_key: 'a0',
       revision: 2,
     });
@@ -347,7 +349,7 @@ describe('task repository', () => {
       area_id: null,
       project_id: 'project-a',
       heading_id: null,
-      destination: 'inbox',
+      destination: 'anytime',
       order_key: 'a0',
     });
     expect(moved.hierarchy_order_key! > 'a0').toBe(true);
@@ -356,27 +358,26 @@ describe('task repository', () => {
     );
   });
 
-  it('rejects Today-only placement outside Today and start dates in inactive destinations', async () => {
+  it('rejects Today membership and start dates in inactive Someday', async () => {
     const { repository } = createHarness(existingTask);
 
     await expect(repository.createTask({
       ownerId: 'owner-a',
       title: 'Invalid section',
-      destination: 'inbox',
-      todaySection: 'evening',
-    })).rejects.toThrow('This Evening is available only within Today');
-    await expect(repository.moveTask('owner-a', 'task-a', {
-      destination: 'inbox',
-      startDate: '2026-07-20',
-    })).rejects.toThrow('Inbox work cannot retain a start date');
+      destination: 'someday',
+      todaySection: 'later',
+    })).rejects.toThrow('Someday work cannot appear in Today');
     await expect(repository.createTask({
       ownerId: 'owner-a',
       title: 'Inactive later task',
       destination: 'someday',
+      todaySection: 'none',
       startDate: '2026-07-20',
     })).rejects.toThrow('Someday work cannot retain a start date');
 
-    const somedayTask = { ...existingTask, destination: 'someday' as const };
+    const somedayTask = {
+      ...existingTask, destination: 'someday' as const, today_section: 'none' as const,
+    };
     const updateHarness = createHarness(somedayTask);
     await expect(updateHarness.repository.updateTask('owner-a', 'task-a', {
       start_date: '2026-07-20',

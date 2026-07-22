@@ -11,52 +11,55 @@ import type { TaskStateTransition } from '@/modules/tasks/domain/taskState';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
 
-export type TaskListView = TaskDestination | 'upcoming' | 'logbook' | 'trash';
-export type TodayTaskSection = 'unfinished' | 'daytime' | 'evening';
+export type TaskListView = TaskDestination | 'today' | 'upcoming' | 'done';
+export type TodayTaskSection = 'now' | 'next' | 'later';
 
 export function useTaskList(ownerId: string, view: TaskListView) {
   const { repository, planningTimeZone } = useTasksRuntime();
   const planningDate = useTaskPlanningDate(planningTimeZone);
   const [optimisticTasks, setOptimisticTasks] = useState<Record<string, TaskTodo | null>>({});
-  const historical = view === 'logbook';
-  const trash = view === 'trash';
   const query = useQuery<TaskTodo>(
-    trash
+    view === 'done'
       ? `SELECT *
          FROM tasks_todos
          WHERE owner_id = ?
-           AND disposition = 'deleted'
-           AND deletion_root_id = id
-         ORDER BY deleted_at DESC, id`
-      : historical
-        ? `SELECT *
-         FROM tasks_todos
-         WHERE owner_id = ?
-           AND lifecycle IN ('completed', 'canceled')
-           AND disposition = 'present'
-         ORDER BY COALESCE(completed_at, canceled_at) DESC, id`
-        : view === 'upcoming'
+           AND ((disposition = 'deleted' AND deletion_root_id = id)
+             OR (disposition = 'present' AND lifecycle IN ('completed', 'canceled')))
+         ORDER BY COALESCE(deleted_at, completed_at, canceled_at) DESC, id`
+      : view === 'upcoming'
           ? `SELECT *
              FROM tasks_todos
              WHERE owner_id = ?
-               AND destination IN ('today', 'anytime')
+               AND destination = 'anytime'
                AND start_date > ?
                AND lifecycle = 'open'
                AND disposition = 'present'
              ORDER BY start_date, order_key, id`
-          : `SELECT *
+          : view === 'today'
+            ? `SELECT *
+         FROM tasks_todos
+         WHERE owner_id = ?
+           AND destination = 'anytime'
+           AND today_section <> 'none'
+           AND lifecycle = 'open'
+           AND disposition = 'present'
+           AND (start_date IS NULL OR start_date <= ?)
+         ORDER BY order_key, id`
+            : `SELECT *
          FROM tasks_todos
          WHERE owner_id = ?
            AND destination = ?
            AND lifecycle = 'open'
            AND disposition = 'present'
-           AND (? NOT IN ('today', 'anytime') OR start_date IS NULL OR start_date <= ?)
+           AND (? <> 'anytime' OR start_date IS NULL OR start_date <= ?)
          ORDER BY order_key, id`,
-    trash || historical
+    view === 'done'
       ? [ownerId]
       : view === 'upcoming'
         ? [ownerId, planningDate]
-        : [ownerId, view, view, planningDate],
+        : view === 'today'
+          ? [ownerId, planningDate]
+          : [ownerId, view, view, planningDate],
   );
 
   useEffect(() => {
@@ -101,20 +104,21 @@ export function useTaskList(ownerId: string, view: TaskListView) {
 
   const createTask = useCallback(
     async (title: string) => {
-      if (view === 'trash' || view === 'logbook' || view === 'upcoming') {
-        const label = view === 'trash' ? 'Trash' : view === 'logbook' ? 'Logbook' : 'Upcoming';
+      if (view === 'done' || view === 'upcoming') {
+        const label = view === 'done' ? 'Done' : 'Upcoming';
         throw new Error(`Tasks cannot be created in ${label}`);
       }
       const createdTask = await repository.createTask({
         ownerId,
         title,
-        destination: view,
-        startDate: view === 'today' ? planningDate : null,
+        destination: view === 'today' ? 'anytime' : view,
+        todaySection: view === 'someday' ? 'none' : 'later',
+        startDate: null,
       });
       setOptimisticTask(createdTask.id, createdTask);
       return createdTask;
     },
-    [ownerId, planningDate, repository, setOptimisticTask, view],
+    [ownerId, repository, setOptimisticTask, view],
   );
   const updateTask = useCallback(
     async (taskId: string, patch: EditableTaskPatch) => {
@@ -152,8 +156,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
       const leavesCurrentView = transition === 'complete'
         || transition === 'cancel'
         || transition === 'delete'
-        || (view === 'logbook' && transition === 'reopen')
-        || (view === 'trash' && transition === 'restore');
+        || (view === 'done' && (transition === 'reopen' || transition === 'restore'));
       if (leavesCurrentView) {
         setOptimisticTask(taskId, null);
       }
@@ -178,7 +181,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
         const optimisticTask = {
           ...currentTask,
           destination: input.destination,
-          today_section: input.todaySection ?? 'daytime',
+          today_section: input.todaySection ?? 'none',
           start_date: input.startDate ?? null,
           revision: currentTask.revision + 1,
           client_mutation_id: `optimistic:${currentTask.client_mutation_id}`,
@@ -285,11 +288,9 @@ function taskIsVisible(
   if (task.owner_id !== ownerId) {
     return false;
   }
-  if (view === 'trash') {
-    return task.disposition === 'deleted' && task.deletion_root_id === task.id;
-  }
-  if (view === 'logbook') {
-    return task.disposition === 'present' && task.lifecycle !== 'open';
+  if (view === 'done') {
+    return (task.disposition === 'deleted' && task.deletion_root_id === task.id)
+      || (task.disposition === 'present' && task.lifecycle !== 'open');
   }
   if (view === 'upcoming') {
     return task.disposition === 'present'
@@ -297,10 +298,17 @@ function taskIsVisible(
       && task.start_date !== null
       && task.start_date > planningDate;
   }
+  if (view === 'today') {
+    return task.destination === 'anytime'
+      && task.today_section !== 'none'
+      && task.lifecycle === 'open'
+      && task.disposition === 'present'
+      && (task.start_date === null || task.start_date <= planningDate);
+  }
   return task.destination === view
     && task.lifecycle === 'open'
     && task.disposition === 'present'
-    && ((view !== 'today' && view !== 'anytime')
+    && (view !== 'anytime'
       || task.start_date === null
       || task.start_date <= planningDate);
 }
@@ -311,13 +319,9 @@ function compareTasksForView(
   view: TaskListView,
   planningDate: string,
 ): number {
-  if (view === 'trash') {
-    return (right.deleted_at ?? '').localeCompare(left.deleted_at ?? '')
-      || left.id.localeCompare(right.id);
-  }
-  if (view === 'logbook') {
-    return (right.completed_at ?? right.canceled_at ?? '').localeCompare(
-      left.completed_at ?? left.canceled_at ?? '',
+  if (view === 'done') {
+    return (right.deleted_at ?? right.completed_at ?? right.canceled_at ?? '').localeCompare(
+      left.deleted_at ?? left.completed_at ?? left.canceled_at ?? '',
     ) || left.id.localeCompare(right.id);
   }
   if (view === 'upcoming') {
@@ -340,15 +344,12 @@ function compareTasksForView(
   );
 }
 
-export function getTodayTaskSection(task: TaskTodo, planningDate: string): TodayTaskSection {
-  if (task.start_date !== null && task.start_date < planningDate) {
-    return 'unfinished';
-  }
-  return task.today_section;
+export function getTodayTaskSection(task: TaskTodo, _planningDate: string): TodayTaskSection {
+  return task.today_section === 'none' ? 'later' : task.today_section;
 }
 
 function compareTodaySection(left: TaskTodo, right: TaskTodo, planningDate: string): number {
-  const ranks: Record<TodayTaskSection, number> = { unfinished: 0, daytime: 1, evening: 2 };
+  const ranks: Record<TodayTaskSection, number> = { now: 0, next: 1, later: 2 };
   return ranks[getTodayTaskSection(left, planningDate)]
     - ranks[getTodayTaskSection(right, planningDate)];
 }

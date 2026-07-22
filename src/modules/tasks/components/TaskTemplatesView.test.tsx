@@ -66,7 +66,7 @@ const revision = {
       notes: '',
       actionability: 'actionable',
       destination: 'anytime',
-      today_section: 'daytime',
+      today_section: 'next',
       order_key: 'a0',
       start_offset_days: null,
       deadline_offset_days: null,

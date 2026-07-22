@@ -174,8 +174,8 @@ describe('useTaskHierarchy', () => {
     try {
       await act(async () => {
         await latest.moveProjectInPlanning(alpha.id, {
-          destination: 'today',
-          todaySection: 'evening',
+          destination: 'anytime',
+          todaySection: 'later',
           startDate: '2026-07-20',
         });
       });
@@ -183,8 +183,8 @@ describe('useTaskHierarchy', () => {
         'owner-a',
         alpha.id,
         expect.objectContaining({
-          destination: 'today',
-          today_section: 'evening',
+          destination: 'anytime',
+          today_section: 'later',
           start_date: '2026-07-20',
           planning_order_key: expect.any(String),
         }),
@@ -241,7 +241,7 @@ function hierarchyProject(
     deleted_at: null,
     deletion_root_id: null,
     destination: 'anytime',
-    today_section: 'daytime',
+    today_section: 'none',
     order_key: orderKey,
     planning_order_key: orderKey,
     start_date: null,

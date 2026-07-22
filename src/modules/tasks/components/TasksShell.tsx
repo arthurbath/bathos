@@ -9,26 +9,26 @@ import {
   type RefObject,
 } from 'react';
 import {
-  Archive,
+  ArrowRight,
   Bell,
   BellRing,
   CalendarDays,
   CalendarRange,
   CheckCircle2,
   Circle,
+  CircleDot,
   CircleDashed,
   CircleHelp,
   CircleSlash2,
   Cloud,
+  Clock3,
   CornerDownLeft,
   DatabaseBackup,
   Hourglass,
-  Inbox,
   ListChecks,
   ListTodo,
   LayoutTemplate,
   MoreHorizontal,
-  Moon,
   Plus,
   RotateCcw,
   Search,
@@ -83,9 +83,9 @@ import { useTaskUndo } from '@/modules/tasks/hooks/useTaskUndo';
 import { useTaskReminders } from '@/modules/tasks/hooks/useTaskReminders';
 import type { TaskWebPushModel } from '@/modules/tasks/hooks/useTaskWebPush';
 import {
-  useTaskHierarchyTrash,
+  useTaskDeletedHierarchyRoots,
   type DeletedTaskHierarchyRoot,
-} from '@/modules/tasks/hooks/useTaskHierarchyTrash';
+} from '@/modules/tasks/hooks/useTaskDeletedHierarchyRoots';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskReminder, TaskTodo } from '@/modules/tasks/types/tasks';
 import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/taskEditorPlanning';
@@ -93,7 +93,6 @@ import { TaskProjectDetailView } from '@/modules/tasks/components/TaskProjectDet
 import { TaskAreaDetailView } from '@/modules/tasks/components/TaskAreaDetailView';
 import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
 import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView';
-import { TaskPermanentDeletionButton } from '@/modules/tasks/components/TaskPermanentDeletionButton';
 import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
 import { TaskPlanningProjects } from '@/modules/tasks/components/TaskPlanningProjects';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
@@ -115,32 +114,28 @@ type TasksShellProps = {
 };
 
 const primaryTaskViews = [
-  { path: '/inbox', label: 'Inbox', icon: Inbox },
   { path: '/today', label: 'Today', icon: CalendarDays },
   { path: '/upcoming', label: 'Upcoming', icon: CalendarRange },
   { path: '/anytime', label: 'Anytime', icon: ListTodo },
+  { path: '/someday', label: 'Someday', icon: CircleDashed },
 ] as const;
 
 const secondaryTaskViews = [
-  { path: '/someday', label: 'Someday', icon: CircleDashed },
   { path: '/projects', label: 'Projects', icon: FolderKanban },
   { path: '/templates', label: 'Templates', icon: LayoutTemplate },
-  { path: '/logbook', label: 'Logbook', icon: Archive },
-  { path: '/trash', label: 'Trash', icon: Trash2 },
+  { path: '/done', label: 'Done', icon: SquareCheckBig },
   { path: '/config', label: 'Config', icon: Settings },
 ] as const;
 
 const taskViews = [...primaryTaskViews, ...secondaryTaskViews] as const;
 
 const taskNavigationShortcuts: Record<string, string> = {
-  i: '/inbox',
   t: '/today',
   u: '/upcoming',
   a: '/anytime',
   s: '/someday',
-  l: '/logbook',
   p: '/projects',
-  r: '/trash',
+  d: '/done',
   e: '/templates',
   c: '/config',
 };
@@ -159,18 +154,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     || view === 'area'
     || view === 'templates'
     || view === 'config'
-    ? 'inbox'
+    ? 'today'
     : view;
   const {
     mode,
     syncState,
     pendingUploadCount,
-    permanentDeletionService,
     portabilityService,
     prepareForSignOut,
   } = useTasksRuntime();
   const hierarchy = useTaskHierarchy(userId);
-  const hierarchyTrash = useTaskHierarchyTrash(userId);
+  const deletedHierarchyRoots = useTaskDeletedHierarchyRoots(userId);
   const {
     tasks,
     loading,
@@ -204,9 +198,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [searchOpen, setSearchOpen] = useState(false);
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
   const [searchTargetTaskId, setSearchTargetTaskId] = useState<string | null>(null);
-  const [permanentlyDeletedKeys, setPermanentlyDeletedKeys] = useState<Set<string>>(
-    () => new Set(),
-  );
   const taskSearch = useTaskSearch(userId, searchOpen);
   const reminders = useTaskReminders(userId);
   const reminderAvailability = getTaskReminderAvailability(
@@ -220,17 +211,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
   const pendingNavigationRef = useRef(false);
   const navigationResetRef = useRef<number | null>(null);
-  const trashRoots = hierarchyTrash.roots.filter((root) => (
-    !permanentlyDeletedKeys.has(`${root.root_type}:${root.id}`)
-  ));
-  const trashTasks = tasks.filter((task) => !permanentlyDeletedKeys.has(`todo:${task.id}`));
-  const taskViewIsEmpty = view === 'trash'
-    ? trashTasks.length === 0 && trashRoots.length === 0
+  const doneRoots = deletedHierarchyRoots.roots;
+  const taskViewIsEmpty = view === 'done'
+    ? tasks.length === 0 && doneRoots.length === 0 && planningProjects.length === 0
     : tasks.length === 0 && planningProjects.length === 0;
-  const permanentDeletionAvailable = mode === 'connected'
+  const serverReplacementAvailable = mode === 'connected'
     && syncState === 'connected'
     && pendingUploadCount === 0;
-  const permanentDeletionUnavailableReason = pendingUploadCount > 0
+  const serverReplacementUnavailableReason = pendingUploadCount > 0
     ? 'Wait for pending task changes to synchronize'
     : syncState !== 'connected'
       ? 'Reconnect to preview the current server deletion scope'
@@ -374,7 +362,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         if (captureInputRef.current) {
           captureInputRef.current.focus();
         } else {
-          navigate(`${basePath}/inbox`);
+          navigate(`${basePath}/today`);
         }
         return;
       }
@@ -467,71 +455,58 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       },
     });
 
-    const moveToToday = action(view === 'upcoming' ? 'Make Available Today' : 'Move to Today', {
-      destination: 'today',
-      todaySection: 'daytime',
-      startDate: planningDate,
+    const moveToTodayLater = action(view === 'upcoming' ? 'Move to Today Later' : 'Add to Today Later', {
+      destination: 'anytime',
+      todaySection: 'later',
+      startDate: null,
     });
     const moveToAnytime = action('Move to Anytime', {
       destination: 'anytime',
-      todaySection: 'daytime',
+      todaySection: 'none',
       startDate: null,
     });
     const moveToSomeday = action('Move to Someday', {
       destination: 'someday',
-      todaySection: 'daytime',
-      startDate: null,
-    });
-    const moveToInbox = action('Move to Inbox', {
-      destination: 'inbox',
-      todaySection: 'daytime',
+      todaySection: 'none',
       startDate: null,
     });
 
     if (view === 'upcoming') {
-      return [moveToToday, moveToAnytime, moveToSomeday, moveToInbox];
-    }
-    if (view === 'inbox') {
-      return [moveToToday, moveToAnytime, moveToSomeday];
+      return [moveToTodayLater, moveToAnytime, moveToSomeday];
     }
     if (view === 'anytime') {
-      return [moveToToday, moveToSomeday, moveToInbox];
+      const todayActions = task.today_section === 'none'
+        ? [
+          action('Add to Today Now', { destination: 'anytime', todaySection: 'now', startDate: null }),
+          action('Add to Today Next', { destination: 'anytime', todaySection: 'next', startDate: null }),
+          moveToTodayLater,
+        ]
+        : [action('Remove from Today', {
+          destination: 'anytime', todaySection: 'none', startDate: null,
+        })];
+      return [...todayActions, moveToSomeday];
     }
     if (view === 'someday') {
-      return [moveToToday, moveToAnytime, moveToInbox];
+      return [moveToTodayLater, moveToAnytime];
     }
 
     const section = getTodayTaskSection(task, planningDate);
-    const actions: TaskTemporalAction[] = [];
-    if (section === 'unfinished') {
-      actions.push(action('Reschedule for Today', {
-        destination: 'today',
-        todaySection: 'daytime',
-        startDate: planningDate,
-      }));
-    }
-    if (section !== 'evening') {
-      actions.push(action('Move to This Evening', {
-        destination: 'today',
-        todaySection: 'evening',
-        startDate: planningDate,
-      }));
-    } else {
-      actions.push(action('Move to Earlier Today', {
-        destination: 'today',
-        todaySection: 'daytime',
-        startDate: planningDate,
-      }));
-    }
+    const actions: TaskTemporalAction[] = (
+      ['now', 'next', 'later'] as const
+    ).filter((candidate) => candidate !== section).map((candidate) => action(
+      `Move to Today ${candidate[0].toUpperCase()}${candidate.slice(1)}`,
+      { destination: 'anytime', todaySection: candidate, startDate: null },
+    ));
     actions.push(
       action('Move to Tomorrow', {
-        destination: 'today',
-        todaySection: 'daytime',
+        destination: 'anytime',
+        todaySection: 'none',
         startDate: addTaskCalendarDays(planningDate, 1),
       }),
-      moveToAnytime,
+      action('Remove from Today', {
+        destination: 'anytime', todaySection: 'none', startDate: null,
+      }),
       moveToSomeday,
-      moveToInbox,
     );
     return actions;
   };
@@ -561,30 +536,32 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     input: TaskPlanningMoveInput,
   ): TaskTemporalAction => ({ label, run: () => applyBulkPlanning(input) });
   const bulkPlanningActions: TaskTemporalAction[] = [
-    bulkAction('Move to Inbox', {
-      destination: 'inbox', todaySection: 'daytime', startDate: null,
+    bulkAction('Move to Today Now', {
+      destination: 'anytime', todaySection: 'now', startDate: null,
     }),
-    bulkAction('Move to Today', {
-      destination: 'today', todaySection: 'daytime', startDate: planningDate,
+    bulkAction('Move to Today Next', {
+      destination: 'anytime', todaySection: 'next', startDate: null,
     }),
-    bulkAction('Move to This Evening', {
-      destination: 'today', todaySection: 'evening', startDate: planningDate,
+    bulkAction('Move to Today Later', {
+      destination: 'anytime', todaySection: 'later', startDate: null,
+    }),
+    bulkAction('Remove from Today', {
+      destination: 'anytime', todaySection: 'none', startDate: null,
     }),
     bulkAction('Move to Tomorrow', {
-      destination: 'today',
-      todaySection: 'daytime',
+      destination: 'anytime',
+      todaySection: 'none',
       startDate: addTaskCalendarDays(planningDate, 1),
     }),
     bulkAction('Move to Anytime', {
-      destination: 'anytime', todaySection: 'daytime', startDate: null,
+      destination: 'anytime', todaySection: 'none', startDate: null,
     }),
     bulkAction('Move to Someday', {
-      destination: 'someday', todaySection: 'daytime', startDate: null,
+      destination: 'someday', todaySection: 'none', startDate: null,
     }),
   ];
 
-  const bulkEligible = view === 'inbox'
-    || view === 'today'
+  const bulkEligible = view === 'today'
     || view === 'upcoming'
     || view === 'anytime'
     || view === 'someday';
@@ -656,9 +633,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             throw reorderError;
           }
         } : undefined}
-        planningLabel={view === 'today' && getTodayTaskSection(task, planningDate) === 'unfinished'
-          ? `Unfinished Since ${formatTaskCalendarDate(task.start_date ?? planningDate)}`
-          : view === 'today' ? null : undefined}
+        planningLabel={view === 'today' ? null : undefined}
+        todayMarker={view === 'anytime' && task.today_section !== 'none'
+          ? task.today_section
+          : undefined}
         reminder={reminders.byRootId.get(task.id) ?? null}
         reminderMode={reminderAvailability}
         reminderTimeZone={reminders.planningTimeZone}
@@ -815,7 +793,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             />
           ) : null}
 
-          {!bulkMode && view !== 'projects' && view !== 'project' && view !== 'area' && view !== 'templates' && view !== 'config' && (view === 'inbox' || view === 'today' || view === 'anytime' || view === 'someday') ? (
+          {!bulkMode && view !== 'projects' && view !== 'project' && view !== 'area' && view !== 'templates' && view !== 'config' && (view === 'today' || view === 'anytime' || view === 'someday') ? (
             <form onSubmit={handleCreate} className="relative">
               <Plus
                 className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
@@ -918,88 +896,103 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                     }
                   }}
                   portabilityService={portabilityService}
-                  replaceAvailable={permanentDeletionAvailable}
-                  replaceUnavailableReason={permanentDeletionUnavailableReason}
+                  replaceAvailable={serverReplacementAvailable}
+                  replaceUnavailableReason={serverReplacementUnavailableReason}
                 />
               )
               : <section aria-label={getTaskSectionLabel(taskListView)}>
-            {loading || hierarchy.loading || (view === 'trash' && hierarchyTrash.loading) ? (
+            {loading || hierarchy.loading || (view === 'done' && deletedHierarchyRoots.loading) ? (
               <div className="flex min-h-40 items-center justify-center">
                 <LoadingSpinner />
               </div>
-            ) : error || hierarchy.error || (view === 'trash' && hierarchyTrash.error) ? (
+            ) : error || hierarchy.error || (view === 'done' && deletedHierarchyRoots.error) ? (
               <p role="alert" className="py-12 text-center text-sm text-destructive">
                 Tasks Could Not Be Loaded
               </p>
             ) : taskViewIsEmpty ? (
               <p className="py-12 text-center text-sm text-muted-foreground">
-                {view === 'trash' ? 'Trash Is Empty' : view === 'logbook' ? 'Logbook Is Empty' : 'No Tasks'}
+                {view === 'done' ? 'Done Is Empty' : 'No Tasks'}
               </p>
-            ) : view === 'trash' ? (
-              <div className="space-y-5">
-                {trashRoots.length > 0 ? (
+            ) : view === 'done' ? (
+              <div className="space-y-7">
+                {doneRoots.length > 0 ? (
+                  <section aria-labelledby="task-done-deleted-heading">
+                    <h3
+                      id="task-done-deleted-heading"
+                      className="mb-2 text-sm font-semibold text-muted-foreground"
+                    >
+                      Deleted ({doneRoots.length})
+                    </h3>
                   <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-                    {trashRoots.map((root) => (
+                    {doneRoots.map((root) => (
                       <DeletedHierarchyRow
                         key={`${root.root_type}:${root.id}`}
                         root={root}
                         onRestore={async () => {
                           try {
-                            await hierarchyTrash.restore(root);
+                            await deletedHierarchyRoots.restore(root);
                           } catch (restoreError) {
                             showTaskError('Hierarchy Could Not Be Restored', restoreError);
                           }
                         }}
-                        permanentDeleteControl={mode === 'connected' && root.root_type === 'project' ? (
-                          <TaskPermanentDeletionButton
-                            rootType="project"
-                            rootId={root.id}
-                            title={root.title}
-                            service={permanentDeletionService}
-                            available={permanentDeletionAvailable}
-                            unavailableReason={permanentDeletionUnavailableReason}
-                            onDeleted={(result) => {
-                              setPermanentlyDeletedKeys((current) => new Set(current).add(
-                                `${result.root.type}:${result.root.id}`,
-                              ));
-                            }}
-                          />
-                        ) : undefined}
                       />
                     ))}
                   </div>
+                  </section>
                 ) : null}
-                {trashTasks.length > 0 ? (
-                  <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-                    {trashTasks.map((task) => (
-                      <DeletedTaskRow
-                        key={task.id}
-                        task={task}
-                        onRestore={async () => {
-                          try {
-                            await transitionTask(task.id, 'restore');
-                          } catch (restoreError) {
-                            showTaskError('Task Could Not Be Restored', restoreError);
-                          }
-                        }}
-                        permanentDeleteControl={mode === 'connected' ? (
-                          <TaskPermanentDeletionButton
-                            rootType="todo"
-                            rootId={task.id}
-                            title={task.title}
-                            service={permanentDeletionService}
-                            available={permanentDeletionAvailable}
-                            unavailableReason={permanentDeletionUnavailableReason}
-                            onDeleted={(result) => {
-                              setPermanentlyDeletedKeys((current) => new Set(current).add(
-                                `${result.root.type}:${result.root.id}`,
-                              ));
-                            }}
-                          />
-                        ) : undefined}
-                      />
-                    ))}
-                  </div>
+                <TaskPlanningProjects
+                  projects={planningProjects}
+                  areas={hierarchy.areas}
+                  basePath={basePath}
+                  view={taskListView}
+                  planningDate={planningDate}
+                  onMove={async () => undefined}
+                  onReorder={async () => undefined}
+                  onReopen={async (project) => {
+                    try {
+                      await hierarchy.transitionProject(project.id, 'reopen_project');
+                    } catch (reopenError) {
+                      showTaskError('Project Could Not Be Reopened', reopenError);
+                      throw reopenError;
+                    }
+                  }}
+                />
+                {tasks.length > 0 ? (
+                  <section aria-labelledby="task-done-todos-heading">
+                    <h3
+                      id="task-done-todos-heading"
+                      className="mb-2 text-sm font-semibold text-muted-foreground"
+                    >
+                      To-Dos ({tasks.length})
+                    </h3>
+                    <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+                      {tasks.map((task) => task.disposition === 'deleted' ? (
+                        <DeletedTaskRow
+                          key={task.id}
+                          task={task}
+                          onRestore={async () => {
+                            try {
+                              await transitionTask(task.id, 'restore');
+                            } catch (restoreError) {
+                              showTaskError('Task Could Not Be Restored', restoreError);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <DoneTaskRow
+                          key={task.id}
+                          task={task}
+                          onReopen={async () => {
+                            try {
+                              await transitionTask(task.id, 'reopen');
+                            } catch (reopenError) {
+                              showTaskError('Task Could Not Be Reopened', reopenError);
+                            }
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </section>
                 ) : null}
               </div>
             ) : view === 'today' ? (
@@ -1081,33 +1074,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   }}
                 />
                 {tasks.length > 0 ? (
-                  <section aria-label={view === 'logbook' ? 'To-Dos' : 'Tasks'}>
+                  <section aria-label="Tasks">
                     <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-                      {view === 'logbook' ? `To-Dos (${tasks.length})` : `Tasks (${tasks.length})`}
+                      Tasks ({tasks.length})
                     </h3>
                     <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-                      {tasks.map((task) => (
-                        view === 'logbook' ? (
-                          <LogbookTaskRow
-                            key={task.id}
-                            task={task}
-                            onReopen={async () => {
-                              try {
-                                await transitionTask(task.id, 'reopen');
-                              } catch (reopenError) {
-                                showTaskError('Task Could Not Be Reopened', reopenError);
-                              }
-                            }}
-                            onDelete={async () => {
-                              try {
-                                await transitionTask(task.id, 'delete');
-                              } catch (deleteError) {
-                                showTaskError('Task Could Not Be Deleted', deleteError);
-                              }
-                            }}
-                          />
-                        ) : renderActiveTask(task, tasks)
-                      ))}
+                      {tasks.map((task) => renderActiveTask(task, tasks))}
                     </div>
                   </section>
                 ) : null}
@@ -1544,14 +1516,12 @@ function TaskWebPushCapability({
   );
 }
 
-function LogbookTaskRow({
+function DoneTaskRow({
   task,
   onReopen,
-  onDelete,
 }: {
   task: TaskTodo;
   onReopen: () => Promise<void>;
-  onDelete: () => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
   const completed = task.lifecycle === 'completed';
@@ -1604,28 +1574,6 @@ function LogbookTaskRow({
         <RotateCcw className="h-4 w-4" aria-hidden="true" />
         Reopen
       </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="clear"
-            size="icon"
-            disabled={pending}
-            aria-label={`Actions for ${task.title}`}
-            className="h-10 w-10 text-muted-foreground"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
-            onSelect={() => void run(onDelete)}
-          >
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
     </article>
   );
 }
@@ -1633,11 +1581,9 @@ function LogbookTaskRow({
 function DeletedHierarchyRow({
   root,
   onRestore,
-  permanentDeleteControl,
 }: {
   root: DeletedTaskHierarchyRoot;
   onRestore: () => Promise<void>;
-  permanentDeleteControl?: ReactNode;
 }) {
   const label = root.root_type === 'checklist_item'
     ? 'Checklist Item'
@@ -1646,14 +1592,15 @@ function DeletedHierarchyRow({
     <article className="flex min-h-14 items-center gap-3 px-3 py-2 sm:px-4">
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-foreground">{root.title}</p>
-        <p className="text-xs text-muted-foreground">Deleted {label}</p>
+        <p className="text-xs text-muted-foreground">
+          Deleted {label} · <time dateTime={root.deleted_at}>{formatTaskTerminalDate(root.deleted_at)}</time>
+        </p>
       </div>
       <div className="flex shrink-0 flex-wrap justify-end gap-2">
         <Button type="button" variant="outline" size="sm" onClick={() => void onRestore()}>
           <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden="true" />
           Restore
         </Button>
-        {permanentDeleteControl}
       </div>
     </article>
   );
@@ -1662,11 +1609,9 @@ function DeletedHierarchyRow({
 function DeletedTaskRow({
   task,
   onRestore,
-  permanentDeleteControl,
 }: {
   task: TaskTodo;
   onRestore: () => Promise<void>;
-  permanentDeleteControl?: ReactNode;
 }) {
   const [restoring, setRestoring] = useState(false);
 
@@ -1678,7 +1623,7 @@ function DeletedTaskRow({
         <p className="text-xs text-muted-foreground">
           {task.lifecycle === 'open' ? 'Open' : task.lifecycle === 'completed' ? 'Completed' : 'Canceled'}
           {' · '}
-          {getTaskViewLabel(task.destination)}
+          {task.deleted_at ? formatTaskTerminalDate(task.deleted_at) : getTaskViewLabel(task.destination)}
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap justify-end gap-2">
@@ -1697,7 +1642,6 @@ function DeletedTaskRow({
           <RotateCcw className="h-4 w-4" aria-hidden="true" />
           Restore
         </Button>
-        {permanentDeleteControl}
       </div>
     </article>
   );
@@ -1715,17 +1659,16 @@ function TodayTaskSections({
   const sections: Array<{
     id: TodayTaskSection;
     label: string;
-    icon?: typeof Moon;
-    className?: string;
+    icon: typeof CircleDot;
   }> = [
-    { id: 'unfinished', label: 'Unfinished', className: 'text-warning' },
-    { id: 'daytime', label: 'Today' },
-    { id: 'evening', label: 'This Evening', icon: Moon },
+    { id: 'now', label: 'Now', icon: CircleDot },
+    { id: 'next', label: 'Next', icon: ArrowRight },
+    { id: 'later', label: 'Later', icon: Clock3 },
   ];
 
   return (
     <div className="space-y-7">
-      {sections.map(({ id, label, icon: Icon, className }) => {
+      {sections.map(({ id, label, icon: Icon }) => {
         const sectionTasks = tasks.filter((task) => getTodayTaskSection(task, planningDate) === id);
         if (sectionTasks.length === 0) {
           return null;
@@ -1734,9 +1677,9 @@ function TodayTaskSections({
           <section key={id} aria-labelledby={`tasks-${id}-heading`}>
             <h3
               id={`tasks-${id}-heading`}
-              className={`mb-2 flex items-center gap-2 text-sm font-semibold ${className ?? 'text-muted-foreground'}`}
+              className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground"
             >
-              {Icon ? <Icon className="h-4 w-4" aria-hidden="true" /> : null}
+              <Icon className="h-4 w-4" aria-hidden="true" />
               {label} ({sectionTasks.length})
             </h3>
             <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
@@ -1762,6 +1705,7 @@ function TaskRow({
   onMoveUp,
   onMoveDown,
   planningLabel,
+  todayMarker,
   reminder,
   reminderMode,
   reminderTimeZone,
@@ -1784,6 +1728,7 @@ function TaskRow({
   onMoveUp?: () => Promise<void>;
   onMoveDown?: () => Promise<void>;
   planningLabel?: string | null;
+  todayMarker?: TodayTaskSection;
   reminder: TaskReminder | null;
   reminderMode: TaskReminderAvailability;
   reminderTimeZone: string;
@@ -1800,6 +1745,11 @@ function TaskRow({
   const [whenOpen, setWhenOpen] = useState(false);
   const titleButtonRef = useRef<HTMLButtonElement>(null);
   const hierarchyLabel = getTaskHierarchyLabel(task, hierarchy);
+  const TodayMarkerIcon = todayMarker === 'now'
+    ? CircleDot
+    : todayMarker === 'next'
+      ? ArrowRight
+      : Clock3;
 
   const run = async (operation: () => Promise<void>): Promise<boolean> => {
     if (pending) {
@@ -1966,7 +1916,18 @@ function TaskRow({
           data-task-id={task.id}
           className="min-w-0 flex-1 py-4 text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="block">{task.title}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate">{task.title}</span>
+            {todayMarker ? (
+              <span
+                className="inline-flex shrink-0 text-info"
+                aria-label={`Today ${todayMarker[0].toUpperCase()}${todayMarker.slice(1)}`}
+                title={`Today ${todayMarker[0].toUpperCase()}${todayMarker.slice(1)}`}
+              >
+                <TodayMarkerIcon className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
+            ) : null}
+          </span>
           {hierarchyLabel ? (
             <span className="mt-1 block text-xs font-normal text-info">{hierarchyLabel}</span>
           ) : null}
@@ -2490,12 +2451,10 @@ function formatReminderIntent(reminder: TaskReminder): string {
 }
 
 function getTaskViewLabel(view: TaskShellView): string {
-  if (view === 'inbox') return 'Inbox';
   if (view === 'anytime') return 'Anytime';
   if (view === 'someday') return 'Someday';
-  if (view === 'logbook') return 'Logbook';
+  if (view === 'done') return 'Done';
   if (view === 'upcoming') return 'Upcoming';
-  if (view === 'trash') return 'Trash';
   if (view === 'projects') return 'Projects';
   if (view === 'project') return 'Project';
   if (view === 'area') return 'Area';
@@ -2516,12 +2475,10 @@ function isTaskKeyboardInput(target: EventTarget | null): boolean {
 }
 
 function getTaskViewFromPath(pathname: string): TaskShellView {
-  if (pathname.endsWith('/inbox')) return 'inbox';
   if (pathname.endsWith('/anytime')) return 'anytime';
   if (pathname.endsWith('/someday')) return 'someday';
-  if (pathname.endsWith('/logbook')) return 'logbook';
+  if (pathname.endsWith('/done')) return 'done';
   if (pathname.endsWith('/upcoming')) return 'upcoming';
-  if (pathname.endsWith('/trash')) return 'trash';
   if (pathname.endsWith('/templates')) return 'templates';
   if (pathname.endsWith('/config')) return 'config';
   if (getTaskAreaIdFromPath(pathname)) return 'area';
@@ -2541,12 +2498,10 @@ function getTaskAreaIdFromPath(pathname: string): string | null {
 }
 
 function getTaskSectionLabel(view: TaskListView): string {
-  if (view === 'inbox') return 'Inbox Tasks';
   if (view === 'anytime') return 'Anytime Tasks';
   if (view === 'someday') return 'Someday Tasks';
-  if (view === 'logbook') return 'Logbook Tasks';
+  if (view === 'done') return 'Done Tasks';
   if (view === 'upcoming') return 'Upcoming Tasks';
-  if (view === 'trash') return 'Deleted Tasks';
   return 'Today Tasks';
 }
 

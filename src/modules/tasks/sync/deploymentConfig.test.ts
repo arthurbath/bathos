@@ -91,6 +91,16 @@ describe('Tasks PowerSync deployment configuration', () => {
       "typeof publicationExists !== 'boolean'",
     );
   });
+
+  it('keeps a read-only production verifier separate from database normalization', () => {
+    expect(productionProvisioner).toContain("'verify-sync-database'");
+    expect(productionProvisioner).toContain(
+      "if (command === 'verify-sync-database') verifySyncDatabase(tempDirectory)",
+    );
+    expect(productionProvisioner).toContain(
+      "withoutPsqlMetaCommands(join(repositoryRoot, 'deploy/tasks-powersync/verify.sql'))",
+    );
+  });
 });
 
 function read(path: string): string {

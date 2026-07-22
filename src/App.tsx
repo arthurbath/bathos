@@ -154,6 +154,9 @@ export function AppRoutes() {
 
         {/* Tasks module */}
         <Route path="/tasks" element={<Navigate to="/tasks/today" replace />} />
+        <Route path="/tasks/inbox" element={<Navigate to="/tasks/today" replace />} />
+        <Route path="/tasks/logbook" element={<Navigate to="/tasks/done" replace />} />
+        <Route path="/tasks/trash" element={<Navigate to="/tasks/done" replace />} />
         <Route path="/tasks/*" element={<TasksRoute />} />
 
         {/* Legacy routes */}

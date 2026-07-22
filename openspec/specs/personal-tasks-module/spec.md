@@ -65,23 +65,19 @@ The system SHALL deploy remote task synchronization only through an explicitly a
 - **THEN** the system does not treat that topology as authoritative until uptime, monitoring, backup, upgrade, outage, and recovery behavior pass a later explicit review
 
 ### Requirement: Core Task Organization
-The system SHALL organize active work through Inbox, areas, projects, headings, to-dos, and checklist items without requiring generic tags.
-
-#### Scenario: Capture unprocessed work
-- **WHEN** a user creates a to-do without assigning an organizational destination or schedule
-- **THEN** the system places the to-do in Inbox
+The system SHALL organize active work through Anytime, Someday, areas, projects, headings, to-dos, and checklist items without requiring a separate Inbox destination or generic tags.
 
 #### Scenario: Organize work in a project
 - **WHEN** a user places a to-do under a project and optional heading
-- **THEN** the to-do appears in that hierarchy and retains its stable identity
+- **THEN** the to-do appears in that hierarchy and retains its stable identity and planning membership
 
 #### Scenario: Organize ongoing responsibility
 - **WHEN** a user places a project or loose to-do in an area
 - **THEN** the system includes the item in that area's active work
 
 #### Scenario: Review active work in an area
-- **WHEN** a user opens an area from the Projects hierarchy
-- **THEN** the web interface presents that owner's present open loose to-dos and projects for the area, preserves real links to project details and each to-do's current planning view, and excludes terminal or unrelated work
+- **WHEN** a user opens an area from Projects
+- **THEN** the interface presents that owner's present open loose to-dos and projects, preserves real links to project details and each to-do's current planning view, and excludes Done or unrelated work
 
 #### Scenario: Keep project membership canonical
 - **WHEN** a to-do belongs to a project whose area changes
@@ -105,46 +101,50 @@ The system SHALL organize active work through Inbox, areas, projects, headings, 
 
 #### Scenario: Order hierarchy independently from planning views
 - **WHEN** a user reorders an area, project, heading, project to-do, loose area to-do, or checklist item
-- **THEN** the system changes only the selected item's order within that hierarchy scope and does not change its order in Today, Anytime, Someday, or another planning view
+- **THEN** the system changes only the selected item's hierarchy order and does not change its order or membership in Today, Anytime, Someday, Upcoming, or Done
+
+#### Scenario: Capture new work for triage
+- **WHEN** a user or supported integration creates a to-do without an explicit planning placement
+- **THEN** the system creates one open present Anytime to-do marked for Today Later
 
 ### Requirement: Date-Based Planning Views
-The system SHALL derive Today, This Evening, Upcoming, Anytime, Someday, and Logbook from task state, start dates, deadlines, and completion state.
-
-#### Scenario: Plan work for today
-- **WHEN** a user assigns an open to-do to today
-- **THEN** the system records the owner's current planning date, includes the to-do in Today, and allows the user to place it in the This Evening section
-
-#### Scenario: Carry unfinished work across midnight
-- **WHEN** an open Today to-do remains unfinished after its assigned planning date
-- **THEN** the system keeps it visible in an Unfinished section until the user completes, moves, or explicitly reschedules it
-
-#### Scenario: Reschedule unfinished work
-- **WHEN** a user reschedules unfinished work for Today, This Evening, or Tomorrow
-- **THEN** the system records the selected owner-local calendar date, places Today work in the selected Today section, and moves Tomorrow work into Upcoming
+The system SHALL derive Today, Upcoming, Anytime, Someday, and Done from task state, start dates, Today membership, and terminal timestamps.
 
 #### Scenario: Defer work to a future date
 - **WHEN** a user assigns a future start date to a to-do or project
-- **THEN** the system includes it in Upcoming and withholds it from active Anytime work until its start date arrives
-
-#### Scenario: Leave work actionable without a date
-- **WHEN** an open present to-do is assigned to Anytime and has no future start date
-- **THEN** the system includes it in Anytime and excludes Inbox, Today, and Someday work from that view
-
-#### Scenario: Temporarily defer Anytime work
-- **WHEN** an Anytime to-do receives a future start date
-- **THEN** the system withholds it from Anytime, includes it in Upcoming, and returns it to Anytime automatically when its owner-local start date arrives
+- **THEN** the system removes Today membership, includes the item in Upcoming, and withholds it from Anytime until its owner-local start date arrives
 
 #### Scenario: Store an uncommitted possibility
 - **WHEN** a user assigns a to-do or project to Someday
-- **THEN** the system clears its start date and Today section and withholds it from Today, Upcoming, and Anytime until the user changes its planning state
+- **THEN** the system clears its start date and Today membership and withholds it from Today, Upcoming, and Anytime
 
 #### Scenario: Activate Someday work
 - **WHEN** a user moves a Someday item to Anytime or assigns it a start date
-- **THEN** the system changes its placement to Anytime and includes it in Anytime or Upcoming according to that start date
+- **THEN** the system changes its destination to Anytime and includes it in Anytime or Upcoming according to that date without automatically adding it to Today
 
-#### Scenario: Complete or cancel work
-- **WHEN** a user completes or cancels a to-do or project
-- **THEN** the system removes it from active planning views and retains it in Logbook according to the history contract
+#### Scenario: Mark Anytime work for Today
+- **WHEN** a user places an available Anytime to-do in Now, Next, or Later
+- **THEN** the system keeps the to-do in Anytime and also includes the same stable record in the selected Today section
+
+#### Scenario: Review the Today projection
+- **WHEN** a user opens Today
+- **THEN** the system shows only available open present Anytime work marked Now, Next, or Later and groups it in that order
+
+#### Scenario: Review the Anytime pool
+- **WHEN** a user opens Anytime
+- **THEN** the system shows every available open present Anytime to-do, including Today members, and marks each Today member with its Now, Next, or Later placement
+
+#### Scenario: Remove work from Today
+- **WHEN** a user removes Today membership from a to-do
+- **THEN** the system records the `none` section, removes the to-do from Today, and keeps it in Anytime without changing its identity or container
+
+#### Scenario: Activate deferred work
+- **WHEN** an Anytime item reaches its owner-local start date
+- **THEN** the system returns it to Anytime without automatically adding it to Today
+
+#### Scenario: Complete, cancel, or delete work
+- **WHEN** a user completes, cancels, or deletes a to-do or supported hierarchy root
+- **THEN** the system removes it from active planning views and includes it in Done until recovery or automatic purge
 
 ### Requirement: Tagless Structured Semantics
 The system SHALL represent workflow meaning through explicit structured concepts and SHALL NOT require generic tags, title parsing, or a generic metadata bag as canonical task data.
@@ -158,7 +158,7 @@ The system SHALL represent workflow meaning through explicit structured concepts
 - **THEN** the system changes only its structured actionability and mutation metadata and leaves its other task dimensions intact
 
 #### Scenario: Preserve waiting work in a planned view
-- **WHEN** a waiting to-do belongs to Today, Inbox, Anytime, Someday, Upcoming, a project, or another defined view
+- **WHEN** a waiting to-do belongs to Today, Anytime, Someday, Upcoming, a project, or another defined view
 - **THEN** the system keeps it in that deliberate placement, presents its waiting state explicitly, and excludes it only when an actionability filter requests actionable work
 
 #### Scenario: Reject actionability changes outside active work
@@ -190,23 +190,23 @@ The system SHALL represent workflow meaning through explicit structured concepts
 - **THEN** the interface derives that presentation from origin metadata rather than parsing the task title
 
 ### Requirement: Bulk Task Planning
-The system SHALL provide an explicit, accessible selection mode for open tasks and SHALL apply the approved bulk temporal-planning actions to the selected records as one local transaction.
+The system SHALL provide an explicit accessible selection mode for open tasks and SHALL apply supported Today membership, future scheduling, Anytime, or Someday actions to selected records as one local transaction.
 
 #### Scenario: Select multiple visible tasks
-- **WHEN** a user enters task selection in Inbox, Today, Upcoming, Anytime, or Someday and selects one or more visible tasks
-- **THEN** the interface reports the selected count, exposes Select All and Clear controls, and makes each row's selected state available to keyboard and assistive-technology users
+- **WHEN** a user enters selection in Today, Upcoming, Anytime, or Someday and selects one or more visible tasks
+- **THEN** the interface reports the selected count, exposes Select All and Clear, and communicates each selected state to keyboard and assistive-technology users
 
 #### Scenario: Plan selected tasks
-- **WHEN** a user applies Move to Inbox, Today, This Evening, Tomorrow, Anytime, or Someday to selected tasks
-- **THEN** the system updates every selected task's destination, Today section, start date, mutation metadata, revision, and destination order in one local transaction while preserving the selected task order
+- **WHEN** a user applies Today Now, Today Next, Today Later, Remove from Today, Tomorrow, Anytime, or Someday to selected tasks
+- **THEN** the system updates every selected task's destination, Today section, start date, mutation metadata, revision, and relevant order in one local transaction while preserving selected order
 
 #### Scenario: Reject one invalid bulk member
-- **WHEN** any selected task is no longer open and present or the requested start date conflicts with one selected task's deadline
-- **THEN** the system rejects the bulk planning operation without writing any selected task and leaves selection available for correction or retry
+- **WHEN** any selected task is no longer open and present or the requested start date conflicts with one selected deadline
+- **THEN** the system rejects the operation without writing any selected task and leaves selection available for correction or retry
 
 #### Scenario: Keep bulk scope bounded
-- **WHEN** the user exits selection, changes task views, or completes a successful bulk plan
-- **THEN** the client clears the selection and returns to ordinary single-task editing without adding bulk completion, deletion, or structural hierarchy mutation to this capability
+- **WHEN** the user exits selection, changes views, or completes a successful bulk plan
+- **THEN** the client clears selection and returns to ordinary editing without adding bulk completion, deletion, or hierarchy mutation
 
 ### Requirement: Native Templates
 The system SHALL support reusable, revisioned to-do and project template definitions that are separate from active task records.
@@ -221,7 +221,7 @@ The system SHALL support reusable, revisioned to-do and project template definit
 
 #### Scenario: Keep templates out of active views
 - **WHEN** a template definition exists but has not been instantiated
-- **THEN** the system excludes the definition from Inbox, Today, Upcoming, Anytime, Someday, and Logbook
+- **THEN** the system excludes the definition from Today, Upcoming, Anytime, Someday, and Done
 
 #### Scenario: Revise a template
 - **WHEN** a user edits a template that already has generated instances
@@ -252,23 +252,23 @@ The system SHALL support reusable, revisioned to-do and project template definit
 - **THEN** the client assigns the already authenticated owner to the parsed result without requiring the server to echo an owner identifier
 
 ### Requirement: Orthogonal Task State
-The system SHALL model lifecycle, record disposition, planning placement, and structured actionability as separate dimensions with revision-checked transitions and append-only history.
+The system SHALL model lifecycle, record disposition, planning destination, Today membership, and structured actionability as separate dimensions with revision-checked transitions and append-only history.
 
 #### Scenario: Complete open work
 - **WHEN** a caller completes present open work from the current revision
-- **THEN** the system sets the lifecycle to completed, records `completed_at`, removes the work from active views, and appends one completion event
+- **THEN** the system sets lifecycle to completed, records `completed_at`, removes the work from active views, includes it in Done, and appends one completion event
 
 #### Scenario: Cancel open work
 - **WHEN** a caller cancels present open work from the current revision
-- **THEN** the system sets the lifecycle to canceled, records `canceled_at`, removes the work from active views, and appends one cancellation event
+- **THEN** the system sets lifecycle to canceled, records `canceled_at`, removes the work from active views, includes it in Done, and appends one cancellation event
 
 #### Scenario: Cancel an active to-do from the web interface
 - **WHEN** a user invokes the visible Cancel action for an active to-do
-- **THEN** the web client submits the ordinary revision-checked cancellation transition, removes the to-do from the active view, and makes the canceled record available in Logbook rather than deleting it
+- **THEN** the web client submits the ordinary revision-checked cancellation transition, removes the to-do from the active view, and makes the canceled record available in Done rather than deleting it
 
 #### Scenario: Reopen terminal work
-- **WHEN** a caller reopens completed or canceled work from the current revision
-- **THEN** the system returns the lifecycle to open, clears the current terminal timestamp, and retains the prior completion or cancellation event in history
+- **WHEN** a caller reopens completed or canceled work from Done during retention
+- **THEN** the system returns lifecycle to open, clears the current terminal timestamp, restores valid Anytime placement with no Today membership when needed, and retains prior history
 
 #### Scenario: Retry a lifecycle transition
 - **WHEN** a caller repeats a lifecycle mutation with the same client mutation identifier
@@ -290,6 +290,14 @@ The system SHALL model lifecycle, record disposition, planning placement, and st
 - **WHEN** a caller completes and later reopens a to-do with checklist items
 - **THEN** the system preserves each checklist item's prior completion state
 
+#### Scenario: Delete work
+- **WHEN** a caller deletes present work from the current revision
+- **THEN** the system records recoverable deletion, includes the root in Done, and preserves the hierarchy operation receipt
+
+#### Scenario: Restore deleted work
+- **WHEN** a caller restores deleted work from Done during retention
+- **THEN** the system restores valid prior hierarchy and active state, falling back to Anytime with no Today membership when the prior placement is no longer valid
+
 ### Requirement: Temporal Planning Semantics
 The system SHALL store start dates and deadlines as local calendar dates, derive Today from the owner's IANA planning time zone, and store reminders as unambiguous resolved instants with their original local intent.
 
@@ -305,9 +313,9 @@ The system SHALL store start dates and deadlines as local calendar dates, derive
 - **WHEN** the owner's current or planning time zone changes
 - **THEN** date-only start and deadline values remain assigned to the same calendar dates
 
-#### Scenario: Place work in This Evening
-- **WHEN** a user places work in This Evening
-- **THEN** the system records an evening section value only on work assigned to the owner's current planning date and does not convert it into an independent date or reminder time
+#### Scenario: Place work in a Today section
+- **WHEN** a user places available Anytime work in Now, Next, or Later
+- **THEN** the system records explicit Today membership without converting the section into an independent date or reminder time
 
 #### Scenario: Resolve a reminder
 - **WHEN** a caller schedules a reminder with a local date, wall-clock time, and IANA time zone
@@ -380,8 +388,8 @@ The system SHALL preserve intentional manual ordering across saves, refreshes, o
 - **THEN** the system saves the new order without changing unrelated items
 
 #### Scenario: Reorder sections of Today independently
-- **WHEN** a user reorders work in Unfinished, Today, or This Evening
-- **THEN** the system changes only that item's order within the same visible section and does not move it across planning dates or Today sections
+- **WHEN** a user reorders work in Now, Next, or Later
+- **THEN** the system changes only that item's order within the same visible section and does not move it across Today sections
 
 #### Scenario: Reorder active and inactive planning pools independently
 - **WHEN** a user reorders work in Anytime or Someday
@@ -521,7 +529,7 @@ The system SHALL expose trustworthy synchronization state without logging task c
 - **THEN** synchronization details identify the installation as local-only, create no remote-degradation episode, and explicitly withhold any implication of cross-device or MCP convergence
 
 ### Requirement: Recoverable History
-The system SHALL provide append-only history, mutation receipts, inverse-mutation undo, recoverable deletion, versioned export, and verified restore behavior before the module is considered replacement-ready.
+The system SHALL provide append-only history, guarded undo, mutation receipts, a recoverable Done queue, versioned export, verified restore, and automatic terminal-data expiry.
 
 #### Scenario: Undo a recent change
 - **WHEN** a user invokes undo for a supported recent task mutation
@@ -536,11 +544,11 @@ The system SHALL provide append-only history, mutation receipts, inverse-mutatio
 - **THEN** the web interface does not submit a duplicate or speculative inverse mutation and does not intercept native text undo
 
 #### Scenario: Reject an unsafe undo
-- **WHEN** intervening changes make the requested inverse mutation unsafe
+- **WHEN** intervening changes make an inverse mutation unsafe
 - **THEN** the system rejects undo without overwriting current data and returns a conflict receipt
 
 #### Scenario: Return a mutation receipt
-- **WHEN** the system accepts, rejects, or treats a task-domain mutation as a no-op
+- **WHEN** the system accepts, rejects, or treats a task mutation as a no-op
 - **THEN** it returns a content-free receipt with the client mutation identifier, actor, channel, affected stable identifiers, revisions, transition, timestamp, outcome, and applicable code
 
 #### Scenario: Delete a task
@@ -553,39 +561,11 @@ The system SHALL provide append-only history, mutation receipts, inverse-mutatio
 
 #### Scenario: Restore work whose container no longer exists
 - **WHEN** a recoverably deleted root cannot return to its prior container
-- **THEN** the system restores the hierarchy to Inbox and reports the fallback in the mutation receipt
-
-#### Scenario: Permanently delete work
-- **WHEN** a user invokes the separately authorized and confirmed permanent-deletion operation for work already in Trash
-- **THEN** the system reports and then erases the selected hierarchy and related owner data without presenting the operation as undoable
-
-#### Scenario: Require the literal permanent-deletion confirmation
-- **WHEN** permanent deletion receives null, blank, differently cased, or otherwise changed confirmation input
-- **THEN** the server rejects the request before looking up or erasing task data and accepts only the exact documented phrase
-
-#### Scenario: Preview permanent deletion
-- **WHEN** a user requests permanent deletion for a deleted to-do or project root
-- **THEN** the server reports every hierarchy and related-data identifier that will be erased, every content-free integrity receipt that will remain, and a digest of that exact scope before accepting confirmation
-
-#### Scenario: Reject a stale permanent-deletion preview
-- **WHEN** the hierarchy or related-data scope changes after preview and before confirmed execution
-- **THEN** the server rejects the stale digest without deleting any record and requires a fresh preview
-
-#### Scenario: Keep permanent deletion server-authoritative
-- **WHEN** the task client is local-only, disconnected, or has queued local mutations
-- **THEN** the interface leaves permanent deletion unavailable so unsynchronized work cannot be erased from an incomplete server view
-
-#### Scenario: Retry confirmed permanent deletion
-- **WHEN** the client retries the exact confirmed permanent-deletion request UUID after an ambiguous response
-- **THEN** the server returns the original content-free receipt without recreating, re-erasing, or misreporting the deleted hierarchy
-
-#### Scenario: Preserve duplicate-suppression receipts
-- **WHEN** permanently deleted work originated from a template, recurrence, or prior hierarchy operation
-- **THEN** the system erases task content and related personal lifecycle data while retaining and reporting the content-free receipts required to prevent old idempotency keys or logical recurrence events from recreating that work
+- **THEN** the system restores the hierarchy to Anytime and reports the fallback in the mutation receipt
 
 #### Scenario: Export task data
 - **WHEN** a user requests an export
-- **THEN** the system produces a versioned JSON envelope with a manifest, counts, checksums, stable identifiers, active data, templates, recurrence definitions, source metadata, history, and recoverably deleted records without credentials or delivery tokens
+- **THEN** the system produces a versioned checksummed JSON envelope containing active and retained Done data without credentials or delivery tokens
 
 #### Scenario: Preview a restore
 - **WHEN** a user supplies an export for dry-run restore
@@ -626,6 +606,30 @@ The system SHALL provide append-only history, mutation receipts, inverse-mutatio
 #### Scenario: Preserve delivery registration during replacement
 - **WHEN** task data is replaced
 - **THEN** the system removes task-specific reminder delivery diagnostics while retaining excluded browser delivery targets and credentials so the current device does not become silently unregistered
+
+#### Scenario: Recover work from Done
+- **WHEN** a user restores deleted work or reopens completed or canceled work before its purge boundary
+- **THEN** the system returns the work to a valid active state and removes it from Done
+
+#### Scenario: Retain work for 30 full local days
+- **WHEN** work enters Done on an owner's local calendar date
+- **THEN** the system retains it throughout that date and the following 30 local midnights
+
+#### Scenario: Purge at the start of the 31st day
+- **WHEN** the owner's planning time zone reaches midnight beginning the 31st calendar day after work entered Done
+- **THEN** the server permanently erases the terminal content graph within one minute and the deletion converges to connected and later-reconnected clients
+
+#### Scenario: Preserve safety receipts after purge
+- **WHEN** purged work originated from idempotent capture, a template, recurrence, or a hierarchy operation
+- **THEN** the system retains only content-free receipts required to prevent duplicate recreation and removes personal task content, sources, reminders, and terminal history not required for that safety
+
+#### Scenario: Read an older export
+- **WHEN** a user previews a supported older export containing Inbox, Today, daytime, evening, Logbook, or Trash state
+- **THEN** the system deterministically normalizes it to Anytime, Today membership, and Done before reporting inserts, matches, and conflicts
+
+#### Scenario: Replace from a verified backup
+- **WHEN** a user confirms replacement from a compatible verified export
+- **THEN** the system creates a pre-restore backup, replaces the synchronized task graph atomically, and preserves the authenticated owner boundary
 
 ### Requirement: Layered Reminder Delivery
 The system SHALL keep the server authoritative for reminder scheduling and logical delivery identity while supporting Web Push, in-app delivery, and later native delivery targets through one idempotent contract.
@@ -742,7 +746,7 @@ The system SHALL treat native Apple surfaces as an optional extension of the sha
 - **THEN** it uses the authoritative task-domain contract and does not introduce an independent task database, reminder scheduler, or generic mutation API
 
 ### Requirement: Keyboard-First Daily Operation
-The system SHALL support efficient keyboard operation for high-frequency capture, navigation, editing, scheduling, movement, completion, and search workflows.
+The system SHALL provide complete keyboard operation for capture, editing, Today planning, navigation, search, selection, lifecycle transitions, and dialogs without overriding browser tab-number shortcuts.
 
 #### Scenario: Navigate without a pointer
 - **WHEN** a keyboard user moves through a task view
@@ -759,10 +763,6 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 #### Scenario: Preserve keyboard focus after a task leaves the view
 - **WHEN** completion, cancellation, movement, or recoverable deletion removes the focused task from the current view
 - **THEN** focus moves to the task now occupying the same visual position, then the prior task, then task capture or the primary view heading when no task remains
-
-#### Scenario: Navigate with web-safe commands
-- **WHEN** a keyboard user invokes the `G` navigation sequence outside an editable control
-- **THEN** the documented second key navigates to Inbox, Today, Upcoming, Anytime, Someday, Logbook, Projects, Templates, or Trash without claiming browser tab-number shortcuts
 
 #### Scenario: Open task capture, search, or keyboard help
 - **WHEN** a keyboard user presses `N`, `/`, or `?` outside an editable control or unrelated modal
@@ -818,7 +818,7 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 
 #### Scenario: Capture from Raycast
 - **WHEN** the user submits a nonempty title through Raycast quick entry
-- **THEN** the authenticated task service creates exactly one Inbox to-do with `raycast` entry provenance and returns an accepted or already-applied receipt
+- **THEN** the authenticated task service creates exactly one Anytime to-do marked Today Later with `raycast` entry provenance and returns an accepted or already-applied receipt
 
 #### Scenario: Authorize Raycast safely
 - **WHEN** the Raycast command has no usable delegated credential
@@ -830,7 +830,7 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 
 #### Scenario: Capture the active browser page
 - **WHEN** the user invokes page capture while Safari, Safari Technology Preview, Google Chrome, or Google Chrome Canary has a normal HTTP(S) active tab
-- **THEN** the system creates one Inbox to-do with a cleaned deterministic title, `browser_capture` entry provenance, and a typed `webpage` source containing the exact accepted URL and optional browser title
+- **THEN** the system creates one Anytime to-do marked Today Later with a cleaned deterministic title, `browser_capture` entry provenance, and a typed `webpage` source containing the exact accepted URL and optional browser title
 
 #### Scenario: Reject unavailable browser context
 - **WHEN** the frontmost application is unsupported, has no browser window, or exposes an invalid, blank, non-HTTP(S), or browser-owned URL
@@ -846,7 +846,7 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 
 #### Scenario: Capture one selected Finder item
 - **WHEN** the user invokes Finder capture with exactly one file or folder selected
-- **THEN** the system creates one Inbox to-do with `raycast` entry provenance, the selected item's name, and a typed `file` source whose local `file://` reference is treated as originating-Mac context rather than a portable cross-device identifier
+- **THEN** the system creates one Anytime to-do marked Today Later with `raycast` entry provenance, the selected item's name, and a typed `file` source whose local `file://` reference is treated as originating-Mac context rather than a portable cross-device identifier
 
 #### Scenario: Reject an ambiguous Finder selection
 - **WHEN** Finder has no selected item or more than one selected item
@@ -854,7 +854,7 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 
 #### Scenario: Capture a reading item
 - **WHEN** the user invokes reading-list capture on a supported normal browser page
-- **THEN** the command uses the verified AI webpage-title workflow with its deterministic fallback and creates one unassigned daytime Today to-do with `browser_capture` entry provenance, a typed `reading_item` source, and the source URL in notes
+- **THEN** the command uses the verified AI webpage-title workflow with its deterministic fallback and creates one unassigned Anytime to-do marked Today Later with `browser_capture` entry provenance, a typed `reading_item` source, and the source URL in notes
 
 #### Scenario: Present reading provenance structurally
 - **WHEN** reading-list capture creates a to-do
@@ -866,7 +866,7 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 
 #### Scenario: Create a processed Mail task
 - **WHEN** authenticated Mail capture supplies AI-processed title and notes, complete source identity, retirement destination, and optional verified work-area assignment
-- **THEN** the specialized service creates one unassigned or area-assigned daytime Today task and retained source record in a single transaction with no generic fallback write
+- **THEN** the specialized service creates one unassigned or area-assigned Anytime task marked Today Later and retained source record in a single transaction with no generic fallback write
 
 #### Scenario: Retire a Mail source only after verified movement
 - **WHEN** the integration begins retirement and then attempts the external Mail move
@@ -886,7 +886,27 @@ The system SHALL support efficient keyboard operation for high-frequency capture
 
 #### Scenario: Gate Mail capture on a complete integration contract
 - **WHEN** parallel-use approval has not passed verification
-- **THEN** Mail capture remains disabled and Inbox Manager does not dual-write to BathOS
+- **THEN** Mail capture remains disabled and Anytime Manager does not dual-write to BathOS
+
+#### Scenario: Capture from the keyboard
+- **WHEN** focus is outside an editable control and the user presses `N`
+- **THEN** the interface focuses the current capture field or navigates to Today and focuses capture
+
+#### Scenario: Save from the keyboard
+- **WHEN** a task editor is open and the user presses Command+Enter or Control+Enter outside composition
+- **THEN** the editor submits the same validated save as the visible action
+
+#### Scenario: Navigate task views
+- **WHEN** focus is outside an editable control and the user presses `G` followed by a documented view key
+- **THEN** the interface navigates to Today, Upcoming, Anytime, Someday, Projects, Templates, Done, or Config without claiming browser tab-number shortcuts
+
+#### Scenario: Search tasks and views
+- **WHEN** focus is outside an editable control and the user presses `/`
+- **THEN** a dialog searches owner-scoped tasks and current views and supports keyboard selection without exposing retired Inbox, Logbook, or Trash destinations
+
+#### Scenario: Preserve native editing behavior
+- **WHEN** focus is inside an input, textarea, select, content-editable surface, menu, or dialog
+- **THEN** task shortcuts do not replace native typing, composition, selection, undo, or control behavior except for the documented form submission shortcut
 
 ### Requirement: Deterministic Mail Capture Retry
 The system SHALL define a specialized Mail capture's idempotent request identity from caller-controlled task and structured source fields, and SHALL NOT treat service-generated task identity, planning date, or ordering as a caller request difference.
@@ -907,7 +927,7 @@ The system SHALL define a specialized Mail capture's idempotent request identity
 The system SHALL retain bounded task-view and search latency as active and historical task data grows beyond the owner's current library.
 
 #### Scenario: Derive task views at synthetic scale
-- **WHEN** the performance harness derives Inbox, Today, Upcoming, Anytime, Someday, Logbook, or Trash from 10,000 mixed synthetic records
+- **WHEN** the performance harness derives Today, Upcoming, Anytime, Someday, or Done from 10,000 mixed synthetic records
 - **THEN** each derivation remains below 100 ms p95 and returns the complete correctly ordered view
 
 #### Scenario: Search a large task library
@@ -972,27 +992,27 @@ The system SHALL preserve one authenticated Tasks runtime and synchronization se
 - **THEN** the Tasks runtime may close its owner-bound local database and synchronization session according to the existing cleanup contract
 
 ### Requirement: Concise Tasks Navigation
-The system SHALL prioritize daily planning through four primary Tasks destinations and one More destination while keeping every supported secondary view discoverable and addressable through a real route.
-
-#### Scenario: Render primary desktop navigation
-- **WHEN** an authenticated user opens Tasks at a desktop or tablet width
-- **THEN** the persistent navigation presents Inbox, Today, Upcoming, Anytime, and More without clipping, overlap, horizontal page overflow, or a second navigation row
-
-#### Scenario: Limit mobile navigation
-- **WHEN** an authenticated user opens Tasks below the desktop breakpoint
-- **THEN** the persistent mobile navigation presents exactly five destinations: Inbox, Today, Upcoming, Anytime, and More
-
-#### Scenario: Open a secondary destination
-- **WHEN** the user opens More
-- **THEN** the menu presents Someday, Projects, Templates, Logbook, Trash, and Config with Lucide icons and a clear active state for the current secondary destination
-
-#### Scenario: Preserve real-link behavior
-- **WHEN** a user activates a primary or secondary destination with an ordinary left click
-- **THEN** Tasks performs in-runtime SPA navigation, while browser-modified activation retains the anchor's default new-tab behavior
+The system SHALL keep Tasks navigation to five or fewer persistent destinations at every viewport and SHALL place secondary task views behind one More menu.
 
 #### Scenario: Navigate secondary views by keyboard
 - **WHEN** a keyboard user opens More and moves through its destinations
 - **THEN** every destination receives visible focus, exposes a nonempty programmatic name, and can be activated without a pointer
+
+#### Scenario: Render concise desktop navigation
+- **WHEN** Tasks renders at a desktop or tablet viewport
+- **THEN** persistent navigation presents Today, Upcoming, Anytime, Someday, and More without clipping, overlap, overflow, or a second row
+
+#### Scenario: Render five mobile destinations
+- **WHEN** Tasks renders below the desktop breakpoint
+- **THEN** persistent mobile navigation presents exactly Today, Upcoming, Anytime, Someday, and More
+
+#### Scenario: Open secondary destinations
+- **WHEN** a user opens More
+- **THEN** the menu presents Projects, Templates, Done, and Config with Lucide icons and a clear active state
+
+#### Scenario: Preserve link behavior
+- **WHEN** a user invokes a direct or overflow navigation item with an ordinary or modified click
+- **THEN** the destination remains a real link, plain left click uses SPA navigation, and modified or middle click preserves browser behavior
 
 ### Requirement: Config-Owned Task Maintenance
 The system SHALL keep infrequent Tasks settings, capability state, diagnostics, and recovery controls on a dedicated Config route instead of persistent daily-planning chrome.
@@ -1002,7 +1022,7 @@ The system SHALL keep infrequent Tasks settings, capability state, diagnostics, 
 - **THEN** `/tasks/config` renders inside the existing Tasks runtime and presents Browser Reminders, Synchronization, and Backup and Restore sections
 
 #### Scenario: Keep daily views concise
-- **WHEN** a user opens Inbox, Today, Upcoming, Anytime, Someday, Projects, Templates, Logbook, or Trash
+- **WHEN** a user opens Today, Upcoming, Anytime, Someday, Projects, Templates, Done, or Config
 - **THEN** the page does not persistently render browser-reminder capability, synchronization diagnostics, backup/restore, or duplicate Projects and Templates shortcuts
 
 #### Scenario: Preserve actionable reminder failures
@@ -1022,11 +1042,11 @@ The system SHALL keep infrequent Tasks settings, capability state, diagnostics, 
 - **THEN** the existing verified export, merge, replacement, and safety behavior remains available without a persistent module-header control
 
 ### Requirement: Concise Task View Presentation
-The system SHALL use the active view's name, compact self-evident controls, and progressive disclosure so routine task browsing is not dominated by setup or explanatory UI.
+The system SHALL use the active view name, compact self-evident controls, progressive disclosure, and small structured Today markers so routine browsing remains uncluttered.
 
 #### Scenario: Name the active view
 - **WHEN** any supported Tasks route renders
-- **THEN** the primary page heading identifies that route as Inbox, Today, Upcoming, Anytime, Someday, Projects, Project, Area, Templates, Logbook, Trash, or Config at every viewport
+- **THEN** the primary heading identifies Today, Upcoming, Anytime, Someday, Projects, Project, Area, Templates, Done, or Config at every viewport
 
 #### Scenario: Create an area progressively
 - **WHEN** a user activates Add Area from Projects
@@ -1040,6 +1060,22 @@ The system SHALL use the active view's name, compact self-evident controls, and 
 - **WHEN** the Projects view is not creating an area or project
 - **THEN** it shows compact icon-only Add Area and Add Project controls with nonempty programmatic names and does not render permanent creation fields
 
+#### Scenario: Mark Today membership in Anytime
+- **WHEN** an Anytime row also belongs to Today Now, Next, or Later
+- **THEN** the row displays compact Lucide iconography with a nonempty accessible name identifying that section without repeating a verbose sentence
+
+#### Scenario: Omit an irrelevant Today marker
+- **WHEN** an Anytime row has no Today membership
+- **THEN** the row does not reserve empty marker space or show a decorative icon
+
+#### Scenario: Browse Done without archive ceremony
+- **WHEN** a user opens Done
+- **THEN** the interface shows retained terminal work in reverse terminal order with its terminal reason, date, and one appropriate restore or reopen action
+
+#### Scenario: Create hierarchy progressively
+- **WHEN** a user creates an area or project from Projects
+- **THEN** compact icon-only controls open title-only keyboard-complete BathOS dialogs and restore trigger focus after close
+
 ### Requirement: Module Isolation
 The task module SHALL remain removable without importing code from another BathOS module or requiring another module's data.
 
@@ -1050,3 +1086,22 @@ The task module SHALL remain removable without importing code from another BathO
 #### Scenario: Remove the task module
 - **WHEN** the task module's files, routes, launcher entry, and `tasks_` database objects are removed
 - **THEN** unrelated BathOS modules continue to function
+
+### Requirement: Legacy Task Planning Migration
+The system SHALL migrate retired planning and terminal vocabulary without losing task content, provenance, hierarchy, reminders, recurrence, history, or stable identity.
+
+#### Scenario: Migrate Inbox work
+- **WHEN** the migration encounters an Inbox to-do
+- **THEN** it becomes Anytime and Today Later with its stable identifiers and content unchanged
+
+#### Scenario: Migrate current Today work
+- **WHEN** the migration encounters eligible daytime or evening Today work
+- **THEN** it becomes Anytime and Today Next or Later respectively
+
+#### Scenario: Migrate future Today work
+- **WHEN** the migration encounters Today work whose start date is after the owner's current planning date
+- **THEN** it becomes future Anytime work with no Today membership and remains in Upcoming
+
+#### Scenario: Retire old routes
+- **WHEN** a user opens `/tasks/inbox`, `/tasks/logbook`, or `/tasks/trash`
+- **THEN** the router replaces the location with `/tasks/today` or `/tasks/done` and never renders a retired view

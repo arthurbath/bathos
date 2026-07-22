@@ -67,7 +67,7 @@ INSERT INTO public.tasks_todos (
 ) VALUES (
   'b1000000-0000-4000-8000-000000000010',
   'b1000000-0000-4000-8000-000000000001',
-  'Current task', 'inbox', 'a0',
+  'Current task', 'anytime', 'a0',
   'b1000000-0000-4000-8000-000000000011'
 );
 INSERT INTO public.tasks_user_settings (
@@ -87,7 +87,7 @@ INSERT INTO public.tasks_todos (
 ) VALUES (
   'b1000000-0000-4000-8000-000000000020',
   'b1000000-0000-4000-8000-000000000002',
-  'Replacement task', 'today', 'b0',
+  'Replacement task', 'anytime', 'b0',
   'b1000000-0000-4000-8000-000000000021'
 );
 INSERT INTO public.tasks_user_settings (
@@ -207,7 +207,7 @@ INSERT INTO public.tasks_todos (
 ) VALUES (
   'b1000000-0000-4000-8000-000000000050',
   'b1000000-0000-4000-8000-000000000001',
-  'Unsynchronized after preview', 'inbox', 'd0',
+  'Unsynchronized after preview', 'anytime', 'd0',
   'b1000000-0000-4000-8000-000000000051'
 );
 

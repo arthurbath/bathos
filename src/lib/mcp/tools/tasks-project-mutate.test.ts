@@ -204,7 +204,7 @@ function project(overrides: StoredRow = {}): StoredRow {
     deleted_at: null,
     deletion_root_id: null,
     destination: 'anytime',
-    today_section: 'daytime',
+    today_section: 'none',
     order_key: 'a0',
     planning_order_key: 'a0',
     start_date: null,
@@ -251,7 +251,7 @@ describe('Tasks MCP project movement and scheduling tools', () => {
     expect(scheduleTaskProject.annotations).toEqual(moveTaskProject.annotations);
   });
 
-  it('moves an owned project to another area and Today with generated order keys', async () => {
+  it('moves an owned project to another area and Today Later with generated order keys', async () => {
     const client = new FakeProjectMutationClient({
       tasks_areas: [area(areaA), area(areaB)],
       tasks_projects: [
@@ -260,8 +260,8 @@ describe('Tasks MCP project movement and scheduling tools', () => {
           id: '30000000-0000-4000-8000-000000000002',
           area_id: areaB,
           order_key: 'a1',
-          destination: 'today',
-          today_section: 'evening',
+          destination: 'anytime',
+          today_section: 'later',
           start_date: '2026-07-20',
           planning_order_key: 'a1',
         }),
@@ -273,8 +273,9 @@ describe('Tasks MCP project movement and scheduling tools', () => {
       expected_revision: 1,
       client_mutation_id: '70000000-0000-4000-8000-000000000001',
       area_id: areaB,
-      destination: 'today',
-      today_section: 'evening',
+      destination: 'anytime',
+      today_section: 'later',
+      start_date: '2026-07-20',
     }, authFor(ownerA, client));
 
     expect(result).toMatchObject({
@@ -289,8 +290,8 @@ describe('Tasks MCP project movement and scheduling tools', () => {
       },
       project: {
         area_id: areaB,
-        destination: 'today',
-        today_section: 'evening',
+        destination: 'anytime',
+        today_section: 'later',
         start_date: '2026-07-20',
         revision: 2,
       },
@@ -324,7 +325,7 @@ describe('Tasks MCP project movement and scheduling tools', () => {
       receipt: { transition: 'reorder', outcome: 'accepted' },
       project: {
         destination: 'anytime',
-        today_section: 'daytime',
+        today_section: 'none',
         start_date: '2026-07-24',
         deadline: '2026-07-25',
         revision: 2,

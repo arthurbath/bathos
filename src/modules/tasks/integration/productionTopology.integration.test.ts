@@ -3,6 +3,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 import { PowerSyncDatabase } from '@powersync/node';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -78,7 +79,7 @@ afterAll(async () => {
 describe.skipIf(!integrationEnabled)('Tasks production topology integration', () => {
   it('proves synthetic cross-client convergence, owner isolation, restart, and cleanup', async () => {
     const environment = productionEnvironment();
-    testDirectory = await mkdtemp(join(tmpdir(), 'bathos-tasks-production-topology-'));
+    testDirectory ??= await mkdtemp(join(tmpdir(), 'bathos-tasks-production-topology-'));
     admin = createClient<Database>(environment.supabaseUrl, environment.serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
@@ -116,8 +117,8 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       idempotency_key: crypto.randomUUID(),
       title: 'Synthetic Production Topology Task',
       notes: 'Disposable topology validation only',
-      destination: 'inbox' as const,
-      today_section: 'daytime' as const,
+      destination: 'anytime' as const,
+      today_section: 'later' as const,
       entry_channel: 'raycast' as const,
     };
     const captures = await Promise.all([
@@ -285,7 +286,258 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     expect(residueError).toBeNull();
     expect(residueCount).toBe(0);
   });
+
+  it('proves the owner-local day-31 Done purge boundary and fresh projection removal', async () => {
+    const environment = productionEnvironment();
+    testDirectory ??= await mkdtemp(join(tmpdir(), 'bathos-tasks-production-topology-'));
+    admin ??= createClient<Database>(environment.supabaseUrl, environment.serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const owner = await createSyntheticOwner('done-retention', environment);
+    const connector = createTasksSupabaseConnector({
+      endpoint: environment.powerSyncUrl,
+      supabase: owner.client,
+    });
+    const setupClient = await openClient(
+      testDirectory,
+      'done-retention-setup.db',
+      owner.id,
+      connector,
+    );
+    await setupClient.repository.ensurePlanningSettings(owner.id, 'America/Los_Angeles');
+    await waitForUploadQueue(setupClient.database, 0);
+
+    const auth = { userId: owner.id, email: owner.email, supabase: owner.client };
+    const captureInput = {
+      idempotency_key: crypto.randomUUID(),
+      title: 'Synthetic Done Retention Boundary Task',
+      notes: 'Disposable production retention validation only',
+      destination: 'anytime' as const,
+      today_section: 'later' as const,
+      entry_channel: 'mcp' as const,
+      source: {
+        kind: 'other' as const,
+        external_id: `production-done-retention:${crypto.randomUUID()}`,
+      },
+    };
+    const creation = await createTaskData(captureInput, auth);
+    const taskId = creation.task.id;
+    const completion = await transitionTaskData({
+      task_id: taskId,
+      expected_revision: 1,
+      client_mutation_id: crypto.randomUUID(),
+      transition: 'complete',
+    }, auth);
+    expect(completion.mutation_outcome).toBe('applied');
+
+    await waitForLocalTask(
+      setupClient.database,
+      taskId,
+      (task) => task.lifecycle === 'completed' && task.completed_at !== null,
+    );
+    await disposeClient(setupClient);
+
+    const beforeBoundary = await openClient(
+      testDirectory,
+      'done-retention-before.db',
+      owner.id,
+      connector,
+    );
+    await waitForLocalTask(
+      beforeBoundary.database,
+      taskId,
+      (task) => task.lifecycle === 'completed' && task.completed_at !== null,
+    );
+    await disposeClient(beforeBoundary);
+
+    const boundaryResult = runGuardedBoundaryPurge(owner.id, taskId);
+    expect(boundaryResult).toEqual({ receipt_count: 1 });
+
+    const afterBoundary = await openClient(
+      testDirectory,
+      'done-retention-after.db',
+      owner.id,
+      connector,
+    );
+    expect(await afterBoundary.database.getOptional(
+      'SELECT id FROM tasks_todos WHERE id = ?',
+      [taskId],
+    )).toBeNull();
+    expect(await afterBoundary.database.getOptional(
+      'SELECT id FROM tasks_history_events WHERE task_id = ?',
+      [taskId],
+    )).toBeNull();
+    await disposeClient(afterBoundary);
+
+    const receipt = runLinkedSql(`
+      SELECT count(*)::integer AS count
+      FROM tasks_private.purged_creation_receipts
+      WHERE owner_id = '${sqlUuid(owner.id)}'::uuid
+        AND entity_type = 'todo'
+        AND entity_id = '${sqlUuid(taskId)}'::uuid;
+    `).rows?.[0] as { count?: number } | undefined;
+    expect(receipt?.count).toBe(1);
+    await expect(createTaskData(captureInput, auth)).rejects.toThrow(
+      'The idempotency key is unavailable',
+    );
+
+    await signOutSyntheticClient(owner.client);
+    await deleteSyntheticOwner(owner.id);
+    const cleanup = runLinkedSql(`
+      SELECT count(*)::integer AS count
+      FROM tasks_private.purged_creation_receipts
+      WHERE owner_id = '${sqlUuid(owner.id)}'::uuid;
+    `).rows?.[0] as { count?: number } | undefined;
+    expect(cleanup?.count).toBe(0);
+  });
 });
+
+type LinkedQueryResult = {
+  rows?: Array<Record<string, unknown>>;
+};
+
+function runLinkedSql(sql: string): LinkedQueryResult {
+  const result = spawnSync(
+    'supabase',
+    ['db', 'query', '--linked', '--output-format', 'json', sql],
+    { cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      result.stderr || result.stdout || `Supabase query failed with exit code ${result.status}`,
+    );
+  }
+  return JSON.parse(result.stdout) as LinkedQueryResult;
+}
+
+function runGuardedBoundaryPurge(
+  ownerId: string,
+  taskId: string,
+): { receipt_count: number } {
+  const owner = sqlUuid(ownerId);
+  const task = sqlUuid(taskId);
+  const response = runLinkedSql(`
+    DO $tasks_done_boundary$
+    DECLARE
+      _before timestamptz := '2026-02-01T07:59:59.999999Z'::timestamptz;
+      _boundary timestamptz := '2026-02-01T08:00:00.000000Z'::timestamptz;
+      _before_candidates integer;
+      _boundary_candidates integer;
+      _before_result jsonb;
+      _boundary_result jsonb;
+    BEGIN
+      UPDATE public.tasks_todos
+      SET completed_at = '2026-01-01T20:00:00.000Z'::timestamptz,
+          revision = revision + 1,
+          client_mutation_id = gen_random_uuid(),
+          last_mutation_channel = 'import',
+          last_actor_type = 'system',
+          updated_at = clock_timestamp()
+      WHERE owner_id = '${owner}'::uuid
+        AND id = '${task}'::uuid;
+
+      WITH owner_zones AS (
+        SELECT users.id AS owner_id,
+          COALESCE(settings.planning_timezone, 'UTC') AS planning_timezone
+        FROM auth.users AS users
+        LEFT JOIN public.tasks_user_settings AS settings
+          ON settings.owner_id = users.id
+      ), candidates AS (
+        SELECT area.owner_id, 'area'::text AS root_type, area.id AS root_id,
+          area.deleted_at AS terminal_at
+        FROM public.tasks_areas AS area
+        WHERE area.disposition = 'deleted' AND area.deletion_root_id = area.id
+        UNION ALL
+        SELECT project.owner_id, 'project', project.id,
+          COALESCE(project.deleted_at, project.completed_at, project.canceled_at)
+        FROM public.tasks_projects AS project
+        WHERE (project.disposition = 'deleted' AND project.deletion_root_id = project.id)
+          OR (project.disposition = 'present' AND project.lifecycle IN ('completed', 'canceled'))
+        UNION ALL
+        SELECT heading.owner_id, 'heading', heading.id, heading.deleted_at
+        FROM public.tasks_headings AS heading
+        WHERE heading.disposition = 'deleted' AND heading.deletion_root_id = heading.id
+        UNION ALL
+        SELECT todo.owner_id, 'todo', todo.id,
+          COALESCE(todo.deleted_at, todo.completed_at, todo.canceled_at)
+        FROM public.tasks_todos AS todo
+        WHERE (todo.disposition = 'deleted' AND todo.deletion_root_id = todo.id)
+          OR (todo.disposition = 'present' AND todo.lifecycle IN ('completed', 'canceled'))
+        UNION ALL
+        SELECT item.owner_id, 'checklist_item', item.id, item.deleted_at
+        FROM public.tasks_checklist_items AS item
+        WHERE item.disposition = 'deleted' AND item.deletion_root_id = item.id
+      )
+      SELECT
+        count(*) FILTER (
+          WHERE (candidate.terminal_at AT TIME ZONE zone.planning_timezone)::date + 31
+            <= (_before AT TIME ZONE zone.planning_timezone)::date
+        ),
+        count(*) FILTER (
+          WHERE (candidate.terminal_at AT TIME ZONE zone.planning_timezone)::date + 31
+            <= (_boundary AT TIME ZONE zone.planning_timezone)::date
+        )
+      INTO _before_candidates, _boundary_candidates
+      FROM candidates AS candidate
+      JOIN owner_zones AS zone ON zone.owner_id = candidate.owner_id
+      WHERE candidate.terminal_at IS NOT NULL;
+
+      IF _before_candidates <> 0 OR _boundary_candidates <> 1 THEN
+        RAISE EXCEPTION 'Synthetic Done boundary candidate guard failed';
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1
+        FROM public.tasks_todos
+        WHERE owner_id = '${owner}'::uuid
+          AND id = '${task}'::uuid
+          AND lifecycle = 'completed'
+          AND (completed_at AT TIME ZONE 'America/Los_Angeles')::date + 31
+            = (_boundary AT TIME ZONE 'America/Los_Angeles')::date
+      ) THEN
+        RAISE EXCEPTION 'Synthetic Done boundary owner guard failed';
+      END IF;
+
+      _before_result := tasks_private.purge_expired_done(_before, 500);
+      IF (_before_result ->> 'purged_roots')::integer <> 0
+        OR NOT EXISTS (
+          SELECT 1 FROM public.tasks_todos
+          WHERE owner_id = '${owner}'::uuid AND id = '${task}'::uuid
+        ) THEN
+        RAISE EXCEPTION 'Done content did not survive immediately before its boundary';
+      END IF;
+
+      _boundary_result := tasks_private.purge_expired_done(_boundary, 500);
+      IF (_boundary_result ->> 'purged_roots')::integer <> 1
+        OR (_boundary_result ->> 'purged_records')::integer <> 1
+        OR EXISTS (
+          SELECT 1 FROM public.tasks_todos
+          WHERE owner_id = '${owner}'::uuid AND id = '${task}'::uuid
+        ) THEN
+        RAISE EXCEPTION 'Done content was not purged exactly at its boundary';
+      END IF;
+    END;
+    $tasks_done_boundary$;
+
+    SELECT count(*)::integer AS receipt_count
+    FROM tasks_private.purged_creation_receipts
+    WHERE owner_id = '${owner}'::uuid
+      AND entity_type = 'todo'
+      AND entity_id = '${task}'::uuid;
+  `);
+  const row = response.rows?.[0] as { receipt_count?: number } | undefined;
+  if (row?.receipt_count !== 1) {
+    throw new Error('The guarded production Done boundary returned no private receipt');
+  }
+  return { receipt_count: row.receipt_count };
+}
+
+function sqlUuid(value: string): string {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new Error('Expected a UUID for the synthetic production fixture');
+  }
+  return value;
+}
 
 function productionEnvironment() {
   if (process.env.TASKS_PRODUCTION_TEST_CONFIRM !== 'synthetic-only') {

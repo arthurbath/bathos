@@ -116,7 +116,7 @@ function TaskPlanningProjectRow({
 }) {
   const navigate = useNavigate();
   const [pending, setPending] = useState(false);
-  const terminal = view === 'logbook';
+  const terminal = view === 'done';
   const completed = project.lifecycle === 'completed';
   const TerminalIcon = completed ? CheckCircle2 : CircleSlash2;
 
@@ -209,43 +209,46 @@ function getProjectPlanningActions(
   planningDate: string,
 ): Array<{ label: string; input: TaskProjectPlanningMoveInput }> {
   const today = {
-    label: view === 'upcoming' ? 'Make Available Today' : 'Move to Today',
-    input: { destination: 'today', todaySection: 'daytime', startDate: planningDate },
+    label: view === 'upcoming' ? 'Move to Today Later' : 'Add to Today Later',
+    input: { destination: 'anytime', todaySection: 'later', startDate: null },
   } satisfies { label: string; input: TaskProjectPlanningMoveInput };
   const anytime = {
     label: 'Move to Anytime',
-    input: { destination: 'anytime', todaySection: 'daytime', startDate: null },
+    input: { destination: 'anytime', todaySection: 'none', startDate: null },
   } satisfies { label: string; input: TaskProjectPlanningMoveInput };
   const someday = {
     label: 'Move to Someday',
-    input: { destination: 'someday', todaySection: 'daytime', startDate: null },
+    input: { destination: 'someday', todaySection: 'none', startDate: null },
   } satisfies { label: string; input: TaskProjectPlanningMoveInput };
 
   if (view === 'upcoming') return [today, anytime, someday];
-  if (view === 'anytime') return [today, someday];
+  if (view === 'anytime') {
+    const actions = project.today_section === 'none' ? [today] : [{
+      label: 'Remove from Today',
+      input: { destination: 'anytime', todaySection: 'none', startDate: null },
+    } satisfies { label: string; input: TaskProjectPlanningMoveInput }];
+    return [...actions, someday];
+  }
   if (view === 'someday') return [today, anytime];
 
   const section = getTodayProjectSection(project, planningDate);
-  const actions: Array<{ label: string; input: TaskProjectPlanningMoveInput }> = [];
-  if (section === 'unfinished') actions.push({
-    label: 'Reschedule for Today',
-    input: { destination: 'today', todaySection: 'daytime', startDate: planningDate },
-  });
-  actions.push(section === 'evening' ? {
-    label: 'Move to Earlier Today',
-    input: { destination: 'today', todaySection: 'daytime', startDate: planningDate },
-  } : {
-    label: 'Move to This Evening',
-    input: { destination: 'today', todaySection: 'evening', startDate: planningDate },
-  });
+  const actions: Array<{ label: string; input: TaskProjectPlanningMoveInput }> = (
+    ['now', 'next', 'later'] as const
+  ).filter((candidate) => candidate !== section).map((candidate) => ({
+    label: `Move to Today ${candidate[0].toUpperCase()}${candidate.slice(1)}`,
+    input: { destination: 'anytime', todaySection: candidate, startDate: null },
+  }));
   actions.push({
     label: 'Move to Tomorrow',
     input: {
-      destination: 'today',
-      todaySection: 'daytime',
+      destination: 'anytime',
+      todaySection: 'none',
       startDate: addTaskCalendarDays(planningDate, 1),
     },
-  }, anytime, someday);
+  }, {
+    label: 'Remove from Today',
+    input: { destination: 'anytime', todaySection: 'none', startDate: null },
+  }, someday);
   return actions;
 }
 
@@ -256,17 +259,13 @@ function projectPlanningLabel(
   areaTitle: string | null,
 ): string {
   const details: string[] = [];
-  if (view === 'logbook') {
+  if (view === 'done') {
     const terminalAt = project.lifecycle === 'completed' ? project.completed_at : project.canceled_at;
     details.push(project.lifecycle === 'completed' ? 'Completed' : 'Canceled');
     if (terminalAt) details.push(formatTerminalDate(terminalAt));
   } else if (view === 'today') {
     const section = getTodayProjectSection(project, planningDate);
-    if (section === 'unfinished') {
-      details.push(`Unfinished Since ${formatCalendarDate(project.start_date ?? planningDate)}`);
-    } else if (section === 'evening') {
-      details.push('This Evening');
-    }
+    details.push(`Today ${section[0].toUpperCase()}${section.slice(1)}`);
   } else if (view === 'upcoming' && project.start_date) {
     details.push(`Starts ${formatCalendarDate(project.start_date)}`);
   }

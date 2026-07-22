@@ -34,8 +34,8 @@ vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({
     areas: [], projects: [], headings: [], loading: false, error: null,
   }),
 }));
-vi.mock('@/modules/tasks/hooks/useTaskHierarchyTrash', () => ({
-  useTaskHierarchyTrash: () => ({
+vi.mock('@/modules/tasks/hooks/useTaskDeletedHierarchyRoots', () => ({
+  useTaskDeletedHierarchyRoots: () => ({
     roots: [], loading: false, error: null, restore: vi.fn(),
   }),
 }));
@@ -160,8 +160,8 @@ function syntheticTask(index: number): TaskTodo {
     disposition: 'present',
     deleted_at: null,
     deletion_root_id: null,
-    destination: 'today',
-    today_section: index % 5 === 0 ? 'evening' : 'daytime',
+    destination: 'anytime',
+    today_section: index % 5 === 0 ? 'later' : 'next',
     actionability: index % 3 === 0 ? 'waiting' : 'actionable',
     order_key: `a${String(index).padStart(5, '0')}`,
     hierarchy_order_key: null,

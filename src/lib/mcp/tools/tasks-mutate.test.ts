@@ -55,7 +55,7 @@ function task(overrides: Partial<Tables['tasks_todos']['Row']> = {}): Tables['ta
     deleted_at: null,
     deletion_root_id: null,
     destination: 'anytime',
-    today_section: 'daytime',
+    today_section: 'none',
     actionability: 'actionable',
     order_key: 'a0',
     hierarchy_order_key: null,
@@ -421,8 +421,9 @@ describe('Tasks MCP mutation tools', () => {
     });
     const result = await moveTaskData({
       ...base(),
-      destination: 'today',
-      today_section: 'daytime',
+      destination: 'anytime',
+      today_section: 'next',
+      start_date: '2026-07-20',
       area_id: areaId,
       project_id: null,
       heading_id: null,
@@ -430,7 +431,7 @@ describe('Tasks MCP mutation tools', () => {
     expect(result).toMatchObject({
       mutation_outcome: 'applied',
       receipt: { transition: 'move' },
-      task: { destination: 'today', area_id: areaId, revision: 2 },
+      task: { destination: 'anytime', today_section: 'next', area_id: areaId, revision: 2 },
     });
     expect(result.task.start_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(result.task.order_key).toMatch(/^a/);
@@ -451,11 +452,11 @@ describe('Tasks MCP mutation tools', () => {
     });
   });
 
-  it('moves This Evening work to daytime when scheduling a different date', async () => {
+  it('removes Today membership when scheduling Later work into the future', async () => {
     const client = new FakeTasksClient({
       tasks_todos: [task({
-        destination: 'today',
-        today_section: 'evening',
+        destination: 'anytime',
+        today_section: 'later',
         start_date: planningDateInTimeZone('America/Los_Angeles'),
       })],
       tasks_user_settings: [settings()],
@@ -466,7 +467,7 @@ describe('Tasks MCP mutation tools', () => {
     expect(result).toMatchObject({
       mutation_outcome: 'applied',
       receipt: { transition: 'move' },
-      task: { destination: 'today', today_section: 'daytime', start_date: '2099-07-25' },
+      task: { destination: 'anytime', today_section: 'none', start_date: '2099-07-25' },
     });
   });
 

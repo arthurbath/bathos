@@ -183,8 +183,8 @@ function request(overrides: Partial<CreateTaskRequest> = {}): CreateTaskRequest 
     idempotency_key: mutationId,
     title: 'Read the source',
     notes: '',
-    destination: 'inbox',
-    today_section: 'daytime',
+    destination: 'anytime',
+    today_section: 'later',
     ...overrides,
   };
 }
@@ -213,12 +213,12 @@ describe('Tasks MCP creation tool', () => {
       .toBe(false);
   });
 
-  it('creates owner-scoped Today work with immutable MCP and typed-source provenance', async () => {
+  it('creates owner-scoped Today Later work with immutable MCP and typed-source provenance', async () => {
     const client = new FakeTasksClient({ tasks_user_settings: [settings()] });
     const result = await createTaskData(request({
       title: '  Read the source  ',
-      destination: 'today',
-      today_section: 'evening',
+      destination: 'anytime',
+      today_section: 'later',
       actionability: 'waiting',
       source: {
         kind: 'webpage',
@@ -238,10 +238,10 @@ describe('Tasks MCP creation tool', () => {
     });
     expect(result.task).toMatchObject({
       title: 'Read the source',
-      destination: 'today',
-      today_section: 'evening',
+      destination: 'anytime',
+      today_section: 'later',
       actionability: 'waiting',
-      start_date: planningDateInTimeZone('America/Los_Angeles'),
+      start_date: null,
       entry_channel: 'mcp',
       last_mutation_channel: 'mcp',
       last_actor_type: 'automation',

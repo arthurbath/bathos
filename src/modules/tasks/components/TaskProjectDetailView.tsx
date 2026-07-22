@@ -326,7 +326,7 @@ export function TaskProjectDetailView({
           <AlertDialogBody>
             <AlertDialogDescription>
               {projectAction === 'delete'
-                ? 'The project, headings, tasks, and checklist items will move to Trash together.'
+                ? 'The project, headings, tasks, and checklist items will move to Done together.'
                 : openDescendantCount > 0
                   ? `${openDescendantCount} open ${openDescendantCount === 1 ? 'task' : 'tasks'} will be ${projectAction === 'complete' ? 'completed' : 'canceled'} with the project.`
                   : `The project will be ${projectAction === 'complete' ? 'completed' : 'canceled'}.`}
@@ -342,7 +342,7 @@ export function TaskProjectDetailView({
                 void confirmProjectAction();
               }}
             >
-              {projectAction === 'delete' ? 'Move to Trash' : 'Continue'}
+              {projectAction === 'delete' ? 'Move to Done' : 'Continue'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -380,8 +380,11 @@ function ProjectPlanningForm({
 
   const normalizedStartDate = destination === 'someday'
     ? null
-    : startDate || (destination === 'today' ? planningDate : null);
-  const normalizedTodaySection = destination === 'today' ? todaySection : 'daytime';
+    : startDate || null;
+  const normalizedTodaySection = destination === 'someday'
+    || (normalizedStartDate !== null && normalizedStartDate !== planningDate)
+    ? 'none'
+    : todaySection;
   const invalidDateRange = Boolean(
     normalizedStartDate && deadline && deadline < normalizedStartDate,
   );
@@ -427,12 +430,13 @@ function ProjectPlanningForm({
             onChange={(event) => {
               const next = event.target.value as typeof destination;
               setDestination(next);
-              if (next === 'someday') setStartDate('');
-              if (next !== 'today') setTodaySection('daytime');
+              if (next === 'someday') {
+                setStartDate('');
+                setTodaySection('none');
+              }
             }}
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <option value="today">Today</option>
             <option value="anytime">Anytime</option>
             <option value="someday">Someday</option>
           </select>
@@ -444,12 +448,15 @@ function ProjectPlanningForm({
           <select
             id={`project-today-section-${project.id}`}
             value={normalizedTodaySection}
-            disabled={saving || destination !== 'today'}
+            disabled={saving || destination === 'someday'
+              || Boolean(normalizedStartDate && normalizedStartDate !== planningDate)}
             onChange={(event) => setTodaySection(event.target.value as typeof todaySection)}
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
-            <option value="daytime">Today</option>
-            <option value="evening">This Evening</option>
+            <option value="none">Not Today</option>
+            <option value="now">Now</option>
+            <option value="next">Next</option>
+            <option value="later">Later</option>
           </select>
         </div>
       </div>

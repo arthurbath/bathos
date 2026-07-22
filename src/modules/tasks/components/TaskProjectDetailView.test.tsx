@@ -28,7 +28,7 @@ function hierarchy(): TaskHierarchyModel {
       area_id: 'area-a',
       lifecycle: 'open',
       destination: 'anytime',
-      today_section: 'daytime',
+      today_section: 'none',
       start_date: '2026-07-24',
       deadline: '2026-07-25',
     }],
@@ -271,7 +271,7 @@ describe('TaskProjectDetailView', () => {
       });
       expect(hierarchyModel.updateProject).toHaveBeenCalledWith('project-a', {
         destination: 'someday',
-        today_section: 'daytime',
+        today_section: 'none',
         start_date: null,
         deadline: '2026-07-25',
       });

@@ -9,10 +9,8 @@ import {
   type AuthenticatedMcpContext,
 } from '../supabase';
 import { uuidSchema } from '../resource-utils';
-import { planningDateInTimeZone } from './tasks-read';
-
-const destinationSchema = z.enum(['inbox', 'today', 'anytime', 'someday']);
-const todaySectionSchema = z.enum(['daytime', 'evening']);
+const destinationSchema = z.enum(['anytime', 'someday']);
+const todaySectionSchema = z.enum(['none', 'now', 'next', 'later']);
 const actionabilitySchema = z.enum(['actionable', 'waiting']);
 const integrationChannelSchema = z.enum([
   'mcp',
@@ -137,10 +135,6 @@ function normalizeRequest(input: CreateTaskRequest): NormalizedCreateTaskRequest
   if (headingId !== null && projectId === null) {
     throw new Error('A task heading requires project membership.');
   }
-  if (input.today_section === 'evening' && input.destination !== 'today') {
-    throw new Error('This Evening is available only within Today.');
-  }
-
   const requestedStartDate = input.start_date ?? null;
   if (requestedStartDate !== null && !isTaskCalendarDate(requestedStartDate)) {
     throw new Error('Start date must be a valid ISO calendar date.');
@@ -149,9 +143,11 @@ function normalizeRequest(input: CreateTaskRequest): NormalizedCreateTaskRequest
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error('Deadline must be a valid ISO calendar date.');
   }
-  if ((input.destination === 'inbox' || input.destination === 'someday')
-    && requestedStartDate !== null) {
-    throw new Error(`${input.destination === 'inbox' ? 'Inbox' : 'Someday'} work cannot retain a start date.`);
+  if (input.destination === 'someday' && input.today_section !== 'none') {
+    throw new Error('Someday work cannot appear in Today.');
+  }
+  if (input.destination === 'someday' && requestedStartDate !== null) {
+    throw new Error('Someday work cannot retain a start date.');
   }
   if (requestedStartDate !== null) assertTaskCalendarRange(requestedStartDate, deadline);
 
@@ -235,36 +231,17 @@ function assertSameCreationRequest(
     [state.source_title, request.sourceTitle],
     [state.source_external_id, request.sourceExternalId],
   ];
-  if (request.destination !== 'today' || request.startDateWasExplicit) {
-    checks.push([state.start_date, request.requestedStartDate]);
-  }
+  checks.push([state.start_date, request.requestedStartDate]);
   if (checks.some(([actual, expected]) => actual !== expected)) {
     throw new Error('The idempotency key was already used for a different task creation request.');
   }
 }
 
-async function planningDateForOwner(auth: AuthenticatedMcpContext): Promise<string> {
-  const settings = await readOne<Tables['tasks_user_settings']['Row']>(auth.supabase
-    .from('tasks_user_settings')
-    .select('*')
-    .eq('owner_id', auth.userId)
-    .maybeSingle());
-  if (settings === null) {
-    throw new Error('Task planning settings are not initialized. Open the Tasks module before creating Today work.');
-  }
-  return planningDateInTimeZone(settings.planning_timezone);
-}
-
 async function resolveStartDate(
   request: NormalizedCreateTaskRequest,
-  auth: AuthenticatedMcpContext,
+  _auth: AuthenticatedMcpContext,
 ): Promise<string | null> {
-  if (request.destination !== 'today') return request.requestedStartDate;
-  const planningDate = await planningDateForOwner(auth);
-  if (request.startDateWasExplicit && request.requestedStartDate !== planningDate) {
-    throw new Error(`Today work must use the owner's current planning date (${planningDate}).`);
-  }
-  return planningDate;
+  return request.requestedStartDate;
 }
 
 async function validateContainer(
@@ -307,7 +284,7 @@ async function nextPlanningOrderKey(
   startDate: string | null,
   auth: AuthenticatedMcpContext,
 ): Promise<string> {
-  let query = auth.supabase
+  const query = auth.supabase
     .from('tasks_todos')
     .select('order_key')
     .eq('owner_id', auth.userId)
@@ -315,7 +292,6 @@ async function nextPlanningOrderKey(
     .eq('today_section', request.todaySection)
     .eq('lifecycle', 'open')
     .eq('disposition', 'present');
-  if (request.destination === 'today') query = query.eq('start_date', startDate!);
   const last = await readOne<{ order_key: string }>(query
     .order('order_key', { ascending: false })
     .order('id', { ascending: false })
@@ -458,8 +434,8 @@ export const createTask = defineTool({
     idempotency_key: uuidSchema.describe('Stable UUID for this logical creation request. Reuse it only to retry the exact same request.'),
     title: z.string().trim().min(1).max(500),
     notes: z.string().max(100_000).default(''),
-    destination: destinationSchema.default('inbox'),
-    today_section: todaySectionSchema.default('daytime'),
+    destination: destinationSchema.default('anytime'),
+    today_section: todaySectionSchema.default('later'),
     actionability: actionabilitySchema.default('actionable').describe('Whether the task can be acted on now or is waiting on something external.'),
     entry_channel: integrationChannelSchema.default('mcp').describe('Structured integration that collected the task. Ordinary MCP clients should keep the default.'),
     start_date: calendarDateSchema.nullable().optional(),

@@ -144,21 +144,21 @@ INSERT INTO public.tasks_todos (
   (
     '97000000-0000-4000-8000-000000000020',
     '97000000-0000-4000-8000-000000000001',
-    'Scheduled task', 'today', 'a0',
+    'Scheduled task', 'anytime', 'a0',
     '97000000-0000-4000-8000-000000000021',
     'mail_message', 'message://reminder-export', '<reminder@example.test>'
   ),
   (
     '97000000-0000-4000-8000-000000000022',
     '97000000-0000-4000-8000-000000000001',
-    'Second scheduled task', 'today', 'a1',
+    'Second scheduled task', 'anytime', 'a1',
     '97000000-0000-4000-8000-000000000023',
     NULL, NULL, NULL
   ),
   (
     '97000000-0000-4000-8000-000000000024',
     '97000000-0000-4000-8000-000000000001',
-    'Completing task', 'today', 'a2',
+    'Completing task', 'anytime', 'a2',
     '97000000-0000-4000-8000-000000000025',
     NULL, NULL, NULL
   );

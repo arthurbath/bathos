@@ -1,6 +1,6 @@
 # Tasks Goal Readiness Audit
 
-**Date:** 2026 Jul 21
+**Date:** 2026 Jul 22
 **Category:** Product / Production / Trust
 **Status:** Complete
 
@@ -10,13 +10,15 @@ BathOS Tasks satisfies the implemented V1 contract across the web application, o
 
 Production acceptance of the offline PWA shell is complete. The user accepted seven corrected-window Inbox Manager handoffs as sufficient lived proof rather than requiring artificial personal work or waiting for the original ten-task or 24-hour boundary. The runtime was explicitly disabled, the final receipts were reconciled through Supabase and a fresh PowerSync projection, the disabled scheduled path preserved ordinary Mail health, and the Inbox Manager OpenSpec change was synchronized, archived, validated, committed, and pushed.
 
+The completed replacement removes Inbox as a planning destination, makes Today a Now, Next, and Later projection of Anytime, combines Logbook and Trash into Done, and automatically purges terminal content at the owner-local midnight beginning its 31st day in Done. The migration, MCP service, Raycast commands, Inbox Manager runtime, once-per-minute retention job, browser behavior, and PowerSync convergence are accepted in production.
+
 ## Accepted Product Surfaces
 
-- The dark, mobile-first Tasks module provides Inbox, Today, Upcoming, Anytime, Someday, Logbook, Trash, areas, projects, headings, checklist items, templates, recurrence, reminders, search, bulk planning, undo, export, restore, and recoverable history without tags.
+- The dark, mobile-first Tasks module provides Today, Upcoming, Anytime, Someday, Done, areas, projects, headings, checklist items, templates, recurrence, reminders, search, bulk planning, undo, export, restore, and recoverable history without tags.
 - One stable `/tasks/*` runtime preserves synchronization, notification state, local history, and pending work across supported route changes while invalid Tasks routes render the ordinary 404 boundary.
 - PowerSync Cloud uses the exact approved 22-table owner-scoped projection. Production topology, restart, conflict, owner-isolation, cleanup, and cross-client convergence gates passed.
 - Safari Web Push subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and scheduled reminder dispatch passed in production.
-- Raycast supports ordinary Inbox capture, current-browser-page capture, Finder-item capture, and AI-refined reading capture through OAuth and the production MCP function. Unreliable selected-text capture was removed from the product contract.
+- Raycast defaults ordinary, current-browser-page, Finder-item, and AI-refined reading capture to Anytime and Today Later through OAuth and the MCP function. Production creation and a fresh PowerSync projection passed. Unreliable selected-text capture remains outside the product contract.
 - Inbox Manager creates Things tasks first and conditionally mirrors only accepted new creations into BathOS Tasks during the private bounded trial. Existing tasks, edits, completions, and Mail rules remain outside that handoff.
 - Native Apple surfaces and migration from Things remain deliberate future decisions rather than incomplete V1 obligations.
 
@@ -27,7 +29,7 @@ Production acceptance of the offline PWA shell is complete. The user accepted se
 | Private-First Task Module | Production owner-isolation, RLS, and cleanup gates in `2026-07-20_tasks_production_sync_readiness.md` and `2026-07-21_tasks_production_topology_hardening.md` | Accepted |
 | Production Task Synchronization | Exact 22-table production topology, restart, convergence, and current synchronized clients | Accepted |
 | Core Task Organization | Archived `add-personal-tasks-module` implementation evidence and `2026-07-20_tasks_live_browser_validation.md` | Accepted |
-| Date-Based Planning Views | Browser validation of Inbox, Today, Upcoming, Anytime, Someday, and Logbook with owner-local planning dates | Accepted |
+| Date-Based Planning Views | Production migration, MCP capture, browser acceptance, and fresh PowerSync proof for Now, Next, Later, Upcoming, Anytime, Someday, and Done | Accepted |
 | Tagless Structured Semantics | Typed source, actionability, hierarchy, destination, lifecycle, and product-identity evidence without tags | Accepted |
 | Bulk Task Planning | Atomic selection and movement coverage in the archived module change and browser validation | Accepted |
 | Native Templates | Template definition, revision, instantiation, MCP, and synchronized-projection coverage in the archived module change | Accepted |
@@ -38,7 +40,7 @@ Production acceptance of the offline PWA shell is complete. The user accepted se
 | Offline Task Operation | Offline workflow acceptance plus archived `enable-tasks-offline-pwa-launch` production and iPhone evidence | Accepted |
 | Deterministic Task Reconciliation | Multi-client winner-order, stale-revision, conflict-receipt, and reconnection gates | Accepted |
 | Actionable Synchronization Diagnostics | `2026-07-21_tasks_sync_reliability.md`, the archived transient-event confirmation change, and current Safari, Chrome, and iPhone diagnostics | Accepted |
-| Recoverable History | `2026-07-20_tasks_preservation_recovery.md`, undo, Trash, export, merge, replace, and rollback gates | Accepted |
+| Recoverable History | Production schema-11 recovery, exact owner-local day-31 purge, fresh PowerSync removal, dependency cleanup, private safety receipt, and rejected stale creation retry | Accepted |
 | Layered Reminder Delivery | `2026-07-20_tasks_reminder_delivery_readiness.md` plus Safari and iPhone Web Push delivery/open acceptance | Accepted |
 | Evidence-Gated Native Apple Expansion | `2026-07-20_tasks_native_apple_companion.md`; lived evidence supports continued web/PWA/Raycast use without premature native scope | Accepted by deliberate deferral |
 | Keyboard-First Daily Operation | `2026-07-20_tasks_accessibility_validation.md`, browser keyboard passes, and focused component tests | Accepted |
@@ -51,6 +53,12 @@ Production acceptance of the offline PWA shell is complete. The user accepted se
 
 ## Current Production Evidence
 
+- Migration `20260722000000_replace_tasks_inbox_logbook_trash_with_done.sql` is recorded locally and remotely. It normalized all 16 production to-dos to Anytime, assigned 14 to Today Next and two to Today Later, and left zero legacy destinations or sections.
+- MCP function version 9 is active. A delegated Raycast browser-source fixture was created with `browser_capture` provenance in Anytime and Today Later, independently projected through a fresh PowerSync database with its creation history, and recoverably removed through `transition_task`.
+- PowerSync remains `ready` with exactly the approved 22 synchronized tables. The private purge-receipt table is excluded from publication and has RLS enabled with no public, anonymous, or authenticated grants.
+- Cron job 2 runs `tasks_private.purge_expired_done()` once per minute. The three post-acceptance runs at 7:35 AM, 7:36 AM, and 7:37 AM PDT succeeded, and zero personal roots are currently eligible.
+- The guarded production retention test proved that one synthetic completed task survived one microsecond before its owner-local midnight boundary, purged exactly at midnight beginning day 31, disappeared from a second fresh PowerSync database, left one private creation receipt, rejected exact stale recreation through the public MCP contract, and left zero synthetic users or receipts after account cleanup.
+- The first retention harness incorrectly supplied a future global evaluation time and purged six retained personal Done roots plus its disposable MCP fixture. Ten open tasks were untouched. The explicitly approved recovery normalized the verified private schema-v10 backup to schema 11, created private before/after recovery backups, restored 16 to-dos and 26 history records, cleared seven affected receipts, and passed a content-free 16 total / 10 open / 6 Done / 9 Mail-source audit. The corrected harness now verifies the complete candidate set inside one transaction and rolls back before purge unless the synthetic root is the only eligible record.
 - The production MCP service advertises 42 tools, including 33 Tasks operations covering bounded reads, structured creation, updates, movement, ordering, lifecycle transitions, templates, recurrence, reminders, and Mail retirement.
 - A read-only production MCP query for Today on 2026 Jul 21 returned five current to-dos, including four Mail-automation tasks, with no truncation or service error.
 - The installed Inbox Manager runtime is healthy and parallel mode is disabled. Seven tasks were accepted during the corrected activation window, the handoff queue is empty, and no handoff failure is recorded. The latest accepted handoff completed at 2026 Jul 21 5:19 PM PDT.
@@ -58,17 +66,15 @@ Production acceptance of the offline PWA shell is complete. The user accepted se
 - The explicit disable completed at 2026 Jul 21 6:07 PM PDT with reason `manual`, zero pending requests, all bounded receipts retained, and the outbox hash unchanged at `c5160a90963badab44be8fb018f9981dadd17a954119a573635ee3a222baed69`.
 - Ordinary post-disable run `20260722T010819Z-19537` recorded `parallel_disabled` before Mail actions and `empty_outbox` after reconciliation, ended successfully at 2026 Jul 21 6:08 PM PDT, and left the outbox hash unchanged. Mail health remained healthy with no handoff failure or retry state.
 - The Mail workflow recovered from one stale enrichment-incident record without changing Mail rules, private mode, accepted task receipts, or scheduled success semantics. Two subsequent ordinary scheduled runs completed healthy.
-- BathOS and Inbox Manager are committed, pushed, clean, and synchronized with `origin/main`.
+- The reinstalled Inbox Manager runtime is healthy. Parallel mode remains manually disabled, pending and failure counts remain zero, installed handoff scripts hash-identically to source, and the immediate post-install Mail run completed successfully at 7:39 AM PDT without changing Mail rules.
 
 ## Completion Closeout
 
-1. The user accepted seven corrected-window tasks as sufficient proof without manufacturing additional personal work.
-2. Parallel mode was disabled explicitly before credential or network work, the queue remained empty, and the post-disable scheduled Mail run stayed healthy.
-3. All nine retained receipts reconciled exactly against task, structured Mail-source, and creation-history rows, with the approved task and history subset independently reproduced through a fresh PowerSync client.
-4. Inbox Manager OpenSpec task 6.4 is complete. The durable specifications were synchronized, the change was archived, all validation passed, and commit `c2f9d36` was pushed to `origin/main`.
-5. The final cross-system audit found no remaining V1 implementation or production-readiness gate.
-
-Four recoverably deleted production-acceptance captures remain as roots in Tasks Trash. Permanent removal still requires explicit action-time confirmation because one setup capture originated from the user's active Safari tab. This cleanup is not a product-readiness blocker.
+1. The approved migration and MCP function are active in production, and the private predeployment backup remains available.
+2. Raycast capture and Inbox Manager delegation use Anytime and Today Later without sending retired planning fields.
+3. The once-per-minute retention job, exact owner-local boundary, private retry receipt, fresh PowerSync removal, and synthetic cleanup passed in production.
+4. The accidental future-time purge was recovered from the verified backup with explicit approval, and the safer transaction-guarded acceptance passed afterward without changing personal data.
+5. Durable specifications are synchronized, companion repositories pass their complete validation gates, and the final cross-system audit found no remaining V1 implementation or production-readiness gate.
 
 ## Pre-Closeout Validation
 
@@ -122,8 +128,8 @@ The BathOS connector catalog attached to this long-running Codex task still expo
 
 ## Completion Status
 
-The implemented BathOS Tasks V1 goal is complete. No additional implementation tranche is required by the durable specifications, archived OpenSpec changes, production evaluations, or source audit. Things remains authoritative while Tasks is available for personal parallel use. Native Apple surfaces, Things migration, and any later product expansion remain deliberate future work rather than incomplete V1 obligations.
+The Tasks V1 replacement goal is complete. Today is an Anytime projection, Inbox is retired, Done replaces Logbook and Trash, owner-local day-31 retention is active, companion capture surfaces use Today Later, and all production, synchronization, recovery, and closeout gates passed. Things remains authoritative for personal work until the user chooses otherwise. Native Apple surfaces and Things migration remain deliberate future decisions.
 
 ## Specification Impact
 
-The archived `enable-tasks-offline-pwa-launch` OpenSpec change modified the personal Tasks offline-operation and layered-reminder requirements. Production acceptance passed and its delta is synchronized into the durable specification. The Inbox Manager parallel-handoff contracts are synchronized and archived in the sibling repository. This readiness closeout is documentation-only and has no further BathOS specification impact.
+The archived `replace-task-inbox-logbook-trash-with-done` change updates the durable personal Tasks, MCP, and routing contracts. The Inbox Manager durable handoff contract delegates Anytime and Today Later placement to the specialized BathOS service without changing Mail classification or mailbox policy.

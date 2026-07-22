@@ -73,13 +73,15 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
     const alpha = await repository.createTask({
       ownerId,
       title: 'Offline Alpha',
-      destination: 'today',
+      destination: 'anytime',
+      todaySection: 'next',
       startDate: '2026-07-20',
     });
     const beta = await repository.createTask({
       ownerId,
       title: 'Offline Beta',
-      destination: 'today',
+      destination: 'anytime',
+      todaySection: 'next',
       startDate: '2026-07-20',
     });
     const recurrenceSource = await repository.createTask({
@@ -131,14 +133,16 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
     const createdOffline = await repository.createTask({
       ownerId,
       title: 'Created While Offline',
-      destination: 'inbox',
+      destination: 'anytime',
+      todaySection: 'later',
     });
     await repository.updateTask(ownerId, alpha.id, {
       title: 'Offline Alpha Edited',
       notes: 'Edited without a network connection',
     });
     await repository.moveTask(ownerId, alpha.id, {
-      destination: 'today',
+      destination: 'anytime',
+      todaySection: 'none',
       startDate: '2026-07-21',
     });
     await repository.updateTask(ownerId, beta.id, {

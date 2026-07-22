@@ -3,32 +3,32 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TaskDataPortabilityDialog } from './TaskDataPortabilityDialog';
 import {
-  taskExportV10Collections,
+  taskExportV11Collections,
   TASK_REPLACE_RESTORE_CONFIRMATION,
-  type TaskExportV10,
+  type TaskExportV11,
   type TaskPortabilityService,
 } from '@/modules/tasks/data/taskPortability';
 
 const checksum = 'a'.repeat(64);
-const counts = Object.fromEntries(taskExportV10Collections.map((name) => [name, 0]));
+const counts = Object.fromEntries(taskExportV11Collections.map((name) => [name, 0]));
 const taskExport = {
   format: 'garden.bath.tasks.export',
-  schema_version: 10,
+  schema_version: 11,
   created_at: '2026-07-20T21:00:00.000Z',
   manifest: {
-    collections: [...taskExportV10Collections],
+    collections: [...taskExportV11Collections],
     counts,
     checksums: {
       algorithm: 'sha256',
-      ...Object.fromEntries(taskExportV10Collections.map((name) => [name, checksum])),
+      ...Object.fromEntries(taskExportV11Collections.map((name) => [name, checksum])),
     },
   },
-  data: Object.fromEntries(taskExportV10Collections.map((name) => [name, []])),
-} as TaskExportV10;
+  data: Object.fromEntries(taskExportV11Collections.map((name) => [name, []])),
+} as TaskExportV11;
 const restorePreview = {
   dry_run: true,
-  schema_version: 10,
-  ...Object.fromEntries(taskExportV10Collections.map((name) => [name, {
+  schema_version: 11,
+  ...Object.fromEntries(taskExportV11Collections.map((name) => [name, {
     inserts: 0,
     matches: 0,
     conflicts: 0,
@@ -38,7 +38,7 @@ const restorePreview = {
   }])),
 };
 const preparation = {
-  schema_version: 10 as const,
+  schema_version: 11 as const,
   backup: taskExport,
   backup_digest: checksum,
   current_counts: counts,
@@ -66,7 +66,7 @@ async function selectBackup() {
   fireEvent.change(screen.getByLabelText('Select Task Backup'), {
     target: { files: [file] },
   });
-  await screen.findByText(/Schema 10:/);
+  await screen.findByText(/Schema 11:/);
 }
 
 describe('TaskDataPortabilityDialog', () => {

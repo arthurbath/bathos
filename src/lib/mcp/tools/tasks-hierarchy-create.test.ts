@@ -251,8 +251,8 @@ describe('Tasks MCP hierarchy creation tools', () => {
       title: 'Launch',
       notes: 'Keep this bounded',
       area_id: areaId,
-      destination: 'today',
-      today_section: 'evening',
+      destination: 'anytime',
+      today_section: 'later',
       start_date: '2026-07-20',
       deadline: '2026-07-21',
     }, authFor(ownerA, client));
@@ -262,8 +262,8 @@ describe('Tasks MCP hierarchy creation tools', () => {
       title: 'Launch',
       notes: 'Keep this bounded',
       lifecycle: 'open',
-      destination: 'today',
-      today_section: 'evening',
+      destination: 'anytime',
+      today_section: 'later',
       start_date: '2026-07-20',
       deadline: '2026-07-21',
     });
@@ -275,7 +275,7 @@ describe('Tasks MCP hierarchy creation tools', () => {
       notes: '',
       area_id: areaId,
       destination: 'anytime',
-      today_section: 'daytime',
+      today_section: 'next',
     }, authFor(ownerA, inaccessible))).rejects.toThrow('area is unavailable');
     expect(inaccessible.insertCount).toBe(0);
   });
@@ -365,7 +365,7 @@ describe('Tasks MCP hierarchy creation tools', () => {
       title: 'Invalid planning',
       notes: '',
       destination: 'someday',
-      today_section: 'daytime',
+      today_section: 'next',
       start_date: '2026-07-20',
     }, authFor(ownerA, client))).rejects.toThrow('Someday projects');
     expect(client.insertCount).toBe(0);

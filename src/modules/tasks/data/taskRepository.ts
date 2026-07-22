@@ -190,8 +190,8 @@ export class TaskRepository {
     );
 
     return this.database.writeTransaction(async (transaction) => {
-      const destination = input.destination ?? 'inbox';
-      const todaySection = input.todaySection ?? 'daytime';
+      const destination = input.destination ?? 'anytime';
+      const todaySection = input.todaySection ?? 'later';
       assertPlanningPlacement(destination, todaySection, startDate);
       await assertOwnedTaskContainer(
         transaction,
@@ -340,7 +340,7 @@ export class TaskRepository {
     context?: TaskMutationContext,
   ): Promise<TaskTodo> {
     assertOwner(ownerId);
-    const todaySection = input.todaySection ?? 'daytime';
+    const todaySection = input.todaySection ?? 'none';
     const startDate = normalizeTaskCalendarDate(input.startDate, 'Start date') ?? null;
     assertPlanningPlacement(input.destination, todaySection, startDate);
 
@@ -387,7 +387,7 @@ export class TaskRepository {
     if (uniqueTaskIds.length === 0) {
       throw new InvalidTaskMutationError('Select at least one task for bulk planning');
     }
-    const todaySection = input.todaySection ?? 'daytime';
+    const todaySection = input.todaySection ?? 'none';
     const startDate = normalizeTaskCalendarDate(input.startDate, 'Start date') ?? null;
     assertPlanningPlacement(input.destination, todaySection, startDate);
 
@@ -897,12 +897,11 @@ function assertPlanningPlacement(
   todaySection: TaskTodaySection,
   startDate: string | null,
 ): void {
-  if (todaySection === 'evening' && destination !== 'today') {
-    throw new InvalidTaskMutationError('This Evening is available only within Today');
+  if (destination === 'someday' && todaySection !== 'none') {
+    throw new InvalidTaskMutationError('Someday work cannot appear in Today');
   }
-  if ((destination === 'inbox' || destination === 'someday') && startDate !== null) {
-    const label = destination === 'inbox' ? 'Inbox' : 'Someday';
-    throw new InvalidTaskMutationError(`${label} work cannot retain a start date`);
+  if (destination === 'someday' && startDate !== null) {
+    throw new InvalidTaskMutationError('Someday work cannot retain a start date');
   }
 }
 

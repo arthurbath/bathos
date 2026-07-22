@@ -15,8 +15,8 @@ import {
 import { uuidSchema } from '../resource-utils';
 import { planningDateInTimeZone } from './tasks-read';
 
-const destinationSchema = z.enum(['inbox', 'today', 'anytime', 'someday']);
-const todaySectionSchema = z.enum(['daytime', 'evening']);
+const destinationSchema = z.enum(['anytime', 'someday']);
+const todaySectionSchema = z.enum(['none', 'now', 'next', 'later']);
 const actionabilitySchema = z.enum(['actionable', 'waiting']);
 const sourceKindSchema = z.enum([
   'webpage',
@@ -350,14 +350,15 @@ function validatePlanningPlacement(
   startDate: string | null,
   planningDate: string | null,
 ): void {
-  if (todaySection === 'evening' && (destination !== 'today' || startDate !== planningDate)) {
-    throw new Error('This Evening requires Today and the current planning date.');
+  if (destination === 'someday' && todaySection !== 'none') {
+    throw new Error('Someday work cannot appear in Today.');
   }
-  if ((destination === 'inbox' || destination === 'someday') && startDate !== null) {
-    throw new Error(`${destination === 'inbox' ? 'Inbox' : 'Someday'} work cannot retain a start date.`);
+  if (destination === 'someday' && startDate !== null) {
+    throw new Error('Someday work cannot retain a start date.');
   }
-  if (destination === 'today' && startDate === null) {
-    throw new Error('Today work requires a start date.');
+  if (destination === 'anytime' && todaySection !== 'none'
+    && startDate !== null && planningDate !== null && startDate > planningDate) {
+    throw new Error('Future work cannot appear in Today.');
   }
 }
 
@@ -466,14 +467,8 @@ async function movePatch(
   if (planningRequested) {
     const destination = input.destination!;
     const planningDate = await planningDateForOwner(auth);
-    const todaySection = destination === 'today' ? input.today_section ?? 'daytime' : 'daytime';
-    let startDate = input.start_date ?? null;
-    if (destination === 'today') {
-      if (startDate !== null && startDate !== planningDate) {
-        throw new Error(`Today work must use the owner's current planning date (${planningDate}).`);
-      }
-      startDate = planningDate;
-    }
+    const todaySection = destination === 'someday' ? 'none' : input.today_section ?? 'none';
+    const startDate = input.start_date ?? null;
     validatePlanningPlacement(destination, todaySection, startDate, planningDate);
     assertTaskCalendarRange(startDate, current.deadline);
     if (destination === current.destination
@@ -531,17 +526,11 @@ async function schedulePatch(
   const planningDate = await planningDateForOwner(auth);
   let destination = current.destination as TaskDestination;
   let todaySection = current.today_section as TaskTodaySection;
-  if (destination === 'inbox' && startDate !== null) {
-    throw new Error('Move Inbox work before assigning a start date.');
-  }
   if (destination === 'someday' && startDate !== null) {
     destination = 'anytime';
-    todaySection = 'daytime';
+    todaySection = 'none';
   }
-  if (destination === 'today' && startDate === null) {
-    throw new Error('Today work requires a start date.');
-  }
-  if (todaySection === 'evening' && startDate !== planningDate) todaySection = 'daytime';
+  if (startDate !== null && startDate > planningDate) todaySection = 'none';
   validatePlanningPlacement(destination, todaySection, startDate, planningDate);
 
   const patch: TaskPatch = { start_date: startDate, deadline };
@@ -592,12 +581,10 @@ function expectedAfterForRetry(
     const input = request.input;
     if (input.destination !== undefined) {
       expected.destination = input.destination;
-      expected.today_section = input.destination === 'today'
-        ? input.today_section ?? 'daytime'
-        : 'daytime';
-      expected.start_date = input.destination === 'today'
-        ? after.start_date
-        : input.start_date ?? null;
+      expected.today_section = input.destination === 'someday'
+        ? 'none'
+        : input.today_section ?? 'none';
+      expected.start_date = input.start_date ?? null;
       ignored.add('order_key');
     }
     if (hasOwn(input, 'area_id') && hasOwn(input, 'project_id') && hasOwn(input, 'heading_id')) {
@@ -614,11 +601,11 @@ function expectedAfterForRetry(
     if (hasOwn(input, 'deadline')) expected.deadline = input.deadline ?? null;
     if (before.destination === 'someday' && expected.start_date !== null) {
       expected.destination = 'anytime';
-      expected.today_section = 'daytime';
+      expected.today_section = 'none';
       ignored.add('order_key');
     }
-    if (before.today_section === 'evening' && after.today_section === 'daytime') {
-      expected.today_section = 'daytime';
+    if (before.today_section !== 'none' && after.today_section === 'none') {
+      expected.today_section = 'none';
     }
     return {
       expected,

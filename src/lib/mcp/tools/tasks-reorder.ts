@@ -17,7 +17,7 @@ import { uuidSchema } from '../resource-utils';
 const directionSchema = z.enum(['up', 'down']);
 const taskScopeSchema = z.enum(['planning', 'hierarchy']);
 const hierarchyScopeSchema = z.enum(['structural', 'planning']);
-const taskPlanningViewSchema = z.enum(['inbox', 'today', 'upcoming', 'anytime', 'someday']);
+const taskPlanningViewSchema = z.enum(['today', 'upcoming', 'anytime', 'someday']);
 const projectPlanningViewSchema = z.enum(['today', 'upcoming', 'anytime', 'someday']);
 const hierarchyTypeSchema = z.enum(['area', 'project', 'heading', 'checklist_item']);
 const calendarDateSchema = z.string().refine(isTaskCalendarDate, {
@@ -244,9 +244,7 @@ function orderSection(
   planningDate: string,
 ): string {
   if (view === 'today') {
-    return typeof record.start_date === 'string' && record.start_date < planningDate
-      ? 'unfinished'
-      : String(record.today_section);
+    return String(record.today_section);
   }
   if (view === 'upcoming') return `upcoming:${String(record.start_date ?? '')}`;
   return view;
@@ -259,10 +257,18 @@ function visibleInPlanning(
 ): boolean {
   if (record.disposition !== 'present' || record.lifecycle !== 'open') return false;
   if (view === 'upcoming') {
-    return typeof record.start_date === 'string' && record.start_date > planningDate;
+    return record.destination === 'anytime'
+      && typeof record.start_date === 'string'
+      && record.start_date > planningDate;
+  }
+  if (view === 'today') {
+    return record.destination === 'anytime'
+      && record.today_section !== 'none'
+      && (record.start_date === null
+        || (typeof record.start_date === 'string' && record.start_date <= planningDate));
   }
   return record.destination === view
-    && ((view !== 'today' && view !== 'anytime')
+    && (view !== 'anytime'
       || record.start_date === null
       || (typeof record.start_date === 'string' && record.start_date <= planningDate));
 }

@@ -53,7 +53,7 @@ SELECT lives_ok(
     ) VALUES (
       '94000000-0000-4000-8000-000000000010',
       '94000000-0000-4000-8000-000000000001',
-      'Synthetic task', 'today', 'a0',
+      'Synthetic task', 'anytime', 'a0',
       '94000000-0000-4000-8000-000000000020'
     )
   $$,
@@ -102,7 +102,7 @@ SELECT is(
 SELECT is(
   (SELECT destination FROM public.tasks_todos
    WHERE id = '94000000-0000-4000-8000-000000000010'),
-  'today',
+  'anytime',
   'does not move waiting work from its planned destination'
 );
 SELECT is(
@@ -119,7 +119,7 @@ SELECT throws_ok(
     ) VALUES (
       '94000000-0000-4000-8000-000000000011',
       '94000000-0000-4000-8000-000000000001',
-      'Invalid task', 'inbox', 'a1', 'blocked',
+      'Invalid task', 'anytime', 'a1', 'blocked',
       '94000000-0000-4000-8000-000000000022'
     )
   $$,
@@ -163,7 +163,7 @@ SELECT lives_ok(
     ) VALUES (
       '94000000-0000-4000-8000-000000000012',
       '94000000-0000-4000-8000-000000000001',
-      'Waiting deletion task', 'inbox', 'a2', 'waiting',
+      'Waiting deletion task', 'anytime', 'a2', 'waiting',
       '94000000-0000-4000-8000-000000000025'
     )
   $$,

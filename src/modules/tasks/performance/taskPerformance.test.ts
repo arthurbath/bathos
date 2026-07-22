@@ -42,9 +42,7 @@ describePerformance('Tasks large-library performance', () => {
   const documents = createTaskSearchDocuments(searchableTasks, hierarchy);
 
   it('derives every task view within the large-library budget', () => {
-    const views = [
-      'inbox', 'today', 'upcoming', 'anytime', 'someday', 'logbook', 'trash',
-    ] as const;
+    const views = ['today', 'upcoming', 'anytime', 'someday', 'done'] as const;
     for (const view of views) {
       const result = measure(`${view} view`, 20, () => deriveTaskViewTasks(
         tasks,
@@ -73,7 +71,7 @@ describePerformance('Tasks large-library performance', () => {
     const filterResult = measure('structured filter', 50, () => (
       filterTaskSearchDocuments(documents, '', {
         ...allFilters,
-        destination: 'today',
+        destination: 'anytime',
         actionability: 'waiting',
         sourceKind: 'mail_message',
       }).length
@@ -105,7 +103,7 @@ function measure(label: string, runs: number, operation: () => number) {
 }
 
 function syntheticTask(index: number): TaskTodo {
-  const destinations: TaskDestination[] = ['inbox', 'today', 'anytime', 'someday'];
+  const destinations: TaskDestination[] = ['anytime', 'someday'];
   const sourceKinds: Array<TaskSourceKind | null> = [
     null, 'mail_message', 'webpage', 'reading_item', 'file',
   ];
@@ -115,8 +113,8 @@ function syntheticTask(index: number): TaskTodo {
   const usesProject = index % 2 === 0;
   const taskId = `task-${String(index).padStart(5, '0')}`;
   const sourceKind = sourceKinds[index % sourceKinds.length];
-  const startDate = destination === 'today' || destination === 'anytime'
-    ? index % 5 === 0 ? '2026-08-01' : planningDate
+  const startDate = destination === 'anytime'
+    ? index % 7 === 0 ? '2026-08-01' : planningDate
     : null;
 
   return taskTodoFixture({
@@ -134,7 +132,9 @@ function syntheticTask(index: number): TaskTodo {
     deleted_at: deleted ? `2026-07-20T${hour(index)}:00:00.000Z` : null,
     deletion_root_id: deleted ? taskId : null,
     destination,
-    today_section: index % 7 === 0 ? 'evening' : 'daytime',
+    today_section: destination === 'someday'
+      ? 'none'
+      : index % 7 === 0 ? 'later' : index % 5 === 0 ? 'none' : 'next',
     actionability: index % 3 === 0 ? 'waiting' : 'actionable',
     order_key: `a${String(index).padStart(5, '0')}`,
     hierarchy_order_key: null,

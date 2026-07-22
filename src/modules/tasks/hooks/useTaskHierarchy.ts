@@ -26,7 +26,7 @@ import type {
 import type { TaskListView } from '@/modules/tasks/hooks/useTaskList';
 
 export type TaskProjectPlanningMoveInput = {
-  destination: Exclude<TaskDestination, 'inbox'>;
+  destination: TaskDestination;
   todaySection: TaskTodaySection;
   startDate: string | null;
 };

@@ -15,20 +15,24 @@ The BathOS platform SHALL explicitly enable the installed router's supported v7 
 - **AND** the router emits no warning requesting either compatibility opt-in
 
 ### Requirement: Existing route outcomes are preserved
-Enabling router compatibility behavior SHALL preserve the existing absolute route declarations and their destinations across the platform and every registered module family.
+Router compatibility behavior SHALL preserve registered platform and module destinations while allowing explicit replacement redirects for retired module routes.
 
 #### Scenario: Platform route resolves
-- **WHEN** a user opens a registered platform route such as the launcher, account, authentication, help, or terms route
-- **THEN** the route resolves to the same platform surface as before the compatibility opt-in
+- **WHEN** a user opens a registered launcher, account, authentication, help, or terms route
+- **THEN** the route resolves to the same platform surface as before
 
 #### Scenario: Module route resolves
-- **WHEN** a user opens a registered Budget, Drawers, Garage, Snake, Wardrobe, or Tasks route
-- **THEN** the route resolves to the same module surface as before the compatibility opt-in
-
-#### Scenario: Redirect route resolves
-- **WHEN** a user opens a registered module-root or legacy redirect route
-- **THEN** the router preserves the existing destination and replacement behavior
+- **WHEN** a user opens a registered Budget, Drawers, Garage, Snake, Wardrobe, or current Tasks route
+- **THEN** the route resolves to its registered module surface
 
 #### Scenario: Unknown route resolves
 - **WHEN** a user opens a path that does not match a registered platform, module, or redirect route
-- **THEN** the terminal not-found behavior remains unchanged
+- **THEN** terminal not-found behavior remains unchanged
+
+#### Scenario: Retired Tasks route resolves
+- **WHEN** a user opens `/tasks/inbox`, `/tasks/logbook`, or `/tasks/trash`
+- **THEN** the router replaces it with `/tasks/today` or `/tasks/done` without rendering a retired surface or adding a browser-history entry
+
+#### Scenario: Module root resolves
+- **WHEN** a user opens the neutral `/tasks` route
+- **THEN** the router replaces it with `/tasks/today`

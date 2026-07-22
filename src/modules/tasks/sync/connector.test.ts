@@ -15,7 +15,7 @@ import {
 
 const detectedAt = '2026-07-20T05:00:00.000Z';
 
-function taskInsertEntry(destination: 'inbox' | 'today' | 'anytime' | 'someday' = 'inbox') {
+function taskInsertEntry(destination: 'anytime' | 'someday' = 'anytime') {
   return new CrudEntry(1, UpdateType.PUT, 'tasks_todos', 'task-a', 1, {
     owner_id: 'owner-a',
     title: 'Offline task',
@@ -23,7 +23,7 @@ function taskInsertEntry(destination: 'inbox' | 'today' | 'anytime' | 'someday' 
     lifecycle: 'open',
     disposition: 'present',
     destination,
-    today_section: 'daytime',
+    today_section: destination === 'someday' ? 'none' : 'later',
     actionability: 'actionable',
     order_key: 'a0',
     start_date: null,
@@ -224,7 +224,7 @@ describe('task sync connector', () => {
         completed_at: null,
         canceled_at: null,
         deleted_at: null,
-        today_section: 'daytime',
+        today_section: 'later',
         actionability: 'actionable',
         start_date: null,
         deadline: null,

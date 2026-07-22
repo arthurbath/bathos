@@ -11,12 +11,12 @@ export function normalizeTaskEditorPlanningPatch(
     && patch.start_date !== undefined
     && patch.start_date !== null) {
     normalizedPatch.destination = 'anytime';
-    normalizedPatch.today_section = 'daytime';
+    normalizedPatch.today_section = 'none';
   }
-  if (task.today_section === 'evening'
+  if (task.today_section !== 'none'
     && patch.start_date !== undefined
     && patch.start_date !== planningDate) {
-    normalizedPatch.today_section = 'daytime';
+    normalizedPatch.today_section = 'none';
   }
   return normalizedPatch;
 }

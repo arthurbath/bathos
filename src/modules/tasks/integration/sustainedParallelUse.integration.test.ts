@@ -97,8 +97,8 @@ describe.skipIf(!integrationEnabled)('Tasks sustained parallel-use integration',
         idempotency_key: captureId,
         title: `Sustained Synthetic Task ${cycles}`,
         notes: `Synthetic endurance cycle ${cycles}`,
-        destination: 'inbox' as const,
-        today_section: 'daytime' as const,
+        destination: 'anytime' as const,
+        today_section: 'later' as const,
         entry_channel: 'raycast' as const,
       };
       const captureResults = await Promise.all([

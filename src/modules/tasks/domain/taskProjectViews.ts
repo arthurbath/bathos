@@ -1,8 +1,8 @@
 import { compareTaskOrder } from '@/modules/tasks/domain/taskOrder';
 import type { TaskDestination, TaskProject } from '@/modules/tasks/types/tasks';
 
-type TaskProjectListView = TaskDestination | 'upcoming' | 'logbook' | 'trash';
-type TodayProjectSection = 'unfinished' | 'daytime' | 'evening';
+type TaskProjectListView = TaskDestination | 'today' | 'upcoming' | 'done';
+type TodayProjectSection = 'now' | 'next' | 'later';
 
 export function deriveTaskViewProjects(
   projects: readonly TaskProject[],
@@ -17,12 +17,9 @@ export function deriveTaskViewProjects(
 
 export function getTodayProjectSection(
   project: TaskProject,
-  planningDate: string,
+  _planningDate: string,
 ): TodayProjectSection {
-  if (project.start_date !== null && project.start_date < planningDate) {
-    return 'unfinished';
-  }
-  return project.today_section;
+  return project.today_section === 'none' ? 'later' : project.today_section;
 }
 
 export function projectPlanningOrderSection(
@@ -45,10 +42,10 @@ function projectIsVisible(
   view: TaskProjectListView,
   planningDate: string,
 ): boolean {
-  if (project.owner_id !== ownerId || view === 'inbox' || view === 'trash') {
+  if (project.owner_id !== ownerId) {
     return false;
   }
-  if (view === 'logbook') {
+  if (view === 'done') {
     return project.disposition === 'present' && project.lifecycle !== 'open';
   }
   if (view === 'upcoming') {
@@ -57,10 +54,17 @@ function projectIsVisible(
       && project.start_date !== null
       && project.start_date > planningDate;
   }
+  if (view === 'today') {
+    return project.destination === 'anytime'
+      && project.today_section !== 'none'
+      && project.lifecycle === 'open'
+      && project.disposition === 'present'
+      && (project.start_date === null || project.start_date <= planningDate);
+  }
   return project.destination === view
     && project.lifecycle === 'open'
     && project.disposition === 'present'
-    && ((view !== 'today' && view !== 'anytime')
+    && (view !== 'anytime'
       || project.start_date === null
       || project.start_date <= planningDate);
 }
@@ -71,9 +75,9 @@ function compareProjectsForView(
   view: TaskProjectListView,
   planningDate: string,
 ): number {
-  if (view === 'logbook') {
-    return (right.completed_at ?? right.canceled_at ?? '').localeCompare(
-      left.completed_at ?? left.canceled_at ?? '',
+  if (view === 'done') {
+    return (right.deleted_at ?? right.completed_at ?? right.canceled_at ?? '').localeCompare(
+      left.deleted_at ?? left.completed_at ?? left.canceled_at ?? '',
     ) || left.id.localeCompare(right.id);
   }
   if (view === 'upcoming') {
@@ -82,9 +86,9 @@ function compareProjectsForView(
   }
   if (view === 'today') {
     const ranks: Record<TodayProjectSection, number> = {
-      unfinished: 0,
-      daytime: 1,
-      evening: 2,
+      now: 0,
+      next: 1,
+      later: 2,
     };
     return ranks[getTodayProjectSection(left, planningDate)]
       - ranks[getTodayProjectSection(right, planningDate)]

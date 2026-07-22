@@ -7,17 +7,15 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  Archive,
   CalendarDays,
   CalendarRange,
   CircleDashed,
   FolderKanban,
-  Inbox,
   LayoutTemplate,
   ListTodo,
   Search,
   Settings,
-  Trash2,
+  SquareCheckBig,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -48,15 +46,13 @@ export type TaskTemporalAction = {
 };
 
 const taskSearchViews = [
-  { path: '/inbox', label: 'Inbox', icon: Inbox },
   { path: '/today', label: 'Today', icon: CalendarDays },
   { path: '/upcoming', label: 'Upcoming', icon: CalendarRange },
   { path: '/anytime', label: 'Anytime', icon: ListTodo },
   { path: '/someday', label: 'Someday', icon: CircleDashed },
-  { path: '/logbook', label: 'Logbook', icon: Archive },
   { path: '/projects', label: 'Projects', icon: FolderKanban },
   { path: '/templates', label: 'Templates', icon: LayoutTemplate },
-  { path: '/trash', label: 'Trash', icon: Trash2 },
+  { path: '/done', label: 'Done', icon: SquareCheckBig },
   { path: '/config', label: 'Config', icon: Settings },
 ] as const;
 
@@ -188,8 +184,6 @@ export function TaskSearchDialog({
               }))}
               options={[
                 ['all', 'All Placements'],
-                ['inbox', 'Inbox'],
-                ['today', 'Today'],
                 ['anytime', 'Anytime'],
                 ['someday', 'Someday'],
               ]}
@@ -352,7 +346,7 @@ export function TaskKeyboardHelpDialog({
         ['N', 'Capture a Task'],
         ['/', 'Search Tasks and Views'],
         ['?', 'Show Keyboard Help'],
-        ['G then I/T/U/A/S/L/P/R/E/C', 'Navigate to a View'],
+        ['G then T/U/A/S/P/D/E/C', 'Navigate to a View'],
         ['Command+Z', 'Undo the Last Task Change'],
       ],
     },

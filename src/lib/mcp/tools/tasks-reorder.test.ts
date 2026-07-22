@@ -194,8 +194,8 @@ function todo(id: string, orderKey: string, overrides: StoredRow = {}): StoredRo
     disposition: 'present',
     deleted_at: null,
     deletion_root_id: null,
-    destination: 'today',
-    today_section: 'daytime',
+    destination: 'anytime',
+    today_section: 'next',
     actionability: 'actionable',
     order_key: orderKey,
     hierarchy_order_key: orderKey,
@@ -232,7 +232,7 @@ function project(id: string, orderKey: string, overrides: StoredRow = {}): Store
     id, owner_id: ownerId, area_id: areaA, title: `Project ${id}`, notes: '',
     lifecycle: 'open', completed_at: null, canceled_at: null,
     disposition: 'present', deleted_at: null, deletion_root_id: null,
-    destination: 'anytime', today_section: 'daytime', start_date: null, deadline: null,
+    destination: 'anytime', today_section: 'none', start_date: null, deadline: null,
     order_key: orderKey, planning_order_key: orderKey,
     entry_channel: 'web', last_mutation_channel: 'web', last_actor_type: 'user',
     revision: 1, client_mutation_id: crypto.randomUUID(),
@@ -271,8 +271,8 @@ describe('Tasks MCP reorder tools', () => {
   it('reorders a Today to-do only within its section and preserves hierarchy order', async () => {
     const first = todo(taskA, 'a0');
     const second = todo(taskB, 'a1');
-    const evening = todo(crypto.randomUUID(), 'a0', { today_section: 'evening' });
-    const client = new FakeReorderClient({ tasks_todos: [first, second, evening] });
+    const later = todo(crypto.randomUUID(), 'a0', { today_section: 'later' });
+    const client = new FakeReorderClient({ tasks_todos: [first, second, later] });
     const result = await reorderTaskData({
       task_id: taskB,
       scope: 'planning',

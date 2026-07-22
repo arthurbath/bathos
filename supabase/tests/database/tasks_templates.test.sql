@@ -119,7 +119,7 @@ INSERT INTO public.tasks_todos (
 ) VALUES (
   '95000000-0000-4000-8000-000000000020',
   '95000000-0000-4000-8000-000000000001',
-  'Synthetic source to-do', 'Reusable source notes', 'today', 'evening',
+  'Synthetic source to-do', 'Reusable source notes', 'anytime', 'later',
   (now() AT TIME ZONE 'UTC')::date,
   (now() AT TIME ZONE 'UTC')::date + 2,
   'a0', 'waiting',
@@ -201,7 +201,7 @@ SELECT is(
         #>> '{result,root_id}'
     )::uuid
   ),
-  'today',
+  'anytime',
   'resolves same-day template planning into Today'
 );
 SELECT is(
@@ -212,7 +212,7 @@ SELECT is(
         #>> '{result,root_id}'
     )::uuid
   ),
-  'evening',
+  'later',
   'preserves the relative This Evening intent'
 );
 SELECT is(
@@ -297,7 +297,7 @@ SELECT throws_ok(
     ) VALUES (
       '95000000-0000-4000-8000-000000000026',
       '95000000-0000-4000-8000-000000000001',
-      'Spoofed template task', 'inbox', 'a1', 'template',
+      'Spoofed template task', 'anytime', 'a1', 'template',
       current_setting('test.todo_template_capture')::jsonb #>> '{template,id}',
       (current_setting('test.todo_template_capture')::jsonb #>> '{template,id}')::uuid,
       1,

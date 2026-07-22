@@ -85,8 +85,8 @@ describe.skipIf(!integrationEnabled)('Tasks multi-client convergence integration
       idempotency_key: crypto.randomUUID(),
       title: 'Captured Through Raycast',
       notes: 'One logical quick-entry request',
-      destination: 'inbox' as const,
-      today_section: 'daytime' as const,
+      destination: 'anytime' as const,
+      today_section: 'later' as const,
       entry_channel: 'raycast' as const,
     };
     const raycastResults = await Promise.all([

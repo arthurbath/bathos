@@ -1,6 +1,6 @@
 # Tasks Guide
 
-BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Things remains authoritative during this trial. Tasks does not import, modify, or replace the Things library. During an explicitly enabled, self-expiring Inbox Manager trial, each newly verified Mail task is created in Things first and then handed to BathOS Tasks as an independent parallel copy.
+BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Things remains authoritative while Tasks earns trust. Tasks does not import, modify, or replace the Things library. The approved Inbox Manager parallel proof is complete and its BathOS handoff is disabled.
 
 ## Start Here
 
@@ -14,19 +14,17 @@ BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/ta
 
 | View | Purpose |
 | --- | --- |
-| Inbox | Unprocessed captures that still need a planning decision |
-| Today | Work planned for the current day, including a separate This Evening section |
+| Today | Available Anytime work marked Now, Next, or Later |
 | Upcoming | Work with a future start date |
-| Anytime | Active work without a scheduled start date |
+| Anytime | All active work available now, including every Today task |
 | Someday | Inactive work kept for possible future attention |
-| Logbook | Completed and canceled work |
-| Trash | Recoverably deleted work |
+| Done | Completed, canceled, and recoverably deleted work retained for 30 full owner-local days |
 | Projects | Areas, projects, headings, project tasks, and checklists |
 | Templates | Reusable to-do and project structures |
 
-Inbox, Today, Upcoming, and Anytime remain directly available in the primary navigation. Open More for Someday, Projects, Templates, Logbook, Trash, and Config.
+Today, Upcoming, Anytime, and Someday remain directly available in the primary navigation. Open More for Projects, Templates, Done, and Config.
 
-Capture first, then plan. Press `N` from most Tasks views to focus the capture field or return to Inbox. New inline captures go to the current view when that view accepts direct capture. Raycast quick entry always goes to Inbox unless its command has a narrower documented destination.
+Press `N` from Today, Anytime, or Someday to focus the capture field. Today and Anytime captures default to Anytime and Today Later. Someday captures remain outside Today. Raycast capture commands also default to Anytime and Today Later.
 
 Use start dates for availability, deadlines for the last acceptable date, and reminders for a specific local time. Mark work as `Waiting` when it cannot be acted upon now. Structured webpage, file, reading-item, and Mail sources remain distinct from the task title and notes.
 
@@ -38,7 +36,7 @@ Press `?` in Tasks to open the current keyboard reference.
 | --- | --- |
 | `N` | Capture a task |
 | `/` | Search tasks and views |
-| `G`, then `I/T/U/A/S/L/P/R/E/C` | Open Inbox, Today, Upcoming, Anytime, Someday, Logbook, Projects, Trash, Templates, or Config |
+| `G`, then `T/U/A/S/P/D/E/C` | Open Today, Upcoming, Anytime, Someday, Projects, Done, Templates, or Config |
 | `Command+Z` | Undo the latest safe task change |
 | `Enter` | Edit the focused task |
 | `C` | Complete the focused task |
@@ -53,10 +51,10 @@ Press `?` in Tasks to open the current keyboard reference.
 
 The sibling Raycast project provides these authenticated commands:
 
-- `Add Task`: Add a title and optional notes to Inbox
-- `Add Page to Tasks`: Capture the active Safari or Chrome page with webpage provenance
-- `Add Finder Item to Tasks`: Capture exactly one selected file or folder with a local file reference
-- `Add to Tasks Reading List`: Create an AI-titled reading item in Today
+- `Add Task`: Add a title and optional notes to Anytime and Today Later
+- `Add Page to Tasks`: Capture the active Safari or Chrome page to Anytime and Today Later with webpage provenance
+- `Add Finder Item to Tasks`: Capture exactly one selected file or folder to Anytime and Today Later with a local file reference
+- `Add to Tasks Reading List`: Create an AI-titled reading item in Anytime and Today Later
 
 The first use of any command opens BathOS authorization in the browser. Later uses refresh the delegated token automatically. Raycast keeps its rotating token and any ambiguous pending capture in the macOS login Keychain under `garden.bath.tasks-raycast`.
 
@@ -100,8 +98,9 @@ Use Backup and Restore under Config to download a checksum-protected JSON backup
 
 - Merge restore validates the backup and adds records that do not conflict with existing stable identifiers.
 - Replace restore downloads a required pre-restore backup, asks for separate confirmation, and replaces the synchronized task graph in one server transaction.
-- Ordinary deletion is recoverable through Trash.
-- Permanent deletion is available only for supported deleted roots, requires a fresh scope preview, and requires exact confirmation.
+- Completed, canceled, and deleted work remains recoverable through Done until its retention boundary.
+- Terminal content is automatically purged at the owner-local midnight beginning its 31st day in Done. The interface does not expose routine permanent deletion.
+- Current backups use schema version 11. Supported older backups are normalized from Inbox, the former Today destination, daytime, evening, Logbook, and Trash semantics before restore.
 
 Keep periodic downloaded backups once Tasks begins holding information that would be painful to reconstruct.
 
@@ -111,7 +110,7 @@ Use Tasks alongside Things for as long as needed. There is no migration deadline
 
 - Keep important established workflows in Things while Tasks earns trust through ordinary use.
 - Do not expect edits in either application to appear in the other.
-- The currently approved Inbox Manager trial ends automatically after 24 hours or 10 accepted parallel Mail tasks, whichever occurs first. Outside an explicitly enabled trial, Inbox Manager sends Mail tasks only to Things.
+- The approved Inbox Manager proof ended with seven accepted parallel tasks, an empty failure-free outbox, and a healthy post-disable Mail run. Inbox Manager now sends Mail tasks only to Things unless a separate future trial is explicitly approved.
 - Parallel Mail handoff is creation-only. Things remains authoritative, no history is backfilled, and edits in either application do not appear in the other.
 - Report recurring friction, missed reminders, synchronization failures, or a specific desired widget or control. Those observations determine the next product slice.
 - Native Apple development remains deferred unless normal use reveals a gap that the installed web app, Web Push, Raycast, or MCP cannot serve adequately.

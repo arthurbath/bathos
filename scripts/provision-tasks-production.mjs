@@ -223,6 +223,15 @@ LIMIT 3;
   run('supabase', ['db', 'query', '--linked', '--file', runsPath]);
 }
 
+function verifySyncDatabase(tempDirectory) {
+  const verifyPath = join(tempDirectory, 'tasks-powersync-verify.sql');
+  writePrivate(
+    verifyPath,
+    withoutPsqlMetaCommands(join(repositoryRoot, 'deploy/tasks-powersync/verify.sql')),
+  );
+  run('supabase', ['db', 'query', '--linked', '--file', verifyPath]);
+}
+
 function runSyntheticTopology(powerSyncUrl) {
   let parsedUrl;
   try {
@@ -267,13 +276,20 @@ function runSyntheticTopology(powerSyncUrl) {
 }
 
 const command = process.argv[2];
-if (!['sync-database', 'reminders', 'verify-reminders', 'synthetic-topology'].includes(command)) {
-  fail('Usage: node scripts/provision-tasks-production.mjs <sync-database|reminders|verify-reminders|synthetic-topology> [PowerSync URL]');
+if (![
+  'sync-database',
+  'verify-sync-database',
+  'reminders',
+  'verify-reminders',
+  'synthetic-topology',
+].includes(command)) {
+  fail('Usage: node scripts/provision-tasks-production.mjs <sync-database|verify-sync-database|reminders|verify-reminders|synthetic-topology> [PowerSync URL]');
 }
 
 const tempDirectory = mkdtempSync(join(tmpdir(), 'bathos-tasks-production-'));
 try {
   if (command === 'sync-database') provisionSyncDatabase(tempDirectory);
+  if (command === 'verify-sync-database') verifySyncDatabase(tempDirectory);
   if (command === 'reminders') provisionReminders(tempDirectory);
   if (command === 'verify-reminders') verifyReminders(tempDirectory);
   if (command === 'synthetic-topology') runSyntheticTopology(process.argv[3]);

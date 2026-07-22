@@ -1,8 +1,8 @@
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import type { TaskDisposition, TaskLifecycle } from '@/modules/tasks/domain/taskState';
 
-export const taskDestinations = ['inbox', 'today', 'anytime', 'someday'] as const;
-export const taskTodaySections = ['daytime', 'evening'] as const;
+export const taskDestinations = ['anytime', 'someday'] as const;
+export const taskTodaySections = ['none', 'now', 'next', 'later'] as const;
 export const taskActionabilities = ['actionable', 'waiting'] as const;
 export const taskEntryChannels = [
   'web',
@@ -175,7 +175,7 @@ type RefinedHierarchyFields = {
 
 type RefinedProjectFields = RefinedHierarchyFields & {
   lifecycle: TaskLifecycle;
-  destination: Exclude<TaskDestination, 'inbox'>;
+  destination: TaskDestination;
   today_section: TaskTodaySection;
 };
 

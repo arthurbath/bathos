@@ -152,6 +152,24 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
   if (!isRecord(parsed)) {
     throw new InvalidTaskHistoryError('Task history contains an invalid state snapshot');
   }
+  const legacyDestination = requireText(parsed.destination, 'destination');
+  const destination = legacyDestination === 'inbox' || legacyDestination === 'today'
+    ? 'anytime'
+    : requireEnum(legacyDestination, taskDestinations, 'destination') as TaskDestination;
+  const legacyTodaySection = parsed.today_section === undefined
+    ? 'daytime'
+    : requireText(parsed.today_section, 'Today section');
+  const todaySection = legacyDestination === 'inbox'
+    ? 'later'
+    : legacyDestination === 'today'
+      ? legacyTodaySection === 'evening' ? 'later' : 'next'
+      : legacyTodaySection === 'daytime' || legacyTodaySection === 'evening'
+        ? 'none'
+        : requireEnum(
+          legacyTodaySection,
+          taskTodaySections,
+          'Today section',
+        ) as TaskTodaySection;
 
   return {
     title: requireText(parsed.title, 'title'),
@@ -169,10 +187,8 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
     disposition: requireEnum(parsed.disposition, ['present', 'deleted'] as const, 'disposition'),
     deleted_at: optionalText(parsed.deleted_at, 'deleted_at'),
     deletion_root_id: optionalTextOrMissing(parsed.deletion_root_id, 'deletion_root_id'),
-    destination: requireEnum(parsed.destination, taskDestinations, 'destination') as TaskDestination,
-    today_section: parsed.today_section === undefined
-      ? 'daytime'
-      : requireEnum(parsed.today_section, taskTodaySections, 'Today section') as TaskTodaySection,
+    destination,
+    today_section: todaySection,
     order_key: requireText(parsed.order_key, 'order_key'),
     area_id: optionalTextOrMissing(parsed.area_id, 'area_id'),
     project_id: optionalTextOrMissing(parsed.project_id, 'project_id'),

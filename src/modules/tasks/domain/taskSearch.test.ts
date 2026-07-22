@@ -61,7 +61,8 @@ function task(overrides: Partial<TaskTodo> = {}): TaskTodo {
   return taskTodoFixture({
     title: 'Synthetic task',
     notes: 'Synthetic notes',
-    destination: 'today',
+    destination: 'anytime',
+    today_section: 'next',
     start_date: '2026-07-20',
     ...overrides,
   });

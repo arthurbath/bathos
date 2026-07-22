@@ -77,13 +77,13 @@ INSERT INTO public.tasks_todos (
   (
     '98000000-0000-4000-8000-000000000020',
     '98000000-0000-4000-8000-000000000001',
-    'First synthetic push task', 'today', 'a0',
+    'First synthetic push task', 'anytime', 'a0',
     '98000000-0000-4000-8000-000000000021'
   ),
   (
     '98000000-0000-4000-8000-000000000022',
     '98000000-0000-4000-8000-000000000001',
-    'Second synthetic push task', 'today', 'a1',
+    'Second synthetic push task', 'anytime', 'a1',
     '98000000-0000-4000-8000-000000000023'
   );
 

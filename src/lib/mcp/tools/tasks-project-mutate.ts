@@ -11,8 +11,8 @@ import {
 import { uuidSchema } from '../resource-utils';
 import { planningDateInTimeZone } from './tasks-read';
 
-const destinationSchema = z.enum(['today', 'anytime', 'someday']);
-const todaySectionSchema = z.enum(['daytime', 'evening']);
+const destinationSchema = z.enum(['anytime', 'someday']);
+const todaySectionSchema = z.enum(['none', 'now', 'next', 'later']);
 const calendarDateSchema = z.string().refine(isTaskCalendarDate, {
   message: 'Expected a valid ISO calendar date.',
 });
@@ -203,14 +203,15 @@ function validatePlanningPlacement(
   startDate: string | null,
   planningDate: string,
 ): void {
-  if (todaySection === 'evening' && (destination !== 'today' || startDate !== planningDate)) {
-    throw new Error('This Evening requires Today and the current planning date.');
+  if (destination === 'someday' && todaySection !== 'none') {
+    throw new Error('Someday projects cannot appear in Today.');
   }
   if (destination === 'someday' && startDate !== null) {
     throw new Error('Someday projects cannot retain a start date.');
   }
-  if (destination === 'today' && startDate === null) {
-    throw new Error('Today projects require a start date.');
+  if (destination === 'anytime' && todaySection !== 'none'
+    && startDate !== null && startDate > planningDate) {
+    throw new Error('Future projects cannot appear in Today.');
   }
 }
 
@@ -282,14 +283,8 @@ async function movePatch(
   if (planningRequested) {
     const destination = input.destination!;
     const planningDate = await planningDateForOwner(auth);
-    const todaySection = destination === 'today' ? input.today_section ?? 'daytime' : 'daytime';
-    let startDate = input.start_date ?? null;
-    if (destination === 'today') {
-      if (startDate !== null && startDate !== planningDate) {
-        throw new Error(`Today projects must use the owner's current planning date (${planningDate}).`);
-      }
-      startDate = planningDate;
-    }
+    const todaySection = destination === 'someday' ? 'none' : input.today_section ?? 'none';
+    const startDate = input.start_date ?? null;
     validatePlanningPlacement(destination, todaySection, startDate, planningDate);
     assertTaskCalendarRange(startDate, current.deadline);
     if (destination === current.destination
@@ -334,12 +329,9 @@ async function schedulePatch(
   let todaySection = current.today_section as ProjectTodaySection;
   if (destination === 'someday' && startDate !== null) {
     destination = 'anytime';
-    todaySection = 'daytime';
+    todaySection = 'none';
   }
-  if (destination === 'today' && startDate === null) {
-    throw new Error('Today projects require a start date.');
-  }
-  if (todaySection === 'evening' && startDate !== planningDate) todaySection = 'daytime';
+  if (startDate !== null && startDate > planningDate) todaySection = 'none';
   validatePlanningPlacement(destination, todaySection, startDate, planningDate);
 
   const patch: TaskProjectPatch = { start_date: startDate, deadline };
@@ -376,12 +368,10 @@ function expectedAfterForRetry(
     }
     if (input.destination !== undefined) {
       expected.destination = input.destination;
-      expected.today_section = input.destination === 'today'
-        ? input.today_section ?? 'daytime'
-        : 'daytime';
-      expected.start_date = input.destination === 'today'
-        ? after.start_date
-        : input.start_date ?? null;
+      expected.today_section = input.destination === 'someday'
+        ? 'none'
+        : input.today_section ?? 'none';
+      expected.start_date = input.start_date ?? null;
       ignored.add('planning_order_key');
     }
     return { expected, ignored };
@@ -392,11 +382,11 @@ function expectedAfterForRetry(
   if (hasOwn(input, 'deadline')) expected.deadline = input.deadline ?? null;
   if (before.destination === 'someday' && expected.start_date !== null) {
     expected.destination = 'anytime';
-    expected.today_section = 'daytime';
+    expected.today_section = 'none';
     ignored.add('planning_order_key');
   }
-  if (before.today_section === 'evening' && after.today_section === 'daytime') {
-    expected.today_section = 'daytime';
+  if (before.today_section !== 'none' && after.today_section === 'none') {
+    expected.today_section = 'none';
   }
   return { expected, ignored };
 }

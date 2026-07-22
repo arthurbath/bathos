@@ -18,7 +18,7 @@ const { mockToast } = vi.hoisted(() => ({ mockToast: vi.fn() }));
 const mockTaskList = vi.fn();
 const mockTaskSearch = vi.fn();
 const mockTaskHierarchy = vi.fn();
-const mockTaskHierarchyTrash = vi.fn();
+const mockTaskDeletedHierarchyRoots = vi.fn();
 const mockTaskReminders = vi.fn();
 const mockTaskUndo = vi.fn();
 const mockPrepareForSignOut = vi.fn();
@@ -31,8 +31,8 @@ vi.mock('@/hooks/use-toast', () => ({
 
 vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
   useTaskList: (...args: unknown[]) => mockTaskList(...args),
-  getTodayTaskSection: (value: { start_date: string | null; today_section: string }, date: string) => (
-    value.start_date !== null && value.start_date < date ? 'unfinished' : value.today_section
+  getTodayTaskSection: (value: { today_section: string }) => (
+    value.today_section === 'none' ? 'later' : value.today_section
   ),
 }));
 
@@ -44,8 +44,8 @@ vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({
   useTaskHierarchy: (...args: unknown[]) => mockTaskHierarchy(...args),
 }));
 
-vi.mock('@/modules/tasks/hooks/useTaskHierarchyTrash', () => ({
-  useTaskHierarchyTrash: (...args: unknown[]) => mockTaskHierarchyTrash(...args),
+vi.mock('@/modules/tasks/hooks/useTaskDeletedHierarchyRoots', () => ({
+  useTaskDeletedHierarchyRoots: (...args: unknown[]) => mockTaskDeletedHierarchyRoots(...args),
 }));
 
 vi.mock('@/modules/tasks/hooks/useTaskReminders', () => ({
@@ -212,13 +212,15 @@ const task = taskTodoFixture({
   id: 'task-a',
   title: 'Existing task',
   notes: 'Existing notes',
-  destination: 'today',
+  destination: 'anytime',
+  today_section: 'next',
 });
 
 const planningProject = taskProjectFixture({
   id: 'project-plan',
   title: 'Plan the launch',
-  destination: 'today',
+  destination: 'anytime',
+  today_section: 'next',
   start_date: '2026-07-20',
   client_mutation_id: 'project-plan-mutation',
 });
@@ -361,7 +363,7 @@ describe('TasksShell', () => {
       reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
       transitionProject: vi.fn().mockResolvedValue(undefined),
     });
-    mockTaskHierarchyTrash.mockReset().mockReturnValue({
+    mockTaskDeletedHierarchyRoots.mockReset().mockReturnValue({
       roots: [],
       loading: false,
       error: null,
@@ -452,7 +454,8 @@ describe('TasksShell', () => {
       ...task,
       id: 'task-mail',
       title: 'Reply to the architect',
-      destination: 'inbox' as const,
+      destination: 'anytime' as const,
+      today_section: 'later' as const,
       source_kind: 'mail_message' as const,
       source_title: 'Project update',
       actionability: 'waiting' as const,
@@ -685,7 +688,7 @@ describe('TasksShell', () => {
       });
       expect(taskList.moveTask).toHaveBeenCalledWith('task-a', {
         destination: 'someday',
-        todaySection: 'daytime',
+        todaySection: 'none',
         startDate: null,
       });
     } finally {
@@ -731,7 +734,7 @@ describe('TasksShell', () => {
 
       expect(taskList.moveTask).toHaveBeenCalledWith('task-a', {
         destination: 'someday',
-        todaySection: 'daytime',
+        todaySection: 'none',
         startDate: null,
       });
       expect(document.activeElement).toBe(
@@ -832,14 +835,14 @@ describe('TasksShell', () => {
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
       expect(dialog.textContent).toContain('Plan Selected Tasks');
       expect(dialog.textContent).toContain('2 Tasks');
-      const evening = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
-        .find(({ textContent }) => textContent === 'Move to This Evening');
-      await act(async () => evening?.click());
+      const later = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
+        .find(({ textContent }) => textContent === 'Move to Today Later');
+      await act(async () => later?.click());
 
       expect(taskList.moveTasks).toHaveBeenCalledWith(['task-a', 'task-b'], {
-        destination: 'today',
-        todaySection: 'evening',
-        startDate: '2026-07-20',
+        destination: 'anytime',
+        todaySection: 'later',
+        startDate: null,
       });
       expect(container.querySelector('[aria-label="Add a Task"]')).toBeTruthy();
       await act(async () => {
@@ -892,8 +895,8 @@ describe('TasksShell', () => {
       });
 
       expect(taskList.moveTasks).toHaveBeenCalledWith(['task-a', 'task-b'], {
-        destination: 'today',
-        todaySection: 'daytime',
+        destination: 'anytime',
+        todaySection: 'none',
         startDate: '2026-07-21',
       });
       expect(dialog.isConnected).toBe(true);
@@ -963,7 +966,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('uses exactly four direct mobile destinations plus six named overflow destinations', () => {
+  it('uses four direct mobile destinations plus four named overflow destinations', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const today = renderShell('/tasks/today');
 
@@ -972,10 +975,10 @@ describe('TasksShell', () => {
         '[data-testid="mobile-nav"] a',
       ));
       expect(mobileLinks.slice(0, 4).map((link) => link.textContent)).toEqual([
-        'Inbox', 'Today', 'Upcoming', 'Anytime',
+        'Today', 'Upcoming', 'Anytime', 'Someday',
       ]);
       expect(mobileLinks.slice(4).map((link) => link.textContent)).toEqual([
-        'Someday', 'Projects', 'Templates', 'Logbook', 'Trash', 'Config',
+        'Projects', 'Templates', 'Done', 'Config',
       ]);
     } finally {
       cleanup(today.root, today.container);
@@ -1110,23 +1113,22 @@ describe('TasksShell', () => {
     }
   });
 
-  it('processes an Inbox task into a chosen planning destination', async () => {
-    const inboxTask = { ...task, destination: 'inbox' as const };
-    const taskList = { ...defaultTaskList(), tasks: [inboxTask] };
+  it('redirects the retired Inbox route to Today and removes Today membership explicitly', async () => {
+    const taskList = { ...defaultTaskList(), tasks: [task] };
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell('/tasks/inbox');
 
     try {
       await openTaskMenuSurface(container, 'Existing task', 'When...');
       const moveAnytime = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
-        .find((item) => item.textContent === 'Move to Anytime');
+        .find((item) => item.textContent === 'Remove from Today');
       await act(async () => {
         moveAnytime?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
 
       expect(taskList.moveTask).toHaveBeenCalledWith('task-a', {
         destination: 'anytime',
-        todaySection: 'daytime',
+        todaySection: 'none',
         startDate: null,
       });
     } finally {
@@ -1721,13 +1723,13 @@ describe('TasksShell', () => {
     }
   });
 
-  it('moves an evening task back to daytime when its Today date is cleared', async () => {
-    const eveningTask = {
+  it('removes Later membership when its Today planning date is cleared', async () => {
+    const laterTask = {
       ...task,
-      today_section: 'evening' as const,
+      today_section: 'later' as const,
       start_date: '2026-07-20',
     };
-    const taskList = { ...defaultTaskList(), tasks: [eveningTask] };
+    const taskList = { ...defaultTaskList(), tasks: [laterTask] };
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell();
 
@@ -1750,7 +1752,7 @@ describe('TasksShell', () => {
 
       expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
         start_date: null,
-        today_section: 'daytime',
+        today_section: 'none',
       });
     } finally {
       cleanup(root, container);
@@ -1821,7 +1823,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('shows deleted tasks in Trash and restores them without exposing task capture', async () => {
+  it('shows deleted tasks in Done and restores them without exposing task capture', async () => {
     const deletedTask = {
       ...task,
       disposition: 'deleted' as const,
@@ -1833,7 +1835,7 @@ describe('TasksShell', () => {
       tasks: [deletedTask],
     };
     mockTaskList.mockReturnValue(taskList);
-    const { container, root } = renderShell('/tasks/trash');
+    const { container, root } = renderShell('/tasks/done');
 
     try {
       expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
@@ -1844,7 +1846,7 @@ describe('TasksShell', () => {
         restore?.click();
       });
 
-      expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'trash');
+      expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'done');
       expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'restore');
       expect(container.querySelector('button[aria-label="Permanently Delete Existing task"]'))
         .toBeNull();
@@ -1853,7 +1855,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('restores independently deleted checklist items from Trash', async () => {
+  it('restores independently deleted checklist items from Done', async () => {
     mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [] });
     const deletedChecklistItem = {
       id: 'checklist-a',
@@ -1862,13 +1864,13 @@ describe('TasksShell', () => {
       root_type: 'checklist_item' as const,
     };
     const restore = vi.fn().mockResolvedValue(undefined);
-    mockTaskHierarchyTrash.mockReturnValue({
+    mockTaskDeletedHierarchyRoots.mockReturnValue({
       roots: [deletedChecklistItem],
       loading: false,
       error: null,
       restore,
     });
-    const { container, root } = renderShell('/tasks/trash');
+    const { container, root } = renderShell('/tasks/done');
 
     try {
       expect(container.textContent).toContain('Deleted Checklist Item');
@@ -1883,7 +1885,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('exposes server-authoritative permanent deletion only when connected and synchronized', () => {
+  it('never exposes user-triggered permanent deletion from Done', () => {
     const deletedTask = {
       ...task,
       disposition: 'deleted' as const,
@@ -1896,12 +1898,12 @@ describe('TasksShell', () => {
       mode: 'connected',
       syncState: 'connected',
     });
-    const { container, root } = renderShell('/tasks/trash');
+    const { container, root } = renderShell('/tasks/done');
 
     try {
       expect(container.querySelector<HTMLButtonElement>(
         'button[aria-label="Permanently Delete Existing task"]',
-      )).toBeEnabled();
+      )).toBeNull();
     } finally {
       cleanup(root, container);
     }
@@ -1912,11 +1914,11 @@ describe('TasksShell', () => {
       syncState: 'connected',
       pendingUploadCount: 1,
     });
-    const pendingRender = renderShell('/tasks/trash');
+    const pendingRender = renderShell('/tasks/done');
     try {
       expect(pendingRender.container.querySelector<HTMLButtonElement>(
         'button[aria-label="Permanently Delete Existing task"]',
-      )).toBeDisabled();
+      )).toBeNull();
     } finally {
       cleanup(pendingRender.root, pendingRender.container);
     }
@@ -1933,14 +1935,14 @@ describe('TasksShell', () => {
       expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'upcoming');
       await openTaskMenuSurface(container, 'Existing task', 'When...');
       const makeAvailable = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
-        .find((item) => item.textContent === 'Make Available Today');
+        .find((item) => item.textContent === 'Move to Today Later');
       await act(async () => {
         makeAvailable?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
       expect(taskList.moveTask).toHaveBeenCalledWith('task-a', {
-        destination: 'today',
-        todaySection: 'daytime',
-        startDate: '2026-07-20',
+        destination: 'anytime',
+        todaySection: 'later',
+        startDate: null,
       });
     } finally {
       cleanup(root, container);
@@ -1966,7 +1968,7 @@ describe('TasksShell', () => {
       });
       expect(taskList.moveTask).toHaveBeenCalledWith('task-a', {
         destination: 'someday',
-        todaySection: 'daytime',
+        todaySection: 'none',
         startDate: null,
       });
     } finally {
@@ -1975,7 +1977,9 @@ describe('TasksShell', () => {
   });
 
   it('captures inactive work in Someday and activates it when a start date is assigned', () => {
-    const somedayTask = { ...task, destination: 'someday' as const };
+    const somedayTask = {
+      ...task, destination: 'someday' as const, today_section: 'none' as const,
+    };
     const taskList = { ...defaultTaskList(), tasks: [somedayTask] };
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell('/tasks/someday');
@@ -1990,7 +1994,7 @@ describe('TasksShell', () => {
         '2026-07-20',
       )).toEqual({
         destination: 'anytime',
-        today_section: 'daytime',
+        today_section: 'none',
         start_date: '2026-07-24',
       });
     } finally {
@@ -1998,7 +2002,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('shows terminal work in Logbook and reopens it without exposing task capture', async () => {
+  it('shows terminal work in Done and reopens it without exposing task capture', async () => {
     const completedTask = {
       ...task,
       lifecycle: 'completed' as const,
@@ -2011,11 +2015,11 @@ describe('TasksShell', () => {
       tasks: [completedTask],
     };
     mockTaskList.mockReturnValue(taskList);
-    const { container, root } = renderShell('/tasks/logbook');
+    const { container, root } = renderShell('/tasks/done');
 
     try {
       expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
-      expect(container.querySelector('section[aria-label="Logbook Tasks"]')).toBeTruthy();
+      expect(container.querySelector('section[aria-label="Done Tasks"]')).toBeTruthy();
       expect(container.querySelector<HTMLAnchorElement>(
         'a[aria-label="Open Mail Message for Existing task"]',
       )?.getAttribute('href')).toBe('message://synthetic-logbook-message');
@@ -2026,49 +2030,51 @@ describe('TasksShell', () => {
         reopen?.click();
       });
 
-      expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'logbook');
+      expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'done');
       expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'reopen');
     } finally {
       cleanup(root, container);
     }
   });
 
-  it('renders Unfinished, Today, and This Evening as distinct sections and reschedules carryover', async () => {
-    const unfinishedTask = {
+  it('renders Now, Next, and Later as distinct Today sections and moves between them', async () => {
+    const nowTask = {
       ...task,
-      id: 'task-unfinished',
-      title: 'Carryover task',
+      id: 'task-now',
+      title: 'Now task',
+      today_section: 'now' as const,
       start_date: '2026-07-19',
     };
-    const eveningTask = {
+    const laterTask = {
       ...task,
-      id: 'task-evening',
-      title: 'Evening task',
+      id: 'task-later',
+      title: 'Later task',
       start_date: '2026-07-20',
-      today_section: 'evening' as const,
+      today_section: 'later' as const,
     };
     const taskList = {
       ...defaultTaskList(),
-      tasks: [unfinishedTask, { ...task, start_date: '2026-07-20' }, eveningTask],
+      tasks: [nowTask, { ...task, start_date: '2026-07-20' }, laterTask],
     };
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell('/tasks/today');
 
     try {
-      expect(container.querySelector('#tasks-unfinished-heading')?.textContent).toContain('Unfinished (1)');
-      expect(container.querySelector('#tasks-daytime-heading')?.textContent).toContain('Today (1)');
-      expect(container.querySelector('#tasks-evening-heading')?.textContent).toContain('This Evening (1)');
+      expect(container.textContent).toContain('Now task');
+      expect(container.querySelector('#tasks-now-heading')?.textContent).toContain('Now (1)');
+      expect(container.querySelector('#tasks-next-heading')?.textContent).toContain('Next (1)');
+      expect(container.querySelector('#tasks-later-heading')?.textContent).toContain('Later (1)');
 
-      await openTaskMenuSurface(container, 'Carryover task', 'When...');
+      await openTaskMenuSurface(container, 'Now task', 'When...');
       const moveEvening = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
-        .find((item) => item.textContent === 'Move to This Evening');
+        .find((item) => item.textContent === 'Move to Today Later');
       await act(async () => {
         moveEvening?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
-      expect(taskList.moveTask).toHaveBeenCalledWith('task-unfinished', {
-        destination: 'today',
-        todaySection: 'evening',
-        startDate: '2026-07-20',
+      expect(taskList.moveTask).toHaveBeenCalledWith('task-now', {
+        destination: 'anytime',
+        todaySection: 'later',
+        startDate: null,
       });
     } finally {
       cleanup(root, container);
@@ -2110,8 +2116,8 @@ describe('TasksShell', () => {
         tomorrow?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
       expect(hierarchy.moveProjectInPlanning).toHaveBeenCalledWith('project-plan', {
-        destination: 'today',
-        todaySection: 'daytime',
+        destination: 'anytime',
+        todaySection: 'none',
         startDate: '2026-07-21',
       });
       expect(taskList.moveTask).not.toHaveBeenCalled();
@@ -2120,7 +2126,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('renders terminal projects in Logbook and reopens them through hierarchy operations', async () => {
+  it('renders terminal projects in Done and reopens them through hierarchy operations', async () => {
     const completedProject = {
       ...planningProject,
       lifecycle: 'completed' as const,
@@ -2139,7 +2145,7 @@ describe('TasksShell', () => {
     };
     mockTaskList.mockReturnValue(taskList);
     mockTaskHierarchy.mockReturnValue(hierarchy);
-    const { container, root } = renderShell('/tasks/logbook');
+    const { container, root } = renderShell('/tasks/done');
 
     try {
       expect(container.textContent).toContain('Completed');

@@ -23,7 +23,8 @@ vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
 const originalTask: TaskTodo = taskTodoFixture({
   id: 'task-a',
   title: 'Original title',
-  destination: 'today',
+  destination: 'anytime',
+  today_section: 'next',
 });
 
 let latest: ReturnType<typeof useTaskList>;
@@ -146,7 +147,7 @@ describe('useTaskList optimistic display', () => {
   });
 
   it('orders deleted tasks newest first and removes a restored task immediately', async () => {
-    harnessView = 'trash';
+    harnessView = 'done';
     const olderDeletedTask = {
       ...originalTask,
       id: 'task-older',
@@ -198,8 +199,8 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
-  it('orders Logbook by terminal time and removes a reopened task immediately', async () => {
-    harnessView = 'logbook';
+  it('orders Done by terminal time and removes a reopened task immediately', async () => {
+    harnessView = 'done';
     const olderCompletedTask = {
       ...originalTask,
       id: 'task-completed',
@@ -286,7 +287,7 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
-  it('assigns the canonical planning date when capturing directly into Today', async () => {
+  it('captures directly into Today as Anytime Later without a start date', async () => {
     const repository = {
       createTask: vi.fn().mockResolvedValue(originalTask),
       updateTask: vi.fn(),
@@ -303,18 +304,21 @@ describe('useTaskList optimistic display', () => {
       expect(repository.createTask).toHaveBeenCalledWith({
         ownerId: 'owner-a',
         title: 'Today capture',
-        destination: 'today',
-        startDate: latest.planningDate,
+        destination: 'anytime',
+        todaySection: 'later',
+        startDate: null,
       });
     } finally {
       cleanup(root, container);
     }
   });
 
-  it('captures directly into Inbox without scheduling the task', async () => {
-    harnessView = 'inbox';
+  it('captures directly into Someday without Today membership', async () => {
+    harnessView = 'someday';
     const repository = {
-      createTask: vi.fn().mockResolvedValue({ ...originalTask, destination: 'inbox' }),
+      createTask: vi.fn().mockResolvedValue({
+        ...originalTask, destination: 'someday', today_section: 'none',
+      }),
       updateTask: vi.fn(),
       moveTask: vi.fn(),
       transitionTask: vi.fn(),
@@ -324,12 +328,13 @@ describe('useTaskList optimistic display', () => {
 
     try {
       await act(async () => {
-        await latest.createTask('Inbox capture');
+        await latest.createTask('Someday capture');
       });
       expect(repository.createTask).toHaveBeenCalledWith({
         ownerId: 'owner-a',
-        title: 'Inbox capture',
-        destination: 'inbox',
+        title: 'Someday capture',
+        destination: 'someday',
+        todaySection: 'none',
         startDate: null,
       });
     } finally {
@@ -366,7 +371,7 @@ describe('useTaskList optimistic display', () => {
     try {
       expect(latest.tasks.map((item) => item.id)).toEqual(['task-a']);
       expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain(
-        "? NOT IN ('today', 'anytime')",
+        "destination = ?",
       );
 
       await act(async () => {
@@ -376,6 +381,7 @@ describe('useTaskList optimistic display', () => {
         ownerId: 'owner-a',
         title: 'Anytime capture',
         destination: 'anytime',
+        todaySection: 'later',
         startDate: null,
       });
 
@@ -384,7 +390,7 @@ describe('useTaskList optimistic display', () => {
       rerender(root);
       expect(latest.tasks.map((item) => item.id)).toEqual(['task-future']);
       expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain(
-        "destination IN ('today', 'anytime')",
+        "destination = 'anytime'",
       );
     } finally {
       cleanup(root, container);
@@ -393,7 +399,9 @@ describe('useTaskList optimistic display', () => {
 
   it('removes a Someday task immediately when assigning a start date activates it', async () => {
     harnessView = 'someday';
-    const somedayTask = { ...originalTask, destination: 'someday' as const };
+    const somedayTask = {
+      ...originalTask, destination: 'someday' as const, today_section: 'none' as const,
+    };
     queryData = [somedayTask];
     const activatedTask = {
       ...somedayTask,
@@ -416,7 +424,7 @@ describe('useTaskList optimistic display', () => {
       act(() => {
         updatePromise = latest.updateTask('task-a', {
           destination: 'anytime',
-          today_section: 'daytime',
+          today_section: 'none',
           start_date: '2099-01-02',
         });
       });
@@ -430,33 +438,34 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
-  it('groups unfinished, daytime, and evening work while reordering only within a section', async () => {
-    const unfinished = {
+  it('groups Now, Next, and Later work while reordering only within a section', async () => {
+    const now = {
       ...originalTask,
-      id: 'task-unfinished',
+      id: 'task-now',
+      today_section: 'now' as const,
       start_date: '2000-01-01',
       order_key: 'a0',
     };
-    const daytimeFirst = {
+    const nextFirst = {
       ...originalTask,
-      id: 'task-day-first',
+      id: 'task-next-first',
       start_date: null,
       order_key: 'a0',
     };
-    const daytimeSecond = {
+    const nextSecond = {
       ...originalTask,
-      id: 'task-day-second',
+      id: 'task-next-second',
       start_date: null,
       order_key: 'a1',
     };
-    const evening = {
+    const later = {
       ...originalTask,
-      id: 'task-evening',
-      today_section: 'evening' as const,
+      id: 'task-later',
+      today_section: 'later' as const,
       start_date: null,
       order_key: 'a0',
     };
-    queryData = [evening, daytimeSecond, unfinished, daytimeFirst];
+    queryData = [later, nextSecond, now, nextFirst];
     const repository = {
       createTask: vi.fn(),
       updateTask: vi.fn().mockImplementation(async (_owner: string, id: string, patch: object) => ({
@@ -473,27 +482,27 @@ describe('useTaskList optimistic display', () => {
 
     try {
       expect(latest.tasks.map((task) => task.id)).toEqual([
-        'task-unfinished',
-        'task-day-first',
-        'task-day-second',
-        'task-evening',
+        'task-now',
+        'task-next-first',
+        'task-next-second',
+        'task-later',
       ]);
-      expect(getTodayTaskSection(unfinished, latest.planningDate)).toBe('unfinished');
+      expect(getTodayTaskSection(now, latest.planningDate)).toBe('now');
 
       await act(async () => {
-        await latest.reorderTask('task-day-second', 'up');
+        await latest.reorderTask('task-next-second', 'up');
       });
       expect(repository.updateTask).toHaveBeenCalledWith(
         'owner-a',
-        'task-day-second',
+        'task-next-second',
         { order_key: expect.any(String) },
       );
       expect(repository.updateTask.mock.calls[0][2].order_key < 'a0').toBe(true);
       expect(latest.tasks.map((task) => task.id)).toEqual([
-        'task-unfinished',
-        'task-day-second',
-        'task-day-first',
-        'task-evening',
+        'task-now',
+        'task-next-second',
+        'task-next-first',
+        'task-later',
       ]);
     } finally {
       cleanup(root, container);

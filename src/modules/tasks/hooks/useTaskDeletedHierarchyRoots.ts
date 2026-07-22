@@ -11,7 +11,7 @@ export type DeletedTaskHierarchyRoot = {
   root_type: Exclude<TaskHierarchyRootType, 'todo'>;
 };
 
-export function useTaskHierarchyTrash(ownerId: string) {
+export function useTaskDeletedHierarchyRoots(ownerId: string) {
   const { hierarchyOperationsRepository } = useTasksRuntime();
   const query = useQuery<DeletedTaskHierarchyRoot>(
     `SELECT id, title, deleted_at, 'area' AS root_type FROM tasks_areas

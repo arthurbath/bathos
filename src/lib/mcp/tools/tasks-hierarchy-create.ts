@@ -10,8 +10,8 @@ import {
 } from '../supabase';
 import { uuidSchema } from '../resource-utils';
 
-const destinationSchema = z.enum(['today', 'anytime', 'someday']);
-const todaySectionSchema = z.enum(['daytime', 'evening']);
+const destinationSchema = z.enum(['anytime', 'someday']);
+const todaySectionSchema = z.enum(['none', 'now', 'next', 'later']);
 const calendarDateSchema = z.string().refine(isTaskCalendarDate, {
   message: 'Expected a valid ISO calendar date.',
 });
@@ -243,7 +243,7 @@ async function nextProjectOrderKeys(
   let planningQuery = auth.supabase.from('tasks_projects').select('planning_order_key')
     .eq('owner_id', auth.userId).eq('disposition', 'present').eq('lifecycle', 'open')
     .eq('destination', destination);
-  if (destination === 'today') planningQuery = planningQuery.eq('today_section', todaySection);
+  planningQuery = planningQuery.eq('today_section', todaySection);
   const [structural, planning] = await Promise.all([
     readOne<Pick<TaskProjectRow, 'order_key'>>(structuralQuery
       .order('order_key', { ascending: false }).order('id', { ascending: false })
@@ -317,8 +317,8 @@ export async function createTaskProjectData(
   const areaId = input.area_id ?? null;
   const startDate = input.start_date ?? null;
   const deadline = input.deadline ?? null;
-  if (input.today_section === 'evening' && input.destination !== 'today') {
-    throw new Error('This Evening is available only within Today.');
+  if (input.destination === 'someday' && input.today_section !== 'none') {
+    throw new Error('Someday projects cannot appear in Today.');
   }
   if (input.destination === 'someday' && startDate !== null) {
     throw new Error('Someday projects cannot retain a start date.');
@@ -477,7 +477,7 @@ export const createTaskProject = defineTool({
     notes: z.string().max(100_000).default(''),
     area_id: uuidSchema.optional(),
     destination: destinationSchema.default('anytime'),
-    today_section: todaySectionSchema.default('daytime'),
+    today_section: todaySectionSchema.default('none'),
     start_date: calendarDateSchema.nullable().optional(),
     deadline: calendarDateSchema.nullable().optional(),
   },

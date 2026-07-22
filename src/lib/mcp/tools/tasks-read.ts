@@ -23,13 +23,11 @@ const taskHierarchyRootTypeSchema = z.enum([
   'todo',
 ]);
 const taskViewSchema = z.enum([
-  'inbox',
   'today',
   'upcoming',
   'anytime',
   'someday',
-  'logbook',
-  'trash',
+  'done',
 ]);
 const planningDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -277,33 +275,38 @@ export function planningDateInTimeZone(timeZone: string, instant = new Date()): 
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function visibleInTaskView(row: TaskPlannableRow, view: Exclude<TaskView, 'trash'>, planningDate: string) {
-  if (view === 'logbook') return row.disposition === 'present' && row.lifecycle !== 'open';
+function visibleInTaskView(row: TaskPlannableRow, view: TaskView, planningDate: string) {
+  if (view === 'done') return row.disposition === 'present' && row.lifecycle !== 'open';
   if (row.disposition !== 'present' || row.lifecycle !== 'open') return false;
   if (view === 'upcoming') {
-    return (row.destination === 'today' || row.destination === 'anytime')
+    return row.destination === 'anytime'
       && row.start_date !== null
       && row.start_date > planningDate;
   }
+  if (view === 'today') {
+    return row.destination === 'anytime'
+      && row.today_section !== 'none'
+      && (row.start_date === null || row.start_date <= planningDate);
+  }
   return row.destination === view
-    && ((view !== 'today' && view !== 'anytime')
+    && (view !== 'anytime'
       || row.start_date === null
       || row.start_date <= planningDate);
 }
 
-function todaySection(row: TaskPlannableRow, planningDate: string) {
-  return row.start_date !== null && row.start_date < planningDate ? 'unfinished' : row.today_section;
+function todaySection(row: TaskPlannableRow, _planningDate: string) {
+  return row.today_section;
 }
 
 function comparePlanningRows(
   left: TaskPlannableRow,
   right: TaskPlannableRow,
-  view: Exclude<TaskView, 'trash'>,
+  view: TaskView,
   planningDate: string,
 ) {
-  if (view === 'logbook') {
-    return (right.completed_at ?? right.canceled_at ?? '').localeCompare(
-      left.completed_at ?? left.canceled_at ?? '',
+  if (view === 'done') {
+    return (right.deleted_at ?? right.completed_at ?? right.canceled_at ?? '').localeCompare(
+      left.deleted_at ?? left.completed_at ?? left.canceled_at ?? '',
     ) || left.id.localeCompare(right.id);
   }
   if (view === 'upcoming') {
@@ -312,7 +315,7 @@ function comparePlanningRows(
       || left.id.localeCompare(right.id);
   }
   if (view === 'today') {
-    const ranks = { unfinished: 0, daytime: 1, evening: 2 } as const;
+    const ranks = { now: 0, next: 1, later: 2 } as const;
     return ranks[todaySection(left, planningDate) as keyof typeof ranks]
       - ranks[todaySection(right, planningDate) as keyof typeof ranks]
       || planningOrder(left).localeCompare(planningOrder(right))
@@ -328,7 +331,7 @@ function planningOrder(row: TaskPlannableRow) {
 
 async function loadPlanningRows(
   auth: AuthenticatedMcpContext,
-  view: Exclude<TaskView, 'trash'>,
+  view: TaskView,
   planningDate: string,
   limit: number,
 ) {
@@ -348,32 +351,33 @@ async function loadPlanningRows(
 
 async function loadTodoPlanningRows(
   auth: AuthenticatedMcpContext,
-  view: Exclude<TaskView, 'trash'>,
+  view: TaskView,
   planningDate: string,
   limit: number,
 ): Promise<BoundedRows<TaskTodoRow>> {
   const base = () => auth.supabase.from('tasks_todos').select('*').eq('owner_id', auth.userId);
   if (view === 'today') {
     const todayBase = () => base()
-      .eq('destination', 'today')
+      .eq('destination', 'anytime')
       .eq('lifecycle', 'open')
-      .eq('disposition', 'present');
+      .eq('disposition', 'present')
+      .or(`start_date.is.null,start_date.lte.${planningDate}`);
     const segments = await Promise.all([
-      readMany<TaskTodoRow>(todayBase().lt('start_date', planningDate).order('start_date').order('order_key').order('id').limit(limit + 1), limit),
-      readMany<TaskTodoRow>(todayBase().eq('today_section', 'daytime').or(`start_date.is.null,start_date.eq.${planningDate}`).order('order_key').order('id').limit(limit + 1), limit),
-      readMany<TaskTodoRow>(todayBase().eq('today_section', 'evening').eq('start_date', planningDate).order('order_key').order('id').limit(limit + 1), limit),
+      readMany<TaskTodoRow>(todayBase().eq('today_section', 'now').order('order_key').order('id').limit(limit + 1), limit),
+      readMany<TaskTodoRow>(todayBase().eq('today_section', 'next').order('order_key').order('id').limit(limit + 1), limit),
+      readMany<TaskTodoRow>(todayBase().eq('today_section', 'later').order('order_key').order('id').limit(limit + 1), limit),
     ]);
     return mergePlanningSegments(segments, view, planningDate, limit);
   }
 
   let query = base();
-  if (view === 'logbook') {
+  if (view === 'done') {
     query = query.eq('disposition', 'present').in('lifecycle', ['completed', 'canceled'])
       .order('updated_at', { ascending: false }).order('id');
   } else {
     query = query.eq('lifecycle', 'open').eq('disposition', 'present');
     if (view === 'upcoming') {
-      query = query.in('destination', ['today', 'anytime']).gt('start_date', planningDate)
+      query = query.eq('destination', 'anytime').gt('start_date', planningDate)
         .order('start_date').order('order_key').order('id');
     } else {
       query = query.eq('destination', view);
@@ -386,32 +390,33 @@ async function loadTodoPlanningRows(
 
 async function loadProjectPlanningRows(
   auth: AuthenticatedMcpContext,
-  view: Exclude<TaskView, 'trash'>,
+  view: TaskView,
   planningDate: string,
   limit: number,
 ): Promise<BoundedRows<TaskProjectRow>> {
   const base = () => auth.supabase.from('tasks_projects').select('*').eq('owner_id', auth.userId);
   if (view === 'today') {
     const todayBase = () => base()
-      .eq('destination', 'today')
+      .eq('destination', 'anytime')
       .eq('lifecycle', 'open')
-      .eq('disposition', 'present');
+      .eq('disposition', 'present')
+      .or(`start_date.is.null,start_date.lte.${planningDate}`);
     const segments = await Promise.all([
-      readMany<TaskProjectRow>(todayBase().lt('start_date', planningDate).order('start_date').order('planning_order_key').order('id').limit(limit + 1), limit),
-      readMany<TaskProjectRow>(todayBase().eq('today_section', 'daytime').or(`start_date.is.null,start_date.eq.${planningDate}`).order('planning_order_key').order('id').limit(limit + 1), limit),
-      readMany<TaskProjectRow>(todayBase().eq('today_section', 'evening').eq('start_date', planningDate).order('planning_order_key').order('id').limit(limit + 1), limit),
+      readMany<TaskProjectRow>(todayBase().eq('today_section', 'now').order('planning_order_key').order('id').limit(limit + 1), limit),
+      readMany<TaskProjectRow>(todayBase().eq('today_section', 'next').order('planning_order_key').order('id').limit(limit + 1), limit),
+      readMany<TaskProjectRow>(todayBase().eq('today_section', 'later').order('planning_order_key').order('id').limit(limit + 1), limit),
     ]);
     return mergePlanningSegments(segments, view, planningDate, limit);
   }
 
   let query = base();
-  if (view === 'logbook') {
+  if (view === 'done') {
     query = query.eq('disposition', 'present').in('lifecycle', ['completed', 'canceled'])
       .order('updated_at', { ascending: false }).order('id');
   } else {
     query = query.eq('lifecycle', 'open').eq('disposition', 'present');
     if (view === 'upcoming') {
-      query = query.in('destination', ['today', 'anytime']).gt('start_date', planningDate)
+      query = query.eq('destination', 'anytime').gt('start_date', planningDate)
         .order('start_date').order('planning_order_key').order('id');
     } else {
       query = query.eq('destination', view);
@@ -424,7 +429,7 @@ async function loadProjectPlanningRows(
 
 function mergePlanningSegments<T extends TaskPlannableRow>(
   segments: BoundedRows<T>[],
-  view: Exclude<TaskView, 'trash'>,
+  view: TaskView,
   planningDate: string,
   limit: number,
 ): BoundedRows<T> {
@@ -441,7 +446,7 @@ function mergePlanningSegments<T extends TaskPlannableRow>(
   };
 }
 
-async function loadTrashRoots(auth: AuthenticatedMcpContext, limit: number) {
+async function loadDoneRoots(auth: AuthenticatedMcpContext, limit: number) {
   const [areas, projects, headings, todos, checklistItems] = await Promise.all([
     readMany<TaskAreaRow>(auth.supabase.from('tasks_areas').select('*').eq('owner_id', auth.userId).eq('disposition', 'deleted').order('deleted_at', { ascending: false }).limit(limit + 1), limit),
     readMany<TaskProjectRow>(auth.supabase.from('tasks_projects').select('*').eq('owner_id', auth.userId).eq('disposition', 'deleted').order('deleted_at', { ascending: false }).limit(limit + 1), limit),
@@ -479,22 +484,14 @@ export async function getTaskViewData(
   auth: AuthenticatedMcpContext,
 ) {
   const planning = await getPlanningContext(auth, input.planning_date);
-  if (input.view === 'trash') {
-    const trash = await loadTrashRoots(auth, input.limit);
-    return {
-      view: input.view,
-      ...planning,
-      limit: input.limit,
-      truncated: trash.truncated,
-      roots: trash.roots,
-    };
-  }
   const loaded = await loadPlanningRows(auth, input.view, planning.planning_date, input.limit);
+  const done = input.view === 'done' ? await loadDoneRoots(auth, input.limit) : null;
   return {
     view: input.view,
     ...planning,
     limit_per_collection: input.limit,
     truncated_collections: loaded.truncatedCollections,
+    ...(done === null ? {} : { roots: done.roots, roots_truncated: done.truncated }),
     projects: loaded.projects.map((record) => ({
       ...stripOwner(record),
       ...(input.view === 'today' ? { derived_section: todaySection(record, planning.planning_date) } : {}),
@@ -535,11 +532,11 @@ export const getTaskRecord = defineTool({
 export const getTaskView = defineTool({
   name: 'get_task_view',
   title: 'Get Task Planning View',
-  description: 'Read the signed-in user\'s Inbox, Today, Upcoming, Anytime, Someday, Logbook, or Trash view using the Tasks domain rules.',
+  description: 'Read the signed-in user\'s Today, Upcoming, Anytime, Someday, or Done view using the Tasks domain rules.',
   inputSchema: {
     view: taskViewSchema,
     planning_date: planningDateSchema.optional().describe('Optional ISO calendar date for deterministic planning review. Defaults to today in the owner\'s stored planning time zone.'),
-    limit: z.number().int().min(1).max(500).default(defaultLimit).describe('Maximum projects, to-dos, or Trash roots returned.'),
+    limit: z.number().int().min(1).max(500).default(defaultLimit).describe('Maximum projects, to-dos, or Done roots returned.'),
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: (input, ctx) => toMcpResult(getTaskViewData(input, requireAuthenticated(ctx))),

@@ -24,7 +24,7 @@ import {
   parseTaskExport,
   previewTaskRestore,
   serializeTaskExport,
-  taskExportV10Collections,
+  taskExportV11Collections,
 } from '@/modules/tasks/data/taskPortability';
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
@@ -68,7 +68,7 @@ afterAll(async () => {
 });
 
 describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integration', () => {
-  it('survives undo, Trash, backup, source loss, verified restore, and replay', async () => {
+  it('survives undo, Done recovery, backup, source loss, verified restore, and replay', async () => {
     testDirectory = await mkdtemp(join(tmpdir(), 'bathos-tasks-preservation-'));
     const anonKey = process.env.TASKS_TEST_SUPABASE_KEY ?? fallbackLocalAnonKey;
     sourceClient = createClient<Database>(localSupabaseUrl, anonKey, {
@@ -128,10 +128,11 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
       taskId: primary.id,
       title: 'Preserve this checklist item',
     });
-    const trashTask = await repository.createTask({
+    const doneTask = await repository.createTask({
       ownerId: source.id,
-      title: 'Restore Me From Backup Trash',
-      destination: 'inbox',
+      title: 'Restore Me From Backup Done',
+      destination: 'anytime',
+      todaySection: 'later',
     });
     await waitForUploadQueue(activeDatabase, 0, 60_000);
 
@@ -162,9 +163,9 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     await waitForUploadQueue(activeDatabase, 0, 60_000);
     await waitForRemoteDisposition(sourceClient, primary.id, 'present');
 
-    await repository.transitionTask(source.id, trashTask.id, 'delete');
+    await repository.transitionTask(source.id, doneTask.id, 'delete');
     await waitForUploadQueue(activeDatabase, 0, 60_000);
-    await waitForRemoteDisposition(sourceClient, trashTask.id, 'deleted');
+    await waitForRemoteDisposition(sourceClient, doneTask.id, 'deleted');
 
     const sourceAuth = { userId: source.id, email: source.email, supabase: sourceClient };
     const messageIdentifier = `<${crypto.randomUUID()}@example.test>`;
@@ -263,8 +264,8 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     expect(reminder.outcome).toBe('accepted');
 
     const taskExport = await createTaskExport(sourceClient);
-    expect(taskExport.schema_version).toBe(10);
-    for (const collection of taskExportV10Collections) {
+    expect(taskExport.schema_version).toBe(11);
+    for (const collection of taskExportV11Collections) {
       expect(taskExport.manifest.counts[collection], collection).toBeGreaterThan(0);
     }
     expect(taskExport.data.tasks_todos.find((task) => task.id === primary.id)).toMatchObject({
@@ -272,9 +273,9 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
       disposition: 'present',
       revision: 5,
     });
-    expect(taskExport.data.tasks_todos.find((task) => task.id === trashTask.id)).toMatchObject({
+    expect(taskExport.data.tasks_todos.find((task) => task.id === doneTask.id)).toMatchObject({
       disposition: 'deleted',
-      deletion_root_id: trashTask.id,
+      deletion_root_id: doneTask.id,
     });
 
     const serialized = serializeTaskExport(taskExport);
@@ -296,8 +297,8 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     await expectOwnerCounts(adminClient, source.id, 0, 0);
 
     const preview = await previewTaskRestore(targetClient, taskExport);
-    expect(preview).toMatchObject({ dry_run: true, schema_version: 10, applied: false });
-    for (const collection of taskExportV10Collections) {
+    expect(preview).toMatchObject({ dry_run: true, schema_version: 11, applied: false });
+    for (const collection of taskExportV11Collections) {
       expect(preview[collection]).toMatchObject({
         inserts: taskExport.manifest.counts[collection],
         matches: 0,
@@ -307,8 +308,8 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     await expectOwnerCounts(adminClient, target.id, 0, 0);
 
     const restored = await mergeTaskRestore(targetClient, taskExport);
-    expect(restored).toMatchObject({ dry_run: false, schema_version: 10, applied: true });
-    for (const collection of taskExportV10Collections) {
+    expect(restored).toMatchObject({ dry_run: false, schema_version: 11, applied: true });
+    for (const collection of taskExportV11Collections) {
       expect(restored[collection]).toMatchObject({
         inserts: taskExport.manifest.counts[collection],
         matches: 0,
@@ -339,11 +340,11 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     const replay = await mergeTaskRestore(targetClient, taskExport);
     expect(replay).toMatchObject({
       dry_run: false,
-      schema_version: 10,
+      schema_version: 11,
       applied: false,
       code: 'already_applied',
     });
-    for (const collection of taskExportV10Collections) {
+    for (const collection of taskExportV11Collections) {
       expect(replay[collection], collection).toMatchObject({
         inserts: 0,
         matches: taskExport.manifest.counts[collection],
@@ -351,33 +352,33 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
       });
     }
 
-    const { data: restoredTrash, error: restoredTrashError } = await targetClient
+    const { data: restoredDone, error: restoredDoneError } = await targetClient
       .from('tasks_todos')
       .select('*')
-      .eq('id', trashTask.id)
+      .eq('id', doneTask.id)
       .single();
-    expect(restoredTrashError).toBeNull();
-    expect(restoredTrash).toMatchObject({
+    expect(restoredDoneError).toBeNull();
+    expect(restoredDone).toMatchObject({
       owner_id: target.id,
-      title: 'Restore Me From Backup Trash',
+      title: 'Restore Me From Backup Done',
       disposition: 'deleted',
     });
-    if (!restoredTrash) throw new Error('Restored Trash task is unavailable');
+    if (!restoredDone) throw new Error('Restored Done task is unavailable');
     const targetAuth = { userId: target.id, email: target.email, supabase: targetClient };
-    const recoveredTrash = await transitionTaskData({
-      task_id: restoredTrash.id,
-      expected_revision: restoredTrash.revision,
+    const recoveredDone = await transitionTaskData({
+      task_id: restoredDone.id,
+      expected_revision: restoredDone.revision,
       client_mutation_id: crypto.randomUUID(),
       transition: 'restore',
     }, targetAuth);
-    expect(recoveredTrash).toMatchObject({
+    expect(recoveredDone).toMatchObject({
       mutation_outcome: 'applied',
       receipt: { transition: 'restore', outcome: 'accepted' },
       task: { disposition: 'present', deletion_root_id: null },
     });
 
     const recoveryExport = await createTaskExport(targetClient);
-    expect(recoveryExport.data.tasks_todos.find((task) => task.id === trashTask.id))
+    expect(recoveryExport.data.tasks_todos.find((task) => task.id === doneTask.id))
       .toMatchObject({ disposition: 'present', deletion_root_id: null });
   }, 120_000);
 });

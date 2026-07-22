@@ -271,6 +271,26 @@ export function parseTaskTemplateSnapshot(value: unknown): TaskTemplateSnapshot 
 
 function parseTodoNode(value: unknown, includeHeading: boolean) {
   const record = requireRecord(value, 'Template to-do node is invalid');
+  const legacyDestination = requireText(record.destination, 'template destination');
+  const destination = legacyDestination === 'inbox' || legacyDestination === 'today'
+    ? 'anytime'
+    : requireEnum(
+      legacyDestination,
+      ['anytime', 'someday'] as const,
+      'template destination',
+    );
+  const legacyTodaySection = requireText(record.today_section, 'template Today section');
+  const todaySection = legacyDestination === 'inbox'
+    ? 'later'
+    : legacyDestination === 'today'
+      ? legacyTodaySection === 'evening' ? 'later' : 'next'
+      : legacyTodaySection === 'daytime' || legacyTodaySection === 'evening'
+        ? 'none'
+        : requireEnum(
+          legacyTodaySection,
+          ['none', 'now', 'next', 'later'] as const,
+          'template Today section',
+        );
   return {
     node_id: requireText(record.node_id, 'template node identifier'),
     ...(includeHeading
@@ -283,16 +303,8 @@ function parseTodoNode(value: unknown, includeHeading: boolean) {
       ['actionable', 'waiting'] as const,
       'template actionability',
     ),
-    destination: requireEnum(
-      record.destination,
-      ['inbox', 'today', 'anytime', 'someday'] as const,
-      'template destination',
-    ),
-    today_section: requireEnum(
-      record.today_section,
-      ['daytime', 'evening'] as const,
-      'template Today section',
-    ),
+    destination,
+    today_section: todaySection,
     order_key: requireText(record.order_key, 'template order'),
     ...(record.hierarchy_order_key === undefined
       ? {}

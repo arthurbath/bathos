@@ -45,13 +45,13 @@ VALUES
 
 SELECT has_function(
   'public',
-  'tasks_create_export_v1',
+  'tasks_create_export_v11',
   ARRAY[]::text[],
   'creates a versioned task export through an authenticated function'
 );
 SELECT has_function(
   'public',
-  'tasks_restore_export_v1',
+  'tasks_restore_export_current',
   ARRAY['jsonb', 'boolean'],
   'previews and executes merge restore through an authenticated function'
 );
@@ -72,6 +72,7 @@ SELECT lives_ok(
       owner_id,
       title,
       destination,
+      today_section,
       order_key,
       start_date,
       deadline,
@@ -81,7 +82,8 @@ SELECT lives_ok(
       '41000000-0000-4000-8000-000000000010',
       '41000000-0000-4000-8000-000000000001',
       'Completed export task',
-      'today',
+      'anytime',
+      'none',
       'a0',
       '2026-07-20',
       '2026-07-24',
@@ -109,6 +111,7 @@ SELECT lives_ok(
       owner_id,
       title,
       destination,
+      today_section,
       order_key,
       source_kind,
       source_url,
@@ -119,7 +122,8 @@ SELECT lives_ok(
       '41000000-0000-4000-8000-000000000011',
       '41000000-0000-4000-8000-000000000001',
       'Deleted reading task',
-      'inbox',
+      'anytime',
+      'none',
       'a1',
       'reading_item',
       'https://example.test/article',
@@ -145,7 +149,7 @@ SELECT lives_ok(
   'records recoverable deletion before export'
 );
 
-SELECT set_config('test.tasks_export', public.tasks_create_export_v1()::text, false);
+SELECT set_config('test.tasks_export', public.tasks_create_export_v11()::text, false);
 
 SELECT is(
   current_setting('test.tasks_export')::jsonb ->> 'format',
@@ -154,7 +158,7 @@ SELECT is(
 );
 SELECT is(
   (current_setting('test.tasks_export')::jsonb ->> 'schema_version')::integer,
-  1,
+  11,
   'versions the export schema'
 );
 SELECT is(
@@ -219,7 +223,7 @@ SELECT is(
 
 SELECT throws_ok(
   format(
-    'SELECT public.tasks_restore_export_v1(%L::jsonb, true)',
+    'SELECT public.tasks_restore_export_current(%L::jsonb, true)',
     jsonb_set(
       current_setting('test.tasks_export')::jsonb,
       '{data,tasks_todos,0,title}',
@@ -227,26 +231,26 @@ SELECT throws_ok(
     )::text
   ),
   '22023',
-  'Task export checksum validation failed',
+  'Task export v10 collection tasks_todos is invalid',
   'rejects a tampered export before planning restore'
 );
 SELECT throws_ok(
   format(
-    'SELECT public.tasks_restore_export_v1(%L::jsonb, true)',
+    'SELECT public.tasks_restore_export_current(%L::jsonb, true)',
     jsonb_set(
       current_setting('test.tasks_export')::jsonb,
       '{schema_version}',
-      '2'::jsonb
+      '12'::jsonb
     )::text
   ),
   '22023',
-  'Unsupported task export schema version',
+  'Task export schema version is unsupported',
   'rejects an unsupported schema version'
 );
 
 RESET ROLE;
-DELETE FROM public.tasks_todos
-WHERE owner_id = '41000000-0000-4000-8000-000000000001';
+DELETE FROM auth.users
+WHERE id = '41000000-0000-4000-8000-000000000001';
 
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '42000000-0000-4000-8000-000000000002', true);
@@ -254,7 +258,7 @@ SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 SELECT is(
   (
-    public.tasks_restore_export_v1(
+    public.tasks_restore_export_current(
       current_setting('test.tasks_export')::jsonb,
       true
     ) #>> '{tasks_todos,inserts}'
@@ -264,7 +268,7 @@ SELECT is(
 );
 SELECT is(
   (
-    public.tasks_restore_export_v1(
+    public.tasks_restore_export_current(
       current_setting('test.tasks_export')::jsonb,
       true
     ) #>> '{tasks_history_events,inserts}'
@@ -280,7 +284,7 @@ SELECT is(
 
 SELECT set_config(
   'test.tasks_restore',
-  public.tasks_restore_export_v1(
+  public.tasks_restore_export_current(
     current_setting('test.tasks_export')::jsonb,
     false
   )::text,
@@ -340,7 +344,7 @@ SELECT is(
 
 SELECT set_config(
   'test.tasks_restore_retry',
-  public.tasks_restore_export_v1(
+  public.tasks_restore_export_current(
     current_setting('test.tasks_export')::jsonb,
     false
   )::text,
@@ -372,7 +376,7 @@ WHERE id = '41000000-0000-4000-8000-000000000010';
 
 SELECT set_config(
   'test.tasks_restore_conflict',
-  public.tasks_restore_export_v1(
+  public.tasks_restore_export_current(
     current_setting('test.tasks_export')::jsonb,
     false
   )::text,
