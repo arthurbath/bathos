@@ -37,7 +37,7 @@ The remaining completion gate is the calendar-bound Inbox Manager trial. Product
 | Stable Manual Ordering | `2026-07-20_tasks_multi_client_convergence.md` and deterministic fractional-order tests | Accepted |
 | Offline Task Operation | Offline workflow acceptance plus archived `enable-tasks-offline-pwa-launch` production and iPhone evidence | Accepted |
 | Deterministic Task Reconciliation | Multi-client winner-order, stale-revision, conflict-receipt, and reconnection gates | Accepted |
-| Actionable Synchronization Diagnostics | `2026-07-21_tasks_sync_reliability.md` and current Safari, Chrome, and iPhone diagnostics | Accepted |
+| Actionable Synchronization Diagnostics | `2026-07-21_tasks_sync_reliability.md`, the archived transient-event confirmation change, and current Safari, Chrome, and iPhone diagnostics | Accepted |
 | Recoverable History | `2026-07-20_tasks_preservation_recovery.md`, undo, Trash, export, merge, replace, and rollback gates | Accepted |
 | Layered Reminder Delivery | `2026-07-20_tasks_reminder_delivery_readiness.md` plus Safari and iPhone Web Push delivery/open acceptance | Accepted |
 | Evidence-Gated Native Apple Expansion | `2026-07-20_tasks_native_apple_companion.md`; lived evidence supports continued web/PWA/Raycast use without premature native scope | Accepted by deliberate deferral |
@@ -53,7 +53,7 @@ The remaining completion gate is the calendar-bound Inbox Manager trial. Product
 
 - The production MCP service advertises 42 tools, including 33 Tasks operations covering bounded reads, structured creation, updates, movement, ordering, lifecycle transitions, templates, recurrence, reminders, and Mail retirement.
 - A read-only production MCP query for Today on 2026 Jul 21 returned five current to-dos, including four Mail-automation tasks, with no truncation or service error.
-- The installed Inbox Manager runtime is healthy. Six tasks have been accepted since the current trial began, four accepted-task slots remain, the handoff queue is empty, and no handoff failure is recorded. The latest accepted handoff completed at 2026 Jul 21 4:26 PM PDT, and the scheduled Mail workflow remained healthy through its 5:03 PM run.
+- The installed Inbox Manager runtime is healthy. Seven tasks have been accepted since the current trial began, three accepted-task slots remain, the handoff queue is empty, and no handoff failure is recorded. The latest accepted handoff completed at 2026 Jul 21 5:19 PM PDT, and the scheduled Mail workflow remained healthy through its 5:46 PM run.
 - The current trial began at 2026 Jul 21 1:50 PM PDT and expires at 2026 Jul 22 1:50 PM PDT unless the tenth accepted task ends it first.
 - The Mail workflow recovered from one stale enrichment-incident record without changing Mail rules, private mode, accepted task receipts, or scheduled success semantics. Two subsequent ordinary scheduled runs completed healthy.
 - BathOS and Inbox Manager are committed, pushed, clean, and synchronized with `origin/main`.
@@ -101,6 +101,16 @@ The first corrective deployment published the new HTML and application bundle, b
 Commits `8d241a1` and `2112990` were pushed to `main` and published through Lovable. Production serves entry bundle `index-pIZaUz4l.js`, Tasks chunk `TasksIndex-SnyCkN8G.js`, the permanent `/tasks/manifest.json`, and worker version 7. The live Tasks chunk contains both `tasks-service-worker.js?version=7` and the `Offline Launch` diagnostic. An authenticated existing Safari installation upgraded from `Preparing` to `Ready` within the 30-second bounded stage while remaining `Synced`, healthy, fully synchronized, and at zero pending changes. An authenticated Chrome installation independently reported `Connected`, `Offline Launch: Ready`, healthy, full synchronization complete, zero pending changes, idle upload/download, eight preserved Today tasks, and no console warnings or errors.
 
 The repeated actual iPhone pass then reported `Offline Launch: Ready` in the newly installed Home Screen app, cold-launched Today under Airplane Mode, accepted a disposable `Yes!` task, preserved it across a full offline app restart, uploaded it after reconnection, and projected it to the authenticated Mac client. The Mac remained `Synced` with no console warnings or errors and moved the disposable task recoverably to Trash, returning Today from nine tasks to eight. The final user-assisted production pass delivered a scheduled browser reminder to the iPhone installation and opened Tasks when the notification was tapped. All iPhone device sub-gates passed.
+
+## Transient Synchronization Event Acceptance
+
+Production browser auditing found that ordinary online reconnect cycles could briefly surface `Offline` or `Download Error` and immediately recover with zero pending work. Persisting those state transitions made Recent Reliability Events noisy even though the live status recovered normally.
+
+The first corrective candidate used a five-second confirmation interval. Focused tests and all release gates passed, but the published `d797f7a` build still recorded three zero-queue Offline events during a normal production reload. Bundle inspection confirmed that production was running the candidate rather than a stale artifact.
+
+Commit `751a974` increased confirmation to 30 seconds while preserving immediate live status, first-observed episode timing, immediate recovery reconciliation, reload continuity, and the existing two-minute reporting boundary. Five focused observer tests, the full 708-test default suite with nine intentional skips, ESLint, the production build, and strict OpenSpec validation passed. Lovable published production entry bundle `index-Dl3YByCl.js`.
+
+The production acceptance captured the existing Recent Reliability Events value, reloaded authenticated `/tasks/today` online, and waited 45 seconds. The event history remained byte-for-byte unchanged. Synchronization Details reported Connected, Offline Launch Ready, Healthy, Full Synchronization Complete, zero pending changes, and idle upload and download state. The console contained no warnings or errors. Transient reconnect signals therefore remain visible live, while only sustained degradation becomes durable reliability history.
 
 ## Connector Discovery Note
 

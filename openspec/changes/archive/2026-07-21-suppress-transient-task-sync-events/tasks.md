@@ -7,4 +7,4 @@
 
 - [x] 2.1 Add focused observer tests for transient blips, confirmed degradation, two-minute reporting, recovery, and reload behavior
 - [x] 2.2 Run focused tests, the full release gates, and strict OpenSpec validation
-- [ ] 2.3 Publish the change and verify an online production reload remains healthy without adding transient reliability events
+- [x] 2.3 Publish the change and verify an online production reload remains healthy without adding transient reliability events
