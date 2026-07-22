@@ -2,13 +2,13 @@
 
 **Date:** 2026 Jul 21
 **Category:** Product / Production / Trust
-**Status:** Bounded Trial Acceptance in Progress
+**Status:** Complete
 
 ## Outcome
 
 BathOS Tasks satisfies the implemented V1 contract across the web application, offline synchronization, production PowerSync, MCP, Raycast capture, Mail capture, Web Push reminders, recovery, accessibility, and large-library behavior. The module is available for personal parallel use while Things remains authoritative. A final audit identified that durable task data alone did not guarantee an installed PWA could cold-launch its application shell without a network connection. That offline-launch gap is implemented, published, and accepted through local, isolated production, authenticated Safari, authenticated Chrome, and actual iPhone Home Screen passes under the `enable-tasks-offline-pwa-launch` change. The first iPhone cold launch failed with Safari's no-network page; the corrected installation subsequently passed partition-local readiness, Airplane Mode cold launch, offline restart, queued mutation reconnection, cross-device projection, Web Push delivery, and notification opening.
 
-The remaining completion gate is the calendar-bound Inbox Manager trial. Production acceptance of the offline PWA shell is complete. Inbox Manager's approved 24-hour or 10-accepted-task parallel trial remains healthy and must reach one boundary before its final production evidence can be recorded and its OpenSpec change can be archived.
+Production acceptance of the offline PWA shell is complete. The user accepted seven corrected-window Inbox Manager handoffs as sufficient lived proof rather than requiring artificial personal work or waiting for the original ten-task or 24-hour boundary. The runtime was explicitly disabled, the final receipts were reconciled through Supabase and a fresh PowerSync projection, the disabled scheduled path preserved ordinary Mail health, and the Inbox Manager OpenSpec change was synchronized, archived, validated, committed, and pushed.
 
 ## Accepted Product Surfaces
 
@@ -44,7 +44,7 @@ The remaining completion gate is the calendar-bound Inbox Manager trial. Product
 | Keyboard-First Daily Operation | `2026-07-20_tasks_accessibility_validation.md`, browser keyboard passes, and focused component tests | Accepted |
 | Deterministic Mail Capture Retry | Archived `fix-tasks-mail-capture-retry` exact-replay, one-task/source/history, and fresh PowerSync-client proof | Accepted |
 | Large-Library Responsiveness | `2026-07-20_tasks_large_library_performance.md` and opt-in performance suite | Accepted |
-| Parallel Use with Things | Healthy bounded Inbox Manager trial with Things-first creation, six current-window receipts, and zero pending work or failures | Awaiting automatic trial boundary |
+| Parallel Use with Things | Accepted seven-task corrected-window trial, exact nine-receipt backend and projection reconciliation, explicit disable, and healthy post-disable Mail run | Accepted |
 | BathOS Product Expression | `2026-07-20_tasks_product_identity.md`, Lucide icon, dark-only BathOS styling, and tagless Tasks naming | Accepted |
 | Stable Tasks Route Runtime | `2026-07-21_tasks_route_runtime_stability.md` and route-runtime regression suite | Accepted |
 | Module Isolation | Tasks-only source, routes, tables, service-worker interception, MCP namespace, and removal-boundary coverage | Accepted |
@@ -53,19 +53,20 @@ The remaining completion gate is the calendar-bound Inbox Manager trial. Product
 
 - The production MCP service advertises 42 tools, including 33 Tasks operations covering bounded reads, structured creation, updates, movement, ordering, lifecycle transitions, templates, recurrence, reminders, and Mail retirement.
 - A read-only production MCP query for Today on 2026 Jul 21 returned five current to-dos, including four Mail-automation tasks, with no truncation or service error.
-- The installed Inbox Manager runtime is healthy. Seven tasks have been accepted since the current trial began, three accepted-task slots remain, the handoff queue is empty, and no handoff failure is recorded. The latest accepted handoff completed at 2026 Jul 21 5:19 PM PDT, and the scheduled Mail workflow remained healthy through its 5:46 PM run.
+- The installed Inbox Manager runtime is healthy and parallel mode is disabled. Seven tasks were accepted during the corrected activation window, the handoff queue is empty, and no handoff failure is recorded. The latest accepted handoff completed at 2026 Jul 21 5:19 PM PDT.
 - A 2026 Jul 21 5:55 PM PDT content-free reconciliation covered all nine retained acceptance receipts, including the canary and eight parallel receipts. Supabase contained exactly nine corresponding task rows, nine structured Mail-source rows, and nine creation-history rows. A fresh disposable PowerSync client independently projected exactly the same nine tasks and nine creation-history rows with matching identifiers, revisions, lifecycles, and dispositions. Mail-source rows remained absent from the client as required by the approved server-only projection boundary. The disposable local database was cleared and removed after the pass.
-- The current trial began at 2026 Jul 21 1:50 PM PDT and expires at 2026 Jul 22 1:50 PM PDT unless the tenth accepted task ends it first.
+- The explicit disable completed at 2026 Jul 21 6:07 PM PDT with reason `manual`, zero pending requests, all bounded receipts retained, and the outbox hash unchanged at `c5160a90963badab44be8fb018f9981dadd17a954119a573635ee3a222baed69`.
+- Ordinary post-disable run `20260722T010819Z-19537` recorded `parallel_disabled` before Mail actions and `empty_outbox` after reconciliation, ended successfully at 2026 Jul 21 6:08 PM PDT, and left the outbox hash unchanged. Mail health remained healthy with no handoff failure or retry state.
 - The Mail workflow recovered from one stale enrichment-incident record without changing Mail rules, private mode, accepted task receipts, or scheduled success semantics. Two subsequent ordinary scheduled runs completed healthy.
 - BathOS and Inbox Manager are committed, pushed, clean, and synchronized with `origin/main`.
 
-## Remaining Completion Work
+## Completion Closeout
 
-1. Let the bounded trial reach its 24-hour or 10-task boundary without artificially creating personal work for the test.
-2. Confirm the runtime disabled at the intended boundary, no post-boundary credential or network work occurred, the queue is empty, and ordinary Mail and Things outcomes remain healthy.
-3. Reconcile the final accepted receipts with the BathOS MCP and PowerSync projection, and record any real retry or failure evidence without exposing task content.
-4. Complete Inbox Manager OpenSpec task 6.4, sync its durable specification, archive the change, validate, commit, and push.
-5. Perform one final cross-repository, route, MCP, synchronization, reminder, and health audit before declaring the implementation goal complete.
+1. The user accepted seven corrected-window tasks as sufficient proof without manufacturing additional personal work.
+2. Parallel mode was disabled explicitly before credential or network work, the queue remained empty, and the post-disable scheduled Mail run stayed healthy.
+3. All nine retained receipts reconciled exactly against task, structured Mail-source, and creation-history rows, with the approved task and history subset independently reproduced through a fresh PowerSync client.
+4. Inbox Manager OpenSpec task 6.4 is complete. The durable specifications were synchronized, the change was archived, all validation passed, and commit `c2f9d36` was pushed to `origin/main`.
+5. The final cross-system audit found no remaining V1 implementation or production-readiness gate.
 
 Four recoverably deleted production-acceptance captures remain as roots in Tasks Trash. Permanent removal still requires explicit action-time confirmation because one setup capture originated from the user's active Safari tab. This cleanup is not a product-readiness blocker.
 
@@ -79,9 +80,9 @@ The current committed `main` branch passed the following broad gates during the 
 - The full default Vitest suite with 708 passing tests across 118 files and nine intentional opt-in cases skipped
 - The opt-in large-library performance suite with four passing tests
 
-The 2026 Jul 21 5:57 PM PDT pre-closeout rerun also passed the current Inbox Manager suite with 233 tests, all 181 Mail-rule validation cases, and strict validation of its seven durable specifications plus the active parallel-handoff change. BathOS ESLint, production build, 708-test default suite, and all seven durable specifications passed from the synchronized `main` branch in the same audit.
+The 2026 Jul 21 5:57 PM PDT pre-closeout rerun also passed the current Inbox Manager suite with 233 tests, all 181 Mail-rule validation cases, and strict validation of its seven durable specifications plus the then-active parallel-handoff change. BathOS ESLint, production build, 708-test default suite, and all seven durable specifications passed from the synchronized `main` branch in the same audit. After closeout, Inbox Manager again passed all 233 tests, all 181 Mail-rule cases, shell syntax checks, Git whitespace checks, and strict validation of the seven durable specifications with no active OpenSpec change.
 
-The performance gate derived every 10,000-record planning view below 1.4 ms at p95, built the reusable search index below 6.7 ms at p95, rendered a 1,000-row view in 904.5 ms, and opened 10,000-record search in 357.9 ms. The remaining opt-in integration suites already have stronger dated local or production acceptance evidence for offline persistence, multi-client convergence, preservation, sustained parallel use, and production topology. They are not substitutes for the still-running lived Mail handoff trial.
+The performance gate derived every 10,000-record planning view below 1.4 ms at p95, built the reusable search index below 6.7 ms at p95, rendered a 1,000-row view in 904.5 ms, and opened 10,000-record search in 357.9 ms. The remaining opt-in integration suites have stronger dated local or production acceptance evidence for offline persistence, multi-client convergence, preservation, sustained parallel use, and production topology.
 
 ## Offline PWA Shell Acceptance
 
@@ -119,10 +120,10 @@ The production acceptance captured the existing Recent Reliability Events value,
 
 The BathOS connector catalog attached to this long-running Codex task still exposes the older Budget, Garage, Snake, and Wardrobe tool set. A direct authenticated production `tools/list` request through the existing Raycast OAuth grant confirms that the deployed service includes the complete Tasks tool set. The discrepancy is therefore client-session discovery staleness, not a missing production deployment. A fresh Codex task or connector refresh should discover the current catalog.
 
-## Completion Estimate
+## Completion Status
 
-No additional large implementation tranche is evident from the durable specifications, archived OpenSpec changes, production evaluations, or source audit. Assuming the bounded trial and offline-shell publication remain healthy, the earliest honest completion point is shortly after 2026 Jul 22 1:50 PM PDT. Production publication, Safari and iPhone acceptance, final evidence reconciliation, specification closeout, validation, and publication should require approximately two to four focused hours after the trial boundary.
+The implemented BathOS Tasks V1 goal is complete. No additional implementation tranche is required by the durable specifications, archived OpenSpec changes, production evaluations, or source audit. Things remains authoritative while Tasks is available for personal parallel use. Native Apple surfaces, Things migration, and any later product expansion remain deliberate future work rather than incomplete V1 obligations.
 
 ## Specification Impact
 
-The `enable-tasks-offline-pwa-launch` OpenSpec change modifies the personal Tasks offline-operation and layered-reminder requirements. Production acceptance passed and the delta is synchronized into the durable specification for archival.
+The archived `enable-tasks-offline-pwa-launch` OpenSpec change modified the personal Tasks offline-operation and layered-reminder requirements. Production acceptance passed and its delta is synchronized into the durable specification. The Inbox Manager parallel-handoff contracts are synchronized and archived in the sibling repository. This readiness closeout is documentation-only and has no further BathOS specification impact.
