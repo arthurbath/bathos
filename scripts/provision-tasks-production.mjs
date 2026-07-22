@@ -272,9 +272,12 @@ function runSyntheticTopology(powerSyncUrl, testScript = 'test:tasks:production-
       TASKS_PRODUCTION_TEST_POWERSYNC_URL: parsedUrl.origin,
     },
   });
-  process.stdout.write(testScript === 'test:tasks:production-day-horizon'
+  const successMessage = testScript === 'test:tasks:production-day-horizon'
     ? 'Synthetic production day-horizon gate passed.\n'
-    : 'Synthetic production topology gate passed.\n');
+    : testScript === 'test:tasks:production-undo-redo'
+      ? 'Synthetic production undo/redo gate passed.\n'
+      : 'Synthetic production topology gate passed.\n';
+  process.stdout.write(successMessage);
 }
 
 const command = process.argv[2];
@@ -284,9 +287,10 @@ if (![
   'reminders',
   'verify-reminders',
   'synthetic-day-horizon',
+  'synthetic-undo-redo',
   'synthetic-topology',
 ].includes(command)) {
-  fail('Usage: node scripts/provision-tasks-production.mjs <sync-database|verify-sync-database|reminders|verify-reminders|synthetic-day-horizon|synthetic-topology> [PowerSync URL]');
+  fail('Usage: node scripts/provision-tasks-production.mjs <sync-database|verify-sync-database|reminders|verify-reminders|synthetic-day-horizon|synthetic-undo-redo|synthetic-topology> [PowerSync URL]');
 }
 
 const tempDirectory = mkdtempSync(join(tmpdir(), 'bathos-tasks-production-'));
@@ -297,6 +301,9 @@ try {
   if (command === 'verify-reminders') verifyReminders(tempDirectory);
   if (command === 'synthetic-day-horizon') {
     runSyntheticTopology(process.argv[3], 'test:tasks:production-day-horizon');
+  }
+  if (command === 'synthetic-undo-redo') {
+    runSyntheticTopology(process.argv[3], 'test:tasks:production-undo-redo');
   }
   if (command === 'synthetic-topology') runSyntheticTopology(process.argv[3]);
 } finally {

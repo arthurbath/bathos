@@ -235,6 +235,7 @@ function defaultTaskList() {
     moveTask: vi.fn().mockResolvedValue(undefined),
     moveTasks: vi.fn().mockResolvedValue([]),
     reorderTask: vi.fn().mockResolvedValue(undefined),
+    reorderTaskTo: vi.fn().mockResolvedValue(undefined),
     transitionTask: vi.fn().mockResolvedValue(undefined),
     planningDate: '2026-07-20',
   };
@@ -342,11 +343,14 @@ describe('TasksShell', () => {
     mockTaskList.mockReset();
     mockTaskUndo.mockReset().mockReturnValue({
       available: false,
+      redoAvailable: false,
       pending: false,
       loading: false,
       error: null,
       event: null,
+      redoEvent: null,
       undo: vi.fn(),
+      redo: vi.fn(),
     });
     mockTaskSearch.mockReset().mockReturnValue({
       tasks: [task],
@@ -586,46 +590,51 @@ describe('TasksShell', () => {
     }
   });
 
-  it('exposes authoritative task undo while preserving native editor undo', async () => {
+  it('keeps task undo and redo keyboard-only while preserving native editor history', async () => {
     const undo = vi.fn().mockResolvedValue(undefined);
+    const redo = vi.fn().mockResolvedValue(undefined);
     mockTaskUndo.mockReturnValue({
       available: true,
+      redoAvailable: true,
       pending: false,
       loading: false,
       error: null,
       event: { id: 'event-update' },
+      redoEvent: { id: 'event-redo' },
       undo,
+      redo,
     });
     mockTaskList.mockReturnValue(defaultTaskList());
     const { container, root } = renderShell();
 
     try {
-      const undoButton = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Undo Last Task Change"]',
-      );
-      expect(undoButton).toHaveAttribute('aria-keyshortcuts', 'Meta+Z Control+Z');
-      await act(async () => {
-        undoButton?.click();
-      });
-      expect(undo).toHaveBeenCalledTimes(1);
+      expect(container.querySelector('button[aria-label="Undo Last Task Change"]')).toBeNull();
+      expect(container.querySelector('button[aria-label="Select Tasks"]')).toBeNull();
 
       const capture = container.querySelector<HTMLInputElement>('input[aria-label="Add a Task"]')!;
       capture.focus();
       await act(async () => {
         capture.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'z', metaKey: true, bubbles: true, cancelable: true,
+          key: 'z', ctrlKey: true, bubbles: true, cancelable: true,
         }));
       });
-      expect(undo).toHaveBeenCalledTimes(1);
+      expect(undo).not.toHaveBeenCalled();
 
       const title = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
       title.focus();
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'z', metaKey: true, bubbles: true, cancelable: true,
+          key: 'z', ctrlKey: true, bubbles: true, cancelable: true,
         }));
       });
-      expect(undo).toHaveBeenCalledTimes(2);
+      expect(undo).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'z', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      expect(redo).toHaveBeenCalledTimes(1);
 
       title.focus();
       await act(async () => {
@@ -633,8 +642,11 @@ describe('TasksShell', () => {
           key: '?', shiftKey: true, bubbles: true, cancelable: true,
         }));
       });
-      expect(document.querySelector<HTMLElement>('[role="dialog"]')?.textContent)
-        .toContain('Undo the Last Task Change');
+      const help = document.querySelector<HTMLElement>('[role="dialog"]')?.textContent;
+      expect(help).toContain('Undo a Task Change');
+      expect(help).toContain('Redo a Task Change');
+      expect(help).toContain('Mac');
+      expect(help).toContain('Windows');
     } finally {
       cleanup(root, container);
     }
@@ -808,22 +820,20 @@ describe('TasksShell', () => {
     const { container, root } = renderShell();
 
     try {
-      const selectMode = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Select Tasks"]',
-      );
-      await act(async () => selectMode?.click());
+      const firstTitle = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
+      await act(async () => {
+        firstTitle.dispatchEvent(new MouseEvent('click', {
+          ctrlKey: true, bubbles: true, cancelable: true,
+        }));
+      });
       expect(container.querySelector('section[aria-label="Task Selection"]')?.textContent)
-        .toContain('0 Tasks Selected');
+        .toContain('1 Task Selected');
       expect(container.querySelector('[aria-label="Add a Task"]')).toBeNull();
 
-      const first = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Select Existing task"]',
-      );
       const second = container.querySelector<HTMLButtonElement>(
         'button[aria-label="Select Second task"]',
       );
       await act(async () => {
-        first?.click();
         second?.click();
       });
       expect(container.querySelector('section[aria-label="Task Selection"]')?.textContent)
@@ -872,13 +882,13 @@ describe('TasksShell', () => {
     const { container, root } = renderShell();
 
     try {
+      const firstTitle = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
       await act(async () => {
-        container.querySelector<HTMLButtonElement>('button[aria-label="Select Tasks"]')?.click();
+        firstTitle.dispatchEvent(new MouseEvent('click', {
+          ctrlKey: true, bubbles: true, cancelable: true,
+        }));
       });
       await act(async () => {
-        container.querySelector<HTMLButtonElement>(
-          'button[aria-label="Select Existing task"]',
-        )?.click();
         container.querySelector<HTMLButtonElement>(
           'button[aria-label="Select Deadline-constrained task"]',
         )?.click();
@@ -903,6 +913,125 @@ describe('TasksShell', () => {
       expect(container.querySelector('section[aria-label="Task Selection"]')?.textContent)
         .toContain('2 Tasks Selected');
       expect(container.querySelector('[aria-label="Add a Task"]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('replaces repeated Shift-click ranges from the original pointer-selection anchor', async () => {
+    const secondTask = {
+      ...task,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    };
+    const thirdTask = {
+      ...task,
+      id: 'task-c',
+      title: 'Third task',
+      order_key: 'a2',
+      client_mutation_id: 'mutation-c',
+    };
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [task, secondTask, thirdTask],
+    });
+    const { container, root } = renderShell();
+
+    try {
+      const secondTitle = container.querySelector<HTMLButtonElement>('[data-task-id="task-b"]')!;
+      await act(async () => {
+        secondTitle.dispatchEvent(new MouseEvent('click', {
+          ctrlKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      const thirdTitle = container.querySelector<HTMLButtonElement>('[data-task-id="task-c"]')!;
+      await act(async () => {
+        thirdTitle.dispatchEvent(new MouseEvent('click', {
+          shiftKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      expect(container.querySelector('[aria-label="Select Existing task"]'))
+        .toHaveAttribute('aria-checked', 'false');
+      expect(container.querySelector('[aria-label="Deselect Second task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+      expect(container.querySelector('[aria-label="Deselect Third task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+
+      const firstTitle = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
+      await act(async () => {
+        firstTitle.dispatchEvent(new MouseEvent('click', {
+          shiftKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+      expect(container.querySelector('[aria-label="Deselect Second task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+      expect(container.querySelector('[aria-label="Select Third task"]'))
+        .toHaveAttribute('aria-checked', 'false');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('drops a task at an arbitrary position inside its current ordered scope', async () => {
+    const secondTask = {
+      ...task,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    };
+    const taskList = { ...defaultTaskList(), tasks: [task, secondTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      const source = container.querySelector('[data-task-id="task-a"]')?.closest('article');
+      const target = container.querySelector('[data-task-id="task-b"]')?.closest('article');
+      if (!source || !target) {
+        throw new Error('Expected both draggable task rows');
+      }
+      expect(source).toHaveAttribute('draggable', 'true');
+      const data = new Map<string, string>();
+      const dataTransfer = {
+        effectAllowed: 'none',
+        dropEffect: 'none',
+        setData: (type: string, value: string) => data.set(type, value),
+        getData: (type: string) => data.get(type) ?? '',
+      } as unknown as DataTransfer;
+      vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({
+        top: 0,
+        bottom: 100,
+        height: 100,
+        left: 0,
+        right: 100,
+        width: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperties(dragOver, {
+        dataTransfer: { value: dataTransfer },
+        clientY: { value: 75 },
+      });
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+
+      await act(async () => {
+        source.dispatchEvent(dragStart);
+        target.dispatchEvent(dragOver);
+      });
+      await act(async () => {
+        target.dispatchEvent(drop);
+        await Promise.resolve();
+      });
+      expect(taskList.reorderTaskTo).toHaveBeenCalledWith('task-a', 'task-b', 'after');
     } finally {
       cleanup(root, container);
     }

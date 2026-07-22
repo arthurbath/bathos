@@ -217,11 +217,31 @@ The system SHALL represent workflow meaning through explicit structured concepts
 - **THEN** the interface derives that presentation from origin metadata rather than parsing the task title
 
 ### Requirement: Bulk Task Planning
-The system SHALL provide an explicit accessible selection mode for open tasks and SHALL apply supported day-horizon, future scheduling, Anytime, or Someday actions to selected records as one local transaction.
+The system SHALL provide an accessible task-row selection mode for open tasks and SHALL apply supported day-horizon, future scheduling, Anytime, or Someday actions to selected records as one local transaction.
 
-#### Scenario: Select multiple visible tasks
-- **WHEN** a user enters selection in Today, Upcoming, Anytime, or Someday and selects one or more visible tasks
-- **THEN** the interface reports the selected count, exposes Select All and Clear, and communicates each selected state to keyboard and assistive-technology users
+#### Scenario: Enter selection with the platform modifier
+- **WHEN** a user Command-clicks a visible task on Mac or Control-clicks a visible task on Windows while selection is inactive
+- **THEN** the interface enters selection, makes that task the stable range anchor, selects it, reports the selected count, and does not open its editor
+
+#### Scenario: Select a contiguous anchored range
+- **WHEN** a user Shift-clicks a visible task after establishing a selection anchor
+- **THEN** the interface replaces the prior range with the contiguous visible range between the original anchor and the clicked task without moving the anchor
+
+#### Scenario: Replace an anchored range repeatedly
+- **WHEN** a user Shift-clicks a different visible task while selection remains active
+- **THEN** the interface replaces the previous range with the new contiguous range from the original anchor
+
+#### Scenario: Toggle selection after entry
+- **WHEN** selection is active and a user ordinarily clicks, Command-clicks on Mac, or Control-clicks on Windows on a visible task
+- **THEN** the interface toggles that task's selected state without opening its editor
+
+#### Scenario: Preserve ordinary task expansion
+- **WHEN** selection is inactive and a user ordinarily clicks a task
+- **THEN** the interface opens or closes that task's editor exactly as before
+
+#### Scenario: Operate selection accessibly
+- **WHEN** one or more visible tasks are selected in Today, Upcoming, Anytime, or Someday
+- **THEN** the interface reports the selected count, exposes Select All and Clear, and communicates each selected state to keyboard and assistive-technology users without requiring a persistent header selection button
 
 #### Scenario: Plan selected tasks
 - **WHEN** a user applies Today Inbox, Today Now, Today Next, Today Later, Remove from Today, Tomorrow, Anytime, or Someday to selected tasks
@@ -237,7 +257,7 @@ The system SHALL provide an explicit accessible selection mode for open tasks an
 
 #### Scenario: Keep bulk scope bounded
 - **WHEN** the user exits selection, changes views, or completes a successful bulk plan
-- **THEN** the client clears selection and returns to ordinary editing without adding bulk completion, deletion, or hierarchy mutation
+- **THEN** the client clears selection and its range anchor and returns to ordinary editing without adding bulk completion, deletion, or hierarchy mutation
 
 ### Requirement: Native Templates
 The system SHALL support reusable, revisioned to-do and project template definitions that are separate from active task records.
@@ -416,19 +436,27 @@ The system SHALL keep recurrence definitions separate from generated task occurr
 - **THEN** the client assigns the already authenticated owner to the parsed result while synchronized recurrence rows continue to validate their stored owner identifier
 
 ### Requirement: Stable Manual Ordering
-The system SHALL preserve intentional manual ordering across saves, refreshes, offline operation, and synchronization.
+The system SHALL preserve intentional manual ordering across direct drag, keyboard or menu moves, saves, refreshes, offline operation, and synchronization.
 
-#### Scenario: Reorder active work
-- **WHEN** a user moves an item within an ordered task view
-- **THEN** the system saves the new order without changing unrelated items
+#### Scenario: Reorder active work by drag
+- **WHEN** a user drags an active task before or after another task in a supported ordered scope
+- **THEN** the system saves the new fractional order and displays the committed placement without opening the dragged task's editor
+
+#### Scenario: Retain non-pointer ordering
+- **WHEN** a user cannot or does not use drag-and-drop
+- **THEN** the interface retains keyboard and menu commands that move the focused task within the same supported scope
 
 #### Scenario: Reorder sections of Today independently
 - **WHEN** a user reorders work in Inbox, Now, Next, or Later
-- **THEN** the system changes only that item's order within the same visible section and does not move it across Today sections
+- **THEN** the system changes only that item's order within the same visible section and does not allow a drag or command to move it across Today sections
 
 #### Scenario: Reorder active and inactive planning pools independently
 - **WHEN** a user reorders work in Anytime or Someday
 - **THEN** the system changes only that item's order within its current planning placement and does not activate, defer, schedule, or move unrelated work
+
+#### Scenario: Withhold drag in unsupported contexts
+- **WHEN** selection is active, a row mutation is pending, or the view has no manual-order contract
+- **THEN** the interface does not offer a draggable task row
 
 #### Scenario: Restore after asynchronous save
 - **WHEN** a reorder is saved asynchronously and the view refreshes
@@ -564,23 +592,43 @@ The system SHALL expose trustworthy synchronization state without logging task c
 - **THEN** synchronization details identify the installation as local-only, create no remote-degradation episode, and explicitly withhold any implication of cross-device or MCP convergence
 
 ### Requirement: Recoverable History
-The system SHALL provide append-only history, guarded undo, mutation receipts, a recoverable Done queue, versioned export, verified restore, and automatic terminal-data expiry.
+The system SHALL provide append-only history, a guarded 100-step task undo and redo cursor, mutation receipts, a recoverable Done queue, versioned export, verified restore, and automatic terminal-data expiry.
 
 #### Scenario: Undo a recent change
-- **WHEN** a user invokes undo for a supported recent task mutation
-- **THEN** the system restores the prior state and synchronizes the restoration as a new valid mutation
+- **WHEN** a user invokes undo for the latest supported forward task mutation
+- **THEN** the system restores the source event's prior state and synchronizes the restoration as a new valid undo mutation
 
-#### Scenario: Expose the latest safe task undo on the web
-- **WHEN** the local synchronized projection contains a latest accepted non-creation task event whose result revision still matches the current task
-- **THEN** the web interface exposes a visible Undo action and lets Command+Z or Control+Z outside editable controls invoke that event's guarded inverse mutation
+#### Scenario: Undo a deep sequence
+- **WHEN** the authoritative projected history contains a safe contiguous chain of supported task mutations
+- **THEN** repeated Command+Z on Mac or Control+Z on Windows can walk backward through as many as 100 source mutations in reverse chronological order
 
-#### Scenario: Withhold unavailable or unsafe web undo
-- **WHEN** no current authoritative event is projected, an undo is already pending, or an editable control owns the native undo command
-- **THEN** the web interface does not submit a duplicate or speculative inverse mutation and does not intercept native text undo
+#### Scenario: Redo an undone sequence
+- **WHEN** one or more task mutations have been undone and no new forward mutation has invalidated redo
+- **THEN** Command+Shift+Z on Mac or Control+Shift+Z on Windows reapplies the next source event's after-state as a new valid redo mutation
 
-#### Scenario: Reject an unsafe undo
-- **WHEN** intervening changes make an inverse mutation unsafe
-- **THEN** the system rejects undo without overwriting current data and returns a conflict receipt
+#### Scenario: Reconstruct task history after refresh
+- **WHEN** the Tasks client starts with a synchronized append-only history projection
+- **THEN** it reconstructs the bounded undo and redo cursor from forward, undo, and redo events without treating inverse events as new forward steps
+
+#### Scenario: Invalidate redo after a new change
+- **WHEN** a user makes a new supported forward task mutation after undoing one or more events
+- **THEN** the client clears the redo path and retains the new mutation in the bounded undo path
+
+#### Scenario: Keep undo and redo out of persistent header chrome
+- **WHEN** the Tasks planning header renders
+- **THEN** it does not expose visible Undo, Redo, or selection-mode buttons and leaves these interactions discoverable through Keyboard Commands
+
+#### Scenario: Preserve native text history
+- **WHEN** focus is in an input, textarea, select, content-editable surface, editor, or unrelated dialog
+- **THEN** Tasks does not intercept native undo or redo keyboard commands
+
+#### Scenario: Withhold unavailable or unsafe history movement
+- **WHEN** no corresponding authoritative source event is projected, an inverse is pending, or current task state no longer matches the required source snapshot
+- **THEN** the web interface does not submit a duplicate or speculative undo or redo mutation
+
+#### Scenario: Reject an unsafe inverse
+- **WHEN** intervening changes make an undo or redo snapshot pairing unsafe
+- **THEN** the system rejects the inverse without overwriting current data and returns a conflict receipt
 
 #### Scenario: Return a mutation receipt
 - **WHEN** the system accepts, rejects, or treats a task mutation as a no-op
@@ -779,6 +827,21 @@ The system SHALL treat native Apple surfaces as an optional extension of the sha
 #### Scenario: Avoid a second task product
 - **WHEN** a native surface reads or mutates task data
 - **THEN** it uses the authoritative task-domain contract and does not introduce an independent task database, reminder scheduler, or generic mutation API
+
+### Requirement: Cross-Platform Task Interaction Reference
+The system SHALL present a visible interaction reference that documents supported Tasks keyboard and pointer commands for both Mac and Windows while development validation is in progress.
+
+#### Scenario: Compare platform commands
+- **WHEN** the user opens Keyboard Commands
+- **THEN** the interface shows Action, Mac, and Windows columns simultaneously and identifies the current platform when the runtime can detect it
+
+#### Scenario: Discover direct list interactions
+- **WHEN** the interaction reference is open
+- **THEN** it documents undo, redo, modifier-click selection, anchored Shift-click range selection, ordinary selection toggling, drag reordering, and the existing keyboard task commands
+
+#### Scenario: Preserve commands outside supported contexts
+- **WHEN** an editable control, composition event, unrelated dialog, or unsupported task view owns an interaction
+- **THEN** the reference does not imply that Tasks will override native editing, browser, or unsupported ordering behavior
 
 ### Requirement: Keyboard-First Daily Operation
 The system SHALL provide complete keyboard operation for capture, editing, Today planning, navigation, search, selection, lifecycle transitions, and dialogs without overriding browser tab-number shortcuts.

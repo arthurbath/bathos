@@ -385,7 +385,7 @@ describe('task repository', () => {
     expect(updateHarness.transaction.execute).not.toHaveBeenCalled();
   });
 
-  it('restores the prior snapshot as a revision-checked inverse mutation', async () => {
+  it('restores the prior snapshot as an exact-state-checked inverse mutation', async () => {
     const completedTask: TaskTodo = {
       ...existingTask,
       lifecycle: 'completed',
@@ -432,6 +432,53 @@ describe('task repository', () => {
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain(
       'undo_source_event_id = ?',
     );
+  });
+
+  it('reapplies the source after-state as a guarded redo mutation', async () => {
+    const completedTask: TaskTodo = {
+      ...existingTask,
+      lifecycle: 'completed',
+      completed_at: timestamp,
+      revision: 2,
+      client_mutation_id: 'mutation-complete',
+      updated_at: timestamp,
+    };
+    const event: TaskHistoryStorageRow = {
+      id: 'event-complete',
+      owner_id: 'owner-a',
+      task_id: 'task-a',
+      client_mutation_id: 'mutation-complete',
+      actor_type: 'user',
+      mutation_channel: 'web',
+      affected_ids: JSON.stringify(['task-a']),
+      base_revision: 1,
+      result_revision: 2,
+      transition: 'complete',
+      occurred_at: timestamp,
+      outcome: 'accepted',
+      code: null,
+      before_state: JSON.stringify(snapshotTask(existingTask)),
+      after_state: JSON.stringify(snapshotTask(completedTask)),
+    };
+    const undoneTask: TaskTodo = {
+      ...existingTask,
+      revision: 3,
+      client_mutation_id: 'mutation-undo',
+      updated_at: timestamp,
+    };
+    const { repository, transaction } = createHarness(null);
+    vi.mocked(transaction.getOptional)
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(undoneTask);
+
+    const redone = await repository.redoTask('owner-a', 'event-complete');
+
+    expect(redone).toMatchObject({
+      lifecycle: 'completed',
+      completed_at: timestamp,
+      revision: 4,
+      undo_source_event_id: 'event-complete',
+    });
   });
 
   it('uses the shared lifecycle contract for completion, deletion, and restoration', async () => {

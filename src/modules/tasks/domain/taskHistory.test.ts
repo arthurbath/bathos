@@ -4,11 +4,13 @@ import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import { taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 
 import {
+  createTaskRedoPatch,
   createTaskUndoPatch,
   InvalidTaskHistoryError,
   parseTaskHistoryEvent,
   snapshotTask,
   UnsafeTaskUndoError,
+  UnsafeTaskRedoError,
   type TaskHistoryStorageRow,
 } from './taskHistory';
 
@@ -88,18 +90,32 @@ describe('task history', () => {
     expect(createTaskUndoPatch(waiting, event)).toMatchObject({ actionability: 'actionable' });
   });
 
-  it('rejects undo when the task advanced beyond the selected event', () => {
+  it('allows an older source revision when the complete current snapshot still matches', () => {
     const event = parseTaskHistoryEvent(historyRow());
 
-    expect(() => createTaskUndoPatch({ ...currentTask, revision: 3 }, event)).toThrow(
-      UnsafeTaskUndoError,
-    );
+    expect(createTaskUndoPatch({ ...currentTask, revision: 8 }, event)).toEqual(event.before_state);
+  });
+
+  it('creates a guarded redo patch from the source event after-state', () => {
+    const event = parseTaskHistoryEvent(historyRow());
+    const undone = {
+      ...currentTask,
+      ...event.before_state,
+      revision: 3,
+    };
+
+    expect(createTaskRedoPatch(undone, event)).toEqual(event.after_state);
+    expect(() => createTaskRedoPatch(currentTask, event)).toThrow(UnsafeTaskRedoError);
   });
 
   it('rejects creation, baseline, foreign, and state-mismatched events', () => {
     expect(() => createTaskUndoPatch(
       currentTask,
       parseTaskHistoryEvent(historyRow({ transition: 'create', before_state: null })),
+    )).toThrow(UnsafeTaskUndoError);
+    expect(() => createTaskUndoPatch(
+      currentTask,
+      parseTaskHistoryEvent(historyRow({ transition: 'redo' })),
     )).toThrow(UnsafeTaskUndoError);
     expect(() => createTaskUndoPatch(
       currentTask,

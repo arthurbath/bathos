@@ -38,6 +38,7 @@ import {
   type TaskSearchFilters,
 } from '@/modules/tasks/domain/taskSearch';
 import { getTaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
+import { isMacLikeTaskPlatform } from '@/modules/tasks/domain/taskSelection';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type {
   TaskSourceKind,
@@ -344,34 +345,45 @@ export function TaskKeyboardHelpDialog({
   onOpenChange: (open: boolean) => void;
   onCloseAutoFocus: () => void;
 }) {
+  const platform = globalThis.navigator?.platform ?? '';
+  const currentPlatform = isMacLikeTaskPlatform(platform)
+    ? 'mac'
+    : /Win/i.test(platform)
+      ? 'windows'
+      : null;
   const groups = [
     {
       label: 'Everywhere',
       commands: [
-        ['N', 'Capture a Task'],
-        ['/', 'Search Tasks and Views'],
-        ['?', 'Show Keyboard Help'],
-        ['G then T/U/A/S/P/D/E/C', 'Navigate to a View'],
-        ['Command+Z', 'Undo the Last Task Change'],
+        ['Capture a Task', 'N', 'N'],
+        ['Search Tasks and Views', '/', '/'],
+        ['Show Keyboard Help', '?', '?'],
+        ['Navigate to a View', 'G then T/U/A/S/P/D/E/C', 'G then T/U/A/S/P/D/E/C'],
+        ['Undo a Task Change', 'Command+Z', 'Control+Z'],
+        ['Redo a Task Change', 'Command+Shift+Z', 'Control+Shift+Z'],
       ],
     },
     {
-      label: 'Focused Task',
+      label: 'Task List',
       commands: [
-        ['Enter', 'Edit'],
-        ['C', 'Complete'],
-        ['M', 'Move to an Area, Project, or Heading'],
-        ['W', 'Choose When'],
-        ['Up/Down', 'Move Focus'],
-        ['Option+Up/Down', 'Reorder'],
+        ['Edit', 'Enter', 'Enter'],
+        ['Complete', 'C', 'C'],
+        ['Move to an Area, Project, or Heading', 'M', 'M'],
+        ['Choose When', 'W', 'W'],
+        ['Move Focus', 'Up/Down', 'Up/Down'],
+        ['Reorder by Keyboard', 'Option+Up/Down', 'Alt+Up/Down'],
+        ['Add or Remove Selection', 'Command-click', 'Control-click'],
+        ['Replace Anchored Range', 'Shift-click', 'Shift-click'],
+        ['Toggle After Selection Starts', 'Click', 'Click'],
+        ['Reorder Directly', 'Drag', 'Drag'],
       ],
     },
     {
       label: 'Editor and Surfaces',
       commands: [
-        ['Command+Enter', 'Save'],
-        ['Escape', 'Cancel or Close'],
-        ['Tab/Shift+Tab', 'Move Through Controls'],
+        ['Save', 'Command+Enter', 'Control+Enter'],
+        ['Cancel or Close', 'Escape', 'Escape'],
+        ['Move Through Controls', 'Tab/Shift+Tab', 'Tab/Shift+Tab'],
       ],
     },
   ];
@@ -398,14 +410,36 @@ export function TaskKeyboardHelpDialog({
                 >
                   {group.label}
                 </h3>
-                <dl className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-                  {group.commands.map(([keys, description]) => (
-                    <div key={keys} className="flex items-center justify-between gap-4 py-2 text-sm">
-                      <dt className="text-foreground">{description}</dt>
-                      <dd><kbd className="font-mono text-xs text-muted-foreground">{keys}</kbd></dd>
-                    </div>
-                  ))}
-                </dl>
+                <div className="overflow-x-auto border-y border-[hsl(var(--grid-sticky-line))]">
+                  <table className="w-full min-w-[30rem] table-fixed text-left text-sm">
+                    <thead className="text-xs text-muted-foreground">
+                      <tr className="border-b border-[hsl(var(--grid-sticky-line))]">
+                        <th scope="col" className="w-[45%] py-2 pr-3 font-medium">Action</th>
+                        <th scope="col" className="w-[27.5%] px-2 py-2 font-medium">
+                          Mac{currentPlatform === 'mac' ? ' · Current' : ''}
+                        </th>
+                        <th scope="col" className="w-[27.5%] py-2 pl-2 font-medium">
+                          Windows{currentPlatform === 'windows' ? ' · Current' : ''}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[hsl(var(--grid-sticky-line))]">
+                      {group.commands.map(([description, macKeys, windowsKeys]) => (
+                        <tr key={description}>
+                          <th scope="row" className="py-2 pr-3 font-normal text-foreground">
+                            {description}
+                          </th>
+                          <td className="px-2 py-2">
+                            <kbd className="font-mono text-xs text-muted-foreground">{macKeys}</kbd>
+                          </td>
+                          <td className="py-2 pl-2">
+                            <kbd className="font-mono text-xs text-muted-foreground">{windowsKeys}</kbd>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </section>
             );
           })}

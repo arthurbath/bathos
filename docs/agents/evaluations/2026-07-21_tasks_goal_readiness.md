@@ -12,9 +12,11 @@ Production acceptance of the offline PWA shell is complete. The user accepted se
 
 The completed replacement removes Inbox as a planning destination, makes Today an Inbox, Now, Next, and Later projection of Anytime, combines Logbook and Trash into Done, and automatically purges terminal content at the owner-local midnight beginning its 31st day in Done. Day Horizon is independent from Start Date. Future Anytime work retains its selected horizon in Upcoming and enters Today in that section when due, while due work without a selected horizon resolves to Inbox. The migration, MCP service, Raycast commands, Inbox Manager runtime, once-per-minute retention job, browser behavior, and PowerSync convergence are accepted in production.
 
+The daily list interaction upgrade is also accepted in production. Persistent Undo and bulk-selection buttons are removed from the header. Mac and Windows keyboard undo/redo traverse a guarded 100-step forward-history cursor, modifier-click establishes selection, repeated Shift-click replaces the contiguous range from the original anchor, and ordinary click continues toggling after selection starts. Today, Anytime, and Someday tasks support direct same-scope drag reordering while retaining keyboard and row-menu alternatives. The Keyboard Commands panel shows both platform mappings and identifies the current platform.
+
 ## Accepted Product Surfaces
 
-- The dark, mobile-first Tasks module provides Today, Upcoming, Anytime, Someday, Done, areas, projects, headings, checklist items, templates, recurrence, reminders, search, bulk planning, undo, export, restore, and recoverable history without tags.
+- The dark, mobile-first Tasks module provides Today, Upcoming, Anytime, Someday, Done, areas, projects, headings, checklist items, templates, recurrence, reminders, search, modifier-based bulk planning, guarded 100-step undo/redo, export, restore, and recoverable history without tags.
 - One stable `/tasks/*` runtime preserves synchronization, notification state, local history, and pending work across supported route changes while invalid Tasks routes render the ordinary 404 boundary.
 - PowerSync Cloud uses the exact approved 22-table owner-scoped projection. Production topology, restart, conflict, owner-isolation, cleanup, and cross-client convergence gates passed.
 - Safari Web Push subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and scheduled reminder dispatch passed in production.
@@ -32,19 +34,19 @@ The completed replacement removes Inbox as a planning destination, makes Today a
 | Core Task Organization | Archived `add-personal-tasks-module` implementation evidence and `2026-07-20_tasks_live_browser_validation.md` | Accepted |
 | Date-Based Planning Views | Production migration, MCP capture, browser acceptance, and fresh PowerSync proof for Inbox, Now, Next, Later, Upcoming, Anytime, Someday, and Done | Accepted |
 | Tagless Structured Semantics | Typed source, actionability, hierarchy, destination, lifecycle, and product-identity evidence without tags | Accepted |
-| Bulk Task Planning | Atomic selection and movement coverage in the archived module change and browser validation | Accepted |
+| Bulk Task Planning | Atomic movement coverage plus production-rendered Command-click, Control-click, ordinary toggle, and anchored Shift-click range behavior | Accepted |
 | Native Templates | Template definition, revision, instantiation, MCP, and synchronized-projection coverage in the archived module change | Accepted |
 | Orthogonal Task State | Independent planning, lifecycle, disposition, and actionability coverage in domain, repository, and rendered tests | Accepted |
 | Temporal Planning Semantics | Independent Start Date and Day Horizon behavior plus deadline, planning-time-zone, and daylight-saving coverage in the archived module change | Accepted |
 | Recurrence Integrity | `2026-07-20_tasks_offline_workflow_validation.md`, preservation recovery, and recurrence database/MCP tests | Accepted |
-| Stable Manual Ordering | `2026-07-20_tasks_multi_client_convergence.md` and deterministic fractional-order tests | Accepted |
+| Stable Manual Ordering | Multi-client convergence, deterministic fractional-order tests, direct same-scope drag placement, and retained keyboard/menu alternatives | Accepted |
 | Offline Task Operation | Offline workflow acceptance plus archived `enable-tasks-offline-pwa-launch` production and iPhone evidence | Accepted |
 | Deterministic Task Reconciliation | Multi-client winner-order, stale-revision, conflict-receipt, and reconnection gates | Accepted |
 | Actionable Synchronization Diagnostics | `2026-07-21_tasks_sync_reliability.md`, the archived transient-event confirmation change, and current Safari, Chrome, and iPhone diagnostics | Accepted |
-| Recoverable History | Production schema-11 recovery, exact owner-local day-31 purge, fresh PowerSync removal, dependency cleanup, private safety receipt, and rejected stale creation retry | Accepted |
+| Recoverable History | Production schema-11 recovery, guarded 100-step undo/redo, exact snapshot traversal, exact owner-local day-31 purge, fresh PowerSync removal, dependency cleanup, private safety receipt, and rejected stale creation retry | Accepted |
 | Layered Reminder Delivery | `2026-07-20_tasks_reminder_delivery_readiness.md` plus Safari and iPhone Web Push delivery/open acceptance | Accepted |
 | Evidence-Gated Native Apple Expansion | `2026-07-20_tasks_native_apple_companion.md`; lived evidence supports continued web/PWA/Raycast use without premature native scope | Accepted by deliberate deferral |
-| Keyboard-First Daily Operation | `2026-07-20_tasks_accessibility_validation.md`, browser keyboard passes, and focused component tests | Accepted |
+| Keyboard-First Daily Operation | Browser keyboard passes, Mac/Windows command mappings, keyboard-only undo/redo, pointer-selection alternatives, drag reordering, and focused component tests | Accepted |
 | Deterministic Mail Capture Retry | Archived `fix-tasks-mail-capture-retry` exact-replay, one-task/source/history, and fresh PowerSync-client proof | Accepted |
 | Large-Library Responsiveness | `2026-07-20_tasks_large_library_performance.md` and opt-in performance suite | Accepted |
 | Parallel Use with Things | Accepted seven-task corrected-window trial, exact nine-receipt backend and projection reconciliation, explicit disable, and healthy post-disable Mail run | Accepted |
@@ -56,8 +58,12 @@ The completed replacement removes Inbox as a planning destination, makes Today a
 
 - Migration `20260722000000_replace_tasks_inbox_logbook_trash_with_done.sql` is recorded locally and remotely. It normalized all 16 production to-dos to Anytime, assigned 14 to Today Next and two to Today Later, and left zero legacy destinations or sections.
 - Migration `20260722150843_add_future_task_day_horizons.sql` is recorded locally and remotely. It adds the Inbox horizon, defaults new capture to Inbox, preserves a selected horizon for future work, resolves due `none` work to Inbox without rewriting it, and corrects orphan recovery to Anytime Inbox.
-- MCP function version 10 is active and advertises 42 tools. The `create_task` schema exposes exactly `none`, `inbox`, `now`, `next`, and `later`, with `inbox` as its default.
+- Migration `20260722174621_add_tasks_deep_undo_redo.sql` is recorded locally and remotely. It adds the `redo` history transition, replaces the public update-trigger helper with a revoked private SECURITY DEFINER helper, and classifies undo/redo only when the complete current/source snapshot pair matches exactly. It rewrote zero task records.
+- The private update trigger is active. Anonymous and authenticated roles cannot execute its helper directly, and the post-deployment Supabase security and performance advisor sets are unchanged.
+- MCP function version 11 is active and advertises 42 tools. The `create_task` schema exposes exactly `none`, `inbox`, `now`, `next`, and `later`, with `inbox` as its default.
 - A disposable production fixture created future Inbox, Now, Next, Later, and `none` tasks, verified every stored horizon, advanced them to the owner-local date, confirmed the `none` task resolved to Today Inbox, proved a matching fresh PowerSync projection, and removed every synthetic task and owner.
+- A separate disposable production fixture created one task, applied a forward MCP update, undid it through the synchronized web repository, redid the same source event, and proved ordered `create`, `update`, `undo`, and `redo` revisions 1-4 in a fresh PowerSync database. Cleanup left zero synthetic users, tasks, history rows, or purge receipts.
+- Authenticated rendered verification confirmed the Today header contains Search and Keyboard Commands without persistent Undo or selection triggers. The dual-platform panel identified Mac as current, a Command-click plus Shift-click selected the expected anchored three-task range, eligible rows exposed native drag affordances, the 390 px header had no page overflow, and the browser console remained clean.
 - Post-fixture production counts remain 16 to-dos, six Done to-dos, 27 history rows, nine Mail sources, zero purge receipts, and zero synthetic users or tasks. PowerSync remains `ready` with exactly the approved 22 synchronized tables.
 - PowerSync remains `ready` with exactly the approved 22 synchronized tables. The private purge-receipt table is excluded from publication and has RLS enabled with no public, anonymous, or authenticated grants.
 - Cron job 2 runs `tasks_private.purge_expired_done()` once per minute. The three post-acceptance runs at 7:35 AM, 7:36 AM, and 7:37 AM PDT succeeded, and zero personal roots are currently eligible.
@@ -78,7 +84,8 @@ The completed replacement removes Inbox as a planning destination, makes Today a
 2. Raycast capture and Inbox Manager delegation omit an explicit horizon so the BathOS service applies its Anytime and Today Inbox default without sending retired planning fields.
 3. The once-per-minute retention job, exact owner-local boundary, private retry receipt, fresh PowerSync removal, and synthetic cleanup passed in production.
 4. The accidental future-time purge was recovered from the verified backup with explicit approval, and the safer transaction-guarded acceptance passed afterward without changing personal data.
-5. Durable specifications are synchronized, companion repositories pass their complete validation gates, and the final cross-system audit found no remaining V1 implementation or production-readiness gate.
+5. The deep undo/redo migration, modifier selection, dual-platform command reference, drag reordering, and cleanup-backed production projection gate passed without changing personal task content.
+6. Durable specifications are synchronized, companion repositories pass their complete validation gates, and the final cross-system audit found no remaining V1 implementation or production-readiness gate.
 
 ## Pre-Closeout Validation
 
@@ -93,6 +100,8 @@ The current committed `main` branch passed the following broad gates during the 
 The 2026 Jul 21 5:57 PM PDT pre-closeout rerun also passed the current Inbox Manager suite with 233 tests, all 181 Mail-rule validation cases, and strict validation of its seven durable specifications plus the then-active parallel-handoff change. BathOS ESLint, production build, 708-test default suite, and all seven durable specifications passed from the synchronized `main` branch in the same audit. After closeout, Inbox Manager again passed all 233 tests, all 181 Mail-rule cases, shell syntax checks, Git whitespace checks, and strict validation of the seven durable specifications with no active OpenSpec change.
 
 The final day-horizon closeout rerun passed all 714 default BathOS tests across 118 files with 11 intentional integration and performance cases skipped, all 728 database assertions across 27 files, ESLint, Tasks TypeScript checking, the production build, strict validation of all seven durable specifications, Edge bundle verification, and Git whitespace checking. Raycast passed all 21 capture tests. Inbox Manager passed all 233 tests and strict validation of its seven durable specifications.
+
+The final list-interaction release gate passed all 724 default BathOS tests across 119 files with 12 intentional integration and performance cases skipped, all 738 database assertions across 28 files, ESLint, Tasks TypeScript checking, the production build, strict validation of all seven durable specifications plus the active interaction change, and Git whitespace checking. The cleanup-backed production acceptance separately proved ordered `create`, `update`, `undo`, and `redo` revisions through a fresh PowerSync projection.
 
 The performance gate derived every 10,000-record planning view below 1.4 ms at p95, built the reusable search index below 6.7 ms at p95, rendered a 1,000-row view in 904.5 ms, and opened 10,000-record search in 357.9 ms. The remaining opt-in integration suites have stronger dated local or production acceptance evidence for offline persistence, multi-client convergence, preservation, sustained parallel use, and production topology.
 
@@ -138,4 +147,4 @@ The Tasks V1 replacement goal is complete. Today is an Anytime projection with I
 
 ## Specification Impact
 
-The archived `replace-task-inbox-logbook-trash-with-done` and `add-future-task-day-horizons` changes update the durable personal Tasks, MCP, and routing contracts. The Inbox Manager durable handoff contract delegates planning placement to the specialized BathOS service, which defaults unspecified capture to Anytime and Today Inbox without changing Mail classification or mailbox policy.
+The archived `replace-task-inbox-logbook-trash-with-done`, `add-future-task-day-horizons`, and `improve-tasks-list-interactions` changes update the durable personal Tasks, MCP, and routing contracts. The Inbox Manager durable handoff contract delegates planning placement to the specialized BathOS service, which defaults unspecified capture to Anytime and Today Inbox without changing Mail classification or mailbox policy.

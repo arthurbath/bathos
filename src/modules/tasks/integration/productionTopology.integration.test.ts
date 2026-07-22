@@ -43,6 +43,14 @@ type SyncIssue = {
   code: string;
 };
 
+type ProjectedHistoryEvent = {
+  id: string;
+  client_mutation_id: string;
+  base_revision: number;
+  result_revision: number;
+  transition: string;
+};
+
 type ProjectionReceiptTable =
   | 'tasks_recurrence_evaluations'
   | 'tasks_recurrence_status_events'
@@ -389,6 +397,137 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       .eq('owner_id', owner.id);
     expect(taskCountError).toBeNull();
     expect(taskCount).toBe(horizons.length);
+
+    await disposeClient(freshClient);
+    await signOutSyntheticClient(owner.client);
+    await deleteSyntheticOwner(owner.id);
+    const { count: residueCount, error: residueError } = await admin
+      .from('tasks_todos')
+      .select('id', { count: 'exact', head: true })
+      .eq('owner_id', owner.id);
+    expect(residueError).toBeNull();
+    expect(residueCount).toBe(0);
+  });
+
+  it('proves deep undo and redo through a fresh projection and cleanup', async () => {
+    const environment = productionEnvironment();
+    testDirectory ??= await mkdtemp(join(tmpdir(), 'bathos-tasks-production-topology-'));
+    admin ??= createClient<Database>(environment.supabaseUrl, environment.serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const owner = await createSyntheticOwner('undo-redo', environment);
+    const connector = createTasksSupabaseConnector({
+      endpoint: environment.powerSyncUrl,
+      supabase: owner.client,
+    });
+    const setupClient = await openClient(
+      testDirectory,
+      'undo-redo-setup.db',
+      owner.id,
+      connector,
+    );
+    await setupClient.repository.ensurePlanningSettings(owner.id, 'America/Los_Angeles');
+    await waitForUploadQueue(setupClient.database, 0);
+
+    const auth = { userId: owner.id, email: owner.email, supabase: owner.client };
+    const creation = await createTaskData({
+      idempotency_key: crypto.randomUUID(),
+      title: 'Synthetic Undo Redo Before',
+      notes: 'Disposable production undo and redo validation only',
+      destination: 'anytime',
+      today_section: 'next',
+      entry_channel: 'mcp',
+    }, auth);
+    const taskId = creation.task.id;
+    await waitForLocalTask(
+      setupClient.database,
+      taskId,
+      (task) => task.revision === 1 && task.title === 'Synthetic Undo Redo Before',
+    );
+
+    const forward = await updateTaskData({
+      task_id: taskId,
+      expected_revision: 1,
+      client_mutation_id: crypto.randomUUID(),
+      title: 'Synthetic Undo Redo After',
+    }, auth);
+    expect(forward.mutation_outcome).toBe('applied');
+    await waitForLocalTask(
+      setupClient.database,
+      taskId,
+      (task) => task.revision === 2 && task.title === 'Synthetic Undo Redo After',
+    );
+    const sourceEvent = await waitForLocalHistoryTransition(
+      setupClient.database,
+      taskId,
+      'update',
+      2,
+    );
+    expect(sourceEvent.base_revision).toBe(1);
+
+    const undone = await setupClient.repository.undoTask(owner.id, sourceEvent.id);
+    expect(undone).toMatchObject({
+      revision: 3,
+      title: 'Synthetic Undo Redo Before',
+      undo_source_event_id: sourceEvent.id,
+    });
+    await waitForUploadQueue(setupClient.database, 0, 60_000);
+    await waitForLocalTask(
+      setupClient.database,
+      taskId,
+      (task) => task.revision === 3 && task.title === 'Synthetic Undo Redo Before',
+    );
+    const undoEvent = await waitForLocalHistoryTransition(
+      setupClient.database,
+      taskId,
+      'undo',
+      3,
+    );
+    expect(undoEvent.client_mutation_id).toBe(undone.client_mutation_id);
+
+    const redone = await setupClient.repository.redoTask(owner.id, sourceEvent.id);
+    expect(redone).toMatchObject({
+      revision: 4,
+      title: 'Synthetic Undo Redo After',
+      undo_source_event_id: sourceEvent.id,
+    });
+    await waitForUploadQueue(setupClient.database, 0, 60_000);
+    await waitForLocalTask(
+      setupClient.database,
+      taskId,
+      (task) => task.revision === 4 && task.title === 'Synthetic Undo Redo After',
+    );
+    const redoEvent = await waitForLocalHistoryTransition(
+      setupClient.database,
+      taskId,
+      'redo',
+      4,
+    );
+    expect(redoEvent.client_mutation_id).toBe(redone.client_mutation_id);
+    await disposeClient(setupClient);
+
+    const freshClient = await openClient(
+      testDirectory,
+      'undo-redo-fresh.db',
+      owner.id,
+      connector,
+    );
+    await waitForLocalTask(
+      freshClient.database,
+      taskId,
+      (task) => task.revision === 4 && task.title === 'Synthetic Undo Redo After',
+    );
+    const freshHistory = await freshClient.database.getAll<ProjectedHistoryEvent>(
+      `SELECT id, client_mutation_id, base_revision, result_revision, transition
+       FROM tasks_history_events
+       WHERE task_id = ?
+       ORDER BY result_revision, id`,
+      [taskId],
+    );
+    expect(freshHistory.map((event) => event.transition))
+      .toEqual(['create', 'update', 'undo', 'redo']);
+    expect(freshHistory.map((event) => event.result_revision)).toEqual([1, 2, 3, 4]);
 
     await disposeClient(freshClient);
     await signOutSyntheticClient(owner.client);
@@ -787,6 +926,30 @@ async function waitForLocalTask(
     await delay(100);
   }
   throw new Error(`Local task ${taskId} did not reach the expected state`);
+}
+
+async function waitForLocalHistoryTransition(
+  database: PowerSyncDatabase,
+  taskId: string,
+  transition: string,
+  resultRevision: number,
+): Promise<ProjectedHistoryEvent> {
+  const deadline = Date.now() + 45_000;
+  while (Date.now() < deadline) {
+    const event = await database.getOptional<ProjectedHistoryEvent>(
+      `SELECT id, client_mutation_id, base_revision, result_revision, transition
+       FROM tasks_history_events
+       WHERE task_id = ? AND transition = ? AND result_revision = ?
+       ORDER BY occurred_at DESC, id DESC
+       LIMIT 1`,
+      [taskId, transition, resultRevision],
+    );
+    if (event !== null) return event;
+    await delay(100);
+  }
+  throw new Error(
+    `Local task ${taskId} did not receive ${transition} history revision ${resultRevision}`,
+  );
 }
 
 async function localTaskCount(database: PowerSyncDatabase): Promise<number> {

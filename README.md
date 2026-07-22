@@ -71,7 +71,8 @@ Plan and complete personal tasks through a private-first, keyboard-focused workf
 - Four primary navigation destinations with secondary views and maintenance tools under More and Config
 - Areas, projects, headings, checklists, templates, reminders, and recurrence
 - Structured actionability and source provenance without generic tags
-- Offline local operation, 30-day Done recovery, history, export, and restore
+- Offline local operation, 30-day Done recovery, 100-step guarded undo/redo, export, and restore
+- Single-click editing, modifier-based range selection, and direct drag reordering with keyboard alternatives
 - First-full-sync status, bounded local reliability history, and content-free production warnings
 - Narrow task-domain MCP tools and Raycast capture commands
 

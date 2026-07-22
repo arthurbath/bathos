@@ -245,6 +245,41 @@ export function useTaskList(ownerId: string, view: TaskListView) {
     },
     [planningDate, tasks, updateTask, view],
   );
+  const reorderTaskTo = useCallback(
+    async (taskId: string, targetTaskId: string, placement: 'before' | 'after') => {
+      const currentTask = tasks.find((task) => task.id === taskId);
+      const targetTask = tasks.find((task) => task.id === targetTaskId);
+      if (!currentTask || !targetTask || currentTask.id === targetTask.id) {
+        return currentTask;
+      }
+      if (
+        taskOrderSection(currentTask, view, planningDate)
+        !== taskOrderSection(targetTask, view, planningDate)
+      ) {
+        return currentTask;
+      }
+      const sectionTasks = tasks.filter((task) => (
+        taskOrderSection(task, view, planningDate) === taskOrderSection(currentTask, view, planningDate)
+      ));
+      const remaining = sectionTasks.filter((task) => task.id !== taskId);
+      const targetIndex = remaining.findIndex((task) => task.id === targetTaskId);
+      if (targetIndex < 0) {
+        return currentTask;
+      }
+      const destinationIndex = targetIndex + (placement === 'after' ? 1 : 0);
+      const currentIndex = sectionTasks.findIndex((task) => task.id === taskId);
+      if (currentIndex === destinationIndex) {
+        return currentTask;
+      }
+      const orderKey = generateTaskMoveOrderKey(
+        sectionTasks.map((task) => ({ id: task.id, orderKey: task.order_key })),
+        taskId,
+        destinationIndex,
+      );
+      return updateTask(taskId, { order_key: orderKey });
+    },
+    [planningDate, tasks, updateTask, view],
+  );
 
   return {
     tasks,
@@ -255,6 +290,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
     moveTask,
     moveTasks,
     reorderTask,
+    reorderTaskTo,
     transitionTask,
     planningDate,
   };

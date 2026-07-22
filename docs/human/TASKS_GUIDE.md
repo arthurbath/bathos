@@ -32,22 +32,29 @@ Use deadlines for the last acceptable date and reminders for a specific local ti
 
 ## Keyboard Commands
 
-Press `?` in Tasks to open the current keyboard reference.
+Press `?` in Tasks to open the current keyboard and pointer reference. The panel always shows Mac and Windows commands and identifies the current platform.
 
-| Keys | Action |
-| --- | --- |
-| `N` | Capture a task |
-| `/` | Search tasks and views |
-| `G`, then `T/U/A/S/P/D/E/C` | Open Today, Upcoming, Anytime, Someday, Projects, Done, Templates, or Config |
-| `Command+Z` | Undo the latest safe task change |
-| `Enter` | Edit the focused task |
-| `C` | Complete the focused task |
-| `M` | Move the focused task to an area, project, or heading |
-| `W` | Choose when the focused task should appear |
-| `Up/Down` | Move focus between tasks |
-| `Option+Up/Down` | Reorder the focused task |
-| `Command+Enter` | Save an open editor |
-| `Escape` | Cancel or close the current surface |
+| Action | Mac | Windows |
+| --- | --- | --- |
+| Capture a task | `N` | `N` |
+| Search tasks and views | `/` | `/` |
+| Open Today, Upcoming, Anytime, Someday, Projects, Done, Templates, or Config | `G`, then `T/U/A/S/P/D/E/C` | `G`, then `T/U/A/S/P/D/E/C` |
+| Undo the latest safe task change | `Command+Z` | `Control+Z` |
+| Redo the latest undone task change | `Command+Shift+Z` | `Control+Shift+Z` |
+| Edit the focused task | `Enter` | `Enter` |
+| Complete the focused task | `C` | `C` |
+| Move the focused task to an area, project, or heading | `M` | `M` |
+| Choose when the focused task should appear | `W` | `W` |
+| Move focus between tasks | `Up/Down` | `Up/Down` |
+| Reorder the focused task | `Option+Up/Down` | `Alt+Up/Down` |
+| Save an open editor | `Command+Enter` | `Control+Enter` |
+| Cancel or close the current surface | `Escape` | `Escape` |
+
+Tasks retains up to 100 safe forward changes for keyboard undo and redo. A new forward change clears the redo path. Undo or redo stops when the current task no longer matches the exact recorded state, preventing an older action from overwriting intervening work.
+
+Command-click on Mac or Control-click on Windows enters selection mode and toggles a task. Shift-click replaces the selection with the contiguous range between the original anchor and the newly clicked task. Once selection mode is active, an ordinary click also toggles a task. Choose `Done` in the selection bar to return to ordinary single-click editing.
+
+Drag a task directly to another position inside the same Today section, Anytime list, or Someday list. Keyboard and row-menu reorder commands remain available.
 
 ## Capture from Raycast
 

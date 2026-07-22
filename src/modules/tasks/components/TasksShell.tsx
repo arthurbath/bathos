@@ -5,6 +5,8 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type DragEvent,
+  type MouseEvent,
   type ReactNode,
   type RefObject,
 } from 'react';
@@ -25,7 +27,6 @@ import {
   CornerDownLeft,
   DatabaseBackup,
   Hourglass,
-  ListChecks,
   ListTodo,
   LayoutTemplate,
   MoreHorizontal,
@@ -36,7 +37,6 @@ import {
   Square,
   SquareCheckBig,
   Trash2,
-  Undo2,
   FolderKanban,
   X,
 } from 'lucide-react';
@@ -110,6 +110,10 @@ import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import { deriveTaskViewProjects } from '@/modules/tasks/domain/taskProjectViews';
+import {
+  applyTaskSelectionGesture,
+  isMacLikeTaskPlatform,
+} from '@/modules/tasks/domain/taskSelection';
 
 type TasksShellProps = {
   userId: string;
@@ -178,13 +182,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     moveTask,
     moveTasks,
     reorderTask,
+    reorderTaskTo,
     transitionTask,
     planningDate,
   } = useTaskList(userId, taskListView);
   const {
     available: taskUndoAvailable,
+    redoAvailable: taskRedoAvailable,
     pending: taskUndoPending,
     undo: undoLastTaskChange,
+    redo: redoLastTaskChange,
   } = useTaskUndo(userId);
   const planningProjects = useMemo(() => deriveTaskViewProjects(
     hierarchy.projects,
@@ -197,6 +204,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<Set<string>>(() => new Set());
+  const [bulkSelectionAnchorId, setBulkSelectionAnchorId] = useState<string | null>(null);
   const [bulkWhenOpen, setBulkWhenOpen] = useState(false);
   const [bulkPending, setBulkPending] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -215,6 +223,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
   const pendingNavigationRef = useRef(false);
   const navigationResetRef = useRef<number | null>(null);
+  const macLikePlatform = useMemo(
+    () => isMacLikeTaskPlatform(globalThis.navigator?.platform ?? ''),
+    [],
+  );
   const doneRoots = deletedHierarchyRoots.roots;
   const taskViewIsEmpty = view === 'done'
     ? tasks.length === 0 && doneRoots.length === 0 && planningProjects.length === 0
@@ -236,6 +248,20 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
   }, [undoLastTaskChange]);
 
+  const runTaskRedo = useCallback(async () => {
+    try {
+      await redoLastTaskChange();
+    } catch (redoError) {
+      showTaskError('Task Change Could Not Be Redone', redoError);
+    }
+  }, [redoLastTaskChange]);
+
+  const clearTaskSelection = useCallback(() => {
+    setBulkSelection(new Set());
+    setBulkSelectionAnchorId(null);
+    setBulkMode(false);
+  }, []);
+
   useEffect(() => {
     const previousMotionScope = document.body.getAttribute('data-tasks-motion-scope');
     document.body.setAttribute('data-tasks-motion-scope', 'true');
@@ -250,11 +276,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   useEffect(() => {
     setSelectedTaskId(null);
-    setBulkMode(false);
-    setBulkSelection(new Set());
+    clearTaskSelection();
     setBulkWhenOpen(false);
     captureInputRef.current?.focus();
-  }, [view]);
+  }, [clearTaskSelection, view]);
 
   useEffect(() => {
     const visibleIds = new Set(tasks.map(({ id }) => id));
@@ -262,7 +287,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       const next = new Set(Array.from(current).filter((taskId) => visibleIds.has(taskId)));
       return next.size === current.size ? current : next;
     });
-  }, [tasks]);
+    setBulkSelectionAnchorId((current) => (
+      current === null || visibleIds.has(current)
+        ? current
+        : Array.from(bulkSelection).find((taskId) => visibleIds.has(taskId)) ?? null
+    ));
+  }, [bulkSelection, tasks]);
 
   useEffect(() => {
     const parameters = new URLSearchParams(location.search);
@@ -301,7 +331,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [searchTargetTaskId, tasks]);
 
   useEffect(() => {
-    const clearPendingNavigation = () => {
+      const clearPendingNavigation = () => {
       pendingNavigationRef.current = false;
       if (navigationResetRef.current !== null) {
         window.clearTimeout(navigationResetRef.current);
@@ -310,24 +340,28 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     };
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       const opensKeyboardHelp = event.key === '?' && event.shiftKey;
-      const invokesTaskUndo = event.key.toLowerCase() === 'z'
-        && (event.metaKey || event.ctrlKey)
-        && !event.altKey
-        && !event.shiftKey;
+      const invokesTaskHistory = event.key.toLowerCase() === 'z'
+        && (macLikePlatform ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey)
+        && !event.altKey;
+      const invokesTaskRedo = invokesTaskHistory && event.shiftKey;
       const editableTarget = isTaskKeyboardInput(event.target);
       const commandSurfaceOpen = document.querySelector('[role="dialog"], [role="menu"]') !== null;
-      if (invokesTaskUndo) {
+      if (invokesTaskHistory) {
         clearPendingNavigation();
         if (
           !event.defaultPrevented
           && !event.isComposing
           && !editableTarget
           && !commandSurfaceOpen
-          && taskUndoAvailable
+          && (invokesTaskRedo ? taskRedoAvailable : taskUndoAvailable)
           && !taskUndoPending
         ) {
           event.preventDefault();
-          void runTaskUndo();
+          if (invokesTaskRedo) {
+            void runTaskRedo();
+          } else {
+            void runTaskUndo();
+          }
         }
         return;
       }
@@ -392,7 +426,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       window.removeEventListener('keydown', handleKeyDown);
       clearPendingNavigation();
     };
-  }, [basePath, navigate, runTaskUndo, taskUndoAvailable, taskUndoPending]);
+  }, [
+    basePath,
+    macLikePlatform,
+    navigate,
+    runTaskRedo,
+    runTaskUndo,
+    taskRedoAvailable,
+    taskUndoAvailable,
+    taskUndoPending,
+  ]);
 
   const openCommandSurface = (open: (value: boolean) => void) => {
     commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
@@ -525,8 +568,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setBulkPending(true);
     try {
       await moveTasks(taskIds, input);
-      setBulkSelection(new Set());
-      setBulkMode(false);
+      clearTaskSelection();
       focusTaskListFallback();
     } catch (moveError) {
       showTaskError('Selected Tasks Could Not Be Planned', moveError);
@@ -574,8 +616,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             todaySection,
             startDate: addTaskCalendarDays(planningDate, 1),
           })));
-          setBulkSelection(new Set());
-          setBulkMode(false);
+          clearTaskSelection();
           focusTaskListFallback();
         } catch (moveError) {
           showTaskError('Selected Tasks Could Not Be Planned', moveError);
@@ -598,6 +639,33 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     || view === 'anytime'
     || view === 'someday';
 
+  const handleTaskPointerSelection = (
+    event: MouseEvent<HTMLButtonElement>,
+    taskId: string,
+  ) => {
+    const next = applyTaskSelectionGesture({
+      active: bulkMode,
+      anchorId: bulkSelectionAnchorId,
+      selectedIds: bulkSelection,
+    }, {
+      taskId,
+      visibleTaskIds: tasks.map(({ id }) => id),
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      macLikePlatform,
+    });
+    if (!bulkEligible || next === null) {
+      setSelectedTaskId((current) => (current === taskId ? null : taskId));
+      return;
+    }
+    event.preventDefault();
+    setSelectedTaskId(null);
+    setBulkMode(next.active);
+    setBulkSelectionAnchorId(next.anchorId);
+    setBulkSelection(next.selectedIds);
+  };
+
   const renderActiveTask = (task: TaskTodo, sectionTasks: TaskTodo[]) => {
     const index = sectionTasks.findIndex((candidate) => candidate.id === task.id);
     return (
@@ -606,7 +674,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         task={task}
         hierarchy={hierarchy}
         selected={selectedTaskId === task.id}
-        onSelect={() => setSelectedTaskId((current) => (current === task.id ? null : task.id))}
+        onSelect={(event) => handleTaskPointerSelection(event, task.id)}
+        onCloseEditor={() => setSelectedTaskId(null)}
         bulkSelection={bulkMode ? {
           selected: bulkSelection.has(task.id),
           onToggle: () => setBulkSelection((current) => {
@@ -665,6 +734,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             throw reorderError;
           }
         } : undefined}
+        draggableTask={!bulkMode
+          && (view === 'today' || view === 'anytime' || view === 'someday')
+          && sectionTasks.length > 1}
+        onDropTask={async (draggedTaskId, placement) => {
+          try {
+            await reorderTaskTo(draggedTaskId, task.id, placement);
+          } catch (reorderError) {
+            showTaskError('Task Could Not Be Reordered', reorderError);
+            throw reorderError;
+          }
+        }}
         planningLabel={view === 'today' ? null : undefined}
         todayMarker={(view === 'anytime' || view === 'upcoming') && task.today_section !== 'none'
           ? task.today_section
@@ -729,40 +809,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               {getTaskViewLabel(view)}
             </h2>
             <div className="flex items-center gap-1">
-              {taskUndoAvailable ? (
-                <Button
-                  type="button"
-                  variant="clear"
-                  size="icon"
-                  disabled={taskUndoPending}
-                  aria-label="Undo Last Task Change"
-                  aria-keyshortcuts="Meta+Z Control+Z"
-                  title="Undo Last Task Change"
-                  className="h-9 w-9 text-muted-foreground"
-                  onClick={() => void runTaskUndo()}
-                >
-                  <Undo2 className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              ) : null}
-              {bulkEligible && tasks.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="clear"
-                  size="icon"
-                  aria-label={bulkMode ? 'Exit Task Selection' : 'Select Tasks'}
-                  aria-pressed={bulkMode}
-                  onClick={() => {
-                    setSelectedTaskId(null);
-                    setBulkMode((current) => {
-                      if (current) setBulkSelection(new Set());
-                      return !current;
-                    });
-                  }}
-                  className="h-9 w-9 text-muted-foreground"
-                >
-                  <ListChecks className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              ) : null}
               <Button
                 type="button"
                 variant="clear"
@@ -818,8 +864,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               onClear={() => setBulkSelection(new Set())}
               onPlan={() => openCommandSurface(setBulkWhenOpen)}
               onDone={() => {
-                setBulkSelection(new Set());
-                setBulkMode(false);
+                clearTaskSelection();
                 focusTaskListFallback();
               }}
             />
@@ -1730,6 +1775,7 @@ function TaskRow({
   hierarchy,
   selected,
   onSelect,
+  onCloseEditor,
   bulkSelection,
   onUpdate,
   onComplete,
@@ -1737,6 +1783,8 @@ function TaskRow({
   planningActions,
   onMoveUp,
   onMoveDown,
+  draggableTask,
+  onDropTask,
   planningLabel,
   todayMarker,
   reminder,
@@ -1749,7 +1797,8 @@ function TaskRow({
   task: TaskTodo;
   hierarchy: TaskHierarchyModel;
   selected: boolean;
-  onSelect: () => void;
+  onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
+  onCloseEditor: () => void;
   bulkSelection?: {
     selected: boolean;
     onToggle: () => void;
@@ -1760,6 +1809,8 @@ function TaskRow({
   planningActions: TaskTemporalAction[];
   onMoveUp?: () => Promise<void>;
   onMoveDown?: () => Promise<void>;
+  draggableTask: boolean;
+  onDropTask: (draggedTaskId: string, placement: 'before' | 'after') => Promise<void>;
   planningLabel?: string | null;
   todayMarker?: TodayTaskSection;
   reminder: TaskReminder | null;
@@ -1776,7 +1827,9 @@ function TaskRow({
   const [pending, setPending] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [whenOpen, setWhenOpen] = useState(false);
+  const [dragPlacement, setDragPlacement] = useState<'before' | 'after' | null>(null);
   const titleButtonRef = useRef<HTMLButtonElement>(null);
+  const suppressClickUntilRef = useRef(0);
   const hierarchyLabel = getTaskHierarchyLabel(task, hierarchy);
   const TodayMarkerIcon = todayMarker === 'now'
     ? CircleDot
@@ -1863,7 +1916,60 @@ function TaskRow({
   }));
 
   return (
-    <article className={selected || bulkSelection?.selected ? 'bg-foreground/[0.04]' : undefined}>
+    <article
+      draggable={draggableTask && !pending}
+      data-task-draggable={draggableTask ? 'true' : undefined}
+      data-drag-placement={dragPlacement ?? undefined}
+      onDragStart={(event) => {
+        if (!draggableTask || pending) {
+          event.preventDefault();
+          return;
+        }
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('application/x-bathos-task-id', task.id);
+        event.dataTransfer.setData('text/plain', task.id);
+        suppressClickUntilRef.current = Date.now() + 1_000;
+      }}
+      onDragOver={(event) => {
+        if (!draggableTask || pending) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        const bounds = event.currentTarget.getBoundingClientRect();
+        setDragPlacement(event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after');
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setDragPlacement(null);
+        }
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        const draggedTaskId = event.dataTransfer.getData('application/x-bathos-task-id')
+          || event.dataTransfer.getData('text/plain');
+        const placement = dragPlacement;
+        setDragPlacement(null);
+        if (!draggableTask || !draggedTaskId || draggedTaskId === task.id || placement === null) {
+          return;
+        }
+        void run(() => onDropTask(draggedTaskId, placement));
+      }}
+      onDragEnd={() => {
+        setDragPlacement(null);
+        suppressClickUntilRef.current = Date.now() + 250;
+      }}
+      className={[
+        'relative',
+        selected || bulkSelection?.selected ? 'bg-foreground/[0.04]' : '',
+      ].filter(Boolean).join(' ') || undefined}
+    >
+      {dragPlacement ? (
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 bg-info ${
+            dragPlacement === 'before' ? 'top-0' : 'bottom-0'
+          }`}
+        />
+      ) : null}
       <div className="flex min-h-14 items-center gap-3 px-2 sm:px-4">
         {bulkSelection ? (
           <button
@@ -1894,7 +2000,13 @@ function TaskRow({
         <button
           ref={titleButtonRef}
           type="button"
-          onClick={bulkSelection ? bulkSelection.onToggle : onSelect}
+          onClick={(event) => {
+            if (Date.now() <= suppressClickUntilRef.current) {
+              event.preventDefault();
+              return;
+            }
+            onSelect(event);
+          }}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing) {
               return;
@@ -1949,7 +2061,7 @@ function TaskRow({
             : 'Enter ArrowUp ArrowDown C M W Alt+ArrowUp Alt+ArrowDown'}
           data-task-title-control
           data-task-id={task.id}
-          className="min-w-0 flex-1 py-4 text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={`min-w-0 flex-1 py-4 text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draggableTask ? 'cursor-grab active:cursor-grabbing' : ''}`}
         >
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate">{task.title}</span>
@@ -2041,7 +2153,7 @@ function TaskRow({
           task={task}
           hierarchy={hierarchy}
           returnFocusRef={titleButtonRef}
-          onCancel={onSelect}
+          onCancel={onCloseEditor}
           onSave={onUpdate}
           reminder={reminder}
           reminderMode={reminderMode}

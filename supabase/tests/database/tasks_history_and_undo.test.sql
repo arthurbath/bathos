@@ -500,8 +500,8 @@ SELECT throws_ok(
       AND revision = 6
   $$,
   '23514',
-  'The requested undo is no longer safe',
-  'rejects undo after the source revision is no longer current'
+  'The requested task history traversal is no longer safe',
+  'rejects undo when the complete current state no longer matches the source'
 );
 SELECT is(
   (

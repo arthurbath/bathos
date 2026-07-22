@@ -513,6 +513,22 @@ describe('useTaskList optimistic display', () => {
         'task-next-first',
         'task-later',
       ]);
+
+      await act(async () => {
+        await latest.reorderTaskTo('task-next-second', 'task-next-first', 'after');
+      });
+      expect(repository.updateTask).toHaveBeenLastCalledWith(
+        'owner-a',
+        'task-next-second',
+        { order_key: expect.any(String) },
+      );
+      expect(latest.tasks.map((task) => task.id)).toEqual([
+        'task-inbox',
+        'task-now',
+        'task-next-first',
+        'task-next-second',
+        'task-later',
+      ]);
     } finally {
       cleanup(root, container);
     }

@@ -87,6 +87,13 @@ export class UnsafeTaskUndoError extends Error {
   }
 }
 
+export class UnsafeTaskRedoError extends Error {
+  constructor(message = 'The requested redo is no longer safe') {
+    super(message);
+    this.name = 'UnsafeTaskRedoError';
+  }
+}
+
 export function parseTaskHistoryEvent(row: TaskHistoryStorageRow): TaskHistoryEvent {
   return {
     ...row,
@@ -110,7 +117,8 @@ export function createTaskUndoPatch(
     || event.outcome !== 'accepted'
     || event.transition === 'baseline'
     || event.transition === 'create'
-    || event.result_revision !== current.revision
+    || event.transition === 'undo'
+    || event.transition === 'redo'
     || event.before_state === null
     || !snapshotsEqual(event.after_state, snapshotTask(current))
   ) {
@@ -118,6 +126,27 @@ export function createTaskUndoPatch(
   }
 
   return event.before_state;
+}
+
+export function createTaskRedoPatch(
+  current: TaskTodo,
+  event: TaskHistoryEvent,
+): TaskHistorySnapshot {
+  if (
+    event.owner_id !== current.owner_id
+    || event.task_id !== current.id
+    || event.outcome !== 'accepted'
+    || event.transition === 'baseline'
+    || event.transition === 'create'
+    || event.transition === 'undo'
+    || event.transition === 'redo'
+    || event.before_state === null
+    || !snapshotsEqual(event.before_state, snapshotTask(current))
+  ) {
+    throw new UnsafeTaskRedoError();
+  }
+
+  return event.after_state;
 }
 
 export function snapshotTask(task: TaskTodo): TaskHistorySnapshot {

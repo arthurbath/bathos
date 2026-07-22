@@ -1,74 +1,232 @@
 import { useQuery } from '@powersync/react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   parseTaskHistoryEvent,
+  UnsafeTaskRedoError,
   UnsafeTaskUndoError,
   type TaskHistoryEvent,
+  type TaskHistorySnapshot,
   type TaskHistoryStorageRow,
 } from '@/modules/tasks/domain/taskHistory';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 
-const latestUndoableTaskEventQuery = `
+export const TASK_HISTORY_LIMIT = 100;
+const TASK_HISTORY_REPLAY_LIMIT = 500;
+
+const taskHistoryQuery = `
   SELECT event.*
   FROM tasks_history_events AS event
-  INNER JOIN tasks_todos AS task
-    ON task.id = event.task_id
-   AND task.owner_id = event.owner_id
   WHERE event.owner_id = ?
     AND event.outcome = 'accepted'
-    AND event.transition NOT IN ('baseline', 'create', 'undo')
-    AND event.result_revision = task.revision
   ORDER BY event.occurred_at DESC, event.id DESC
-  LIMIT 1
+  LIMIT ${TASK_HISTORY_REPLAY_LIMIT}
 `;
+
+export type TaskHistoryCursor = {
+  undo: TaskHistoryEvent[];
+  redo: TaskHistoryEvent[];
+};
+
+const emptyCursor = (): TaskHistoryCursor => ({ undo: [], redo: [] });
 
 export function useTaskUndo(ownerId: string) {
   const { repository } = useTasksRuntime();
-  const query = useQuery<TaskHistoryStorageRow>(latestUndoableTaskEventQuery, [ownerId]);
+  const query = useQuery<TaskHistoryStorageRow>(taskHistoryQuery, [ownerId]);
   const pendingRef = useRef(false);
+  const cursorRef = useRef<TaskHistoryCursor>(emptyCursor());
+  const processedEventIdsRef = useRef(new Set<string>());
+  const ownerIdRef = useRef(ownerId);
+  const [cursor, setCursor] = useState<TaskHistoryCursor>(emptyCursor);
   const [pending, setPending] = useState(false);
-  const parsed = useMemo(() => parseLatestUndoableEvent(query.data), [query.data]);
+  const parsed = useMemo(() => parseHistoryEvents(query.data), [query.data]);
+
+  useEffect(() => {
+    if (ownerIdRef.current !== ownerId) {
+      ownerIdRef.current = ownerId;
+      processedEventIdsRef.current = new Set();
+      cursorRef.current = emptyCursor();
+      setCursor(cursorRef.current);
+    }
+
+    let next = cursorRef.current;
+    let changed = false;
+    for (const event of parsed.events) {
+      if (processedEventIdsRef.current.has(event.id)) {
+        continue;
+      }
+      processedEventIdsRef.current.add(event.id);
+      next = applyTaskHistoryEvent(next, event);
+      changed = true;
+    }
+    if (changed) {
+      cursorRef.current = next;
+      setCursor(next);
+    }
+  }, [ownerId, parsed.events]);
 
   const undo = useCallback(async () => {
-    if (pendingRef.current || parsed.event === null) {
+    const event = cursorRef.current.undo.at(-1) ?? null;
+    if (pendingRef.current || event === null) {
       throw new UnsafeTaskUndoError('There is no current task change available to undo');
     }
 
     pendingRef.current = true;
     setPending(true);
     try {
-      return await repository.undoTask(ownerId, parsed.event.id);
+      const task = await repository.undoTask(ownerId, event.id);
+      const next = moveUndoCursorBackward(cursorRef.current, event);
+      cursorRef.current = next;
+      setCursor(next);
+      return task;
     } finally {
       pendingRef.current = false;
       setPending(false);
     }
-  }, [ownerId, parsed.event, repository]);
+  }, [ownerId, repository]);
+
+  const redo = useCallback(async () => {
+    const event = cursorRef.current.redo.at(-1) ?? null;
+    if (pendingRef.current || event === null) {
+      throw new UnsafeTaskRedoError('There is no current task change available to redo');
+    }
+
+    pendingRef.current = true;
+    setPending(true);
+    try {
+      const task = await repository.redoTask(ownerId, event.id);
+      const next = moveUndoCursorForward(cursorRef.current, event);
+      cursorRef.current = next;
+      setCursor(next);
+      return task;
+    } finally {
+      pendingRef.current = false;
+      setPending(false);
+    }
+  }, [ownerId, repository]);
 
   return {
-    available: parsed.event !== null,
+    available: cursor.undo.length > 0,
+    redoAvailable: cursor.redo.length > 0,
     pending,
     loading: query.isLoading,
     error: query.error ?? parsed.error,
-    event: parsed.event,
+    event: cursor.undo.at(-1) ?? null,
+    redoEvent: cursor.redo.at(-1) ?? null,
+    undoDepth: cursor.undo.length,
+    redoDepth: cursor.redo.length,
     undo,
+    redo,
   };
 }
 
-function parseLatestUndoableEvent(rows: readonly TaskHistoryStorageRow[]): {
-  event: TaskHistoryEvent | null;
-  error: Error | null;
-} {
-  if (rows.length === 0) {
-    return { event: null, error: null };
+export function replayTaskHistory(events: readonly TaskHistoryEvent[]): TaskHistoryCursor {
+  return [...events]
+    .sort(compareHistoryEvents)
+    .reduce(applyTaskHistoryEvent, emptyCursor());
+}
+
+export function applyTaskHistoryEvent(
+  cursor: TaskHistoryCursor,
+  event: TaskHistoryEvent,
+): TaskHistoryCursor {
+  if (event.transition === 'baseline') {
+    return cursor;
+  }
+  if (event.transition === 'create') {
+    return { ...cursor, redo: [] };
+  }
+  if (event.transition === 'undo') {
+    const source = cursor.undo.at(-1);
+    if (source && inverseMatchesSource(event, source, 'undo')) {
+      return moveUndoCursorBackward(cursor, source);
+    }
+    return cursor;
+  }
+  if (event.transition === 'redo') {
+    const source = cursor.redo.at(-1);
+    if (source && inverseMatchesSource(event, source, 'redo')) {
+      return moveUndoCursorForward(cursor, source);
+    }
+    return cursor;
   }
 
-  try {
-    return { event: parseTaskHistoryEvent(rows[0]), error: null };
-  } catch (error) {
-    return {
-      event: null,
-      error: error instanceof Error ? error : new Error('Task history could not be read'),
-    };
+  return {
+    undo: [...cursor.undo, event].slice(-TASK_HISTORY_LIMIT),
+    redo: [],
+  };
+}
+
+function moveUndoCursorBackward(
+  cursor: TaskHistoryCursor,
+  event: TaskHistoryEvent,
+): TaskHistoryCursor {
+  if (cursor.undo.at(-1)?.id !== event.id) {
+    return cursor;
   }
+  return {
+    undo: cursor.undo.slice(0, -1),
+    redo: [...cursor.redo, event].slice(-TASK_HISTORY_LIMIT),
+  };
+}
+
+function moveUndoCursorForward(
+  cursor: TaskHistoryCursor,
+  event: TaskHistoryEvent,
+): TaskHistoryCursor {
+  if (cursor.redo.at(-1)?.id !== event.id) {
+    return cursor;
+  }
+  return {
+    undo: [...cursor.undo, event].slice(-TASK_HISTORY_LIMIT),
+    redo: cursor.redo.slice(0, -1),
+  };
+}
+
+function inverseMatchesSource(
+  inverse: TaskHistoryEvent,
+  source: TaskHistoryEvent,
+  direction: 'undo' | 'redo',
+): boolean {
+  if (
+    source.before_state === null
+    || inverse.owner_id !== source.owner_id
+    || inverse.task_id !== source.task_id
+  ) {
+    return false;
+  }
+  return direction === 'undo'
+    ? snapshotsEqual(inverse.before_state, source.after_state)
+      && snapshotsEqual(inverse.after_state, source.before_state)
+    : snapshotsEqual(inverse.before_state, source.before_state)
+      && snapshotsEqual(inverse.after_state, source.after_state);
+}
+
+function snapshotsEqual(
+  left: TaskHistorySnapshot | null,
+  right: TaskHistorySnapshot | null,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function compareHistoryEvents(left: TaskHistoryEvent, right: TaskHistoryEvent): number {
+  return left.occurred_at.localeCompare(right.occurred_at) || left.id.localeCompare(right.id);
+}
+
+function parseHistoryEvents(rows: readonly TaskHistoryStorageRow[]): {
+  events: TaskHistoryEvent[];
+  error: Error | null;
+} {
+  const events: TaskHistoryEvent[] = [];
+  for (const row of rows) {
+    try {
+      events.push(parseTaskHistoryEvent(row));
+    } catch (error) {
+      return {
+        events: [],
+        error: error instanceof Error ? error : new Error('Task history could not be read'),
+      };
+    }
+  }
+  return { events: events.sort(compareHistoryEvents), error: null };
 }

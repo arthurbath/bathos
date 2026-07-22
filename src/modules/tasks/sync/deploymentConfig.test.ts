@@ -112,6 +112,16 @@ describe('Tasks PowerSync deployment configuration', () => {
       'test:tasks:production-day-horizon": "npm run test:tasks:production-topology',
     );
   });
+
+  it('keeps the undo and redo production gate synthetic, focused, and cleanup-backed', () => {
+    expect(productionProvisioner).toContain("'synthetic-undo-redo'");
+    expect(productionProvisioner).toContain("'test:tasks:production-undo-redo'");
+    expect(packageJson).toContain('"test:tasks:production-undo-redo"');
+    expect(packageJson).toContain("-t 'proves deep undo and redo through a fresh projection'");
+    expect(packageJson).not.toContain(
+      'test:tasks:production-undo-redo": "npm run test:tasks:production-topology',
+    );
+  });
 });
 
 function read(path: string): string {

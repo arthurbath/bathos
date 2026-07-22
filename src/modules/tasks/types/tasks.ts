@@ -92,6 +92,7 @@ export const taskMutationTransitions = [
   'delete',
   'restore',
   'undo',
+  'redo',
 ] as const;
 
 export type TaskDestination = (typeof taskDestinations)[number];
@@ -227,7 +228,7 @@ export type TaskHierarchyHistoryEvent = Omit<
   entity_type: Exclude<TaskHierarchyRootType, 'todo'>;
   actor_type: TaskActorType;
   mutation_channel: TaskEntryChannel;
-  transition: Exclude<TaskMutationTransition, 'undo'>;
+  transition: Exclude<TaskMutationTransition, 'undo' | 'redo'>;
 };
 
 export type TaskTemplateChecklistNode = {

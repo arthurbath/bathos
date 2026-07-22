@@ -8,6 +8,7 @@ import {
   normalizeTaskCalendarDate,
 } from '@/modules/tasks/domain/taskDates';
 import {
+  createTaskRedoPatch,
   createTaskUndoPatch,
   parseTaskHistoryEvent,
   type TaskHistorySnapshot,
@@ -554,6 +555,23 @@ export class TaskRepository {
     eventId: string,
     context?: TaskMutationContext,
   ): Promise<TaskTodo> {
+    return this.applyHistoryEvent(ownerId, eventId, 'undo', context);
+  }
+
+  async redoTask(
+    ownerId: string,
+    eventId: string,
+    context?: TaskMutationContext,
+  ): Promise<TaskTodo> {
+    return this.applyHistoryEvent(ownerId, eventId, 'redo', context);
+  }
+
+  private async applyHistoryEvent(
+    ownerId: string,
+    eventId: string,
+    direction: 'undo' | 'redo',
+    context?: TaskMutationContext,
+  ): Promise<TaskTodo> {
     assertOwner(ownerId);
     return this.database.writeTransaction(async (transaction) => {
       const storedEvent = await transaction.getOptional<TaskHistoryStorageRow>(
@@ -566,7 +584,9 @@ export class TaskRepository {
 
       const event = parseTaskHistoryEvent(storedEvent);
       const current = await getOwnedTask(transaction, ownerId, event.task_id);
-      const patch = createTaskUndoPatch(current, event);
+      const patch = direction === 'undo'
+        ? createTaskUndoPatch(current, event)
+        : createTaskRedoPatch(current, event);
       assertSource(
         patch.source_kind,
         patch.source_url,
