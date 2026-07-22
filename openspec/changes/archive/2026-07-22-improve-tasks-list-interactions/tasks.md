@@ -19,5 +19,5 @@
 ## 4. Release and Closeout
 
 - [x] 4.1 Run targeted Vitest coverage, `npm run test`, `npm run lint`, `npm run build`, `supabase test db`, and `openspec validate --all --strict`
-- [ ] 4.2 Obtain production migration approval, apply the migration, deploy the matching web release, and run the cleanup-backed production undo and redo projection gate
-- [ ] 4.3 Sync and archive the OpenSpec change, update affected Tasks readiness documentation, rerun full validation, commit, push main, and prove a clean synchronized repository
+- [x] 4.2 Obtain production migration approval, apply the migration, deploy the matching web release, and run the cleanup-backed production undo and redo projection gate
+- [x] 4.3 Sync and archive the OpenSpec change, update affected Tasks readiness documentation, rerun full validation, commit, push main, and prove a clean synchronized repository
