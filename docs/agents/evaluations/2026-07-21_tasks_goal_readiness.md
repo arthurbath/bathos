@@ -76,8 +76,10 @@ The current committed `main` branch passed the following broad gates during the 
 - ESLint across the repository
 - A production Vite build
 - Strict validation of all seven durable OpenSpec specifications
-- The full default Vitest suite with 706 passing tests across 118 files and nine intentional opt-in cases skipped
+- The full default Vitest suite with 708 passing tests across 118 files and nine intentional opt-in cases skipped
 - The opt-in large-library performance suite with four passing tests
+
+The 2026 Jul 21 5:57 PM PDT pre-closeout rerun also passed the current Inbox Manager suite with 233 tests, all 181 Mail-rule validation cases, and strict validation of its seven durable specifications plus the active parallel-handoff change. BathOS ESLint, production build, 708-test default suite, and all seven durable specifications passed from the synchronized `main` branch in the same audit.
 
 The performance gate derived every 10,000-record planning view below 1.4 ms at p95, built the reusable search index below 6.7 ms at p95, rendered a 1,000-row view in 904.5 ms, and opened 10,000-record search in 357.9 ms. The remaining opt-in integration suites already have stronger dated local or production acceptance evidence for offline persistence, multi-client convergence, preservation, sustained parallel use, and production topology. They are not substitutes for the still-running lived Mail handoff trial.
 
