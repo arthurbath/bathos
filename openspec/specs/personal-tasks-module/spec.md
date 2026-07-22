@@ -404,7 +404,7 @@ The system SHALL preserve intentional manual ordering across saves, refreshes, o
 - **THEN** the first accepted revision remains authoritative and the stale reorder produces a conflict receipt rather than silently overwriting the accepted order
 
 ### Requirement: Offline Task Operation
-The system SHALL allow core task work to continue during temporary network loss and SHALL reconcile valid local changes when connectivity returns.
+The system SHALL allow core task work to continue during temporary network loss, SHALL allow a previously loaded installed Tasks web app to reopen its interface without network access, and SHALL reconcile valid local changes when connectivity returns.
 
 #### Scenario: Create work offline
 - **WHEN** the user creates a to-do while the client is offline
@@ -421,6 +421,42 @@ The system SHALL allow core task work to continue during temporary network loss 
 #### Scenario: Preserve the durable mutation queue
 - **WHEN** a client restarts while one or more mutations have not reached the server
 - **THEN** the client retains the queued mutations, exposes their count, and retries them without creating duplicate logical tasks
+
+#### Scenario: Prepare offline launch without requesting notification permission
+- **WHEN** an authenticated user opens Tasks on a supported secure client with network access
+- **THEN** the client idempotently registers the Tasks service worker and stages the complete public application shell without requesting notification permission, creating a push subscription, or sending a reminder-registration mutation
+
+#### Scenario: Reopen a previously loaded Tasks PWA offline
+- **WHEN** an installed Tasks web app completed one online shell stage and later launches a `/tasks/*` route during temporary network loss
+- **THEN** the service worker returns one internally consistent cached shell whose versioned application assets are available, and the Tasks runtime can open its durable local database and pending mutation queue
+
+#### Scenario: Prepare the Home Screen installation's independent storage
+- **WHEN** an iPhone or iPad user adds Tasks to the Home Screen and launches that installed app online
+- **THEN** Tasks uses its permanent same-origin manifest, establishes authentication and synchronization in the Home Screen app's own browsing partition, and reports offline launch as ready only after that partition contains the active complete shell
+
+#### Scenario: Expose incomplete offline preparation without overstating readiness
+- **WHEN** the current client does not yet have an active complete Tasks shell in its own Cache Storage
+- **THEN** Synchronization Details reports offline launch as preparing, failed, or unavailable instead of ready, even if another browser or installation has staged the shell
+
+#### Scenario: Preserve the previous shell after an incomplete refresh
+- **WHEN** an online Tasks navigation receives new shell HTML but one required versioned application asset cannot be staged
+- **THEN** the service worker leaves the prior complete shell active, removes the incomplete staging cache, and does not make the partial deployment the offline fallback
+
+#### Scenario: Replace a CDN-cached worker release
+- **WHEN** a new backward-compatible Tasks worker is published while the hosting edge still retains the prior unversioned script response
+- **THEN** the client registers the new versioned worker script URL under the existing root scope so the published worker installs without creating a competing registration or push subscription
+
+#### Scenario: Isolate offline caching from other BathOS modules and data traffic
+- **WHEN** the root-scoped Tasks service worker observes another BathOS module navigation, authentication traffic, Supabase, PowerSync, MCP, reminder-provider, or other non-shell request
+- **THEN** it does not intercept or cache that request and stores no task content, owner data, credential, provider secret, or API response in Cache Storage
+
+#### Scenario: Pause remote role probes while offline
+- **WHEN** the Tasks shell opens while the browser reports that network connectivity is unavailable
+- **THEN** the client retains cached authorization state, makes no administrator-role network probes, labels synchronization as offline, and resumes authorization and synchronization checks when connectivity returns
+
+#### Scenario: Back off transient role-probe failures
+- **WHEN** an administrator-role probe fails while the browser still reports online
+- **THEN** the client retries with bounded exponential backoff instead of issuing a fixed high-frequency request loop
 
 ### Requirement: Deterministic Task Reconciliation
 The system SHALL use stable task identifiers and optimistic integer revisions so stale task mutations are detected, reported, and resolved to an authoritative server state.
@@ -636,7 +672,7 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 
 #### Scenario: Register Web Push explicitly
 - **WHEN** a user invokes the browser-reminder Enable action on a supported secure client and grants notification permission
-- **THEN** the client registers one standards-based service-worker subscription, the server stores its provider credentials outside the synchronized target projection, and repeated registration reuses the target identity
+- **THEN** the client reuses the Tasks service-worker registration to create one standards-based push subscription, the server stores its provider credentials outside the synchronized target projection, and repeated registration reuses the target identity
 
 #### Scenario: Transfer one browser subscription between accounts
 - **WHEN** a browser endpoint is registered by a different signed-in owner on the same installation
@@ -646,9 +682,9 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** a signed-in owner signs out from Tasks or another BathOS route on an installation with a browser subscription
 - **THEN** the installation unsubscribes before completing sign-out, and the Tasks route also revokes the owner-scoped server target when that authenticated operation is available
 
-#### Scenario: Inspect Web Push without implicit registration
+#### Scenario: Inspect Web Push without implicit subscription
 - **WHEN** a connected user opens Tasks before enabling browser reminders
-- **THEN** the client passively inspects any existing service-worker registration and does not create a registration, subscription, or permission prompt until the user invokes Enable
+- **THEN** the client may register or inspect the shared Tasks service worker for offline launch but does not request notification permission, create a push subscription, or register a delivery target until the user invokes Enable
 
 #### Scenario: Keep browser reminder failures content-free
 - **WHEN** browser-reminder inspection, registration, or revocation fails
@@ -679,8 +715,8 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **THEN** the service worker accepts only a same-origin Tasks destination, reuses and focuses an existing Tasks client when available, otherwise opens a new Tasks window, and never navigates the unrelated BathOS module away from its current route
 
 #### Scenario: Activate a published reminder worker promptly
-- **WHEN** a backward-compatible Tasks reminder service worker update installs while BathOS tabs remain open
-- **THEN** the worker requests immediate activation so future push and notification-click events use the published behavior without requiring every existing BathOS tab to close
+- **WHEN** a backward-compatible Tasks reminder and offline-shell service worker update installs while BathOS tabs remain open
+- **THEN** the worker requests immediate activation so future offline launch, push, and notification-click events use the published behavior without requiring every existing BathOS tab to close
 
 ### Requirement: Evidence-Gated Native Apple Expansion
 The system SHALL treat native Apple surfaces as an optional extension of the shared task domain and SHALL require a specific observed workflow gap before creating a native companion.

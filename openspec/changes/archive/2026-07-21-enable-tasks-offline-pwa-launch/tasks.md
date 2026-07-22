@@ -30,5 +30,5 @@
 - [x] 4.2b Verify authenticated production Chrome cold-reloads the cached Tasks shell and local database under DevTools Offline emulation without disconnecting the Codex host.
 - [x] 4.2c Publish the offline retry/status hardening and repeat the Chrome offline pass, confirming bounded remote probes and documenting that DevTools does not isolate the PowerSync shared-worker transport.
 - [x] 4.2d Publish worker version 7 through a versioned registration URL and verify authenticated Safari and Chrome report `Synced`, `Offline Launch: Ready`, zero pending changes, and no current console errors.
-- [ ] 4.3 Complete the user-assisted iPhone Home Screen installation, offline restart, queued mutation, reconnection, and notification-delivery pass.
-- [ ] 4.4 Sync the durable specification, archive the change, validate the final repository, commit, and push.
+- [x] 4.3 Complete the user-assisted iPhone Home Screen installation, offline restart, queued mutation, reconnection, and notification-delivery pass.
+- [x] 4.4 Sync the durable specification, archive the change, validate the final repository, commit, and push.

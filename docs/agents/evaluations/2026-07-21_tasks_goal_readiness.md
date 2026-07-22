@@ -6,9 +6,9 @@
 
 ## Outcome
 
-BathOS Tasks satisfies the implemented V1 contract across the web application, offline synchronization, production PowerSync, MCP, Raycast capture, Mail capture, Web Push reminders, recovery, accessibility, and large-library behavior. The module is available for personal parallel use while Things remains authoritative. A final audit identified that durable task data alone did not guarantee an installed PWA could cold-launch its application shell without a network connection. That offline-launch gap is implemented and published, with accepted local, isolated production, authenticated Safari staging, and authenticated Chrome offline-emulation passes under the active `enable-tasks-offline-pwa-launch` change. The first actual iPhone pass failed at cold launch with Safari's no-network page. The device gate therefore remains open while a partition-local readiness correction is validated and published.
+BathOS Tasks satisfies the implemented V1 contract across the web application, offline synchronization, production PowerSync, MCP, Raycast capture, Mail capture, Web Push reminders, recovery, accessibility, and large-library behavior. The module is available for personal parallel use while Things remains authoritative. A final audit identified that durable task data alone did not guarantee an installed PWA could cold-launch its application shell without a network connection. That offline-launch gap is implemented, published, and accepted through local, isolated production, authenticated Safari, authenticated Chrome, and actual iPhone Home Screen passes under the `enable-tasks-offline-pwa-launch` change. The first iPhone cold launch failed with Safari's no-network page; the corrected installation subsequently passed partition-local readiness, Airplane Mode cold launch, offline restart, queued mutation reconnection, cross-device projection, Web Push delivery, and notification opening.
 
-The remaining completion gates are the calendar-bound Inbox Manager trial and production acceptance of the new offline PWA shell. Inbox Manager's approved 24-hour or 10-accepted-task parallel trial remains healthy and must reach one boundary before its final production evidence can be recorded and its OpenSpec change can be archived.
+The remaining completion gate is the calendar-bound Inbox Manager trial. Production acceptance of the offline PWA shell is complete. Inbox Manager's approved 24-hour or 10-accepted-task parallel trial remains healthy and must reach one boundary before its final production evidence can be recorded and its OpenSpec change can be archived.
 
 ## Accepted Product Surfaces
 
@@ -24,20 +24,18 @@ The remaining completion gates are the calendar-bound Inbox Manager trial and pr
 
 - The production MCP service advertises 42 tools, including 33 Tasks operations covering bounded reads, structured creation, updates, movement, ordering, lifecycle transitions, templates, recurrence, reminders, and Mail retirement.
 - A read-only production MCP query for Today on 2026 Jul 21 returned five current to-dos, including four Mail-automation tasks, with no truncation or service error.
-- The installed Inbox Manager runtime is healthy. Five tasks have been accepted since the current trial began, five accepted-task slots remain, the handoff queue is empty, and no handoff failure is recorded. The latest accepted handoff completed at 2026 Jul 21 3:49 PM PDT, and the scheduled Mail workflow remained healthy through its 3:54 PM run.
+- The installed Inbox Manager runtime is healthy. Six tasks have been accepted since the current trial began, four accepted-task slots remain, the handoff queue is empty, and no handoff failure is recorded. The latest accepted handoff completed at 2026 Jul 21 4:26 PM PDT, and the scheduled Mail workflow remained healthy through its 5:03 PM run.
 - The current trial began at 2026 Jul 21 1:50 PM PDT and expires at 2026 Jul 22 1:50 PM PDT unless the tenth accepted task ends it first.
 - The Mail workflow recovered from one stale enrichment-incident record without changing Mail rules, private mode, accepted task receipts, or scheduled success semantics. Two subsequent ordinary scheduled runs completed healthy.
 - BathOS and Inbox Manager are committed, pushed, clean, and synchronized with `origin/main`.
 
 ## Remaining Completion Work
 
-1. Publish the permanent Tasks manifest and partition-local `Offline Launch` readiness diagnostic prompted by the failed iPhone pass.
-2. Repeat the actual-device iPhone pass only after the Home Screen installation itself reports both `Synced` and `Offline Launch: Ready`, then verify full transport loss, queued mutation recovery, and notification delivery.
-3. Let the bounded trial reach its 24-hour or 10-task boundary without artificially creating personal work for the test.
-4. Confirm the runtime disabled at the intended boundary, no post-boundary credential or network work occurred, the queue is empty, and ordinary Mail and Things outcomes remain healthy.
-5. Reconcile the final accepted receipts with the BathOS MCP and PowerSync projection, and record any real retry or failure evidence without exposing task content.
-6. Complete Inbox Manager OpenSpec task 6.4, sync its durable specification, archive the change, validate, commit, and push.
-7. Sync and archive `enable-tasks-offline-pwa-launch`, then perform one final cross-repository, route, MCP, synchronization, reminder, and health audit before declaring the implementation goal complete.
+1. Let the bounded trial reach its 24-hour or 10-task boundary without artificially creating personal work for the test.
+2. Confirm the runtime disabled at the intended boundary, no post-boundary credential or network work occurred, the queue is empty, and ordinary Mail and Things outcomes remain healthy.
+3. Reconcile the final accepted receipts with the BathOS MCP and PowerSync projection, and record any real retry or failure evidence without exposing task content.
+4. Complete Inbox Manager OpenSpec task 6.4, sync its durable specification, archive the change, validate, commit, and push.
+5. Archive `enable-tasks-offline-pwa-launch`, then perform one final cross-repository, route, MCP, synchronization, reminder, and health audit before declaring the implementation goal complete.
 
 Four recoverably deleted production-acceptance captures remain as roots in Tasks Trash. Permanent removal still requires explicit action-time confirmation because one setup capture originated from the user's active Safari tab. This cleanup is not a product-readiness blocker.
 
@@ -48,7 +46,7 @@ The current committed `main` branch passed the following broad gates during the 
 - ESLint across the repository
 - A production Vite build
 - Strict validation of all seven durable OpenSpec specifications
-- The full default Vitest suite with 687 passing tests across 117 files and nine intentional opt-in cases skipped
+- The full default Vitest suite with 706 passing tests across 118 files and nine intentional opt-in cases skipped
 - The opt-in large-library performance suite with four passing tests
 
 The performance gate derived every 10,000-record planning view below 1.4 ms at p95, built the reusable search index below 6.7 ms at p95, rendered a 1,000-row view in 904.5 ms, and opened 10,000-record search in 357.9 ms. The remaining opt-in integration suites already have stronger dated local or production acceptance evidence for offline persistence, multi-client convergence, preservation, sustained parallel use, and production topology. They are not substitutes for the still-running lived Mail handoff trial.
@@ -71,7 +69,9 @@ The first actual iPhone Home Screen pass then failed immediately after Airplane 
 
 The first corrective deployment published the new HTML and application bundle, but the unversioned worker URL still returned version 6 from a Cloudflare edge with `Cache-Control: max-age=14400`, `Age: 3934`, and `CF-Cache-Status: HIT`. The versioned request `/tasks-service-worker.js?version=7` returned the new deployment and worker version 7 immediately. Registration now advances that query version with each worker release while preserving the existing root scope and push registration. Focused partition, delayed-staging, registration, and Web Push tests, lint, production build, and strict OpenSpec validation pass locally.
 
-Commits `8d241a1` and `2112990` were pushed to `main` and published through Lovable. Production serves entry bundle `index-pIZaUz4l.js`, Tasks chunk `TasksIndex-SnyCkN8G.js`, the permanent `/tasks/manifest.json`, and worker version 7. The live Tasks chunk contains both `tasks-service-worker.js?version=7` and the `Offline Launch` diagnostic. An authenticated existing Safari installation upgraded from `Preparing` to `Ready` within the 30-second bounded stage while remaining `Synced`, healthy, fully synchronized, and at zero pending changes. An authenticated Chrome installation independently reported `Connected`, `Offline Launch: Ready`, healthy, full synchronization complete, zero pending changes, idle upload/download, eight preserved Today tasks, and no console warnings or errors. The repeated actual iPhone Airplane Mode pass remains pending.
+Commits `8d241a1` and `2112990` were pushed to `main` and published through Lovable. Production serves entry bundle `index-pIZaUz4l.js`, Tasks chunk `TasksIndex-SnyCkN8G.js`, the permanent `/tasks/manifest.json`, and worker version 7. The live Tasks chunk contains both `tasks-service-worker.js?version=7` and the `Offline Launch` diagnostic. An authenticated existing Safari installation upgraded from `Preparing` to `Ready` within the 30-second bounded stage while remaining `Synced`, healthy, fully synchronized, and at zero pending changes. An authenticated Chrome installation independently reported `Connected`, `Offline Launch: Ready`, healthy, full synchronization complete, zero pending changes, idle upload/download, eight preserved Today tasks, and no console warnings or errors.
+
+The repeated actual iPhone pass then reported `Offline Launch: Ready` in the newly installed Home Screen app, cold-launched Today under Airplane Mode, accepted a disposable `Yes!` task, preserved it across a full offline app restart, uploaded it after reconnection, and projected it to the authenticated Mac client. The Mac remained `Synced` with no console warnings or errors and moved the disposable task recoverably to Trash, returning Today from nine tasks to eight. The final user-assisted production pass delivered a scheduled browser reminder to the iPhone installation and opened Tasks when the notification was tapped. All iPhone device sub-gates passed.
 
 ## Connector Discovery Note
 
@@ -83,4 +83,4 @@ No additional large implementation tranche is evident from the durable specifica
 
 ## Specification Impact
 
-The active `enable-tasks-offline-pwa-launch` OpenSpec change modifies the personal Tasks offline-operation and layered-reminder requirements. It will be synced into the durable specification only after production acceptance.
+The `enable-tasks-offline-pwa-launch` OpenSpec change modifies the personal Tasks offline-operation and layered-reminder requirements. Production acceptance passed and the delta is synchronized into the durable specification for archival.
