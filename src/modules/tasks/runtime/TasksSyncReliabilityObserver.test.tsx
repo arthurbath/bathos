@@ -1,7 +1,10 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TaskSyncHealthEvent } from '@/modules/tasks/data/taskSyncHealthEventStore';
+import {
+  TASK_SYNC_DEGRADATION_REPORT_DELAY_MS,
+  type TaskSyncHealthEvent,
+} from '@/modules/tasks/data/taskSyncHealthEventStore';
 import {
   TASK_SYNC_DEGRADATION_CONFIRM_DELAY_MS,
   TasksSyncReliabilityObserver,
@@ -97,7 +100,12 @@ describe('TasksSyncReliabilityObserver', () => {
     }));
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(54_999);
+      await vi.advanceTimersByTimeAsync(
+        TASK_SYNC_DEGRADATION_REPORT_DELAY_MS
+          - 60_000
+          - TASK_SYNC_DEGRADATION_CONFIRM_DELAY_MS
+          - 1,
+      );
     });
     expect(store.reportCurrentIfDue).not.toHaveBeenCalled();
     await act(async () => {

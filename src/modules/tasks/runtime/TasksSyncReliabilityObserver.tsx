@@ -24,7 +24,7 @@ type TaskSyncHealthEventStoreLike = Pick<
   'reconcile' | 'reportCurrentIfDue'
 >;
 
-export const TASK_SYNC_DEGRADATION_CONFIRM_DELAY_MS = 5_000;
+export const TASK_SYNC_DEGRADATION_CONFIRM_DELAY_MS = 30_000;
 
 type TasksSyncReliabilityObserverProps = {
   store?: TaskSyncHealthEventStoreLike;

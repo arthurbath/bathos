@@ -20,9 +20,9 @@
 
 ## Decisions
 
-### Confirm new degradation states for five seconds before persistence
+### Confirm new degradation states for thirty seconds before persistence
 
-The observer will delay its first reconciliation of an upload error, download error, or offline state for five seconds. If the state clears or changes before the timer fires, cleanup cancels that reconciliation and the transient state never enters durable history. Five seconds is long enough to absorb the observed reconnect churn while remaining short relative to the existing two-minute production reporting threshold.
+The observer will delay its first reconciliation of an upload error, download error, or offline state for thirty seconds. If the state clears or changes before the timer fires, cleanup cancels that reconciliation and the transient state never enters durable history. The initial five-second candidate failed production acceptance because one ordinary online reload cycled through several zero-queue offline states that each survived that threshold. Thirty seconds remains well below the existing two-minute production reporting threshold while covering the measured reconnect behavior.
 
 The alternative was to special-case startup or `hasSynced` state. That would leave equivalent transient errors during later reconnects noisy and would couple the policy to PowerSync initialization details.
 
@@ -38,6 +38,6 @@ Healthy, connecting, first-sync-pending, synchronizing, and local-only states wi
 
 ## Risks / Trade-offs
 
-- A real degradation shorter than five seconds will not appear in recent reliability history. This is intentional because it has no durable queue effect and clears far below the alert threshold.
+- A real degradation shorter than thirty seconds will not appear in recent reliability history. This is intentional because current state remains visible immediately and the episode clears far below the alert threshold.
 - A browser suspended during the confirmation interval may fire the timer late. The original observation timestamp preserves correct duration, and normal state cleanup prevents recording a state that React already observed as cleared.
 - PowerSync may emit several degradation categories during reconnection. Each category must remain stable for the full confirmation interval before it can create an event, preventing category churn from fragmenting history.
