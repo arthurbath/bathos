@@ -191,7 +191,7 @@ export class TaskRepository {
 
     return this.database.writeTransaction(async (transaction) => {
       const destination = input.destination ?? 'anytime';
-      const todaySection = input.todaySection ?? 'later';
+      const todaySection = input.todaySection ?? 'inbox';
       assertPlanningPlacement(destination, todaySection, startDate);
       await assertOwnedTaskContainer(
         transaction,

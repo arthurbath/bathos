@@ -66,7 +66,8 @@ Accessible at [os.bath.garden/snake/weights](https://os.bath.garden/snake/weight
 Plan and complete personal tasks through a private-first, keyboard-focused workflow. Features include:
 
 - Today, Upcoming, Anytime, Someday, and Done views
-- Now, Next, and Later sections inside Today, projected from Anytime
+- Inbox, Now, Next, and Later sections inside Today, projected from Anytime
+- Independent day horizons that remain attached to future work in Upcoming and determine its Today section when due
 - Four primary navigation destinations with secondary views and maintenance tools under More and Config
 - Areas, projects, headings, checklists, templates, reminders, and recurrence
 - Structured actionability and source provenance without generic tags

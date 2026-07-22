@@ -232,7 +232,7 @@ function verifySyncDatabase(tempDirectory) {
   run('supabase', ['db', 'query', '--linked', '--file', verifyPath]);
 }
 
-function runSyntheticTopology(powerSyncUrl) {
+function runSyntheticTopology(powerSyncUrl, testScript = 'test:tasks:production-topology') {
   let parsedUrl;
   try {
     parsedUrl = new URL(powerSyncUrl);
@@ -262,7 +262,7 @@ function runSyntheticTopology(powerSyncUrl) {
     fail('Could not resolve the managed publishable and server-only Supabase keys');
   }
 
-  run('npm', ['run', 'test:tasks:production-topology'], {
+  run('npm', ['run', testScript], {
     env: {
       ...process.env,
       TASKS_PRODUCTION_TEST_CONFIRM: 'synthetic-only',
@@ -272,7 +272,9 @@ function runSyntheticTopology(powerSyncUrl) {
       TASKS_PRODUCTION_TEST_POWERSYNC_URL: parsedUrl.origin,
     },
   });
-  process.stdout.write('Synthetic production topology gate passed.\n');
+  process.stdout.write(testScript === 'test:tasks:production-day-horizon'
+    ? 'Synthetic production day-horizon gate passed.\n'
+    : 'Synthetic production topology gate passed.\n');
 }
 
 const command = process.argv[2];
@@ -281,9 +283,10 @@ if (![
   'verify-sync-database',
   'reminders',
   'verify-reminders',
+  'synthetic-day-horizon',
   'synthetic-topology',
 ].includes(command)) {
-  fail('Usage: node scripts/provision-tasks-production.mjs <sync-database|verify-sync-database|reminders|verify-reminders|synthetic-topology> [PowerSync URL]');
+  fail('Usage: node scripts/provision-tasks-production.mjs <sync-database|verify-sync-database|reminders|verify-reminders|synthetic-day-horizon|synthetic-topology> [PowerSync URL]');
 }
 
 const tempDirectory = mkdtempSync(join(tmpdir(), 'bathos-tasks-production-'));
@@ -292,6 +295,9 @@ try {
   if (command === 'verify-sync-database') verifySyncDatabase(tempDirectory);
   if (command === 'reminders') provisionReminders(tempDirectory);
   if (command === 'verify-reminders') verifyReminders(tempDirectory);
+  if (command === 'synthetic-day-horizon') {
+    runSyntheticTopology(process.argv[3], 'test:tasks:production-day-horizon');
+  }
   if (command === 'synthetic-topology') runSyntheticTopology(process.argv[3]);
 } finally {
   rmSync(tempDirectory, { recursive: true, force: true });

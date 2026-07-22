@@ -12,7 +12,7 @@ import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
 
 export type TaskListView = TaskDestination | 'today' | 'upcoming' | 'done';
-export type TodayTaskSection = 'now' | 'next' | 'later';
+export type TodayTaskSection = 'inbox' | 'now' | 'next' | 'later';
 
 export function useTaskList(ownerId: string, view: TaskListView) {
   const { repository, planningTimeZone } = useTasksRuntime();
@@ -40,10 +40,12 @@ export function useTaskList(ownerId: string, view: TaskListView) {
          FROM tasks_todos
          WHERE owner_id = ?
            AND destination = 'anytime'
-           AND today_section <> 'none'
            AND lifecycle = 'open'
            AND disposition = 'present'
-           AND (start_date IS NULL OR start_date <= ?)
+           AND (
+             (start_date IS NULL AND today_section <> 'none')
+             OR start_date <= ?
+           )
          ORDER BY order_key, id`
             : `SELECT *
          FROM tasks_todos
@@ -112,7 +114,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
         ownerId,
         title,
         destination: view === 'today' ? 'anytime' : view,
-        todaySection: view === 'someday' ? 'none' : 'later',
+        todaySection: view === 'someday' ? 'none' : 'inbox',
         startDate: null,
       });
       setOptimisticTask(createdTask.id, createdTask);
@@ -300,10 +302,12 @@ function taskIsVisible(
   }
   if (view === 'today') {
     return task.destination === 'anytime'
-      && task.today_section !== 'none'
       && task.lifecycle === 'open'
       && task.disposition === 'present'
-      && (task.start_date === null || task.start_date <= planningDate);
+      && (
+        (task.start_date === null && task.today_section !== 'none')
+        || (task.start_date !== null && task.start_date <= planningDate)
+      );
   }
   return task.destination === view
     && task.lifecycle === 'open'
@@ -345,11 +349,11 @@ function compareTasksForView(
 }
 
 export function getTodayTaskSection(task: TaskTodo, _planningDate: string): TodayTaskSection {
-  return task.today_section === 'none' ? 'later' : task.today_section;
+  return task.today_section === 'none' ? 'inbox' : task.today_section;
 }
 
 function compareTodaySection(left: TaskTodo, right: TaskTodo, planningDate: string): number {
-  const ranks: Record<TodayTaskSection, number> = { now: 0, next: 1, later: 2 };
+  const ranks: Record<TodayTaskSection, number> = { inbox: 0, now: 1, next: 2, later: 3 };
   return ranks[getTodayTaskSection(left, planningDate)]
     - ranks[getTodayTaskSection(right, planningDate)];
 }

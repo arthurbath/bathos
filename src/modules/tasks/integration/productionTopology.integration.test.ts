@@ -11,7 +11,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import type { Database } from '@/integrations/supabase/types';
 import { createTaskData } from '@/lib/mcp/tools/tasks-create';
-import { transitionTaskData, updateTaskData } from '@/lib/mcp/tools/tasks-mutate';
+import { scheduleTaskData, transitionTaskData, updateTaskData } from '@/lib/mcp/tools/tasks-mutate';
+import { getTaskViewData, planningDateInTimeZone } from '@/lib/mcp/tools/tasks-read';
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
@@ -283,6 +284,119 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       .from('tasks_todos')
       .select('id', { count: 'exact', head: true })
       .eq('id', taskId);
+    expect(residueError).toBeNull();
+    expect(residueCount).toBe(0);
+  });
+
+  it('proves future day-horizon activation through a fresh projection and cleanup', async () => {
+    const environment = productionEnvironment();
+    testDirectory ??= await mkdtemp(join(tmpdir(), 'bathos-tasks-production-topology-'));
+    admin ??= createClient<Database>(environment.supabaseUrl, environment.serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const owner = await createSyntheticOwner('day-horizon', environment);
+    const connector = createTasksSupabaseConnector({
+      endpoint: environment.powerSyncUrl,
+      supabase: owner.client,
+    });
+    const setupClient = await openClient(
+      testDirectory,
+      'day-horizon-setup.db',
+      owner.id,
+      connector,
+    );
+    await setupClient.repository.ensurePlanningSettings(owner.id, 'America/Los_Angeles');
+    await waitForUploadQueue(setupClient.database, 0);
+
+    const auth = { userId: owner.id, email: owner.email, supabase: owner.client };
+    const horizons = ['inbox', 'now', 'next', 'later', 'none'] as const;
+    const creations = [];
+    for (const horizon of horizons) {
+      creations.push(await createTaskData({
+        idempotency_key: crypto.randomUUID(),
+        title: `Synthetic Day Horizon ${horizon}`,
+        notes: 'Disposable future day-horizon validation only',
+        destination: 'anytime',
+        today_section: horizon,
+        start_date: '2099-12-31',
+        entry_channel: 'mcp',
+      }, auth));
+    }
+
+    await Promise.all(creations.map(({ task }) => waitForLocalTask(
+      setupClient.database,
+      task.id,
+      (projected) => projected.revision === 1
+        && projected.start_date === '2099-12-31'
+        && projected.today_section === task.today_section,
+    )));
+
+    const planningDate = planningDateInTimeZone('America/Los_Angeles');
+    for (const { task } of creations) {
+      const scheduled = await scheduleTaskData({
+        task_id: task.id,
+        expected_revision: 1,
+        client_mutation_id: crypto.randomUUID(),
+        start_date: planningDate,
+      }, auth);
+      expect(scheduled.mutation_outcome).toBe('applied');
+      expect(scheduled.task).toMatchObject({
+        revision: 2,
+        start_date: planningDate,
+        today_section: task.today_section,
+      });
+    }
+
+    const todayView = await getTaskViewData({
+      view: 'today',
+      planning_date: planningDate,
+      limit: 50,
+    }, auth);
+    if (!('todos' in todayView)) throw new Error('Expected a Today planning result.');
+    expect(Object.fromEntries(todayView.todos.map((task) => [task.id, task.derived_section])))
+      .toEqual(Object.fromEntries(creations.map(({ task }) => [
+        task.id,
+        task.today_section === 'none' ? 'inbox' : task.today_section,
+      ])));
+
+    await Promise.all(creations.map(({ task }) => waitForLocalTask(
+      setupClient.database,
+      task.id,
+      (projected) => projected.revision === 2
+        && projected.start_date === planningDate
+        && projected.today_section === task.today_section,
+    )));
+    await disposeClient(setupClient);
+
+    const freshClient = await openClient(
+      testDirectory,
+      'day-horizon-fresh.db',
+      owner.id,
+      connector,
+    );
+    await Promise.all(creations.map(({ task }) => waitForLocalTask(
+      freshClient.database,
+      task.id,
+      (projected) => projected.revision === 2
+        && projected.start_date === planningDate
+        && projected.today_section === task.today_section,
+    )));
+
+    const { count: taskCount, error: taskCountError } = await admin
+      .from('tasks_todos')
+      .select('id', { count: 'exact', head: true })
+      .eq('owner_id', owner.id);
+    expect(taskCountError).toBeNull();
+    expect(taskCount).toBe(horizons.length);
+
+    await disposeClient(freshClient);
+    await signOutSyntheticClient(owner.client);
+    await deleteSyntheticOwner(owner.id);
+    const { count: residueCount, error: residueError } = await admin
+      .from('tasks_todos')
+      .select('id', { count: 'exact', head: true })
+      .eq('owner_id', owner.id);
     expect(residueError).toBeNull();
     expect(residueCount).toBe(0);
   });

@@ -333,6 +333,29 @@ describe('Tasks MCP project movement and scheduling tools', () => {
     });
   });
 
+  it('retains a project day horizon when scheduling it into the future', async () => {
+    const client = new FakeProjectMutationClient({
+      tasks_projects: [project({ today_section: 'later' })],
+    });
+    const result = await scheduleTaskProjectData({
+      project_id: projectId,
+      expected_revision: 1,
+      client_mutation_id: '70000000-0000-4000-8000-000000000012',
+      start_date: '2099-07-24',
+    }, authFor(ownerA, client));
+
+    expect(result).toMatchObject({
+      mutation_outcome: 'applied',
+      receipt: { transition: 'update', outcome: 'accepted' },
+      project: {
+        destination: 'anytime',
+        today_section: 'later',
+        start_date: '2099-07-24',
+        revision: 2,
+      },
+    });
+  });
+
   it('replays an exact project movement from immutable history after later edits', async () => {
     const client = new FakeProjectMutationClient({
       tasks_areas: [area(areaA), area(areaB)],

@@ -211,6 +211,7 @@ describe('Tasks MCP creation tool', () => {
     });
     expect(createTask.inputSchema.source.safeParse({ kind: 'selected_text' }).success)
       .toBe(false);
+    expect(createTask.inputSchema.today_section.parse(undefined)).toBe('inbox');
   });
 
   it('creates owner-scoped Today Later work with immutable MCP and typed-source provenance', async () => {

@@ -87,7 +87,11 @@ import {
   type DeletedTaskHierarchyRoot,
 } from '@/modules/tasks/hooks/useTaskDeletedHierarchyRoots';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
-import type { TaskReminder, TaskTodo } from '@/modules/tasks/types/tasks';
+import type {
+  TaskReminder,
+  TaskTodaySection,
+  TaskTodo,
+} from '@/modules/tasks/types/tasks';
 import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/taskEditorPlanning';
 import { TaskProjectDetailView } from '@/modules/tasks/components/TaskProjectDetailView';
 import { TaskAreaDetailView } from '@/modules/tasks/components/TaskAreaDetailView';
@@ -477,6 +481,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (view === 'anytime') {
       const todayActions = task.today_section === 'none'
         ? [
+          action('Add to Today Inbox', { destination: 'anytime', todaySection: 'inbox', startDate: null }),
           action('Add to Today Now', { destination: 'anytime', todaySection: 'now', startDate: null }),
           action('Add to Today Next', { destination: 'anytime', todaySection: 'next', startDate: null }),
           moveToTodayLater,
@@ -492,7 +497,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
     const section = getTodayTaskSection(task, planningDate);
     const actions: TaskTemporalAction[] = (
-      ['now', 'next', 'later'] as const
+      ['inbox', 'now', 'next', 'later'] as const
     ).filter((candidate) => candidate !== section).map((candidate) => action(
       `Move to Today ${candidate[0].toUpperCase()}${candidate.slice(1)}`,
       { destination: 'anytime', todaySection: candidate, startDate: null },
@@ -500,7 +505,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     actions.push(
       action('Move to Tomorrow', {
         destination: 'anytime',
-        todaySection: 'none',
+        todaySection: section,
         startDate: addTaskCalendarDays(planningDate, 1),
       }),
       action('Remove from Today', {
@@ -536,6 +541,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     input: TaskPlanningMoveInput,
   ): TaskTemporalAction => ({ label, run: () => applyBulkPlanning(input) });
   const bulkPlanningActions: TaskTemporalAction[] = [
+    bulkAction('Move to Today Inbox', {
+      destination: 'anytime', todaySection: 'inbox', startDate: null,
+    }),
     bulkAction('Move to Today Now', {
       destination: 'anytime', todaySection: 'now', startDate: null,
     }),
@@ -548,11 +556,35 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     bulkAction('Remove from Today', {
       destination: 'anytime', todaySection: 'none', startDate: null,
     }),
-    bulkAction('Move to Tomorrow', {
-      destination: 'anytime',
-      todaySection: 'none',
-      startDate: addTaskCalendarDays(planningDate, 1),
-    }),
+    {
+      label: 'Move to Tomorrow',
+      run: async () => {
+        if (bulkPending) return;
+        const selectedTasks = tasks.filter(({ id }) => bulkSelection.has(id));
+        if (selectedTasks.length === 0) return;
+        setBulkPending(true);
+        try {
+          const groups = new Map<TodayTaskSection, string[]>();
+          for (const task of selectedTasks) {
+            const section = getTodayTaskSection(task, planningDate);
+            groups.set(section, [...(groups.get(section) ?? []), task.id]);
+          }
+          await Promise.all(Array.from(groups, ([todaySection, taskIds]) => moveTasks(taskIds, {
+            destination: 'anytime',
+            todaySection,
+            startDate: addTaskCalendarDays(planningDate, 1),
+          })));
+          setBulkSelection(new Set());
+          setBulkMode(false);
+          focusTaskListFallback();
+        } catch (moveError) {
+          showTaskError('Selected Tasks Could Not Be Planned', moveError);
+          throw moveError;
+        } finally {
+          setBulkPending(false);
+        }
+      },
+    },
     bulkAction('Move to Anytime', {
       destination: 'anytime', todaySection: 'none', startDate: null,
     }),
@@ -634,7 +666,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           }
         } : undefined}
         planningLabel={view === 'today' ? null : undefined}
-        todayMarker={view === 'anytime' && task.today_section !== 'none'
+        todayMarker={(view === 'anytime' || view === 'upcoming') && task.today_section !== 'none'
           ? task.today_section
           : undefined}
         reminder={reminders.byRootId.get(task.id) ?? null}
@@ -1661,6 +1693,7 @@ function TodayTaskSections({
     label: string;
     icon: typeof CircleDot;
   }> = [
+    { id: 'inbox', label: 'Inbox', icon: ListTodo },
     { id: 'now', label: 'Now', icon: CircleDot },
     { id: 'next', label: 'Next', icon: ArrowRight },
     { id: 'later', label: 'Later', icon: Clock3 },
@@ -1749,7 +1782,9 @@ function TaskRow({
     ? CircleDot
     : todayMarker === 'next'
       ? ArrowRight
-      : Clock3;
+      : todayMarker === 'later'
+        ? Clock3
+        : ListTodo;
 
   const run = async (operation: () => Promise<void>): Promise<boolean> => {
     if (pending) {
@@ -2033,6 +2068,7 @@ function TaskRow({
           setWhenOpen(nextOpen);
         }}
         onCloseAutoFocus={() => titleButtonRef.current?.focus()}
+        onPlan={(patch) => runMovementAction(() => onUpdate(patch))}
       /> : null}
     </article>
   );
@@ -2069,6 +2105,7 @@ function TaskEditor({
   const [notes, setNotes] = useState(task.notes);
   const [actionability, setActionability] = useState(task.actionability);
   const [startDate, setStartDate] = useState(task.start_date ?? '');
+  const [todaySection, setTodaySection] = useState<TaskTodaySection>(task.today_section);
   const [deadline, setDeadline] = useState(task.deadline ?? '');
   const [reminderDate, setReminderDate] = useState(reminder?.local_date ?? '');
   const [reminderTime, setReminderTime] = useState(reminder?.local_time.slice(0, 5) ?? '09:00');
@@ -2112,6 +2149,12 @@ function TaskEditor({
     }
     if (startDate !== (task.start_date ?? '')) {
       patch.start_date = startDate || null;
+    }
+    if (todaySection !== task.today_section) {
+      patch.today_section = todaySection;
+      if (task.destination === 'someday' && todaySection !== 'none') {
+        patch.destination = 'anytime';
+      }
     }
     if (deadline !== (task.deadline ?? '')) {
       patch.deadline = deadline || null;
@@ -2260,7 +2303,7 @@ function TaskEditor({
           </select>
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor={`task-start-date-${task.id}`}>
             Start Date
@@ -2287,6 +2330,24 @@ function TaskEditor({
               </Button>
             ) : null}
           </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground" htmlFor={`task-day-horizon-${task.id}`}>
+            Day Horizon
+          </label>
+          <select
+            id={`task-day-horizon-${task.id}`}
+            value={todaySection}
+            onChange={(event) => setTodaySection(event.target.value as TaskTodaySection)}
+            disabled={saving}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="none">None</option>
+            <option value="inbox">Inbox</option>
+            <option value="now">Now</option>
+            <option value="next">Next</option>
+            <option value="later">Later</option>
+          </select>
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor={`task-deadline-${task.id}`}>

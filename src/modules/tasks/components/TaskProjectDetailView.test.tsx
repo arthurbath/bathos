@@ -279,6 +279,33 @@ describe('TaskProjectDetailView', () => {
       cleanup(root, container);
     }
   });
+
+  it('retains a selected day horizon on a future-start project', async () => {
+    const hierarchyModel = hierarchy();
+    mockUseTaskProjectDetail.mockReturnValue(detail());
+    const { container, root } = renderDetail(hierarchyModel);
+
+    try {
+      const dayHorizon = container.querySelector<HTMLSelectElement>(
+        '#project-today-section-project-a',
+      )!;
+      expect(dayHorizon.disabled).toBe(false);
+      await act(async () => setControlValue(dayHorizon, 'inbox'));
+      await act(async () => {
+        Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+          .find((button) => button.textContent?.trim() === 'Save Planning')
+          ?.click();
+      });
+      expect(hierarchyModel.updateProject).toHaveBeenCalledWith('project-a', {
+        destination: 'anytime',
+        today_section: 'inbox',
+        start_date: '2026-07-24',
+        deadline: '2026-07-25',
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
 });
 
 function projectTask(

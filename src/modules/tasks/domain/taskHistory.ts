@@ -160,7 +160,7 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
     ? 'daytime'
     : requireText(parsed.today_section, 'Today section');
   const todaySection = legacyDestination === 'inbox'
-    ? 'later'
+    ? 'inbox'
     : legacyDestination === 'today'
       ? legacyTodaySection === 'evening' ? 'later' : 'next'
       : legacyTodaySection === 'daytime' || legacyTodaySection === 'evening'

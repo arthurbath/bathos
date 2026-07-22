@@ -11,7 +11,7 @@ import {
 import { uuidSchema } from '../resource-utils';
 
 const destinationSchema = z.enum(['anytime', 'someday']);
-const todaySectionSchema = z.enum(['none', 'now', 'next', 'later']);
+const todaySectionSchema = z.enum(['none', 'inbox', 'now', 'next', 'later']);
 const calendarDateSchema = z.string().refine(isTaskCalendarDate, {
   message: 'Expected a valid ISO calendar date.',
 });

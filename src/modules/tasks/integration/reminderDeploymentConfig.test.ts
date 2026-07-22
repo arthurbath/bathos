@@ -12,7 +12,9 @@ import {
 
 function validEnvironment() {
   const key = createECDH('prime256v1');
-  key.generateKeys();
+  do {
+    key.generateKeys();
+  } while (key.getPrivateKey().byteLength !== 32);
   const publicKey = key.getPublicKey(undefined, 'uncompressed').toString('base64url');
   return {
     TASKS_REMINDER_DISPATCH_SECRET: 'a'.repeat(32),

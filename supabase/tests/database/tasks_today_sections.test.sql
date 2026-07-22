@@ -24,8 +24,8 @@ SELECT is(
       AND table_name = 'tasks_todos'
       AND column_name = 'today_section'
   ),
-  '''later''::text',
-  'defaults new work to Today Later'
+  '''inbox''::text',
+  'defaults new work to Today Inbox'
 );
 SELECT ok(
   EXISTS (

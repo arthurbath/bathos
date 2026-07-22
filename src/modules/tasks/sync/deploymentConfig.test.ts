@@ -12,6 +12,7 @@ const productionPublicationUpdate = read('deploy/tasks-powersync/publication-upd
 const productionRole = read('deploy/tasks-powersync/database-role.sql');
 const productionVerify = read('deploy/tasks-powersync/verify.sql');
 const productionProvisioner = read('scripts/provision-tasks-production.mjs');
+const packageJson = read('package.json');
 const externalBoundaryMigration = read(
   'supabase/migrations/20260721134118_harden_tasks_external_boundaries.sql',
 );
@@ -99,6 +100,16 @@ describe('Tasks PowerSync deployment configuration', () => {
     );
     expect(productionProvisioner).toContain(
       "withoutPsqlMetaCommands(join(repositoryRoot, 'deploy/tasks-powersync/verify.sql'))",
+    );
+  });
+
+  it('keeps the day-horizon production gate synthetic, focused, and cleanup-backed', () => {
+    expect(productionProvisioner).toContain("'synthetic-day-horizon'");
+    expect(productionProvisioner).toContain("'test:tasks:production-day-horizon'");
+    expect(packageJson).toContain('"test:tasks:production-day-horizon"');
+    expect(packageJson).toContain("-t 'proves future day-horizon activation'");
+    expect(packageJson).not.toContain(
+      'test:tasks:production-day-horizon": "npm run test:tasks:production-topology',
     );
   });
 });

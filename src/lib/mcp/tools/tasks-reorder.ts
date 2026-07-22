@@ -244,7 +244,7 @@ function orderSection(
   planningDate: string,
 ): string {
   if (view === 'today') {
-    return String(record.today_section);
+    return record.today_section === 'none' ? 'inbox' : String(record.today_section);
   }
   if (view === 'upcoming') return `upcoming:${String(record.start_date ?? '')}`;
   return view;
@@ -263,8 +263,7 @@ function visibleInPlanning(
   }
   if (view === 'today') {
     return record.destination === 'anytime'
-      && record.today_section !== 'none'
-      && (record.start_date === null
+      && ((record.start_date === null && record.today_section !== 'none')
         || (typeof record.start_date === 'string' && record.start_date <= planningDate));
   }
   return record.destination === view

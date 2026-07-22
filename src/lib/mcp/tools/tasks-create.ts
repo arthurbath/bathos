@@ -10,7 +10,7 @@ import {
 } from '../supabase';
 import { uuidSchema } from '../resource-utils';
 const destinationSchema = z.enum(['anytime', 'someday']);
-const todaySectionSchema = z.enum(['none', 'now', 'next', 'later']);
+const todaySectionSchema = z.enum(['none', 'inbox', 'now', 'next', 'later']);
 const actionabilitySchema = z.enum(['actionable', 'waiting']);
 const integrationChannelSchema = z.enum([
   'mcp',
@@ -435,7 +435,7 @@ export const createTask = defineTool({
     title: z.string().trim().min(1).max(500),
     notes: z.string().max(100_000).default(''),
     destination: destinationSchema.default('anytime'),
-    today_section: todaySectionSchema.default('later'),
+    today_section: todaySectionSchema.default('inbox'),
     actionability: actionabilitySchema.default('actionable').describe('Whether the task can be acted on now or is waiting on something external.'),
     entry_channel: integrationChannelSchema.default('mcp').describe('Structured integration that collected the task. Ordinary MCP clients should keep the default.'),
     start_date: calendarDateSchema.nullable().optional(),

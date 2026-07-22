@@ -92,7 +92,7 @@ async function nextPlanningOrderKey(
     .select('order_key')
     .eq('owner_id', auth.userId)
     .eq('destination', 'anytime')
-    .eq('today_section', 'later')
+    .eq('today_section', 'inbox')
     .is('start_date', null)
     .eq('lifecycle', 'open')
     .eq('disposition', 'present')

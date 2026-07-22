@@ -47,6 +47,14 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null }> {
     return this;
   }
 
+  not(column: string, operator: string, value: unknown) {
+    if (operator === 'is' && value === null) {
+      this.filters.push((row) => row[column] !== null);
+      return this;
+    }
+    throw new Error(`Unsupported fake NOT clause: ${column}.${operator}.${String(value)}`);
+  }
+
   or(expression: string) {
     const clauses = expression.split(',').map((clause) => {
       const [column, operator, ...rawValue] = clause.split('.');
@@ -343,6 +351,7 @@ describe('Tasks MCP read tools', () => {
   });
 
   it('derives and orders Today sections while excluding future and other-owner work', async () => {
+    const inboxId = '50000000-0000-4000-8000-000000000009';
     const nowId = '50000000-0000-4000-8000-000000000010';
     const nextId = '50000000-0000-4000-8000-000000000011';
     const laterId = '50000000-0000-4000-8000-000000000012';
@@ -354,19 +363,50 @@ describe('Tasks MCP read tools', () => {
     }, authFor(ownerA, {
       tasks_user_settings: [settings()],
       tasks_todos: [
+        todo({ id: inboxId, destination: 'anytime', today_section: 'none', start_date: '2026-07-20', order_key: 'a3' }),
         todo({ id: nowId, destination: 'anytime', today_section: 'now', start_date: '2026-07-19', order_key: 'a2' }),
         todo({ id: nextId, destination: 'anytime', today_section: 'next', start_date: '2026-07-20', order_key: 'a1' }),
         todo({ id: laterId, destination: 'anytime', today_section: 'later', start_date: '2026-07-20', order_key: 'a0' }),
-        todo({ id: futureId, destination: 'anytime', today_section: 'none', start_date: '2026-07-21' }),
+        todo({ id: futureId, destination: 'anytime', today_section: 'now', start_date: '2026-07-21' }),
         todo({ id: '50000000-0000-4000-8000-000000000014', owner_id: ownerB, destination: 'anytime', today_section: 'next', start_date: '2026-07-20' }),
       ],
       tasks_projects: [],
     }));
 
     if (!('todos' in result)) throw new Error('Expected a planning view result.');
-    expect(result.todos.map(({ id }) => id)).toEqual([nowId, nextId, laterId]);
-    expect(result.todos.map((row) => row.derived_section)).toEqual(['now', 'next', 'later']);
+    expect(result.todos.map(({ id }) => id)).toEqual([inboxId, nowId, nextId, laterId]);
+    expect(result.todos.map((row) => row.derived_section)).toEqual([
+      'inbox', 'now', 'next', 'later',
+    ]);
     expect(result.todos.every((row) => !('owner_id' in row))).toBe(true);
+  });
+
+  it('does not let undated none rows consume the bounded due Inbox fallback', async () => {
+    const dueTodoId = '50000000-0000-4000-8000-000000000019';
+    const dueProjectId = '30000000-0000-4000-8000-000000000019';
+    const result = await getTaskViewData({
+      view: 'today',
+      planning_date: '2026-07-20',
+      limit: 1,
+    }, authFor(ownerA, {
+      tasks_user_settings: [settings()],
+      tasks_todos: [
+        todo({ id: '50000000-0000-4000-8000-000000000017', project_id: null, heading_id: null, order_key: 'a0' }),
+        todo({ id: '50000000-0000-4000-8000-000000000018', project_id: null, heading_id: null, order_key: 'a1' }),
+        todo({ id: dueTodoId, project_id: null, heading_id: null, start_date: '2026-07-20', order_key: 'z0' }),
+      ],
+      tasks_projects: [
+        project({ id: '30000000-0000-4000-8000-000000000017', planning_order_key: 'a0' }),
+        project({ id: '30000000-0000-4000-8000-000000000018', planning_order_key: 'a1' }),
+        project({ id: dueProjectId, start_date: '2026-07-20', planning_order_key: 'z0' }),
+      ],
+    }));
+
+    if (!('todos' in result)) throw new Error('Expected a planning view result.');
+    expect(result.todos.map(({ id }) => id)).toEqual([dueTodoId]);
+    expect(result.projects.map(({ id }) => id)).toEqual([dueProjectId]);
+    expect(result.todos[0].derived_section).toBe('inbox');
+    expect(result.projects[0].derived_section).toBe('inbox');
   });
 
   it('returns independent deleted roots in Done with deterministic planning context', async () => {

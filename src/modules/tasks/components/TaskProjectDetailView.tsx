@@ -353,7 +353,7 @@ export function TaskProjectDetailView({
 
 function ProjectPlanningForm({
   project,
-  planningDate,
+  planningDate: _planningDate,
   onSave,
 }: {
   project: NonNullable<TaskHierarchyModel['projects'][number]>;
@@ -381,10 +381,7 @@ function ProjectPlanningForm({
   const normalizedStartDate = destination === 'someday'
     ? null
     : startDate || null;
-  const normalizedTodaySection = destination === 'someday'
-    || (normalizedStartDate !== null && normalizedStartDate !== planningDate)
-    ? 'none'
-    : todaySection;
+  const normalizedTodaySection = destination === 'someday' ? 'none' : todaySection;
   const invalidDateRange = Boolean(
     normalizedStartDate && deadline && deadline < normalizedStartDate,
   );
@@ -443,17 +440,17 @@ function ProjectPlanningForm({
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor={`project-today-section-${project.id}`}>
-            Today Section
+            Day Horizon
           </label>
           <select
             id={`project-today-section-${project.id}`}
             value={normalizedTodaySection}
-            disabled={saving || destination === 'someday'
-              || Boolean(normalizedStartDate && normalizedStartDate !== planningDate)}
+            disabled={saving || destination === 'someday'}
             onChange={(event) => setTodaySection(event.target.value as typeof todaySection)}
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
-            <option value="none">Not Today</option>
+            <option value="none">None</option>
+            <option value="inbox">Inbox</option>
             <option value="now">Now</option>
             <option value="next">Next</option>
             <option value="later">Later</option>

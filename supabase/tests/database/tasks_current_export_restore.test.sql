@@ -170,8 +170,8 @@ SELECT is(
     SELECT today_section FROM public.tasks_todos
     WHERE id = 'dc000000-0000-4000-8000-000000000020'
   ),
-  'later',
-  'normalizes legacy Inbox to Today Later'
+  'inbox',
+  'normalizes legacy Inbox to Today Inbox'
 );
 SELECT is(
   (

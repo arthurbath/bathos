@@ -107,7 +107,7 @@ describe('task repository', () => {
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain('INSERT INTO tasks_todos');
   });
 
-  it('places unscheduled captures without an explicit destination in Today Later and Anytime', async () => {
+  it('places unscheduled captures without an explicit destination in Today Inbox and Anytime', async () => {
     const { repository } = createHarness(null);
 
     await expect(repository.createTask({
@@ -116,7 +116,7 @@ describe('task repository', () => {
     })).resolves.toMatchObject({
       title: 'Unprocessed capture',
       destination: 'anytime',
-      today_section: 'later',
+      today_section: 'inbox',
       start_date: null,
     });
   });

@@ -14,8 +14,8 @@ BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/ta
 
 | View | Purpose |
 | --- | --- |
-| Today | Available Anytime work marked Now, Next, or Later |
-| Upcoming | Work with a future start date |
+| Today | Eligible Anytime work grouped into Inbox, Now, Next, and Later |
+| Upcoming | Work with a future start date, including its selected day horizon |
 | Anytime | All active work available now, including every Today task |
 | Someday | Inactive work kept for possible future attention |
 | Done | Completed, canceled, and recoverably deleted work retained for 30 full owner-local days |
@@ -24,9 +24,11 @@ BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/ta
 
 Today, Upcoming, Anytime, and Someday remain directly available in the primary navigation. Open More for Projects, Templates, Done, and Config.
 
-Press `N` from Today, Anytime, or Someday to focus the capture field. Today and Anytime captures default to Anytime and Today Later. Someday captures remain outside Today. Raycast capture commands also default to Anytime and Today Later.
+Press `N` from Today, Anytime, or Someday to focus the capture field. Today and Anytime captures default to Anytime and Today Inbox. Someday captures remain outside Today. Raycast capture commands also default to Anytime and Today Inbox.
 
-Use start dates for availability, deadlines for the last acceptable date, and reminders for a specific local time. Mark work as `Waiting` when it cannot be acted upon now. Structured webpage, file, reading-item, and Mail sources remain distinct from the task title and notes.
+Use Start Date for availability and Day Horizon for the Today section in which the work should appear. Inbox is the default triage section, followed by Now, Next, and Later. A future item keeps its selected day horizon while it remains in Upcoming, then enters Today in that section on its owner-local start date. A future item without a selected horizon enters Today Inbox when due. Removing the day horizon from undated work keeps it in Anytime and removes it from Today.
+
+Use deadlines for the last acceptable date and reminders for a specific local time. Mark work as `Waiting` when it cannot be acted upon now. Structured webpage, file, reading-item, and Mail sources remain distinct from the task title and notes.
 
 ## Keyboard Commands
 
@@ -51,10 +53,10 @@ Press `?` in Tasks to open the current keyboard reference.
 
 The sibling Raycast project provides these authenticated commands:
 
-- `Add Task`: Add a title and optional notes to Anytime and Today Later
-- `Add Page to Tasks`: Capture the active Safari or Chrome page to Anytime and Today Later with webpage provenance
-- `Add Finder Item to Tasks`: Capture exactly one selected file or folder to Anytime and Today Later with a local file reference
-- `Add to Tasks Reading List`: Create an AI-titled reading item in Anytime and Today Later
+- `Add Task`: Add a title and optional notes to Anytime and Today Inbox
+- `Add Page to Tasks`: Capture the active Safari or Chrome page to Anytime and Today Inbox with webpage provenance
+- `Add Finder Item to Tasks`: Capture exactly one selected file or folder to Anytime and Today Inbox with a local file reference
+- `Add to Tasks Reading List`: Create an AI-titled reading item in Anytime and Today Inbox
 
 The first use of any command opens BathOS authorization in the browser. Later uses refresh the delegated token automatically. Raycast keeps its rotating token and any ambiguous pending capture in the macOS login Keychain under `garden.bath.tasks-raycast`.
 

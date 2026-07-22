@@ -13,10 +13,9 @@ import {
   type AuthenticatedMcpContext,
 } from '../supabase';
 import { uuidSchema } from '../resource-utils';
-import { planningDateInTimeZone } from './tasks-read';
 
 const destinationSchema = z.enum(['anytime', 'someday']);
-const todaySectionSchema = z.enum(['none', 'now', 'next', 'later']);
+const todaySectionSchema = z.enum(['none', 'inbox', 'now', 'next', 'later']);
 const actionabilitySchema = z.enum(['actionable', 'waiting']);
 const sourceKindSchema = z.enum([
   'webpage',
@@ -329,36 +328,16 @@ function changedPatch(current: Snapshot, patch: TaskPatch): TaskPatch {
   );
 }
 
-async function planningDateForOwner(
-  auth: AuthenticatedMcpContext,
-  instant = new Date(),
-): Promise<string> {
-  const settings = await readOne<Tables['tasks_user_settings']['Row']>(auth.supabase
-    .from('tasks_user_settings')
-    .select('*')
-    .eq('owner_id', auth.userId)
-    .maybeSingle());
-  if (settings === null) {
-    throw new Error('Task planning settings are not initialized. Open the Tasks module first.');
-  }
-  return planningDateInTimeZone(settings.planning_timezone, instant);
-}
-
 function validatePlanningPlacement(
   destination: TaskDestination,
   todaySection: TaskTodaySection,
   startDate: string | null,
-  planningDate: string | null,
 ): void {
   if (destination === 'someday' && todaySection !== 'none') {
     throw new Error('Someday work cannot appear in Today.');
   }
   if (destination === 'someday' && startDate !== null) {
     throw new Error('Someday work cannot retain a start date.');
-  }
-  if (destination === 'anytime' && todaySection !== 'none'
-    && startDate !== null && planningDate !== null && startDate > planningDate) {
-    throw new Error('Future work cannot appear in Today.');
   }
 }
 
@@ -466,10 +445,9 @@ async function movePatch(
   const patch: TaskPatch = {};
   if (planningRequested) {
     const destination = input.destination!;
-    const planningDate = await planningDateForOwner(auth);
     const todaySection = destination === 'someday' ? 'none' : input.today_section ?? 'none';
     const startDate = input.start_date ?? null;
-    validatePlanningPlacement(destination, todaySection, startDate, planningDate);
+    validatePlanningPlacement(destination, todaySection, startDate);
     assertTaskCalendarRange(startDate, current.deadline);
     if (destination === current.destination
       && todaySection === current.today_section
@@ -523,15 +501,13 @@ async function schedulePatch(
   }
   assertTaskCalendarRange(startDate, deadline);
 
-  const planningDate = await planningDateForOwner(auth);
   let destination = current.destination as TaskDestination;
   let todaySection = current.today_section as TaskTodaySection;
   if (destination === 'someday' && startDate !== null) {
     destination = 'anytime';
     todaySection = 'none';
   }
-  if (startDate !== null && startDate > planningDate) todaySection = 'none';
-  validatePlanningPlacement(destination, todaySection, startDate, planningDate);
+  validatePlanningPlacement(destination, todaySection, startDate);
 
   const patch: TaskPatch = { start_date: startDate, deadline };
   if (destination !== current.destination) {
@@ -603,9 +579,6 @@ function expectedAfterForRetry(
       expected.destination = 'anytime';
       expected.today_section = 'none';
       ignored.add('order_key');
-    }
-    if (before.today_section !== 'none' && after.today_section === 'none') {
-      expected.today_section = 'none';
     }
     return {
       expected,

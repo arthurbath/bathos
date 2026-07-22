@@ -23,13 +23,13 @@ describe('getTaskPlanningRoute', () => {
     }, '2026-07-20')).toBe('upcoming');
   });
 
-  it('retains the persisted route for currently available work', () => {
+  it('routes due dated work without a stored horizon to Today Inbox', () => {
     expect(getTaskPlanningRoute({
       destination: 'anytime',
       lifecycle: 'open',
       disposition: 'present',
       start_date: '2026-07-20',
       today_section: 'none',
-    }, '2026-07-20')).toBe('anytime');
+    }, '2026-07-20')).toBe('today');
   });
 });

@@ -10,7 +10,8 @@ describe('task project planning views', () => {
     const projects = [
       project('today', { destination: 'anytime', today_section: 'next', start_date: planningDate }),
       project('now', { destination: 'anytime', today_section: 'now', start_date: '2026-07-19' }),
-      project('future-today', { destination: 'anytime', today_section: 'none', start_date: '2026-07-22' }),
+      project('future-today', { destination: 'anytime', today_section: 'now', start_date: '2026-07-22' }),
+      project('due-inbox', { destination: 'anytime', today_section: 'none', start_date: planningDate }),
       project('anytime', { destination: 'anytime', start_date: null }),
       project('future-anytime', { destination: 'anytime', start_date: '2026-07-21' }),
       project('someday', { destination: 'someday', start_date: null }),
@@ -18,11 +19,11 @@ describe('task project planning views', () => {
     ];
 
     expect(deriveTaskViewProjects(projects, 'owner-a', 'today', planningDate)
-      .map(({ id }) => id)).toEqual(['now', 'today']);
+      .map(({ id }) => id)).toEqual(['due-inbox', 'now', 'today']);
     expect(deriveTaskViewProjects(projects, 'owner-a', 'upcoming', planningDate)
       .map(({ id }) => id)).toEqual(['future-anytime', 'future-today']);
     expect(deriveTaskViewProjects(projects, 'owner-a', 'anytime', planningDate)
-      .map(({ id }) => id)).toEqual(['anytime', 'now', 'today']);
+      .map(({ id }) => id)).toEqual(['anytime', 'due-inbox', 'now', 'today']);
     expect(deriveTaskViewProjects(projects, 'owner-a', 'someday', planningDate)
       .map(({ id }) => id)).toEqual(['someday']);
   });
@@ -43,6 +44,10 @@ describe('task project planning views', () => {
     });
 
     expect(getTodayProjectSection(later, planningDate)).toBe('later');
+    expect(getTodayProjectSection(project('due', {
+      today_section: 'none',
+      start_date: planningDate,
+    }), planningDate)).toBe('inbox');
     expect(deriveTaskViewProjects([completed, canceled], 'owner-a', 'done', planningDate)
       .map(({ id }) => id)).toEqual(['canceled', 'completed']);
   });

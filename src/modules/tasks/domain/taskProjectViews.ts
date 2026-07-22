@@ -2,7 +2,7 @@ import { compareTaskOrder } from '@/modules/tasks/domain/taskOrder';
 import type { TaskDestination, TaskProject } from '@/modules/tasks/types/tasks';
 
 type TaskProjectListView = TaskDestination | 'today' | 'upcoming' | 'done';
-type TodayProjectSection = 'now' | 'next' | 'later';
+type TodayProjectSection = 'inbox' | 'now' | 'next' | 'later';
 
 export function deriveTaskViewProjects(
   projects: readonly TaskProject[],
@@ -19,7 +19,7 @@ export function getTodayProjectSection(
   project: TaskProject,
   _planningDate: string,
 ): TodayProjectSection {
-  return project.today_section === 'none' ? 'later' : project.today_section;
+  return project.today_section === 'none' ? 'inbox' : project.today_section;
 }
 
 export function projectPlanningOrderSection(
@@ -56,10 +56,12 @@ function projectIsVisible(
   }
   if (view === 'today') {
     return project.destination === 'anytime'
-      && project.today_section !== 'none'
       && project.lifecycle === 'open'
       && project.disposition === 'present'
-      && (project.start_date === null || project.start_date <= planningDate);
+      && (
+        (project.start_date === null && project.today_section !== 'none')
+        || (project.start_date !== null && project.start_date <= planningDate)
+      );
   }
   return project.destination === view
     && project.lifecycle === 'open'
@@ -86,9 +88,10 @@ function compareProjectsForView(
   }
   if (view === 'today') {
     const ranks: Record<TodayProjectSection, number> = {
-      now: 0,
-      next: 1,
-      later: 2,
+      inbox: 0,
+      now: 1,
+      next: 2,
+      later: 3,
     };
     return ranks[getTodayProjectSection(left, planningDate)]
       - ranks[getTodayProjectSection(right, planningDate)]

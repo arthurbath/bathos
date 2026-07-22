@@ -567,7 +567,7 @@ function parseTaskInsert(entry: CrudEntry): TaskInsert {
     deleted_at: optionalText(data.deleted_at),
     deletion_root_id: optionalText(data.deletion_root_id),
     destination: optionalText(data.destination) ?? 'anytime',
-    today_section: optionalText(data.today_section) ?? 'later',
+    today_section: optionalText(data.today_section) ?? 'inbox',
     order_key: requireText(data.order_key, 'order_key'),
     hierarchy_order_key: optionalText(data.hierarchy_order_key),
     start_date: optionalText(data.start_date),

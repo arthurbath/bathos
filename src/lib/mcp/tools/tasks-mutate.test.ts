@@ -452,7 +452,7 @@ describe('Tasks MCP mutation tools', () => {
     });
   });
 
-  it('removes Today membership when scheduling Later work into the future', async () => {
+  it('retains the Later horizon when scheduling work into the future', async () => {
     const client = new FakeTasksClient({
       tasks_todos: [task({
         destination: 'anytime',
@@ -466,8 +466,8 @@ describe('Tasks MCP mutation tools', () => {
     }, authFor(ownerA, client));
     expect(result).toMatchObject({
       mutation_outcome: 'applied',
-      receipt: { transition: 'move' },
-      task: { destination: 'anytime', today_section: 'none', start_date: '2099-07-25' },
+      receipt: { transition: 'update' },
+      task: { destination: 'anytime', today_section: 'later', start_date: '2099-07-25' },
     });
   });
 

@@ -32,7 +32,7 @@ vi.mock('@/hooks/use-toast', () => ({
 vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
   useTaskList: (...args: unknown[]) => mockTaskList(...args),
   getTodayTaskSection: (value: { today_section: string }) => (
-    value.today_section === 'none' ? 'later' : value.today_section
+    value.today_section === 'none' ? 'inbox' : value.today_section
   ),
 }));
 
@@ -896,7 +896,7 @@ describe('TasksShell', () => {
 
       expect(taskList.moveTasks).toHaveBeenCalledWith(['task-a', 'task-b'], {
         destination: 'anytime',
-        todaySection: 'none',
+        todaySection: 'next',
         startDate: '2026-07-21',
       });
       expect(dialog.isConnected).toBe(true);
@@ -1238,6 +1238,7 @@ describe('TasksShell', () => {
       const actionability = container.querySelector<HTMLSelectElement>('#task-actionability-task-a')!;
       const organization = container.querySelector<HTMLSelectElement>('#task-organization-task-a')!;
       const startDate = container.querySelector<HTMLButtonElement>('#task-start-date-task-a')!;
+      const dayHorizon = container.querySelector<HTMLSelectElement>('#task-day-horizon-task-a')!;
       const deadline = container.querySelector<HTMLButtonElement>('#task-deadline-task-a')!;
       const cancel = Array.from(editorTitle.form!.querySelectorAll<HTMLButtonElement>('button'))
         .find((button) => button.textContent === 'Cancel')!;
@@ -1253,6 +1254,8 @@ describe('TasksShell', () => {
       expect(document.activeElement).toBe(organization);
       await tab();
       expect(document.activeElement).toBe(startDate);
+      await tab();
+      expect(document.activeElement).toBe(dayHorizon);
       await tab();
       expect(document.activeElement).toBe(deadline);
       await tab();
@@ -1723,7 +1726,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('removes Later membership when its Today planning date is cleared', async () => {
+  it('retains the Later horizon when its explicit start date is cleared', async () => {
     const laterTask = {
       ...task,
       today_section: 'later' as const,
@@ -1752,7 +1755,6 @@ describe('TasksShell', () => {
 
       expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
         start_date: null,
-        today_section: 'none',
       });
     } finally {
       cleanup(root, container);
@@ -1925,7 +1927,7 @@ describe('TasksShell', () => {
   });
 
   it('shows future-start work in Upcoming and can make it available today', async () => {
-    const upcomingTask = { ...task, start_date: '2026-07-24' };
+    const upcomingTask = { ...task, today_section: 'next' as const, start_date: '2026-07-24' };
     const taskList = { ...defaultTaskList(), tasks: [upcomingTask] };
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell('/tasks/upcoming');
@@ -1933,6 +1935,24 @@ describe('TasksShell', () => {
     try {
       expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
       expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'upcoming');
+      expect(container.querySelector('[aria-label="Today Next"]')).toBeTruthy();
+      await openTaskMenuSurface(container, 'Existing task', 'When...');
+      const dayHorizon = document.querySelector<HTMLSelectElement>('#task-when-horizon-task-a')!;
+      await act(async () => {
+        dayHorizon.value = 'now';
+        dayHorizon.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      const savePlanning = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+        .find((item) => item.textContent === 'Save Planning');
+      await act(async () => {
+        savePlanning?.click();
+        await Promise.resolve();
+      });
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+        start_date: '2026-07-24',
+        today_section: 'now',
+      });
+
       await openTaskMenuSurface(container, 'Existing task', 'When...');
       const makeAvailable = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
         .find((item) => item.textContent === 'Move to Today Later');
@@ -1997,6 +2017,11 @@ describe('TasksShell', () => {
         today_section: 'none',
         start_date: '2026-07-24',
       });
+      expect(normalizeTaskEditorPlanningPatch(
+        { ...task, today_section: 'later' },
+        { start_date: '2026-07-24' },
+        '2026-07-20',
+      )).toEqual({ start_date: '2026-07-24' });
     } finally {
       cleanup(root, container);
     }
@@ -2037,7 +2062,14 @@ describe('TasksShell', () => {
     }
   });
 
-  it('renders Now, Next, and Later as distinct Today sections and moves between them', async () => {
+  it('renders Inbox, Now, Next, and Later as distinct Today sections and moves between them', async () => {
+    const inboxTask = {
+      ...task,
+      id: 'task-inbox',
+      title: 'Inbox task',
+      today_section: 'none' as const,
+      start_date: '2026-07-20',
+    };
     const nowTask = {
       ...task,
       id: 'task-now',
@@ -2054,13 +2086,14 @@ describe('TasksShell', () => {
     };
     const taskList = {
       ...defaultTaskList(),
-      tasks: [nowTask, { ...task, start_date: '2026-07-20' }, laterTask],
+      tasks: [inboxTask, nowTask, { ...task, start_date: '2026-07-20' }, laterTask],
     };
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell('/tasks/today');
 
     try {
       expect(container.textContent).toContain('Now task');
+      expect(container.querySelector('#tasks-inbox-heading')?.textContent).toContain('Inbox (1)');
       expect(container.querySelector('#tasks-now-heading')?.textContent).toContain('Now (1)');
       expect(container.querySelector('#tasks-next-heading')?.textContent).toContain('Next (1)');
       expect(container.querySelector('#tasks-later-heading')?.textContent).toContain('Later (1)');
@@ -2117,7 +2150,7 @@ describe('TasksShell', () => {
       });
       expect(hierarchy.moveProjectInPlanning).toHaveBeenCalledWith('project-plan', {
         destination: 'anytime',
-        todaySection: 'none',
+        todaySection: 'next',
         startDate: '2026-07-21',
       });
       expect(taskList.moveTask).not.toHaveBeenCalled();

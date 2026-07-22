@@ -47,8 +47,8 @@ SELECT is(
 );
 SELECT is(
   (SELECT today_section FROM public.tasks_todos WHERE id = 'b2000000-0000-4000-8000-000000000010'),
-  'later',
-  'defaults an unqualified capture to Today Later'
+  'inbox',
+  'defaults an unqualified capture to Today Inbox'
 );
 
 SELECT lives_ok(

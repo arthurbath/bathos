@@ -285,8 +285,10 @@ function visibleInTaskView(row: TaskPlannableRow, view: TaskView, planningDate: 
   }
   if (view === 'today') {
     return row.destination === 'anytime'
-      && row.today_section !== 'none'
-      && (row.start_date === null || row.start_date <= planningDate);
+      && (
+        (row.start_date === null && row.today_section !== 'none')
+        || (row.start_date !== null && row.start_date <= planningDate)
+      );
   }
   return row.destination === view
     && (view !== 'anytime'
@@ -295,7 +297,7 @@ function visibleInTaskView(row: TaskPlannableRow, view: TaskView, planningDate: 
 }
 
 function todaySection(row: TaskPlannableRow, _planningDate: string) {
-  return row.today_section;
+  return row.today_section === 'none' ? 'inbox' : row.today_section;
 }
 
 function comparePlanningRows(
@@ -315,7 +317,7 @@ function comparePlanningRows(
       || left.id.localeCompare(right.id);
   }
   if (view === 'today') {
-    const ranks = { now: 0, next: 1, later: 2 } as const;
+    const ranks = { inbox: 0, now: 1, next: 2, later: 3 } as const;
     return ranks[todaySection(left, planningDate) as keyof typeof ranks]
       - ranks[todaySection(right, planningDate) as keyof typeof ranks]
       || planningOrder(left).localeCompare(planningOrder(right))
@@ -363,6 +365,8 @@ async function loadTodoPlanningRows(
       .eq('disposition', 'present')
       .or(`start_date.is.null,start_date.lte.${planningDate}`);
     const segments = await Promise.all([
+      readMany<TaskTodoRow>(todayBase().eq('today_section', 'inbox').order('order_key').order('id').limit(limit + 1), limit),
+      readMany<TaskTodoRow>(todayBase().eq('today_section', 'none').not('start_date', 'is', null).order('order_key').order('id').limit(limit + 1), limit),
       readMany<TaskTodoRow>(todayBase().eq('today_section', 'now').order('order_key').order('id').limit(limit + 1), limit),
       readMany<TaskTodoRow>(todayBase().eq('today_section', 'next').order('order_key').order('id').limit(limit + 1), limit),
       readMany<TaskTodoRow>(todayBase().eq('today_section', 'later').order('order_key').order('id').limit(limit + 1), limit),
@@ -402,6 +406,8 @@ async function loadProjectPlanningRows(
       .eq('disposition', 'present')
       .or(`start_date.is.null,start_date.lte.${planningDate}`);
     const segments = await Promise.all([
+      readMany<TaskProjectRow>(todayBase().eq('today_section', 'inbox').order('planning_order_key').order('id').limit(limit + 1), limit),
+      readMany<TaskProjectRow>(todayBase().eq('today_section', 'none').not('start_date', 'is', null).order('planning_order_key').order('id').limit(limit + 1), limit),
       readMany<TaskProjectRow>(todayBase().eq('today_section', 'now').order('planning_order_key').order('id').limit(limit + 1), limit),
       readMany<TaskProjectRow>(todayBase().eq('today_section', 'next').order('planning_order_key').order('id').limit(limit + 1), limit),
       readMany<TaskProjectRow>(todayBase().eq('today_section', 'later').order('planning_order_key').order('id').limit(limit + 1), limit),

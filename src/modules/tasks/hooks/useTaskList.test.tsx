@@ -287,7 +287,7 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
-  it('captures directly into Today as Anytime Later without a start date', async () => {
+  it('captures directly into Today as Anytime Inbox without a start date', async () => {
     const repository = {
       createTask: vi.fn().mockResolvedValue(originalTask),
       updateTask: vi.fn(),
@@ -305,7 +305,7 @@ describe('useTaskList optimistic display', () => {
         ownerId: 'owner-a',
         title: 'Today capture',
         destination: 'anytime',
-        todaySection: 'later',
+        todaySection: 'inbox',
         startDate: null,
       });
     } finally {
@@ -381,7 +381,7 @@ describe('useTaskList optimistic display', () => {
         ownerId: 'owner-a',
         title: 'Anytime capture',
         destination: 'anytime',
-        todaySection: 'later',
+        todaySection: 'inbox',
         startDate: null,
       });
 
@@ -438,7 +438,14 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
-  it('groups Now, Next, and Later work while reordering only within a section', async () => {
+  it('groups Inbox, Now, Next, and Later work while reordering only within a section', async () => {
+    const inbox = {
+      ...originalTask,
+      id: 'task-inbox',
+      today_section: 'none' as const,
+      start_date: '2000-01-01',
+      order_key: 'a0',
+    };
     const now = {
       ...originalTask,
       id: 'task-now',
@@ -465,7 +472,7 @@ describe('useTaskList optimistic display', () => {
       start_date: null,
       order_key: 'a0',
     };
-    queryData = [later, nextSecond, now, nextFirst];
+    queryData = [later, nextSecond, now, inbox, nextFirst];
     const repository = {
       createTask: vi.fn(),
       updateTask: vi.fn().mockImplementation(async (_owner: string, id: string, patch: object) => ({
@@ -482,6 +489,7 @@ describe('useTaskList optimistic display', () => {
 
     try {
       expect(latest.tasks.map((task) => task.id)).toEqual([
+        'task-inbox',
         'task-now',
         'task-next-first',
         'task-next-second',
@@ -499,6 +507,7 @@ describe('useTaskList optimistic display', () => {
       );
       expect(repository.updateTask.mock.calls[0][2].order_key < 'a0').toBe(true);
       expect(latest.tasks.map((task) => task.id)).toEqual([
+        'task-inbox',
         'task-now',
         'task-next-second',
         'task-next-first',

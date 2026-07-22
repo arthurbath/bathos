@@ -223,7 +223,15 @@ function getProjectPlanningActions(
 
   if (view === 'upcoming') return [today, anytime, someday];
   if (view === 'anytime') {
-    const actions = project.today_section === 'none' ? [today] : [{
+    const actions = project.today_section === 'none' ? ([
+      ['inbox', 'Inbox'],
+      ['now', 'Now'],
+      ['next', 'Next'],
+      ['later', 'Later'],
+    ] as const).map(([todaySection, label]) => ({
+      label: `Add to Today ${label}`,
+      input: { destination: 'anytime' as const, todaySection, startDate: null },
+    })) : [{
       label: 'Remove from Today',
       input: { destination: 'anytime', todaySection: 'none', startDate: null },
     } satisfies { label: string; input: TaskProjectPlanningMoveInput }];
@@ -233,7 +241,7 @@ function getProjectPlanningActions(
 
   const section = getTodayProjectSection(project, planningDate);
   const actions: Array<{ label: string; input: TaskProjectPlanningMoveInput }> = (
-    ['now', 'next', 'later'] as const
+    ['inbox', 'now', 'next', 'later'] as const
   ).filter((candidate) => candidate !== section).map((candidate) => ({
     label: `Move to Today ${candidate[0].toUpperCase()}${candidate.slice(1)}`,
     input: { destination: 'anytime', todaySection: candidate, startDate: null },
@@ -242,7 +250,7 @@ function getProjectPlanningActions(
     label: 'Move to Tomorrow',
     input: {
       destination: 'anytime',
-      todaySection: 'none',
+      todaySection: section,
       startDate: addTaskCalendarDays(planningDate, 1),
     },
   }, {
@@ -268,6 +276,9 @@ function projectPlanningLabel(
     details.push(`Today ${section[0].toUpperCase()}${section.slice(1)}`);
   } else if (view === 'upcoming' && project.start_date) {
     details.push(`Starts ${formatCalendarDate(project.start_date)}`);
+    if (project.today_section !== 'none') {
+      details.push(`Today ${project.today_section[0].toUpperCase()}${project.today_section.slice(1)}`);
+    }
   }
   if (project.deadline) details.push(`Due ${formatCalendarDate(project.deadline)}`);
   if (areaTitle) details.push(areaTitle);
