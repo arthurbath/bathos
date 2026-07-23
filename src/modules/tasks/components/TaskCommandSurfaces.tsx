@@ -486,7 +486,7 @@ export function TaskKeyboardHelpDialog({
     {
       label: 'Everywhere',
       commands: [
-        ['Capture a Task', 'Command+N', 'Control+N'],
+        ['New Task', 'Command+N', 'Control+N'],
         ['Quick Find', 'Command+F', 'Control+F'],
         ['Show Keyboard Help', 'Command+/', 'Control+/'],
         ['Open Today', 'Command+1', 'Control+1'],
@@ -507,6 +507,7 @@ export function TaskKeyboardHelpDialog({
         ['Open Next', 'Control+S', 'Control+Shift+S'],
         ['Open Previous', 'Control+W', 'Control+Shift+W'],
         ['Mark Open To-Do Complete', 'Control+D', 'Control+Shift+D'],
+        ['Toggle Completion', 'Command+K', 'Control+K'],
         ['Close and Clear Focus', 'Control+X', 'Control+Shift+X'],
         ['Move to or Cycle Today', 'Command+T', 'Control+T'],
         ['Move to Anytime', 'Command+R', 'Control+R'],
@@ -527,6 +528,7 @@ export function TaskKeyboardHelpDialog({
     {
       label: 'Editor and Surfaces',
       commands: [
+        ['Close Open To-Do', 'Command+Return or Escape', 'Control+Return or Escape'],
         ['Move Through Controls', 'Tab/Shift+Tab', 'Tab/Shift+Tab'],
       ],
     },

@@ -996,7 +996,7 @@ The system SHALL present a visible interaction reference that documents supporte
 - **THEN** the reference does not imply that Tasks will override native editing, browser, or unsupported ordering behavior
 
 ### Requirement: Keyboard-First Daily Operation
-The system SHALL provide modifier-based keyboard operation for capture, editing, Today planning, direct view navigation, list traversal, lifecycle transitions, find, and dialogs while suppressing every matching browser-level command inside the mounted Tasks module.
+The system SHALL provide modifier-based keyboard operation for full-editor creation, editing, Today planning, direct view navigation, list traversal, lifecycle transitions, find, and dialogs while suppressing every matching browser-level command inside the mounted Tasks module.
 
 #### Scenario: Navigate without a pointer
 - **WHEN** a keyboard user moves through a task view
@@ -1006,17 +1006,57 @@ The system SHALL provide modifier-based keyboard operation for capture, editing,
 - **WHEN** a user invokes Control+D on Mac or Control+Shift+D on Windows while a to-do is open
 - **THEN** the system toggles that to-do's pending completion state without closing its editor or transitioning it to Done
 
+#### Scenario: Toggle completion with Command K
+- **WHEN** a user presses Command+K on Mac or Control+K on Windows with an open task
+- **THEN** Tasks toggles the same pending completion state as the platform's Control+D completion command and suppresses the matching browser command
+
+#### Scenario: Complete a bulk selection with Command K
+- **WHEN** a user presses Command+K on Mac or Control+K on Windows while a nonempty task multi-selection owns task commands
+- **THEN** Tasks completes every selected open-lifecycle task through the ordinary lifecycle path and suppresses the matching browser command
+
 #### Scenario: Invoke a task command safely
 - **WHEN** focus is on a task title and no editor, unrelated modal, or composition event owns keyboard input
 - **THEN** Enter retains ordinary button activation, Option+Up or Option+Down on Mac and Alt+Up or Alt+Down on Windows reorder within the current scope, and no unmodified letter or arrow key triggers a Tasks command
 
 #### Scenario: Preserve keyboard focus after a task leaves the view
 - **WHEN** completion, cancellation, movement, or recoverable deletion removes the focused task from the current view
-- **THEN** focus moves to the task now occupying the same visual position, then the prior task, then task capture or the primary view heading when no task remains
+- **THEN** focus moves to the task now occupying the same visual position, then the prior task, then the primary view heading when no task remains
 
-#### Scenario: Open task capture, find, or keyboard help
+#### Scenario: Open task creation, find, or keyboard help
 - **WHEN** a keyboard user presses Command+N, Command+F, or Command+/ on Mac, or Control+N, Control+F, or Control+/ on Windows
-- **THEN** the module respectively focuses task capture, opens quick find, or opens the keyboard-command reference and suppresses the matching browser command
+- **THEN** the module respectively opens a blank task in the complete editor, opens quick find, or opens the keyboard-command reference and suppresses the matching browser command
+
+#### Scenario: Create through the complete editor
+- **WHEN** Command+N or Control+N is invoked from Today, Upcoming, Anytime, or Someday
+- **THEN** Tasks removes any persistent Add a Task field, injects one blank local task draft at the top of that view, opens the ordinary complete editor, and focuses its blank title
+
+#### Scenario: Create from outside a planning list
+- **WHEN** Command+N or Control+N is invoked from Projects, Templates, Done, Config, Search, a project, or an area
+- **THEN** Tasks navigates to Today and opens one blank Today Now draft in the complete editor
+
+#### Scenario: Persist a valid draft
+- **WHEN** a blank draft first obtains a nonblank title
+- **THEN** Tasks creates exactly one ordinary task using the complete latest draft metadata, keeps the open row at the top until close, and routes subsequent edits through ordinary ordered autosave
+
+#### Scenario: Preserve metadata entered before a title
+- **WHEN** a user edits planning, organization, notes, Primary Link, actionability, deadline, or reminder intent before giving the draft a title
+- **THEN** Tasks retains those values locally and includes them when the first nonblank title creates the task
+
+#### Scenario: Discard an untitled draft
+- **WHEN** the user closes a draft whose title never became nonblank
+- **THEN** Tasks removes the local draft without creating synchronized work, history, sources, reminders, or a success toast
+
+#### Scenario: Default a Today draft
+- **WHEN** a user creates a task from Today
+- **THEN** the draft begins as undated Anytime work with Today Now horizon and responds to ordinary planning keyboard commands
+
+#### Scenario: Reconcile a new task after close
+- **WHEN** a persisted draft editor closes
+- **THEN** Tasks removes the temporary top projection and derives the task's membership, grouping, and order through the active view's ordinary sorting rules
+
+#### Scenario: Explain a saved task leaving the view
+- **WHEN** the final accepted metadata places a newly persisted task outside the view where it was created
+- **THEN** Tasks shows one neutral toast stating that the task was saved but is not visible in the current list
 
 #### Scenario: Submit inline hierarchy capture
 - **WHEN** a keyboard user enters a nonblank area, project, project to-do, or checklist-item name and presses Enter without an active composition event
@@ -1036,7 +1076,7 @@ The system SHALL provide modifier-based keyboard operation for capture, editing,
 
 #### Scenario: Restore focus after a movement command
 - **WHEN** a structural or temporal movement command succeeds and its command surface closes
-- **THEN** focus returns to the moved task when it remains in the current view, or follows the same-position, prior-task, capture, and primary-heading fallback when the move removes it
+- **THEN** focus returns to the moved task when it remains in the current view, or follows the same-position, prior-task, and primary-heading fallback when the move removes it
 
 #### Scenario: Autosave free-text editing
 - **WHEN** a user changes a to-do title or notes in an open editor
@@ -1103,7 +1143,7 @@ The system SHALL provide modifier-based keyboard operation for capture, editing,
 - **THEN** Tasks opens the last visible to-do when none is open, otherwise closes the current editor and opens the previous visible to-do, closing without wrapping when the current to-do is first
 
 #### Scenario: Focus a newly opened title
-- **WHEN** a pointer, search result, or keyboard traversal command opens a to-do
+- **WHEN** a pointer, search result, creation command, or keyboard traversal command opens a to-do
 - **THEN** focus lands in the title input with its insertion point at the end and the page scrolls only as needed to reveal that title, never the bottom of a long editor
 
 #### Scenario: Animate inline editor disclosure
@@ -1113,6 +1153,10 @@ The system SHALL provide modifier-based keyboard operation for capture, editing,
 #### Scenario: Close an editor from outside
 - **WHEN** a pointer interaction begins outside the open to-do and any calendar, menu, listbox, or dialog launched from its editor
 - **THEN** Tasks flushes pending autosave, closes the editor, and commits any deferred completion through the ordinary close path
+
+#### Scenario: Close an editor with Command Return or Escape
+- **WHEN** a task editor is open and the user presses Command+Return on Mac, Control+Return on Windows, or Escape while no nested dialog or popover owns Escape
+- **THEN** Tasks flushes autosave and closes the editor from any focused task field with the same deferred-completion semantics as the ordinary close path
 
 #### Scenario: Retain an open task's list projection
 - **WHEN** autosaved planning or organization metadata would remove or regroup the currently open to-do
@@ -1238,13 +1282,9 @@ The system SHALL provide modifier-based keyboard operation for capture, editing,
 - **WHEN** parallel-use approval has not passed verification
 - **THEN** Mail capture remains disabled and Inbox Manager does not dual-write to BathOS
 
-#### Scenario: Capture from the keyboard
-- **WHEN** the user presses Command+N on Mac or Control+N on Windows
-- **THEN** the interface focuses the current capture field or navigates to Today and focuses capture
-
 #### Scenario: Navigate task views
 - **WHEN** the user presses the documented Command+number or Control+number chord
-- **THEN** the interface navigates directly to Today, Upcoming, Anytime, Someday, Projects, Templates, Done, or Config while suppressing browser tab-number behavior
+- **THEN** the interface navigates directly to Today, Upcoming, Anytime, Someday, Projects, Templates, or Config while suppressing browser tab-number behavior
 
 #### Scenario: Search tasks and views
 - **WHEN** the user activates the visible Search Tasks and Views control

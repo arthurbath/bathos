@@ -14,6 +14,10 @@ const gesture = (overrides: Partial<KeyboardEvent> = {}) => ({
 describe('getTaskKeyboardCommand', () => {
   it('maps Mac application commands and numbered views', () => {
     expect(getTaskKeyboardCommand(gesture({ key: 'n', metaKey: true }), true)).toBe('capture');
+    expect(getTaskKeyboardCommand(gesture({ key: 'k', metaKey: true }), true))
+      .toBe('toggle-completion');
+    expect(getTaskKeyboardCommand(gesture({ key: 'Enter', metaKey: true }), true))
+      .toBe('close-editor');
     expect(getTaskKeyboardCommand(gesture({ key: '/', metaKey: true }), true)).toBe('help');
     expect(getTaskKeyboardCommand(gesture({ key: 'f', metaKey: true }), true)).toBe('find');
     expect(getTaskKeyboardCommand(gesture({ key: '1', metaKey: true }), true)).toBe('view-today');
@@ -40,6 +44,10 @@ describe('getTaskKeyboardCommand', () => {
 
   it('maps Windows application commands and numbered views', () => {
     expect(getTaskKeyboardCommand(gesture({ key: 'n', ctrlKey: true }), false)).toBe('capture');
+    expect(getTaskKeyboardCommand(gesture({ key: 'k', ctrlKey: true }), false))
+      .toBe('toggle-completion');
+    expect(getTaskKeyboardCommand(gesture({ key: 'Enter', ctrlKey: true }), false))
+      .toBe('close-editor');
     expect(getTaskKeyboardCommand(gesture({ key: '/', ctrlKey: true }), false)).toBe('help');
     expect(getTaskKeyboardCommand(gesture({ key: 'f', ctrlKey: true }), false)).toBe('find');
     expect(getTaskKeyboardCommand(gesture({ key: '5', ctrlKey: true }), false)).toBe('view-projects');
@@ -89,6 +97,7 @@ describe('getTaskKeyboardCommand', () => {
     expect(getTaskKeyboardCommand(gesture({ key: 'g' }), false)).toBeNull();
     expect(getTaskKeyboardCommand(gesture({ key: 'c' }), false)).toBeNull();
     expect(getTaskKeyboardCommand(gesture({ key: 'ArrowDown' }), true)).toBeNull();
+    expect(getTaskKeyboardCommand(gesture({ key: 'Escape' }), true)).toBe('close-editor');
     expect(getTaskKeyboardCommand(gesture({ key: 's', ctrlKey: true, shiftKey: true }), true))
       .toBeNull();
     expect(getTaskKeyboardCommand(gesture({ key: 's', ctrlKey: true }), false))

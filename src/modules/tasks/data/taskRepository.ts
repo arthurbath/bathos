@@ -37,7 +37,7 @@ export type CreateTaskInput = {
   title: string;
   notes?: string;
   destination?: TaskDestination;
-  todaySection?: TaskTodaySection;
+  todaySection?: TaskTodaySection | null;
   orderKey?: string;
   startDate?: string | null;
   deadline?: string | null;

@@ -21,6 +21,7 @@ export type TaskKeyboardCommand =
   | 'open-organization'
   | 'cycle-horizon'
   | 'focus-reminder'
+  | 'toggle-completion'
   | 'complete-open'
   | 'open-next'
   | 'open-previous'
@@ -56,8 +57,10 @@ export function getTaskKeyboardCommand(
     if (macLikePlatform) return 'duplicate';
   }
   if (applicationModifier && !gesture.altKey && !gesture.shiftKey) {
+    if (key === 'enter') return 'close-editor';
     if (key === 'a') return 'select-all';
     if (key === 'n') return 'capture';
+    if (key === 'k') return 'toggle-completion';
     if (key === 'f') return 'find';
     if (key === '/') return 'help';
     if (key === ',') return 'view-config';
@@ -71,6 +74,14 @@ export function getTaskKeyboardCommand(
     if (key === 'e') return 'focus-reminder';
     if (numberedTaskCommands[key]) return numberedTaskCommands[key];
   }
+
+  if (
+    key === 'escape'
+    && !gesture.metaKey
+    && !gesture.ctrlKey
+    && !gesture.altKey
+    && !gesture.shiftKey
+  ) return 'close-editor';
 
   const taskControlModifier = gesture.ctrlKey
     && !gesture.metaKey

@@ -2,6 +2,7 @@ import { useQuery } from '@powersync/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
+  CreateTaskInput,
   EditableTaskPatch,
   TaskPlanningMoveInput,
 } from '@/modules/tasks/data/taskRepository';
@@ -9,6 +10,7 @@ import {
   compareTaskOrder,
   generateTaskDropOrderKey,
   generateTaskMoveOrderKey,
+  generateTaskOrderKey,
 } from '@/modules/tasks/domain/taskOrder';
 import { taskCalendarDateInTimeZone } from '@/modules/tasks/domain/taskDates';
 import {
@@ -21,6 +23,13 @@ import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
 
 export type TaskListView = TaskDestination | 'today' | 'upcoming' | 'done';
 export type TodayTaskSection = 'inbox' | 'now' | 'next' | 'later';
+export type TaskListCreateInput = Omit<
+  CreateTaskInput,
+  'ownerId' | 'orderKey' | 'todaySection'
+> & {
+  todaySection?: TodayTaskSection | null;
+  atTop?: boolean;
+};
 
 export function useTaskList(
   ownerId: string,
@@ -149,22 +158,41 @@ export function useTaskList(
   }, []);
 
   const createTask = useCallback(
-    async (title: string) => {
-      if (view === 'done' || view === 'upcoming') {
+    async (input: string | TaskListCreateInput) => {
+      if (typeof input === 'string' && (view === 'done' || view === 'upcoming')) {
         const label = view === 'done' ? 'Done' : 'Upcoming';
         throw new Error(`Tasks cannot be created in ${label}`);
       }
-      const createdTask = await repository.createTask({
-        ownerId,
-        title,
-        destination: view === 'today' ? 'anytime' : view,
-        todaySection: view === 'someday' ? null : 'next',
+      const defaults: TaskListCreateInput = {
+        title: typeof input === 'string' ? input : input.title,
+        destination: view === 'today' || view === 'upcoming' ? 'anytime' : view,
+        todaySection: view === 'someday' || view === 'upcoming' ? null : 'next',
         startDate: null,
+      };
+      const requested = typeof input === 'string' ? defaults : { ...defaults, ...input };
+      const firstScopedTask = requested.atTop
+        ? allTasks
+          .filter((task) => task.destination === requested.destination
+            && task.today_section === requested.todaySection
+            && task.lifecycle === 'open'
+            && task.disposition === 'present')
+          .sort((left, right) => compareTaskOrder(
+            { id: left.id, orderKey: left.order_key },
+            { id: right.id, orderKey: right.order_key },
+          ))[0]
+        : null;
+      const { atTop, ...createInput } = requested;
+      const createdTask = await repository.createTask({
+        ...createInput,
+        ownerId,
+        ...(atTop ? {
+          orderKey: generateTaskOrderKey(null, firstScopedTask?.order_key ?? null),
+        } : {}),
       });
       setOptimisticTask(createdTask.id, createdTask);
       return createdTask;
     },
-    [ownerId, repository, setOptimisticTask, view],
+    [allTasks, ownerId, repository, setOptimisticTask, view],
   );
   const updateTask = useCallback(
     async (taskId: string, patch: EditableTaskPatch) => {
@@ -418,7 +446,7 @@ function freezeTaskViewProjection(task: TaskTodo, projection: TaskTodo): TaskTod
   };
 }
 
-function taskIsVisible(
+export function taskIsVisible(
   task: TaskTodo,
   ownerId: string,
   view: TaskListView,

@@ -7,7 +7,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type FormEvent,
   type DragEvent,
   type MouseEvent,
   type ReactNode,
@@ -28,7 +27,6 @@ import {
   Clock2,
   Clock5,
   Clock8,
-  CornerDownLeft,
   DatabaseBackup,
   Hourglass,
   Inbox,
@@ -89,6 +87,7 @@ import {
 import {
   getTaskTodayMembershipSection,
   getTodayTaskSection,
+  taskIsVisible,
   useTaskList,
   type TaskListView,
   type TodayTaskSection,
@@ -142,6 +141,13 @@ import {
   cycleTaskShortcutHorizon,
   getTaskTodayShortcutHorizon,
 } from '@/modules/tasks/domain/taskShortcutPlanning';
+import {
+  NEW_TASK_DRAFT_ID,
+  applyTaskCreationDraftPatch,
+  createTaskCreationDraft,
+  getTaskCreationInput,
+  type TaskCreationDraft,
+} from '@/modules/tasks/domain/taskCreationDraft';
 
 type TasksShellProps = {
   userId: string;
@@ -197,6 +203,18 @@ function isTaskEditableTarget(target: EventTarget | null): boolean {
   return editable !== null;
 }
 
+function taskNestedSurfaceOwnsEscape(target: EventTarget | null): boolean {
+  if (target instanceof Element && target.closest(
+    '[data-radix-popper-content-wrapper], [role="dialog"], [role="menu"], [role="listbox"]',
+  )) return true;
+  return document.querySelector(
+    '[data-radix-popper-content-wrapper] [data-state="open"], '
+      + '[role="dialog"][data-state="open"], '
+      + '[role="menu"][data-state="open"], '
+      + '[role="listbox"][data-state="open"]',
+  ) !== null;
+}
+
 export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -227,7 +245,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const hierarchy = useTaskHierarchy(userId);
   const deletedHierarchyRoots = useTaskDeletedHierarchyRoots(userId);
   const {
-    tasks,
+    tasks: projectedTasks,
     loading,
     error,
     createTask,
@@ -253,8 +271,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     taskListView,
     planningDate,
   ), [hierarchy.projects, planningDate, taskListView, userId]);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [creationDraft, setCreationDraft] = useState<TaskCreationDraft | null>(null);
+  const tasks = useMemo(
+    () => creationDraft?.persistedTaskId
+      ? projectedTasks.filter((task) => task.id !== creationDraft.persistedTaskId)
+      : projectedTasks,
+    [creationDraft?.persistedTaskId, projectedTasks],
+  );
   const [deferredCompletionTaskIds, setDeferredCompletionTaskIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -276,10 +299,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     reminders.projectionError,
   );
   const acknowledgeReminderDelivery = reminders.acknowledge;
-  const captureInputRef = useRef<HTMLInputElement>(null);
   const commandReturnFocusRef = useRef<HTMLElement | null>(null);
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
   const selectedTaskIdRef = useRef<string | null>(null);
+  const creationDraftRef = useRef<TaskCreationDraft | null>(null);
   const deferredCompletionTaskIdsRef = useRef<Set<string>>(new Set());
   const taskEditorAutosaveRef = useRef<{
     taskId: string;
@@ -290,9 +313,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     [],
   );
   const doneRoots = deletedHierarchyRoots.roots;
-  const taskViewIsEmpty = view === 'done'
+  const taskViewIsEmpty = creationDraft === null && (view === 'done'
     ? tasks.length === 0 && doneRoots.length === 0 && planningProjects.length === 0
-    : tasks.length === 0 && planningProjects.length === 0;
+    : tasks.length === 0 && planningProjects.length === 0);
   const serverReplacementAvailable = mode === 'connected'
     && syncState === 'connected'
     && pendingUploadCount === 0;
@@ -318,6 +341,94 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
   }, [redoLastTaskChange]);
 
+  const replaceCreationDraft = useCallback((next: TaskCreationDraft | null) => {
+    creationDraftRef.current = next;
+    setCreationDraft(next);
+  }, []);
+
+  const saveCreationDraftPatch = useCallback(async (patch: EditableTaskPatch) => {
+    const current = creationDraftRef.current;
+    if (current === null) throw new Error('No task draft is open');
+    const normalizedPatch = normalizeTaskEditorPlanningPatch(
+      current.task,
+      patch,
+      planningDate,
+    );
+    let next = applyTaskCreationDraftPatch(current, normalizedPatch);
+    replaceCreationDraft(next);
+
+    if (next.persistedTaskId === null) {
+      if (!next.task.title.trim()) return;
+      const created = await createTask(getTaskCreationInput(next));
+      next = {
+        ...next,
+        persistedTaskId: created.id,
+        task: { ...created, id: NEW_TASK_DRAFT_ID },
+      };
+      replaceCreationDraft(next);
+      if (next.pendingReminder !== null) {
+        try {
+          await reminders.save({
+            rootType: 'todo',
+            rootId: created.id,
+            reminder: null,
+            ...next.pendingReminder,
+          });
+          next = { ...next, pendingReminder: null };
+          replaceCreationDraft(next);
+        } catch (reminderError) {
+          showTaskError('Reminder Could Not Be Saved', reminderError);
+        }
+      }
+      return;
+    }
+
+    const updated = await updateTask(next.persistedTaskId, normalizedPatch);
+    replaceCreationDraft({
+      ...next,
+      task: { ...updated, id: NEW_TASK_DRAFT_ID },
+    });
+  }, [createTask, planningDate, reminders, replaceCreationDraft, updateTask]);
+
+  const saveCreationDraftReminder = useCallback(async (input: {
+    localTime: string;
+    ambiguityChoice: 'earlier' | 'later';
+  }) => {
+    const current = creationDraftRef.current;
+    if (current === null) return;
+    const next = { ...current, pendingReminder: input };
+    replaceCreationDraft(next);
+    if (next.persistedTaskId === null) return;
+    await reminders.save({
+      rootType: 'todo',
+      rootId: next.persistedTaskId,
+      reminder: reminders.byRootId.get(next.persistedTaskId) ?? null,
+      ...input,
+    });
+    replaceCreationDraft({ ...next, pendingReminder: null });
+  }, [reminders, replaceCreationDraft]);
+
+  const cancelCreationDraftReminder = useCallback(async () => {
+    const current = creationDraftRef.current;
+    if (current === null) return;
+    replaceCreationDraft({ ...current, pendingReminder: null });
+    if (current.persistedTaskId === null) return;
+    const reminder = reminders.byRootId.get(current.persistedTaskId);
+    if (reminder) await reminders.cancel(reminder);
+  }, [reminders, replaceCreationDraft]);
+
+  const finishCreationDraft = useCallback((skipVisibilityToast = false) => {
+    const current = creationDraftRef.current;
+    replaceCreationDraft(null);
+    if (current?.persistedTaskId === null || current === null || skipVisibilityToast) return;
+    const persistedTask = { ...current.task, id: current.persistedTaskId };
+    if (taskIsVisible(persistedTask, userId, current.view, planningDate)) return;
+    toast({
+      title: 'Task Saved',
+      description: 'The task is not visible in the current list.',
+    });
+  }, [planningDate, replaceCreationDraft, userId]);
+
   const setDeferredCompletions = useCallback((next: Set<string>) => {
     deferredCompletionTaskIdsRef.current = next;
     setDeferredCompletionTaskIds(next);
@@ -335,7 +446,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const next = new Set(deferredCompletionTaskIdsRef.current);
     next.delete(taskId);
     setDeferredCompletions(next);
-    void transitionTask(taskId, 'complete').catch((completeError) => {
+    const persistedTaskId = taskId === NEW_TASK_DRAFT_ID
+      ? creationDraftRef.current?.persistedTaskId ?? null
+      : taskId;
+    if (persistedTaskId === null) return;
+    void transitionTask(persistedTaskId, 'complete').catch((completeError) => {
       showTaskError('Task Could Not Be Completed', completeError);
     });
   }, [setDeferredCompletions, transitionTask]);
@@ -369,11 +484,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (clearPageFocus && document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
+    const closingCreationDraft = currentTaskId === NEW_TASK_DRAFT_ID;
+    const completingCreationDraft = closingCreationDraft
+      && deferredCompletionTaskIdsRef.current.has(NEW_TASK_DRAFT_ID);
     selectedTaskIdRef.current = taskId;
     setSelectedTaskId(taskId);
     if (currentTaskId !== null) finalizeDeferredCompletion(currentTaskId);
+    if (closingCreationDraft) finishCreationDraft(completingCreationDraft);
     return true;
-  }, [finalizeDeferredCompletion]);
+  }, [finalizeDeferredCompletion, finishCreationDraft]);
 
   const openRelativeTask = useCallback((direction: -1 | 1) => {
     const controls = Array.from(document.querySelectorAll<HTMLElement>(
@@ -396,6 +515,39 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setBulkSelectionAnchorId(null);
     setBulkMode(false);
   }, []);
+
+  const beginTaskCreation = useCallback(async () => {
+    if (selectedTaskIdRef.current === NEW_TASK_DRAFT_ID) {
+      document.querySelector<HTMLInputElement>(
+        `[data-task-editor-title][id="task-title-${NEW_TASK_DRAFT_ID}"]`,
+      )?.focus();
+      return;
+    }
+    const targetView: TaskListView = view === 'today'
+      || view === 'upcoming'
+      || view === 'anytime'
+      || view === 'someday'
+      ? view
+      : 'today';
+    const closed = await setOpenTask(null);
+    if (!closed) return;
+    clearTaskSelection();
+    setBulkWhenOpen(false);
+    setBulkCommandMode(null);
+    const draft = createTaskCreationDraft(userId, targetView);
+    replaceCreationDraft(draft);
+    selectedTaskIdRef.current = NEW_TASK_DRAFT_ID;
+    setSelectedTaskId(NEW_TASK_DRAFT_ID);
+    if (targetView !== view) navigate(`${basePath}/${targetView}`);
+  }, [
+    basePath,
+    clearTaskSelection,
+    navigate,
+    replaceCreationDraft,
+    setOpenTask,
+    userId,
+    view,
+  ]);
 
   useEffect(() => {
     if (!bulkMode) return undefined;
@@ -457,10 +609,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [selectedTaskId, setOpenTask]);
 
   useEffect(() => {
-    void setOpenTask(null);
     clearTaskSelection();
     setBulkWhenOpen(false);
-    captureInputRef.current?.focus();
+    const draft = creationDraftRef.current;
+    if (
+      selectedTaskIdRef.current === NEW_TASK_DRAFT_ID
+      && draft?.view === view
+    ) return;
+    void setOpenTask(null);
   }, [clearTaskSelection, setOpenTask, view]);
 
   useEffect(() => {
@@ -515,6 +671,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     const taskId = selectedTaskIdRef.current;
     if (taskId === null) return [];
+    if (taskId === NEW_TASK_DRAFT_ID && creationDraftRef.current !== null) {
+      return [creationDraftRef.current.task];
+    }
     const task = tasks.find((candidate) => candidate.id === taskId);
     return task ? [task] : [];
   }, [bulkMode, bulkSelection, tasks]);
@@ -546,13 +705,25 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const targets = getTaskCommandTargets();
     if (targets.length === 0) return;
     try {
+      const draftTarget = targets.find((task) => task.id === NEW_TASK_DRAFT_ID);
+      const persistedTargets = targets.filter((task) => task.id !== NEW_TASK_DRAFT_ID);
       if (command === 'anytime' || command === 'someday') {
-        await moveTasks(targets.map(({ id }) => id), {
-          destination: command,
-          todaySection: null,
-          startDate: null,
-        });
-        await cancelTaskReminders(targets);
+        if (draftTarget) {
+          await saveCreationDraftPatch({
+            destination: command,
+            today_section: null,
+            start_date: null,
+          });
+          await cancelCreationDraftReminder();
+        }
+        if (persistedTargets.length > 0) {
+          await moveTasks(persistedTargets.map(({ id }) => id), {
+            destination: command,
+            todaySection: null,
+            startDate: null,
+          });
+          await cancelTaskReminders(persistedTargets);
+        }
         return;
       }
       const eligible = command === 'horizon'
@@ -574,23 +745,53 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         else groups.set(key, { todaySection: horizon, startDate, tasks: [task] });
       }
       for (const group of groups.values()) {
-        await moveTasks(group.tasks.map(({ id }) => id), {
-          destination: 'anytime',
-          todaySection: group.todaySection,
-          startDate: group.startDate,
-        });
+        const draftInGroup = group.tasks.some((task) => task.id === NEW_TASK_DRAFT_ID);
+        if (draftInGroup) {
+          await saveCreationDraftPatch({
+            destination: 'anytime',
+            today_section: group.todaySection,
+            start_date: group.startDate,
+          });
+        }
+        const persistedIds = group.tasks
+          .filter((task) => task.id !== NEW_TASK_DRAFT_ID)
+          .map(({ id }) => id);
+        if (persistedIds.length > 0) {
+          await moveTasks(persistedIds, {
+            destination: 'anytime',
+            todaySection: group.todaySection,
+            startDate: group.startDate,
+          });
+        }
       }
-      if (command === 'today') await cancelTaskReminders(targets);
+      if (command === 'today') {
+        if (draftTarget) await cancelCreationDraftReminder();
+        await cancelTaskReminders(persistedTargets);
+      }
     } catch (shortcutError) {
       showTaskError('Task Command Could Not Be Applied', shortcutError);
     }
-  }, [cancelTaskReminders, getTaskCommandTargets, moveTasks, planningDate]);
+  }, [
+    cancelCreationDraftReminder,
+    cancelTaskReminders,
+    getTaskCommandTargets,
+    moveTasks,
+    planningDate,
+    saveCreationDraftPatch,
+  ]);
 
   const runDuplicateShortcut = useCallback(async () => {
     const targets = getTaskCommandTargets();
     if (targets.length === 0) return;
     try {
-      for (const task of targets) await duplicateTask(task.id);
+      for (const task of targets) {
+        if (task.id === NEW_TASK_DRAFT_ID) {
+          const persistedTaskId = creationDraftRef.current?.persistedTaskId;
+          if (persistedTaskId) await duplicateTask(persistedTaskId);
+        } else {
+          await duplicateTask(task.id);
+        }
+      }
     } catch (duplicateError) {
       showTaskError('Task Could Not Be Duplicated', duplicateError);
     }
@@ -638,8 +839,36 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }, 0);
   }, [bulkMode, bulkSelection.size, getTaskCommandTargets]);
 
+  const runToggleCompletionShortcut = useCallback(async () => {
+    if (bulkMode && bulkSelection.size > 0) {
+      const targetIds = tasks
+        .filter((task) => bulkSelection.has(task.id))
+        .map(({ id }) => id);
+      setBulkPending(true);
+      try {
+        for (const taskId of targetIds) await transitionTask(taskId, 'complete');
+        clearTaskSelection();
+      } catch (completeError) {
+        showTaskError('Selected Tasks Could Not Be Completed', completeError);
+      } finally {
+        setBulkPending(false);
+      }
+      return;
+    }
+    const taskId = selectedTaskIdRef.current;
+    if (taskId !== null) toggleDeferredCompletion(taskId);
+  }, [
+    bulkMode,
+    bulkSelection,
+    clearTaskSelection,
+    tasks,
+    toggleDeferredCompletion,
+    transitionTask,
+  ]);
+
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape' && taskNestedSurfaceOwnsEscape(event.target)) return;
       if (
         event.key === 'Escape'
         && bulkMode
@@ -657,6 +886,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       }
       const command = getTaskKeyboardCommand(event, macLikePlatform);
       if (command === null) return;
+      if (command === 'close-editor' && selectedTaskIdRef.current === null) return;
       if (command === 'select-all') {
         if (isTaskEditableTarget(event.target) || !bulkEligible || tasks.length === 0) return;
         event.preventDefault();
@@ -684,13 +914,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         return;
       }
       if (command === 'capture') {
-        if (captureInputRef.current) {
-          captureInputRef.current.focus();
-        } else {
-          void setOpenTask(null).then((closed) => {
-            if (closed) navigate(`${basePath}/today`);
-          });
-        }
+        void beginTaskCreation();
         return;
       }
       if (command === 'find') {
@@ -717,6 +941,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       if (command === 'complete-open') {
         const taskId = selectedTaskIdRef.current;
         if (taskId !== null) toggleDeferredCompletion(taskId);
+        return;
+      }
+      if (command === 'toggle-completion') {
+        void runToggleCompletionShortcut();
         return;
       }
       if (command === 'plan-today') {
@@ -768,6 +996,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
     const handleKeyUp = (event: globalThis.KeyboardEvent) => {
       if (getTaskKeyboardCommand(event, macLikePlatform) !== 'close-editor') return;
+      if (event.key === 'Escape' && taskNestedSurfaceOwnsEscape(event.target)) return;
+      if (selectedTaskIdRef.current === null) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       if (!event.isComposing) void setOpenTask(null, true);
@@ -781,6 +1011,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     };
   }, [
     basePath,
+    beginTaskCreation,
     bulkCommandMode,
     bulkEligible,
     bulkMode,
@@ -793,6 +1024,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     openRelativeTask,
     runDuplicateShortcut,
     runPlanningShortcut,
+    runToggleCompletionShortcut,
     runTaskRedo,
     runTaskUndo,
     setOpenTask,
@@ -820,29 +1052,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const focusTaskListFallback = () => {
     commandReturnFocusRef.current = null;
     window.setTimeout(() => {
-      const fallback = captureInputRef.current
-        ?? document.querySelector<HTMLElement>('[data-task-view-heading]');
-      fallback?.focus();
+      document.querySelector<HTMLElement>('[data-task-view-heading]')?.focus();
     }, 0);
-  };
-
-  const handleCreate = async (event: FormEvent) => {
-    event.preventDefault();
-    const title = newTaskTitle.trim();
-    if (!title || creating) {
-      return;
-    }
-
-    setCreating(true);
-    try {
-      await createTask(title);
-      setNewTaskTitle('');
-      captureInputRef.current?.focus();
-    } catch (createError) {
-      showTaskError('Task Could Not Be Added', createError);
-    } finally {
-      setCreating(false);
-    }
   };
 
   const handleSignOut = async () => {
@@ -862,9 +1073,25 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       label,
       run: async () => {
         try {
-          await moveTask(task.id, input);
-          if (input.startDate === null) await cancelTaskReminders([task]);
-          else if (input.startDate) await rescheduleTaskReminders([task]);
+          if (task.id === NEW_TASK_DRAFT_ID) {
+            await saveCreationDraftPatch({
+              destination: input.destination,
+              today_section: input.todaySection ?? null,
+              start_date: input.startDate ?? null,
+            });
+            if (input.startDate === null) {
+              await cancelCreationDraftReminder();
+            } else if (input.startDate) {
+              const persistedTaskId = creationDraftRef.current?.persistedTaskId;
+              if (persistedTaskId) {
+                await rescheduleTaskReminders([{ ...task, id: persistedTaskId }]);
+              }
+            }
+          } else {
+            await moveTask(task.id, input);
+            if (input.startDate === null) await cancelTaskReminders([task]);
+            else if (input.startDate) await rescheduleTaskReminders([task]);
+          }
         } catch (moveError) {
           showTaskError('Task Could Not Be Moved', moveError);
           throw moveError;
@@ -1037,6 +1264,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   const renderActiveTask = (task: TaskTodo, sectionTasks: TaskTodo[]) => {
     const index = sectionTasks.findIndex((candidate) => candidate.id === task.id);
+    const isCreationDraft = task.id === NEW_TASK_DRAFT_ID;
+    const persistedDraftTaskId = isCreationDraft
+      ? creationDraftRef.current?.persistedTaskId ?? null
+      : null;
     return (
       <TaskRow
         key={task.id}
@@ -1048,7 +1279,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onRegisterAutosave={registerTaskEditorAutosave}
         completionRequested={deferredCompletionTaskIds.has(task.id)}
         onToggleDeferredCompletion={() => toggleDeferredCompletion(task.id)}
-        bulkSelection={bulkMode ? {
+        bulkSelection={bulkMode && !isCreationDraft ? {
           selected: bulkSelection.has(task.id),
           onToggle: () => setBulkSelection((current) => {
             const next = new Set(current);
@@ -1059,6 +1290,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         } : undefined}
         onUpdate={async (patch) => {
           try {
+            if (isCreationDraft) {
+              await saveCreationDraftPatch(patch);
+              return;
+            }
             const normalizedPatch = normalizeTaskEditorPlanningPatch(
               task,
               patch,
@@ -1072,7 +1307,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         }}
         onComplete={async () => {
           try {
-            await transitionTask(task.id, 'complete');
+            if (isCreationDraft) {
+              if (persistedDraftTaskId) {
+                await transitionTask(persistedDraftTaskId, 'complete');
+              }
+              await setOpenTask(null);
+            } else {
+              await transitionTask(task.id, 'complete');
+            }
           } catch (completeError) {
             showTaskError('Task Could Not Be Completed', completeError);
             throw completeError;
@@ -1080,14 +1322,23 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         }}
         onCancel={async () => {
           try {
-            await transitionTask(task.id, 'cancel');
+            if (isCreationDraft) {
+              if (persistedDraftTaskId) {
+                await transitionTask(persistedDraftTaskId, 'cancel');
+              }
+              await setOpenTask(null);
+            } else {
+              await transitionTask(task.id, 'cancel');
+            }
           } catch (cancelError) {
             showTaskError('Task Could Not Be Canceled', cancelError);
             throw cancelError;
           }
         }}
         planningActions={planningActionsForTask(task)}
-        onMoveUp={(view === 'today' || view === 'anytime' || view === 'someday') && index > 0 ? async () => {
+        onMoveUp={!isCreationDraft
+          && (view === 'today' || view === 'anytime' || view === 'someday')
+          && index > 0 ? async () => {
           try {
             await reorderTask(task.id, 'up');
           } catch (reorderError) {
@@ -1095,7 +1346,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             throw reorderError;
           }
         } : undefined}
-        onMoveDown={(view === 'today' || view === 'anytime' || view === 'someday')
+        onMoveDown={!isCreationDraft
+          && (view === 'today' || view === 'anytime' || view === 'someday')
           && index >= 0
           && index < sectionTasks.length - 1 ? async () => {
           try {
@@ -1105,7 +1357,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             throw reorderError;
           }
         } : undefined}
-        draggableTask={!bulkMode
+        draggableTask={!isCreationDraft
+          && !bulkMode
           && (view === 'today' || view === 'anytime' || view === 'someday')
           && (view === 'today' ? tasks.length > 1 : sectionTasks.length > 1)}
         onDropTask={async (draggedTaskId, placement) => {
@@ -1124,11 +1377,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             ? task.today_section
             : undefined}
         todayMarkerContext={view === 'upcoming' ? 'Day Horizon' : 'Today'}
-        reminder={reminders.byRootId.get(task.id) ?? null}
+        reminder={reminders.byRootId.get(persistedDraftTaskId ?? task.id) ?? null}
         reminderMode={reminderAvailability}
         reminderTimeZone={reminders.planningTimeZone}
         onSaveReminder={async (input) => {
           try {
+            if (isCreationDraft) {
+              await saveCreationDraftReminder(input);
+              return;
+            }
             await reminders.save({
               ...input,
               rootType: 'todo',
@@ -1141,6 +1398,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           }
         }}
         onCancelReminder={async () => {
+          if (isCreationDraft) {
+            await cancelCreationDraftReminder();
+            return;
+          }
           const reminder = reminders.byRootId.get(task.id);
           if (!reminder) return;
           try {
@@ -1152,7 +1413,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         }}
         onDelete={async () => {
           try {
-            await transitionTask(task.id, 'delete');
+            if (isCreationDraft) {
+              if (persistedDraftTaskId) {
+                await transitionTask(persistedDraftTaskId, 'delete');
+              }
+              await setOpenTask(null);
+            } else {
+              await transitionTask(task.id, 'delete');
+            }
           } catch (deleteError) {
             showTaskError('Task Could Not Be Deleted', deleteError);
             throw deleteError;
@@ -1256,6 +1524,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 type="button"
                 variant="clear"
                 size="icon"
+                aria-label="New Task"
+                aria-keyshortcuts="Meta+N Control+N"
+                onClick={() => void beginTaskCreation()}
+                className="h-9 w-9 text-muted-foreground"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+              </Button>
+              <Button
+                type="button"
+                variant="clear"
+                size="icon"
                 aria-label="Search Tasks and Views"
                 onClick={() => openCommandSurface(setSearchOpen)}
                 className="h-9 w-9 text-muted-foreground"
@@ -1297,40 +1576,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
           <TaskDesktopNavigation view={view} basePath={basePath} navigate={navigate} />
 
-          {!bulkMode && view !== 'projects' && view !== 'project' && view !== 'area' && view !== 'templates' && view !== 'config' && (view === 'today' || view === 'anytime' || view === 'someday') ? (
-            <form onSubmit={handleCreate} className="relative">
-              <Plus
-                className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                ref={captureInputRef}
-                value={newTaskTitle}
-                onChange={(event) => setNewTaskTitle(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-                    event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                disabled={creating}
-                aria-label="Add a Task"
-                aria-keyshortcuts="Meta+N Control+N Enter"
-                autoComplete="off"
-                placeholder="Add a Task"
-                className="h-14 rounded-md pl-12 pr-14 text-base"
-              />
-              <Button
-                type="submit"
-                variant="clear"
-                size="icon"
-                disabled={!newTaskTitle.trim() || creating}
-                aria-label="Add Task"
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-              >
-                <CornerDownLeft className="h-4 w-4" />
-              </Button>
-            </form>
+          {creationDraft ? (
+            <section aria-label="New Task">
+              <div className="border-y border-[hsl(var(--grid-sticky-line))]">
+                {renderActiveTask(creationDraft.task, [creationDraft.task])}
+              </div>
+            </section>
           ) : null}
 
           {view === 'search' ? (
@@ -2403,6 +2654,7 @@ function TaskRow({
   const suppressClickUntilRef = useRef(0);
   const pendingRef = useRef(false);
   const hierarchyLabel = getTaskHierarchyLabel(task, hierarchy);
+  const taskLabel = task.title || 'New Task';
   const TodayMarkerIcon = todayMarker === 'now'
     ? Clock2
     : todayMarker === 'next'
@@ -2520,8 +2772,7 @@ function TaskRow({
       ) ?? []).filter(
         (control) => control.dataset.taskId !== task.id,
       );
-      const fallback = main?.querySelector<HTMLElement>('input[aria-label="Add a Task"]')
-        ?? main?.querySelector<HTMLElement>('[data-task-view-heading]');
+      const fallback = main?.querySelector<HTMLElement>('[data-task-view-heading]');
       (remaining[currentIndex] ?? remaining[currentIndex - 1] ?? fallback)?.focus();
     }, delay);
   };
@@ -2632,7 +2883,7 @@ function TaskRow({
             type="button"
             role="checkbox"
             aria-checked={bulkSelection.selected}
-            aria-label={`${bulkSelection.selected ? 'Deselect' : 'Select'} ${task.title}`}
+            aria-label={`${bulkSelection.selected ? 'Deselect' : 'Select'} ${taskLabel}`}
             onClick={bulkSelection.onToggle}
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-info transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
@@ -2646,7 +2897,7 @@ function TaskRow({
           <button
             type="button"
             disabled={pending}
-            aria-label={`${completionRequested ? 'Mark Incomplete' : 'Complete'} ${task.title}`}
+            aria-label={`${completionRequested ? 'Mark Incomplete' : 'Complete'} ${taskLabel}`}
             aria-pressed={selected ? completionRequested : undefined}
             data-task-completion-control
             onClick={() => {
@@ -2701,6 +2952,7 @@ function TaskRow({
             }
           }}
           aria-expanded={bulkSelection ? undefined : selected}
+          aria-label={task.title ? undefined : 'New Task'}
           aria-pressed={bulkSelection ? bulkSelection.selected : undefined}
           aria-keyshortcuts={bulkSelection
             ? 'Enter'
@@ -2775,7 +3027,7 @@ function TaskRow({
               variant="clear"
               size="icon"
               disabled={pending}
-              aria-label={`Actions for ${task.title}`}
+              aria-label={`Actions for ${taskLabel}`}
               className="h-10 w-10 text-muted-foreground"
             >
               <MoreHorizontal className="h-4 w-4" />
@@ -3069,6 +3321,7 @@ function TaskEditor({
         ref={titleInputRef}
         id={`task-title-${task.id}`}
         data-task-editor-title
+        aria-keyshortcuts="Meta+Enter Control+Enter Escape"
         value={title}
         onChange={(event) => {
           const nextTitle = event.target.value;

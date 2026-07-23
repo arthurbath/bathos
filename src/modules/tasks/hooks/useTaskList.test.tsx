@@ -343,6 +343,47 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
+  it('creates a complete draft snapshot at the top of its ordering scope', async () => {
+    const repository = {
+      createTask: vi.fn().mockResolvedValue(originalTask),
+      updateTask: vi.fn(),
+      moveTask: vi.fn(),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      await act(async () => {
+        await latest.createTask({
+          title: 'Draft snapshot',
+          notes: 'Created in the full editor',
+          destination: 'anytime',
+          todaySection: 'next',
+          startDate: null,
+          deadline: '2099-02-01',
+          actionability: 'waiting',
+          atTop: true,
+        });
+      });
+      const creationInput = repository.createTask.mock.calls[0][0];
+      expect(creationInput).toMatchObject({
+        ownerId: 'owner-a',
+        title: 'Draft snapshot',
+        notes: 'Created in the full editor',
+        destination: 'anytime',
+        todaySection: 'next',
+        startDate: null,
+        deadline: '2099-02-01',
+        actionability: 'waiting',
+      });
+      expect(creationInput.orderKey).toBeTypeOf('string');
+      expect(creationInput.orderKey < originalTask.order_key).toBe(true);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('duplicates mutable task content without copying source identity', async () => {
     const source = {
       ...originalTask,
