@@ -108,6 +108,7 @@ function TaskStartPickerPanel({
   const committedReminderDisplay = formatTaskReminderTimeDisplay(reminderTime) ?? '';
   const [reminderInput, setReminderInput] = useState(committedReminderDisplay);
   const reminderInputConfirmedRef = useRef(true);
+  const keyboardDateConfirmationRef = useRef(false);
 
   useEffect(() => {
     if (document.activeElement === reminderRef.current) return;
@@ -148,6 +149,23 @@ function TaskStartPickerPanel({
     (selectedDay ?? (position === 'first' ? days[0] : days.at(-1)))?.focus();
   };
 
+  const focusCalendarHeader = () => {
+    const caption = panelRef.current?.querySelector<HTMLButtonElement>(
+      'button[name="caption-month-year"]',
+    );
+    if (caption) {
+      caption.focus();
+      return;
+    }
+    const previousYear = panelRef.current?.querySelector<HTMLButtonElement>(
+      'button[name="previous-year"]:not(:disabled)',
+    );
+    const nextYear = panelRef.current?.querySelector<HTMLButtonElement>(
+      'button[name="next-year"]:not(:disabled)',
+    );
+    (previousYear ?? nextYear)?.focus();
+  };
+
   const handlePanelKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (
       event.key !== 'ArrowLeft'
@@ -168,7 +186,7 @@ function TaskStartPickerPanel({
       const index = horizons.indexOf(horizon);
       if (event.key === 'ArrowLeft' && index > 0) horizons[index - 1]?.focus();
       else if (event.key === 'ArrowRight' && index < horizons.length - 1) horizons[index + 1]?.focus();
-      else if (event.key === 'ArrowDown') focusCalendarDay('first');
+      else if (event.key === 'ArrowDown') focusCalendarHeader();
       else return;
       event.preventDefault();
       event.stopPropagation();
@@ -217,20 +235,6 @@ function TaskStartPickerPanel({
       return;
     }
 
-    const dayButton = target.closest<HTMLButtonElement>('button[name="day"]');
-    if (dayButton && event.key === 'ArrowDown') {
-      const rows = Array.from(panelRef.current?.querySelectorAll('tbody tr') ?? []);
-      const row = dayButton.closest('tr');
-      const rowIndex = row ? rows.indexOf(row) : -1;
-      const hasEnabledDayBelow = rows.slice(rowIndex + 1).some((candidateRow) => (
-        candidateRow.querySelector('button[name="day"]:not(:disabled)')
-      ));
-      if (!hasEnabledDayBelow) {
-        reminderRef.current?.focus();
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    }
   };
 
   const commitReminderInput = async (): Promise<boolean> => {
@@ -296,6 +300,15 @@ function TaskStartPickerPanel({
                   'h-auto min-w-0 flex-col gap-1 px-1.5 py-2 text-xs',
                   selected && 'bg-accent text-accent-foreground',
                 )}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void onPlanningChange({
+                    startDate: null,
+                    todaySection: value,
+                  }).then(onRequestClose);
+                }}
                 onClick={() => void onPlanningChange({
                   startDate: null,
                   todaySection: value,
@@ -318,11 +331,26 @@ function TaskStartPickerPanel({
           defaultMonth={visibleMonth}
           today={planningToday}
           initialFocusDate={selectedDate ?? minimumDate}
+          onDayGridExitDown={() => {
+            if (reminderRef.current?.disabled) return false;
+            reminderRef.current?.focus();
+            return Boolean(reminderRef.current);
+          }}
+          onKeyDownCapture={(event) => {
+            const target = event.target instanceof HTMLElement ? event.target : null;
+            if (target?.closest('button[name="day"]:not(:disabled)')) {
+              keyboardDateConfirmationRef.current = event.key === 'Enter';
+            }
+          }}
           onSelect={(date) => {
             if (!date) return;
+            const closeAfterSave = keyboardDateConfirmationRef.current;
+            keyboardDateConfirmationRef.current = false;
             void onPlanningChange({
               startDate: toDatePickerFieldValue(date),
               todaySection: task.today_section ?? 'next',
+            }).then(() => {
+              if (closeAfterSave) onRequestClose();
             });
           }}
           allowTabExit

@@ -14,6 +14,7 @@ import { buttonVariants } from "@/components/ui/button";
 export type CalendarProps = React.ComponentProps<typeof DayPicker> & {
   allowTabExit?: boolean;
   initialFocusDate?: Date;
+  onDayGridExitDown?: () => boolean;
   onKeyDownCapture?: React.KeyboardEventHandler;
 };
 
@@ -77,12 +78,17 @@ function getCalendarHeaderTarget(
     .find(canReceiveCalendarFocus) ?? null;
 }
 
-function findEnabledDayAbove(
+function findEnabledDayInColumn(
   rows: HTMLButtonElement[][],
-  rowIndex: number,
+  startRowIndex: number,
   colIndex: number,
+  step: -1 | 1,
 ): HTMLButtonElement | null {
-  for (let candidateRowIndex = rowIndex - 1; candidateRowIndex >= 0; candidateRowIndex -= 1) {
+  for (
+    let candidateRowIndex = startRowIndex;
+    candidateRowIndex >= 0 && candidateRowIndex < rows.length;
+    candidateRowIndex += step
+  ) {
     const candidateRow = rows[candidateRowIndex];
     const candidate = candidateRow?.[Math.min(colIndex, candidateRow.length - 1)];
     if (canReceiveCalendarFocus(candidate)) return candidate;
@@ -90,7 +96,27 @@ function findEnabledDayAbove(
   return null;
 }
 
-function focusCalendarArrowTarget(root: HTMLElement, activeElement: HTMLElement, key: string): boolean {
+function findFirstEnabledDay(rows: HTMLButtonElement[][]): HTMLButtonElement | null {
+  return rows.flat().find(canReceiveCalendarFocus) ?? null;
+}
+
+function focusEnabledDayBelowHeader(
+  rows: HTMLButtonElement[][],
+  preferredColumn: number,
+): boolean {
+  const target = findEnabledDayInColumn(rows, 0, preferredColumn, 1)
+    ?? findFirstEnabledDay(rows);
+  if (!target) return false;
+  target.focus();
+  return true;
+}
+
+function focusCalendarArrowTarget(
+  root: HTMLElement,
+  activeElement: HTMLElement,
+  key: string,
+  onDayGridExitDown?: () => boolean,
+): boolean {
   const previousMonthButton = root.querySelector<HTMLButtonElement>('button[name="previous-month"]');
   const nextMonthButton = root.querySelector<HTMLButtonElement>('button[name="next-month"]');
   const captionButton = root.querySelector<HTMLButtonElement>('button[name="caption-month-year"]');
@@ -108,7 +134,7 @@ function focusCalendarArrowTarget(root: HTMLElement, activeElement: HTMLElement,
     } else if (key === "ArrowRight") {
       target = colIndex < rows[rowIndex].length - 1 ? rows[rowIndex][colIndex + 1] : (rows[rowIndex + 1]?.[0] ?? nextMonthButton);
     } else if (key === "ArrowUp") {
-      target = findEnabledDayAbove(rows, rowIndex, colIndex)
+      target = findEnabledDayInColumn(rows, rowIndex - 1, colIndex, -1)
         ?? getCalendarHeaderTarget(
           colIndex,
           previousMonthButton,
@@ -116,7 +142,11 @@ function focusCalendarArrowTarget(root: HTMLElement, activeElement: HTMLElement,
           nextMonthButton,
         );
     } else if (key === "ArrowDown") {
-      target = rows[rowIndex + 1]?.[Math.min(colIndex, rows[rowIndex + 1].length - 1)];
+      target = findEnabledDayInColumn(rows, rowIndex + 1, colIndex, 1);
+      if (!target) {
+        onDayGridExitDown?.();
+        return true;
+      }
     }
 
     if (!target) return false;
@@ -133,10 +163,7 @@ function focusCalendarArrowTarget(root: HTMLElement, activeElement: HTMLElement,
       captionButton.focus();
       return true;
     }
-    if (key === "ArrowDown" && rows[0]?.[0]) {
-      rows[0][0].focus();
-      return true;
-    }
+    if (key === "ArrowDown") return focusEnabledDayBelowHeader(rows, 0);
     return false;
   }
 
@@ -149,18 +176,17 @@ function focusCalendarArrowTarget(root: HTMLElement, activeElement: HTMLElement,
       captionButton.focus();
       return true;
     }
-    if (key === "ArrowDown" && rows[0]?.at(-1)) {
-      rows[0].at(-1)?.focus();
-      return true;
+    if (key === "ArrowDown") {
+      return focusEnabledDayBelowHeader(
+        rows,
+        Math.max(0, (rows[0]?.length ?? 1) - 1),
+      );
     }
     return false;
   }
 
   if (activeElement === captionButton) {
-    if (key === "ArrowDown" && rows[0]?.[3]) {
-      rows[0][3].focus();
-      return true;
-    }
+    if (key === "ArrowDown") return focusEnabledDayBelowHeader(rows, 3);
     if (key === "ArrowLeft" && previousMonthButton) {
       previousMonthButton.focus();
       return true;
@@ -213,9 +239,19 @@ function MonthPicker({
     return () => window.clearTimeout(timer);
   }, [activeMonth, minimumDate, year]);
 
-  const focusMonthAt = (index: number) => {
+  const focusMonthAt = (index: number): boolean => {
     const candidate = monthButtonRefs.current[index];
-    if (!candidate?.disabled) candidate.focus();
+    if (candidate?.disabled) return false;
+    candidate?.focus();
+    return Boolean(candidate);
+  };
+
+  const focusSelectableMonthBelowHeader = (preferredColumn: number) => {
+    for (let monthIndex = preferredColumn; monthIndex < 12; monthIndex += 3) {
+      if (focusMonthAt(monthIndex)) return;
+    }
+    const firstSelectable = firstSelectableMonthIndex(year, minimumDate);
+    if (firstSelectable !== null) focusMonthAt(firstSelectable);
   };
 
   const pageYear = (position: "previous" | "next") => {
@@ -244,8 +280,11 @@ function MonthPicker({
       event.preventDefault();
       const priorRowMonth = findSelectableMonth(monthIndex, -3, year, minimumDate);
       if (priorRowMonth !== null && priorRowMonth < monthIndex) focusMonthAt(priorRowMonth);
-      else if (monthIndex % 3 === 2) nextYearButtonRef.current?.focus();
-      else if (!prevYearButtonRef.current?.disabled) prevYearButtonRef.current?.focus();
+      else if (monthIndex % 3 === 2 || prevYearButtonRef.current?.disabled) {
+        nextYearButtonRef.current?.focus();
+      } else {
+        prevYearButtonRef.current?.focus();
+      }
       return;
     }
     if (event.key === "ArrowDown") {
@@ -272,8 +311,7 @@ function MonthPicker({
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      if (position === "previous") focusMonthAt(0);
-      else focusMonthAt(2);
+      focusSelectableMonthBelowHeader(position === "previous" ? 0 : 2);
     }
   };
 
@@ -360,6 +398,7 @@ function Calendar({
   showOutsideDays = true,
   allowTabExit = false,
   initialFocusDate,
+  onDayGridExitDown,
   onKeyDownCapture,
   month,
   defaultMonth,
@@ -426,7 +465,10 @@ function Calendar({
     if (viewMode === "day" && (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")) {
       const root = event.currentTarget as HTMLElement;
       const activeElement = event.target instanceof HTMLElement ? event.target : null;
-      if (activeElement && focusCalendarArrowTarget(root, activeElement, event.key)) {
+      if (
+        activeElement
+        && focusCalendarArrowTarget(root, activeElement, event.key, onDayGridExitDown)
+      ) {
         event.preventDefault();
         event.stopPropagation();
       }

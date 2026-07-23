@@ -219,6 +219,83 @@ describe('Calendar keyboard navigation', () => {
     }
   });
 
+  it('skips disabled dates below the calendar header', async () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 6, 1)}
+        fromDate={new Date(2026, 6, 24)}
+        selected={new Date(2026, 6, 24)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      const captionButton = container.querySelector<HTMLButtonElement>(
+        'button[name="caption-month-year"]',
+      );
+      act(() => {
+        captionButton?.focus();
+        captionButton?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+        }));
+      });
+      await flushUi();
+
+      const focusedDay = document.activeElement as HTMLButtonElement;
+      expect(focusedDay).toHaveAttribute('name', 'day');
+      expect(focusedDay).not.toBeDisabled();
+      expect(Number(focusedDay.textContent?.trim())).toBeGreaterThanOrEqual(24);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('hands the final day-row ArrowDown boundary to its composed destination', async () => {
+    function Harness() {
+      const clearRef = React.useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <Calendar
+            mode="single"
+            month={new Date(2026, 6, 1)}
+            selected={new Date(2026, 6, 31)}
+            onSelect={() => {}}
+            onDayGridExitDown={() => {
+              clearRef.current?.focus();
+              return Boolean(clearRef.current);
+            }}
+          />
+          <button ref={clearRef} type="button">Clear</button>
+        </>
+      );
+    }
+
+    const { container, root } = mount(<Harness />);
+
+    try {
+      const julyThirtyFirst = getDayButton(container, '31');
+      const clear = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent === 'Clear');
+      act(() => {
+        julyThirtyFirst?.focus();
+        julyThirtyFirst?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await flushUi();
+
+      expect(document.activeElement).toBe(clear);
+      expect(container.textContent).toContain('July 2026');
+      expect(container.textContent).not.toContain('August 2026');
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it('falls back to the month-year control when disabled dates and hidden previous navigation block the preferred path', async () => {
     const { container, root } = mount(
       <Calendar
@@ -618,6 +695,19 @@ describe('Calendar keyboard navigation', () => {
       expect(months[6]?.className).toContain('enabled:!cursor-pointer');
       expect(months[0]?.className).toContain('disabled:!cursor-not-allowed');
       expect(document.activeElement).toBe(months[6]);
+
+      const nextYearButton = container.querySelector<HTMLButtonElement>(
+        'button[name="next-year"]',
+      );
+      act(() => {
+        nextYearButton?.focus();
+        nextYearButton?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+        }));
+      });
+      await flushUi();
+      expect(document.activeElement).toBe(months[8]);
     } finally {
       unmount(root, container);
     }

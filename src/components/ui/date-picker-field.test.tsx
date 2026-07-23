@@ -124,4 +124,47 @@ describe('DatePickerField', () => {
       unmount(root, container);
     }
   });
+
+  it('moves from the final date row to Clear without paging the visible month', async () => {
+    const { container, root } = mount(
+      <DatePickerField
+        id="deadline-boundary"
+        value="2026-07-31"
+        minDate="2026-07-01"
+        clearable
+        onValueChange={vi.fn()}
+      />,
+    );
+
+    try {
+      act(() => {
+        container.querySelector<HTMLButtonElement>('#deadline-boundary')?.click();
+      });
+      await flushUi();
+      const julyThirtyFirst = Array.from(document.body.querySelectorAll<HTMLButtonElement>(
+        'button[name="day"]',
+      )).find((button) => (
+        button.textContent?.trim() === '31'
+        && !button.className.includes('day-outside')
+      ));
+      const clear = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Clear');
+
+      act(() => {
+        julyThirtyFirst?.focus();
+        julyThirtyFirst?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await flushUi();
+
+      expect(document.activeElement).toBe(clear);
+      expect(document.body.textContent).toContain('July 2026');
+      expect(document.body.textContent).not.toContain('August 2026');
+    } finally {
+      unmount(root, container);
+    }
+  });
 });

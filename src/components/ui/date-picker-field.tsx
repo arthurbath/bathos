@@ -55,6 +55,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
     () => getVisibleMonth(value, todayDate),
   );
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const clearButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const selectedDate = parseDatePickerFieldValue(value);
   const minimumDate = parseDatePickerFieldValue(minDate);
   const calendarToday = parseDatePickerFieldValue(todayDate);
@@ -107,6 +108,11 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
           today={calendarToday}
           initialFocusDate={selectedDate ?? minimumDate ?? calendarToday}
           onMonthChange={setVisibleMonth}
+          onDayGridExitDown={() => {
+            if (clearButtonRef.current?.disabled) return false;
+            clearButtonRef.current?.focus();
+            return Boolean(clearButtonRef.current);
+          }}
           onSelect={(date) => {
             if (!date) {
               setOpen(false);
@@ -121,6 +127,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
         {clearable ? (
           <div className="border-t border-[hsl(var(--grid-sticky-line))] p-2">
             <Button
+              ref={clearButtonRef}
               type="button"
               variant="clear"
               className="w-full justify-start gap-2 text-muted-foreground"

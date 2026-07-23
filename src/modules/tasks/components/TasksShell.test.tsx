@@ -2712,6 +2712,17 @@ describe('TasksShell', () => {
           cancelable: true,
         }));
       });
+      expect(document.activeElement).toBe(
+        document.querySelector('button[name="caption-month-year"]'),
+      );
+
+      await act(async () => {
+        document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
       expect((document.activeElement as HTMLElement)?.getAttribute('name')).toBe('day');
       expect(document.activeElement).not.toBeDisabled();
 
@@ -2752,6 +2763,107 @@ describe('TasksShell', () => {
           }));
       });
       expect(document.activeElement).toBe(reminderInput);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('commits a Today horizon once and closes Start when Enter confirms it', async () => {
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      const later = document.querySelector<HTMLButtonElement>(
+        '[data-task-start-horizon="later"]',
+      );
+      await act(async () => {
+        later?.focus();
+        later?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+
+      expect(taskList.updateTask).toHaveBeenCalledTimes(1);
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+        destination: 'anytime',
+        start_date: null,
+        today_section: 'later',
+      });
+      expect(document.querySelector('[data-task-start-picker]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('closes Start after Enter confirms a legal date but not after calendar navigation', async () => {
+    const futureTask = taskTodoFixture({
+      ...task,
+      start_date: '2026-07-24',
+      today_section: 'next',
+    });
+    const taskList = { ...defaultTaskList(), tasks: [futureTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      const nextMonth = document.querySelector<HTMLButtonElement>(
+        'button[name="next-month"]',
+      );
+      await act(async () => {
+        nextMonth?.focus();
+        nextMonth?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        nextMonth?.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.querySelector('[data-task-start-picker]')).toBeTruthy();
+      expect(document.body.textContent).toContain('August 2026');
+
+      const augustFirst = Array.from(document.querySelectorAll<HTMLButtonElement>(
+        'button[name="day"]:not(:disabled)',
+      )).find((button) => (
+        button.textContent?.trim() === '1'
+        && !button.className.includes('day-outside')
+      ));
+      await act(async () => {
+        augustFirst?.focus();
+        augustFirst?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        augustFirst?.click();
+        await Promise.resolve();
+      });
+
+      expect(taskList.updateTask).toHaveBeenCalledTimes(1);
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+        destination: 'anytime',
+        start_date: '2026-08-01',
+        today_section: 'next',
+      });
+      expect(document.querySelector('[data-task-start-picker]')).toBeNull();
     } finally {
       cleanup(root, container);
     }

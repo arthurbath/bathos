@@ -464,6 +464,10 @@ The Tasks expanded to-do editor SHALL present Start and Deadline as a matched re
 - **WHEN** a to-do has a Deadline and the user activates Clear inside the Deadline picker
 - **THEN** Tasks immediately persists a null Deadline, closes the picker, restores trigger focus, and exposes no separate inline clear button
 
+#### Scenario: Leave the Deadline calendar through its lower boundary
+- **WHEN** keyboard focus is on the final visible row of the Deadline calendar and the user presses ArrowDown
+- **THEN** focus moves to Clear and the visible calendar month does not change
+
 #### Scenario: Identify today in either calendar
 - **WHEN** the owner planning date is visible in the Start or Deadline calendar
 - **THEN** the calendar gives today a visible semantic highlight and an accessible current-date state independently from the selected-date state
@@ -532,11 +536,11 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 
 #### Scenario: Choose a Today horizon
 - **WHEN** a user chooses Inbox, Now, Next, or Later in the Start picker
-- **THEN** Tasks immediately stores that active Today horizon with a null future Start Date and keeps the picker available for optional reminder editing
+- **THEN** Tasks immediately stores that active Today horizon with a null future Start Date and keeps the picker available for optional reminder editing unless Enter confirmed the final selection
 
 #### Scenario: Choose a future Start date
 - **WHEN** a user chooses a date after the owner's planning date
-- **THEN** Tasks immediately stores that future Start Date, retains a valid selected day horizon for reached-date activation, and keeps the picker available for optional reminder editing
+- **THEN** Tasks immediately stores that future Start Date, retains a valid selected day horizon for reached-date activation, and keeps the picker available for optional reminder editing unless Enter confirmed the final selection
 
 #### Scenario: Prevent calendar scheduling for today or the past
 - **WHEN** the Start picker calendar displays the owner planning date or an earlier date
@@ -580,10 +584,18 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 
 #### Scenario: Traverse the complete picker with arrow keys
 - **WHEN** focus is within Start and the user presses an arrow key outside ordinary reminder text editing
-- **THEN** focus moves predictably among Today horizons, calendar header and dates, Reminder, and Clear while skipping disabled destinations
+- **THEN** downward focus moves in visible order from Today horizons to the calendar header, then to enabled dates or months, Reminder, and Clear while reverse navigation follows the same structure and skips disabled destinations
 
-#### Scenario: Activate a focused Start action
-- **WHEN** a user presses Enter or Space on a focused Today horizon, calendar action, selectable date, month, year pager, or Clear
+#### Scenario: Confirm a final Start selection with Enter
+- **WHEN** keyboard focus is on a Today horizon, selectable date, or Clear and the user presses Enter
+- **THEN** Tasks performs the selection once, waits for its immediate autosave, closes Start, and restores focus to the trigger
+
+#### Scenario: Keep Start open for internal calendar navigation
+- **WHEN** keyboard focus is on a calendar pager, month or year caption, or selectable month and the user presses Enter
+- **THEN** Tasks performs the calendar page or view action and keeps Start open with focus inside the picker
+
+#### Scenario: Activate other focused Start actions
+- **WHEN** a user presses Space on a focused Today horizon, calendar action, selectable date, month, year pager, or Clear
 - **THEN** Tasks performs the same action as pointer activation, while Space inside Reminder remains text input
 
 #### Scenario: Open Start from the reminder command
