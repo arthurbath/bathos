@@ -21,41 +21,54 @@ function cleanup(root: Root, container: HTMLElement) {
 }
 
 describe('TaskSourceIndicator', () => {
-  it('opens web sources in a separate browser tab with a named real link', () => {
+  it('opens an explicit web Primary Link in a separate browser context', () => {
     const { container, root } = renderIndicator(taskTodoFixture({
       title: 'Read the brief',
       source_kind: 'reading_item',
       source_url: 'https://example.test/brief',
       source_title: 'The brief',
+      primary_link: 'https://example.test/brief',
     }));
 
     try {
       const link = container.querySelector<HTMLAnchorElement>('a');
       expect(link?.href).toBe('https://example.test/brief');
       expect(link?.target).toBe('_blank');
-      expect(link?.rel).toBe('noreferrer');
-      expect(link?.getAttribute('aria-label')).toBe('Open Reading Item for Read the brief');
-      expect(link?.title).toBe('Reading Item: The brief');
+      expect(link?.rel).toBe('noopener noreferrer');
+      expect(link?.getAttribute('aria-label')).toBe('Open Primary Link for Read the brief');
+      expect(link?.title).toBe('https://example.test/brief');
     } finally {
       cleanup(root, container);
     }
   });
 
-  it.each([
-    ['mail_message', 'message://synthetic-message', 'Open Mail Message for Follow up'],
-    ['file', 'file:///Users/Shared/Synthetic.txt', 'Open File for Follow up'],
-  ] as const)('hands %s deep links to the originating platform', (sourceKind, sourceUrl, label) => {
+  it('hands a message Primary Link to Mail', () => {
     const { container, root } = renderIndicator(taskTodoFixture({
       title: 'Follow up',
-      source_kind: sourceKind,
-      source_url: sourceUrl,
+      source_kind: 'mail_message',
+      source_url: 'message://synthetic-message',
+      primary_link: 'message://synthetic-message',
     }));
 
     try {
       const link = container.querySelector<HTMLAnchorElement>('a');
-      expect(link?.getAttribute('href')).toBe(sourceUrl);
+      expect(link?.getAttribute('href')).toBe('message://synthetic-message');
       expect(link?.hasAttribute('target')).toBe(false);
-      expect(link?.getAttribute('aria-label')).toBe(label);
+      expect(link?.getAttribute('aria-label')).toBe('Open Mail Link for Follow up');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('prepends HTTPS when the editable Primary Link has no web protocol', () => {
+    const { container, root } = renderIndicator(taskTodoFixture({
+      title: 'Read the brief',
+      primary_link: 'example.test/brief',
+    }));
+
+    try {
+      expect(container.querySelector<HTMLAnchorElement>('a')?.getAttribute('href'))
+        .toBe('https://example.test/brief');
     } finally {
       cleanup(root, container);
     }

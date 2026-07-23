@@ -19,7 +19,10 @@ import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceServic
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import { TaskPermanentDeletionService } from '@/modules/tasks/data/taskPermanentDeletionService';
 import { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
-import { resolveTaskPlanningTimeZone } from '@/modules/tasks/domain/taskDates';
+import {
+  resolveTaskPlanningTimeZone,
+  taskCalendarDateInTimeZone,
+} from '@/modules/tasks/domain/taskDates';
 import type { TasksSyncState } from '@/modules/tasks/domain/taskSyncReliability';
 import {
   bindTasksDatabaseOwner,
@@ -105,6 +108,7 @@ export function TasksRuntimeProvider({
     let active = true;
     let disposeStatusListener: (() => void) | undefined;
     let queuePoll: ReturnType<typeof setInterval> | undefined;
+    let activationPoll: ReturnType<typeof setInterval> | undefined;
     const endpoint = import.meta.env.VITE_TASKS_POWERSYNC_ENDPOINT?.trim();
     const isBrowserOnline = () => window.navigator.onLine !== false;
     const refreshBrowserNetworkState = () => {
@@ -129,6 +133,18 @@ export function TasksRuntimeProvider({
           ownerId,
           resolveTaskPlanningTimeZone(),
         );
+        const activateReachedDates = async () => {
+          const planningDate = taskCalendarDateInTimeZone(
+            settings.planning_timezone,
+            new Date(),
+          );
+          await repository.activateDueStartDates(ownerId, planningDate);
+          await hierarchyRepository.activateDueProjectStartDates(ownerId, planningDate);
+        };
+        await activateReachedDates();
+        activationPoll = setInterval(() => {
+          void activateReachedDates().catch(() => undefined);
+        }, 60_000);
         if (!active) {
           return;
         }
@@ -190,9 +206,12 @@ export function TasksRuntimeProvider({
       if (queuePoll !== undefined) {
         clearInterval(queuePoll);
       }
+      if (activationPoll !== undefined) {
+        clearInterval(activationPoll);
+      }
       void database.close().catch(() => undefined);
     };
-  }, [database, ownerId, repository]);
+  }, [database, hierarchyRepository, ownerId, repository]);
 
   const prepareForSignOut = useCallback(async () => {
     await prepareTasksForSignOut({

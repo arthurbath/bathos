@@ -24,7 +24,7 @@ import {
   parseTaskExport,
   previewTaskRestore,
   serializeTaskExport,
-  taskExportV11Collections,
+  taskExportV12Collections,
 } from '@/modules/tasks/data/taskPortability';
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
@@ -110,18 +110,12 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
       title: 'Recovery Project',
       notes: 'Representative hierarchy for backup validation',
     });
-    const heading = await hierarchy.createHeading({
-      ownerId: source.id,
-      projectId: project.id,
-      title: 'Recovery Heading',
-    });
     const primary = await repository.createTask({
       ownerId: source.id,
       title: 'Preserve This Task',
       notes: 'Original notes',
       destination: 'anytime',
       projectId: project.id,
-      headingId: heading.id,
     });
     await hierarchy.createChecklistItem({
       ownerId: source.id,
@@ -254,18 +248,25 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     );
     expect(resumedRecurrence).toMatchObject({ outcome: 'accepted', definition: { status: 'active' } });
 
+    const reminderTask = await repository.createTask({
+      ownerId: source.id,
+      title: 'Preserve Scheduled Reminder',
+      destination: 'anytime',
+      todaySection: 'next',
+      startDate: '2099-07-20',
+    });
+    await waitForUploadQueue(activeDatabase, 0, 60_000);
     const reminder = await new TaskReminderService(sourceClient).save({
       rootType: 'todo',
-      rootId: primary.id,
-      localDate: '2026-07-21',
+      rootId: reminderTask.id,
       localTime: '09:00',
       timeZone: 'America/Los_Angeles',
     });
     expect(reminder.outcome).toBe('accepted');
 
     const taskExport = await createTaskExport(sourceClient);
-    expect(taskExport.schema_version).toBe(11);
-    for (const collection of taskExportV11Collections) {
+    expect(taskExport.schema_version).toBe(12);
+    for (const collection of taskExportV12Collections) {
       expect(taskExport.manifest.counts[collection], collection).toBeGreaterThan(0);
     }
     expect(taskExport.data.tasks_todos.find((task) => task.id === primary.id)).toMatchObject({
@@ -297,8 +298,8 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     await expectOwnerCounts(adminClient, source.id, 0, 0);
 
     const preview = await previewTaskRestore(targetClient, taskExport);
-    expect(preview).toMatchObject({ dry_run: true, schema_version: 11, applied: false });
-    for (const collection of taskExportV11Collections) {
+    expect(preview).toMatchObject({ dry_run: true, schema_version: 12, applied: false });
+    for (const collection of taskExportV12Collections) {
       expect(preview[collection]).toMatchObject({
         inserts: taskExport.manifest.counts[collection],
         matches: 0,
@@ -308,8 +309,8 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     await expectOwnerCounts(adminClient, target.id, 0, 0);
 
     const restored = await mergeTaskRestore(targetClient, taskExport);
-    expect(restored).toMatchObject({ dry_run: false, schema_version: 11, applied: true });
-    for (const collection of taskExportV11Collections) {
+    expect(restored).toMatchObject({ dry_run: false, schema_version: 12, applied: true });
+    for (const collection of taskExportV12Collections) {
       expect(restored[collection]).toMatchObject({
         inserts: taskExport.manifest.counts[collection],
         matches: 0,
@@ -340,11 +341,11 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     const replay = await mergeTaskRestore(targetClient, taskExport);
     expect(replay).toMatchObject({
       dry_run: false,
-      schema_version: 11,
+      schema_version: 12,
       applied: false,
       code: 'already_applied',
     });
-    for (const collection of taskExportV11Collections) {
+    for (const collection of taskExportV12Collections) {
       expect(replay[collection], collection).toMatchObject({
         inserts: 0,
         matches: taskExport.manifest.counts[collection],

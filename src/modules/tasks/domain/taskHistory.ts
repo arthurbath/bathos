@@ -33,10 +33,10 @@ export type TaskHistorySnapshot = Pick<
   | 'order_key'
   | 'area_id'
   | 'project_id'
-  | 'heading_id'
   | 'hierarchy_order_key'
   | 'start_date'
   | 'deadline'
+  | 'primary_link'
   | 'source_kind'
   | 'source_url'
   | 'source_title'
@@ -165,10 +165,10 @@ export function snapshotTask(task: TaskTodo): TaskHistorySnapshot {
     order_key: task.order_key,
     area_id: task.area_id ?? null,
     project_id: task.project_id ?? null,
-    heading_id: task.heading_id ?? null,
     hierarchy_order_key: task.hierarchy_order_key ?? null,
     start_date: task.start_date ?? null,
     deadline: task.deadline ?? null,
+    primary_link: task.primary_link ?? null,
     source_kind: task.source_kind,
     source_url: task.source_url,
     source_title: task.source_title,
@@ -187,18 +187,26 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
     : requireEnum(legacyDestination, taskDestinations, 'destination') as TaskDestination;
   const legacyTodaySection = parsed.today_section === undefined
     ? 'daytime'
-    : requireText(parsed.today_section, 'Today section');
-  const todaySection = legacyDestination === 'inbox'
+    : parsed.today_section === null
+      ? null
+      : requireText(parsed.today_section, 'Today section');
+  const startDate = optionalTextOrMissing(parsed.start_date, 'start_date');
+  const mappedTodaySection = legacyDestination === 'inbox'
     ? 'inbox'
     : legacyDestination === 'today'
       ? legacyTodaySection === 'evening' ? 'later' : 'next'
       : legacyTodaySection === 'daytime' || legacyTodaySection === 'evening'
-        ? 'none'
+        ? null
+        : legacyTodaySection === null
+          ? null
+        : legacyTodaySection === 'none'
+          ? null
         : requireEnum(
           legacyTodaySection,
           taskTodaySections,
           'Today section',
         ) as TaskTodaySection;
+  const todaySection = startDate ? mappedTodaySection ?? 'next' : mappedTodaySection;
 
   return {
     title: requireText(parsed.title, 'title'),
@@ -221,13 +229,13 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
     order_key: requireText(parsed.order_key, 'order_key'),
     area_id: optionalTextOrMissing(parsed.area_id, 'area_id'),
     project_id: optionalTextOrMissing(parsed.project_id, 'project_id'),
-    heading_id: optionalTextOrMissing(parsed.heading_id, 'heading_id'),
     hierarchy_order_key: optionalTextOrMissing(
       parsed.hierarchy_order_key,
       'hierarchy_order_key',
     ),
-    start_date: optionalTextOrMissing(parsed.start_date, 'start_date'),
+    start_date: startDate,
     deadline: optionalTextOrMissing(parsed.deadline, 'deadline'),
+    primary_link: optionalTextOrMissing(parsed.primary_link, 'primary_link'),
     source_kind: parsed.source_kind === null
       ? null
       : requireEnum(parsed.source_kind, taskSourceKinds, 'source kind') as TaskSourceKind,
@@ -314,10 +322,10 @@ function snapshotsEqual(left: TaskHistorySnapshot, right: TaskHistorySnapshot): 
     && left.order_key === right.order_key
     && left.area_id === right.area_id
     && left.project_id === right.project_id
-    && left.heading_id === right.heading_id
     && left.hierarchy_order_key === right.hierarchy_order_key
     && left.start_date === right.start_date
     && left.deadline === right.deadline
+    && left.primary_link === right.primary_link
     && left.source_kind === right.source_kind
     && left.source_url === right.source_url
     && left.source_title === right.source_title

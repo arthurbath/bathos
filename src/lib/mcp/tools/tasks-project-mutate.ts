@@ -1,5 +1,5 @@
 import type { Database, Json } from '@/integrations/supabase/types';
-import { assertTaskCalendarRange, isTaskCalendarDate } from '../../../modules/tasks/domain/taskDates';
+import { isTaskCalendarDate } from '../../../modules/tasks/domain/taskDates';
 import { generateTaskOrderKey } from '../../../modules/tasks/domain/taskOrder';
 
 import { defineTool, z } from '../mcp-core';
@@ -9,9 +9,10 @@ import {
   type AuthenticatedMcpContext,
 } from '../supabase';
 import { uuidSchema } from '../resource-utils';
+import { planningDateInTimeZone } from './tasks-read';
 
 const destinationSchema = z.enum(['anytime', 'someday']);
-const todaySectionSchema = z.enum(['none', 'inbox', 'now', 'next', 'later']);
+const todaySectionSchema = z.enum(['inbox', 'now', 'next', 'later']);
 const calendarDateSchema = z.string().refine(isTaskCalendarDate, {
   message: 'Expected a valid ISO calendar date.',
 });
@@ -33,7 +34,7 @@ type MutationBase = {
 export type MoveTaskProjectRequest = MutationBase & {
   area_id?: string | null;
   destination?: ProjectDestination;
-  today_section?: ProjectTodaySection;
+  today_section?: ProjectTodaySection | null;
   start_date?: string | null;
 };
 
@@ -185,14 +186,14 @@ function assertMutable(project: TaskProjectRow): void {
 
 function validatePlanningPlacement(
   destination: ProjectDestination,
-  todaySection: ProjectTodaySection,
+  todaySection: ProjectTodaySection | null,
   startDate: string | null,
 ): void {
-  if (destination === 'someday' && todaySection !== 'none') {
-    throw new Error('Someday projects cannot appear in Today.');
+  if (destination === 'someday' && (todaySection !== null || startDate !== null)) {
+    throw new Error('Someday projects cannot retain a start date or day horizon.');
   }
-  if (destination === 'someday' && startDate !== null) {
-    throw new Error('Someday projects cannot retain a start date.');
+  if (destination === 'anytime' && startDate !== null && todaySection === null) {
+    throw new Error('A future-dated project requires a day horizon.');
   }
 }
 
@@ -225,16 +226,29 @@ async function nextPlanningOrderKey(
   auth: AuthenticatedMcpContext,
   projectId: string,
   destination: ProjectDestination,
-  todaySection: ProjectTodaySection,
+  todaySection: ProjectTodaySection | null,
 ): Promise<string> {
-  const last = await readOne<{ planning_order_key: string }>(auth.supabase
+  const query = auth.supabase
     .from('tasks_projects').select('planning_order_key')
     .eq('owner_id', auth.userId).eq('destination', destination)
-    .eq('today_section', todaySection).eq('lifecycle', 'open')
-    .eq('disposition', 'present').neq('id', projectId)
+    .eq('lifecycle', 'open').eq('disposition', 'present').neq('id', projectId);
+  const scoped = todaySection === null
+    ? query.is('today_section', null)
+    : query.eq('today_section', todaySection);
+  const last = await readOne<{ planning_order_key: string }>(scoped
     .order('planning_order_key', { ascending: false }).order('id', { ascending: false })
     .limit(1).maybeSingle());
   return generateTaskOrderKey(last?.planning_order_key ?? null, null);
+}
+
+async function ownerPlanningDate(auth: AuthenticatedMcpContext): Promise<string> {
+  const settings = await readOne<{ planning_timezone: string }>(auth.supabase
+    .from('tasks_user_settings').select('planning_timezone')
+    .eq('owner_id', auth.userId).maybeSingle());
+  if (!settings) {
+    throw new Error('Task planning settings are not initialized. Open the Tasks module once.');
+  }
+  return planningDateInTimeZone(settings.planning_timezone);
 }
 
 async function movePatch(
@@ -263,10 +277,14 @@ async function movePatch(
 
   if (planningRequested) {
     const destination = input.destination!;
-    const todaySection = destination === 'someday' ? 'none' : input.today_section ?? 'none';
-    const startDate = input.start_date ?? null;
+    const startDate = destination === 'someday' ? null : input.start_date ?? null;
+    if (startDate !== null && startDate <= await ownerPlanningDate(auth)) {
+      throw new Error('Start date must be later than today in the owner planning time zone.');
+    }
+    const todaySection = destination === 'someday'
+      ? null
+      : startDate === null ? input.today_section ?? null : input.today_section ?? 'next';
     validatePlanningPlacement(destination, todaySection, startDate);
-    assertTaskCalendarRange(startDate, current.deadline);
     if (destination === current.destination
       && todaySection === current.today_section
       && startDate !== current.start_date) {
@@ -302,13 +320,16 @@ async function schedulePatch(
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error('Deadline must be a valid ISO calendar date.');
   }
-  assertTaskCalendarRange(startDate, deadline);
-
+  if (startDate !== null && startDate <= await ownerPlanningDate(auth)) {
+    throw new Error('Start date must be later than today in the owner planning time zone.');
+  }
   let destination = current.destination as ProjectDestination;
-  let todaySection = current.today_section as ProjectTodaySection;
+  let todaySection = current.today_section as ProjectTodaySection | null;
   if (destination === 'someday' && startDate !== null) {
     destination = 'anytime';
-    todaySection = 'none';
+    todaySection = 'next';
+  } else if (startDate !== null && todaySection === null) {
+    todaySection = 'next';
   }
   validatePlanningPlacement(destination, todaySection, startDate);
 
@@ -346,10 +367,10 @@ function expectedAfterForRetry(
     }
     if (input.destination !== undefined) {
       expected.destination = input.destination;
+      expected.start_date = input.destination === 'someday' ? null : input.start_date ?? null;
       expected.today_section = input.destination === 'someday'
-        ? 'none'
-        : input.today_section ?? 'none';
-      expected.start_date = input.start_date ?? null;
+        ? null
+        : expected.start_date === null ? input.today_section ?? null : input.today_section ?? 'next';
       ignored.add('planning_order_key');
     }
     return { expected, ignored };
@@ -360,8 +381,10 @@ function expectedAfterForRetry(
   if (hasOwn(input, 'deadline')) expected.deadline = input.deadline ?? null;
   if (before.destination === 'someday' && expected.start_date !== null) {
     expected.destination = 'anytime';
-    expected.today_section = 'none';
+    expected.today_section = 'next';
     ignored.add('planning_order_key');
+  } else if (expected.start_date !== null && before.today_section === null) {
+    expected.today_section = 'next';
   }
   return { expected, ignored };
 }
@@ -547,7 +570,7 @@ export const moveTaskProject = defineTool({
     ...mutationBaseSchema,
     area_id: uuidSchema.nullable().optional().describe('Present area or null for no area.'),
     destination: destinationSchema.optional(),
-    today_section: todaySectionSchema.optional(),
+    today_section: todaySectionSchema.nullable().optional(),
     start_date: calendarDateSchema.nullable().optional(),
   },
   annotations: mutationAnnotations,

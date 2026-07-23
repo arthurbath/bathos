@@ -72,7 +72,7 @@ describe('task reminder MCP data', () => {
       .mockResolvedValueOnce({ data: { outcome: 'accepted' }, error: null });
     const context = auth(rpc);
     await saveTaskReminderData({
-      root_type: 'todo', root_id: 'task-a', local_date: '2026-07-20',
+      root_type: 'todo', root_id: 'task-a',
       local_time: '09:00', time_zone: 'America/Los_Angeles',
       ambiguity_choice: 'earlier', idempotency_key: 'mutation-a',
     }, context);
@@ -81,7 +81,7 @@ describe('task reminder MCP data', () => {
       idempotency_key: 'mutation-b',
     }, context);
 
-    expect(rpc).toHaveBeenNthCalledWith(1, 'tasks_save_reminder', expect.objectContaining({
+    expect(rpc).toHaveBeenNthCalledWith(1, 'tasks_save_start_reminder', expect.objectContaining({
       _root_type: 'todo', _mutation_channel: 'mcp', _actor_type: 'automation',
     }));
     expect(rpc).toHaveBeenNthCalledWith(2, 'tasks_cancel_reminder', expect.objectContaining({

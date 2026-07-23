@@ -5,11 +5,14 @@ import {
   InvalidTaskMutationError,
   type TaskMutationContext,
 } from '@/modules/tasks/data/taskRepository';
+import {
+  isTaskPlanningTimeZone,
+  taskCalendarDateInTimeZone,
+} from '@/modules/tasks/domain/taskDates';
 import type {
   TaskArea,
   TaskChecklistItem,
   TaskEntryChannel,
-  TaskHeading,
   TaskProject,
 } from '@/modules/tasks/types/tasks';
 
@@ -39,10 +42,6 @@ export type CreateTaskProjectInput = CreateHierarchyInput & {
   planningOrderKey?: string;
 };
 
-export type CreateTaskHeadingInput = CreateHierarchyInput & {
-  projectId: string;
-};
-
 export type CreateTaskChecklistItemInput = CreateHierarchyInput & {
   taskId: string;
 };
@@ -63,8 +62,6 @@ export type TaskProjectPatch = Partial<
     | 'deadline'
   >
 >;
-
-export type TaskHeadingPatch = Partial<Pick<TaskHeading, 'title' | 'order_key'>>;
 
 export type TaskChecklistItemPatch = Partial<
   Pick<
@@ -135,7 +132,7 @@ export class TaskHierarchyRepository {
         deleted_at: null,
         deletion_root_id: null,
         destination: 'anytime',
-        today_section: 'none',
+        today_section: null,
         order_key: input.orderKey ?? await nextOrderKey(
           transaction,
           'tasks_projects',
@@ -159,40 +156,6 @@ export class TaskHierarchyRepository {
       };
       await insertRow(transaction, 'tasks_projects', project);
       return project;
-    });
-  }
-
-  async createHeading(input: CreateTaskHeadingInput): Promise<TaskHeading> {
-    requireId(input.projectId, 'A project is required for a heading');
-    return this.database.writeTransaction(async (transaction) => {
-      await assertOwnedParent(
-        transaction,
-        'tasks_projects',
-        input.ownerId,
-        input.projectId,
-        'project',
-      );
-      const metadata = this.createMetadata(input);
-      const heading: TaskHeading = {
-        ...metadata,
-        project_id: input.projectId,
-        title: normalizeTitle(input.title),
-        order_key: input.orderKey ?? await nextOrderKey(
-          transaction,
-          'tasks_headings',
-          input.ownerId,
-          [['project_id', input.projectId]],
-        ),
-        disposition: 'present',
-        deleted_at: null,
-        deletion_root_id: null,
-        template_definition_id: null,
-        template_revision: null,
-        template_instantiation_id: null,
-        template_node_id: null,
-      };
-      await insertRow(transaction, 'tasks_headings', heading);
-      return heading;
     });
   }
 
@@ -271,21 +234,68 @@ export class TaskHierarchyRepository {
           );
         }
         assertProjectPlanning(next);
+        if (normalized.start_date !== undefined) {
+          await assertFutureProjectStartDate(
+            transaction,
+            ownerId,
+            normalized.start_date,
+            this.now(),
+          );
+        }
       },
     );
   }
 
-  updateHeading(
+  async activateDueProjectStartDates(
     ownerId: string,
-    headingId: string,
-    patch: TaskHeadingPatch,
-    context?: TaskMutationContext,
-  ): Promise<TaskHeading> {
-    const normalized = normalizePatch(patch);
-    if (normalized.title !== undefined) normalized.title = normalizeTitle(normalized.title);
-    return this.updateRow<TaskHeading>(
-      'tasks_headings', 'heading', ownerId, headingId, normalized, context,
-    );
+    planningDate: string,
+  ): Promise<TaskProject[]> {
+    assertOwner(ownerId);
+    requireId(planningDate, 'A planning date is required for activation');
+    return this.database.writeTransaction(async (transaction) => {
+      const dueProjects = await transaction.getAll<TaskProject>(
+        `SELECT * FROM tasks_projects
+         WHERE owner_id = ?
+           AND destination = 'anytime'
+           AND lifecycle = 'open'
+           AND disposition = 'present'
+           AND start_date IS NOT NULL
+           AND start_date <= ?
+         ORDER BY start_date, planning_order_key, id`,
+        [ownerId, planningDate],
+      );
+      const updatedAt = this.now();
+      const activated: TaskProject[] = [];
+      for (const current of dueProjects) {
+        const next: TaskProject = {
+          ...current,
+          start_date: null,
+          last_mutation_channel: 'native',
+          last_actor_type: 'system',
+          revision: current.revision + 1,
+          client_mutation_id: this.createId(),
+          updated_at: updatedAt,
+        };
+        await transaction.execute(
+          `UPDATE tasks_projects
+           SET start_date = ?, last_mutation_channel = ?, last_actor_type = ?,
+             revision = ?, client_mutation_id = ?, updated_at = ?
+           WHERE id = ? AND owner_id = ?`,
+          [
+            next.start_date,
+            next.last_mutation_channel,
+            next.last_actor_type,
+            next.revision,
+            next.client_mutation_id,
+            next.updated_at,
+            next.id,
+            ownerId,
+          ],
+        );
+        activated.push(next);
+      }
+      return activated;
+    });
   }
 
   updateChecklistItem(
@@ -388,11 +398,10 @@ export class TaskHierarchyRepository {
   }
 }
 
-type HierarchyRow = TaskArea | TaskProject | TaskHeading | TaskChecklistItem;
+type HierarchyRow = TaskArea | TaskProject | TaskChecklistItem;
 type HierarchyTable =
   | 'tasks_areas'
   | 'tasks_projects'
-  | 'tasks_headings'
   | 'tasks_checklist_items';
 
 function normalizeStoredHierarchyRow<T extends HierarchyRow>(
@@ -499,7 +508,7 @@ function requireId(value: string, message: string): void {
 
 function assertProjectPlanning(patch: TaskProjectPatch): void {
   if (patch.destination === 'someday' && patch.today_section !== undefined
-    && patch.today_section !== 'none') {
+    && patch.today_section !== null) {
     throw new InvalidTaskMutationError('Someday projects cannot appear in Today');
   }
   if (
@@ -509,12 +518,32 @@ function assertProjectPlanning(patch: TaskProjectPatch): void {
   ) {
     throw new InvalidTaskMutationError('Someday projects cannot have a start date');
   }
-  if (
-    patch.start_date != null
-    && patch.deadline != null
-    && patch.deadline < patch.start_date
-  ) {
-    throw new InvalidTaskMutationError('A project deadline cannot precede its start date');
+  if (patch.start_date != null && patch.today_section === null) {
+    throw new InvalidTaskMutationError('A future project start date requires a day horizon');
+  }
+}
+
+async function assertFutureProjectStartDate(
+  transaction: Transaction,
+  ownerId: string,
+  startDate: string | null,
+  now: string,
+): Promise<void> {
+  if (startDate === null) return;
+  const [settings] = await transaction.getAll<{ planning_timezone: string }>(
+    `SELECT planning_timezone
+     FROM tasks_user_settings
+     WHERE owner_id = ?
+     LIMIT 1`,
+    [ownerId],
+  );
+  const planningTimeZone = settings?.planning_timezone
+    && isTaskPlanningTimeZone(settings.planning_timezone)
+    ? settings.planning_timezone
+    : 'UTC';
+  const planningDate = taskCalendarDateInTimeZone(planningTimeZone, new Date(now));
+  if (startDate <= planningDate) {
+    throw new InvalidTaskMutationError('Project start date must be after today');
   }
 }
 

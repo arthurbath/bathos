@@ -113,6 +113,20 @@ describe('Tasks PowerSync deployment configuration', () => {
     );
   });
 
+  it('keeps the structure-simplification gate synthetic, focused, and cleanup-backed', () => {
+    expect(productionProvisioner).toContain("'synthetic-structure-simplification'");
+    expect(productionProvisioner).toContain(
+      "'test:tasks:production-structure-simplification'",
+    );
+    expect(packageJson).toContain('"test:tasks:production-structure-simplification"');
+    expect(packageJson).toContain(
+      "-t 'proves simplified scheduling through schema 12 and a fresh projection'",
+    );
+    expect(packageJson).not.toContain(
+      'test:tasks:production-structure-simplification": "npm run test:tasks:production-topology',
+    );
+  });
+
   it('keeps the undo and redo production gate synthetic, focused, and cleanup-backed', () => {
     expect(productionProvisioner).toContain("'synthetic-undo-redo'");
     expect(productionProvisioner).toContain("'test:tasks:production-undo-redo'");

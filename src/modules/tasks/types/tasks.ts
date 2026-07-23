@@ -2,8 +2,8 @@ import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase
 import type { TaskDisposition, TaskLifecycle } from '@/modules/tasks/domain/taskState';
 
 export const taskDestinations = ['anytime', 'someday'] as const;
-export const taskTodaySections = ['none', 'inbox', 'now', 'next', 'later'] as const;
-export const taskActionabilities = ['actionable', 'waiting'] as const;
+export const taskTodaySections = ['inbox', 'now', 'next', 'later'] as const;
+export const taskActionabilities = ['actionable', 'waiting', 'rechecking'] as const;
 export const taskEntryChannels = [
   'web',
   'raycast',
@@ -60,7 +60,6 @@ export const taskActorTypes = ['user', 'automation', 'system', 'import'] as cons
 export const taskHierarchyRootTypes = [
   'area',
   'project',
-  'heading',
   'todo',
   'checklist_item',
 ] as const;
@@ -127,7 +126,6 @@ type TaskTodoInsertRow = TablesInsert<'tasks_todos'>;
 type TaskTodoUpdateRow = TablesUpdate<'tasks_todos'>;
 type TaskAreaRow = Tables<'tasks_areas'>;
 type TaskProjectRow = Tables<'tasks_projects'>;
-type TaskHeadingRow = Tables<'tasks_headings'>;
 type TaskChecklistItemRow = Tables<'tasks_checklist_items'>;
 type TaskMailSourceRow = Tables<'tasks_mail_sources'>;
 type TaskMailSourceEventRow = Tables<'tasks_mail_source_events'>;
@@ -151,7 +149,7 @@ type RefinedTaskFields = {
   lifecycle: TaskLifecycle;
   disposition: TaskDisposition;
   destination: TaskDestination;
-  today_section: TaskTodaySection;
+  today_section: TaskTodaySection | null;
   actionability: TaskActionability;
   entry_channel: TaskEntryChannel;
   last_mutation_channel: TaskEntryChannel;
@@ -177,7 +175,7 @@ type RefinedHierarchyFields = {
 type RefinedProjectFields = RefinedHierarchyFields & {
   lifecycle: TaskLifecycle;
   destination: TaskDestination;
-  today_section: TaskTodaySection;
+  today_section: TaskTodaySection | null;
 };
 
 export type TaskArea = Omit<TaskAreaRow, keyof RefinedHierarchyFields> &
@@ -185,9 +183,6 @@ export type TaskArea = Omit<TaskAreaRow, keyof RefinedHierarchyFields> &
 
 export type TaskProject = Omit<TaskProjectRow, keyof RefinedProjectFields> &
   RefinedProjectFields;
-
-export type TaskHeading = Omit<TaskHeadingRow, keyof RefinedHierarchyFields> &
-  RefinedHierarchyFields;
 
 export type TaskChecklistItem = Omit<
   TaskChecklistItemRow,
@@ -239,12 +234,11 @@ export type TaskTemplateChecklistNode = {
 
 export type TaskTemplateTodoNode = {
   node_id: string;
-  heading_node_id?: string | null;
   title: string;
   notes: string;
   actionability: TaskActionability;
   destination: TaskDestination;
-  today_section: TaskTodaySection;
+  today_section: TaskTodaySection | null;
   order_key: string;
   hierarchy_order_key?: string;
   start_offset_days: number | null;
@@ -263,13 +257,8 @@ export type TaskProjectTemplateSnapshot = {
   kind: 'project';
   root: Omit<
     TaskTemplateTodoNode,
-    'actionability' | 'checklist' | 'heading_node_id' | 'hierarchy_order_key'
+    'actionability' | 'checklist' | 'hierarchy_order_key'
   > & { planning_order_key: string };
-  headings: Array<{
-    node_id: string;
-    title: string;
-    order_key: string;
-  }>;
   todos: TaskTemplateTodoNode[];
 };
 

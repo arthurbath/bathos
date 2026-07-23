@@ -1,7 +1,10 @@
 import type { Transaction } from '@powersync/web';
 import { describe, expect, it, vi } from 'vitest';
 
-import { taskChecklistItemFixture } from '@/modules/tasks/testing/taskFixtures';
+import {
+  taskChecklistItemFixture,
+  taskProjectFixture,
+} from '@/modules/tasks/testing/taskFixtures';
 import type { TaskChecklistItem } from '@/modules/tasks/types/tasks';
 
 import {
@@ -14,6 +17,7 @@ const timestamp = '2026-07-20T06:30:00.000Z';
 function createHarness(results: unknown[] = []) {
   const transaction = {
     execute: vi.fn().mockResolvedValue({ rows: undefined, rowsAffected: 1 }),
+    getAll: vi.fn().mockResolvedValue([]),
     getOptional: vi.fn(),
   } as unknown as Transaction;
   for (const result of results) {
@@ -38,6 +42,30 @@ function createHarness(results: unknown[] = []) {
 }
 
 describe('task hierarchy repository', () => {
+  it('activates reached project dates locally without clearing their horizon', async () => {
+    const { repository, transaction } = createHarness();
+    vi.mocked(transaction.getAll).mockResolvedValueOnce([
+      taskProjectFixture({ start_date: '2026-07-20', today_section: 'later' }),
+    ]);
+
+    await expect(
+      repository.activateDueProjectStartDates('owner-a', '2026-07-20'),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: 'project-a',
+        start_date: null,
+        today_section: 'later',
+        last_mutation_channel: 'native',
+        last_actor_type: 'system',
+        revision: 2,
+      }),
+    ]);
+    expect(transaction.execute).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE tasks_projects'),
+      expect.arrayContaining([null, 'native', 'system', 'project-a', 'owner-a']),
+    );
+  });
+
   it('creates an area with owner-scoped order and mutation metadata', async () => {
     const { repository, transaction } = createHarness([{ order_key: 'a0' }]);
 
@@ -82,34 +110,43 @@ describe('task hierarchy repository', () => {
     );
   });
 
-  it('creates headings and checklist items beneath one explicit parent', async () => {
+  it('requires assigned project start dates to be future dates in the owner time zone', async () => {
+    const project = taskProjectFixture({ start_date: null, today_section: 'next' });
+    const rejected = createHarness([project]);
+    vi.mocked(rejected.transaction.getAll).mockResolvedValueOnce([
+      { planning_timezone: 'UTC' },
+    ]);
+    await expect(rejected.repository.updateProject('owner-a', project.id, {
+      start_date: '2026-07-20',
+    })).rejects.toThrow('Project start date must be after today');
+    expect(rejected.transaction.execute).not.toHaveBeenCalled();
+
+    const accepted = createHarness([project]);
+    vi.mocked(accepted.transaction.getAll).mockResolvedValueOnce([
+      { planning_timezone: 'America/Los_Angeles' },
+    ]);
+    await expect(accepted.repository.updateProject('owner-a', project.id, {
+      start_date: '2026-07-20',
+    })).resolves.toMatchObject({ start_date: '2026-07-20' });
+  });
+
+  it('creates checklist items beneath one explicit parent', async () => {
     const { repository, transaction } = createHarness([
-      { id: 'project-a' },
-      null,
       { id: 'task-a' },
       null,
     ]);
 
-    const heading = await repository.createHeading({
-      ownerId: 'owner-a',
-      projectId: 'project-a',
-      title: 'First phase',
-    });
     const item = await repository.createChecklistItem({
       ownerId: 'owner-a',
       taskId: 'task-a',
       title: 'Confirm details',
     });
 
-    expect(heading).toMatchObject({ project_id: 'project-a', disposition: 'present' });
     expect(item).toMatchObject({ task_id: 'task-a', completed: false });
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain(
-      'INSERT INTO tasks_headings',
-    );
-    expect(vi.mocked(transaction.execute).mock.calls[1][0]).toContain(
       'INSERT INTO tasks_checklist_items',
     );
-    expect(vi.mocked(transaction.execute).mock.calls[1][1]).toContain(0);
+    expect(vi.mocked(transaction.execute).mock.calls[0][1]).toContain(0);
   });
 
   it('completes a checklist item with one revision-safe mutation', async () => {

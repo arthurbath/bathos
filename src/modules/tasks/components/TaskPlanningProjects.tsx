@@ -17,7 +17,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
-import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
+import {
+  addTaskCalendarDays,
+  formatTaskRelativeCalendarDate,
+} from '@/modules/tasks/domain/taskDates';
 import {
   getTodayProjectSection,
   projectPlanningOrderSection,
@@ -214,16 +217,16 @@ function getProjectPlanningActions(
   } satisfies { label: string; input: TaskProjectPlanningMoveInput };
   const anytime = {
     label: 'Move to Anytime',
-    input: { destination: 'anytime', todaySection: 'none', startDate: null },
+    input: { destination: 'anytime', todaySection: null, startDate: null },
   } satisfies { label: string; input: TaskProjectPlanningMoveInput };
   const someday = {
     label: 'Move to Someday',
-    input: { destination: 'someday', todaySection: 'none', startDate: null },
+    input: { destination: 'someday', todaySection: null, startDate: null },
   } satisfies { label: string; input: TaskProjectPlanningMoveInput };
 
   if (view === 'upcoming') return [today, anytime, someday];
   if (view === 'anytime') {
-    const actions = project.today_section === 'none' ? ([
+    const actions = project.today_section === null ? ([
       ['inbox', 'Inbox'],
       ['now', 'Now'],
       ['next', 'Next'],
@@ -233,7 +236,7 @@ function getProjectPlanningActions(
       input: { destination: 'anytime' as const, todaySection, startDate: null },
     })) : [{
       label: 'Remove from Today',
-      input: { destination: 'anytime', todaySection: 'none', startDate: null },
+      input: { destination: 'anytime', todaySection: null, startDate: null },
     } satisfies { label: string; input: TaskProjectPlanningMoveInput }];
     return [...actions, someday];
   }
@@ -255,7 +258,7 @@ function getProjectPlanningActions(
     },
   }, {
     label: 'Remove from Today',
-    input: { destination: 'anytime', todaySection: 'none', startDate: null },
+    input: { destination: 'anytime', todaySection: null, startDate: null },
   }, someday);
   return actions;
 }
@@ -275,30 +278,21 @@ function projectPlanningLabel(
     const section = getTodayProjectSection(project, planningDate);
     details.push(`Today ${section[0].toUpperCase()}${section.slice(1)}`);
   } else if (view === 'upcoming' && project.start_date) {
-    details.push(`Starts ${formatCalendarDate(project.start_date)}`);
-    if (project.today_section !== 'none') {
+    details.push(`Starts ${formatTaskRelativeCalendarDate(project.start_date, planningDate)}`);
+    if (project.today_section !== null) {
       details.push(`Today ${project.today_section[0].toUpperCase()}${project.today_section.slice(1)}`);
     }
   }
-  if (project.deadline) details.push(`Due ${formatCalendarDate(project.deadline)}`);
+  if (project.deadline) {
+    details.push(`Due ${formatTaskRelativeCalendarDate(project.deadline, planningDate)}`);
+  }
   if (areaTitle) details.push(areaTitle);
   return details.length > 0 ? details.join(' · ') : 'Project';
-}
-
-function formatCalendarDate(value: string): string {
-  const [year, month, day] = value.split('-').map(Number);
-  return calendarDateFormatter.format(new Date(year, month - 1, day));
 }
 
 function formatTerminalDate(value: string): string {
   return terminalDateFormatter.format(new Date(value));
 }
-
-const calendarDateFormatter = new Intl.DateTimeFormat(undefined, {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-});
 
 const terminalDateFormatter = new Intl.DateTimeFormat(undefined, {
   month: 'short',

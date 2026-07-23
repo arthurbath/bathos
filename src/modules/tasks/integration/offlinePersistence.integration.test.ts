@@ -75,14 +75,14 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
       title: 'Offline Alpha',
       destination: 'anytime',
       todaySection: 'next',
-      startDate: '2026-07-20',
+      startDate: '2099-07-20',
     });
     const beta = await repository.createTask({
       ownerId,
       title: 'Offline Beta',
       destination: 'anytime',
       todaySection: 'next',
-      startDate: '2026-07-20',
+      startDate: '2099-07-20',
     });
     const recurrenceSource = await repository.createTask({
       ownerId,
@@ -142,8 +142,8 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
     });
     await repository.moveTask(ownerId, alpha.id, {
       destination: 'anytime',
-      todaySection: 'none',
-      startDate: '2026-07-21',
+      todaySection: 'next',
+      startDate: '2099-07-21',
     });
     await repository.updateTask(ownerId, beta.id, {
       order_key: generateTaskOrderKey(null, alpha.order_key),
@@ -168,7 +168,7 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
     expect(afterRestart.get(alpha.id)).toMatchObject({
       title: 'Offline Alpha Edited',
       notes: 'Edited without a network connection',
-      start_date: '2026-07-21',
+      start_date: '2099-07-21',
       disposition: 'present',
     });
     expect(afterRestart.get(beta.id)).toMatchObject({ lifecycle: 'completed' });
@@ -198,7 +198,7 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
     const remote = new Map(remoteRows?.map((task) => [task.id, task]) ?? []);
     expect(remote.get(alpha.id)).toMatchObject({
       title: 'Offline Alpha Edited',
-      start_date: '2026-07-21',
+      start_date: '2099-07-21',
       disposition: 'present',
     });
     expect(remote.get(beta.id)).toMatchObject({ lifecycle: 'completed' });

@@ -36,7 +36,6 @@ describe('useTaskAreaDetail', () => {
       owner_id: 'owner-a',
       area_id: 'area-a',
       project_id: null,
-      heading_id: null,
       lifecycle: 'open',
       disposition: 'present',
     });

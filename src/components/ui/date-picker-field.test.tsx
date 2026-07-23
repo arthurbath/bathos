@@ -63,4 +63,29 @@ describe('DatePickerField', () => {
       unmount(root, container);
     }
   });
+
+  it('disables calendar dates before an explicit minimum', async () => {
+    const { container, root } = mount(
+      <DatePickerField
+        id="future-date"
+        value="2026-07-23"
+        minDate="2026-07-23"
+        onValueChange={vi.fn()}
+      />,
+    );
+
+    try {
+      act(() => {
+        container.querySelector<HTMLButtonElement>('#future-date')?.click();
+      });
+      await flushUi();
+      const dayTwentyTwo = Array.from(document.body.querySelectorAll<HTMLButtonElement>(
+        'button[name="day"]',
+      )).find((button) => button.textContent?.trim() === '22'
+        && !button.className.includes('day-outside'));
+      expect(dayTwentyTwo).toBeDisabled();
+    } finally {
+      unmount(root, container);
+    }
+  });
 });

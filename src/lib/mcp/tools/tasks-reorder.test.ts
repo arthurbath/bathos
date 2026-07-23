@@ -22,8 +22,6 @@ const areaA = '30000000-0000-4000-8000-000000000001';
 const areaB = '30000000-0000-4000-8000-000000000002';
 const projectA = '40000000-0000-4000-8000-000000000001';
 const projectB = '40000000-0000-4000-8000-000000000002';
-const headingA = '50000000-0000-4000-8000-000000000001';
-const headingB = '50000000-0000-4000-8000-000000000002';
 const checklistA = '60000000-0000-4000-8000-000000000001';
 const checklistB = '60000000-0000-4000-8000-000000000002';
 
@@ -31,7 +29,7 @@ const taskSnapshotKeys = [
   'title', 'notes', 'lifecycle', 'completed_at', 'canceled_at', 'disposition',
   'deleted_at', 'destination', 'today_section', 'order_key', 'start_date', 'deadline',
   'actionability', 'source_kind', 'source_url', 'source_title', 'source_external_id',
-  'area_id', 'project_id', 'heading_id', 'hierarchy_order_key', 'deletion_root_id',
+  'area_id', 'project_id', 'hierarchy_order_key', 'deletion_root_id',
 ] as const;
 
 function taskSnapshot(row: StoredRow): Json {
@@ -96,7 +94,7 @@ class FakeReorderClient {
     } else {
       const entityType = table === 'tasks_areas' ? 'area'
         : table === 'tasks_projects' ? 'project'
-          : table === 'tasks_headings' ? 'heading' : 'checklist_item';
+          : 'checklist_item';
       this.rows('tasks_hierarchy_history_events').push({
         id: crypto.randomUUID(),
         owner_id: row.owner_id,
@@ -185,7 +183,6 @@ function todo(id: string, orderKey: string, overrides: StoredRow = {}): StoredRo
     owner_id: ownerId,
     area_id: null,
     project_id: null,
-    heading_id: null,
     title: `Task ${id}`,
     notes: '',
     lifecycle: 'open',
@@ -232,22 +229,12 @@ function project(id: string, orderKey: string, overrides: StoredRow = {}): Store
     id, owner_id: ownerId, area_id: areaA, title: `Project ${id}`, notes: '',
     lifecycle: 'open', completed_at: null, canceled_at: null,
     disposition: 'present', deleted_at: null, deletion_root_id: null,
-    destination: 'anytime', today_section: 'none', start_date: null, deadline: null,
+    destination: 'anytime', today_section: null, start_date: null, deadline: null,
     order_key: orderKey, planning_order_key: orderKey,
     entry_channel: 'web', last_mutation_channel: 'web', last_actor_type: 'user',
     revision: 1, client_mutation_id: crypto.randomUUID(),
     created_at: '2026-07-20T17:00:00.000Z', updated_at: '2026-07-20T17:00:00.000Z',
     ...overrides,
-  };
-}
-
-function heading(id: string, orderKey: string): StoredRow {
-  return {
-    id, owner_id: ownerId, project_id: projectA, title: `Heading ${id}`,
-    order_key: orderKey, disposition: 'present', deleted_at: null, deletion_root_id: null,
-    entry_channel: 'web', last_mutation_channel: 'web', last_actor_type: 'user',
-    revision: 1, client_mutation_id: crypto.randomUUID(),
-    created_at: '2026-07-20T17:00:00.000Z', updated_at: '2026-07-20T17:00:00.000Z',
   };
 }
 
@@ -351,11 +338,9 @@ describe('Tasks MCP reorder tools', () => {
   it.each([
     ['area', areaB, 'tasks_areas', [area(areaA, 'a0'), area(areaB, 'a1')]],
     ['project', projectB, 'tasks_projects', [project(projectA, 'a0'), project(projectB, 'a1')]],
-    ['heading', headingB, 'tasks_headings', [heading(headingA, 'a0'), heading(headingB, 'a1')]],
     ['checklist_item', checklistB, 'tasks_checklist_items', [checklist(checklistA, 'a0'), checklist(checklistB, 'a1')]],
   ] as const)('reorders one %s within its structural peers', async (recordType, recordId, table, rows) => {
     const tables: Partial<Record<TableName, StoredRow[]>> = { [table]: [...rows] };
-    if (recordType === 'heading') tables.tasks_projects = [project(projectA, 'a0')];
     if (recordType === 'checklist_item') tables.tasks_todos = [todo(taskA, 'a0')];
     const client = new FakeReorderClient(tables);
     const result = await reorderTaskHierarchyData({

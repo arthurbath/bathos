@@ -22,7 +22,7 @@ export function useTaskProjectDetail(ownerId: string, projectId: string) {
      WHERE owner_id = ?
        AND project_id = ?
        AND disposition = 'present'
-     ORDER BY heading_id, hierarchy_order_key, id`,
+     ORDER BY hierarchy_order_key, id`,
     [ownerId, projectId],
   );
   const checklistQuery = useQuery<TaskChecklistItem>(
@@ -64,14 +64,13 @@ export function useTaskProjectDetail(ownerId: string, projectId: string) {
     [checklistQuery.data, optimisticChecklist],
   );
 
-  const createTask = useCallback(async (title: string, headingId: string | null) => {
-    const orderKey = nextTaskOrderKey(tasks, headingId);
+  const createTask = useCallback(async (title: string) => {
+    const orderKey = nextTaskOrderKey(tasks);
     const task = await repository.createTask({
       ownerId,
       title,
       destination: 'anytime',
       projectId,
-      headingId,
       hierarchyOrderKey: orderKey,
     });
     setOptimisticTasks((current) => ({ ...current, [task.id]: task }));
@@ -96,22 +95,10 @@ export function useTaskProjectDetail(ownerId: string, projectId: string) {
     }
   }, [ownerId, repository, tasks]);
 
-  const moveTaskToHeading = useCallback(async (taskId: string, headingId: string | null) => {
-    const peers = tasks.filter((task) => task.id !== taskId && task.heading_id === headingId);
-    const tail = peers.at(-1);
-    const task = await repository.moveTaskToContainer(ownerId, taskId, {
-      projectId,
-      headingId,
-      hierarchyOrderKey: generateTaskOrderKey(tail ? taskStructuralKey(tail) : null, null),
-    });
-    setOptimisticTasks((current) => ({ ...current, [taskId]: task }));
-    return task;
-  }, [ownerId, projectId, repository, tasks]);
-
   const reorderTask = useCallback(async (taskId: string, direction: 'up' | 'down') => {
     const task = tasks.find(({ id }) => id === taskId);
     if (!task) return undefined;
-    const peers = tasks.filter(({ heading_id }) => heading_id === task.heading_id);
+    const peers = tasks;
     const orderKey = moveOrderKey(
       peers.map((peer) => ({ id: peer.id, order_key: taskStructuralKey(peer) })),
       taskId,
@@ -200,7 +187,6 @@ export function useTaskProjectDetail(ownerId: string, projectId: string) {
     error: tasksQuery.error ?? checklistQuery.error,
     createTask,
     updateTask,
-    moveTaskToHeading,
     reorderTask,
     createChecklistItem,
     updateChecklistItem,
@@ -216,9 +202,8 @@ function taskStructuralKey(task: TaskTodo): string {
   return task.hierarchy_order_key ?? task.order_key;
 }
 
-function nextTaskOrderKey(tasks: TaskTodo[], headingId: string | null): string {
-  const peers = tasks.filter((task) => task.heading_id === headingId);
-  const tail = peers.at(-1);
+function nextTaskOrderKey(tasks: TaskTodo[]): string {
+  const tail = tasks.at(-1);
   return generateTaskOrderKey(tail ? taskStructuralKey(tail) : null, null);
 }
 

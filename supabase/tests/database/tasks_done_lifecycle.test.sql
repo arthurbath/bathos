@@ -47,14 +47,14 @@ SELECT is(
 );
 SELECT is(
   (SELECT today_section FROM public.tasks_todos WHERE id = 'b2000000-0000-4000-8000-000000000010'),
-  'inbox',
-  'defaults an unqualified capture to Today Inbox'
+  NULL,
+  'keeps an unqualified undated capture outside Today'
 );
 
 SELECT lives_ok(
   $$
     UPDATE public.tasks_todos
-    SET today_section = 'now', revision = revision + 1,
+    SET start_date = NULL, today_section = 'now', revision = revision + 1,
       client_mutation_id = 'b2000000-0000-4000-8000-000000000012'
     WHERE id = 'b2000000-0000-4000-8000-000000000010'
   $$,
@@ -84,7 +84,7 @@ SELECT throws_ok(
   NULL,
   'rejects the retired Today destination'
 );
-SELECT throws_ok(
+SELECT lives_ok(
   $$
     INSERT INTO public.tasks_todos (
       id, owner_id, title, destination, today_section, order_key, client_mutation_id
@@ -95,9 +95,7 @@ SELECT throws_ok(
       'b2000000-0000-4000-8000-000000000021'
     )
   $$,
-  '23514',
-  NULL,
-  'prevents Someday work from appearing in Today'
+  'clears a supplied horizon when work moves to Someday'
 );
 SELECT lives_ok(
   $$
@@ -106,7 +104,7 @@ SELECT lives_ok(
     ) VALUES (
       'b2000000-0000-4000-8000-000000000022',
       'b2000000-0000-4000-8000-000000000001',
-      'Valid Someday', 'someday', 'none', 'a1',
+      'Valid Someday', 'someday', NULL, 'a1',
       'b2000000-0000-4000-8000-000000000023'
     )
   $$,
@@ -114,12 +112,12 @@ SELECT lives_ok(
 );
 
 INSERT INTO public.tasks_todos (
-  id, owner_id, title, destination, today_section, order_key,
+  id, owner_id, title, destination, start_date, today_section, order_key,
   source_kind, source_url, source_external_id, client_mutation_id
 ) VALUES (
   'b2000000-0000-4000-8000-000000000030',
   'b2000000-0000-4000-8000-000000000001',
-  'Boundary Done task', 'anytime', 'none', 'a2',
+  'Boundary Done task', 'anytime', DATE '2099-01-01', 'next', 'a2',
   'mail_message', 'message://done-boundary', '<done-boundary@example.test>',
   'b2000000-0000-4000-8000-000000000031'
 );
@@ -140,7 +138,7 @@ SELECT set_config(
   'test.done_reminder',
   public.tasks_save_reminder(
     NULL, NULL, 'todo', 'b2000000-0000-4000-8000-000000000030',
-    '2020-01-01', '09:00', 'UTC', 'earlier',
+    '2099-01-01', '09:00', 'UTC', 'earlier',
     'b2000000-0000-4000-8000-000000000034'
   )::text,
   false
@@ -148,7 +146,7 @@ SELECT set_config(
 SELECT set_config(
   'test.done_claim',
   public.tasks_claim_due_reminders(
-    '2025-01-01 00:00:00+00', 'b2000000-0000-4000-8000-000000000035'
+    '2100-01-01 00:00:00+00', 'b2000000-0000-4000-8000-000000000035'
   )::text,
   false
 );

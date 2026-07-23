@@ -24,8 +24,8 @@ SELECT is(
       AND table_name = 'tasks_todos'
       AND column_name = 'today_section'
   ),
-  '''inbox''::text',
-  'defaults new work to Today Inbox'
+  NULL,
+  'leaves unscheduled work outside Today by default'
 );
 SELECT ok(
   EXISTS (
@@ -41,7 +41,7 @@ SELECT ok(
     LIKE '%today_section%',
   'indexes active manual order by Today section'
 );
-SELECT has_function('public', 'tasks_create_export_v11', ARRAY[]::text[], 'exports schema version eleven');
+SELECT has_function('public', 'tasks_create_export_v12', ARRAY[]::text[], 'exports schema version twelve');
 SELECT has_function(
   'public',
   'tasks_restore_export_current',
@@ -57,13 +57,13 @@ SELECT lives_ok(
   $$
     INSERT INTO public.tasks_todos (
       id, owner_id, title, destination, today_section, order_key,
-      start_date, client_mutation_id
+      client_mutation_id
     )
     VALUES (
       '71000000-0000-4000-8000-000000000010',
       '71000000-0000-4000-8000-000000000001',
       'Synthetic evening task', 'anytime', 'later', 'a0',
-      '2026-07-20', '71000000-0000-4000-8000-000000000020'
+      '71000000-0000-4000-8000-000000000020'
     )
   $$,
   'stores This Evening as a section of Today'
@@ -131,7 +131,7 @@ SELECT throws_ok(
   $$,
   '23514',
   NULL,
-  'rejects a retired Today section'
+  'rejects a retired day horizon'
 );
 
 UPDATE public.tasks_todos
@@ -141,11 +141,11 @@ SET
   client_mutation_id = '71000000-0000-4000-8000-000000000023'
 WHERE id = '71000000-0000-4000-8000-000000000010';
 
-SELECT set_config('test.tasks_today_export', public.tasks_create_export_v11()::text, false);
+SELECT set_config('test.tasks_today_export', public.tasks_create_export_v12()::text, false);
 SELECT is(
   (current_setting('test.tasks_today_export')::jsonb ->> 'schema_version')::integer,
-  11,
-  'uses portable export schema version eleven'
+  12,
+  'uses portable export schema version twelve'
 );
 SELECT is(
   current_setting('test.tasks_today_export')::jsonb

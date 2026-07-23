@@ -27,7 +27,6 @@ export type TaskReminderSaveInput = {
   reminder?: TaskReminder | null;
   rootType: TaskTemplateKind;
   rootId: string;
-  localDate: string;
   localTime: string;
   timeZone: string;
   ambiguityChoice?: TaskReminderAmbiguityChoice;
@@ -85,18 +84,16 @@ export class TaskReminderService {
   async save(input: TaskReminderSaveInput): Promise<TaskReminderSaveResult> {
     if (
       !input.rootId
-      || !isTaskCalendarDate(input.localDate)
       || !isTaskReminderTime(input.localTime)
       || !input.timeZone.trim()
     ) {
-      throw new InvalidTaskReminderError('A valid reminder date, time, and time zone are required');
+      throw new InvalidTaskReminderError('A valid reminder time and time zone are required');
     }
-    const { data, error } = await this.client.rpc('tasks_save_reminder', {
+    const { data, error } = await this.client.rpc('tasks_save_start_reminder', {
       _reminder_id: (input.reminder?.id ?? null) as unknown as string,
       _expected_record_revision: (input.reminder?.record_revision ?? null) as unknown as number,
       _root_type: input.rootType,
       _root_id: input.rootId,
-      _local_date: input.localDate,
       _local_time: input.localTime,
       _time_zone: input.timeZone,
       _ambiguity_choice: input.ambiguityChoice ?? 'earlier',

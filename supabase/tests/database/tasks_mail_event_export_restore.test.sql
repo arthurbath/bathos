@@ -20,35 +20,35 @@ VALUES
   );
 
 SELECT has_function(
-  'public', 'tasks_create_export_v6', ARRAY[]::text[],
+  'public', 'tasks_create_export_v12', ARRAY[]::text[],
   'creates portable task exports with Mail source audit history'
 );
 
 SELECT has_function(
-  'public', 'tasks_restore_export_v6', ARRAY['jsonb', 'boolean'],
+  'public', 'tasks_restore_export_current', ARRAY['jsonb', 'boolean'],
   'restores portable task exports with Mail source audit history'
 );
 
 SELECT is(
-  has_function_privilege('anon', 'public.tasks_create_export_v6()', 'EXECUTE'),
+  has_function_privilege('anon', 'public.tasks_create_export_v12()', 'EXECUTE'),
   false,
-  'withholds version six export from anonymous callers'
+  'withholds current export from anonymous callers'
 );
 
 SELECT is(
   has_function_privilege(
-    'authenticated', 'public.tasks_create_export_v6()', 'EXECUTE'
+    'authenticated', 'public.tasks_create_export_v12()', 'EXECUTE'
   ),
   true,
-  'grants version six export to authenticated callers'
+  'grants current export to authenticated callers'
 );
 
 SELECT is(
   has_function_privilege(
-    'authenticated', 'public.tasks_restore_export_v6(jsonb,boolean)', 'EXECUTE'
+    'authenticated', 'public.tasks_restore_export_current(jsonb,boolean)', 'EXECUTE'
   ),
   true,
-  'grants version six restore to authenticated callers'
+  'grants current restore to authenticated callers'
 );
 
 SET LOCAL ROLE authenticated;
@@ -58,7 +58,7 @@ SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT public.tasks_create_mail_capture(
   '76000000-0000-4000-8000-000000000010',
   '76000000-0000-4000-8000-000000000011',
-  'Portable retirement history', '', '2026-07-20', 'a0', NULL,
+  'Portable retirement history', '', NULL, 'a0', NULL,
   'Work', 'INBOX', 'mail-event-export@example.test',
   'message://%3Cmail-event-export%40example.test%3E',
   'Archive', 'Export test', NULL
@@ -84,11 +84,11 @@ SELECT public.tasks_resolve_mail_retirement(
 );
 
 CREATE TEMP TABLE captured_mail_event_export AS
-SELECT public.tasks_create_export_v6() AS envelope;
+SELECT public.tasks_create_export_v12() AS envelope;
 
 SELECT is(
   (SELECT envelope ->> 'schema_version' FROM captured_mail_event_export),
-  '6',
+  '12',
   'advances the portable task schema for Mail source audit events'
 );
 
@@ -109,15 +109,18 @@ SELECT is(
 );
 
 SELECT is(
-  (SELECT envelope #>> '{data,tasks_mail_source_events,1,error_code}'
-   FROM captured_mail_event_export),
+  (SELECT jsonb_path_query_first(
+    envelope,
+    '$.data.tasks_mail_source_events[*] ? (@.transition == "retirement_failed").error_code'
+  ) #>> '{}'
+  FROM captured_mail_event_export),
   'mail_move_timeout',
   'preserves a failed retirement after a later successful retry'
 );
 
 SELECT is(
   (SELECT (
-    public.tasks_restore_export_v6(envelope, true)
+    public.tasks_restore_export_current(envelope, true)
       #>> '{tasks_mail_source_events,matches}'
   )::integer FROM captured_mail_event_export),
   4,
@@ -150,7 +153,7 @@ GRANT SELECT ON missing_event_field_export TO authenticated;
 SET LOCAL ROLE authenticated;
 SELECT throws_ok(
   $$
-    SELECT public.tasks_restore_export_v6(envelope, true)
+    SELECT public.tasks_restore_export_current(envelope, true)
     FROM missing_event_field_export
   $$,
   '22023', NULL,
@@ -186,7 +189,7 @@ GRANT SELECT ON broken_event_chain_export TO authenticated;
 SET LOCAL ROLE authenticated;
 SELECT throws_ok(
   $$
-    SELECT public.tasks_restore_export_v6(envelope, true)
+    SELECT public.tasks_restore_export_current(envelope, true)
     FROM broken_event_chain_export
   $$,
   '22023', NULL,
@@ -218,7 +221,7 @@ GRANT SELECT ON mismatched_source_state_export TO authenticated;
 SET LOCAL ROLE authenticated;
 SELECT throws_ok(
   $$
-    SELECT public.tasks_restore_export_v6(envelope, true)
+    SELECT public.tasks_restore_export_current(envelope, true)
     FROM mismatched_source_state_export
   $$,
   '22023', NULL,
@@ -236,7 +239,7 @@ SELECT set_config('request.jwt.claim.sub', '76000000-0000-4000-8000-000000000002
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 SELECT is(
-  (public.tasks_restore_export_v6(
+  (public.tasks_restore_export_current(
     (SELECT envelope FROM captured_mail_event_export), true
   ) #>> '{tasks_mail_sources,inserts}')::integer,
   1,
@@ -244,7 +247,7 @@ SELECT is(
 );
 
 SELECT is(
-  (public.tasks_restore_export_v6(
+  (public.tasks_restore_export_current(
     (SELECT envelope FROM captured_mail_event_export), true
   ) #>> '{tasks_mail_source_events,inserts}')::integer,
   4,
@@ -253,7 +256,7 @@ SELECT is(
 
 SELECT lives_ok(
   $$
-    SELECT public.tasks_restore_export_v6(
+    SELECT public.tasks_restore_export_current(
       (SELECT envelope FROM captured_mail_event_export), false
     );
     SET CONSTRAINTS ALL IMMEDIATE;
@@ -291,7 +294,7 @@ SELECT is(
 );
 
 SELECT is(
-  (public.tasks_restore_export_v6(
+  (public.tasks_restore_export_current(
     (SELECT envelope FROM captured_mail_event_export), true
   ) #>> '{tasks_mail_source_events,matches}')::integer,
   4,
@@ -305,19 +308,17 @@ WHERE task_id = '76000000-0000-4000-8000-000000000011'
   AND base_revision = 1;
 
 SET LOCAL ROLE authenticated;
-SELECT throws_ok(
-  $$
-    SELECT public.tasks_restore_export_v6(
-      (SELECT envelope FROM captured_mail_event_export), false
-    )
-  $$,
-  '23505', NULL,
-  'rejects an actual restore instead of partially merging conflicting audit history'
+SELECT is(
+  public.tasks_restore_export_current(
+    (SELECT envelope FROM captured_mail_event_export), false
+  ) ->> 'code',
+  'restore_conflict',
+  'rejects conflicting audit history before partially merging it'
 );
 
 SELECT is(
   (SELECT jsonb_array_length(
-    public.tasks_create_export_v6() #> '{data,tasks_mail_source_events}'
+    public.tasks_create_export_v12() #> '{data,tasks_mail_source_events}'
   )),
   4,
   're-exports the restored audit history for its new owner'

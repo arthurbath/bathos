@@ -12,9 +12,8 @@ export function getTaskPlanningRoute(
     && task.start_date > planningDate
     && task.destination === 'anytime'
   ) return 'upcoming';
-  if (task.destination === 'anytime' && (
-    (task.start_date === null && task.today_section !== 'none')
-    || (task.start_date !== null && task.start_date <= planningDate)
-  )) return 'today';
+  if (task.destination === 'anytime'
+    && task.today_section !== null
+    && (task.start_date === null || task.start_date <= planningDate)) return 'today';
   return task.destination;
 }

@@ -23,7 +23,7 @@ export function getTodayProjectSection(
   project: TaskProject,
   _planningDate: string,
 ): TodayProjectSection {
-  return project.today_section === 'none' ? 'inbox' : project.today_section;
+  return project.today_section ?? 'next';
 }
 
 export function projectPlanningOrderSection(
@@ -62,10 +62,8 @@ function projectIsVisible(
     return project.destination === 'anytime'
       && project.lifecycle === 'open'
       && project.disposition === 'present'
-      && (
-        (project.start_date === null && project.today_section !== 'none')
-        || (project.start_date !== null && project.start_date <= planningDate)
-      );
+      && project.today_section !== null
+      && (project.start_date === null || project.start_date <= planningDate);
   }
   return project.destination === view
     && project.lifecycle === 'open'

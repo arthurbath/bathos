@@ -26,24 +26,24 @@ INSERT INTO auth.users (
   );
 
 SELECT has_function(
-  'public', 'tasks_prepare_replace_restore', ARRAY['jsonb'],
+  'public', 'tasks_prepare_replace_restore_v12', ARRAY['jsonb'],
   'prepares a current-schema replacement and pre-restore backup'
 );
 SELECT has_function(
-  'public', 'tasks_replace_restore_v10',
+  'public', 'tasks_replace_restore_v12',
   ARRAY['jsonb', 'text', 'uuid', 'text'],
   'executes a guarded current-schema replacement'
 );
 SELECT is(
   has_function_privilege(
-    'anon', 'public.tasks_replace_restore_v10(jsonb,text,uuid,text)', 'EXECUTE'
+    'anon', 'public.tasks_replace_restore_v12(jsonb,text,uuid,text)', 'EXECUTE'
   ),
   false,
   'withholds replacement restore from anonymous callers'
 );
 SELECT is(
   has_function_privilege(
-    'authenticated', 'public.tasks_replace_restore_v10(jsonb,text,uuid,text)', 'EXECUTE'
+    'authenticated', 'public.tasks_replace_restore_v12(jsonb,text,uuid,text)', 'EXECUTE'
   ),
   true,
   'grants replacement restore to authenticated callers'
@@ -99,7 +99,7 @@ INSERT INTO public.tasks_user_settings (
   'b1000000-0000-4000-8000-000000000023'
 );
 SELECT set_config(
-  'test.replace_target', public.tasks_create_export_v10()::text, false
+  'test.replace_target', public.tasks_create_export_v12()::text, false
 );
 
 SELECT set_config(
@@ -114,7 +114,7 @@ INSERT INTO public.tasks_todos (
   'b1000000-0000-4000-8000-000000000031'
 );
 SELECT set_config(
-  'test.replace_conflict_target', public.tasks_create_export_v10()::text, false
+  'test.replace_conflict_target', public.tasks_create_export_v12()::text, false
 );
 
 SELECT set_config(
@@ -122,14 +122,14 @@ SELECT set_config(
 );
 SELECT set_config(
   'test.replace_conflict_prepare',
-  public.tasks_prepare_replace_restore(
+  public.tasks_prepare_replace_restore_v12(
     current_setting('test.replace_conflict_target')::jsonb
   )::text,
   false
 );
 SELECT throws_ok(
   format(
-    $$SELECT public.tasks_replace_restore_v10(
+    $$SELECT public.tasks_replace_restore_v12(
       %L::jsonb, %L, 'b1000000-0000-4000-8000-000000000040', 'REPLACE TASK DATA'
     )$$,
     current_setting('test.replace_conflict_target'),
@@ -160,7 +160,7 @@ SELECT set_config(
 );
 SELECT set_config(
   'test.replace_prepare',
-  public.tasks_prepare_replace_restore(
+  public.tasks_prepare_replace_restore_v12(
     current_setting('test.replace_target')::jsonb
   )::text,
   false
@@ -213,7 +213,7 @@ INSERT INTO public.tasks_todos (
 
 SELECT throws_ok(
   format(
-    $$SELECT public.tasks_replace_restore_v10(
+    $$SELECT public.tasks_replace_restore_v12(
       %L::jsonb, %L, 'b1000000-0000-4000-8000-000000000060', 'REPLACE TASK DATA'
     )$$,
     current_setting('test.replace_target'),
@@ -231,14 +231,14 @@ SELECT is(
 
 SELECT set_config(
   'test.replace_fresh_prepare',
-  public.tasks_prepare_replace_restore(
+  public.tasks_prepare_replace_restore_v12(
     current_setting('test.replace_target')::jsonb
   )::text,
   false
 );
 SELECT throws_ok(
   format(
-    $$SELECT public.tasks_replace_restore_v10(
+    $$SELECT public.tasks_replace_restore_v12(
       %L::jsonb, %L, 'b1000000-0000-4000-8000-000000000060', 'REPLACE'
     )$$,
     current_setting('test.replace_target'),
@@ -272,7 +272,7 @@ SELECT set_config(
 );
 SELECT set_config(
   'test.replace_result',
-  public.tasks_replace_restore_v10(
+  public.tasks_replace_restore_v12(
     current_setting('test.replace_target')::jsonb,
     current_setting('test.replace_fresh_prepare')::jsonb ->> 'backup_digest',
     'b1000000-0000-4000-8000-000000000060',
@@ -326,7 +326,7 @@ SELECT set_config(
   'request.jwt.claim.sub', 'b1000000-0000-4000-8000-000000000001', true
 );
 SELECT is(
-  public.tasks_replace_restore_v10(
+  public.tasks_replace_restore_v12(
     current_setting('test.replace_target')::jsonb,
     current_setting('test.replace_fresh_prepare')::jsonb ->> 'backup_digest',
     'b1000000-0000-4000-8000-000000000060',
@@ -337,7 +337,7 @@ SELECT is(
 );
 SELECT throws_ok(
   format(
-    $$SELECT public.tasks_replace_restore_v10(
+    $$SELECT public.tasks_replace_restore_v12(
       %L::jsonb, %L, 'b1000000-0000-4000-8000-000000000060', 'REPLACE TASK DATA'
     )$$,
     current_setting('test.replace_conflict_target'),

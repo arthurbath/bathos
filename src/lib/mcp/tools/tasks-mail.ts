@@ -7,7 +7,6 @@ import {
   type AuthenticatedMcpContext,
 } from '../supabase';
 import { uuidSchema } from '../resource-utils';
-import { planningDateInTimeZone } from './tasks-read';
 
 const messageDeepLinkSchema = z.string().max(8_000).refine(
   (value) => value.startsWith('message://'),
@@ -55,18 +54,6 @@ function trimRequired(value: string, label: string, maxLength: number): string {
   return normalized;
 }
 
-async function planningDate(auth: AuthenticatedMcpContext): Promise<string> {
-  const settings = await readOne<{ planning_timezone: string }>(auth.supabase
-    .from('tasks_user_settings')
-    .select('planning_timezone')
-    .eq('owner_id', auth.userId)
-    .maybeSingle());
-  if (!settings) {
-    throw new Error('Task planning settings are not initialized. Open the Tasks module once.');
-  }
-  return planningDateInTimeZone(settings.planning_timezone);
-}
-
 async function validateArea(
   areaId: string | undefined,
   auth: AuthenticatedMcpContext,
@@ -84,7 +71,6 @@ async function validateArea(
 }
 
 async function nextPlanningOrderKey(
-  _startDate: string,
   auth: AuthenticatedMcpContext,
 ): Promise<string> {
   const last = await readOne<{ order_key: string }>(auth.supabase
@@ -92,8 +78,7 @@ async function nextPlanningOrderKey(
     .select('order_key')
     .eq('owner_id', auth.userId)
     .eq('destination', 'anytime')
-    .eq('today_section', 'inbox')
-    .is('start_date', null)
+    .eq('today_section', 'next')
     .eq('lifecycle', 'open')
     .eq('disposition', 'present')
     .order('order_key', { ascending: false })
@@ -114,7 +99,6 @@ async function nextAreaOrderKey(
     .eq('owner_id', auth.userId)
     .eq('area_id', areaId)
     .is('project_id', null)
-    .is('heading_id', null)
     .eq('lifecycle', 'open')
     .eq('disposition', 'present')
     .not('hierarchy_order_key', 'is', null)
@@ -139,12 +123,9 @@ export async function createMailTaskData(
     1_000,
   );
   const sourceTitle = input.source_title?.trim() || null;
-  const [startDate, areaId] = await Promise.all([
-    planningDate(auth),
-    validateArea(input.area_id, auth),
-  ]);
+  const areaId = await validateArea(input.area_id, auth);
   const [orderKey, hierarchyOrderKey] = await Promise.all([
-    nextPlanningOrderKey(startDate, auth),
+    nextPlanningOrderKey(auth),
     nextAreaOrderKey(areaId, auth),
   ]);
   const { data, error } = await auth.supabase.rpc('tasks_create_mail_capture', {
@@ -152,7 +133,7 @@ export async function createMailTaskData(
     _task_id: crypto.randomUUID(),
     _title: title,
     _notes: input.notes,
-    _start_date: startDate,
+    _start_date: null,
     _order_key: orderKey,
     _hierarchy_order_key: hierarchyOrderKey,
     _account_identifier: accountIdentifier,

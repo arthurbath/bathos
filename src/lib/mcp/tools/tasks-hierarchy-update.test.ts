@@ -8,8 +8,6 @@ import {
   updateTaskAreaData,
   updateTaskChecklistItem,
   updateTaskChecklistItemData,
-  updateTaskHeading,
-  updateTaskHeadingData,
   updateTaskProject,
   updateTaskProjectData,
 } from './tasks-hierarchy-update';
@@ -60,7 +58,7 @@ class FakeHierarchyUpdateClient {
       ? 'area'
       : table === 'tasks_projects'
         ? 'project'
-        : table === 'tasks_headings' ? 'heading' : 'checklist_item';
+        : 'checklist_item';
     const { owner_id: _beforeOwner, ...beforeState } = before;
     const { owner_id: _afterOwner, ...afterState } = row;
     history.push({
@@ -130,7 +128,6 @@ const ownerA = '10000000-0000-4000-8000-000000000001';
 const ownerB = '10000000-0000-4000-8000-000000000002';
 const areaId = '20000000-0000-4000-8000-000000000001';
 const projectId = '30000000-0000-4000-8000-000000000001';
-const headingId = '40000000-0000-4000-8000-000000000001';
 const taskId = '50000000-0000-4000-8000-000000000001';
 const checklistId = '60000000-0000-4000-8000-000000000001';
 
@@ -175,22 +172,6 @@ function project(overrides: StoredRow = {}): StoredRow {
   };
 }
 
-function heading(overrides: StoredRow = {}): StoredRow {
-  return {
-    id: headingId,
-    owner_id: ownerA,
-    project_id: projectId,
-    title: 'First phase',
-    disposition: 'present',
-    revision: 1,
-    client_mutation_id: crypto.randomUUID(),
-    last_mutation_channel: 'web',
-    last_actor_type: 'user',
-    updated_at: '2026-07-20T17:00:00.000Z',
-    ...overrides,
-  };
-}
-
 function task(overrides: StoredRow = {}): StoredRow {
   return {
     id: taskId,
@@ -220,22 +201,19 @@ function checklist(overrides: StoredRow = {}): StoredRow {
 }
 
 describe('Tasks MCP hierarchy update tools', () => {
-  it('advertises four explicit idempotent closed-world mutations', () => {
+  it('advertises three explicit idempotent closed-world mutations', () => {
     expect([
       updateTaskArea.name,
       updateTaskProject.name,
-      updateTaskHeading.name,
       updateTaskChecklistItem.name,
     ]).toEqual([
       'update_task_area',
       'update_task_project',
-      'update_task_heading',
       'update_task_checklist_item',
     ]);
     for (const tool of [
       updateTaskArea,
       updateTaskProject,
-      updateTaskHeading,
       updateTaskChecklistItem,
     ]) {
       expect(tool.annotations).toEqual({
@@ -340,30 +318,6 @@ describe('Tasks MCP hierarchy update tools', () => {
       notes: 'Changed value',
     }, authFor(ownerA, client))).rejects.toThrow('different hierarchy data');
     expect(client.updateCount).toBe(1);
-  });
-
-  it('requires an open owned parent before editing a heading', async () => {
-    const client = new FakeHierarchyUpdateClient({
-      tasks_headings: [heading()],
-      tasks_projects: [project({ lifecycle: 'completed' })],
-    });
-    await expect(updateTaskHeadingData({
-      heading_id: headingId,
-      expected_revision: 1,
-      client_mutation_id: '70000000-0000-4000-8000-000000000006',
-      title: 'Changed phase',
-    }, authFor(ownerA, client))).rejects.toThrow('parent project');
-    expect(client.updateCount).toBe(0);
-
-    const inaccessible = new FakeHierarchyUpdateClient({
-      tasks_headings: [heading({ owner_id: ownerB })],
-    });
-    await expect(updateTaskHeadingData({
-      heading_id: headingId,
-      expected_revision: 1,
-      client_mutation_id: '70000000-0000-4000-8000-000000000007',
-      title: 'Changed phase',
-    }, authFor(ownerA, inaccessible))).rejects.toThrow('heading is unavailable');
   });
 
   it('completes a checklist item with coupled completion state', async () => {

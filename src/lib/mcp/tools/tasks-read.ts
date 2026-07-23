@@ -11,7 +11,6 @@ import { uuidSchema } from '../resource-utils';
 const taskRecordTypeSchema = z.enum([
   'area',
   'project',
-  'heading',
   'todo',
   'checklist_item',
 ]);
@@ -19,7 +18,6 @@ const taskHierarchyRootTypeSchema = z.enum([
   'all',
   'area',
   'project',
-  'heading',
   'todo',
 ]);
 const taskViewSchema = z.enum([
@@ -37,14 +35,12 @@ type TaskView = z.infer<typeof taskViewSchema>;
 type TaskTables = Database['public']['Tables'];
 type TaskAreaRow = TaskTables['tasks_areas']['Row'];
 type TaskProjectRow = TaskTables['tasks_projects']['Row'];
-type TaskHeadingRow = TaskTables['tasks_headings']['Row'];
 type TaskTodoRow = TaskTables['tasks_todos']['Row'];
 type TaskChecklistItemRow = TaskTables['tasks_checklist_items']['Row'];
 type TaskUserSettingsRow = TaskTables['tasks_user_settings']['Row'];
 type TaskHierarchyRows = {
   areas: TaskAreaRow[];
   projects: TaskProjectRow[];
-  headings: TaskHeadingRow[];
   todos: TaskTodoRow[];
   checklist_items: TaskChecklistItemRow[];
 };
@@ -54,7 +50,7 @@ type TaskPlannableRow = TaskTodoRow | TaskProjectRow;
 const defaultLimit = 250;
 
 function emptyHierarchyRows(): TaskHierarchyRows {
-  return { areas: [], projects: [], headings: [], todos: [], checklist_items: [] };
+  return { areas: [], projects: [], todos: [], checklist_items: [] };
 }
 
 async function readMany<T>(
@@ -84,15 +80,12 @@ async function getOwnedTaskRecord(
   auth: AuthenticatedMcpContext,
   recordType: TaskRecordType,
   id: string,
-): Promise<TaskAreaRow | TaskProjectRow | TaskHeadingRow | TaskTodoRow | TaskChecklistItemRow | null> {
+): Promise<TaskAreaRow | TaskProjectRow | TaskTodoRow | TaskChecklistItemRow | null> {
   if (recordType === 'area') {
     return readOne(auth.supabase.from('tasks_areas').select('*').eq('owner_id', auth.userId).eq('id', id).maybeSingle());
   }
   if (recordType === 'project') {
     return readOne(auth.supabase.from('tasks_projects').select('*').eq('owner_id', auth.userId).eq('id', id).maybeSingle());
-  }
-  if (recordType === 'heading') {
-    return readOne(auth.supabase.from('tasks_headings').select('*').eq('owner_id', auth.userId).eq('id', id).maybeSingle());
   }
   if (recordType === 'todo') {
     return readOne(auth.supabase.from('tasks_todos').select('*').eq('owner_id', auth.userId).eq('id', id).maybeSingle());
@@ -129,11 +122,10 @@ async function loadAllHierarchy(
     todosQuery = todosQuery.eq('lifecycle', 'open');
   }
 
-  const [areas, projects, headings, todos, checklistItems] = await Promise.all([
+  const [areas, projects, todos, checklistItems] = await Promise.all([
     readMany<TaskAreaRow>(auth.supabase.from('tasks_areas').select('*').eq('owner_id', auth.userId).eq('disposition', 'present').order('order_key').order('id').limit(limit + 1), limit),
     readMany<TaskProjectRow>(projectsQuery.order('area_id').order('order_key').order('id').limit(limit + 1), limit),
-    readMany<TaskHeadingRow>(auth.supabase.from('tasks_headings').select('*').eq('owner_id', auth.userId).eq('disposition', 'present').order('project_id').order('order_key').order('id').limit(limit + 1), limit),
-    readMany<TaskTodoRow>(todosQuery.order('project_id').order('heading_id').order('hierarchy_order_key').order('id').limit(limit + 1), limit),
+    readMany<TaskTodoRow>(todosQuery.order('project_id').order('hierarchy_order_key').order('id').limit(limit + 1), limit),
     readMany<TaskChecklistItemRow>(auth.supabase.from('tasks_checklist_items').select('*').eq('owner_id', auth.userId).eq('disposition', 'present').order('task_id').order('order_key').order('id').limit(limit + 1), limit),
   ]);
   const visibleProjectIds = new Set(projects.rows.map(({ id }) => id));
@@ -146,14 +138,12 @@ async function loadAllHierarchy(
     rows: {
       areas: areas.rows,
       projects: projects.rows,
-      headings: headings.rows.filter(({ project_id }) => visibleProjectIds.has(project_id)),
       todos: visibleTodos,
       checklist_items: checklistItems.rows.filter(({ task_id }) => visibleTodoIds.has(task_id)),
     },
     truncatedCollections: [
       areas.truncated && 'areas',
       projects.truncated && 'projects',
-      headings.truncated && 'headings',
       todos.truncated && 'todos',
       checklistItems.truncated && 'checklist_items',
     ].filter((name): name is string => Boolean(name)),
@@ -175,7 +165,6 @@ function scopeHierarchyRows(
     result.areas = [area];
     result.projects = rows.projects.filter(({ area_id }) => area_id === rootId);
     const projectIds = new Set(result.projects.map(({ id }) => id));
-    result.headings = rows.headings.filter(({ project_id }) => projectIds.has(project_id));
     result.todos = rows.todos.filter(({ area_id, project_id }) => (
       area_id === rootId || (project_id !== null && projectIds.has(project_id))
     ));
@@ -184,23 +173,13 @@ function scopeHierarchyRows(
     if (!project) throw new Error('Task project not found within the bounded hierarchy result.');
     result.projects = [project];
     result.areas = rows.areas.filter(({ id }) => id === project.area_id);
-    result.headings = rows.headings.filter(({ project_id }) => project_id === rootId);
     result.todos = rows.todos.filter(({ project_id }) => project_id === rootId);
-  } else if (rootType === 'heading') {
-    const heading = rows.headings.find(({ id }) => id === rootId);
-    if (!heading) throw new Error('Task heading not found within the bounded hierarchy result.');
-    const project = rows.projects.find(({ id }) => id === heading.project_id);
-    result.headings = [heading];
-    result.projects = project ? [project] : [];
-    result.areas = project ? rows.areas.filter(({ id }) => id === project.area_id) : [];
-    result.todos = rows.todos.filter(({ heading_id }) => heading_id === rootId);
   } else {
     const todo = rows.todos.find(({ id }) => id === rootId);
     if (!todo) throw new Error('Task to-do not found within the bounded hierarchy result.');
     const project = rows.projects.find(({ id }) => id === todo.project_id);
     result.todos = [todo];
     result.projects = project ? [project] : [];
-    result.headings = rows.headings.filter(({ id }) => id === todo.heading_id);
     result.areas = rows.areas.filter(({ id }) => id === (todo.area_id ?? project?.area_id));
   }
 
@@ -231,7 +210,6 @@ export async function getTaskHierarchyData(
     collections: {
       areas: scoped.areas.map(stripOwner),
       projects: scoped.projects.map(stripOwner),
-      headings: scoped.headings.map(stripOwner),
       todos: scoped.todos.map(stripOwner),
       checklist_items: scoped.checklist_items.map(stripOwner),
     },
@@ -285,10 +263,8 @@ function visibleInTaskView(row: TaskPlannableRow, view: TaskView, planningDate: 
   }
   if (view === 'today') {
     return row.destination === 'anytime'
-      && (
-        (row.start_date === null && row.today_section !== 'none')
-        || (row.start_date !== null && row.start_date <= planningDate)
-      );
+      && row.today_section !== null
+      && (row.start_date === null || row.start_date <= planningDate);
   }
   return row.destination === view
     && (view !== 'anytime'
@@ -297,7 +273,7 @@ function visibleInTaskView(row: TaskPlannableRow, view: TaskView, planningDate: 
 }
 
 function todaySection(row: TaskPlannableRow, _planningDate: string) {
-  return row.today_section === 'none' ? 'inbox' : row.today_section;
+  return row.today_section;
 }
 
 function comparePlanningRows(
@@ -366,7 +342,6 @@ async function loadTodoPlanningRows(
       .or(`start_date.is.null,start_date.lte.${planningDate}`);
     const segments = await Promise.all([
       readMany<TaskTodoRow>(todayBase().eq('today_section', 'inbox').order('order_key').order('id').limit(limit + 1), limit),
-      readMany<TaskTodoRow>(todayBase().eq('today_section', 'none').not('start_date', 'is', null).order('order_key').order('id').limit(limit + 1), limit),
       readMany<TaskTodoRow>(todayBase().eq('today_section', 'now').order('order_key').order('id').limit(limit + 1), limit),
       readMany<TaskTodoRow>(todayBase().eq('today_section', 'next').order('order_key').order('id').limit(limit + 1), limit),
       readMany<TaskTodoRow>(todayBase().eq('today_section', 'later').order('order_key').order('id').limit(limit + 1), limit),
@@ -407,7 +382,6 @@ async function loadProjectPlanningRows(
       .or(`start_date.is.null,start_date.lte.${planningDate}`);
     const segments = await Promise.all([
       readMany<TaskProjectRow>(todayBase().eq('today_section', 'inbox').order('planning_order_key').order('id').limit(limit + 1), limit),
-      readMany<TaskProjectRow>(todayBase().eq('today_section', 'none').not('start_date', 'is', null).order('planning_order_key').order('id').limit(limit + 1), limit),
       readMany<TaskProjectRow>(todayBase().eq('today_section', 'now').order('planning_order_key').order('id').limit(limit + 1), limit),
       readMany<TaskProjectRow>(todayBase().eq('today_section', 'next').order('planning_order_key').order('id').limit(limit + 1), limit),
       readMany<TaskProjectRow>(todayBase().eq('today_section', 'later').order('planning_order_key').order('id').limit(limit + 1), limit),
@@ -453,10 +427,9 @@ function mergePlanningSegments<T extends TaskPlannableRow>(
 }
 
 async function loadDoneRoots(auth: AuthenticatedMcpContext, limit: number) {
-  const [areas, projects, headings, todos, checklistItems] = await Promise.all([
+  const [areas, projects, todos, checklistItems] = await Promise.all([
     readMany<TaskAreaRow>(auth.supabase.from('tasks_areas').select('*').eq('owner_id', auth.userId).eq('disposition', 'deleted').order('deleted_at', { ascending: false }).limit(limit + 1), limit),
     readMany<TaskProjectRow>(auth.supabase.from('tasks_projects').select('*').eq('owner_id', auth.userId).eq('disposition', 'deleted').order('deleted_at', { ascending: false }).limit(limit + 1), limit),
-    readMany<TaskHeadingRow>(auth.supabase.from('tasks_headings').select('*').eq('owner_id', auth.userId).eq('disposition', 'deleted').order('deleted_at', { ascending: false }).limit(limit + 1), limit),
     readMany<TaskTodoRow>(auth.supabase.from('tasks_todos').select('*').eq('owner_id', auth.userId).eq('disposition', 'deleted').order('deleted_at', { ascending: false }).limit(limit + 1), limit),
     readMany<TaskChecklistItemRow>(auth.supabase.from('tasks_checklist_items').select('*').eq('owner_id', auth.userId).eq('disposition', 'deleted').order('deleted_at', { ascending: false }).limit(limit + 1), limit),
   ]);
@@ -465,8 +438,6 @@ async function loadDoneRoots(auth: AuthenticatedMcpContext, limit: number) {
       .map((record) => ({ root_type: 'area' as const, record })),
     ...projects.rows.filter(({ id, deletion_root_id }) => deletion_root_id === id)
       .map((record) => ({ root_type: 'project' as const, record })),
-    ...headings.rows.filter(({ id, deletion_root_id }) => deletion_root_id === id)
-      .map((record) => ({ root_type: 'heading' as const, record })),
     ...todos.rows.filter(({ id, deletion_root_id }) => deletion_root_id === id)
       .map((record) => ({ root_type: 'todo' as const, record })),
     ...checklistItems.rows.filter(({ id, deletion_root_id }) => deletion_root_id === id)
@@ -480,7 +451,7 @@ async function loadDoneRoots(auth: AuthenticatedMcpContext, limit: number) {
       root_type,
       record: stripOwner(record),
     })),
-    truncated: roots.length > limit || [areas, projects, headings, todos, checklistItems]
+    truncated: roots.length > limit || [areas, projects, todos, checklistItems]
       .some((collection) => collection.truncated),
   };
 }
@@ -512,9 +483,9 @@ export async function getTaskViewData(
 export const getTaskHierarchy = defineTool({
   name: 'get_task_hierarchy',
   title: 'Get Task Hierarchy',
-  description: 'Read the signed-in user\'s normalized task areas, projects, headings, to-dos, and checklist items. Returns stable ids and relationship fields without mutating data.',
+  description: 'Read the signed-in user\'s normalized task areas, projects, to-dos, and checklist items. Returns stable ids and relationship fields without mutating data.',
   inputSchema: {
-    root_type: taskHierarchyRootTypeSchema.default('all').describe('Read the complete bounded hierarchy or scope it to one area, project, heading, or to-do.'),
+    root_type: taskHierarchyRootTypeSchema.default('all').describe('Read the complete bounded hierarchy or scope it to one area, project, or to-do.'),
     root_id: uuidSchema.optional().describe('Required when root_type is not all.'),
     include_terminal: z.boolean().default(false).describe('Include completed and canceled projects and to-dos.'),
     limit: z.number().int().min(1).max(500).default(defaultLimit).describe('Maximum rows returned per hierarchy collection.'),
@@ -526,7 +497,7 @@ export const getTaskHierarchy = defineTool({
 export const getTaskRecord = defineTool({
   name: 'get_task_record',
   title: 'Get Task Record',
-  description: 'Read one task area, project, heading, to-do, or checklist item by stable id for the signed-in user.',
+  description: 'Read one task area, project, to-do, or checklist item by stable id for the signed-in user.',
   inputSchema: {
     record_type: taskRecordTypeSchema,
     id: uuidSchema.describe('Stable record id.'),

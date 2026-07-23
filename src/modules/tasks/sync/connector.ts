@@ -14,7 +14,6 @@ const supportedUploadTables = new Set([
   'tasks_user_settings',
   'tasks_areas',
   'tasks_projects',
-  'tasks_headings',
   'tasks_checklist_items',
   'tasks_hierarchy_operations',
 ]);
@@ -22,7 +21,6 @@ const supportedUploadTables = new Set([
 type HierarchyTable =
   | 'tasks_areas'
   | 'tasks_projects'
-  | 'tasks_headings'
   | 'tasks_checklist_items';
 
 type TaskInsert = TablesInsert<'tasks_todos'>;
@@ -33,8 +31,6 @@ type TaskAreaInsert = TablesInsert<'tasks_areas'>;
 type TaskAreaUpdate = TablesUpdate<'tasks_areas'>;
 type TaskProjectInsert = TablesInsert<'tasks_projects'>;
 type TaskProjectUpdate = TablesUpdate<'tasks_projects'>;
-type TaskHeadingInsert = TablesInsert<'tasks_headings'>;
-type TaskHeadingUpdate = TablesUpdate<'tasks_headings'>;
 type TaskChecklistItemInsert = TablesInsert<'tasks_checklist_items'>;
 type TaskChecklistItemUpdate = TablesUpdate<'tasks_checklist_items'>;
 type TaskHierarchyOperationInsert = TablesInsert<'tasks_hierarchy_operations'>;
@@ -61,8 +57,6 @@ export interface TasksRemoteStore {
   updateArea(id: string, baseRevision: number, patch: TaskAreaUpdate): Promise<TasksRemoteWriteOutcome>;
   insertProject(project: TaskProjectInsert): Promise<TasksRemoteWriteOutcome>;
   updateProject(id: string, baseRevision: number, patch: TaskProjectUpdate): Promise<TasksRemoteWriteOutcome>;
-  insertHeading(heading: TaskHeadingInsert): Promise<TasksRemoteWriteOutcome>;
-  updateHeading(id: string, baseRevision: number, patch: TaskHeadingUpdate): Promise<TasksRemoteWriteOutcome>;
   insertChecklistItem(item: TaskChecklistItemInsert): Promise<TasksRemoteWriteOutcome>;
   updateChecklistItem(
     id: string,
@@ -188,14 +182,6 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
           parseProjectUpdate,
           this.options.remoteStore.insertProject.bind(this.options.remoteStore),
           this.options.remoteStore.updateProject.bind(this.options.remoteStore),
-        );
-      } else if (entry.table === 'tasks_headings') {
-        outcome = await uploadHierarchyEntry(
-          entry,
-          parseHeadingInsert,
-          parseHeadingUpdate,
-          this.options.remoteStore.insertHeading.bind(this.options.remoteStore),
-          this.options.remoteStore.updateHeading.bind(this.options.remoteStore),
         );
       } else if (entry.table === 'tasks_checklist_items') {
         outcome = await uploadHierarchyEntry(
@@ -385,18 +371,6 @@ export class TasksSupabaseRemoteStore implements TasksRemoteStore {
     return this.updateHierarchy('tasks_projects', id, baseRevision, patch);
   }
 
-  insertHeading(heading: TaskHeadingInsert): Promise<TasksRemoteWriteOutcome> {
-    return this.insertHierarchy('tasks_headings', heading);
-  }
-
-  updateHeading(
-    id: string,
-    baseRevision: number,
-    patch: TaskHeadingUpdate,
-  ): Promise<TasksRemoteWriteOutcome> {
-    return this.updateHierarchy('tasks_headings', id, baseRevision, patch);
-  }
-
   insertChecklistItem(item: TaskChecklistItemInsert): Promise<TasksRemoteWriteOutcome> {
     return this.insertHierarchy('tasks_checklist_items', item);
   }
@@ -557,7 +531,6 @@ function parseTaskInsert(entry: CrudEntry): TaskInsert {
     actionability: parseTaskActionability(data.actionability),
     area_id: optionalText(data.area_id),
     project_id: optionalText(data.project_id),
-    heading_id: optionalText(data.heading_id),
     title: requireText(data.title, 'title'),
     notes: optionalText(data.notes) ?? '',
     lifecycle: optionalText(data.lifecycle) ?? 'open',
@@ -572,6 +545,7 @@ function parseTaskInsert(entry: CrudEntry): TaskInsert {
     hierarchy_order_key: optionalText(data.hierarchy_order_key),
     start_date: optionalText(data.start_date),
     deadline: optionalText(data.deadline),
+    primary_link: optionalText(data.primary_link),
     entry_channel: entryChannel,
     last_mutation_channel: optionalText(data.last_mutation_channel) ?? entryChannel,
     last_actor_type: optionalText(data.last_actor_type) ?? 'user',
@@ -604,10 +578,10 @@ function parseTaskUpdate(entry: CrudEntry): TaskUpdate {
     'order_key',
     'area_id',
     'project_id',
-    'heading_id',
     'hierarchy_order_key',
     'start_date',
     'deadline',
+    'primary_link',
     'last_mutation_channel',
     'last_actor_type',
     'undo_source_event_id',
@@ -632,10 +606,14 @@ function parseTaskUpdate(entry: CrudEntry): TaskUpdate {
   return { ...data } as TaskUpdate;
 }
 
-function parseTaskActionability(value: unknown): 'actionable' | 'waiting' {
+function parseTaskActionability(value: unknown): 'actionable' | 'waiting' | 'rechecking' {
   const actionability = optionalText(value) ?? 'actionable';
-  if (actionability !== 'actionable' && actionability !== 'waiting') {
-    throw new InvalidTasksCrudEntryError('Task actionability must be actionable or waiting');
+  if (actionability !== 'actionable'
+    && actionability !== 'waiting'
+    && actionability !== 'rechecking') {
+    throw new InvalidTasksCrudEntryError(
+      'Task actionability must be actionable, waiting, or rechecking',
+    );
   }
   return actionability;
 }
@@ -700,10 +678,6 @@ function parseProjectInsert(entry: CrudEntry): TaskProjectInsert {
   return parseHierarchyInsert(entry, ['title', 'order_key', 'planning_order_key']) as TaskProjectInsert;
 }
 
-function parseHeadingInsert(entry: CrudEntry): TaskHeadingInsert {
-  return parseHierarchyInsert(entry, ['project_id', 'title', 'order_key']) as TaskHeadingInsert;
-}
-
 function parseChecklistItemInsert(entry: CrudEntry): TaskChecklistItemInsert {
   const parsed = parseHierarchyInsert(entry, ['task_id', 'title', 'order_key']);
   return {
@@ -718,10 +692,6 @@ function parseAreaUpdate(entry: CrudEntry): TaskAreaUpdate {
 
 function parseProjectUpdate(entry: CrudEntry): TaskProjectUpdate {
   return parseHierarchyUpdate(entry, hierarchyMutableColumns.project) as TaskProjectUpdate;
-}
-
-function parseHeadingUpdate(entry: CrudEntry): TaskHeadingUpdate {
-  return parseHierarchyUpdate(entry, hierarchyMutableColumns.heading) as TaskHeadingUpdate;
 }
 
 function parseChecklistItemUpdate(entry: CrudEntry): TaskChecklistItemUpdate {
@@ -757,7 +727,6 @@ const hierarchyMutableColumns = {
     'disposition', 'deleted_at', 'deletion_root_id', 'destination', 'today_section', 'order_key',
     'planning_order_key', 'start_date', 'deadline',
   ],
-  heading: ['title', 'order_key', 'disposition', 'deleted_at', 'deletion_root_id'],
   checklist: [
     'title', 'completed', 'completed_at', 'order_key', 'disposition', 'deleted_at',
     'deletion_root_id',

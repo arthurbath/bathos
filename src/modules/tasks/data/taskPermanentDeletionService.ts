@@ -10,7 +10,6 @@ export type TaskPermanentDeletionRootType = 'todo' | 'project';
 
 export type TaskPermanentDeletionHierarchy = {
   projects: string[];
-  headings: string[];
   todos: string[];
   checklist_items: string[];
 };
@@ -150,7 +149,6 @@ function parseHierarchy(value: unknown): TaskPermanentDeletionHierarchy {
   const hierarchy = requireRecord(value, 'Permanent-deletion hierarchy is invalid');
   return {
     projects: requireStringArray(hierarchy.projects, 'projects'),
-    headings: requireStringArray(hierarchy.headings, 'headings'),
     todos: requireStringArray(hierarchy.todos, 'tasks'),
     checklist_items: requireStringArray(hierarchy.checklist_items, 'checklist items'),
   };

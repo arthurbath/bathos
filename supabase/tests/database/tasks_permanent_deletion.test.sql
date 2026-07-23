@@ -75,25 +75,15 @@ INSERT INTO public.tasks_projects (
   'Deleted project', 'a0', 'a0',
   'a1000000-0000-4000-8000-000000000011'
 );
-INSERT INTO public.tasks_headings (
-  id, owner_id, project_id, title, order_key, client_mutation_id
-) VALUES (
-  'a1000000-0000-4000-8000-000000000020',
-  'a1000000-0000-4000-8000-000000000001',
-  'a1000000-0000-4000-8000-000000000010',
-  'Deleted heading', 'a0',
-  'a1000000-0000-4000-8000-000000000021'
-);
 INSERT INTO public.tasks_todos (
-  id, owner_id, project_id, heading_id, title, destination, order_key,
+  id, owner_id, project_id, title, destination, start_date, order_key,
   hierarchy_order_key, source_kind, source_url, source_external_id,
   client_mutation_id
 ) VALUES (
   'a1000000-0000-4000-8000-000000000030',
   'a1000000-0000-4000-8000-000000000001',
   'a1000000-0000-4000-8000-000000000010',
-  'a1000000-0000-4000-8000-000000000020',
-  'Deleted task', 'anytime', 'a0', 'a0',
+  'Deleted task', 'anytime', DATE '2099-01-01', 'a0', 'a0',
   'mail_message', 'message://permanent-delete', '<permanent-delete@example.test>',
   'a1000000-0000-4000-8000-000000000031'
 );
@@ -122,7 +112,7 @@ SELECT set_config(
   'test.permanent_reminder',
   public.tasks_save_reminder(
     NULL, NULL, 'todo', 'a1000000-0000-4000-8000-000000000030',
-    '2020-01-01', '09:00', 'UTC', 'earlier',
+    '2099-01-01', '09:00', 'UTC', 'earlier',
     'a1000000-0000-4000-8000-000000000043'
   )::text,
   false
@@ -130,7 +120,7 @@ SELECT set_config(
 SELECT set_config(
   'test.permanent_claim',
   public.tasks_claim_due_reminders(
-    '2025-01-01 00:00:00+00', 'a1000000-0000-4000-8000-000000000044'
+    '2100-01-01 00:00:00+00', 'a1000000-0000-4000-8000-000000000044'
   )::text,
   false
 );
@@ -144,7 +134,6 @@ INSERT INTO public.tasks_hierarchy_operations (
   'project', 'a1000000-0000-4000-8000-000000000010', 'delete', 'cascade',
   jsonb_build_object(
     'a1000000-0000-4000-8000-000000000010', 1,
-    'a1000000-0000-4000-8000-000000000020', 1,
     'a1000000-0000-4000-8000-000000000030', 1,
     'a1000000-0000-4000-8000-000000000040', 1
   ),
@@ -246,9 +235,9 @@ INSERT INTO public.tasks_hierarchy_history_events (
   transition, occurred_at, before_state, after_state
 ) VALUES (
   'a1000000-0000-4000-8000-000000000001',
-  'heading', 'a1000000-0000-4000-8000-000000000020',
+  'project', 'a1000000-0000-4000-8000-000000000010',
   'a1000000-0000-4000-8000-000000000060', 'system', 'web',
-  ARRAY['a1000000-0000-4000-8000-000000000020'::uuid],
+  ARRAY['a1000000-0000-4000-8000-000000000010'::uuid],
   2, 3, 'update', '2026-07-20T19:31:00Z', '{}'::jsonb, '{}'::jsonb
 );
 SET LOCAL ROLE authenticated;
@@ -322,8 +311,6 @@ SELECT is(
 SELECT is(
   (SELECT count(*) FROM public.tasks_projects
    WHERE id = 'a1000000-0000-4000-8000-000000000010')
-  + (SELECT count(*) FROM public.tasks_headings
-     WHERE id = 'a1000000-0000-4000-8000-000000000020')
   + (SELECT count(*) FROM public.tasks_todos
      WHERE id = 'a1000000-0000-4000-8000-000000000030')
   + (SELECT count(*) FROM public.tasks_checklist_items
@@ -337,7 +324,6 @@ SELECT is(
   + (SELECT count(*) FROM public.tasks_hierarchy_history_events
      WHERE entity_id = ANY(ARRAY[
        'a1000000-0000-4000-8000-000000000010'::uuid,
-       'a1000000-0000-4000-8000-000000000020'::uuid,
        'a1000000-0000-4000-8000-000000000040'::uuid
      ]))
   + (SELECT count(*) FROM public.tasks_mail_sources

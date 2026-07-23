@@ -259,22 +259,22 @@ SELECT throws_ok(
 );
 
 SELECT has_function(
-  'public', 'tasks_create_export_v5', ARRAY[]::text[],
+  'public', 'tasks_create_export_v12', ARRAY[]::text[],
   'creates portable task exports with Mail source records'
 );
 
 SELECT has_function(
-  'public', 'tasks_restore_export_v5', ARRAY['jsonb', 'boolean'],
+  'public', 'tasks_restore_export_current', ARRAY['jsonb', 'boolean'],
   'restores portable task exports with Mail source records'
 );
 
 CREATE TEMP TABLE captured_mail_export AS
-SELECT public.tasks_create_export_v5() AS envelope;
+SELECT public.tasks_create_export_v12() AS envelope;
 
 SELECT is(
   (SELECT envelope ->> 'schema_version' FROM captured_mail_export),
-  '5',
-  'advances the portable task schema for Mail sources'
+  '12',
+  'uses the current portable task schema for Mail sources'
 );
 
 SELECT is(
@@ -293,7 +293,7 @@ SELECT is(
 
 SELECT throws_ok(
   $$
-    SELECT public.tasks_restore_export_v5(
+    SELECT public.tasks_restore_export_current(
       jsonb_set(
         envelope,
         '{data,tasks_mail_sources,0,deep_link}',
@@ -323,7 +323,7 @@ SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 SELECT lives_ok(
   $$
-    SELECT public.tasks_restore_export_v5(envelope, false)
+    SELECT public.tasks_restore_export_current(envelope, false)
     FROM captured_mail_export;
     SET CONSTRAINTS ALL IMMEDIATE;
     SET CONSTRAINTS ALL DEFERRED

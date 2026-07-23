@@ -204,7 +204,7 @@ function project(overrides: StoredRow = {}): StoredRow {
     deleted_at: null,
     deletion_root_id: null,
     destination: 'anytime',
-    today_section: 'none',
+    today_section: null,
     order_key: 'a0',
     planning_order_key: 'a0',
     start_date: null,
@@ -262,7 +262,7 @@ describe('Tasks MCP project movement and scheduling tools', () => {
           order_key: 'a1',
           destination: 'anytime',
           today_section: 'later',
-          start_date: '2026-07-20',
+          start_date: null,
           planning_order_key: 'a1',
         }),
       ],
@@ -275,7 +275,7 @@ describe('Tasks MCP project movement and scheduling tools', () => {
       area_id: areaB,
       destination: 'anytime',
       today_section: 'later',
-      start_date: '2026-07-20',
+      start_date: null,
     }, authFor(ownerA, client));
 
     expect(result).toMatchObject({
@@ -292,7 +292,7 @@ describe('Tasks MCP project movement and scheduling tools', () => {
         area_id: areaB,
         destination: 'anytime',
         today_section: 'later',
-        start_date: '2026-07-20',
+        start_date: null,
         revision: 2,
       },
     });
@@ -322,10 +322,10 @@ describe('Tasks MCP project movement and scheduling tools', () => {
 
     expect(result).toMatchObject({
       mutation_outcome: 'applied',
-      receipt: { transition: 'reorder', outcome: 'accepted' },
+      receipt: { transition: 'update', outcome: 'accepted' },
       project: {
         destination: 'anytime',
-        today_section: 'none',
+        today_section: 'next',
         start_date: '2026-07-24',
         deadline: '2026-07-25',
         revision: 2,
@@ -336,6 +336,7 @@ describe('Tasks MCP project movement and scheduling tools', () => {
   it('retains a project day horizon when scheduling it into the future', async () => {
     const client = new FakeProjectMutationClient({
       tasks_projects: [project({ today_section: 'later' })],
+      tasks_user_settings: [settings()],
     });
     const result = await scheduleTaskProjectData({
       project_id: projectId,

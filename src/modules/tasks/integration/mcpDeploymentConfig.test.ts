@@ -20,10 +20,10 @@ describe('Tasks MCP deployment bundle', () => {
     expect(bundle).not.toContain('from "npm:@/');
   });
 
-  it('contains the current independent day-horizon contract', () => {
-    expect(bundle).toContain('z.enum(["none", "inbox", "now", "next", "later"])');
-    expect(bundle).toContain('today_section: todaySectionSchema.default("inbox")');
+  it('contains the current start-dependent day-horizon contract', () => {
+    expect(bundle).toContain('z.enum(["inbox", "now", "next", "later"])');
+    expect(bundle).toContain('today_section: todaySectionSchema.nullable().optional()');
+    expect(bundle).not.toContain('z.enum(["none", "inbox", "now", "next", "later"])');
     expect(bundle).not.toContain('Future work cannot appear in Today.');
-    expect(bundle).not.toContain('if (startDate !== null && startDate > planningDate) todaySection = "none"');
   });
 });

@@ -15,7 +15,7 @@ vi.mock('@/modules/tasks/hooks/useTaskProjectDetail', () => ({
   useTaskProjectDetail: (...args: unknown[]) => mockUseTaskProjectDetail(...args),
 }));
 
-const task = projectTask('task-a', 'Project task', null, 'a0');
+const task = projectTask('task-a', 'Project task', 'a0');
 const firstItem = checklistItem('item-a', 'Step one', 'a0');
 const secondItem = checklistItem('item-b', 'Step two', 'a1');
 
@@ -28,22 +28,18 @@ function hierarchy(): TaskHierarchyModel {
       area_id: 'area-a',
       lifecycle: 'open',
       destination: 'anytime',
-      today_section: 'none',
+      today_section: 'next',
       start_date: '2026-07-24',
       deadline: '2026-07-25',
     }],
-    headings: [{ id: 'heading-a', title: 'Next', project_id: 'project-a' }],
     loading: false,
     error: null,
     createArea: vi.fn(),
     createProject: vi.fn(),
-    createHeading: vi.fn().mockResolvedValue(undefined),
     updateArea: vi.fn(),
     updateProject: vi.fn(),
-    updateHeading: vi.fn().mockResolvedValue(undefined),
     reorderArea: vi.fn(),
     reorderProject: vi.fn(),
-    reorderHeading: vi.fn().mockResolvedValue(undefined),
     moveProjectToArea: vi.fn(),
   } as unknown as TaskHierarchyModel;
 }
@@ -56,7 +52,6 @@ function detail() {
     error: null,
     createTask: vi.fn().mockResolvedValue(undefined),
     updateTask: vi.fn().mockResolvedValue(undefined),
-    moveTaskToHeading: vi.fn().mockResolvedValue(undefined),
     reorderTask: vi.fn().mockResolvedValue(undefined),
     createChecklistItem: vi.fn().mockResolvedValue(undefined),
     updateChecklistItem: vi.fn().mockResolvedValue(undefined),
@@ -140,7 +135,7 @@ describe('TaskProjectDetailView', () => {
     }
   });
 
-  it('creates headings and project tasks in an explicit heading', async () => {
+  it('creates project tasks without exposing headings', async () => {
     const hierarchyModel = hierarchy();
     const detailModel = detail();
     mockUseTaskProjectDetail.mockReturnValue(detailModel);
@@ -151,47 +146,27 @@ describe('TaskProjectDetailView', () => {
       expect(container.textContent).toContain('Work');
       expect(container.querySelector<HTMLAnchorElement>('a[href="/projects"]')).toBeTruthy();
 
-      const headingInput = container.querySelector<HTMLInputElement>('[aria-label="New Heading Name"]')!;
-      await act(async () => {
-        setControlValue(headingInput, 'Later');
-        pressEnter(headingInput, true);
-      });
-      expect(hierarchyModel.createHeading).not.toHaveBeenCalled();
-      await act(async () => {
-        pressEnter(headingInput);
-      });
-      expect(hierarchyModel.createHeading).toHaveBeenCalledWith('project-a', 'Later');
-
       const taskInput = container.querySelector<HTMLInputElement>(
         '[aria-label="New Project Task Name"]',
       )!;
-      const headingSelect = container.querySelector<HTMLSelectElement>(
-        '[aria-label="New Task Heading"]',
-      )!;
       await act(async () => {
         setControlValue(taskInput, 'Draft copy');
-        setControlValue(headingSelect, 'heading-a');
         pressEnter(taskInput);
       });
-      expect(detailModel.createTask).toHaveBeenCalledWith('Draft copy', 'heading-a');
+      expect(detailModel.createTask).toHaveBeenCalledWith('Draft copy');
+      expect(container.textContent).not.toContain('Heading');
     } finally {
       cleanup(root, container);
     }
   });
 
-  it('moves a task and edits its independent checklist', async () => {
+  it('edits task actionability and its independent checklist', async () => {
     const hierarchyModel = hierarchy();
     const detailModel = detail();
     mockUseTaskProjectDetail.mockReturnValue(detailModel);
     const { container, root } = renderDetail(hierarchyModel);
 
     try {
-      const taskHeading = container.querySelector<HTMLSelectElement>(
-        '[aria-label="Heading for Project task"]',
-      )!;
-      await act(async () => setControlValue(taskHeading, 'heading-a'));
-      expect(detailModel.moveTaskToHeading).toHaveBeenCalledWith('task-a', 'heading-a');
-
       const actionability = container.querySelector<HTMLSelectElement>(
         '[aria-label="Actionability for Project task"]',
       )!;
@@ -227,7 +202,7 @@ describe('TaskProjectDetailView', () => {
     }
   });
 
-  it('exposes a project task file source as a platform deep link', () => {
+  it('presents project task file provenance without making the audited source editable', () => {
     const hierarchyModel = hierarchy();
     const detailModel = detail();
     detailModel.tasks = [{
@@ -240,12 +215,11 @@ describe('TaskProjectDetailView', () => {
     const { container, root } = renderDetail(hierarchyModel);
 
     try {
-      const link = container.querySelector<HTMLAnchorElement>(
-        'a[aria-label="Open File for Project task"]',
+      const indicator = container.querySelector<HTMLElement>(
+        '[aria-label="File Source for Project task"]',
       );
-      expect(link?.getAttribute('href')).toBe('file:///Users/Shared/Synthetic.txt');
-      expect(link?.hasAttribute('target')).toBe(false);
-      expect(link?.title).toBe('File: Synthetic.txt');
+      expect(indicator?.tagName).toBe('SPAN');
+      expect(indicator?.title).toBe('File: Synthetic.txt');
     } finally {
       cleanup(root, container);
     }
@@ -271,7 +245,7 @@ describe('TaskProjectDetailView', () => {
       });
       expect(hierarchyModel.updateProject).toHaveBeenCalledWith('project-a', {
         destination: 'someday',
-        today_section: 'none',
+        today_section: null,
         start_date: null,
         deadline: '2026-07-25',
       });
@@ -311,13 +285,11 @@ describe('TaskProjectDetailView', () => {
 function projectTask(
   id: string,
   title: string,
-  headingId: string | null,
   hierarchyOrderKey: string,
 ): TaskTodo {
   return taskTodoFixture({
     id,
     project_id: 'project-a',
-    heading_id: headingId,
     title,
     destination: 'anytime',
     hierarchy_order_key: hierarchyOrderKey,

@@ -126,8 +126,6 @@ function createHarness(
     updateArea: vi.fn(resolve),
     insertProject: vi.fn(resolve),
     updateProject: vi.fn(resolve),
-    insertHeading: vi.fn(resolve),
-    updateHeading: vi.fn(resolve),
     insertChecklistItem: vi.fn(resolve),
     updateChecklistItem: vi.fn(resolve),
     insertHierarchyOperation: vi.fn(resolve),
@@ -263,13 +261,21 @@ describe('task sync connector', () => {
     expect(complete).toHaveBeenCalledOnce();
   });
 
-  it('uploads structured waiting state and rejects invalid actionability', async () => {
+  it('uploads every structured non-actionable state and rejects invalid actionability', async () => {
     const valid = createHarness(taskPatchEntry({ actionability: 'waiting' }));
     await valid.connector.uploadData(valid.database);
     expect(valid.remoteStore.updateTask).toHaveBeenCalledWith(
       'task-a',
       1,
       expect.objectContaining({ actionability: 'waiting' }),
+    );
+
+    const rechecking = createHarness(taskPatchEntry({ actionability: 'rechecking' }));
+    await rechecking.connector.uploadData(rechecking.database);
+    expect(rechecking.remoteStore.updateTask).toHaveBeenCalledWith(
+      'task-a',
+      1,
+      expect.objectContaining({ actionability: 'rechecking' }),
     );
 
     const invalid = createHarness(taskPatchEntry({ actionability: 'blocked' }));

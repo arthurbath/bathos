@@ -1,5 +1,5 @@
 import { useQuery } from '@powersync/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
   EditableTaskPatch,
@@ -22,7 +22,11 @@ import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
 export type TaskListView = TaskDestination | 'today' | 'upcoming' | 'done';
 export type TodayTaskSection = 'inbox' | 'now' | 'next' | 'later';
 
-export function useTaskList(ownerId: string, view: TaskListView) {
+export function useTaskList(
+  ownerId: string,
+  view: TaskListView,
+  retainedTaskId: string | null = null,
+) {
   const { repository, planningTimeZone } = useTasksRuntime();
   const planningDate = useTaskPlanningDate(planningTimeZone);
   const [optimisticTasks, setOptimisticTasks] = useState<Record<string, TaskTodo | null>>({});
@@ -56,10 +60,8 @@ export function useTaskList(ownerId: string, view: TaskListView) {
            AND destination = 'anytime'
            AND lifecycle = 'open'
            AND disposition = 'present'
-           AND (
-             (start_date IS NULL AND today_section <> 'none')
-             OR start_date <= ?
-           )
+           AND today_section IS NOT NULL
+           AND (start_date IS NULL OR start_date <= ?)
          ORDER BY order_key, id`
             : `SELECT *
          FROM tasks_todos
@@ -99,13 +101,41 @@ export function useTaskList(ownerId: string, view: TaskListView) {
     });
   }, [query.data]);
 
-  const tasks = useMemo(() => deriveTaskViewTasks(
+  const allTasks = useMemo(() => mergeTaskRecords(
     query.data,
     optimisticTasks,
+  ), [optimisticTasks, query.data]);
+  const retainedProjectionRef = useRef<{ id: string; task: TaskTodo } | null>(null);
+  if (retainedProjectionRef.current?.id !== retainedTaskId) {
+    const retainedTask = retainedTaskId === null
+      ? null
+      : allTasks.find((task) => task.id === retainedTaskId) ?? null;
+    retainedProjectionRef.current = retainedTask === null
+      ? null
+      : { id: retainedTask.id, task: retainedTask };
+  }
+  const retainedProjection = retainedProjectionRef.current;
+  const tasks = useMemo(() => deriveTaskViewTasks(
+    allTasks,
     ownerId,
     view,
     planningDate,
-  ), [optimisticTasks, ownerId, planningDate, query.data, view]);
+    retainedTaskId,
+    retainedProjection?.task ?? null,
+  ), [allTasks, ownerId, planningDate, retainedProjection, retainedTaskId, view]);
+
+  const previousRetainedTaskIdRef = useRef<string | null>(retainedTaskId);
+  useEffect(() => {
+    const previousTaskId = previousRetainedTaskIdRef.current;
+    previousRetainedTaskIdRef.current = retainedTaskId;
+    if (previousTaskId === null || previousTaskId === retainedTaskId) return;
+    setOptimisticTasks((current) => {
+      const optimisticTask = current[previousTaskId];
+      if (optimisticTask === undefined || optimisticTask === null) return current;
+      if (taskIsVisible(optimisticTask, ownerId, view, planningDate)) return current;
+      return { ...current, [previousTaskId]: null };
+    });
+  }, [ownerId, planningDate, retainedTaskId, view]);
 
   const setOptimisticTask = useCallback((taskId: string, task: TaskTodo | null | undefined) => {
     setOptimisticTasks((current) => {
@@ -128,7 +158,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
         ownerId,
         title,
         destination: view === 'today' ? 'anytime' : view,
-        todaySection: view === 'someday' ? 'none' : 'inbox',
+        todaySection: view === 'someday' ? null : 'next',
         startDate: null,
       });
       setOptimisticTask(createdTask.id, createdTask);
@@ -138,7 +168,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
   );
   const updateTask = useCallback(
     async (taskId: string, patch: EditableTaskPatch) => {
-      const currentTask = tasks.find((task) => task.id === taskId);
+      const currentTask = allTasks.find((task) => task.id === taskId);
       if (currentTask) {
         const optimisticTask = {
           ...currentTask,
@@ -149,7 +179,9 @@ export function useTaskList(ownerId: string, view: TaskListView) {
         };
         setOptimisticTask(
           taskId,
-          taskIsVisible(optimisticTask, ownerId, view, planningDate) ? optimisticTask : null,
+          retainedTaskId === taskId || taskIsVisible(optimisticTask, ownerId, view, planningDate)
+            ? optimisticTask
+            : null,
         );
       }
 
@@ -157,7 +189,9 @@ export function useTaskList(ownerId: string, view: TaskListView) {
         const updatedTask = await repository.updateTask(ownerId, taskId, patch);
         setOptimisticTask(
           taskId,
-          taskIsVisible(updatedTask, ownerId, view, planningDate) ? updatedTask : null,
+          retainedTaskId === taskId || taskIsVisible(updatedTask, ownerId, view, planningDate)
+            ? updatedTask
+            : null,
         );
         return updatedTask;
       } catch (error) {
@@ -165,7 +199,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
         throw error;
       }
     },
-    [ownerId, planningDate, repository, setOptimisticTask, tasks, view],
+    [allTasks, ownerId, planningDate, repository, retainedTaskId, setOptimisticTask, view],
   );
   const transitionTask = useCallback(
     async (taskId: string, transition: TaskStateTransition) => {
@@ -192,12 +226,14 @@ export function useTaskList(ownerId: string, view: TaskListView) {
   );
   const moveTask = useCallback(
     async (taskId: string, input: TaskPlanningMoveInput) => {
-      const currentTask = tasks.find((task) => task.id === taskId);
+      const currentTask = allTasks.find((task) => task.id === taskId);
       if (currentTask) {
         const optimisticTask = {
           ...currentTask,
           destination: input.destination,
-          today_section: input.todaySection ?? 'none',
+          today_section: input.destination === 'someday'
+            ? null
+            : input.todaySection ?? (input.startDate ? 'next' : null),
           start_date: input.startDate ?? null,
           revision: currentTask.revision + 1,
           client_mutation_id: `optimistic:${currentTask.client_mutation_id}`,
@@ -205,7 +241,9 @@ export function useTaskList(ownerId: string, view: TaskListView) {
         };
         setOptimisticTask(
           taskId,
-          taskIsVisible(optimisticTask, ownerId, view, planningDate) ? optimisticTask : null,
+          retainedTaskId === taskId || taskIsVisible(optimisticTask, ownerId, view, planningDate)
+            ? optimisticTask
+            : null,
         );
       }
 
@@ -213,7 +251,9 @@ export function useTaskList(ownerId: string, view: TaskListView) {
         const movedTask = await repository.moveTask(ownerId, taskId, input);
         setOptimisticTask(
           taskId,
-          taskIsVisible(movedTask, ownerId, view, planningDate) ? movedTask : null,
+          retainedTaskId === taskId || taskIsVisible(movedTask, ownerId, view, planningDate)
+            ? movedTask
+            : null,
         );
         return movedTask;
       } catch (error) {
@@ -221,7 +261,7 @@ export function useTaskList(ownerId: string, view: TaskListView) {
         throw error;
       }
     },
-    [ownerId, planningDate, repository, setOptimisticTask, tasks, view],
+    [allTasks, ownerId, planningDate, repository, retainedTaskId, setOptimisticTask, view],
   );
   const moveTasks = useCallback(
     async (taskIds: string[], input: TaskPlanningMoveInput) => {
@@ -309,24 +349,43 @@ export function useTaskList(ownerId: string, view: TaskListView) {
 }
 
 export function deriveTaskViewTasks(
-  queriedTasks: readonly TaskTodo[],
-  optimisticTasks: Readonly<Record<string, TaskTodo | null>>,
+  mergedTasks: readonly TaskTodo[],
   ownerId: string,
   view: TaskListView,
   planningDate: string,
+  retainedTaskId: string | null = null,
+  retainedProjection: TaskTodo | null = null,
+): TaskTodo[] {
+  return mergedTasks
+    .filter((task) => task.id === retainedTaskId
+      || taskIsVisible(task, ownerId, view, planningDate))
+    .map((task) => task.id === retainedTaskId && retainedProjection !== null
+      ? freezeTaskViewProjection(task, retainedProjection)
+      : task)
+    .sort((left, right) => compareTasksForView(left, right, view, planningDate));
+}
+
+function mergeTaskRecords(
+  queriedTasks: readonly TaskTodo[],
+  optimisticTasks: Readonly<Record<string, TaskTodo | null>>,
 ): TaskTodo[] {
   const merged = new Map(queriedTasks.map((task) => [task.id, task]));
   for (const [taskId, optimisticTask] of Object.entries(optimisticTasks)) {
-    if (optimisticTask === null) {
-      merged.delete(taskId);
-    } else {
-      merged.set(taskId, optimisticTask);
-    }
+    if (optimisticTask === null) merged.delete(taskId);
+    else merged.set(taskId, optimisticTask);
   }
+  return Array.from(merged.values());
+}
 
-  return Array.from(merged.values())
-    .filter((task) => taskIsVisible(task, ownerId, view, planningDate))
-    .sort((left, right) => compareTasksForView(left, right, view, planningDate));
+function freezeTaskViewProjection(task: TaskTodo, projection: TaskTodo): TaskTodo {
+  return {
+    ...task,
+    destination: projection.destination,
+    today_section: projection.today_section,
+    start_date: projection.start_date,
+    deadline: projection.deadline,
+    order_key: projection.order_key,
+  };
 }
 
 function taskIsVisible(
@@ -352,10 +411,8 @@ function taskIsVisible(
     return task.destination === 'anytime'
       && task.lifecycle === 'open'
       && task.disposition === 'present'
-      && (
-        (task.start_date === null && task.today_section !== 'none')
-        || (task.start_date !== null && task.start_date <= planningDate)
-      );
+      && task.today_section !== null
+      && (task.start_date === null || task.start_date <= planningDate);
   }
   return task.destination === view
     && task.lifecycle === 'open'
@@ -397,7 +454,7 @@ function compareTasksForView(
 }
 
 export function getTodayTaskSection(task: TaskTodo, _planningDate: string): TodayTaskSection {
-  return task.today_section === 'none' ? 'inbox' : task.today_section;
+  return task.today_section ?? 'next';
 }
 
 export function getTaskTodayMembershipSection(
@@ -407,10 +464,8 @@ export function getTaskTodayMembershipSection(
   const belongsToToday = task.destination === 'anytime'
     && task.lifecycle === 'open'
     && task.disposition === 'present'
-    && (
-      (task.start_date === null && task.today_section !== 'none')
-      || (task.start_date !== null && task.start_date <= planningDate)
-    );
+    && task.today_section !== null
+    && (task.start_date === null || task.start_date <= planningDate);
   return belongsToToday ? getTodayTaskSection(task, planningDate) : null;
 }
 

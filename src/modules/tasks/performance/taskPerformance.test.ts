@@ -32,10 +32,6 @@ describePerformance('Tasks large-library performance', () => {
       id: `project-${index}`,
       title: `Project ${index}`,
     })),
-    headings: Array.from({ length: 1_000 }, (_, index) => ({
-      id: `heading-${index}`,
-      title: `Heading ${index}`,
-    })),
   };
   const tasks = Array.from({ length: taskCount }, (_, index) => syntheticTask(index));
   const searchableTasks = tasks.filter(({ disposition }) => disposition === 'present');
@@ -46,7 +42,6 @@ describePerformance('Tasks large-library performance', () => {
     for (const view of views) {
       const result = measure(`${view} view`, 20, () => deriveTaskViewTasks(
         tasks,
-        {},
         ownerId,
         view,
         planningDate,
@@ -122,7 +117,6 @@ function syntheticTask(index: number): TaskTodo {
     owner_id: ownerId,
     area_id: usesProject ? null : `area-${index % 100}`,
     project_id: usesProject ? `project-${index % 500}` : null,
-    heading_id: usesProject ? `heading-${index % 1_000}` : null,
     title: index === 9_999 ? 'Needle Saturn 9999' : `Synthetic Task ${index}`,
     notes: `Performance notes for synthetic task ${index}`,
     lifecycle,
@@ -132,9 +126,9 @@ function syntheticTask(index: number): TaskTodo {
     deleted_at: deleted ? `2026-07-20T${hour(index)}:00:00.000Z` : null,
     deletion_root_id: deleted ? taskId : null,
     destination,
-    today_section: destination === 'someday'
-      ? 'none'
-      : index % 7 === 0 ? 'later' : index % 5 === 0 ? 'none' : 'next',
+    today_section: startDate === null
+      ? null
+      : index % 7 === 0 ? 'later' : 'next',
     actionability: index % 3 === 0 ? 'waiting' : 'actionable',
     order_key: `a${String(index).padStart(5, '0')}`,
     hierarchy_order_key: null,

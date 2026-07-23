@@ -1,0 +1,251 @@
+## MODIFIED Requirements
+
+### Requirement: Personal Tasks MCP Resource Actions
+The BathOS MCP server SHALL let an authenticated user read and mutate their heading-free task hierarchy, templates, to-dos, checklists, future-only Start Dates, independent day horizons, reminder time, Done recovery state, and supported structured workflow fields under the current Tasks domain rules.
+
+#### Scenario: Read task data
+- **WHEN** an authenticated MCP client requests task data or a defined task view
+- **THEN** the server returns only task records owned by the signed-in user
+
+#### Scenario: Read normalized task hierarchy
+- **WHEN** an authenticated MCP client requests the bounded hierarchy or scopes it to one area, project, or to-do
+- **THEN** the server returns current owner-scoped areas, projects, to-dos, and checklist items with stable single-value relationship identifiers and explicit truncation metadata
+
+#### Scenario: Read one task record
+- **WHEN** an authenticated MCP client requests one current task record by supported type and stable identifier
+- **THEN** the server returns that owned record without exposing an owner identifier or a record owned by another user
+
+#### Scenario: Read a defined planning view
+- **WHEN** an authenticated MCP client requests Today, Upcoming, Anytime, Someday, or Done
+- **THEN** the server applies lifecycle, disposition, future-only Start Date, independent day-horizon, planning-date, time-zone, and ordering rules and returns separately typed project, to-do, or Done-root results
+
+#### Scenario: Read native templates
+- **WHEN** an authenticated MCP client requests active or explicitly archived native templates
+- **THEN** the server returns only the signed-in owner's bounded template definitions and their current immutable revisions without exposing owner identifiers
+
+#### Scenario: Validate a hierarchy creation parent
+- **WHEN** an MCP client creates a project within an area or a checklist item within a to-do
+- **THEN** the server requires the parent to be present, owned by the signed-in user, and open when the parent has a lifecycle, without disclosing an inaccessible record
+
+#### Scenario: Retry hierarchy creation after later changes
+- **WHEN** an MCP client retries an exact hierarchy-creation request after the resulting record has changed
+- **THEN** the server resolves the immutable hierarchy creation event, returns its original receipt and the current owner-safe record, and does not create another record or event
+
+#### Scenario: Reject a changed hierarchy creation retry
+- **WHEN** an MCP client reuses a hierarchy-creation idempotency key for another record type or changed normalized input
+- **THEN** the server rejects the request without creating or changing hierarchy data
+
+#### Scenario: Create a Mail task atomically
+- **WHEN** a verified integration calls `create_mail_task` with complete structured Mail identity, retirement destination, AI-processed content, optional accessible area, and a new idempotency key
+- **THEN** the server atomically creates one undated Anytime to-do with Today Next horizon, `mail_automation` provenance, one editable Primary Link initialized from the deep link, and one retained Mail source, then returns the creation receipt and owner-safe records
+
+#### Scenario: Deduplicate Mail capture by request and source identity
+- **WHEN** a verified integration retries the same Mail request UUID or later presents the same owner, account, and message identity with a different request UUID
+- **THEN** the server returns the existing task and source without creating duplicate records while rejecting changed data for the same request UUID or conflicting source identity
+
+#### Scenario: Guard Mail source retirement around an external move
+- **WHEN** a verified integration is ready to move a retained Mail source and then reports the external result
+- **THEN** `begin_mail_retirement` first records a pending state and `resolve_mail_retirement` records only verified retirement or an explicit bounded failure, using optimistic revisions and idempotent receipts for both mutations
+
+#### Scenario: Preserve auditable Mail retirement transitions
+- **WHEN** a Mail retirement fails, is retried, and later succeeds
+- **THEN** the server retains each accepted owner-scoped lifecycle event, rejects direct authenticated source updates and event inserts, and keeps the retired state terminal
+
+#### Scenario: Reject an idempotency-key payload change
+- **WHEN** an MCP client reuses a creation idempotency key with different normalized title, planning, container, or source input
+- **THEN** the server rejects the request and neither creates nor changes a task
+
+#### Scenario: Update task data
+- **WHEN** an authenticated MCP client updates a supported task record by stable identifier
+- **THEN** the server applies the valid state transition only within the signed-in user's scope and returns the resulting state
+
+#### Scenario: Update hierarchy content through explicit tools
+- **WHEN** an authenticated MCP client calls `update_task_area`, `update_task_project`, or `update_task_checklist_item` with supported content or checklist-completion input
+- **THEN** the server updates only those allowlisted fields on an owned present record and requires an open parent before changing a checklist item
+
+#### Scenario: Require an optimistic hierarchy-update boundary
+- **WHEN** an MCP client calls a hierarchy content-update tool
+- **THEN** the request requires the stable record identifier, its expected positive revision, and a caller-generated mutation UUID, while owner, raw revision, lifecycle, disposition, order, and arbitrary metadata fields remain unavailable
+
+#### Scenario: Retry an accepted hierarchy update
+- **WHEN** an MCP client retries the exact accepted hierarchy content update with the same mutation UUID
+- **THEN** the server resolves the immutable hierarchy-history event, returns its original receipt and the current owner-safe record, and does not write again
+
+#### Scenario: Reject a stale or changed hierarchy update
+- **WHEN** a hierarchy update has a stale expected revision or reuses a mutation UUID with changed record, revision, or normalized input
+- **THEN** a stale request returns a content-free conflict receipt and current owner-safe state, while a changed retry is rejected without changing hierarchy data
+
+#### Scenario: Return a current hierarchy no-op
+- **WHEN** a new hierarchy mutation UUID requests content or checklist completion that is already current
+- **THEN** the server returns a content-free no-op receipt without changing the revision, completion timestamp, or append-only hierarchy history
+
+#### Scenario: Transition hierarchy lifecycle and recovery explicitly
+- **WHEN** an authenticated MCP client calls `transition_task_hierarchy`
+- **THEN** the tool completes, cancels, or reopens only a project, or recoverably deletes or restores one area, project, or checklist item, without exposing generic lifecycle fields, physical deletion, or to-do behavior already owned by `transition_task`
+
+#### Scenario: Derive the atomic hierarchy revision set on the server
+- **WHEN** an MCP client requests a hierarchy lifecycle or recovery operation with the stable root identifier, current positive root revision, and logical mutation UUID
+- **THEN** Postgres derives the complete owner-scoped candidate revision set, substitutes the caller's expected root revision, and applies the operation only when that exact authoritative set remains current
+
+#### Scenario: Protect project descendants explicitly
+- **WHEN** an MCP client completes or cancels a project
+- **THEN** the default `reject` policy returns a content-free rejection while open descendant to-dos remain, an explicit `cascade` applies the terminal transition atomically to the project and open descendants, and reopening changes only the project
+
+#### Scenario: Retry a hierarchy lifecycle or recovery operation
+- **WHEN** an MCP client retries the exact hierarchy transition with the same mutation UUID after the operation or root has changed
+- **THEN** the server returns the immutable original operation receipt and current owner-safe root when it remains available without repeating the mutation, while changed reuse is rejected
+
+#### Scenario: Return safe hierarchy transition outcomes
+- **WHEN** a hierarchy lifecycle or recovery request is already current, stale, rejected by descendant policy, or accepted
+- **THEN** the server returns a no-op, conflict, rejected, or accepted receipt respectively, never exposes a partial hierarchy, and keeps permanent deletion outside the MCP schema
+
+#### Scenario: Move a project through an explicit tool
+- **WHEN** an authenticated MCP client calls `move_task_project` with the current project revision and a new area, planning placement, or both
+- **THEN** the server validates the owned present area, project lifecycle, owner-local Today date, supported placement, and single-area membership, appends generated structural and planning order keys when their scopes change, and never accepts raw order keys
+
+#### Scenario: Schedule a project through an explicit tool
+- **WHEN** an authenticated MCP client calls `schedule_task_project` with the current project revision and a start-date or deadline change
+- **THEN** the server validates date-only calendar values, allows the start date on either side of the deadline, activates scheduled Someday work into Anytime, enforces the future-schedule horizon and Start-Date-anchored reminder, and never exposes lifecycle or arbitrary project fields through the scheduling operation
+
+#### Scenario: Retry an accepted project movement or schedule
+- **WHEN** an MCP client retries the exact accepted project movement or scheduling request with the same mutation UUID after the current project has changed
+- **THEN** the server validates the normalized historical before-and-after states, returns the immutable hierarchy-history receipt and current owner-safe project without another write, and rejects changed reuse or a key used by another task or hierarchy operation
+
+#### Scenario: Return safe project mutation outcomes
+- **WHEN** a project movement or schedule request is already current, stale, deleted, or terminal
+- **THEN** the server returns a content-free no-op or revision conflict when applicable, otherwise rejects the invalid state, and never changes append-only history for an unaccepted request
+
+#### Scenario: Reorder through explicit direction-based tools
+- **WHEN** an authenticated MCP client calls `reorder_task` or `reorder_task_hierarchy` with a stable record identifier, current positive revision, logical mutation UUID, supported order scope, and `up` or `down`
+- **THEN** the server reorders only that present open record within its exact current planning section or structural peer collection and never accepts a raw order key or destination index
+
+#### Scenario: Derive a deterministic reorder scope
+- **WHEN** an MCP client reorders a planning record
+- **THEN** the request identifies the supported planning view and explicit planning date, Today remains section-scoped, Upcoming remains start-date-scoped, and the server reads the complete owner-scoped peer collection through ordered pagination before generating the replacement fractional key
+
+#### Scenario: Preserve independent ordering dimensions
+- **WHEN** an MCP client reorders a to-do or project structurally or within a planning view
+- **THEN** the server changes only `hierarchy_order_key` or structural `order_key` for hierarchy order and only the planning `order_key` or `planning_order_key` for planning order, leaving the other dimension unchanged
+
+#### Scenario: Return safe reorder outcomes
+- **WHEN** a reorder reaches a collection boundary, uses a stale expected revision, retries an exact accepted request, or reuses its mutation UUID with changed scope, direction, record, or revision
+- **THEN** the server returns a content-free no-op at the boundary, a content-free conflict for stale state, the immutable original history receipt and current owner-safe record for an exact retry, or rejects changed reuse without writing another revision or history event
+
+#### Scenario: Use explicit to-do mutation tools
+- **WHEN** an authenticated MCP client edits content or source metadata, moves planning or container placement, schedules dates, or requests a lifecycle or recovery transition
+- **THEN** the server exposes `update_task`, `move_task`, `schedule_task`, or `transition_task` respectively instead of a generic record or arbitrary-patch mutation
+
+#### Scenario: Require an optimistic mutation boundary
+- **WHEN** an MCP client calls a to-do mutation tool
+- **THEN** the request requires the stable to-do identifier, its expected positive revision, and a caller-generated UUID that identifies the logical mutation
+
+#### Scenario: Detect a stale MCP mutation
+- **WHEN** the requested expected revision does not match the current owned to-do revision
+- **THEN** the server leaves the to-do unchanged and returns a content-free conflict receipt with the current owner-safe state
+
+#### Scenario: Retry an accepted MCP mutation
+- **WHEN** an MCP client retries the exact accepted edit, movement, schedule, or lifecycle request with the same mutation identifier
+- **THEN** the server resolves the immutable task-history event, returns its original receipt and the current to-do state, and does not append another event
+
+#### Scenario: Retry an accepted recovery mutation
+- **WHEN** an MCP client retries the exact accepted recoverable delete or restore request with the same mutation identifier
+- **THEN** the server resolves the atomic hierarchy-operation receipt, returns the current to-do state, and does not repeat the hierarchy mutation
+
+#### Scenario: Reject a mutation-key payload change
+- **WHEN** an MCP client reuses a mutation identifier for a different task, expected base revision, operation, or normalized payload
+- **THEN** the server rejects the request without changing task data
+
+#### Scenario: Return a current-state no-op
+- **WHEN** a new MCP mutation identifier requests an already-current lifecycle, recovery, content, placement, or schedule state from the current revision
+- **THEN** the server returns a no-op receipt without incrementing the revision or appending task history
+
+#### Scenario: Delete task data recoverably
+- **WHEN** an authenticated MCP client requests normal deletion of a supported task record
+- **THEN** the server moves the record to the module's recoverable deleted state unless a separately authorized permanent-deletion operation exists
+
+#### Scenario: Delete a to-do hierarchy atomically
+- **WHEN** an MCP client recoverably deletes or restores a to-do that has checklist descendants
+- **THEN** the server uses one owner-scoped hierarchy operation, validates the complete expected-revision set, and never exposes a partially deleted or restored hierarchy
+
+#### Scenario: Reject a retired view
+- **WHEN** an MCP client requests Inbox, Logbook, or Trash
+- **THEN** schema validation rejects the retired value and identifies the current Today or Done vocabulary
+
+#### Scenario: Create a to-do through the narrow contract
+- **WHEN** an authenticated MCP client calls `create_task` with a new idempotency key, valid title, optional planning and single-value container input, optional typed source, and optional supported integration channel
+- **THEN** the server creates exactly one open present to-do with declared or MCP provenance, stable identifiers, append-only history, no start date, and Today Next as its default planning placement
+
+#### Scenario: Deduplicate capture
+- **WHEN** a client retries an exact creation request or Mail source identity
+- **THEN** the server returns the existing task and source without creating duplicates and rejects changed reuse of the idempotency key
+
+#### Scenario: Create hierarchy records
+- **WHEN** a client calls a supported area, project, or checklist creation tool
+- **THEN** the server creates one owner-scoped present record with validated optional parents, deterministic append ordering, and append-only history
+
+#### Scenario: Move day horizon explicitly
+- **WHEN** a client moves active or future Anytime work to Inbox, Now, Next, or Later
+- **THEN** the server keeps destination Anytime, changes the supported day horizon without inventing a start date, updates relevant ordering, and returns a revision-checked receipt
+
+#### Scenario: Clear a start date explicitly
+- **WHEN** a client clears an Anytime item's start date
+- **THEN** the server cancels its active reminder, retains or clears its day horizon according to the explicit active placement, and keeps the item in Anytime
+
+#### Scenario: Move between Anytime and Someday
+- **WHEN** a client moves a to-do or project between Anytime and Someday
+- **THEN** the server validates placement, clears start date, day horizon, and reminder for Someday, generates the destination order, and does not accept a standalone Inbox or Today destination
+
+#### Scenario: Schedule future work
+- **WHEN** a client assigns a future start date and optional Inbox, Now, Next, or Later horizon
+- **THEN** the server places the work in Anytime, stores the selected horizon or Next by default, includes it in Upcoming until the owner-local date, and preserves valid container and deadline state even when the deadline is earlier
+
+#### Scenario: Reject a nonfuture Start Date
+- **WHEN** a client assigns today or an earlier date as Start Date
+- **THEN** the server rejects the request without changing task data and directs the client to an active day horizon instead
+
+#### Scenario: Edit a Primary Link
+- **WHEN** an MCP client creates or updates a to-do with an optional Primary Link
+- **THEN** the server stores the literal shortcut through the narrow content contract, includes it in history and owner-safe reads, and does not modify structured source identity
+
+#### Scenario: Use explicit lifecycle and recovery tools
+- **WHEN** a client completes, cancels, reopens, deletes, or restores supported work
+- **THEN** the server applies the revision-checked task or hierarchy operation, projects terminal work into Done, and never exposes physical purge as a general MCP mutation
+
+#### Scenario: Retry an accepted mutation
+- **WHEN** a client retries an exact accepted mutation identifier after current state changes
+- **THEN** the server returns the immutable original receipt and current owner-safe state without another write
+
+#### Scenario: Detect stale or changed mutations
+- **WHEN** expected revision is stale or a mutation identifier is reused with changed normalized input
+- **THEN** the server returns a safe conflict or rejects changed reuse without modifying task data
+
+#### Scenario: Preserve independent ordering
+- **WHEN** a client reorders work structurally, in Anytime, or in one Today section
+- **THEN** the server changes only the relevant hierarchy or planning order and never changes day horizon as a side effect
+
+#### Scenario: Keep purge server-authoritative
+- **WHEN** Done work reaches its automatic expiry boundary
+- **THEN** no MCP tool can defer the purge, resurrect purged content, or enumerate another owner's terminal records
+
+### Requirement: Structured Task Automation Contract
+The BathOS MCP server SHALL expose explicit task fields for three-state actionability, source/origin, templates, future-only scheduling with independent day horizons and reminders, recurrence, and completion without requiring clients to encode meaning in generic tags or task titles.
+
+#### Scenario: Set structured origin
+- **WHEN** an MCP client creates a task from a supported external source or collection integration
+- **THEN** the server validates the closed integration channel and typed source reference independently, defaults the channel to `mcp`, and does not require a title prefix
+
+#### Scenario: Set actionability
+- **WHEN** an MCP client changes how an open present task can become actionable
+- **THEN** the server accepts only `actionable`, `waiting`, or `rechecking`, stores the state rather than adding a tag, and returns an idempotent mutation receipt
+
+#### Scenario: Set a structured day horizon
+- **WHEN** an MCP client creates, moves, or schedules Anytime work with `inbox`, `now`, `next`, or `later`
+- **THEN** the server stores the active or deferred horizon without inventing a date, defaults future-dated work to `next` when omitted, and returns it in owner-safe planning state
+
+#### Scenario: Set a reminder time
+- **WHEN** an MCP client assigns a reminder time to a to-do or project
+- **THEN** the server requires the item to have a start date, resolves the reminder on that date in the supplied valid time zone, and accepts no independent reminder date
+
+#### Scenario: Instantiate a template
+- **WHEN** an MCP client requests creation from a task or project template
+- **THEN** the server requires an explicit anchor and idempotency UUID, fixes the actor and channel to MCP automation, and uses the atomic heading-free template-instantiation operation rather than exposing template storage as generic task duplication

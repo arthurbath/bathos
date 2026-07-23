@@ -360,7 +360,6 @@ function ArchiveTemplateButton({
 function countTemplateNodes(snapshot: TaskTemplateSnapshot): number {
   if (snapshot.kind === 'todo') return 1 + snapshot.root.checklist.length;
   return 1
-    + snapshot.headings.length
     + snapshot.todos.length
     + snapshot.todos.reduce((total, todo) => total + todo.checklist.length, 0);
 }
@@ -376,7 +375,7 @@ function getTodoTemplateDestination(
     ? null
     : addTaskCalendarDays(anchorDate, snapshot.root.start_offset_days);
   if (startDate && startDate > planningDate) return 'upcoming';
-  if (snapshot.root.today_section !== 'none') return 'today';
+  if (snapshot.root.today_section !== null) return 'today';
   return 'anytime';
 }
 

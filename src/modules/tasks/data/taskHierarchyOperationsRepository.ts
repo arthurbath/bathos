@@ -150,8 +150,6 @@ async function getCandidates(
        WHERE owner_id = ? AND deletion_root_id = ?
        UNION ALL SELECT 'project', id, revision FROM tasks_projects
        WHERE owner_id = ? AND deletion_root_id = ?
-       UNION ALL SELECT 'heading', id, revision FROM tasks_headings
-       WHERE owner_id = ? AND deletion_root_id = ?
        UNION ALL SELECT 'todo', id, revision FROM tasks_todos
        WHERE owner_id = ? AND deletion_root_id = ?
        UNION ALL SELECT 'checklist_item', id, revision FROM tasks_checklist_items
@@ -159,7 +157,6 @@ async function getCandidates(
       [
         input.ownerId, input.rootId, input.ownerId, input.rootId,
         input.ownerId, input.rootId, input.ownerId, input.rootId,
-        input.ownerId, input.rootId,
       ],
     );
   }
@@ -179,10 +176,6 @@ async function getDeleteCandidates(
        WHERE owner_id = ? AND id = ? AND disposition = 'present'
        UNION ALL SELECT 'project', id, revision FROM tasks_projects
        WHERE owner_id = ? AND area_id = ? AND disposition = 'present'
-       UNION ALL SELECT 'heading', heading.id, heading.revision
-       FROM tasks_headings AS heading JOIN tasks_projects AS project
-         ON project.id = heading.project_id AND project.owner_id = heading.owner_id
-       WHERE heading.owner_id = ? AND project.area_id = ? AND heading.disposition = 'present'
        UNION ALL SELECT 'todo', task.id, task.revision
        FROM tasks_todos AS task LEFT JOIN tasks_projects AS project
          ON project.id = task.project_id AND project.owner_id = task.owner_id
@@ -196,7 +189,7 @@ async function getDeleteCandidates(
        WHERE item.owner_id = ? AND (task.area_id = ? OR project.area_id = ?)
          AND item.disposition = 'present' AND task.disposition = 'present'`,
       [
-        ownerId, rootId, ownerId, rootId, ownerId, rootId,
+        ownerId, rootId, ownerId, rootId,
         ownerId, rootId, rootId, ownerId, rootId, rootId,
       ],
     );
@@ -205,28 +198,12 @@ async function getDeleteCandidates(
     return transaction.getAll<Candidate>(
       `SELECT 'project' AS entity_type, id, revision FROM tasks_projects
        WHERE owner_id = ? AND id = ? AND disposition = 'present'
-       UNION ALL SELECT 'heading', id, revision FROM tasks_headings
-       WHERE owner_id = ? AND project_id = ? AND disposition = 'present'
        UNION ALL SELECT 'todo', id, revision FROM tasks_todos
        WHERE owner_id = ? AND project_id = ? AND disposition = 'present'
        UNION ALL SELECT 'checklist_item', item.id, item.revision
        FROM tasks_checklist_items AS item JOIN tasks_todos AS task
          ON task.id = item.task_id AND task.owner_id = item.owner_id
        WHERE item.owner_id = ? AND task.project_id = ?
-         AND item.disposition = 'present' AND task.disposition = 'present'`,
-      [ownerId, rootId, ownerId, rootId, ownerId, rootId, ownerId, rootId],
-    );
-  }
-  if (rootType === 'heading') {
-    return transaction.getAll<Candidate>(
-      `SELECT 'heading' AS entity_type, id, revision FROM tasks_headings
-       WHERE owner_id = ? AND id = ? AND disposition = 'present'
-       UNION ALL SELECT 'todo', id, revision FROM tasks_todos
-       WHERE owner_id = ? AND heading_id = ? AND disposition = 'present'
-       UNION ALL SELECT 'checklist_item', item.id, item.revision
-       FROM tasks_checklist_items AS item JOIN tasks_todos AS task
-         ON task.id = item.task_id AND task.owner_id = item.owner_id
-       WHERE item.owner_id = ? AND task.heading_id = ?
          AND item.disposition = 'present' AND task.disposition = 'present'`,
       [ownerId, rootId, ownerId, rootId, ownerId, rootId],
     );
@@ -306,7 +283,7 @@ async function restoreOptimistically(
   createId: () => string,
 ): Promise<void> {
   const orderedTypes: TaskHierarchyRootType[] = [
-    'area', 'project', 'heading', 'todo', 'checklist_item',
+    'area', 'project', 'todo', 'checklist_item',
   ];
   for (const entityType of orderedTypes) {
     for (const candidate of candidates.filter(({ entity_type }) => entity_type === entityType)) {
@@ -352,23 +329,19 @@ async function restorationPatch(
     const task = await transaction.get<{
       area_id: string | null;
       project_id: string | null;
-      heading_id: string | null;
-    }>('SELECT area_id, project_id, heading_id FROM tasks_todos WHERE id = ? AND owner_id = ?', [id, ownerId]);
+    }>('SELECT area_id, project_id FROM tasks_todos WHERE id = ? AND owner_id = ?', [id, ownerId]);
     const areaPresent = task.area_id === null
       || await isPresent(transaction, 'tasks_areas', ownerId, task.area_id);
     const projectPresent = task.project_id === null
       || await isPresent(transaction, 'tasks_projects', ownerId, task.project_id);
-    const headingPresent = task.heading_id === null
-      || await isPresent(transaction, 'tasks_headings', ownerId, task.heading_id);
     if (areaPresent && projectPresent) {
-      return headingPresent ? {} : { heading_id: null };
+      return {};
     }
     return {
       area_id: null,
       project_id: null,
-      heading_id: null,
       destination: 'anytime',
-      today_section: 'none',
+      today_section: null,
       start_date: null,
     };
   }
@@ -380,15 +353,6 @@ async function assertRestorableStructuralRoot(
   input: TaskHierarchyOperationRequest,
 ): Promise<void> {
   if (input.operation !== 'restore') return;
-  if (input.rootType === 'heading') {
-    const heading = await transaction.get<{ project_id: string }>(
-      'SELECT project_id FROM tasks_headings WHERE id = ? AND owner_id = ?',
-      [input.rootId, input.ownerId],
-    );
-    if (!await isPresent(transaction, 'tasks_projects', input.ownerId, heading.project_id)) {
-      throw new TaskHierarchyOperationRejectedError('parent_not_present');
-    }
-  }
   if (input.rootType === 'checklist_item') {
     const item = await transaction.get<{ task_id: string }>(
       'SELECT task_id FROM tasks_checklist_items WHERE id = ? AND owner_id = ?',
@@ -439,9 +403,8 @@ async function isPresent(
 function tableFor(entityType: TaskHierarchyRootType): string {
   return entityType === 'area' ? 'tasks_areas'
     : entityType === 'project' ? 'tasks_projects'
-      : entityType === 'heading' ? 'tasks_headings'
-        : entityType === 'todo' ? 'tasks_todos'
-          : 'tasks_checklist_items';
+      : entityType === 'todo' ? 'tasks_todos'
+        : 'tasks_checklist_items';
 }
 
 function assertRequest(input: TaskHierarchyOperationRequest): void {

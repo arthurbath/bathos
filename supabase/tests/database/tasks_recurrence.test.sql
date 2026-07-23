@@ -67,11 +67,11 @@ SELECT has_function(
   'changes recurrence status explicitly'
 );
 SELECT has_function(
-  'public', 'tasks_create_export_v9', ARRAY[]::text[],
+  'public', 'tasks_create_export_v12', ARRAY[]::text[],
   'exports recurrence definitions and provenance'
 );
 SELECT has_function(
-  'public', 'tasks_restore_export_v9', ARRAY['jsonb', 'boolean'],
+  'public', 'tasks_restore_export_current', ARRAY['jsonb', 'boolean'],
   'restores recurrence definitions and provenance'
 );
 SELECT has_index(
@@ -492,7 +492,7 @@ SELECT lives_ok(
   $$
     SELECT set_config(
       'test.recurrence_export',
-      public.tasks_create_export_v9()::text,
+      public.tasks_create_export_v12()::text,
       false
     )
   $$,
@@ -503,8 +503,8 @@ SELECT is(
     current_setting('test.recurrence_export')::jsonb
       ->> 'schema_version'
   )::integer,
-  9,
-  'uses task export schema version nine'
+  12,
+  'uses the current task export schema'
 );
 SELECT ok(
   jsonb_array_length(
@@ -515,7 +515,7 @@ SELECT ok(
 );
 SELECT throws_ok(
   $$
-    SELECT public.tasks_restore_export_v9(
+    SELECT public.tasks_restore_export_current(
       jsonb_set(
         current_setting('test.recurrence_export')::jsonb,
         '{manifest,checksums,tasks_recurrence_definitions}',
@@ -525,7 +525,7 @@ SELECT throws_ok(
     )
   $$,
   '22023',
-  'Task export v9 collection tasks_recurrence_definitions is invalid',
+  'Task export v12 collection tasks_recurrence_definitions is invalid',
   'rejects a recurrence collection with a mismatched checksum'
 );
 
@@ -554,7 +554,7 @@ SELECT set_config(
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT ok(
   (
-    public.tasks_restore_export_v9(
+    public.tasks_restore_export_current(
       current_setting('test.recurrence_export')::jsonb, true
     ) #>> '{tasks_recurrence_definitions,inserts}'
   )::integer > 0,
@@ -564,7 +564,7 @@ SELECT lives_ok(
   $$
     SELECT set_config(
       'test.recurrence_restore',
-      public.tasks_restore_export_v9(
+      public.tasks_restore_export_current(
         current_setting('test.recurrence_export')::jsonb, false
       )::text,
       false

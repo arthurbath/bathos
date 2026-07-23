@@ -1,6 +1,7 @@
 import type { Database, Json } from '@/integrations/supabase/types';
-import { assertTaskCalendarRange, isTaskCalendarDate } from '../../../modules/tasks/domain/taskDates';
+import { isTaskCalendarDate } from '../../../modules/tasks/domain/taskDates';
 import { generateTaskOrderKey } from '../../../modules/tasks/domain/taskOrder';
+import { normalizeTaskPrimaryLink } from '../../../modules/tasks/domain/taskPrimaryLink';
 
 import { defineTool, z } from '../mcp-core';
 import {
@@ -10,8 +11,8 @@ import {
 } from '../supabase';
 import { uuidSchema } from '../resource-utils';
 const destinationSchema = z.enum(['anytime', 'someday']);
-const todaySectionSchema = z.enum(['none', 'inbox', 'now', 'next', 'later']);
-const actionabilitySchema = z.enum(['actionable', 'waiting']);
+const todaySectionSchema = z.enum(['inbox', 'now', 'next', 'later']);
+const actionabilitySchema = z.enum(['actionable', 'waiting', 'rechecking']);
 const integrationChannelSchema = z.enum([
   'mcp',
   'raycast',
@@ -49,16 +50,16 @@ export type CreateTaskRequest = {
   idempotency_key: string;
   title: string;
   notes: string;
-  destination: TaskDestination;
-  today_section: TaskTodaySection;
+  destination?: TaskDestination;
+  today_section?: TaskTodaySection | null;
   actionability?: TaskActionability;
   entry_channel?: TaskIntegrationChannel;
   start_date?: string | null;
   deadline?: string | null;
   area_id?: string;
   project_id?: string;
-  heading_id?: string;
   source?: TaskSource;
+  primary_link?: string | null;
 };
 
 type NormalizedCreateTaskRequest = {
@@ -66,19 +67,19 @@ type NormalizedCreateTaskRequest = {
   title: string;
   notes: string;
   destination: TaskDestination;
-  todaySection: TaskTodaySection;
+  todaySection: TaskTodaySection | null;
   actionability: TaskActionability;
   entryChannel: TaskIntegrationChannel;
   requestedStartDate: string | null;
-  startDateWasExplicit: boolean;
+  placementWasImplicit: boolean;
   deadline: string | null;
   areaId: string | null;
   projectId: string | null;
-  headingId: string | null;
   sourceKind: TaskSource['kind'] | null;
   sourceUrl: string | null;
   sourceTitle: string | null;
   sourceExternalId: string | null;
+  primaryLink: string | null;
 };
 
 type ExistingCreation = {
@@ -111,6 +112,10 @@ function normalizeRequest(input: CreateTaskRequest): NormalizedCreateTaskRequest
   const sourceUrl = trimOptional(input.source?.url);
   const sourceTitle = trimOptional(input.source?.title);
   const sourceExternalId = trimOptional(input.source?.external_id);
+  const primaryLink = normalizeTaskPrimaryLink(input.primary_link);
+  if ((primaryLink?.length ?? 0) > 8_000) {
+    throw new Error('Primary Link cannot exceed 8000 characters.');
+  }
   if ((sourceKind === 'webpage' || sourceKind === 'reading_item') && sourceUrl === null) {
     throw new Error('Webpage and reading-item sources require a URL.');
   }
@@ -128,13 +133,10 @@ function normalizeRequest(input: CreateTaskRequest): NormalizedCreateTaskRequest
 
   const areaId = input.area_id ?? null;
   const projectId = input.project_id ?? null;
-  const headingId = input.heading_id ?? null;
   if (areaId !== null && projectId !== null) {
     throw new Error('A task cannot belong directly to both an area and a project.');
   }
-  if (headingId !== null && projectId === null) {
-    throw new Error('A task heading requires project membership.');
-  }
+  const destination = input.destination ?? 'anytime';
   const requestedStartDate = input.start_date ?? null;
   if (requestedStartDate !== null && !isTaskCalendarDate(requestedStartDate)) {
     throw new Error('Start date must be a valid ISO calendar date.');
@@ -143,32 +145,30 @@ function normalizeRequest(input: CreateTaskRequest): NormalizedCreateTaskRequest
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error('Deadline must be a valid ISO calendar date.');
   }
-  if (input.destination === 'someday' && input.today_section !== 'none') {
-    throw new Error('Someday work cannot appear in Today.');
+  const requestedTodaySection = input.today_section ?? null;
+  if (destination === 'someday' && (requestedTodaySection !== null || requestedStartDate !== null)) {
+    throw new Error('Someday work cannot retain a start date or day horizon.');
   }
-  if (input.destination === 'someday' && requestedStartDate !== null) {
-    throw new Error('Someday work cannot retain a start date.');
-  }
-  if (requestedStartDate !== null) assertTaskCalendarRange(requestedStartDate, deadline);
-
   return {
     idempotencyKey: input.idempotency_key,
     title: trimRequired(input.title, 'Task title', 500),
     notes: input.notes,
-    destination: input.destination,
-    todaySection: input.today_section,
+    destination,
+    todaySection: requestedTodaySection,
     actionability: input.actionability ?? 'actionable',
     entryChannel: input.entry_channel ?? 'mcp',
     requestedStartDate,
-    startDateWasExplicit: input.start_date !== undefined && input.start_date !== null,
+    placementWasImplicit: input.destination === undefined
+      && input.start_date === undefined
+      && input.today_section === undefined,
     deadline,
     areaId,
     projectId,
-    headingId,
     sourceKind,
     sourceUrl,
     sourceTitle,
     sourceExternalId,
+    primaryLink,
   };
 }
 
@@ -219,36 +219,57 @@ function assertSameCreationRequest(
     [state.title, request.title],
     [state.notes, request.notes],
     [state.destination, request.destination],
-    [state.today_section, request.todaySection],
     [state.actionability, request.actionability],
     [existing.event.mutation_channel, request.entryChannel],
     [state.deadline, request.deadline],
     [state.area_id, request.areaId],
     [state.project_id, request.projectId],
-    [state.heading_id, request.headingId],
     [state.source_kind, request.sourceKind],
     [state.source_url, request.sourceUrl],
     [state.source_title, request.sourceTitle],
     [state.source_external_id, request.sourceExternalId],
+    [state.primary_link, request.primaryLink],
   ];
-  checks.push([state.start_date, request.requestedStartDate]);
+  if (request.placementWasImplicit) {
+    checks.push([state.today_section, 'next']);
+    checks.push([state.start_date, null]);
+  } else {
+    const expectedStartDate = request.requestedStartDate;
+    const expectedTodaySection = request.destination === 'someday'
+      ? null
+      : expectedStartDate === null ? request.todaySection : request.todaySection ?? 'next';
+    checks.push([state.start_date, expectedStartDate]);
+    checks.push([state.today_section, expectedTodaySection]);
+  }
   if (checks.some(([actual, expected]) => actual !== expected)) {
     throw new Error('The idempotency key was already used for a different task creation request.');
   }
 }
 
-async function resolveStartDate(
-  request: NormalizedCreateTaskRequest,
-  _auth: AuthenticatedMcpContext,
-): Promise<string | null> {
-  return request.requestedStartDate;
+async function ownerPlanningDate(auth: AuthenticatedMcpContext): Promise<string> {
+  const settings = await readOne<{ planning_timezone: string }>(auth.supabase
+    .from('tasks_user_settings')
+    .select('planning_timezone')
+    .eq('owner_id', auth.userId)
+    .maybeSingle());
+  if (!settings) {
+    throw new Error('Task planning settings are not initialized. Open the Tasks module once.');
+  }
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: settings.planning_timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 async function validateContainer(
   request: NormalizedCreateTaskRequest,
   auth: AuthenticatedMcpContext,
 ): Promise<void> {
-  const [area, project, heading] = await Promise.all([
+  const [area, project] = await Promise.all([
     request.areaId === null ? null : readOne<{ id: string }>(auth.supabase
       .from('tasks_areas')
       .select('id')
@@ -264,24 +285,15 @@ async function validateContainer(
       .eq('disposition', 'present')
       .eq('lifecycle', 'open')
       .maybeSingle()),
-    request.headingId === null ? null : readOne<{ id: string; project_id: string }>(auth.supabase
-      .from('tasks_headings')
-      .select('id, project_id')
-      .eq('owner_id', auth.userId)
-      .eq('id', request.headingId)
-      .eq('disposition', 'present')
-      .maybeSingle()),
   ]);
   if (request.areaId !== null && area === null) throw new Error('The task area is unavailable.');
   if (request.projectId !== null && project === null) throw new Error('The task project is unavailable.');
-  if (request.headingId !== null && (heading === null || heading.project_id !== request.projectId)) {
-    throw new Error('The task heading does not belong to the selected project.');
-  }
 }
 
 async function nextPlanningOrderKey(
   request: NormalizedCreateTaskRequest,
   startDate: string | null,
+  todaySection: TaskTodaySection | null,
   auth: AuthenticatedMcpContext,
 ): Promise<string> {
   const query = auth.supabase
@@ -289,10 +301,12 @@ async function nextPlanningOrderKey(
     .select('order_key')
     .eq('owner_id', auth.userId)
     .eq('destination', request.destination)
-    .eq('today_section', request.todaySection)
     .eq('lifecycle', 'open')
     .eq('disposition', 'present');
-  const last = await readOne<{ order_key: string }>(query
+  const scoped = todaySection === null
+    ? query.is('today_section', null)
+    : query.eq('today_section', todaySection);
+  const last = await readOne<{ order_key: string }>(scoped
     .order('order_key', { ascending: false })
     .order('id', { ascending: false })
     .limit(1)
@@ -304,7 +318,7 @@ async function nextHierarchyOrderKey(
   request: NormalizedCreateTaskRequest,
   auth: AuthenticatedMcpContext,
 ): Promise<string | null> {
-  if (request.areaId === null && request.projectId === null && request.headingId === null) {
+  if (request.areaId === null && request.projectId === null) {
     return null;
   }
   let query = auth.supabase
@@ -315,7 +329,6 @@ async function nextHierarchyOrderKey(
     .eq('disposition', 'present');
   query = request.areaId === null ? query.is('area_id', null) : query.eq('area_id', request.areaId);
   query = request.projectId === null ? query.is('project_id', null) : query.eq('project_id', request.projectId);
-  query = request.headingId === null ? query.is('heading_id', null) : query.eq('heading_id', request.headingId);
   const last = await readOne<{ hierarchy_order_key: string | null }>(query
     .not('hierarchy_order_key', 'is', null)
     .order('hierarchy_order_key', { ascending: false })
@@ -369,11 +382,18 @@ export async function createTaskData(
     return creationResult(existing, 'already_applied');
   }
 
-  const startDate = await resolveStartDate(request, auth);
-  assertTaskCalendarRange(startDate, request.deadline);
   await validateContainer(request, auth);
+  const startDate = request.destination === 'someday' ? null : request.requestedStartDate;
+  if (startDate !== null && startDate <= await ownerPlanningDate(auth)) {
+    throw new Error('Start date must be later than today in the owner planning time zone.');
+  }
+  const todaySection = request.destination === 'someday'
+    ? null
+    : startDate !== null
+      ? request.todaySection ?? 'next'
+      : request.placementWasImplicit ? 'next' : request.todaySection;
   const [orderKey, hierarchyOrderKey] = await Promise.all([
-    nextPlanningOrderKey(request, startDate, auth),
+    nextPlanningOrderKey(request, startDate, todaySection, auth),
     nextHierarchyOrderKey(request, auth),
   ]);
   const timestamp = new Date().toISOString();
@@ -382,7 +402,6 @@ export async function createTaskData(
     owner_id: auth.userId,
     area_id: request.areaId,
     project_id: request.projectId,
-    heading_id: request.headingId,
     title: request.title,
     notes: request.notes,
     lifecycle: 'open',
@@ -392,7 +411,7 @@ export async function createTaskData(
     deleted_at: null,
     deletion_root_id: null,
     destination: request.destination,
-    today_section: request.todaySection,
+    today_section: todaySection,
     actionability: request.actionability,
     order_key: orderKey,
     hierarchy_order_key: hierarchyOrderKey,
@@ -406,6 +425,7 @@ export async function createTaskData(
     source_url: request.sourceUrl,
     source_title: request.sourceTitle,
     source_external_id: request.sourceExternalId,
+    primary_link: request.primaryLink,
     revision: 1,
     client_mutation_id: request.idempotencyKey,
     created_at: timestamp,
@@ -434,16 +454,16 @@ export const createTask = defineTool({
     idempotency_key: uuidSchema.describe('Stable UUID for this logical creation request. Reuse it only to retry the exact same request.'),
     title: z.string().trim().min(1).max(500),
     notes: z.string().max(100_000).default(''),
-    destination: destinationSchema.default('anytime'),
-    today_section: todaySectionSchema.default('inbox'),
-    actionability: actionabilitySchema.default('actionable').describe('Whether the task can be acted on now or is waiting on something external.'),
+    destination: destinationSchema.optional().describe('Omit for ordinary active capture in Today Next. Explicit Anytime without a start date or horizon remains undated.'),
+    today_section: todaySectionSchema.nullable().optional().describe('Active work may use a horizon without a start date. Future-dated work defaults to Next when omitted.'),
+    actionability: actionabilitySchema.default('actionable').describe('Whether the task is actionable, waiting on an outside party or signal, or requires deliberate rechecking.'),
     entry_channel: integrationChannelSchema.default('mcp').describe('Structured integration that collected the task. Ordinary MCP clients should keep the default.'),
     start_date: calendarDateSchema.nullable().optional(),
     deadline: calendarDateSchema.nullable().optional(),
     area_id: uuidSchema.optional(),
     project_id: uuidSchema.optional(),
-    heading_id: uuidSchema.optional(),
     source: sourceSchema.optional().describe('Optional typed source reference. Template provenance is reserved for template instantiation.'),
+    primary_link: z.string().max(8_000).nullable().optional().describe('Optional editable shortcut, stored independently from typed source provenance.'),
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
   handler: (input, ctx) => toMcpResult(createTaskData(input, requireAuthenticated(ctx))),

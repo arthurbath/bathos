@@ -11,11 +11,10 @@ import { uuidSchema } from '../resource-utils';
 type Tables = Database['public']['Tables'];
 type TaskAreaRow = Tables['tasks_areas']['Row'];
 type TaskProjectRow = Tables['tasks_projects']['Row'];
-type TaskHeadingRow = Tables['tasks_headings']['Row'];
 type TaskChecklistItemRow = Tables['tasks_checklist_items']['Row'];
 type TaskHierarchyHistoryRow = Tables['tasks_hierarchy_history_events']['Row'];
-type HierarchyRecordType = 'area' | 'project' | 'heading' | 'checklist_item';
-type HierarchyRow = TaskAreaRow | TaskProjectRow | TaskHeadingRow | TaskChecklistItemRow;
+type HierarchyRecordType = 'area' | 'project' | 'checklist_item';
+type HierarchyRow = TaskAreaRow | TaskProjectRow | TaskChecklistItemRow;
 type MutableKey = 'title' | 'notes' | 'completed' | 'completed_at';
 type NormalizedPatch = Partial<Record<MutableKey, Json>>;
 
@@ -33,11 +32,6 @@ export type UpdateTaskProjectRequest = MutationBase & {
   project_id: string;
   title?: string;
   notes?: string;
-};
-
-export type UpdateTaskHeadingRequest = MutationBase & {
-  heading_id: string;
-  title: string;
 };
 
 export type UpdateTaskChecklistItemRequest = MutationBase & {
@@ -91,10 +85,6 @@ async function readHierarchyRecord(
   }
   if (recordType === 'project') {
     return readOne<TaskProjectRow>(auth.supabase.from('tasks_projects')
-      .select('*').eq('owner_id', auth.userId).eq('id', id).maybeSingle());
-  }
-  if (recordType === 'heading') {
-    return readOne<TaskHeadingRow>(auth.supabase.from('tasks_headings')
       .select('*').eq('owner_id', auth.userId).eq('id', id).maybeSingle());
   }
   return readOne<TaskChecklistItemRow>(auth.supabase.from('tasks_checklist_items')
@@ -237,13 +227,6 @@ async function assertParentMutable(
   record: HierarchyRow,
   auth: AuthenticatedMcpContext,
 ): Promise<void> {
-  if (request.recordType === 'heading') {
-    const heading = record as TaskHeadingRow;
-    const project = await readOne<{ id: string }>(auth.supabase.from('tasks_projects')
-      .select('id').eq('owner_id', auth.userId).eq('id', heading.project_id)
-      .eq('disposition', 'present').eq('lifecycle', 'open').maybeSingle());
-    if (project === null) throw new Error('Reopen or restore the parent project before editing.');
-  }
   if (request.recordType === 'checklist_item') {
     const item = record as TaskChecklistItemRow;
     const task = await readOne<{ id: string }>(auth.supabase.from('tasks_todos')
@@ -269,7 +252,6 @@ function changedPatch(record: HierarchyRow, patch: NormalizedPatch): NormalizedP
 function tableFor(recordType: HierarchyRecordType) {
   if (recordType === 'area') return 'tasks_areas' as const;
   if (recordType === 'project') return 'tasks_projects' as const;
-  if (recordType === 'heading') return 'tasks_headings' as const;
   return 'tasks_checklist_items' as const;
 }
 
@@ -373,19 +355,6 @@ export function updateTaskProjectData(
   }, auth);
 }
 
-export function updateTaskHeadingData(
-  input: UpdateTaskHeadingRequest,
-  auth: AuthenticatedMcpContext,
-) {
-  return runMutation({
-    ...input,
-    recordType: 'heading',
-    recordId: input.heading_id,
-    patch: { title: trimTitle(input.title) },
-    mutableKeys: ['title'],
-  }, auth);
-}
-
 export function updateTaskChecklistItemData(
   input: UpdateTaskChecklistItemRequest,
   auth: AuthenticatedMcpContext,
@@ -440,15 +409,6 @@ export const updateTaskProject = defineTool({
   },
   annotations: mutationAnnotations,
   handler: (input, ctx) => toMcpResult(updateTaskProjectData(input, requireAuthenticated(ctx))),
-});
-
-export const updateTaskHeading = defineTool({
-  name: 'update_task_heading',
-  title: 'Update Task Heading',
-  description: 'Rename one owner-scoped heading beneath an open project through an optimistic revision boundary.',
-  inputSchema: { ...mutationInput, heading_id: uuidSchema, title: z.string().min(1).max(500) },
-  annotations: mutationAnnotations,
-  handler: (input, ctx) => toMcpResult(updateTaskHeadingData(input, requireAuthenticated(ctx))),
 });
 
 export const updateTaskChecklistItem = defineTool({

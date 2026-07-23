@@ -34,11 +34,11 @@ SELECT has_index(
   'indexes owner-scoped actionability filters'
 );
 SELECT has_function(
-  'public', 'tasks_create_export_v7', ARRAY[]::text[],
+  'public', 'tasks_create_export_v12', ARRAY[]::text[],
   'creates the actionability-aware portable export'
 );
 SELECT has_function(
-  'public', 'tasks_restore_export_v7', ARRAY['jsonb', 'boolean'],
+  'public', 'tasks_restore_export_current', ARRAY['jsonb', 'boolean'],
   'restores the actionability-aware portable export'
 );
 
@@ -203,11 +203,11 @@ SELECT throws_ok(
   'rejects actionability changes in Trash'
 );
 
-SELECT set_config('test.tasks_actionability_export', public.tasks_create_export_v7()::text, false);
+SELECT set_config('test.tasks_actionability_export', public.tasks_create_export_v12()::text, false);
 SELECT is(
   (current_setting('test.tasks_actionability_export')::jsonb ->> 'schema_version')::integer,
-  7,
-  'advances the portable schema to version seven'
+  12,
+  'uses the current portable schema'
 );
 SELECT is(
   (
@@ -234,7 +234,7 @@ SELECT is(
 );
 SELECT is(
   (
-    public.tasks_restore_export_v7(
+    public.tasks_restore_export_current(
       current_setting('test.tasks_actionability_export')::jsonb,
       true
     ) #>> '{tasks_todos,matches}'
@@ -244,7 +244,7 @@ SELECT is(
 );
 SELECT throws_ok(
   format(
-    'SELECT public.tasks_restore_export_v7(%L::jsonb, true)',
+    'SELECT public.tasks_restore_export_current(%L::jsonb, true)',
     jsonb_set(
       current_setting('test.tasks_actionability_export')::jsonb,
       '{data,tasks_todos,0,actionability}',

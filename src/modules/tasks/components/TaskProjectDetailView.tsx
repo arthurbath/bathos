@@ -36,6 +36,7 @@ import {
 } from '@/modules/tasks/components/TaskProjectsView';
 import { submitTaskFormOnEnter } from '@/modules/tasks/components/taskFormKeyboard';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
+import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import {
   TaskProjectReminderForm,
   type ProjectReminderInput,
@@ -45,7 +46,6 @@ import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy'
 import { useTaskProjectDetail } from '@/modules/tasks/hooks/useTaskProjectDetail';
 import type {
   TaskChecklistItem,
-  TaskHeading,
   TaskReminder,
   TaskTodo,
 } from '@/modules/tasks/types/tasks';
@@ -76,35 +76,17 @@ export function TaskProjectDetailView({
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
   const project = hierarchy.projects.find(({ id }) => id === projectId);
-  const headings = hierarchy.headings.filter(({ project_id }) => project_id === projectId);
-  const [newHeadingTitle, setNewHeadingTitle] = useState('');
   const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskHeadingId, setNewTaskHeadingId] = useState('');
-  const [creatingHeading, setCreatingHeading] = useState(false);
   const [creatingTask, setCreatingTask] = useState(false);
   const [projectAction, setProjectAction] = useState<'complete' | 'cancel' | 'delete' | null>(null);
   const [changingProject, setChangingProject] = useState(false);
-
-  const createHeading = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!newHeadingTitle.trim() || creatingHeading) return;
-    setCreatingHeading(true);
-    try {
-      await hierarchy.createHeading(projectId, newHeadingTitle);
-      setNewHeadingTitle('');
-    } catch (error) {
-      showError('Heading Could Not Be Added', error);
-    } finally {
-      setCreatingHeading(false);
-    }
-  };
 
   const createTask = async (event: FormEvent) => {
     event.preventDefault();
     if (!newTaskTitle.trim() || creatingTask) return;
     setCreatingTask(true);
     try {
-      await detail.createTask(newTaskTitle, newTaskHeadingId || null);
+      await detail.createTask(newTaskTitle);
       setNewTaskTitle('');
     } catch (error) {
       showError('Task Could Not Be Added', error);
@@ -137,7 +119,6 @@ export function TaskProjectDetailView({
 
   const area = hierarchy.areas.find(({ id }) => id === project.area_id);
   const projectsHref = `${basePath}/projects`;
-  const ungroupedTasks = detail.tasks.filter(({ heading_id }) => heading_id === null);
   const openDescendantCount = detail.tasks.filter(({ lifecycle }) => lifecycle === 'open').length;
 
   const confirmProjectAction = async () => {
@@ -220,37 +201,21 @@ export function TaskProjectDetailView({
             planningDate={planningDate}
             onSave={(patch) => hierarchy.updateProject(project.id, patch)}
           />
-          <TaskProjectReminderForm
-            key={reminder?.client_mutation_id ?? 'new-reminder'}
-            projectId={project.id}
-            reminder={reminder}
-            mode={reminderMode}
-            timeZone={reminderTimeZone}
-            onSave={onSaveReminder}
-            onCancel={onCancelReminder}
-          />
+          {project.start_date ? (
+            <TaskProjectReminderForm
+              key={reminder?.client_mutation_id ?? 'new-reminder'}
+              projectId={project.id}
+              reminder={reminder}
+              mode={reminderMode}
+              timeZone={reminderTimeZone}
+              onSave={onSaveReminder}
+              onCancel={onCancelReminder}
+            />
+          ) : null}
         </div>
       ) : null}
 
-      {project.lifecycle === 'open' ? <div className="grid gap-4 md:grid-cols-2">
-        <form onSubmit={createHeading} className="flex gap-2">
-          <Input
-            value={newHeadingTitle}
-            onChange={(event) => setNewHeadingTitle(event.target.value)}
-            onKeyDown={submitTaskFormOnEnter}
-            aria-label="New Heading Name"
-            placeholder="New Heading"
-          />
-          <Button
-            type="submit"
-            variant="outline-success"
-            size="icon"
-            disabled={creatingHeading || !newHeadingTitle.trim()}
-            aria-label="Add Heading"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-        </form>
+      {project.lifecycle === 'open' ? <div>
         <form onSubmit={createTask} className="flex gap-2">
           <Input
             value={newTaskTitle}
@@ -259,17 +224,6 @@ export function TaskProjectDetailView({
             aria-label="New Project Task Name"
             placeholder="New Task"
           />
-          <select
-            value={newTaskHeadingId}
-            onChange={(event) => setNewTaskHeadingId(event.target.value)}
-            aria-label="New Task Heading"
-            className="h-10 min-w-0 max-w-40 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">No Heading</option>
-            {headings.map((heading) => (
-              <option key={heading.id} value={heading.id}>{heading.title}</option>
-            ))}
-          </select>
           <Button
             type="submit"
             variant="outline-success"
@@ -282,33 +236,10 @@ export function TaskProjectDetailView({
         </form>
       </div> : null}
 
-      {headings.length === 0 && ungroupedTasks.length === 0 ? (
+      {detail.tasks.length === 0 ? (
         <p className="py-12 text-center text-sm text-muted-foreground">No Project Tasks</p>
       ) : (
-        <div className="space-y-7">
-          {ungroupedTasks.length > 0 ? (
-            <ProjectTaskSection
-              heading={null}
-              headings={headings}
-              tasks={ungroupedTasks}
-              detail={detail}
-            />
-          ) : null}
-          {headings.map((heading, index) => (
-            <ProjectTaskSection
-              key={heading.id}
-              heading={heading}
-              headings={headings}
-              tasks={detail.tasks.filter(({ heading_id }) => heading_id === heading.id)}
-              detail={detail}
-              onRename={(title) => hierarchy.updateHeading(heading.id, { title })}
-              onMoveUp={index > 0 ? () => hierarchy.reorderHeading(heading.id, 'up') : undefined}
-              onMoveDown={index < headings.length - 1
-                ? () => hierarchy.reorderHeading(heading.id, 'down')
-                : undefined}
-            />
-          ))}
-        </div>
+        <ProjectTaskSection tasks={detail.tasks} detail={detail} />
       )}
 
       <AlertDialog
@@ -326,7 +257,7 @@ export function TaskProjectDetailView({
           <AlertDialogBody>
             <AlertDialogDescription>
               {projectAction === 'delete'
-                ? 'The project, headings, tasks, and checklist items will move to Done together.'
+                ? 'The project, tasks, and checklist items will move to Done together.'
                 : openDescendantCount > 0
                   ? `${openDescendantCount} open ${openDescendantCount === 1 ? 'task' : 'tasks'} will be ${projectAction === 'complete' ? 'completed' : 'canceled'} with the project.`
                   : `The project will be ${projectAction === 'complete' ? 'completed' : 'canceled'}.`}
@@ -353,7 +284,7 @@ export function TaskProjectDetailView({
 
 function ProjectPlanningForm({
   project,
-  planningDate: _planningDate,
+  planningDate,
   onSave,
 }: {
   project: NonNullable<TaskHierarchyModel['projects'][number]>;
@@ -361,14 +292,14 @@ function ProjectPlanningForm({
   onSave: (patch: Parameters<TaskHierarchyModel['updateProject']>[1]) => Promise<unknown>;
 }) {
   const [destination, setDestination] = useState(project.destination);
-  const [todaySection, setTodaySection] = useState(project.today_section);
+  const [todaySection, setTodaySection] = useState(project.today_section ?? 'next');
   const [startDate, setStartDate] = useState(project.start_date ?? '');
   const [deadline, setDeadline] = useState(project.deadline ?? '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setDestination(project.destination);
-    setTodaySection(project.today_section);
+    setTodaySection(project.today_section ?? 'next');
     setStartDate(project.start_date ?? '');
     setDeadline(project.deadline ?? '');
   }, [
@@ -381,10 +312,7 @@ function ProjectPlanningForm({
   const normalizedStartDate = destination === 'someday'
     ? null
     : startDate || null;
-  const normalizedTodaySection = destination === 'someday' ? 'none' : todaySection;
-  const invalidDateRange = Boolean(
-    normalizedStartDate && deadline && deadline < normalizedStartDate,
-  );
+  const normalizedTodaySection = destination === 'someday' ? null : todaySection;
   const changed = destination !== project.destination
     || normalizedTodaySection !== project.today_section
     || normalizedStartDate !== project.start_date
@@ -392,7 +320,7 @@ function ProjectPlanningForm({
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    if (!changed || invalidDateRange || saving) return;
+    if (!changed || saving) return;
     setSaving(true);
     try {
       await onSave({
@@ -429,7 +357,7 @@ function ProjectPlanningForm({
               setDestination(next);
               if (next === 'someday') {
                 setStartDate('');
-                setTodaySection('none');
+                setTodaySection('next');
               }
             }}
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -438,24 +366,23 @@ function ProjectPlanningForm({
             <option value="someday">Someday</option>
           </select>
         </div>
-        <div className="space-y-1.5">
+        {destination !== 'someday' ? <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor={`project-today-section-${project.id}`}>
             Day Horizon
           </label>
           <select
             id={`project-today-section-${project.id}`}
             value={normalizedTodaySection}
-            disabled={saving || destination === 'someday'}
+            disabled={saving}
             onChange={(event) => setTodaySection(event.target.value as typeof todaySection)}
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
-            <option value="none">None</option>
             <option value="inbox">Inbox</option>
             <option value="now">Now</option>
             <option value="next">Next</option>
             <option value="later">Later</option>
           </select>
-        </div>
+        </div> : null}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
@@ -466,10 +393,14 @@ function ProjectPlanningForm({
             <DatePickerField
               id={`project-start-date-${project.id}`}
               value={destination === 'someday' ? '' : startDate}
-              onValueChange={setStartDate}
+              onValueChange={(value) => {
+                if (value && !startDate) setTodaySection('next');
+                setStartDate(value);
+              }}
               disabled={saving || destination === 'someday'}
               placeholder="No Start Date"
               aria-label="Project Start Date"
+              minDate={addTaskCalendarDays(planningDate, 1)}
             />
             {destination !== 'someday' && startDate ? (
               <Button
@@ -513,13 +444,8 @@ function ProjectPlanningForm({
           </div>
         </div>
       </div>
-      {invalidDateRange ? (
-        <p role="alert" className="text-sm text-destructive">
-          Deadline cannot be earlier than the start date.
-        </p>
-      ) : null}
       <div className="flex justify-end">
-        <Button type="submit" disabled={saving || invalidDateRange || !changed}>
+        <Button type="submit" disabled={saving || !changed}>
           Save Planning
         </Button>
       </div>
@@ -528,49 +454,14 @@ function ProjectPlanningForm({
 }
 
 function ProjectTaskSection({
-  heading,
-  headings,
   tasks,
   detail,
-  onRename,
-  onMoveUp,
-  onMoveDown,
 }: {
-  heading: TaskHeading | null;
-  headings: TaskHeading[];
   tasks: TaskTodo[];
   detail: ReturnType<typeof useTaskProjectDetail>;
-  onRename?: (title: string) => Promise<unknown>;
-  onMoveUp?: () => Promise<unknown>;
-  onMoveDown?: () => Promise<unknown>;
 }) {
-  const sectionId = `task-heading-${heading?.id ?? 'none'}`;
   return (
-    <section aria-labelledby={sectionId}>
-      <div className="mb-2 flex min-h-9 items-center gap-2">
-        {heading ? (
-          <TaskHierarchyEditableTitle id={sectionId} value={heading.title} onSave={onRename!} />
-        ) : (
-          <h4 id={sectionId} className="text-sm font-semibold text-muted-foreground">
-            No Heading ({tasks.length})
-          </h4>
-        )}
-        {heading ? (
-          <div className="ml-auto flex items-center gap-1">
-            <span className="text-xs text-muted-foreground">{tasks.length}</span>
-            <TaskHierarchyOrderButton
-              label={`Move ${heading.title} Up`}
-              icon={ArrowUp}
-              action={onMoveUp}
-            />
-            <TaskHierarchyOrderButton
-              label={`Move ${heading.title} Down`}
-              icon={ArrowDown}
-              action={onMoveDown}
-            />
-          </div>
-        ) : null}
-      </div>
+    <section aria-label="Project Tasks">
       <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
         {tasks.length === 0 ? (
           <p className="px-4 py-5 text-sm text-muted-foreground">No Tasks</p>
@@ -578,13 +469,11 @@ function ProjectTaskSection({
           <ProjectTaskRow
             key={task.id}
             task={task}
-            headings={headings}
             checklistItems={detail.checklistItems.filter(({ task_id }) => task_id === task.id)}
             onRename={(title) => detail.updateTask(task.id, { title })}
             onSetActionability={(actionability) => (
               detail.updateTask(task.id, { actionability })
             )}
-            onMoveHeading={(headingId) => detail.moveTaskToHeading(task.id, headingId)}
             onMoveUp={index > 0 ? () => detail.reorderTask(task.id, 'up') : undefined}
             onMoveDown={index < tasks.length - 1
               ? () => detail.reorderTask(task.id, 'down')
@@ -609,11 +498,9 @@ function ProjectTaskSection({
 
 function ProjectTaskRow({
   task,
-  headings,
   checklistItems,
   onRename,
   onSetActionability,
-  onMoveHeading,
   onMoveUp,
   onMoveDown,
   onCreateChecklistItem,
@@ -623,11 +510,9 @@ function ProjectTaskRow({
   onDeleteChecklistItem,
 }: {
   task: TaskTodo;
-  headings: TaskHeading[];
   checklistItems: TaskChecklistItem[];
   onRename: (title: string) => Promise<unknown>;
   onSetActionability: (actionability: TaskTodo['actionability']) => Promise<unknown>;
-  onMoveHeading: (headingId: string | null) => Promise<unknown>;
   onMoveUp?: () => Promise<unknown>;
   onMoveDown?: () => Promise<unknown>;
   onCreateChecklistItem: (title: string) => Promise<unknown>;
@@ -670,21 +555,7 @@ function ProjectTaskRow({
         >
           <option value="actionable">Actionable</option>
           <option value="waiting">Waiting</option>
-        </select>
-        <select
-          value={task.heading_id ?? ''}
-          onChange={(event) => {
-            void onMoveHeading(event.target.value || null).catch((error) => {
-              showError('Task Could Not Be Moved', error);
-            });
-          }}
-          aria-label={`Heading for ${task.title}`}
-          className="h-9 min-w-36 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <option value="">No Heading</option>
-          {headings.map((heading) => (
-            <option key={heading.id} value={heading.id}>{heading.title}</option>
-          ))}
+          <option value="rechecking">Rechecking</option>
         </select>
         <details className="group min-w-0 flex-1">
           <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-sm text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">

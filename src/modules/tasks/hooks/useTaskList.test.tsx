@@ -25,14 +25,16 @@ const originalTask: TaskTodo = taskTodoFixture({
   title: 'Original title',
   destination: 'anytime',
   today_section: 'next',
+  start_date: '2000-01-01',
 });
 
 let latest: ReturnType<typeof useTaskList>;
 let queryData: TaskTodo[];
 let harnessView: TaskListView;
+let harnessRetainedTaskId: string | null;
 
 function Harness() {
-  latest = useTaskList('owner-a', harnessView);
+  latest = useTaskList('owner-a', harnessView, harnessRetainedTaskId);
   return null;
 }
 
@@ -66,6 +68,7 @@ function deferred<T>() {
 describe('useTaskList optimistic display', () => {
   beforeEach(() => {
     harnessView = 'today';
+    harnessRetainedTaskId = null;
     queryData = [originalTask];
     mocks.useQuery.mockReset().mockImplementation(() => ({
       data: queryData,
@@ -314,7 +317,7 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
-  it('captures directly into Today as Anytime Inbox without a start date', async () => {
+  it('captures directly into undated Today Next', async () => {
     const repository = {
       createTask: vi.fn().mockResolvedValue(originalTask),
       updateTask: vi.fn(),
@@ -332,7 +335,7 @@ describe('useTaskList optimistic display', () => {
         ownerId: 'owner-a',
         title: 'Today capture',
         destination: 'anytime',
-        todaySection: 'inbox',
+        todaySection: 'next',
         startDate: null,
       });
     } finally {
@@ -344,7 +347,7 @@ describe('useTaskList optimistic display', () => {
     harnessView = 'someday';
     const repository = {
       createTask: vi.fn().mockResolvedValue({
-        ...originalTask, destination: 'someday', today_section: 'none',
+        ...originalTask, destination: 'someday', today_section: null, start_date: null,
       }),
       updateTask: vi.fn(),
       moveTask: vi.fn(),
@@ -361,7 +364,7 @@ describe('useTaskList optimistic display', () => {
         ownerId: 'owner-a',
         title: 'Someday capture',
         destination: 'someday',
-        todaySection: 'none',
+        todaySection: null,
         startDate: null,
       });
     } finally {
@@ -408,7 +411,7 @@ describe('useTaskList optimistic display', () => {
         ownerId: 'owner-a',
         title: 'Anytime capture',
         destination: 'anytime',
-        todaySection: 'inbox',
+        todaySection: 'next',
         startDate: null,
       });
 
@@ -427,7 +430,7 @@ describe('useTaskList optimistic display', () => {
   it('removes a Someday task immediately when assigning a start date activates it', async () => {
     harnessView = 'someday';
     const somedayTask = {
-      ...originalTask, destination: 'someday' as const, today_section: 'none' as const,
+      ...originalTask, destination: 'someday' as const, today_section: null, start_date: null,
     };
     queryData = [somedayTask];
     const activatedTask = {
@@ -451,7 +454,7 @@ describe('useTaskList optimistic display', () => {
       act(() => {
         updatePromise = latest.updateTask('task-a', {
           destination: 'anytime',
-          today_section: 'none',
+          today_section: 'next',
           start_date: '2099-01-02',
         });
       });
@@ -465,11 +468,51 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
+  it('retains an open task in its original view group until retention ends', async () => {
+    harnessRetainedTaskId = 'task-a';
+    const deferredTask = {
+      ...originalTask,
+      start_date: '2099-01-02',
+      today_section: 'later' as const,
+      revision: 2,
+      client_mutation_id: 'mutation-deferred',
+    };
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn().mockResolvedValue(deferredTask),
+      moveTask: vi.fn(),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      await act(async () => {
+        await latest.updateTask('task-a', {
+          start_date: '2099-01-02',
+          today_section: 'later',
+        });
+      });
+      expect(latest.tasks).toHaveLength(1);
+      expect(latest.tasks[0]).toMatchObject({
+        id: 'task-a',
+        start_date: originalTask.start_date,
+        today_section: originalTask.today_section,
+      });
+
+      harnessRetainedTaskId = null;
+      rerender(root);
+      expect(latest.tasks).toEqual([]);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('groups Inbox, Now, Next, and Later work while reordering only within a section', async () => {
     const inbox = {
       ...originalTask,
       id: 'task-inbox',
-      today_section: 'none' as const,
+      today_section: 'inbox' as const,
       start_date: '2000-01-01',
       order_key: 'a0',
     };
@@ -483,20 +526,20 @@ describe('useTaskList optimistic display', () => {
     const nextFirst = {
       ...originalTask,
       id: 'task-next-first',
-      start_date: null,
+      start_date: '2000-01-01',
       order_key: 'a0',
     };
     const nextSecond = {
       ...originalTask,
       id: 'task-next-second',
-      start_date: null,
+      start_date: '2000-01-01',
       order_key: 'a1',
     };
     const later = {
       ...originalTask,
       id: 'task-later',
       today_section: 'later' as const,
-      start_date: null,
+      start_date: '2000-01-01',
       order_key: 'a0',
     };
     queryData = [later, nextSecond, now, inbox, nextFirst];

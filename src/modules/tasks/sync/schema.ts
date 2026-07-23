@@ -6,7 +6,6 @@ const taskTodos = new Table(
     actionability: column.text,
     area_id: column.text,
     project_id: column.text,
-    heading_id: column.text,
     title: column.text,
     notes: column.text,
     lifecycle: column.text,
@@ -21,6 +20,7 @@ const taskTodos = new Table(
     hierarchy_order_key: column.text,
     start_date: column.text,
     deadline: column.text,
+    primary_link: column.text,
     entry_channel: column.text,
     last_mutation_channel: column.text,
     last_actor_type: column.text,
@@ -67,7 +67,6 @@ const taskTodos = new Table(
         'owner_id',
         'area_id',
         'project_id',
-        'heading_id',
         'disposition',
         'hierarchy_order_key',
       ],
@@ -141,30 +140,6 @@ const taskProjects = new Table(
       ],
     },
   },
-);
-
-const taskHeadings = new Table(
-  {
-    owner_id: column.text,
-    project_id: column.text,
-    title: column.text,
-    order_key: column.text,
-    disposition: column.text,
-    deleted_at: column.text,
-    deletion_root_id: column.text,
-    template_definition_id: column.text,
-    template_revision: column.integer,
-    template_instantiation_id: column.text,
-    template_node_id: column.text,
-    entry_channel: column.text,
-    last_mutation_channel: column.text,
-    last_actor_type: column.text,
-    revision: column.integer,
-    client_mutation_id: column.text,
-    created_at: column.text,
-    updated_at: column.text,
-  },
-  { indexes: { ownerProjectOrder: ['owner_id', 'project_id', 'disposition', 'order_key'] } },
 );
 
 const taskChecklistItems = new Table(
@@ -585,7 +560,6 @@ const taskOwnerBinding = new Table(
 export const tasksPowerSyncSchema = new Schema({
   tasks_areas: taskAreas,
   tasks_projects: taskProjects,
-  tasks_headings: taskHeadings,
   tasks_todos: taskTodos,
   tasks_checklist_items: taskChecklistItems,
   tasks_history_events: taskHistoryEvents,

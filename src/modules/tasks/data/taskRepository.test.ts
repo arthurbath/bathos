@@ -17,6 +17,8 @@ const timestamp = '2026-07-20T04:30:00.000Z';
 const existingTask: TaskTodo = taskTodoFixture({
   id: 'task-a',
   title: 'Existing task',
+  today_section: 'next',
+  start_date: null,
 });
 
 function createHarness(queryResult: unknown | null) {
@@ -77,6 +79,34 @@ describe('task repository', () => {
     ).rejects.toThrow('A recognized IANA planning time zone is required');
   });
 
+  it('activates reached local start dates once while retaining their day horizon', async () => {
+    const { repository, transaction } = createHarness(null);
+    vi.mocked(transaction.getAll).mockResolvedValueOnce([
+      { ...existingTask, start_date: '2026-07-20' },
+    ]);
+
+    await expect(
+      repository.activateDueStartDates('owner-a', '2026-07-20'),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: 'task-a',
+        start_date: null,
+        today_section: 'next',
+        last_mutation_channel: 'native',
+        last_actor_type: 'system',
+        revision: 2,
+      }),
+    ]);
+    expect(transaction.getAll).toHaveBeenCalledWith(
+      expect.stringContaining('start_date <= ?'),
+      ['owner-a', '2026-07-20'],
+    );
+    expect(transaction.execute).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE tasks_todos'),
+      expect.arrayContaining([null, 'native', 'system', 'task-a', 'owner-a']),
+    );
+  });
+
   it('creates a complete offline row after the current destination tail', async () => {
     const { repository, transaction } = createHarness({ order_key: 'a0' });
 
@@ -107,7 +137,7 @@ describe('task repository', () => {
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain('INSERT INTO tasks_todos');
   });
 
-  it('places unscheduled captures without an explicit destination in Today Inbox and Anytime', async () => {
+  it('places ordinary captures in active Today Next without a Start Date', async () => {
     const { repository } = createHarness(null);
 
     await expect(repository.createTask({
@@ -116,8 +146,31 @@ describe('task repository', () => {
     })).resolves.toMatchObject({
       title: 'Unprocessed capture',
       destination: 'anytime',
-      today_section: 'inbox',
+      today_section: 'next',
       start_date: null,
+    });
+  });
+
+  it('requires assigned start dates to be future dates in the owner planning time zone', async () => {
+    const rejected = createHarness(null);
+    await expect(rejected.repository.createTask({
+      ownerId: 'owner-a',
+      title: 'Reached start date',
+      startDate: '2026-07-20',
+    })).rejects.toThrow('Start date must be after today');
+    expect(rejected.transaction.execute).not.toHaveBeenCalled();
+
+    const accepted = createHarness(null);
+    vi.mocked(accepted.transaction.getAll).mockResolvedValueOnce([
+      { planning_timezone: 'America/Los_Angeles' },
+    ]);
+    await expect(accepted.repository.createTask({
+      ownerId: 'owner-a',
+      title: 'Tomorrow in the owner time zone',
+      startDate: '2026-07-20',
+    })).resolves.toMatchObject({
+      start_date: '2026-07-20',
+      today_section: 'next',
     });
   });
 
@@ -149,9 +202,9 @@ describe('task repository', () => {
     const { repository } = createHarness(existingTask);
 
     await expect(repository.updateTask('owner-a', 'task-a', {
-      actionability: 'waiting',
+      actionability: 'rechecking',
     })).resolves.toMatchObject({
-      actionability: 'waiting',
+      actionability: 'rechecking',
       destination: 'anytime',
       order_key: 'a0',
       revision: 2,
@@ -180,17 +233,17 @@ describe('task repository', () => {
     const moved = await repository.moveTask('owner-a', 'task-a', {
       destination: 'anytime',
       todaySection: 'later',
-      startDate: '2026-07-20',
+      startDate: '2026-07-21',
     });
 
     expect(moved).toMatchObject({
       destination: 'anytime',
       today_section: 'later',
-      start_date: '2026-07-20',
+      start_date: '2026-07-21',
       revision: 2,
     });
     expect(moved.order_key > 'a0').toBe(true);
-    expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain('today_section = ?');
+    expect(vi.mocked(transaction.getOptional).mock.calls.at(-1)?.[0]).toContain('today_section IS ?');
   });
 
   it('moves active work to Anytime or Someday with destination-scoped planning', async () => {
@@ -204,7 +257,7 @@ describe('task repository', () => {
       startDate: '2026-07-24',
     })).resolves.toMatchObject({
       destination: 'anytime',
-      today_section: 'none',
+      today_section: 'next',
       start_date: '2026-07-24',
     });
 
@@ -222,11 +275,11 @@ describe('task repository', () => {
 
     await expect(somedayHarness.repository.moveTask('owner-a', 'task-a', {
       destination: 'someday',
-      todaySection: 'none',
+      todaySection: null,
       startDate: null,
     })).resolves.toMatchObject({
       destination: 'someday',
-      today_section: 'none',
+      today_section: null,
       start_date: null,
       deadline: '2026-07-24',
     });
@@ -249,7 +302,7 @@ describe('task repository', () => {
     const moved = await repository.moveTasks('owner-a', ['task-a', 'task-b'], {
       destination: 'anytime',
       todaySection: 'later',
-      startDate: '2026-07-20',
+      startDate: '2026-07-21',
     });
 
     expect(database.writeTransaction).toHaveBeenCalledOnce();
@@ -258,7 +311,7 @@ describe('task repository', () => {
     expect(moved[0]).toMatchObject({
       destination: 'anytime',
       today_section: 'later',
-      start_date: '2026-07-20',
+      start_date: '2026-07-21',
       revision: 2,
     });
     expect(moved[1].order_key > moved[0].order_key).toBe(true);
@@ -287,7 +340,7 @@ describe('task repository', () => {
     expect(transaction.execute).not.toHaveBeenCalled();
   });
 
-  it('rejects a bulk start date beyond one selected deadline before writing', async () => {
+  it('allows a bulk start date beyond a selected deadline', async () => {
     const constrainedTask = {
       ...existingTask,
       id: 'task-b',
@@ -304,31 +357,28 @@ describe('task repository', () => {
       destination: 'anytime',
       todaySection: 'next',
       startDate: '2026-07-21',
-    })).rejects.toThrow('Deadline cannot be earlier than the start date');
-    expect(transaction.execute).not.toHaveBeenCalled();
+    })).resolves.toHaveLength(2);
+    expect(transaction.execute).toHaveBeenCalledTimes(2);
   });
 
-  it('moves a task into one owned project heading without changing planning order', async () => {
+  it('moves a task into one owned project without changing planning order', async () => {
     const { repository, transaction } = createHarness(existingTask);
     vi.mocked(transaction.getOptional)
       .mockResolvedValueOnce(existingTask)
-      .mockResolvedValueOnce({ id: 'project-a' })
-      .mockResolvedValueOnce({ project_id: 'project-a' });
+      .mockResolvedValueOnce({ id: 'project-a' });
 
     await expect(repository.moveTaskToContainer('owner-a', 'task-a', {
       projectId: 'project-a',
-      headingId: 'heading-a',
       hierarchyOrderKey: 'a1',
     })).resolves.toMatchObject({
       project_id: 'project-a',
-      heading_id: 'heading-a',
       hierarchy_order_key: 'a1',
       destination: 'anytime',
       order_key: 'a0',
       revision: 2,
     });
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain(
-      'project_id = ?, heading_id = ?, hierarchy_order_key = ?',
+      'project_id = ?, hierarchy_order_key = ?',
     );
   });
 
@@ -342,13 +392,11 @@ describe('task repository', () => {
     const moved = await repository.updateTask('owner-a', 'task-a', {
       area_id: null,
       project_id: 'project-a',
-      heading_id: null,
     });
 
     expect(moved).toMatchObject({
       area_id: null,
       project_id: 'project-a',
-      heading_id: null,
       destination: 'anytime',
       order_key: 'a0',
     });
@@ -366,22 +414,22 @@ describe('task repository', () => {
       title: 'Invalid section',
       destination: 'someday',
       todaySection: 'later',
-    })).rejects.toThrow('Someday work cannot appear in Today');
+    })).rejects.toThrow('Someday work cannot retain planning dates');
     await expect(repository.createTask({
       ownerId: 'owner-a',
       title: 'Inactive later task',
       destination: 'someday',
-      todaySection: 'none',
+      todaySection: null,
       startDate: '2026-07-20',
-    })).rejects.toThrow('Someday work cannot retain a start date');
+    })).rejects.toThrow('Someday work cannot retain planning dates');
 
     const somedayTask = {
-      ...existingTask, destination: 'someday' as const, today_section: 'none' as const,
+      ...existingTask, destination: 'someday' as const, today_section: null, start_date: null,
     };
     const updateHarness = createHarness(somedayTask);
     await expect(updateHarness.repository.updateTask('owner-a', 'task-a', {
       start_date: '2026-07-20',
-    })).rejects.toThrow('Someday work cannot retain a start date');
+    })).rejects.toThrow('Someday work cannot retain planning dates');
     expect(updateHarness.transaction.execute).not.toHaveBeenCalled();
   });
 
@@ -579,7 +627,7 @@ describe('task repository', () => {
     expect(transaction.execute).not.toHaveBeenCalled();
   });
 
-  it('validates date-only planning ranges against the complete current task', async () => {
+  it('allows start dates after deadlines while retaining both facts', async () => {
     const { repository, transaction } = createHarness({
       ...existingTask,
       destination: 'anytime',
@@ -598,7 +646,7 @@ describe('task repository', () => {
     });
     await expect(
       invalidHarness.repository.updateTask('owner-a', 'task-a', { deadline: '2026-07-20' }),
-    ).rejects.toThrow('Deadline cannot be earlier than the start date');
-    expect(invalidHarness.transaction.execute).not.toHaveBeenCalled();
+    ).resolves.toMatchObject({ start_date: '2026-07-24', deadline: '2026-07-20' });
+    expect(invalidHarness.transaction.execute).toHaveBeenCalledOnce();
   });
 });

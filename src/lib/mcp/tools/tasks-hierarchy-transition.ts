@@ -11,11 +11,10 @@ import { uuidSchema } from '../resource-utils';
 type Tables = Database['public']['Tables'];
 type TaskAreaRow = Tables['tasks_areas']['Row'];
 type TaskProjectRow = Tables['tasks_projects']['Row'];
-type TaskHeadingRow = Tables['tasks_headings']['Row'];
 type TaskChecklistItemRow = Tables['tasks_checklist_items']['Row'];
 type HierarchyOperationRow = Tables['tasks_hierarchy_operations']['Row'];
-type HierarchyRootType = 'area' | 'project' | 'heading' | 'checklist_item';
-type HierarchyRootRow = TaskAreaRow | TaskProjectRow | TaskHeadingRow | TaskChecklistItemRow;
+type HierarchyRootType = 'area' | 'project' | 'checklist_item';
+type HierarchyRootRow = TaskAreaRow | TaskProjectRow | TaskChecklistItemRow;
 type HierarchyTransition = 'complete' | 'cancel' | 'reopen' | 'delete' | 'restore';
 type DescendantPolicy = 'reject' | 'cascade';
 
@@ -90,10 +89,6 @@ async function readRoot(
   }
   if (rootType === 'project') {
     return readOne<TaskProjectRow>(auth.supabase.from('tasks_projects').select('*')
-      .eq('owner_id', auth.userId).eq('id', rootId).maybeSingle());
-  }
-  if (rootType === 'heading') {
-    return readOne<TaskHeadingRow>(auth.supabase.from('tasks_headings').select('*')
       .eq('owner_id', auth.userId).eq('id', rootId).maybeSingle());
   }
   return readOne<TaskChecklistItemRow>(auth.supabase.from('tasks_checklist_items').select('*')
@@ -319,9 +314,9 @@ export async function transitionTaskHierarchyData(
 export const transitionTaskHierarchy = defineTool({
   name: 'transition_task_hierarchy',
   title: 'Transition Task Hierarchy',
-  description: 'Complete, cancel, or reopen one project, or recoverably delete or restore one area, project, heading, or checklist item with one atomic revision-checked hierarchy operation. Permanent deletion is not available.',
+  description: 'Complete, cancel, or reopen one project, or recoverably delete or restore one area, project, or checklist item with one atomic revision-checked hierarchy operation. Permanent deletion is not available.',
   inputSchema: {
-    root_type: z.enum(['area', 'project', 'heading', 'checklist_item']),
+    root_type: z.enum(['area', 'project', 'checklist_item']),
     root_id: uuidSchema.describe('Stable hierarchy root identifier.'),
     expected_revision: z.number().int().positive().describe('Current root revision returned by a task hierarchy read.'),
     client_mutation_id: uuidSchema.describe('Stable UUID for this logical mutation. Reuse it only to retry the exact same request.'),

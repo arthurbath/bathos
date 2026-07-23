@@ -149,7 +149,7 @@ describe('Tasks Mail MCP tool', () => {
       _message_identifier: 'message@example.test',
       _retirement_destination_identifier: 'Archive',
       _source_title: 'Project update',
-      _start_date: planningDateInTimeZone('America/Los_Angeles'),
+      _start_date: null,
       _area_id: null,
       _hierarchy_order_key: null,
     });

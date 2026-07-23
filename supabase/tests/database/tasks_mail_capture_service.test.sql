@@ -59,7 +59,7 @@ SELECT public.tasks_create_mail_capture(
   '71000000-0000-4000-8000-000000000011',
   'Reply to project update',
   'Review the source message and reply.',
-  '2026-07-20',
+  NULL,
   'a0',
   NULL,
   'Work',
@@ -107,13 +107,13 @@ SELECT is(
     '71000000-0000-4000-8000-000000000099',
     'Reply to project update',
     'Review the source message and reply.',
-    '2026-07-21', 'z9', NULL, 'Work', 'INBOX',
+    NULL, 'z9', NULL, 'Work', 'INBOX',
     'mail-owner-a@example.test',
     'message://%3Cmail-owner-a%40example.test%3E',
     'Archive', 'Project update', NULL
   ) ->> 'idempotency_outcome',
   'already_applied',
-  'replays exact caller fields despite different generated identity, date, and order'
+  'replays exact caller fields despite different generated identity and order'
 );
 
 SELECT is(
@@ -134,7 +134,7 @@ SELECT is(
     '71000000-0000-4000-8000-000000000013',
     'A newly enriched title',
     'New notes after a caller restart.',
-    '2026-07-20', 'a1', NULL, 'Work', 'INBOX',
+    NULL, 'a1', NULL, 'Work', 'INBOX',
     'mail-owner-a@example.test',
     'message://%3Cmail-owner-a%40example.test%3E',
     'Archive', 'Project update', NULL
@@ -156,7 +156,7 @@ SELECT throws_ok(
       '71000000-0000-4000-8000-000000000011',
       'Different title',
       'Review the source message and reply.',
-      '2026-07-20', 'a0', NULL, 'Work', 'INBOX',
+      NULL, 'a0', NULL, 'Work', 'INBOX',
       'mail-owner-a@example.test',
       'message://%3Cmail-owner-a%40example.test%3E',
       'Archive', 'Project update', NULL
@@ -171,7 +171,7 @@ SELECT throws_ok(
     SELECT public.tasks_create_mail_capture(
       '71000000-0000-4000-8000-000000000014',
       '71000000-0000-4000-8000-000000000015',
-      'Same message', '', '2026-07-20', 'a2', NULL,
+      'Same message', '', NULL, 'a2', NULL,
       'Work', 'Other mailbox', 'mail-owner-a@example.test',
       'message://%3Cmail-owner-a%40example.test%3E',
       'Trash', 'Project update', NULL
@@ -186,7 +186,7 @@ SELECT throws_ok(
     SELECT public.tasks_create_mail_capture(
       '71000000-0000-4000-8000-000000000016',
       '71000000-0000-4000-8000-000000000017',
-      'Invalid source', '', '2026-07-20', 'a3', NULL,
+      'Invalid source', '', NULL, 'a3', NULL,
       'Work', 'INBOX', 'invalid@example.test',
       'https://example.test/not-mail', 'Archive', NULL, NULL
     )
@@ -201,7 +201,7 @@ SELECT throws_ok(
       SELECT public.tasks_create_mail_capture(
         '71000000-0000-4000-8000-000000000018',
         '71000000-0000-4000-8000-000000000019',
-        'Atomic failure', '', '2026-07-20', 'a4', NULL,
+        'Atomic failure', '', NULL, 'a4', NULL,
         'Work', 'INBOX', 'atomic-failure@example.test',
         'message://%%3Catomic-failure%%40example.test%%3E', %L, NULL, NULL
       )
@@ -227,7 +227,7 @@ SELECT is(
   public.tasks_create_mail_capture(
     '72000000-0000-4000-8000-000000000010',
     '72000000-0000-4000-8000-000000000011',
-    'Owner B same external message', '', '2026-07-20', 'a0', NULL,
+    'Owner B same external message', '', NULL, 'a0', NULL,
     'Work', 'INBOX', 'mail-owner-a@example.test',
     'message://%3Cmail-owner-a%40example.test%3E',
     'Archive', NULL, NULL

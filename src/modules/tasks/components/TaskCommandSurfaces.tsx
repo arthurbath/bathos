@@ -30,6 +30,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { shouldHandleWithBrowser } from '@/lib/navigation';
+import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
 import {
   createTaskSearchDocuments,
@@ -116,10 +117,10 @@ export function TaskSearchDialog({
   }, [open]);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const deferredQuery = useDeferredValue(normalizedQuery);
-  const { areas, headings, projects } = hierarchy;
+  const { areas, projects } = hierarchy;
   const documents = useMemo(
-    () => createTaskSearchDocuments(tasks, { areas, headings, projects }),
-    [areas, headings, projects, tasks],
+    () => createTaskSearchDocuments(tasks, { areas, projects }),
+    [areas, projects, tasks],
   );
   const filteredDocuments = useMemo(
     () => filterTaskSearchDocuments(documents, deferredQuery, filters),
@@ -219,6 +220,7 @@ export function TaskSearchDialog({
                 ['all', 'All Actionability'],
                 ['actionable', 'Actionable'],
                 ['waiting', 'Waiting'],
+                ['rechecking', 'Rechecking'],
               ]}
             />
             <SearchFilter
@@ -355,10 +357,16 @@ export function TaskKeyboardHelpDialog({
     {
       label: 'Everywhere',
       commands: [
-        ['Capture a Task', 'N', 'N'],
-        ['Search Tasks and Views', '/', '/'],
-        ['Show Keyboard Help', '?', '?'],
-        ['Navigate to a View', 'G then T/U/A/S/P/D/E/C', 'G then T/U/A/S/P/D/E/C'],
+        ['Capture a Task', 'Command+N', 'Control+N'],
+        ['Show Keyboard Help', 'Command+/', 'Control+/'],
+        ['Open Today', 'Command+1', 'Control+1'],
+        ['Open Upcoming', 'Command+2', 'Control+2'],
+        ['Open Anytime', 'Command+3', 'Control+3'],
+        ['Open Someday', 'Command+4', 'Control+4'],
+        ['Open Projects', 'Command+5', 'Control+5'],
+        ['Open Templates', 'Command+6', 'Control+6'],
+        ['Open Done', 'Command+7', 'Control+7'],
+        ['Open Config', 'Command+8', 'Control+8'],
         ['Undo a Task Change', 'Command+Z', 'Control+Z'],
         ['Redo a Task Change', 'Command+Shift+Z', 'Control+Shift+Z'],
       ],
@@ -366,11 +374,10 @@ export function TaskKeyboardHelpDialog({
     {
       label: 'Task List',
       commands: [
-        ['Edit', 'Enter', 'Enter'],
-        ['Complete', 'C', 'C'],
-        ['Move to an Area, Project, or Heading', 'M', 'M'],
-        ['Choose When', 'W', 'W'],
-        ['Move Focus', 'Up/Down', 'Up/Down'],
+        ['Open Next', 'Control+S', 'Control+Shift+S'],
+        ['Open Previous', 'Control+W', 'Control+Shift+W'],
+        ['Mark Open To-Do Complete', 'Control+D', 'Control+Shift+D'],
+        ['Close and Clear Focus', 'Control+X', 'Control+Shift+X'],
         ['Reorder by Keyboard', 'Option+Up/Down', 'Alt+Up/Down'],
         ['Add or Remove Selection', 'Command-click', 'Control-click'],
         ['Replace Anchored Range', 'Shift-click', 'Shift-click'],
@@ -381,8 +388,6 @@ export function TaskKeyboardHelpDialog({
     {
       label: 'Editor and Surfaces',
       commands: [
-        ['Save', 'Command+Enter', 'Control+Enter'],
-        ['Cancel or Close', 'Escape', 'Escape'],
         ['Move Through Controls', 'Tab/Shift+Tab', 'Tab/Shift+Tab'],
       ],
     },
@@ -497,7 +502,7 @@ export function TaskMoveDialog({
               label="No Area or Project"
               current={!task.area_id && !task.project_id}
               disabled={pending}
-              onClick={() => void move({ area_id: null, project_id: null, heading_id: null })}
+              onClick={() => void move({ area_id: null, project_id: null })}
             />
           </div>
           {hierarchy.areas.length > 0 ? (
@@ -511,7 +516,6 @@ export function TaskMoveDialog({
                   onClick={() => void move({
                     area_id: area.id,
                     project_id: null,
-                    heading_id: null,
                   })}
                 />
               ))}
@@ -523,30 +527,13 @@ export function TaskMoveDialog({
                 <div key={project.id}>
                   <TaskCommandButton
                     label={project.title}
-                    current={task.project_id === project.id && task.heading_id === null}
+                    current={task.project_id === project.id}
                     disabled={pending}
                     onClick={() => void move({
                       area_id: null,
                       project_id: project.id,
-                      heading_id: null,
                     })}
                   />
-                  {hierarchy.headings
-                    .filter(({ project_id }) => project_id === project.id)
-                    .map((heading) => (
-                      <TaskCommandButton
-                        key={heading.id}
-                        label={`${project.title} / ${heading.title}`}
-                        current={task.heading_id === heading.id}
-                        disabled={pending}
-                        nested
-                        onClick={() => void move({
-                          area_id: null,
-                          project_id: project.id,
-                          heading_id: heading.id,
-                        })}
-                      />
-                    ))}
                 </div>
               ))}
             </TaskCommandGroup>
@@ -562,6 +549,7 @@ export function TaskWhenDialog({
   open,
   task,
   actions,
+  planningDate,
   onOpenChange,
   onCloseAutoFocus,
   onPlan,
@@ -569,17 +557,18 @@ export function TaskWhenDialog({
   open: boolean;
   task: TaskTodo;
   actions: TaskTemporalAction[];
+  planningDate: string;
   onOpenChange: (open: boolean) => void;
   onCloseAutoFocus: () => void;
   onPlan: (patch: EditableTaskPatch) => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
   const [startDate, setStartDate] = useState(task.start_date ?? '');
-  const [todaySection, setTodaySection] = useState<TaskTodaySection>(task.today_section);
+  const [todaySection, setTodaySection] = useState<TaskTodaySection>(task.today_section ?? 'next');
   useEffect(() => {
     if (!open) return;
     setStartDate(task.start_date ?? '');
-    setTodaySection(task.today_section);
+    setTodaySection(task.today_section ?? 'next');
   }, [open, task.start_date, task.today_section]);
   const apply = async (action: TaskTemporalAction) => {
     if (pending) return;
@@ -598,11 +587,11 @@ export function TaskWhenDialog({
     setPending(true);
     try {
       await onPlan({
-        ...(task.destination === 'someday' && (startDate || todaySection !== 'none')
+        ...(task.destination === 'someday' && startDate
           ? { destination: 'anytime' as const }
           : {}),
         start_date: startDate || null,
-        today_section: todaySection,
+        today_section: startDate ? todaySection : task.today_section,
       });
       onOpenChange(false);
     } catch {
@@ -633,13 +622,17 @@ export function TaskWhenDialog({
               <DatePickerField
                 id={`task-when-start-${task.id}`}
                 value={startDate}
-                onValueChange={setStartDate}
+                onValueChange={(value) => {
+                  if (value && !startDate) setTodaySection('next');
+                  setStartDate(value);
+                }}
                 disabled={pending}
                 placeholder="No Start Date"
                 aria-label="Start Date"
+                minDate={addTaskCalendarDays(planningDate, 1)}
               />
             </div>
-            <div className="space-y-1.5">
+            {startDate || task.today_section !== null ? <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground" htmlFor={`task-when-horizon-${task.id}`}>
                 Day Horizon
               </label>
@@ -650,13 +643,12 @@ export function TaskWhenDialog({
                 disabled={pending}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <option value="none">None</option>
                 <option value="inbox">Inbox</option>
                 <option value="now">Now</option>
                 <option value="next">Next</option>
                 <option value="later">Later</option>
               </select>
-            </div>
+            </div> : null}
           </div>
           <div className="flex justify-end">
             <Button type="button" size="sm" disabled={pending} onClick={() => void savePlanning()}>
@@ -785,7 +777,9 @@ function TaskCommandButton({
 function getTaskSearchMetadata(task: TaskTodo, hierarchyLabel: string | null): string {
   const metadata = [
     task.lifecycle === 'open' ? task.destination : task.lifecycle,
-    task.actionability === 'waiting' ? 'waiting' : null,
+    task.actionability === 'waiting'
+      ? 'waiting'
+      : task.actionability === 'rechecking' ? 'rechecking' : null,
     hierarchyLabel,
     task.source_kind ? sourceKindLabels[task.source_kind] : null,
   ].filter(Boolean);

@@ -30,6 +30,7 @@ interface DatePickerFieldProps extends Omit<React.ButtonHTMLAttributes<HTMLButto
   placeholder?: string;
   displayFormat?: string;
   popoverAlign?: 'start' | 'center' | 'end';
+  minDate?: string;
 }
 
 export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFieldProps>(({
@@ -38,6 +39,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   placeholder = 'Pick a date',
   displayFormat = 'MMM d, yyyy',
   popoverAlign = 'start',
+  minDate,
   className,
   disabled,
   ...props
@@ -46,6 +48,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   const [visibleMonth, setVisibleMonth] = React.useState<Date>(() => getVisibleMonth(value));
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const selectedDate = parseDatePickerFieldValue(value);
+  const minimumDate = parseDatePickerFieldValue(minDate);
 
   React.useImperativeHandle(forwardedRef, () => triggerRef.current as HTMLButtonElement);
 
@@ -89,6 +92,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
         <Calendar
           mode="single"
           selected={selectedDate}
+          disabled={minimumDate ? { before: minimumDate } : undefined}
           month={visibleMonth}
           onMonthChange={setVisibleMonth}
           onSelect={(date) => {

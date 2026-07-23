@@ -185,7 +185,6 @@ GRANT USAGE ON SCHEMA public TO tasks_powersync_role;
 GRANT SELECT ON TABLE
   public.tasks_areas,
   public.tasks_projects,
-  public.tasks_headings,
   public.tasks_todos,
   public.tasks_checklist_items,
   public.tasks_history_events,

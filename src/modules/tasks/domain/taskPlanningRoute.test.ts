@@ -8,7 +8,7 @@ describe('getTaskPlanningRoute', () => {
       destination: 'anytime',
       lifecycle: 'completed',
       disposition: 'present',
-      today_section: 'none',
+      today_section: 'next',
       start_date: '2026-07-20',
     }, '2026-07-20')).toBe('done');
   });
@@ -18,7 +18,7 @@ describe('getTaskPlanningRoute', () => {
       destination: 'anytime',
       lifecycle: 'open',
       disposition: 'present',
-      today_section: 'none',
+      today_section: 'next',
       start_date: '2026-07-21',
     }, '2026-07-20')).toBe('upcoming');
   });
@@ -29,7 +29,7 @@ describe('getTaskPlanningRoute', () => {
       lifecycle: 'open',
       disposition: 'present',
       start_date: '2026-07-20',
-      today_section: 'none',
+      today_section: 'next',
     }, '2026-07-20')).toBe('today');
   });
 });

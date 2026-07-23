@@ -1,6 +1,6 @@
 # Tasks PowerSync Deployment
 
-This package prepares the remote synchronization boundary for the private Tasks parallel-use trial. It is safe to keep in the public repository because it contains no database password, service token, private endpoint credential, or personal task content.
+This package defines the remote synchronization boundary for BathOS Tasks. It is safe to keep in the public repository because it contains no database password, service token, private endpoint credential, or personal task content.
 
 Production provisioning was approved and completed on 2026 Jul 20. The active topology is recorded in `docs/agents/evaluations/2026-07-20_tasks_production_sync_topology.md`. Future mutations still require explicit approval and must preserve the exact task-only boundary described here.
 
@@ -17,13 +17,13 @@ The repository test `src/modules/tasks/sync/deploymentConfig.test.ts` keeps thes
 
 ## Production State
 
-The active `Tasks Development` instance is in a US region on PowerSync Cloud Free. It uses Supabase Auth, the dedicated `tasks_powersync_role`, the exact 22-table `powersync` publication, and the committed `owner_tasks` stream. The public client endpoint is configured only after the synthetic production topology gate passed and an independent cleanup audit found no residual synthetic users or task rows.
+The active `Tasks Development` instance is in a US region on PowerSync Cloud Free. It uses Supabase Auth, the dedicated `tasks_powersync_role`, the exact 21-table `powersync` publication, and the committed `owner_tasks` stream. The public client endpoint is configured only after the synthetic production topology gate passed and an independent cleanup audit found no residual synthetic users or task rows.
 
-The Done-retention migration does not add a synchronized table. Its content-free duplicate-suppression receipts remain in `tasks_private`, outside the publication and PowerSync role. Expired rows disappearing from the existing 22 public tables project through the ordinary delete stream, so the approved publication and Sync Stream table sets remain unchanged.
+The Done-retention migration does not add a synchronized table. Its content-free duplicate-suppression receipts remain in `tasks_private`, outside the publication and PowerSync role. Expired rows disappearing from the synchronized public tables project through the ordinary delete stream.
 
 The replication password remains in macOS Keychain. Server-only Supabase keys are resolved only in memory by `scripts/provision-tasks-production.mjs` when the explicit synthetic gate is run. Do not upgrade a billing plan, rotate credentials, change the publication, or alter the production database merely because this runbook exists.
 
-Run `node scripts/provision-tasks-production.mjs verify-sync-database` for a read-only production check of the effective role, exact 22-table publication, RLS and replica identity, and the documented Supabase-managed `pg_net` exception. Unlike `sync-database`, this verification command never normalizes the role or changes the publication.
+Run `node scripts/provision-tasks-production.mjs verify-sync-database` for a read-only production check of the effective role, exact 21-table publication, RLS and replica identity, and the documented Supabase-managed `pg_net` exception. Unlike `sync-database`, this verification command never normalizes the role or changes the publication.
 
 ## Database Preparation
 
@@ -41,7 +41,7 @@ ORDER BY pubname, schemaname, tablename;
 
 Use `publication-create.sql` only when `powersync` does not exist. Use `publication-update.sql` only after proving an existing `powersync` publication belongs exclusively to this Tasks deployment. The update intentionally removes unapproved tables from that publication.
 
-Run `verify.sql` before giving PowerSync the database connection. Its final row must report `ready` and 22 synchronized tables. Verification evaluates schema usage together with effective relation and column privileges, and it rejects executable public `SECURITY DEFINER` functions. Hosted Supabase currently gives every database role inherited access to the `supabase_admin`-owned `net` schema, its two operational queue tables, and its request functions. The project `postgres` role cannot revoke that managed grant. Verification treats only that exact owner-controlled pg_net surface as an explicit infrastructure exception, rejects direct pg_net grants to the PowerSync role, and rejects every other non-Tasks schema or relation. The `powersync` publication and Sync Streams still contain only the approved 22 Tasks tables. Removing the pg_net exception requires Supabase support or replacement of the reminder scheduler.
+Run `verify.sql` before giving PowerSync the database connection. Its final row must report `ready` and 21 synchronized tables. Verification evaluates schema usage together with effective relation and column privileges, and it rejects executable public `SECURITY DEFINER` functions. Hosted Supabase currently gives every database role inherited access to the `supabase_admin`-owned `net` schema, its two operational queue tables, and its request functions. The project `postgres` role cannot revoke that managed grant. Verification treats only that exact owner-controlled pg_net surface as an explicit infrastructure exception, rejects direct pg_net grants to the PowerSync role, and rejects every other non-Tasks schema or relation. The `powersync` publication and Sync Streams contain only the approved 21 Tasks tables. Removing the pg_net exception requires Supabase support or replacement of the reminder scheduler.
 
 ## PowerSync Cloud Configuration
 
@@ -65,6 +65,8 @@ npm run test:tasks:production-topology
 ```
 
 The gate creates two synthetic owners, proves owner isolation, exact Raycast capture retry, two-client download, offline-web versus MCP conflict convergence, exactly-once completion, persisted-client restart, authoritative history counts, and account-cascade cleanup. It refuses to run without the exact confirmation value. Its emergency cleanup attempts every database, session, user, and temporary-directory step even after an earlier failure, and fails conspicuously if any cleanup step leaves uncertain residue.
+
+After the structure-simplification release, run `node scripts/provision-tasks-production.mjs synthetic-structure-simplification POWER_SYNC_URL`. The focused fixture proves dated to-do and project Next defaults, Rechecking, Start Date later than Deadline, time-only reminder rebinding and cancellation, schema-12 export, the heading-free 21-table projection, fresh-client synchronization, and account-cascade cleanup.
 
 After it passes, independently confirm that the two synthetic users and their task rows are absent. Only then add the public HTTPS endpoint as `VITE_TASKS_POWERSYNC_ENDPOINT` to the intended BathOS deployment and repeat a browser-level acceptance pass with synthetic data.
 

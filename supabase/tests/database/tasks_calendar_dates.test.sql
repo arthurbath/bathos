@@ -59,8 +59,8 @@ SELECT lives_ok(
       'Date-aware task',
       'anytime',
       'a0',
-      '2026-07-20',
-      '2026-07-24',
+      '2099-07-20',
+      '2099-07-24',
       '51000000-0000-4000-8000-000000000020'
     )
   $$,
@@ -69,11 +69,11 @@ SELECT lives_ok(
 
 SELECT is(
   (SELECT start_date::text FROM public.tasks_todos WHERE id = '51000000-0000-4000-8000-000000000010'),
-  '2026-07-20',
+  '2099-07-20',
   'retains the selected calendar date without a time-zone conversion'
 );
 
-SELECT throws_ok(
+SELECT lives_ok(
   $$
     INSERT INTO public.tasks_todos (
       id,
@@ -91,14 +91,12 @@ SELECT throws_ok(
       'Impossible range',
       'anytime',
       'a1',
-      '2026-07-24',
-      '2026-07-20',
+      '2099-07-24',
+      '2099-07-20',
       '51000000-0000-4000-8000-000000000021'
     )
   $$,
-  '23514',
-  NULL,
-  'rejects a deadline earlier than the start date'
+  'allows a deadline earlier than the start date'
 );
 
 SELECT lives_ok(
@@ -106,7 +104,7 @@ SELECT lives_ok(
     UPDATE public.tasks_todos
     SET
       start_date = NULL,
-      deadline = '2026-07-23',
+      deadline = '2099-07-23',
       revision = 2,
       client_mutation_id = '51000000-0000-4000-8000-000000000022'
     WHERE id = '51000000-0000-4000-8000-000000000010'
@@ -122,7 +120,7 @@ SELECT is(
     ORDER BY result_revision DESC
     LIMIT 1
   ),
-  '2026-07-23',
+  '2099-07-23',
   'includes calendar dates in authoritative history snapshots'
 );
 

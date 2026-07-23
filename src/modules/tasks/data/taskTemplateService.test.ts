@@ -123,7 +123,6 @@ describe('TaskTemplateService', () => {
           root_type: 'todo',
           root_id: '80000000-0000-4000-8000-000000000001',
           project_id: null,
-          heading_ids: [],
           task_ids: ['80000000-0000-4000-8000-000000000001'],
           checklist_item_ids: [],
         },
@@ -154,6 +153,25 @@ describe('TaskTemplateService', () => {
     expect(() => parseTaskTemplateSnapshot({ ...snapshot(), version: 2 })).toThrow(
       'Template snapshot version is unsupported',
     );
+  });
+
+  it('retains an active day horizon without inventing a start-date offset', () => {
+    const source = snapshot();
+    const undated = {
+      ...source,
+      root: {
+        ...source.root,
+        today_section: 'next',
+        start_offset_days: null,
+      },
+    };
+
+    expect(parseTaskTemplateSnapshot(undated)).toMatchObject({
+      root: {
+        today_section: 'next',
+        start_offset_days: null,
+      },
+    });
   });
 
   it('rejects an RPC record owned by a different authenticated user', () => {

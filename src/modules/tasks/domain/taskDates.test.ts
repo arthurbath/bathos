@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertTaskCalendarRange,
   addTaskCalendarDays,
+  formatTaskRelativeCalendarDate,
   isTaskCalendarDate,
   isTaskPlanningTimeZone,
   normalizeTaskCalendarDate,
@@ -56,5 +57,19 @@ describe('task calendar dates', () => {
     expect(addTaskCalendarDays('2026-12-31', 1)).toBe('2027-01-01');
     expect(addTaskCalendarDays('2028-02-28', 1)).toBe('2028-02-29');
     expect(addTaskCalendarDays('2028-03-01', -1)).toBe('2028-02-29');
+  });
+
+  it('summarizes nearby dates relative to the owner planning date', () => {
+    const planningDate = '2026-07-22';
+    expect(formatTaskRelativeCalendarDate('2026-07-22', planningDate, 'en-US')).toBe('Today');
+    expect(formatTaskRelativeCalendarDate('2026-07-23', planningDate, 'en-US')).toBe('Tomorrow');
+    expect(formatTaskRelativeCalendarDate('2026-07-21', planningDate, 'en-US')).toBe('one day ago');
+    expect(formatTaskRelativeCalendarDate('2026-07-28', planningDate, 'en-US')).toBe('6 days left');
+    expect(formatTaskRelativeCalendarDate('2026-07-12', planningDate, 'en-US')).toBe('10 days ago');
+  });
+
+  it('uses short month and day outside the 10-day relative window', () => {
+    expect(formatTaskRelativeCalendarDate('2026-08-27', '2026-07-22', 'en-US')).toBe('Aug 27');
+    expect(formatTaskRelativeCalendarDate('2026-07-11', '2026-07-22', 'en-US')).toBe('Jul 11');
   });
 });

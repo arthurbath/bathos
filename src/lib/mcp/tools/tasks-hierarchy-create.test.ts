@@ -8,8 +8,6 @@ import {
   createTaskAreaData,
   createTaskChecklistItem,
   createTaskChecklistItemData,
-  createTaskHeading,
-  createTaskHeadingData,
   createTaskProject,
   createTaskProjectData,
 } from './tasks-hierarchy-create';
@@ -41,7 +39,6 @@ class FakeHierarchyClient {
     const supported = [
       'tasks_areas',
       'tasks_projects',
-      'tasks_headings',
       'tasks_checklist_items',
     ];
     if (!supported.includes(table)) throw new Error(`Unsupported fake insert: ${String(table)}`);
@@ -63,7 +60,7 @@ class FakeHierarchyClient {
       ? 'area'
       : table === 'tasks_projects'
         ? 'project'
-        : table === 'tasks_headings' ? 'heading' : 'checklist_item';
+        : 'checklist_item';
     const { owner_id: _ownerId, ...afterState } = value;
     history.push({
       id: crypto.randomUUID(),
@@ -193,22 +190,19 @@ function parentTask(ownerId = ownerA): StoredRow {
 }
 
 describe('Tasks MCP hierarchy creation tools', () => {
-  it('advertises four explicit idempotent closed-world mutations', () => {
+  it('advertises three explicit idempotent closed-world mutations', () => {
     expect([
       createTaskArea.name,
       createTaskProject.name,
-      createTaskHeading.name,
       createTaskChecklistItem.name,
     ]).toEqual([
       'create_task_area',
       'create_task_project',
-      'create_task_heading',
       'create_task_checklist_item',
     ]);
     for (const tool of [
       createTaskArea,
       createTaskProject,
-      createTaskHeading,
       createTaskChecklistItem,
     ]) {
       expect(tool.annotations).toEqual({
@@ -245,7 +239,10 @@ describe('Tasks MCP hierarchy creation tools', () => {
   });
 
   it('creates a structured project only beneath an owned present area', async () => {
-    const client = new FakeHierarchyClient({ tasks_areas: [parentArea()] });
+    const client = new FakeHierarchyClient({
+      tasks_areas: [parentArea()],
+      tasks_user_settings: [{ owner_id: ownerA, planning_timezone: 'America/Los_Angeles' }],
+    });
     const result = await createTaskProjectData({
       idempotency_key: '50000000-0000-4000-8000-000000000002',
       title: 'Launch',
@@ -253,7 +250,7 @@ describe('Tasks MCP hierarchy creation tools', () => {
       area_id: areaId,
       destination: 'anytime',
       today_section: 'later',
-      start_date: '2026-07-20',
+      start_date: '2026-07-24',
       deadline: '2026-07-21',
     }, authFor(ownerA, client));
 
@@ -264,7 +261,7 @@ describe('Tasks MCP hierarchy creation tools', () => {
       lifecycle: 'open',
       destination: 'anytime',
       today_section: 'later',
-      start_date: '2026-07-20',
+      start_date: '2026-07-24',
       deadline: '2026-07-21',
     });
 
@@ -280,23 +277,17 @@ describe('Tasks MCP hierarchy creation tools', () => {
     expect(inaccessible.insertCount).toBe(0);
   });
 
-  it('creates headings and checklist items only beneath owned open parents', async () => {
+  it('creates checklist items only beneath owned open parents', async () => {
     const client = new FakeHierarchyClient({
       tasks_projects: [parentProject()],
       tasks_todos: [parentTask()],
     });
-    const heading = await createTaskHeadingData({
-      idempotency_key: '50000000-0000-4000-8000-000000000004',
-      project_id: projectId,
-      title: 'First phase',
-    }, authFor(ownerA, client));
     const item = await createTaskChecklistItemData({
       idempotency_key: '50000000-0000-4000-8000-000000000005',
       task_id: taskId,
       title: 'Confirm details',
     }, authFor(ownerA, client));
 
-    expect(heading.record).toMatchObject({ project_id: projectId, title: 'First phase' });
     expect(item.record).toMatchObject({
       task_id: taskId,
       title: 'Confirm details',
@@ -322,23 +313,6 @@ describe('Tasks MCP hierarchy creation tools', () => {
       mutation_outcome: 'already_applied',
       receipt: first.receipt,
       record: { title: 'Later title', revision: 2 },
-    });
-    expect(client.insertCount).toBe(1);
-  });
-
-  it('replays a child creation after its parent is no longer open', async () => {
-    const client = new FakeHierarchyClient({ tasks_projects: [parentProject()] });
-    const request = {
-      idempotency_key: '50000000-0000-4000-8000-000000000009',
-      project_id: projectId,
-      title: 'First phase',
-    };
-    await createTaskHeadingData(request, authFor(ownerA, client));
-    client.rows('tasks_projects')[0].lifecycle = 'completed';
-
-    await expect(createTaskHeadingData(request, authFor(ownerA, client))).resolves.toMatchObject({
-      mutation_outcome: 'already_applied',
-      record_type: 'heading',
     });
     expect(client.insertCount).toBe(1);
   });

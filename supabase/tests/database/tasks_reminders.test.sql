@@ -138,27 +138,27 @@ INSERT INTO public.tasks_user_settings (
   '97000000-0000-4000-8000-000000000011'
 );
 INSERT INTO public.tasks_todos (
-  id, owner_id, title, destination, order_key, client_mutation_id,
+  id, owner_id, title, destination, start_date, order_key, client_mutation_id,
   source_kind, source_url, source_external_id
 ) VALUES
   (
     '97000000-0000-4000-8000-000000000020',
     '97000000-0000-4000-8000-000000000001',
-    'Scheduled task', 'anytime', 'a0',
+    'Scheduled task', 'anytime', '2099-01-15', 'a0',
     '97000000-0000-4000-8000-000000000021',
     'mail_message', 'message://reminder-export', '<reminder@example.test>'
   ),
   (
     '97000000-0000-4000-8000-000000000022',
     '97000000-0000-4000-8000-000000000001',
-    'Second scheduled task', 'anytime', 'a1',
+    'Second scheduled task', 'anytime', '2099-01-01', 'a1',
     '97000000-0000-4000-8000-000000000023',
     NULL, NULL, NULL
   ),
   (
     '97000000-0000-4000-8000-000000000024',
     '97000000-0000-4000-8000-000000000001',
-    'Completing task', 'anytime', 'a2',
+    'Completing task', 'anytime', '2099-02-01', 'a2',
     '97000000-0000-4000-8000-000000000025',
     NULL, NULL, NULL
   );
@@ -181,7 +181,7 @@ SELECT lives_ok(
       'test.reminder_save',
       public.tasks_save_reminder(
         NULL, NULL, 'todo', '97000000-0000-4000-8000-000000000020',
-        '2026-01-15', '09:00', 'America/Los_Angeles', 'earlier',
+        '2099-01-15', '09:00', 'America/Los_Angeles', 'earlier',
         '97000000-0000-4000-8000-000000000030'
       )::text,
       false
@@ -191,7 +191,7 @@ SELECT lives_ok(
 );
 SELECT is(
   current_setting('test.reminder_save')::jsonb #>> '{reminder,resolved_at}',
-  '2026-01-15T17:00:00+00:00',
+  '2099-01-15T17:00:00+00:00',
   'stores the resolved instant alongside its local intent'
 );
 SELECT is(
@@ -204,7 +204,7 @@ SELECT is(
     public.tasks_save_reminder(
       (current_setting('test.reminder_save')::jsonb #>> '{reminder,id}')::uuid,
       1, 'todo', '97000000-0000-4000-8000-000000000020',
-      '2026-01-15', '09:00', 'America/Los_Angeles', 'earlier',
+      '2099-01-15', '09:00', 'America/Los_Angeles', 'earlier',
       '97000000-0000-4000-8000-000000000030'
     ) ->> 'outcome'
   ),
@@ -221,7 +221,7 @@ SELECT is(
     public.tasks_save_reminder(
       (current_setting('test.reminder_save')::jsonb #>> '{reminder,id}')::uuid,
       99, 'todo', '97000000-0000-4000-8000-000000000020',
-      '2026-01-16', '09:00', 'America/Los_Angeles', 'earlier',
+      '2099-01-16', '09:00', 'America/Los_Angeles', 'earlier',
       '97000000-0000-4000-8000-000000000031'
     ) ->> 'outcome'
   ),
@@ -233,7 +233,7 @@ SELECT is(
     public.tasks_save_reminder(
       (current_setting('test.reminder_save')::jsonb #>> '{reminder,id}')::uuid,
       1, 'todo', '97000000-0000-4000-8000-000000000020',
-      '2026-01-16', '09:00', 'America/Los_Angeles', 'earlier',
+      '2099-01-16', '09:00', 'America/Los_Angeles', 'earlier',
       '97000000-0000-4000-8000-000000000032'
     ) ->> 'outcome'
   ),
@@ -275,7 +275,7 @@ SELECT lives_ok(
       'test.due_reminder',
       public.tasks_save_reminder(
         NULL, NULL, 'todo', '97000000-0000-4000-8000-000000000022',
-        '2020-01-01', '09:00', 'UTC', 'earlier',
+        '2099-01-01', '09:00', 'UTC', 'earlier',
         '97000000-0000-4000-8000-000000000033'
       )::text,
       false
@@ -286,7 +286,7 @@ SELECT lives_ok(
 SELECT set_config(
   'test.reminder_claim',
   public.tasks_claim_due_reminders(
-    '2025-01-01 00:00:00+00', '97000000-0000-4000-8000-000000000034'
+    '2099-01-02 00:00:00+00', '97000000-0000-4000-8000-000000000034'
   )::text,
   false
 );
@@ -302,7 +302,7 @@ SELECT is(
 );
 SELECT is(
   public.tasks_claim_due_reminders(
-    '2025-01-01 00:00:00+00', '97000000-0000-4000-8000-000000000034'
+    '2099-01-02 00:00:00+00', '97000000-0000-4000-8000-000000000034'
   ),
   current_setting('test.reminder_claim')::jsonb,
   'returns the immutable claim receipt for an exact retry'
@@ -333,7 +333,7 @@ SELECT is(
 SELECT is(
   jsonb_array_length(
     public.tasks_claim_due_reminders(
-      '2025-01-01 00:00:00+00', '97000000-0000-4000-8000-000000000035'
+      '2099-01-02 00:00:00+00', '97000000-0000-4000-8000-000000000035'
     ) -> 'items'
   ),
   0,
@@ -362,7 +362,7 @@ SELECT set_config(
   'test.lifecycle_reminder',
   public.tasks_save_reminder(
     NULL, NULL, 'todo', '97000000-0000-4000-8000-000000000024',
-    '2030-01-01', '09:00', 'UTC', 'earlier',
+    '2099-02-01', '09:00', 'UTC', 'earlier',
     '97000000-0000-4000-8000-000000000037'
   )::text,
   false
@@ -384,12 +384,12 @@ SELECT is(
 );
 
 SELECT set_config(
-  'test.reminder_export', public.tasks_create_export_v10()::text, false
+  'test.reminder_export', public.tasks_create_export_v12()::text, false
 );
 SELECT is(
   (current_setting('test.reminder_export')::jsonb ->> 'schema_version')::integer,
-  10,
-  'uses portable task export schema version ten'
+  12,
+  'uses portable task export schema version twelve'
 );
 SELECT ok(
   jsonb_array_length(
@@ -407,7 +407,7 @@ SELECT ok(
 );
 SELECT throws_ok(
   $$
-    SELECT public.tasks_restore_export_v10(
+    SELECT public.tasks_restore_export_current(
       jsonb_set(
         current_setting('test.reminder_export')::jsonb,
         '{manifest,checksums,tasks_reminders}',
@@ -416,7 +416,7 @@ SELECT throws_ok(
     )
   $$,
   '22023',
-  'Task export v10 collection tasks_reminders is invalid',
+  'Task export v12 collection tasks_reminders is invalid',
   'rejects reminder data with a mismatched checksum'
 );
 
@@ -453,7 +453,7 @@ SELECT set_config(
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT ok(
   (
-    public.tasks_restore_export_v10(
+    public.tasks_restore_export_current(
       current_setting('test.reminder_export')::jsonb, true
     ) #>> '{tasks_reminders,inserts}'
   )::integer > 0,
@@ -463,7 +463,7 @@ SELECT lives_ok(
   $$
     SELECT set_config(
       'test.reminder_restore',
-      public.tasks_restore_export_v10(
+      public.tasks_restore_export_current(
         current_setting('test.reminder_export')::jsonb, false
       )::text,
       false
@@ -478,7 +478,7 @@ SELECT is(
 );
 SELECT set_config(
   'test.reminder_replay',
-  public.tasks_restore_export_v10(
+  public.tasks_restore_export_current(
     current_setting('test.reminder_export')::jsonb, false
   )::text,
   false
@@ -498,14 +498,15 @@ SELECT is(
 );
 SELECT throws_ok(
   format(
-    'SELECT public.tasks_restore_export_v10(%L::jsonb, true)',
+    'SELECT public.tasks_restore_export_current(%L::jsonb, true)',
     jsonb_set(
       current_setting('test.reminder_export')::jsonb,
       '{data,tasks_mail_sources,0,account_identifier}',
       '"tampered-account"'::jsonb
     )::text
   ),
-  'Task export checksum mismatch for tasks_mail_sources',
+  '22023',
+  'Task export v12 collection tasks_mail_sources is invalid',
   'rejects Mail source tampering before adding its temporary validator identity'
 );
 SELECT ok(

@@ -20,9 +20,9 @@ vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
   useTasksRuntime: () => mocks.useTasksRuntime(),
 }));
 
-const alpha = projectTask('task-alpha', 'Alpha', null, 'a0');
-const beta = projectTask('task-beta', 'Beta', null, 'a1');
-const headed = projectTask('task-headed', 'Headed', 'heading-a', 'a0');
+const alpha = projectTask('task-alpha', 'Alpha', 'a0');
+const beta = projectTask('task-beta', 'Beta', 'a1');
+const gamma = projectTask('task-gamma', 'Gamma', 'a2');
 const item = checklistItem('item-a', false);
 let taskRows: TaskTodo[];
 let checklistRows: TaskChecklistItem[];
@@ -48,7 +48,7 @@ function cleanup(root: Root, container: HTMLElement) {
 
 describe('useTaskProjectDetail', () => {
   beforeEach(() => {
-    taskRows = [beta, headed, alpha];
+    taskRows = [beta, gamma, alpha];
     checklistRows = [item];
     mocks.useQuery.mockReset().mockImplementation((query: string) => ({
       data: query.includes('FROM tasks_todos') ? taskRows : checklistRows,
@@ -58,7 +58,7 @@ describe('useTaskProjectDetail', () => {
   });
 
   it('creates project work at the structural tail without changing its planning pool', async () => {
-    const created = projectTask('task-created', 'Created', null, 'a2');
+    const created = projectTask('task-created', 'Created', 'a3');
     const repository = {
       createTask: vi.fn().mockResolvedValue(created),
       updateTask: vi.fn(),
@@ -72,18 +72,17 @@ describe('useTaskProjectDetail', () => {
 
     try {
       await act(async () => {
-        await latest.createTask('Created', null);
+        await latest.createTask('Created');
       });
       expect(repository.createTask).toHaveBeenCalledWith(expect.objectContaining({
         ownerId: 'owner-a',
         title: 'Created',
         destination: 'anytime',
         projectId: 'project-a',
-        headingId: null,
         hierarchyOrderKey: expect.any(String),
       }));
       const input = repository.createTask.mock.calls[0][0];
-      expect(input.hierarchyOrderKey > beta.hierarchy_order_key!).toBe(true);
+      expect(input.hierarchyOrderKey > gamma.hierarchy_order_key!).toBe(true);
       expect(latest.tasks.map(({ id }) => id)).toContain(created.id);
     } finally {
       cleanup(root, container);
@@ -122,41 +121,6 @@ describe('useTaskProjectDetail', () => {
       expect(patch.hierarchy_order_key < alpha.hierarchy_order_key!).toBe(true);
       expect(patch).not.toHaveProperty('order_key');
       expect(patch).not.toHaveProperty('destination');
-    } finally {
-      cleanup(root, container);
-    }
-  });
-
-  it('moves a task to the tail of one heading without planning changes', async () => {
-    const moved = { ...alpha, heading_id: 'heading-a', hierarchy_order_key: 'a1' };
-    const repository = {
-      createTask: vi.fn(),
-      updateTask: vi.fn(),
-      moveTaskToContainer: vi.fn().mockResolvedValue(moved),
-    };
-    mocks.useTasksRuntime.mockReturnValue({
-      repository,
-      hierarchyRepository: hierarchyRepository(),
-    });
-    const { container, root } = renderHarness();
-
-    try {
-      await act(async () => {
-        await latest.moveTaskToHeading(alpha.id, 'heading-a');
-      });
-      expect(repository.moveTaskToContainer).toHaveBeenCalledWith(
-        'owner-a',
-        alpha.id,
-        {
-          projectId: 'project-a',
-          headingId: 'heading-a',
-          hierarchyOrderKey: expect.any(String),
-        },
-      );
-      const input = repository.moveTaskToContainer.mock.calls[0][2];
-      expect(input.hierarchyOrderKey > headed.hierarchy_order_key!).toBe(true);
-      expect(input).not.toHaveProperty('destination');
-      expect(input).not.toHaveProperty('orderKey');
     } finally {
       cleanup(root, container);
     }
@@ -299,13 +263,11 @@ function deferred<T>() {
 function projectTask(
   id: string,
   title: string,
-  headingId: string | null,
   hierarchyOrderKey: string,
 ): TaskTodo {
   return taskTodoFixture({
     id,
     project_id: 'project-a',
-    heading_id: headingId,
     title,
     destination: 'anytime',
     order_key: `planning-${id}`,

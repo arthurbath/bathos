@@ -13,7 +13,6 @@ describe('tasks PowerSync schema', () => {
       'tasks_areas',
       'tasks_checklist_items',
       'tasks_delivery_targets',
-      'tasks_headings',
       'tasks_hierarchy_history_events',
       'tasks_hierarchy_operations',
       'tasks_history_events',
@@ -41,7 +40,6 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_user_settings.local_only).toBe(false);
     expect(tables.tasks_areas.local_only).toBe(false);
     expect(tables.tasks_projects.local_only).toBe(false);
-    expect(tables.tasks_headings.local_only).toBe(false);
     expect(tables.tasks_checklist_items.local_only).toBe(false);
     expect(tables.tasks_hierarchy_operations.local_only).toBe(false);
     expect(tables.tasks_hierarchy_history_events.local_only).toBe(false);

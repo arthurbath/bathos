@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -20,17 +21,17 @@ import {
   CheckCircle2,
   Circle,
   CircleCheckBig,
-  CircleDot,
   CircleDashed,
   CircleHelp,
   CircleSlash2,
   Cloud,
-  Clock3,
+  Clock2,
+  Clock5,
+  Clock8,
   CornerDownLeft,
   DatabaseBackup,
   Hourglass,
   Inbox,
-  ListStart,
   ListTodo,
   LayoutTemplate,
   MoreHorizontal,
@@ -65,7 +66,10 @@ import type {
   TaskPlanningMoveInput,
 } from '@/modules/tasks/data/taskRepository';
 import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
-import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
+import {
+  addTaskCalendarDays,
+  formatTaskRelativeCalendarDate,
+} from '@/modules/tasks/domain/taskDates';
 import {
   TaskKeyboardHelpDialog,
   TaskBulkWhenDialog,
@@ -122,6 +126,10 @@ import {
   applyTaskSelectionGesture,
   isMacLikeTaskPlatform,
 } from '@/modules/tasks/domain/taskSelection';
+import {
+  getTaskKeyboardCommand,
+  type TaskKeyboardCommand,
+} from '@/modules/tasks/domain/taskKeyboardCommands';
 
 type TasksShellProps = {
   userId: string;
@@ -133,6 +141,9 @@ const TaskMarkdownNotes = lazy(async () => {
   const module = await import('@/modules/tasks/components/TaskMarkdownNotes');
   return { default: module.TaskMarkdownNotes };
 });
+
+const TASK_EDITOR_TEXT_AUTOSAVE_DELAY_MS = 400;
+const TASK_EDITOR_EXPANSION_DURATION_MS = 150;
 
 const primaryTaskViews = [
   { path: '/today', label: 'Today', icon: CalendarDays },
@@ -150,15 +161,15 @@ const secondaryTaskViews = [
 
 const taskViews = [...primaryTaskViews, ...secondaryTaskViews] as const;
 
-const taskNavigationShortcuts: Record<string, string> = {
-  t: '/today',
-  u: '/upcoming',
-  a: '/anytime',
-  s: '/someday',
-  p: '/projects',
-  d: '/done',
-  e: '/templates',
-  c: '/config',
+const taskCommandPaths: Partial<Record<TaskKeyboardCommand, string>> = {
+  'view-today': '/today',
+  'view-upcoming': '/upcoming',
+  'view-anytime': '/anytime',
+  'view-someday': '/someday',
+  'view-projects': '/projects',
+  'view-templates': '/templates',
+  'view-done': '/done',
+  'view-config': '/config',
 };
 
 type TaskShellView = TaskListView | 'projects' | 'project' | 'area' | 'templates' | 'config';
@@ -184,6 +195,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     portabilityService,
     prepareForSignOut,
   } = useTasksRuntime();
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const hierarchy = useTaskHierarchy(userId);
   const deletedHierarchyRoots = useTaskDeletedHierarchyRoots(userId);
   const {
@@ -198,7 +210,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     reorderTaskTo,
     transitionTask,
     planningDate,
-  } = useTaskList(userId, taskListView);
+  } = useTaskList(userId, taskListView, selectedTaskId);
   const {
     available: taskUndoAvailable,
     redoAvailable: taskRedoAvailable,
@@ -214,7 +226,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   ), [hierarchy.projects, planningDate, taskListView, userId]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [creating, setCreating] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [deferredCompletionTaskIds, setDeferredCompletionTaskIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<Set<string>>(() => new Set());
   const [bulkSelectionAnchorId, setBulkSelectionAnchorId] = useState<string | null>(null);
@@ -234,8 +248,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const captureInputRef = useRef<HTMLInputElement>(null);
   const commandReturnFocusRef = useRef<HTMLElement | null>(null);
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
-  const pendingNavigationRef = useRef(false);
-  const navigationResetRef = useRef<number | null>(null);
+  const selectedTaskIdRef = useRef<string | null>(null);
+  const deferredCompletionTaskIdsRef = useRef<Set<string>>(new Set());
+  const taskEditorAutosaveRef = useRef<{
+    taskId: string;
+    flush: () => Promise<void>;
+  } | null>(null);
   const macLikePlatform = useMemo(
     () => isMacLikeTaskPlatform(globalThis.navigator?.platform ?? ''),
     [],
@@ -269,6 +287,79 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
   }, [redoLastTaskChange]);
 
+  const setDeferredCompletions = useCallback((next: Set<string>) => {
+    deferredCompletionTaskIdsRef.current = next;
+    setDeferredCompletionTaskIds(next);
+  }, []);
+
+  const toggleDeferredCompletion = useCallback((taskId: string) => {
+    const next = new Set(deferredCompletionTaskIdsRef.current);
+    if (next.has(taskId)) next.delete(taskId);
+    else next.add(taskId);
+    setDeferredCompletions(next);
+  }, [setDeferredCompletions]);
+
+  const finalizeDeferredCompletion = useCallback((taskId: string) => {
+    if (!deferredCompletionTaskIdsRef.current.has(taskId)) return;
+    const next = new Set(deferredCompletionTaskIdsRef.current);
+    next.delete(taskId);
+    setDeferredCompletions(next);
+    void transitionTask(taskId, 'complete').catch((completeError) => {
+      showTaskError('Task Could Not Be Completed', completeError);
+    });
+  }, [setDeferredCompletions, transitionTask]);
+
+  const registerTaskEditorAutosave = useCallback((
+    taskId: string,
+    flush: () => Promise<void>,
+  ) => {
+    taskEditorAutosaveRef.current = { taskId, flush };
+  }, []);
+
+  const setOpenTask = useCallback(async (
+    taskId: string | null,
+    clearPageFocus = false,
+  ): Promise<boolean> => {
+    const currentTaskId = selectedTaskIdRef.current;
+    if (currentTaskId === taskId) return true;
+    const autosave = currentTaskId !== null
+      && taskEditorAutosaveRef.current?.taskId === currentTaskId
+      ? taskEditorAutosaveRef.current
+      : null;
+    if (autosave !== null) {
+      try {
+        await autosave.flush();
+      } catch {
+        return false;
+      }
+    }
+    if (selectedTaskIdRef.current !== currentTaskId) return false;
+    if (taskEditorAutosaveRef.current === autosave) taskEditorAutosaveRef.current = null;
+    if (clearPageFocus && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    selectedTaskIdRef.current = taskId;
+    setSelectedTaskId(taskId);
+    if (currentTaskId !== null) finalizeDeferredCompletion(currentTaskId);
+    return true;
+  }, [finalizeDeferredCompletion]);
+
+  const openRelativeTask = useCallback((direction: -1 | 1) => {
+    const controls = Array.from(document.querySelectorAll<HTMLElement>(
+      '[data-task-title-control][data-task-id]',
+    ));
+    if (controls.length === 0) return;
+    const currentTaskId = selectedTaskIdRef.current;
+    const currentIndex = currentTaskId === null
+      ? -1
+      : controls.findIndex((control) => control.dataset.taskId === currentTaskId);
+    const targetIndex = currentTaskId === null
+      ? direction === 1 ? 0 : controls.length - 1
+      : currentIndex + direction;
+    const targetTaskId = controls[targetIndex]?.dataset.taskId ?? null;
+    void setOpenTask(targetTaskId);
+  }, [setOpenTask]);
+
   const clearTaskSelection = useCallback(() => {
     setBulkSelection(new Set());
     setBulkSelectionAnchorId(null);
@@ -288,11 +379,36 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, []);
 
   useEffect(() => {
-    setSelectedTaskId(null);
+    if (selectedTaskId === null) return undefined;
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const taskRow = target.closest<HTMLElement>('[data-task-row-id]');
+      if (taskRow?.dataset.taskRowId === selectedTaskId) return;
+
+      // Another title owns the direct replace interaction and flushes this editor itself.
+      if (target.closest('[data-task-title-control]')) return;
+
+      // Radix renders editor-owned calendars, menus, and dialogs outside the task row.
+      if (target.closest(
+        '[data-radix-popper-content-wrapper], [role="dialog"], [role="menu"], [role="listbox"]',
+      )) return;
+
+      void setOpenTask(null);
+    };
+
+    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
+  }, [selectedTaskId, setOpenTask]);
+
+  useEffect(() => {
+    void setOpenTask(null);
     clearTaskSelection();
     setBulkWhenOpen(false);
     captureInputRef.current?.focus();
-  }, [clearTaskSelection, view]);
+  }, [clearTaskSelection, setOpenTask, view]);
 
   useEffect(() => {
     const visibleIds = new Set(tasks.map(({ id }) => id));
@@ -331,123 +447,96 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const target = tasks.find(({ id }) => id === searchTargetTaskId);
     if (!target) return;
     if (target.lifecycle === 'open') {
-      setSelectedTaskId(target.id);
-    }
-    window.setTimeout(() => {
+      void setOpenTask(target.id);
+    } else {
       document.querySelector<HTMLElement>(
-        target.lifecycle === 'open'
-          ? `[data-task-title-control][data-task-id="${target.id}"]`
-          : `[data-task-search-id="${target.id}"]`,
+        `[data-task-search-id="${target.id}"]`,
       )?.focus();
-    }, 0);
+    }
     setSearchTargetTaskId(null);
-  }, [searchTargetTaskId, tasks]);
+  }, [searchTargetTaskId, setOpenTask, tasks]);
 
   useEffect(() => {
-      const clearPendingNavigation = () => {
-      pendingNavigationRef.current = false;
-      if (navigationResetRef.current !== null) {
-        window.clearTimeout(navigationResetRef.current);
-        navigationResetRef.current = null;
-      }
-    };
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      const opensKeyboardHelp = event.key === '?' && event.shiftKey;
-      const invokesTaskHistory = event.key.toLowerCase() === 'z'
-        && (macLikePlatform ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey)
-        && !event.altKey;
-      const invokesTaskRedo = invokesTaskHistory && event.shiftKey;
-      const editableTarget = isTaskKeyboardInput(event.target);
-      const commandSurfaceOpen = document.querySelector('[role="dialog"], [role="menu"]') !== null;
-      if (invokesTaskHistory) {
-        clearPendingNavigation();
-        if (
-          !event.defaultPrevented
-          && !event.isComposing
-          && !editableTarget
-          && !commandSurfaceOpen
-          && (invokesTaskRedo ? taskRedoAvailable : taskUndoAvailable)
-          && !taskUndoPending
-        ) {
-          event.preventDefault();
-          if (invokesTaskRedo) {
-            void runTaskRedo();
-          } else {
-            void runTaskUndo();
-          }
-        }
-        return;
-      }
-      if (
-        event.defaultPrevented
-        || event.isComposing
-        || event.metaKey
-        || event.ctrlKey
-        || event.altKey
-        || (event.shiftKey && !opensKeyboardHelp)
-        || editableTarget
-        || commandSurfaceOpen
-      ) {
-        clearPendingNavigation();
-        return;
-      }
+      const command = getTaskKeyboardCommand(event, macLikePlatform);
+      if (command === null) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.isComposing) return;
 
-      const key = event.key.toLowerCase();
-      if (pendingNavigationRef.current) {
-        clearPendingNavigation();
-        const path = taskNavigationShortcuts[key];
-        if (path) {
-          event.preventDefault();
-          navigate(`${basePath}${path}`);
-        }
+      if (command === 'undo') {
+        if (taskUndoAvailable && !taskUndoPending) void runTaskUndo();
         return;
       }
-      if (key === 'g') {
-        event.preventDefault();
-        pendingNavigationRef.current = true;
-        navigationResetRef.current = window.setTimeout(clearPendingNavigation, 1200);
+      if (command === 'redo') {
+        if (taskRedoAvailable && !taskUndoPending) void runTaskRedo();
         return;
       }
-      if (key === 'n') {
-        event.preventDefault();
+      if (command === 'capture') {
         if (captureInputRef.current) {
           captureInputRef.current.focus();
         } else {
-          navigate(`${basePath}/today`);
+          void setOpenTask(null).then((closed) => {
+            if (closed) navigate(`${basePath}/today`);
+          });
         }
         return;
       }
-      if (key === '/') {
-        event.preventDefault();
-        commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null;
-        setSearchOpen(true);
-        return;
-      }
-      if (opensKeyboardHelp) {
-        event.preventDefault();
+      if (command === 'help') {
         commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
           ? document.activeElement
           : null;
         setKeyboardHelpOpen(true);
+        return;
       }
+      const path = taskCommandPaths[command];
+      if (path) {
+        void setOpenTask(null).then((closed) => {
+          if (closed) navigate(`${basePath}${path}`);
+        });
+        return;
+      }
+      if (command === 'complete-open') {
+        const taskId = selectedTaskIdRef.current;
+        if (taskId !== null) toggleDeferredCompletion(taskId);
+        return;
+      }
+      if (command === 'open-next') {
+        openRelativeTask(1);
+        return;
+      }
+      if (command === 'open-previous') {
+        openRelativeTask(-1);
+        return;
+      }
+      if (command === 'close-editor') void setOpenTask(null, true);
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    const handleKeyUp = (event: globalThis.KeyboardEvent) => {
+      if (getTaskKeyboardCommand(event, macLikePlatform) !== 'close-editor') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!event.isComposing) void setOpenTask(null, true);
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('keyup', handleKeyUp, true);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      clearPendingNavigation();
+      window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('keyup', handleKeyUp, true);
     };
   }, [
     basePath,
     macLikePlatform,
     navigate,
+    openRelativeTask,
     runTaskRedo,
     runTaskUndo,
+    setOpenTask,
     taskRedoAvailable,
     taskUndoAvailable,
     taskUndoPending,
+    toggleDeferredCompletion,
   ]);
 
   const openCommandSurface = (open: (value: boolean) => void) => {
@@ -522,12 +611,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     });
     const moveToAnytime = action('Move to Anytime', {
       destination: 'anytime',
-      todaySection: 'none',
+      todaySection: null,
       startDate: null,
     });
     const moveToSomeday = action('Move to Someday', {
       destination: 'someday',
-      todaySection: 'none',
+      todaySection: null,
       startDate: null,
     });
 
@@ -535,7 +624,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       return [moveToTodayLater, moveToAnytime, moveToSomeday];
     }
     if (view === 'anytime') {
-      const todayActions = task.today_section === 'none'
+      const todayActions = task.today_section === null
         ? [
           action('Add to Today Inbox', { destination: 'anytime', todaySection: 'inbox', startDate: null }),
           action('Add to Today Now', { destination: 'anytime', todaySection: 'now', startDate: null }),
@@ -543,7 +632,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           moveToTodayLater,
         ]
         : [action('Remove from Today', {
-          destination: 'anytime', todaySection: 'none', startDate: null,
+          destination: 'anytime', todaySection: null, startDate: null,
         })];
       return [...todayActions, moveToSomeday];
     }
@@ -565,7 +654,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         startDate: addTaskCalendarDays(planningDate, 1),
       }),
       action('Remove from Today', {
-        destination: 'anytime', todaySection: 'none', startDate: null,
+        destination: 'anytime', todaySection: null, startDate: null,
       }),
       moveToSomeday,
     );
@@ -609,7 +698,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       destination: 'anytime', todaySection: 'later', startDate: null,
     }),
     bulkAction('Remove from Today', {
-      destination: 'anytime', todaySection: 'none', startDate: null,
+      destination: 'anytime', todaySection: null, startDate: null,
     }),
     {
       label: 'Move to Tomorrow',
@@ -640,10 +729,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       },
     },
     bulkAction('Move to Anytime', {
-      destination: 'anytime', todaySection: 'none', startDate: null,
+      destination: 'anytime', todaySection: null, startDate: null,
     }),
     bulkAction('Move to Someday', {
-      destination: 'someday', todaySection: 'none', startDate: null,
+      destination: 'someday', todaySection: null, startDate: null,
     }),
   ];
 
@@ -669,11 +758,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       macLikePlatform,
     });
     if (!bulkEligible || next === null) {
-      setSelectedTaskId((current) => (current === taskId ? null : taskId));
+      void setOpenTask(selectedTaskIdRef.current === taskId ? null : taskId);
       return;
     }
     event.preventDefault();
-    setSelectedTaskId(null);
+    void setOpenTask(null);
     setBulkMode(next.active);
     setBulkSelectionAnchorId(next.anchorId);
     setBulkSelection(next.selectedIds);
@@ -688,7 +777,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         hierarchy={hierarchy}
         selected={selectedTaskId === task.id}
         onSelect={(event) => handleTaskPointerSelection(event, task.id)}
-        onCloseEditor={() => setSelectedTaskId(null)}
+        onCloseEditor={() => void setOpenTask(null)}
+        onRegisterAutosave={registerTaskEditorAutosave}
+        completionRequested={deferredCompletionTaskIds.has(task.id)}
+        onToggleDeferredCompletion={() => toggleDeferredCompletion(task.id)}
         bulkSelection={bulkMode ? {
           selected: bulkSelection.has(task.id),
           onToggle: () => setBulkSelection((current) => {
@@ -706,7 +798,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               planningDate,
             );
             await updateTask(task.id, normalizedPatch);
-            setSelectedTaskId(null);
           } catch (updateError) {
             showTaskError('Task Could Not Be Updated', updateError);
             throw updateError;
@@ -759,9 +850,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           }
         }}
         planningLabel={view === 'today' ? null : undefined}
+        planningDate={planningDate}
         todayMarker={view === 'anytime'
           ? getTaskTodayMembershipSection(task, planningDate) ?? undefined
-          : view === 'upcoming' && task.today_section !== 'none'
+          : view === 'upcoming' && task.today_section !== null
             ? task.today_section
             : undefined}
         todayMarkerContext={view === 'upcoming' ? 'Day Horizon' : 'Today'}
@@ -830,7 +922,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 variant="clear"
                 size="icon"
                 aria-label="Search Tasks and Views"
-                aria-keyshortcuts="/"
                 onClick={() => openCommandSurface(setSearchOpen)}
                 className="h-9 w-9 text-muted-foreground"
               >
@@ -841,7 +932,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 variant="clear"
                 size="icon"
                 aria-label="Keyboard Commands"
-                aria-keyshortcuts="?"
+                aria-keyshortcuts="Meta+/ Control+/"
                 onClick={() => openCommandSurface(setKeyboardHelpOpen)}
                 className="h-9 w-9 text-muted-foreground"
               >
@@ -904,7 +995,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 }}
                 disabled={creating}
                 aria-label="Add a Task"
-                aria-keyshortcuts="N Enter"
+                aria-keyshortcuts="Meta+N Control+N Enter"
                 autoComplete="off"
                 placeholder="Add a Task"
                 className="h-14 rounded-md pl-12 pr-14 text-base"
@@ -1758,12 +1849,12 @@ function TodayTaskSections({
   const sections: Array<{
     id: TodayTaskSection;
     label: string;
-    icon: typeof CircleDot;
+    icon: typeof Clock2;
   }> = [
     { id: 'inbox', label: 'Inbox', icon: Inbox },
-    { id: 'now', label: 'Now', icon: CircleDot },
-    { id: 'next', label: 'Next', icon: ListStart },
-    { id: 'later', label: 'Later', icon: Clock3 },
+    { id: 'now', label: 'Now', icon: Clock2 },
+    { id: 'next', label: 'Next', icon: Clock5 },
+    { id: 'later', label: 'Later', icon: Clock8 },
   ];
 
   return (
@@ -1845,6 +1936,9 @@ function TaskRow({
   selected,
   onSelect,
   onCloseEditor,
+  onRegisterAutosave,
+  completionRequested,
+  onToggleDeferredCompletion,
   bulkSelection,
   onUpdate,
   onComplete,
@@ -1855,6 +1949,7 @@ function TaskRow({
   draggableTask,
   onDropTask,
   planningLabel,
+  planningDate,
   todayMarker,
   todayMarkerContext,
   reminder,
@@ -1869,6 +1964,9 @@ function TaskRow({
   selected: boolean;
   onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
   onCloseEditor: () => void;
+  onRegisterAutosave: (taskId: string, flush: () => Promise<void>) => void;
+  completionRequested: boolean;
+  onToggleDeferredCompletion: () => void;
   bulkSelection?: {
     selected: boolean;
     onToggle: () => void;
@@ -1882,13 +1980,13 @@ function TaskRow({
   draggableTask: boolean;
   onDropTask: (draggedTaskId: string, placement: 'before' | 'after') => Promise<void>;
   planningLabel?: string | null;
+  planningDate: string;
   todayMarker?: TodayTaskSection;
   todayMarkerContext: 'Today' | 'Day Horizon';
   reminder: TaskReminder | null;
   reminderMode: TaskReminderAvailability;
   reminderTimeZone: string;
   onSaveReminder: (input: {
-    localDate: string;
     localTime: string;
     ambiguityChoice: 'earlier' | 'later';
   }) => Promise<void>;
@@ -1900,17 +1998,88 @@ function TaskRow({
   const [whenOpen, setWhenOpen] = useState(false);
   const [dragPlacement, setDragPlacement] = useState<'before' | 'after' | null>(null);
   const [terminalExiting, setTerminalExiting] = useState(false);
+  const [editorMounted, setEditorMounted] = useState(selected);
+  const [editorExpanded, setEditorExpanded] = useState(selected);
+  const articleRef = useRef<HTMLElement>(null);
+  const editorRegionRef = useRef<HTMLDivElement>(null);
+  const editorAnimationFrameRef = useRef<number | null>(null);
+  const editorScrollFrameRef = useRef<number | null>(null);
+  const editorUnmountTimerRef = useRef<number | null>(null);
+  const suppressActionMenuAutoFocusRef = useRef(false);
   const titleButtonRef = useRef<HTMLButtonElement>(null);
   const suppressClickUntilRef = useRef(0);
   const pendingRef = useRef(false);
   const hierarchyLabel = getTaskHierarchyLabel(task, hierarchy);
   const TodayMarkerIcon = todayMarker === 'now'
-    ? CircleDot
+    ? Clock2
     : todayMarker === 'next'
-      ? ListStart
+      ? Clock5
       : todayMarker === 'later'
-        ? Clock3
+        ? Clock8
         : Inbox;
+
+  useEffect(() => {
+    const cancelScheduledMotion = () => {
+      if (editorAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(editorAnimationFrameRef.current);
+        editorAnimationFrameRef.current = null;
+      }
+      if (editorScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(editorScrollFrameRef.current);
+        editorScrollFrameRef.current = null;
+      }
+      if (editorUnmountTimerRef.current !== null) {
+        window.clearTimeout(editorUnmountTimerRef.current);
+        editorUnmountTimerRef.current = null;
+      }
+    };
+    cancelScheduledMotion();
+
+    const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      ?? true;
+    if (selected) {
+      setEditorMounted(true);
+      if (reducedMotion) {
+        setEditorExpanded(true);
+        editorScrollFrameRef.current = window.requestAnimationFrame(() => {
+          editorScrollFrameRef.current = null;
+          articleRef.current?.querySelector<HTMLElement>('[data-task-editor-title]')
+            ?.scrollIntoView?.({ block: 'nearest' });
+        });
+        return cancelScheduledMotion;
+      }
+
+      setEditorExpanded(false);
+      editorAnimationFrameRef.current = window.requestAnimationFrame(() => {
+        editorAnimationFrameRef.current = null;
+        setEditorExpanded(true);
+        editorScrollFrameRef.current = window.requestAnimationFrame(() => {
+          editorScrollFrameRef.current = null;
+          articleRef.current?.querySelector<HTMLElement>('[data-task-editor-title]')
+            ?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+        });
+      });
+      return cancelScheduledMotion;
+    }
+
+    setEditorExpanded(false);
+    if (reducedMotion) {
+      setEditorMounted(false);
+      return cancelScheduledMotion;
+    }
+    editorUnmountTimerRef.current = window.setTimeout(() => {
+      editorUnmountTimerRef.current = null;
+      setEditorMounted(false);
+    }, TASK_EDITOR_EXPANSION_DURATION_MS);
+    return cancelScheduledMotion;
+  }, [selected]);
+
+  useLayoutEffect(() => {
+    const region = editorRegionRef.current;
+    if (region === null) return;
+    if (selected) region.removeAttribute('inert');
+    else region.setAttribute('inert', '');
+  }, [editorMounted, selected]);
 
   const run = async (operation: () => Promise<void>): Promise<boolean> => {
     if (pendingRef.current) {
@@ -1934,12 +2103,6 @@ function TaskRow({
       '[data-task-title-control]',
     ) ?? [],
   );
-
-  const focusRelativeTask = (offset: -1 | 1) => {
-    const controls = getTaskTitleControls();
-    const currentIndex = controls.indexOf(titleButtonRef.current!);
-    controls[currentIndex + offset]?.focus();
-  };
 
   const captureTaskFocus = () => {
     const controls = getTaskTitleControls();
@@ -1976,6 +2139,7 @@ function TaskRow({
     focusDelay = 0,
   ) => {
     if (pendingRef.current) return;
+    suppressActionMenuAutoFocusRef.current = true;
     const focus = captureTaskFocus();
     pendingRef.current = true;
     setPending(true);
@@ -2000,6 +2164,7 @@ function TaskRow({
   const runMovementAction = async (operation: () => Promise<void>) => {
     const focus = captureTaskFocus();
     await operation();
+    onCloseEditor();
     restoreTaskFocus(focus, true);
   };
 
@@ -2010,6 +2175,8 @@ function TaskRow({
 
   return (
     <article
+      ref={articleRef}
+      data-task-row-id={task.id}
       draggable={draggableTask && !pending}
       data-task-draggable={draggableTask ? 'true' : undefined}
       data-drag-placement={dragPlacement ?? undefined}
@@ -2086,11 +2253,23 @@ function TaskRow({
           <button
             type="button"
             disabled={pending}
-            aria-label={`Complete ${task.title}`}
-            onClick={() => void runTerminalAction(onComplete)}
+            aria-label={`${completionRequested ? 'Mark Incomplete' : 'Complete'} ${task.title}`}
+            aria-pressed={selected ? completionRequested : undefined}
+            data-task-completion-control
+            onClick={() => {
+              if (selected) {
+                onToggleDeferredCompletion();
+                return;
+              }
+              void runTerminalAction(onComplete);
+            }}
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
-            <Square className="h-6 w-6" aria-hidden="true" />
+            {completionRequested ? (
+              <SquareCheckBig className="h-6 w-6 text-success" aria-hidden="true" />
+            ) : (
+              <Square className="h-6 w-6" aria-hidden="true" />
+            )}
           </button>
         )}
         <button
@@ -2127,34 +2306,12 @@ function TaskRow({
             if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
               return;
             }
-            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-              event.preventDefault();
-              focusRelativeTask(event.key === 'ArrowUp' ? -1 : 1);
-              return;
-            }
-            if (bulkSelection) {
-              return;
-            }
-            if (event.key.toLowerCase() === 'c') {
-              event.preventDefault();
-              void runTerminalAction(onComplete);
-              return;
-            }
-            if (event.key.toLowerCase() === 'm') {
-              event.preventDefault();
-              setMoveOpen(true);
-              return;
-            }
-            if (event.key.toLowerCase() === 'w') {
-              event.preventDefault();
-              setWhenOpen(true);
-            }
           }}
           aria-expanded={bulkSelection ? undefined : selected}
           aria-pressed={bulkSelection ? bulkSelection.selected : undefined}
           aria-keyshortcuts={bulkSelection
-            ? 'Enter ArrowUp ArrowDown'
-            : 'Enter ArrowUp ArrowDown C M W Alt+ArrowUp Alt+ArrowDown'}
+            ? 'Enter'
+            : 'Enter Alt+ArrowUp Alt+ArrowDown'}
           data-task-title-control
           data-task-id={task.id}
           className={`min-w-0 flex-1 py-4 text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draggableTask ? 'cursor-grab active:cursor-grabbing' : ''}`}
@@ -2179,6 +2336,11 @@ function TaskRow({
               <Hourglass className="h-3.5 w-3.5" aria-hidden="true" />
               Waiting
             </span>
+          ) : task.actionability === 'rechecking' ? (
+            <span className="mt-1 inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              Rechecking
+            </span>
           ) : null}
           {(
             (planningLabel !== null && (planningLabel || task.start_date))
@@ -2186,16 +2348,20 @@ function TaskRow({
           ) ? (
             <span className="mt-1 block text-xs font-normal text-muted-foreground">
               {planningLabel !== null
-                ? planningLabel ?? (task.start_date ? `Starts ${formatTaskCalendarDate(task.start_date)}` : null)
+                ? planningLabel ?? (task.start_date
+                  ? `Starts ${formatTaskRelativeCalendarDate(task.start_date, planningDate)}`
+                  : null)
                 : null}
               {planningLabel !== null && (planningLabel || task.start_date) && task.deadline ? ' · ' : null}
-              {task.deadline ? `Due ${formatTaskCalendarDate(task.deadline)}` : null}
+              {task.deadline
+                ? `Due ${formatTaskRelativeCalendarDate(task.deadline, planningDate)}`
+                : null}
             </span>
           ) : null}
-          {reminder ? (
+          {reminder && task.start_date ? (
             <span className="mt-1 inline-flex items-center gap-1 text-xs font-normal text-info">
               <Bell className="h-3.5 w-3.5" aria-hidden="true" />
-              {formatReminderIntent(reminder)}
+              {formatReminderIntent(reminder, planningDate)}
             </span>
           ) : null}
         </button>
@@ -2213,13 +2379,31 @@ function TaskRow({
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={(event) => {
+              if (!suppressActionMenuAutoFocusRef.current) return;
+              event.preventDefault();
+              suppressActionMenuAutoFocusRef.current = false;
+            }}
+          >
             <DropdownMenuItem
-              onSelect={() => void run(() => onUpdate({
-                actionability: task.actionability === 'waiting' ? 'actionable' : 'waiting',
-              }))}
+              disabled={task.actionability === 'actionable'}
+              onSelect={() => void run(() => onUpdate({ actionability: 'actionable' }))}
             >
-              {task.actionability === 'waiting' ? 'Mark as Actionable' : 'Mark as Waiting'}
+              Mark as Actionable
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={task.actionability === 'waiting'}
+              onSelect={() => void run(() => onUpdate({ actionability: 'waiting' }))}
+            >
+              Mark as Waiting
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={task.actionability === 'rechecking'}
+              onSelect={() => void run(() => onUpdate({ actionability: 'rechecking' }))}
+            >
+              Mark as Rechecking
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => setMoveOpen(true)}>Move...</DropdownMenuItem>
@@ -2244,19 +2428,33 @@ function TaskRow({
           </DropdownMenuContent>
         </DropdownMenu> : null}
       </div>
-      {selected && !bulkSelection ? (
-        <TaskEditor
-          task={task}
-          hierarchy={hierarchy}
-          returnFocusRef={titleButtonRef}
-          onCancel={onCloseEditor}
-          onSave={onUpdate}
-          reminder={reminder}
-          reminderMode={reminderMode}
-          reminderTimeZone={reminderTimeZone}
-          onSaveReminder={onSaveReminder}
-          onCancelReminder={onCancelReminder}
-        />
+      {editorMounted && !bulkSelection ? (
+        <div
+          ref={editorRegionRef}
+          data-task-editor-region
+          data-state={selected ? (editorExpanded ? 'open' : 'opening') : 'closing'}
+          aria-hidden={selected ? undefined : true}
+          className={[
+            'grid overflow-hidden transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none',
+            editorExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+            selected ? '' : 'pointer-events-none',
+          ].filter(Boolean).join(' ')}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <TaskEditor
+              task={task}
+              hierarchy={hierarchy}
+              onSave={onUpdate}
+              reminder={reminder}
+              reminderMode={reminderMode}
+              reminderTimeZone={reminderTimeZone}
+              planningDate={planningDate}
+              onSaveReminder={onSaveReminder}
+              onCancelReminder={onCancelReminder}
+              onRegisterAutosave={onRegisterAutosave}
+            />
+          </div>
+        </div>
       ) : null}
       {!bulkSelection ? <TaskMoveDialog
         open={moveOpen}
@@ -2272,6 +2470,7 @@ function TaskRow({
         open={whenOpen}
         task={task}
         actions={movementPlanningActions}
+        planningDate={planningDate}
         onOpenChange={(nextOpen) => {
           setWhenOpen(nextOpen);
         }}
@@ -2286,162 +2485,225 @@ function TaskRow({
 function TaskEditor({
   task,
   hierarchy,
-  returnFocusRef,
-  onCancel,
   onSave,
   reminder,
   reminderMode,
   reminderTimeZone,
+  planningDate,
   onSaveReminder,
   onCancelReminder,
+  onRegisterAutosave,
 }: {
   task: TaskTodo;
   hierarchy: TaskHierarchyModel;
-  returnFocusRef: RefObject<HTMLButtonElement>;
-  onCancel: () => void;
   onSave: (patch: EditableTaskPatch) => Promise<void>;
   reminder: TaskReminder | null;
   reminderMode: TaskReminderAvailability;
   reminderTimeZone: string;
+  planningDate: string;
   onSaveReminder: (input: {
-    localDate: string;
     localTime: string;
     ambiguityChoice: 'earlier' | 'later';
   }) => Promise<void>;
   onCancelReminder: () => Promise<void>;
+  onRegisterAutosave: (taskId: string, flush: () => Promise<void>) => void;
 }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes);
+  const [primaryLink, setPrimaryLink] = useState(task.primary_link ?? '');
   const [actionability, setActionability] = useState(task.actionability);
   const [startDate, setStartDate] = useState(task.start_date ?? '');
-  const [todaySection, setTodaySection] = useState<TaskTodaySection>(task.today_section);
+  const [todaySection, setTodaySection] = useState<TaskTodaySection>(task.today_section ?? 'next');
   const [deadline, setDeadline] = useState(task.deadline ?? '');
-  const [reminderDate, setReminderDate] = useState(reminder?.local_date ?? '');
-  const [reminderTime, setReminderTime] = useState(reminder?.local_time.slice(0, 5) ?? '09:00');
+  const [reminderTime, setReminderTime] = useState(reminder?.local_time.slice(0, 5) ?? '');
   const [ambiguityChoice, setAmbiguityChoice] = useState<'earlier' | 'later'>(
     reminder?.ambiguity_choice ?? 'earlier',
   );
   const [organization, setOrganization] = useState(taskOrganizationValue(task));
-  const [headingId, setHeadingId] = useState(task.heading_id ?? '');
-  const [saving, setSaving] = useState(false);
-  const invalidDateRange = Boolean(startDate && deadline && deadline < startDate);
-  const reminderChanged = reminderDate !== (reminder?.local_date ?? '')
-    || (reminderDate !== '' && reminderTime !== (reminder?.local_time.slice(0, 5) ?? '09:00'))
-    || ambiguityChoice !== (reminder?.ambiguity_choice ?? 'earlier');
-  const invalidReminder = Boolean(reminderDate && !reminderTime);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const operationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const lastOperationRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingTextPatchRef = useRef<EditableTaskPatch>({});
+  const retryTaskPatchRef = useRef<EditableTaskPatch>({});
+  const textAutosaveTimerRef = useRef<number | null>(null);
+  const onSaveRef = useRef(onSave);
+  const onSaveReminderRef = useRef(onSaveReminder);
+  const onCancelReminderRef = useRef(onCancelReminder);
+  onSaveRef.current = onSave;
+  onSaveReminderRef.current = onSaveReminder;
+  onCancelReminderRef.current = onCancelReminder;
 
-  const restoreTitleFocus = () => {
-    window.setTimeout(() => returnFocusRef.current?.focus(), 0);
-  };
+  useLayoutEffect(() => {
+    const input = titleInputRef.current;
+    if (input === null) return;
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(input.value.length, input.value.length);
+  }, [task.id]);
 
-  const handleCancel = () => {
-    onCancel();
-    restoreTitleFocus();
-  };
+  const enqueueOperation = useCallback((operation: () => Promise<void>) => {
+    const run = operationQueueRef.current.then(operation);
+    operationQueueRef.current = run.catch(() => undefined);
+    lastOperationRef.current = run;
+    return run;
+  }, []);
 
-  const handleSave = async (event: FormEvent) => {
-    event.preventDefault();
-    const normalizedTitle = title.trim();
-    if (!normalizedTitle || saving || invalidDateRange || invalidReminder) {
-      return;
-    }
-
-    const patch: EditableTaskPatch = {};
-    if (normalizedTitle !== task.title) {
-      patch.title = normalizedTitle;
-    }
-    if (notes !== task.notes) {
-      patch.notes = notes;
-    }
-    if (actionability !== task.actionability) {
-      patch.actionability = actionability;
-    }
-    if (startDate !== (task.start_date ?? '')) {
-      patch.start_date = startDate || null;
-    }
-    if (todaySection !== task.today_section) {
-      patch.today_section = todaySection;
-      if (task.destination === 'someday' && todaySection !== 'none') {
-        patch.destination = 'anytime';
-      }
-    }
-    if (deadline !== (task.deadline ?? '')) {
-      patch.deadline = deadline || null;
-    }
-    const container = parseTaskOrganization(organization, headingId);
-    if (
-      container.area_id !== task.area_id
-      || container.project_id !== task.project_id
-      || container.heading_id !== task.heading_id
-    ) {
-      Object.assign(patch, container);
-    }
-    if (Object.keys(patch).length === 0 && !reminderChanged) {
-      handleCancel();
-      return;
-    }
-
-    setSaving(true);
+  const enqueueTaskPatch = useCallback((patch: EditableTaskPatch) => enqueueOperation(async () => {
+    const retryPatch = retryTaskPatchRef.current;
+    retryTaskPatchRef.current = {};
+    const effectivePatch = { ...retryPatch, ...patch };
+    if (Object.keys(effectivePatch).length === 0) return;
     try {
-      if (reminderChanged) {
-        if (reminderDate) {
-          await onSaveReminder({ localDate: reminderDate, localTime: reminderTime, ambiguityChoice });
-        } else if (reminder) {
-          await onCancelReminder();
-        }
+      await onSaveRef.current(effectivePatch);
+    } catch (error) {
+      retryTaskPatchRef.current = {
+        ...effectivePatch,
+        ...retryTaskPatchRef.current,
+      };
+      throw error;
+    }
+  }), [enqueueOperation]);
+
+  const takePendingTextPatch = useCallback(() => {
+    if (textAutosaveTimerRef.current !== null) {
+      window.clearTimeout(textAutosaveTimerRef.current);
+      textAutosaveTimerRef.current = null;
+    }
+    const patch = pendingTextPatchRef.current;
+    pendingTextPatchRef.current = {};
+    return patch;
+  }, []);
+
+  const scheduleTextPatch = useCallback((patch: EditableTaskPatch) => {
+    pendingTextPatchRef.current = { ...pendingTextPatchRef.current, ...patch };
+    if (textAutosaveTimerRef.current !== null) {
+      window.clearTimeout(textAutosaveTimerRef.current);
+    }
+    textAutosaveTimerRef.current = window.setTimeout(() => {
+      textAutosaveTimerRef.current = null;
+      const pendingPatch = pendingTextPatchRef.current;
+      pendingTextPatchRef.current = {};
+      if (Object.keys(pendingPatch).length > 0) void enqueueTaskPatch(pendingPatch);
+    }, TASK_EDITOR_TEXT_AUTOSAVE_DELAY_MS);
+  }, [enqueueTaskPatch]);
+
+  const removePendingTextField = useCallback((field: keyof EditableTaskPatch) => {
+    const pendingPatch = { ...pendingTextPatchRef.current };
+    delete pendingPatch[field];
+    pendingTextPatchRef.current = pendingPatch;
+    if (Object.keys(pendingPatch).length === 0 && textAutosaveTimerRef.current !== null) {
+      window.clearTimeout(textAutosaveTimerRef.current);
+      textAutosaveTimerRef.current = null;
+    }
+  }, []);
+
+  const persistImmediateTaskPatch = useCallback((patch: EditableTaskPatch) => {
+    const pendingTextPatch = takePendingTextPatch();
+    return enqueueTaskPatch({ ...pendingTextPatch, ...patch });
+  }, [enqueueTaskPatch, takePendingTextPatch]);
+
+  const flushAutosave = useCallback(async () => {
+    const pendingTextPatch = takePendingTextPatch();
+    if (Object.keys(pendingTextPatch).length > 0) enqueueTaskPatch(pendingTextPatch);
+    try {
+      await lastOperationRef.current;
+      if (Object.keys(retryTaskPatchRef.current).length > 0) {
+        await enqueueTaskPatch({});
       }
-      if (Object.keys(patch).length > 0) {
-        await onSave(patch);
-      } else {
-        onCancel();
-      }
-      restoreTitleFocus();
-    } catch {
-      // The parent reports the error and keeps the editor open for retry.
-    } finally {
-      setSaving(false);
+    } catch (error) {
+      if (Object.keys(retryTaskPatchRef.current).length === 0) throw error;
+      await enqueueTaskPatch({});
+    }
+  }, [enqueueTaskPatch, takePendingTextPatch]);
+
+  useLayoutEffect(() => {
+    onRegisterAutosave(task.id, flushAutosave);
+    return () => {
+      void flushAutosave().catch(() => undefined);
+    };
+  }, [flushAutosave, onRegisterAutosave, task.id]);
+
+  const persistReminder = useCallback((
+    localTime: string,
+    choice: 'earlier' | 'later',
+  ) => {
+    const pendingTextPatch = takePendingTextPatch();
+    if (Object.keys(pendingTextPatch).length > 0) enqueueTaskPatch(pendingTextPatch);
+    return enqueueOperation(() => onSaveReminderRef.current({
+      localTime,
+      ambiguityChoice: choice,
+    }));
+  }, [enqueueOperation, enqueueTaskPatch, takePendingTextPatch]);
+
+  const cancelReminder = useCallback(() => {
+    const pendingTextPatch = takePendingTextPatch();
+    if (Object.keys(pendingTextPatch).length > 0) enqueueTaskPatch(pendingTextPatch);
+    return enqueueOperation(() => onCancelReminderRef.current());
+  }, [enqueueOperation, enqueueTaskPatch, takePendingTextPatch]);
+
+  const changeStartDate = (value: string) => {
+    const nextTodaySection = value ? (startDate ? todaySection : 'next') : todaySection;
+    setStartDate(value);
+    setTodaySection(nextTodaySection);
+    void persistImmediateTaskPatch({
+      start_date: value || null,
+      today_section: nextTodaySection,
+    });
+    if (!value) {
+      setReminderTime('');
+      if (reminder !== null || reminderTime) void cancelReminder();
+    } else if (reminderTime) {
+      void persistReminder(reminderTime, ambiguityChoice);
     }
   };
 
   return (
-    <form
-      onSubmit={handleSave}
-      onKeyDown={(event) => {
-        if (
-          event.key === 'Enter'
-          && (event.metaKey || event.ctrlKey)
-          && !event.nativeEvent.isComposing
-        ) {
-          event.preventDefault();
-          event.currentTarget.requestSubmit();
-          return;
-        }
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          handleCancel();
-        }
-      }}
-      aria-keyshortcuts="Meta+Enter Escape"
+    <div
       className="space-y-3 border-t border-[hsl(var(--grid-sticky-line))] px-4 py-4 sm:ml-14"
     >
       <label className="sr-only" htmlFor={`task-title-${task.id}`}>
         Task Title
       </label>
       <Input
+        ref={titleInputRef}
         id={`task-title-${task.id}`}
-        autoFocus
+        data-task-editor-title
         value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        disabled={saving}
+        onChange={(event) => {
+          const nextTitle = event.target.value;
+          setTitle(nextTitle);
+          const normalizedTitle = nextTitle.trim();
+          if (normalizedTitle) scheduleTextPatch({ title: normalizedTitle });
+          else removePendingTextField('title');
+        }}
       />
       <Suspense fallback={<div className="min-h-28" aria-label="Loading Task Notes" />}>
         <TaskMarkdownNotes
           id={`task-notes-${task.id}`}
           notes={notes}
-          onChange={setNotes}
-          disabled={saving}
+          onChange={(nextNotes) => {
+            setNotes(nextNotes);
+            scheduleTextPatch({ notes: nextNotes });
+          }}
+          disabled={false}
         />
       </Suspense>
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-foreground" htmlFor={`task-primary-link-${task.id}`}>
+          Primary Link
+        </label>
+        <Input
+          id={`task-primary-link-${task.id}`}
+          value={primaryLink}
+          placeholder="No Primary Link"
+          inputMode="url"
+          onChange={(event) => {
+            const nextPrimaryLink = event.target.value;
+            setPrimaryLink(nextPrimaryLink);
+            scheduleTextPatch({ primary_link: nextPrimaryLink || null });
+          }}
+        />
+      </div>
+      <div data-task-editor-identity-grid className="grid gap-3 sm:grid-cols-2">
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground" htmlFor={`task-actionability-${task.id}`}>
           Actionability
@@ -2449,16 +2711,19 @@ function TaskEditor({
         <select
           id={`task-actionability-${task.id}`}
           value={actionability}
-          onChange={(event) => setActionability(event.target.value as TaskTodo['actionability'])}
-          disabled={saving}
+          onChange={(event) => {
+            const nextActionability = event.target.value as TaskTodo['actionability'];
+            setActionability(nextActionability);
+            void persistImmediateTaskPatch({ actionability: nextActionability });
+          }}
           className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <option value="actionable">Actionable</option>
           <option value="waiting">Waiting</option>
+          <option value="rechecking">Rechecking</option>
         </select>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
+      <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor={`task-organization-${task.id}`}>
             Organization
           </label>
@@ -2466,10 +2731,11 @@ function TaskEditor({
             id={`task-organization-${task.id}`}
             value={organization}
             onChange={(event) => {
-              setOrganization(event.target.value);
-              setHeadingId('');
+              const nextOrganization = event.target.value;
+              setOrganization(nextOrganization);
+              void persistImmediateTaskPatch(parseTaskOrganization(nextOrganization));
             }}
-            disabled={saving || hierarchy.loading}
+            disabled={hierarchy.loading}
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="none">No Area or Project</option>
@@ -2488,28 +2754,9 @@ function TaskEditor({
               </optgroup>
             ) : null}
           </select>
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor={`task-heading-${task.id}`}>
-            Heading
-          </label>
-          <select
-            id={`task-heading-${task.id}`}
-            value={headingId}
-            onChange={(event) => setHeadingId(event.target.value)}
-            disabled={saving || !organization.startsWith('project:')}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">No Heading</option>
-            {hierarchy.headings
-              .filter(({ project_id }) => organization === `project:${project_id}`)
-              .map((heading) => (
-                <option key={heading.id} value={heading.id}>{heading.title}</option>
-              ))}
-          </select>
-        </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      </div>
+      <div data-task-editor-temporal-grid className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor={`task-start-date-${task.id}`}>
             Start Date
@@ -2518,44 +2765,84 @@ function TaskEditor({
             <DatePickerField
               id={`task-start-date-${task.id}`}
               value={startDate}
-              onValueChange={setStartDate}
-              disabled={saving}
+              onValueChange={changeStartDate}
               placeholder="No Start Date"
               aria-label="Start Date"
+              minDate={addTaskCalendarDays(planningDate, 1)}
             />
             {startDate ? (
               <Button
                 type="button"
                 variant="clear"
                 size="icon"
-                disabled={saving}
                 aria-label="Clear Start Date"
-                onClick={() => setStartDate('')}
+                onClick={() => changeStartDate('')}
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </Button>
             ) : null}
           </div>
         </div>
-        <div className="space-y-1.5">
+        {startDate || task.today_section !== null ? <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor={`task-day-horizon-${task.id}`}>
             Day Horizon
           </label>
           <select
             id={`task-day-horizon-${task.id}`}
             value={todaySection}
-            onChange={(event) => setTodaySection(event.target.value as TaskTodaySection)}
-            disabled={saving}
+            onChange={(event) => {
+              const nextTodaySection = event.target.value as TaskTodaySection;
+              setTodaySection(nextTodaySection);
+              void persistImmediateTaskPatch({ today_section: nextTodaySection });
+            }}
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <option value="none">None</option>
             <option value="inbox">Inbox</option>
             <option value="now">Now</option>
             <option value="next">Next</option>
             <option value="later">Later</option>
           </select>
-        </div>
-        <div className="space-y-1.5">
+        </div> : null}
+        {startDate ? <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground" htmlFor={`task-reminder-time-${task.id}`}>
+            Reminder Time
+          </label>
+          <div className="flex gap-2">
+            <Input
+              id={`task-reminder-time-${task.id}`}
+              type="time"
+              value={reminderTime}
+              onChange={(event) => {
+                const nextReminderTime = event.target.value;
+                setReminderTime(nextReminderTime);
+                if (nextReminderTime) {
+                  void persistReminder(nextReminderTime, ambiguityChoice);
+                } else if (reminder !== null || reminderTime) {
+                  void cancelReminder();
+                }
+              }}
+              disabled={reminderMode !== 'connected'}
+            />
+            {reminderTime ? (
+              <Button
+                type="button"
+                variant="clear"
+                size="icon"
+                disabled={reminderMode !== 'connected'}
+                aria-label="Clear Reminder"
+                onClick={() => {
+                  setReminderTime('');
+                  void cancelReminder();
+                }}
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+          </div>
+        </div> : null}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5 sm:col-span-1">
           <label className="text-sm font-medium text-foreground" htmlFor={`task-deadline-${task.id}`}>
             Deadline
           </label>
@@ -2563,8 +2850,10 @@ function TaskEditor({
             <DatePickerField
               id={`task-deadline-${task.id}`}
               value={deadline}
-              onValueChange={setDeadline}
-              disabled={saving}
+              onValueChange={(value) => {
+                setDeadline(value);
+                void persistImmediateTaskPatch({ deadline: value || null });
+              }}
               placeholder="No Deadline"
               aria-label="Deadline"
             />
@@ -2573,9 +2862,11 @@ function TaskEditor({
                 type="button"
                 variant="clear"
                 size="icon"
-                disabled={saving}
                 aria-label="Clear Deadline"
-                onClick={() => setDeadline('')}
+                onClick={() => {
+                  setDeadline('');
+                  void persistImmediateTaskPatch({ deadline: null });
+                }}
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </Button>
@@ -2583,108 +2874,45 @@ function TaskEditor({
           </div>
         </div>
       </div>
-      <fieldset className="space-y-3 rounded-md border border-[hsl(var(--grid-sticky-line))] p-3">
-        <legend className="px-1 text-sm font-medium text-foreground">Reminder</legend>
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
+      {startDate && reminderTime ? (
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground" htmlFor={`task-reminder-date-${task.id}`}>
-              Date
+            <label className="text-sm font-medium text-foreground" htmlFor={`task-reminder-ambiguity-${task.id}`}>
+              Repeated Local Time
             </label>
-            <div className="flex gap-2">
-              <DatePickerField
-                id={`task-reminder-date-${task.id}`}
-                value={reminderDate}
-                onValueChange={setReminderDate}
-                disabled={saving || reminderMode !== 'connected'}
-                placeholder="No Reminder"
-                aria-label="Reminder Date"
-              />
-              {reminderDate ? (
-                <Button
-                  type="button"
-                  variant="clear"
-                  size="icon"
-                  disabled={saving || reminderMode !== 'connected'}
-                  aria-label="Clear Reminder"
-                  onClick={() => setReminderDate('')}
-                >
-                  <X className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              ) : null}
-            </div>
+            <select
+              id={`task-reminder-ambiguity-${task.id}`}
+              value={ambiguityChoice}
+              onChange={(event) => {
+                const nextChoice = event.target.value as 'earlier' | 'later';
+                setAmbiguityChoice(nextChoice);
+                void persistReminder(reminderTime, nextChoice);
+              }}
+              disabled={reminderMode !== 'connected'}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="earlier">Earlier Instance</option>
+              <option value="later">Later Instance</option>
+            </select>
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground" htmlFor={`task-reminder-time-${task.id}`}>
-              Time
-            </label>
-            <Input
-              id={`task-reminder-time-${task.id}`}
-              type="time"
-              value={reminderTime}
-              onChange={(event) => setReminderTime(event.target.value)}
-              disabled={saving || reminderMode !== 'connected' || !reminderDate}
-            />
+            <span className="text-sm font-medium text-foreground">Time Zone</span>
+            <p className="flex h-10 items-center text-sm text-muted-foreground">
+              {reminderTimeZone}
+            </p>
           </div>
         </div>
-        {reminderDate ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground" htmlFor={`task-reminder-ambiguity-${task.id}`}>
-                Repeated Local Time
-              </label>
-              <select
-                id={`task-reminder-ambiguity-${task.id}`}
-                value={ambiguityChoice}
-                onChange={(event) => setAmbiguityChoice(event.target.value as 'earlier' | 'later')}
-                disabled={saving || reminderMode !== 'connected'}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="earlier">Earlier Instance</option>
-                <option value="later">Later Instance</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <span className="text-sm font-medium text-foreground">Time Zone</span>
-              <p className="flex h-10 items-center text-sm text-muted-foreground">
-                {reminderTimeZone}
-              </p>
-            </div>
-          </div>
-        ) : null}
-        {reminderMode !== 'connected' ? (
+      ) : null}
+      {startDate && reminderMode !== 'connected' ? (
           <p className="text-xs text-warning">
             {getTaskReminderUnavailableMessage(reminderMode)}
           </p>
-        ) : reminder?.resolution_kind === 'gap_forward' ? (
+        ) : startDate && reminder?.resolution_kind === 'gap_forward' ? (
           <p className="text-xs text-warning">
             This local time was adjusted to the first valid instant after a daylight-saving gap.
           </p>
         ) : null}
-      </fieldset>
-      {invalidDateRange ? (
-        <p role="alert" className="text-sm text-destructive">
-          Deadline cannot be earlier than the start date.
-        </p>
-      ) : null}
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="clear" size="sm" disabled={saving} onClick={handleCancel}>
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          size="sm"
-          disabled={
-            !title.trim()
-            || saving
-            || invalidDateRange
-            || invalidReminder
-            || (reminderChanged && reminderMode !== 'connected')
-          }
-        >
-          Save
-        </Button>
-      </div>
-    </form>
+    </div>
   );
 }
 
@@ -2712,9 +2940,9 @@ function showReminderDeliveryError(title: string): void {
   });
 }
 
-function formatReminderIntent(reminder: TaskReminder): string {
+function formatReminderIntent(reminder: TaskReminder, planningDate: string): string {
   const localTime = reminder.local_time.slice(0, 5);
-  return `Remind ${formatTaskCalendarDate(reminder.local_date)} at ${localTime}`;
+  return `Remind ${formatTaskRelativeCalendarDate(reminder.local_date, planningDate)} at ${localTime}`;
 }
 
 function getTaskViewLabel(view: TaskShellView): string {
@@ -2733,12 +2961,6 @@ function getTaskViewLabel(view: TaskShellView): string {
 function isTaskNavigationActive(view: TaskShellView, path: string): boolean {
   return view === path.slice(1)
     || (path === '/projects' && (view === 'project' || view === 'area'));
-}
-
-function isTaskKeyboardInput(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest(
-    'input, textarea, select, [contenteditable="true"]',
-  ));
 }
 
 function getTaskViewFromPath(pathname: string): TaskShellView {
@@ -2775,9 +2997,8 @@ function getTaskSectionLabel(view: TaskListView): string {
 function getTaskHierarchyLabel(task: TaskTodo, hierarchy: TaskHierarchyModel): string | null {
   if (task.project_id) {
     const project = hierarchy.projects.find(({ id }) => id === task.project_id);
-    const heading = hierarchy.headings.find(({ id }) => id === task.heading_id);
     if (!project) return 'Unavailable Project';
-    return heading ? `${project.title} / ${heading.title}` : project.title;
+    return project.title;
   }
   if (task.area_id) {
     return hierarchy.areas.find(({ id }) => id === task.area_id)?.title ?? 'Unavailable Area';
@@ -2793,35 +3014,25 @@ function taskOrganizationValue(task: TaskTodo): string {
 
 function parseTaskOrganization(
   organization: string,
-  headingId: string,
-): Pick<TaskTodo, 'area_id' | 'project_id' | 'heading_id'> {
+): Pick<TaskTodo, 'area_id' | 'project_id'> {
   if (organization.startsWith('project:')) {
     return {
       area_id: null,
       project_id: organization.slice('project:'.length),
-      heading_id: headingId || null,
     };
   }
   if (organization.startsWith('area:')) {
     return {
       area_id: organization.slice('area:'.length),
       project_id: null,
-      heading_id: null,
     };
   }
-  return { area_id: null, project_id: null, heading_id: null };
+  return { area_id: null, project_id: null };
 }
 
 function formatTaskTerminalDate(timestamp: string): string {
   const date = new Date(timestamp);
   return Number.isNaN(date.valueOf())
     ? timestamp
-    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
-}
-
-function formatTaskCalendarDate(value: string): string {
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.valueOf())
-    ? value
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
 }

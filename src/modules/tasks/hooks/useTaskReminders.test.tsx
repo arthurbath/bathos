@@ -108,7 +108,6 @@ describe('useTaskReminders', () => {
       await result.current.save({
         rootType: 'todo',
         rootId: 'task-b',
-        localDate: '2026-07-20',
         localTime: '09:00',
       });
     });
@@ -173,7 +172,6 @@ describe('useTaskReminders', () => {
     await expect(result.current.save({
       rootType: 'todo',
       rootId: 'task-a',
-      localDate: '2026-07-20',
       localTime: '09:00',
     })).rejects.toThrow('Reminder changes require connected task storage');
     expect(reminderService.claimDue).not.toHaveBeenCalled();

@@ -174,10 +174,12 @@ function getAreaTaskMetadata(
   route: ReturnType<typeof getTaskPlanningRoute>,
 ): string {
   const values = [
-    route === 'today' && task.today_section !== 'none'
+    route === 'today' && task.today_section !== null
       ? `Today ${task.today_section[0].toUpperCase()}${task.today_section.slice(1)}`
       : route[0].toUpperCase() + route.slice(1),
-    task.actionability === 'waiting' ? 'Waiting' : null,
+    task.actionability === 'waiting'
+      ? 'Waiting'
+      : task.actionability === 'rechecking' ? 'Rechecking' : null,
   ].filter(Boolean);
   return values.join(' / ');
 }

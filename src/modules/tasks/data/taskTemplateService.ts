@@ -41,7 +41,6 @@ export type TaskTemplateInstanceResult = {
   root_type: TaskTemplateKind;
   root_id: string;
   project_id: string | null;
-  heading_ids: string[];
   task_ids: string[];
   checklist_item_ids: string[];
 };
@@ -234,16 +233,11 @@ export function parseTaskTemplateSnapshot(value: unknown): TaskTemplateSnapshot 
       root: parseTodoNode(record.root, false),
     } satisfies TaskTodoTemplateSnapshot;
   }
-  const headings = requireArray(record.headings, 'Project template headings are invalid').map(
-    (heading) => {
-      const row = requireRecord(heading, 'Project template heading is invalid');
-      return {
-        node_id: requireText(row.node_id, 'heading node identifier'),
-        title: requireText(row.title, 'heading title'),
-        order_key: requireText(row.order_key, 'heading order'),
-      };
-    },
-  );
+  // Legacy project snapshots may contain headings. Their descendant to-dos are
+  // intentionally flattened into the project when parsed.
+  if (record.headings !== undefined) {
+    requireArray(record.headings, 'Project template headings are invalid');
+  }
   const root = parseTodoNode(record.root, false);
   return {
     version: 1,
@@ -262,14 +256,13 @@ export function parseTaskTemplateSnapshot(value: unknown): TaskTemplateSnapshot 
       start_offset_days: root.start_offset_days,
       deadline_offset_days: root.deadline_offset_days,
     },
-    headings,
     todos: requireArray(record.todos, 'Project template to-dos are invalid').map(
       (todo) => parseTodoNode(todo, true),
     ),
   } satisfies TaskProjectTemplateSnapshot;
 }
 
-function parseTodoNode(value: unknown, includeHeading: boolean) {
+function parseTodoNode(value: unknown, _includeLegacyHeading: boolean) {
   const record = requireRecord(value, 'Template to-do node is invalid');
   const legacyDestination = requireText(record.destination, 'template destination');
   const destination = legacyDestination === 'inbox' || legacyDestination === 'today'
@@ -279,28 +272,33 @@ function parseTodoNode(value: unknown, includeHeading: boolean) {
       ['anytime', 'someday'] as const,
       'template destination',
     );
-  const legacyTodaySection = requireText(record.today_section, 'template Today section');
-  const todaySection = legacyDestination === 'inbox'
+  const legacyTodaySection = record.today_section === null
+    ? null
+    : requireText(record.today_section, 'template Today section');
+  const startOffsetDays = optionalInteger(record.start_offset_days, 'start offset');
+  const mappedTodaySection = legacyDestination === 'inbox'
     ? 'later'
     : legacyDestination === 'today'
       ? legacyTodaySection === 'evening' ? 'later' : 'next'
       : legacyTodaySection === 'daytime' || legacyTodaySection === 'evening'
-        ? 'none'
-        : requireEnum(
-          legacyTodaySection,
-          ['none', 'now', 'next', 'later'] as const,
-          'template Today section',
-        );
+        ? null
+        : legacyTodaySection === 'none' || legacyTodaySection === null
+          ? null
+          : requireEnum(
+            legacyTodaySection,
+            ['inbox', 'now', 'next', 'later'] as const,
+            'template Today section',
+          );
+  const todaySection = destination === 'someday'
+    ? null
+    : mappedTodaySection ?? (startOffsetDays === null ? null : 'next');
   return {
     node_id: requireText(record.node_id, 'template node identifier'),
-    ...(includeHeading
-      ? { heading_node_id: optionalText(record.heading_node_id, 'heading node identifier') }
-      : {}),
     title: requireText(record.title, 'template title'),
     notes: requireText(record.notes, 'template notes', true),
     actionability: requireEnum(
       record.actionability ?? 'actionable',
-      ['actionable', 'waiting'] as const,
+      ['actionable', 'waiting', 'rechecking'] as const,
       'template actionability',
     ),
     destination,
@@ -309,7 +307,7 @@ function parseTodoNode(value: unknown, includeHeading: boolean) {
     ...(record.hierarchy_order_key === undefined
       ? {}
       : { hierarchy_order_key: requireText(record.hierarchy_order_key, 'hierarchy order') }),
-    start_offset_days: optionalInteger(record.start_offset_days, 'start offset'),
+    start_offset_days: destination === 'someday' ? null : startOffsetDays,
     deadline_offset_days: optionalInteger(record.deadline_offset_days, 'deadline offset'),
     checklist: requireArray(record.checklist ?? [], 'Template checklist is invalid').map((item) => {
       const row = requireRecord(item, 'Template checklist item is invalid');
@@ -328,7 +326,6 @@ function parseTaskTemplateInstanceResult(value: unknown): TaskTemplateInstanceRe
     root_type: requireEnum(record.root_type, taskTemplateKinds, 'root type'),
     root_id: requireText(record.root_id, 'root identifier'),
     project_id: optionalText(record.project_id, 'project identifier'),
-    heading_ids: requireStringArray(record.heading_ids, 'heading identifiers'),
     task_ids: requireStringArray(record.task_ids, 'task identifiers'),
     checklist_item_ids: requireStringArray(
       record.checklist_item_ids,

@@ -96,7 +96,6 @@ function model(mode: 'local' | 'connected') {
 const hierarchy = {
   areas: [],
   projects: [],
-  headings: [],
   loading: false,
   error: null,
 };

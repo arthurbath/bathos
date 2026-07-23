@@ -50,12 +50,11 @@ describe('TaskReminderService', () => {
     await expect(service.save({
       rootType: 'todo',
       rootId: 'task-a',
-      localDate: '2026-07-20',
       localTime: '09:00',
       timeZone: 'America/Los_Angeles',
       mutationId: 'mutation-a',
     })).resolves.toMatchObject({ outcome: 'accepted', reminder, occurrence });
-    expect(rpc).toHaveBeenCalledWith('tasks_save_reminder', expect.objectContaining({
+    expect(rpc).toHaveBeenCalledWith('tasks_save_start_reminder', expect.objectContaining({
       _root_type: 'todo',
       _root_id: 'task-a',
       _local_time: '09:00',
@@ -71,7 +70,6 @@ describe('TaskReminderService', () => {
     await expect(service.save({
       rootType: 'todo',
       rootId: 'task-a',
-      localDate: '2026-07-20',
       localTime: '25:00',
       timeZone: 'UTC',
     })).rejects.toBeInstanceOf(InvalidTaskReminderError);

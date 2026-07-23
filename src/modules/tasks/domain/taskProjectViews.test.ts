@@ -11,7 +11,7 @@ describe('task project planning views', () => {
       project('today', { destination: 'anytime', today_section: 'next', start_date: planningDate }),
       project('now', { destination: 'anytime', today_section: 'now', start_date: '2026-07-19' }),
       project('future-today', { destination: 'anytime', today_section: 'now', start_date: '2026-07-22' }),
-      project('due-inbox', { destination: 'anytime', today_section: 'none', start_date: planningDate }),
+      project('due-inbox', { destination: 'anytime', today_section: 'inbox', start_date: planningDate }),
       project('anytime', { destination: 'anytime', start_date: null }),
       project('future-anytime', { destination: 'anytime', start_date: '2026-07-21' }),
       project('deadline-anytime', { destination: 'anytime', deadline: '2026-07-23' }),
@@ -46,7 +46,7 @@ describe('task project planning views', () => {
 
     expect(getTodayProjectSection(later, planningDate)).toBe('later');
     expect(getTodayProjectSection(project('due', {
-      today_section: 'none',
+      today_section: 'inbox',
       start_date: planningDate,
     }), planningDate)).toBe('inbox');
     expect(deriveTaskViewProjects([completed, canceled], 'owner-a', 'done', planningDate)
@@ -68,7 +68,7 @@ function project(id: string, patch: Partial<TaskProject> = {}): TaskProject {
     deleted_at: null,
     deletion_root_id: null,
     destination: 'anytime',
-    today_section: 'none',
+    today_section: null,
     order_key: `h-${id}`,
     planning_order_key: `p-${id}`,
     start_date: null,

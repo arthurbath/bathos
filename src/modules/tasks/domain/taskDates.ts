@@ -97,3 +97,29 @@ export function addTaskCalendarDays(value: string, days: number): string {
     shifted.getUTCDate().toString().padStart(2, '0'),
   ].join('-');
 }
+
+export function formatTaskRelativeCalendarDate(
+  value: string,
+  planningDate: string,
+  locale?: string,
+): string {
+  if (!isTaskCalendarDate(value) || !isTaskCalendarDate(planningDate)) return value;
+  const offset = calendarEpochDay(value) - calendarEpochDay(planningDate);
+  if (offset === 0) return 'Today';
+  if (offset === 1) return 'Tomorrow';
+  if (offset === -1) return 'one day ago';
+  if (offset > 1 && offset <= 10) return `${offset} days left`;
+  if (offset < -1 && offset >= -10) return `${Math.abs(offset)} days ago`;
+
+  const [year, month, day] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+function calendarEpochDay(value: string): number {
+  const [year, month, day] = value.split('-').map(Number);
+  return Math.trunc(Date.UTC(year, month - 1, day) / 86_400_000);
+}

@@ -2,7 +2,6 @@ import { Bell, X } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { DatePickerField } from '@/components/ui/date-picker-field';
 import { Input } from '@/components/ui/input';
 import {
   getTaskReminderUnavailableMessage,
@@ -11,7 +10,6 @@ import {
 import type { TaskReminder } from '@/modules/tasks/types/tasks';
 
 export type ProjectReminderInput = {
-  localDate: string;
   localTime: string;
   ambiguityChoice: 'earlier' | 'later';
 };
@@ -31,25 +29,22 @@ export function TaskProjectReminderForm({
   onSave: (input: ProjectReminderInput) => Promise<void>;
   onCancel: () => Promise<void>;
 }) {
-  const [localDate, setLocalDate] = useState(reminder?.local_date ?? '');
-  const [localTime, setLocalTime] = useState(reminder?.local_time.slice(0, 5) ?? '09:00');
+  const [localTime, setLocalTime] = useState(reminder?.local_time.slice(0, 5) ?? '');
   const [ambiguityChoice, setAmbiguityChoice] = useState<'earlier' | 'later'>(
     reminder?.ambiguity_choice ?? 'earlier',
   );
   const [saving, setSaving] = useState(false);
   const connected = mode === 'connected';
-  const changed = localDate !== (reminder?.local_date ?? '')
-    || (localDate !== '' && localTime !== (reminder?.local_time.slice(0, 5) ?? '09:00'))
+  const changed = localTime !== (reminder?.local_time.slice(0, 5) ?? '')
     || ambiguityChoice !== (reminder?.ambiguity_choice ?? 'earlier');
-  const invalid = Boolean(localDate && !localTime);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    if (!connected || !changed || invalid || saving) return;
+    if (!connected || !changed || saving) return;
     setSaving(true);
     try {
-      if (localDate) {
-        await onSave({ localDate, localTime, ambiguityChoice });
+      if (localTime) {
+        await onSave({ localTime, ambiguityChoice });
       } else if (reminder) {
         await onCancel();
       }
@@ -70,54 +65,36 @@ export function TaskProjectReminderForm({
         <Bell className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         <h4 className="text-sm font-semibold text-foreground">Reminder</h4>
       </div>
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
-        <div className="space-y-1.5">
-          <label
-            className="text-sm font-medium text-foreground"
-            htmlFor={`project-reminder-date-${projectId}`}
-          >
-            Date
-          </label>
-          <div className="flex gap-2">
-            <DatePickerField
-              id={`project-reminder-date-${projectId}`}
-              value={localDate}
-              onValueChange={setLocalDate}
-              disabled={saving || !connected}
-              placeholder="No Reminder"
-              aria-label="Project Reminder Date"
-            />
-            {localDate ? (
-              <Button
-                type="button"
-                variant="clear"
-                size="icon"
-                disabled={saving || !connected}
-                aria-label="Clear Project Reminder"
-                onClick={() => setLocalDate('')}
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            ) : null}
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <label
-            className="text-sm font-medium text-foreground"
-            htmlFor={`project-reminder-time-${projectId}`}
-          >
-            Time
-          </label>
+      <div className="space-y-1.5">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor={`project-reminder-time-${projectId}`}
+        >
+          Time
+        </label>
+        <div className="flex gap-2">
           <Input
             id={`project-reminder-time-${projectId}`}
             type="time"
             value={localTime}
             onChange={(event) => setLocalTime(event.target.value)}
-            disabled={saving || !connected || !localDate}
+            disabled={saving || !connected}
           />
+          {localTime ? (
+            <Button
+              type="button"
+              variant="clear"
+              size="icon"
+              disabled={saving || !connected}
+              aria-label="Clear Project Reminder"
+              onClick={() => setLocalTime('')}
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          ) : null}
         </div>
       </div>
-      {localDate ? (
+      {localTime ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label
@@ -158,7 +135,7 @@ export function TaskProjectReminderForm({
         <Button
           type="submit"
           size="sm"
-          disabled={!connected || !changed || invalid || saving}
+          disabled={!connected || !changed || saving}
         >
           Save Reminder
         </Button>

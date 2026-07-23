@@ -31,7 +31,7 @@ vi.mock('@/modules/tasks/hooks/useTaskUndo', () => ({
 }));
 vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({
   useTaskHierarchy: () => ({
-    areas: [], projects: [], headings: [], loading: false, error: null,
+    areas: [], projects: [], loading: false, error: null,
   }),
 }));
 vi.mock('@/modules/tasks/hooks/useTaskDeletedHierarchyRoots', () => ({
@@ -121,9 +121,7 @@ describePerformance('Tasks rendered-view performance', () => {
       container.querySelector<HTMLElement>('[data-task-title-control]')?.focus();
       const searchStartedAt = performance.now();
       act(() => {
-        window.dispatchEvent(new KeyboardEvent('keydown', {
-          key: '/', bubbles: true, cancelable: true,
-        }));
+        container.querySelector<HTMLButtonElement>('[aria-label="Search Tasks and Views"]')?.click();
       });
       const searchOpenMs = performance.now() - searchStartedAt;
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
@@ -151,7 +149,6 @@ function syntheticTask(index: number): TaskTodo {
     owner_id: 'synthetic-owner',
     area_id: null,
     project_id: null,
-    heading_id: null,
     title: `Rendered Synthetic Task ${index}`,
     notes: `Rendered synthetic notes ${index}`,
     lifecycle: 'open',

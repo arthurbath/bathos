@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type {
   TaskAreaPatch,
-  TaskHeadingPatch,
   TaskProjectPatch,
 } from '@/modules/tasks/data/taskHierarchyRepository';
 import {
@@ -19,7 +18,6 @@ import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type {
   TaskArea,
   TaskDestination,
-  TaskHeading,
   TaskProject,
   TaskTodaySection,
 } from '@/modules/tasks/types/tasks';
@@ -27,7 +25,7 @@ import type { TaskListView } from '@/modules/tasks/hooks/useTaskList';
 
 export type TaskProjectPlanningMoveInput = {
   destination: TaskDestination;
-  todaySection: TaskTodaySection;
+  todaySection: TaskTodaySection | null;
   startDate: string | null;
 };
 
@@ -45,18 +43,9 @@ export function useTaskHierarchy(ownerId: string) {
      ORDER BY area_id, order_key, id`,
     [ownerId],
   );
-  const headingsQuery = useQuery<TaskHeading>(
-    `SELECT * FROM tasks_headings
-     WHERE owner_id = ? AND disposition = 'present'
-     ORDER BY project_id, order_key, id`,
-    [ownerId],
-  );
   const [optimisticAreas, setOptimisticAreas] = useState<Record<string, TaskArea | null>>({});
   const [optimisticProjects, setOptimisticProjects] = useState<
     Record<string, TaskProject | null>
-  >({});
-  const [optimisticHeadings, setOptimisticHeadings] = useState<
-    Record<string, TaskHeading | null>
   >({});
 
   useEffect(() => {
@@ -65,9 +54,6 @@ export function useTaskHierarchy(ownerId: string) {
   useEffect(() => {
     setOptimisticProjects((current) => clearCaughtUpRows(current, projectsQuery.data));
   }, [projectsQuery.data]);
-  useEffect(() => {
-    setOptimisticHeadings((current) => clearCaughtUpRows(current, headingsQuery.data));
-  }, [headingsQuery.data]);
 
   const areas = useMemo(
     () => mergeRows(areasQuery.data, optimisticAreas).sort(compareHierarchyRows),
@@ -76,10 +62,6 @@ export function useTaskHierarchy(ownerId: string) {
   const projects = useMemo(
     () => mergeRows(projectsQuery.data, optimisticProjects).sort(compareHierarchyRows),
     [optimisticProjects, projectsQuery.data],
-  );
-  const headings = useMemo(
-    () => mergeRows(headingsQuery.data, optimisticHeadings).sort(compareHierarchyRows),
-    [headingsQuery.data, optimisticHeadings],
   );
 
   const createArea = useCallback(async (title: string) => {
@@ -94,11 +76,6 @@ export function useTaskHierarchy(ownerId: string) {
     return project;
   }, [hierarchyRepository, ownerId]);
 
-  const createHeading = useCallback(async (projectId: string, title: string) => {
-    const heading = await hierarchyRepository.createHeading({ ownerId, projectId, title });
-    setOptimisticHeadings((current) => ({ ...current, [heading.id]: heading }));
-    return heading;
-  }, [hierarchyRepository, ownerId]);
 
   const updateArea = useCallback(async (areaId: string, patch: TaskAreaPatch) => {
     const area = await hierarchyRepository.updateArea(ownerId, areaId, patch);
@@ -118,14 +95,6 @@ export function useTaskHierarchy(ownerId: string) {
     return project;
   }, [hierarchyRepository, ownerId]);
 
-  const updateHeading = useCallback(async (headingId: string, patch: TaskHeadingPatch) => {
-    const heading = await hierarchyRepository.updateHeading(ownerId, headingId, patch);
-    setOptimisticHeadings((current) => ({
-      ...current,
-      [headingId]: heading.disposition === 'present' ? heading : null,
-    }));
-    return heading;
-  }, [hierarchyRepository, ownerId]);
 
   const reorderArea = useCallback(async (areaId: string, direction: 'up' | 'down') => {
     const orderKey = moveOrderKey(areas, areaId, direction);
@@ -207,14 +176,6 @@ export function useTaskHierarchy(ownerId: string) {
     return updateProject(projectId, { planning_order_key: planningOrderKey });
   }, [ownerId, projects, updateProject]);
 
-  const reorderHeading = useCallback(async (headingId: string, direction: 'up' | 'down') => {
-    const heading = headings.find(({ id }) => id === headingId);
-    if (!heading) return undefined;
-    const peers = headings.filter(({ project_id }) => project_id === heading.project_id);
-    const orderKey = moveOrderKey(peers, headingId, direction);
-    return orderKey === null ? undefined : updateHeading(headingId, { order_key: orderKey });
-  }, [headings, updateHeading]);
-
   const transitionProject = useCallback(async (
     projectId: string,
     operation: 'complete_project' | 'cancel_project' | 'reopen_project',
@@ -228,7 +189,7 @@ export function useTaskHierarchy(ownerId: string) {
   }), [hierarchyOperationsRepository, ownerId]);
 
   const deleteHierarchy = useCallback(async (
-    rootType: 'area' | 'project' | 'heading',
+    rootType: 'area' | 'project',
     rootId: string,
   ) => {
     const result = await hierarchyOperationsRepository.request({
@@ -242,8 +203,6 @@ export function useTaskHierarchy(ownerId: string) {
       setOptimisticAreas((current) => ({ ...current, [rootId]: null }));
     } else if (rootType === 'project') {
       setOptimisticProjects((current) => ({ ...current, [rootId]: null }));
-    } else {
-      setOptimisticHeadings((current) => ({ ...current, [rootId]: null }));
     }
     return result;
   }, [hierarchyOperationsRepository, ownerId]);
@@ -251,18 +210,14 @@ export function useTaskHierarchy(ownerId: string) {
   return {
     areas,
     projects,
-    headings,
-    loading: areasQuery.isLoading || projectsQuery.isLoading || headingsQuery.isLoading,
-    error: areasQuery.error ?? projectsQuery.error ?? headingsQuery.error,
+    loading: areasQuery.isLoading || projectsQuery.isLoading,
+    error: areasQuery.error ?? projectsQuery.error,
     createArea,
     createProject,
-    createHeading,
     updateArea,
     updateProject,
-    updateHeading,
     reorderArea,
     reorderProject,
-    reorderHeading,
     moveProjectToArea,
     moveProjectInPlanning,
     reorderProjectInPlanning,

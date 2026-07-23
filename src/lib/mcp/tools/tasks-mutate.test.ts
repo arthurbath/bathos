@@ -31,8 +31,8 @@ const snapshotKeys = [
   'title', 'notes', 'lifecycle', 'completed_at', 'canceled_at', 'disposition',
   'deleted_at', 'destination', 'today_section', 'order_key', 'start_date', 'deadline',
   'actionability',
-  'source_kind', 'source_url', 'source_title', 'source_external_id', 'area_id',
-  'project_id', 'heading_id', 'hierarchy_order_key', 'deletion_root_id',
+  'source_kind', 'source_url', 'source_title', 'source_external_id', 'primary_link', 'area_id',
+  'project_id', 'hierarchy_order_key', 'deletion_root_id',
 ] as const;
 
 function snapshot(row: StoredRow): Json {
@@ -45,7 +45,6 @@ function task(overrides: Partial<Tables['tasks_todos']['Row']> = {}): Tables['ta
     owner_id: ownerA,
     area_id: null,
     project_id: null,
-    heading_id: null,
     title: 'Synthetic task',
     notes: '',
     lifecycle: 'open',
@@ -55,7 +54,7 @@ function task(overrides: Partial<Tables['tasks_todos']['Row']> = {}): Tables['ta
     deleted_at: null,
     deletion_root_id: null,
     destination: 'anytime',
-    today_section: 'none',
+    today_section: null,
     actionability: 'actionable',
     order_key: 'a0',
     hierarchy_order_key: null,
@@ -69,6 +68,7 @@ function task(overrides: Partial<Tables['tasks_todos']['Row']> = {}): Tables['ta
     source_url: null,
     source_title: null,
     source_external_id: null,
+    primary_link: null,
     template_definition_id: null,
     template_revision: null,
     template_instantiation_id: null,
@@ -151,7 +151,6 @@ class FakeTasksClient {
       : before.actionability !== row.actionability ? 'set_actionability'
       : before.destination !== row.destination || before.today_section !== row.today_section
         || before.area_id !== row.area_id || before.project_id !== row.project_id
-        || before.heading_id !== row.heading_id
         ? 'move' : before.order_key !== row.order_key ? 'reorder' : 'update';
     this.rows('tasks_history_events').push({
       id: crypto.randomUUID(),
@@ -317,6 +316,7 @@ describe('Tasks MCP mutation tools', () => {
         notes: undefined,
         actionability: undefined,
         source: undefined,
+        primary_link: undefined,
       },
       { isAuthenticated: () => false } as never,
     )).toThrow('Not authenticated');
@@ -366,7 +366,7 @@ describe('Tasks MCP mutation tools', () => {
 
   it('sets structured actionability with a dedicated idempotent transition', async () => {
     const client = new FakeTasksClient({ tasks_todos: [task()] });
-    const input = { ...base(), actionability: 'waiting' as const };
+    const input = { ...base(), actionability: 'rechecking' as const };
 
     const first = await updateTaskData(input, authFor(ownerA, client));
     const replay = await updateTaskData(input, authFor(ownerA, client));
@@ -374,7 +374,7 @@ describe('Tasks MCP mutation tools', () => {
     expect(first).toMatchObject({
       mutation_outcome: 'applied',
       receipt: { transition: 'set_actionability', base_revision: 1, result_revision: 2 },
-      task: { actionability: 'waiting', revision: 2 },
+      task: { actionability: 'rechecking', revision: 2 },
     });
     expect(replay.mutation_outcome).toBe('already_applied');
     expect(client.taskUpdateCount).toBe(1);
@@ -423,17 +423,16 @@ describe('Tasks MCP mutation tools', () => {
       ...base(),
       destination: 'anytime',
       today_section: 'next',
-      start_date: '2026-07-20',
+      start_date: null,
       area_id: areaId,
       project_id: null,
-      heading_id: null,
     }, authFor(ownerA, client));
     expect(result).toMatchObject({
       mutation_outcome: 'applied',
       receipt: { transition: 'move' },
       task: { destination: 'anytime', today_section: 'next', area_id: areaId, revision: 2 },
     });
-    expect(result.task.start_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(result.task.start_date).toBeNull();
     expect(result.task.order_key).toMatch(/^a/);
   });
 

@@ -22,16 +22,14 @@ describe('task search documents', () => {
       task({
         title: 'Replace sink valve',
         project_id: 'project-a',
-        heading_id: 'heading-a',
       }),
     ], {
       areas: [],
       projects: [{ id: 'project-a', title: 'House' }],
-      headings: [{ id: 'heading-a', title: 'Repairs' }],
     });
 
-    expect(documents[0].hierarchyLabel).toBe('House / Repairs');
-    expect(filterTaskSearchDocuments(documents, 'house / repairs', allFilters))
+    expect(documents[0].hierarchyLabel).toBe('House');
+    expect(filterTaskSearchDocuments(documents, 'house', allFilters))
       .toHaveLength(1);
     expect(filterTaskSearchDocuments(documents, 'SINK VALVE'.toLocaleLowerCase(), allFilters))
       .toHaveLength(1);
@@ -40,9 +38,10 @@ describe('task search documents', () => {
   it('combines typed filters and reports only available structured source kinds', () => {
     const documents = createTaskSearchDocuments([
       task({ id: 'mail', actionability: 'waiting', source_kind: 'mail_message' }),
+      task({ id: 'retry', actionability: 'rechecking', source_kind: null }),
       task({ id: 'web', destination: 'anytime', source_kind: 'webpage' }),
       task({ id: 'plain', source_kind: null }),
-    ], { areas: [], projects: [], headings: [] });
+    ], { areas: [], projects: [] });
 
     expect(filterTaskSearchDocuments(documents, '', {
       ...allFilters,
@@ -51,8 +50,12 @@ describe('task search documents', () => {
     }).map(({ task: value }) => value.id)).toEqual(['mail']);
     expect(filterTaskSearchDocuments(documents, '', {
       ...allFilters,
+      actionability: 'rechecking',
+    }).map(({ task: value }) => value.id)).toEqual(['retry']);
+    expect(filterTaskSearchDocuments(documents, '', {
+      ...allFilters,
       sourceKind: 'none',
-    }).map(({ task: value }) => value.id)).toEqual(['plain']);
+    }).map(({ task: value }) => value.id)).toEqual(['retry', 'plain']);
     expect(getTaskSearchSourceKinds(documents)).toEqual(['mail_message', 'webpage']);
   });
 });

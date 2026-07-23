@@ -63,7 +63,7 @@ SELECT lives_ok(
     VALUES (
       '72000000-0000-4000-8000-000000000010',
       '72000000-0000-4000-8000-000000000001',
-      'Synthetic active task', 'anytime', 'none', 'a0', '2026-07-30',
+      'Synthetic active task', 'anytime', NULL, 'a0', '2026-07-30',
       '72000000-0000-4000-8000-000000000020'
     )
   $$,
@@ -92,7 +92,7 @@ SELECT lives_ok(
     VALUES (
       '72000000-0000-4000-8000-000000000012',
       '72000000-0000-4000-8000-000000000001',
-      'Synthetic inactive task', 'someday', 'none', 'a0', '2026-07-31',
+      'Synthetic inactive task', 'someday', NULL, 'a0', '2026-07-31',
       '72000000-0000-4000-8000-000000000022'
     )
   $$,
@@ -123,7 +123,7 @@ SELECT is(
   1,
   'derives future Anytime work into Upcoming'
 );
-SELECT throws_ok(
+SELECT lives_ok(
   $$
     INSERT INTO public.tasks_todos (
       id, owner_id, title, destination, today_section, order_key, start_date,
@@ -132,15 +132,13 @@ SELECT throws_ok(
     VALUES (
       '72000000-0000-4000-8000-000000000013',
       '72000000-0000-4000-8000-000000000001',
-      'Invalid inactive task', 'someday', 'none', 'a2', '2026-07-25',
+      'Normalized inactive task', 'someday', NULL, 'a2', '2026-07-25',
       '72000000-0000-4000-8000-000000000023'
     )
   $$,
-  '23514',
-  NULL,
-  'rejects a start date on Someday work'
+  'clears a start date supplied for Someday work'
 );
-SELECT throws_ok(
+SELECT lives_ok(
   $$
     INSERT INTO public.tasks_todos (
       id, owner_id, title, destination, today_section, order_key, client_mutation_id
@@ -148,13 +146,11 @@ SELECT throws_ok(
     VALUES (
       '72000000-0000-4000-8000-000000000014',
       '72000000-0000-4000-8000-000000000001',
-      'Invalid Someday membership', 'someday', 'later', 'a2',
+      'Normalized Someday membership', 'someday', 'later', 'a2',
       '72000000-0000-4000-8000-000000000024'
     )
   $$,
-  '23514',
-  NULL,
-  'rejects Today membership on Someday work'
+  'clears Today membership supplied for Someday work'
 );
 SELECT throws_ok(
   $$
@@ -170,14 +166,14 @@ SELECT throws_ok(
   $$,
   '23514',
   NULL,
-  'rejects a retired Today section'
+  'rejects a retired day horizon'
 );
 SELECT lives_ok(
   $$
     UPDATE public.tasks_todos
     SET
       destination = 'someday',
-      today_section = 'none',
+      today_section = NULL,
       revision = 2,
       client_mutation_id = '72000000-0000-4000-8000-000000000026'
     WHERE id = '72000000-0000-4000-8000-000000000010'
@@ -204,31 +200,29 @@ SELECT is(
   'someday',
   'preserves inactive placement in append-only history'
 );
-SELECT throws_ok(
+SELECT lives_ok(
   $$
     UPDATE public.tasks_todos
     SET
       destination = 'someday',
-      today_section = 'none',
+      today_section = NULL,
       revision = 2,
       client_mutation_id = '72000000-0000-4000-8000-000000000027'
     WHERE id = '72000000-0000-4000-8000-000000000011'
   $$,
-  '23514',
-  NULL,
-  'requires a future start date to be cleared when moving to Someday'
+  'clears a future start date when moving to Someday'
 );
 
 RESET ROLE;
 SELECT ok(
   tasks_private.todo_export_planning_is_valid_v3(
-    '{"destination":"anytime","today_section":"none","start_date":"2026-07-25"}'::jsonb
+    '{"destination":"anytime","today_section":"next","start_date":"2026-07-25"}'::jsonb
   ),
   'accepts future Anytime placement in export validation'
 );
 SELECT is(
   tasks_private.todo_export_planning_is_valid_v3(
-    '{"destination":"someday","today_section":"none","start_date":"2026-07-25"}'::jsonb
+    '{"destination":"someday","today_section":null,"start_date":"2026-07-25"}'::jsonb
   ),
   false,
   'rejects scheduled Someday placement in export validation'
@@ -237,7 +231,7 @@ SELECT is(
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '72000000-0000-4000-8000-000000000001', true);
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
-SELECT set_config('test.tasks_planning_export', public.tasks_create_export_v11()::text, false);
+SELECT set_config('test.tasks_planning_export', public.tasks_create_export_v12()::text, false);
 SELECT is(
   jsonb_array_length(
     jsonb_path_query_array(
@@ -245,7 +239,7 @@ SELECT is(
       '$.data.tasks_todos[*] ? (@.destination == "someday")'
     )
   ),
-  2,
+  5,
   'exports every Someday task in the current portable format'
 );
 
@@ -264,7 +258,7 @@ SELECT is(
       true
     ) #>> '{tasks_todos,inserts}'
   )::integer,
-  3,
+  5,
   'previews restoring active and inactive planning work'
 );
 SELECT is(
@@ -274,7 +268,7 @@ SELECT is(
       false
     ) #>> '{tasks_todos,inserts}'
   )::integer,
-  3,
+  5,
   'restores active and inactive planning work'
 );
 

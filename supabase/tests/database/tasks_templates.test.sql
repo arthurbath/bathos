@@ -34,9 +34,9 @@ SELECT has_column(
   'public', 'tasks_projects', 'template_node_id',
   'stores project template-node provenance'
 );
-SELECT has_column(
-  'public', 'tasks_headings', 'template_node_id',
-  'stores heading template-node provenance'
+SELECT hasnt_table(
+  'public', 'tasks_headings',
+  'keeps template provenance heading-free'
 );
 SELECT has_column(
   'public', 'tasks_checklist_items', 'template_node_id',
@@ -93,11 +93,11 @@ SELECT has_function(
   'archives template definitions explicitly'
 );
 SELECT has_function(
-  'public', 'tasks_create_export_v8', ARRAY[]::text[],
+  'public', 'tasks_create_export_v12', ARRAY[]::text[],
   'exports template definitions and provenance'
 );
 SELECT has_function(
-  'public', 'tasks_restore_export_v8', ARRAY['jsonb', 'boolean'],
+  'public', 'tasks_restore_export_current', ARRAY['jsonb', 'boolean'],
   'restores template definitions and provenance'
 );
 
@@ -120,7 +120,7 @@ INSERT INTO public.tasks_todos (
   '95000000-0000-4000-8000-000000000020',
   '95000000-0000-4000-8000-000000000001',
   'Synthetic source to-do', 'Reusable source notes', 'anytime', 'later',
-  (now() AT TIME ZONE 'UTC')::date,
+  (now() AT TIME ZONE 'UTC')::date + 1,
   (now() AT TIME ZONE 'UTC')::date + 2,
   'a0', 'waiting',
   '95000000-0000-4000-8000-000000000021'
@@ -202,7 +202,7 @@ SELECT is(
     )::uuid
   ),
   'anytime',
-  'resolves same-day template planning into Today'
+  'keeps generated future work in Anytime'
 );
 SELECT is(
   (
@@ -385,23 +385,13 @@ INSERT INTO public.tasks_projects (
   'Synthetic project source', 'Project source notes', 'anytime', 'a0', 'a0',
   '95000000-0000-4000-8000-000000000033'
 );
-INSERT INTO public.tasks_headings (
-  id, owner_id, project_id, title, order_key, client_mutation_id
-) VALUES (
-  '95000000-0000-4000-8000-000000000034',
-  '95000000-0000-4000-8000-000000000001',
-  '95000000-0000-4000-8000-000000000032',
-  'Synthetic heading', 'a0',
-  '95000000-0000-4000-8000-000000000035'
-);
 INSERT INTO public.tasks_todos (
-  id, owner_id, project_id, heading_id, title, destination, order_key,
+  id, owner_id, project_id, title, destination, order_key,
   hierarchy_order_key, client_mutation_id
 ) VALUES (
   '95000000-0000-4000-8000-000000000036',
   '95000000-0000-4000-8000-000000000001',
   '95000000-0000-4000-8000-000000000032',
-  '95000000-0000-4000-8000-000000000034',
   'Synthetic project task', 'anytime', 'a1', 'a0',
   '95000000-0000-4000-8000-000000000037'
 );
@@ -454,13 +444,10 @@ SELECT is(
   '95000000-0000-4000-8000-000000000030'::uuid,
   'places the generated project in the selected owner-safe area'
 );
-SELECT is(
-  jsonb_array_length(
-    current_setting('test.project_template_instance')::jsonb
-      #> '{result,heading_ids}'
-  ),
-  1,
-  'creates the project heading hierarchy'
+SELECT ok(
+  NOT (current_setting('test.project_template_instance')::jsonb
+    #> '{result}' ? 'heading_ids'),
+  'instantiates a flat project hierarchy'
 );
 SELECT is(
   (
@@ -480,14 +467,14 @@ SELECT is(
 SELECT is(
   (
     SELECT count(DISTINCT template_node_id)
-    FROM public.tasks_headings
+    FROM public.tasks_todos
     WHERE project_id = (
       current_setting('test.project_template_instance')::jsonb
         #>> '{result,root_id}'
     )::uuid
   ),
   1::bigint,
-  'retains a stable template node on the generated heading'
+  'retains a stable template node on the generated task'
 );
 
 SELECT lives_ok(
@@ -542,7 +529,7 @@ SELECT lives_ok(
   $$
     SELECT set_config(
       'test.template_export',
-      public.tasks_create_export_v8()::text,
+      public.tasks_create_export_v12()::text,
       false
     )
   $$,
@@ -550,14 +537,14 @@ SELECT lives_ok(
 );
 SELECT is(
   (current_setting('test.template_export')::jsonb ->> 'schema_version')::integer,
-  8,
-  'advances the portable format to version eight'
+  12,
+  'uses the current portable format'
 );
 SELECT is(
   jsonb_array_length(
     current_setting('test.template_export')::jsonb #> '{manifest,collections}'
   ),
-  14,
+  20,
   'declares every current portable collection'
 );
 SELECT is(
@@ -588,7 +575,7 @@ SELECT ok(
 );
 SELECT throws_ok(
   $$
-    SELECT public.tasks_restore_export_v8(
+    SELECT public.tasks_restore_export_current(
       jsonb_set(
         current_setting('test.template_export')::jsonb,
         '{manifest,checksums,tasks_templates}',
@@ -598,7 +585,7 @@ SELECT throws_ok(
     )
   $$,
   '22023',
-  'Task export v8 collection tasks_templates is invalid',
+  'Task export v12 collection tasks_templates is invalid',
   'rejects a template collection with a mismatched checksum'
 );
 
@@ -622,7 +609,7 @@ SELECT set_config('request.jwt.claim.sub', '95000000-0000-4000-8000-000000000002
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT is(
   (
-    public.tasks_restore_export_v8(
+    public.tasks_restore_export_current(
       current_setting('test.template_export')::jsonb,
       true
     ) #>> '{tasks_templates,inserts}'
@@ -634,7 +621,7 @@ SELECT lives_ok(
   $$
     SELECT set_config(
       'test.template_restore',
-      public.tasks_restore_export_v8(
+      public.tasks_restore_export_current(
         current_setting('test.template_export')::jsonb,
         false
       )::text,

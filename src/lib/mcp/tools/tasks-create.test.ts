@@ -157,6 +157,7 @@ function creationSnapshot(row: StoredRow): Json {
     source_url: row.source_url as string | null,
     source_title: row.source_title as string | null,
     source_external_id: row.source_external_id as string | null,
+    primary_link: row.primary_link as string | null,
     area_id: row.area_id as string | null,
     project_id: row.project_id as string | null,
     heading_id: row.heading_id as string | null,
@@ -185,6 +186,7 @@ function request(overrides: Partial<CreateTaskRequest> = {}): CreateTaskRequest 
     notes: '',
     destination: 'anytime',
     today_section: 'later',
+    start_date: null,
     ...overrides,
   };
 }
@@ -211,10 +213,10 @@ describe('Tasks MCP creation tool', () => {
     });
     expect(createTask.inputSchema.source.safeParse({ kind: 'selected_text' }).success)
       .toBe(false);
-    expect(createTask.inputSchema.today_section.parse(undefined)).toBe('inbox');
+    expect(createTask.inputSchema.today_section.parse(undefined)).toBeUndefined();
   });
 
-  it('creates owner-scoped Today Later work with immutable MCP and typed-source provenance', async () => {
+  it('creates owner-scoped active Today Later work with independent provenance and Primary Link', async () => {
     const client = new FakeTasksClient({ tasks_user_settings: [settings()] });
     const result = await createTaskData(request({
       title: '  Read the source  ',
@@ -227,6 +229,7 @@ describe('Tasks MCP creation tool', () => {
         title: 'Example article',
         external_id: 'article-1',
       },
+      primary_link: ' https://example.test/read ',
     }), authFor(ownerA, client));
 
     expect(result.idempotency_outcome).toBe('created');
@@ -248,6 +251,7 @@ describe('Tasks MCP creation tool', () => {
       last_actor_type: 'automation',
       source_kind: 'webpage',
       source_url: 'https://example.test/article',
+      primary_link: 'https://example.test/read',
     });
     expect(result.task).not.toHaveProperty('owner_id');
     expect(client.rows('tasks_todos')[0]).toMatchObject({ owner_id: ownerA });
@@ -255,7 +259,7 @@ describe('Tasks MCP creation tool', () => {
   });
 
   it('records a declared structured integration channel and includes it in idempotency', async () => {
-    const client = new FakeTasksClient();
+    const client = new FakeTasksClient({ tasks_user_settings: [settings()] });
     const input = request({ entry_channel: 'raycast' });
 
     const result = await createTaskData(input, authFor(ownerA, client));
@@ -326,16 +330,22 @@ describe('Tasks MCP creation tool', () => {
     expect(client.taskInsertCount).toBe(0);
   });
 
-  it('rejects invalid structured-source and calendar combinations', async () => {
-    const client = new FakeTasksClient();
+  it('rejects invalid structured sources and allows a start after the deadline', async () => {
+    const client = new FakeTasksClient({ tasks_user_settings: [settings()] });
     await expect(createTaskData(request({
       source: { kind: 'webpage' },
     }), authFor(ownerA, client))).rejects.toThrow('sources require a URL');
-    await expect(createTaskData(request({
+    const overdue = await createTaskData(request({
+      idempotency_key: '20000000-0000-4000-8000-000000000009',
       destination: 'anytime',
-      start_date: '2026-07-21',
+      start_date: '2026-07-24',
       deadline: '2026-07-20',
-    }), authFor(ownerA, client))).rejects.toThrow('Deadline cannot be earlier');
-    expect(client.taskInsertCount).toBe(0);
+    }), authFor(ownerA, client));
+    expect(overdue.task).toMatchObject({
+      start_date: '2026-07-24',
+      deadline: '2026-07-20',
+      today_section: 'later',
+    });
+    expect(client.taskInsertCount).toBe(1);
   });
 });

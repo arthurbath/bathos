@@ -6,7 +6,6 @@ DECLARE
     'tasks_areas',
     'tasks_checklist_items',
     'tasks_delivery_targets',
-    'tasks_headings',
     'tasks_hierarchy_history_events',
     'tasks_hierarchy_operations',
     'tasks_history_events',
@@ -324,6 +323,6 @@ $validation$;
 
 SELECT
   'ready' AS tasks_powersync_database_status,
-  22 AS synchronized_table_count,
+  21 AS synchronized_table_count,
   current_database() AS database_name,
   clock_timestamp() AS verified_at;

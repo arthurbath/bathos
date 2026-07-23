@@ -73,7 +73,6 @@ export async function saveTaskReminderData(
     expected_record_revision?: number;
     root_type: 'todo' | 'project';
     root_id: string;
-    local_date: string;
     local_time: string;
     time_zone: string;
     ambiguity_choice: 'earlier' | 'later';
@@ -81,12 +80,11 @@ export async function saveTaskReminderData(
   },
   auth: AuthenticatedMcpContext,
 ) {
-  const { data, error } = await auth.supabase.rpc('tasks_save_reminder', {
+  const { data, error } = await auth.supabase.rpc('tasks_save_start_reminder', {
     _reminder_id: input.reminder_id ?? null,
     _expected_record_revision: input.expected_record_revision ?? null,
     _root_type: input.root_type,
     _root_id: input.root_id,
-    _local_date: input.local_date,
     _local_time: input.local_time,
     _time_zone: input.time_zone,
     _ambiguity_choice: input.ambiguity_choice,
@@ -117,7 +115,6 @@ export async function cancelTaskReminderData(
   return data;
 }
 
-const calendarDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const localTimeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/);
 
 export const getTaskReminders = defineTool({
@@ -136,14 +133,13 @@ export const getTaskReminders = defineTool({
 export const saveTaskReminder = defineTool({
   name: 'save_task_reminder',
   title: 'Save Task Reminder',
-  description: 'Create or revise one task or project reminder from explicit local date, wall-clock time, IANA time zone, and daylight-saving ambiguity choice.',
+  description: 'Create or revise one task or project reminder at a wall-clock time on its Start date, using an IANA time zone and daylight-saving ambiguity choice.',
   inputSchema: {
     reminder_id: uuidSchema.optional().describe('Existing reminder to revise. Omit to create.'),
     expected_record_revision: z.number().int().positive().optional()
       .describe('Required current record revision when revising an existing reminder.'),
     root_type: z.enum(['todo', 'project']),
     root_id: uuidSchema,
-    local_date: calendarDateSchema,
     local_time: localTimeSchema,
     time_zone: z.string().min(1).max(255),
     ambiguity_choice: z.enum(['earlier', 'later']).default('earlier'),

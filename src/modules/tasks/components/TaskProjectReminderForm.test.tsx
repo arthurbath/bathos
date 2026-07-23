@@ -59,7 +59,6 @@ describe('TaskProjectReminderForm', () => {
         .find((button) => button.textContent === 'Save Reminder')!;
       await act(async () => save.click());
       expect(onSave).toHaveBeenCalledWith({
-        localDate: '2026-07-20',
         localTime: '10:30',
         ambiguityChoice: 'earlier',
       });
@@ -83,7 +82,7 @@ describe('TaskProjectReminderForm', () => {
       const save = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
         .find((button) => button.textContent === 'Save Reminder');
       expect(save?.disabled).toBe(true);
-      expect(container.querySelector<HTMLButtonElement>('[aria-label="Project Reminder Date"]')
+      expect(container.querySelector<HTMLInputElement>('#project-reminder-time-project-a')
         ?.disabled).toBe(true);
     } finally {
       cleanup(root, container);

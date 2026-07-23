@@ -3,10 +3,11 @@ import type { AbstractPowerSyncDatabase, Transaction } from '@powersync/web';
 import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
 import { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHierarchyOperationsRepository';
 import {
-  assertTaskCalendarRange,
   isTaskPlanningTimeZone,
   normalizeTaskCalendarDate,
+  taskCalendarDateInTimeZone,
 } from '@/modules/tasks/domain/taskDates';
+import { normalizeTaskPrimaryLink } from '@/modules/tasks/domain/taskPrimaryLink';
 import {
   createTaskRedoPatch,
   createTaskUndoPatch,
@@ -40,6 +41,7 @@ export type CreateTaskInput = {
   orderKey?: string;
   startDate?: string | null;
   deadline?: string | null;
+  primaryLink?: string | null;
   entryChannel?: TaskEntryChannel;
   sourceKind?: TaskSourceKind | null;
   sourceUrl?: string | null;
@@ -49,7 +51,6 @@ export type CreateTaskInput = {
   actionability?: TaskActionability;
   areaId?: string | null;
   projectId?: string | null;
-  headingId?: string | null;
   hierarchyOrderKey?: string | null;
 };
 
@@ -67,7 +68,6 @@ export type TaskPlanningMoveInput = {
 export type TaskContainerMoveInput = {
   areaId?: string | null;
   projectId?: string | null;
-  headingId?: string | null;
   hierarchyOrderKey?: string | null;
 };
 
@@ -82,10 +82,10 @@ export type EditableTaskPatch = Partial<
     | 'order_key'
     | 'area_id'
     | 'project_id'
-    | 'heading_id'
     | 'hierarchy_order_key'
     | 'start_date'
     | 'deadline'
+    | 'primary_link'
     | 'source_kind'
     | 'source_url'
     | 'source_title'
@@ -104,7 +104,6 @@ const insertColumns = [
   'actionability',
   'area_id',
   'project_id',
-  'heading_id',
   'title',
   'notes',
   'lifecycle',
@@ -119,6 +118,7 @@ const insertColumns = [
   'hierarchy_order_key',
   'start_date',
   'deadline',
+  'primary_link',
   'entry_channel',
   'last_mutation_channel',
   'last_actor_type',
@@ -181,25 +181,27 @@ export class TaskRepository {
       input.sourceTitle ?? null,
       input.sourceExternalId ?? null,
     );
-    const startDate = normalizeTaskCalendarDate(input.startDate, 'Start date') ?? null;
+    const destination = input.destination ?? 'anytime';
+    if (destination === 'someday' && (input.todaySection != null || input.startDate != null)) {
+      throw new InvalidTaskMutationError('Someday work cannot retain planning dates');
+    }
+    const requestedStartDate = input.startDate;
+    const startDate = normalizeTaskCalendarDate(requestedStartDate, 'Start date') ?? null;
     const deadline = normalizeTaskCalendarDate(input.deadline, 'Deadline') ?? null;
-    assertTaskCalendarRange(startDate, deadline);
-    assertTaskContainer(
-      input.areaId ?? null,
-      input.projectId ?? null,
-      input.headingId ?? null,
-    );
+    assertTaskContainer(input.areaId ?? null, input.projectId ?? null);
 
     return this.database.writeTransaction(async (transaction) => {
-      const destination = input.destination ?? 'anytime';
-      const todaySection = input.todaySection ?? 'inbox';
+      const timestamp = this.now();
+      const todaySection = destination === 'someday'
+        ? null
+        : input.todaySection ?? (startDate || input.startDate === undefined ? 'next' : null);
       assertPlanningPlacement(destination, todaySection, startDate);
+      await assertFutureStartDate(transaction, input.ownerId, startDate, timestamp);
       await assertOwnedTaskContainer(
         transaction,
         input.ownerId,
         input.areaId ?? null,
         input.projectId ?? null,
-        input.headingId ?? null,
       );
       const lastTask = input.orderKey
         ? null
@@ -208,7 +210,7 @@ export class TaskRepository {
              FROM tasks_todos
              WHERE owner_id = ?
                AND destination = ?
-               AND today_section = ?
+               AND today_section IS ?
                AND lifecycle = 'open'
                AND disposition = 'present'
              ORDER BY order_key DESC, id DESC
@@ -222,9 +224,7 @@ export class TaskRepository {
           input.ownerId,
           input.areaId ?? null,
           input.projectId ?? null,
-          input.headingId ?? null,
         );
-      const timestamp = this.now();
       const entryChannel = input.entryChannel ?? 'web';
       const task: TaskTodo = {
         id: this.createId(),
@@ -232,7 +232,6 @@ export class TaskRepository {
         actionability: input.actionability ?? 'actionable',
         area_id: input.areaId ?? null,
         project_id: input.projectId ?? null,
-        heading_id: input.headingId ?? null,
         title,
         notes: input.notes ?? '',
         lifecycle: 'open',
@@ -247,6 +246,7 @@ export class TaskRepository {
         hierarchy_order_key: hierarchyOrderKey,
         start_date: startDate,
         deadline,
+        primary_link: normalizeTaskPrimaryLink(input.primaryLink),
         entry_channel: entryChannel,
         last_mutation_channel: entryChannel,
         last_actor_type: input.actorType ?? 'user',
@@ -325,6 +325,41 @@ export class TaskRepository {
     });
   }
 
+  async activateDueStartDates(ownerId: string, planningDate: string): Promise<TaskTodo[]> {
+    assertOwner(ownerId);
+    const reachedDate = normalizeTaskCalendarDate(planningDate, 'Planning date');
+    if (reachedDate === null) {
+      throw new InvalidTaskMutationError('A planning date is required for activation');
+    }
+
+    return this.database.writeTransaction(async (transaction) => {
+      const dueTasks = await transaction.getAll<TaskTodo>(
+        `SELECT * FROM tasks_todos
+         WHERE owner_id = ?
+           AND destination = 'anytime'
+           AND lifecycle = 'open'
+           AND disposition = 'present'
+           AND start_date IS NOT NULL
+           AND start_date <= ?
+         ORDER BY start_date, order_key, id`,
+        [ownerId, reachedDate],
+      );
+      const occurredAt = this.now();
+      const activated: TaskTodo[] = [];
+      for (const current of dueTasks) {
+        activated.push(await updateOwnedTask(
+          transaction,
+          current,
+          { start_date: null },
+          this.createId(),
+          occurredAt,
+          { channel: 'native', actorType: 'system' },
+        ));
+      }
+      return activated;
+    });
+  }
+
   async updateTask(
     ownerId: string,
     taskId: string,
@@ -341,19 +376,25 @@ export class TaskRepository {
     context?: TaskMutationContext,
   ): Promise<TaskTodo> {
     assertOwner(ownerId);
-    const todaySection = input.todaySection ?? 'none';
+    if (input.destination === 'someday' && (input.todaySection != null || input.startDate != null)) {
+      throw new InvalidTaskMutationError('Someday work cannot retain planning dates');
+    }
     const startDate = normalizeTaskCalendarDate(input.startDate, 'Start date') ?? null;
+    const todaySection = input.destination === 'someday'
+      ? null
+      : input.todaySection ?? (startDate ? 'next' : null);
     assertPlanningPlacement(input.destination, todaySection, startDate);
 
     return this.database.writeTransaction(async (transaction) => {
+      const occurredAt = this.now();
+      await assertFutureStartDate(transaction, ownerId, startDate, occurredAt);
       const current = await getOwnedTask(transaction, ownerId, taskId);
-      assertTaskCalendarRange(startDate, current.deadline);
       const lastTask = await transaction.getOptional<{ order_key: string }>(
         `SELECT order_key
          FROM tasks_todos
          WHERE owner_id = ?
            AND destination = ?
-           AND today_section = ?
+           AND today_section IS ?
            AND lifecycle = 'open'
            AND disposition = 'present'
            AND id <> ?
@@ -371,7 +412,7 @@ export class TaskRepository {
           order_key: generateTaskOrderKey(lastTask?.order_key ?? null, null),
         },
         this.createId(),
-        this.now(),
+        occurredAt,
         normalizeMutationContext(context),
       );
     });
@@ -384,15 +425,22 @@ export class TaskRepository {
     context?: TaskMutationContext,
   ): Promise<TaskTodo[]> {
     assertOwner(ownerId);
+    if (input.destination === 'someday' && (input.todaySection != null || input.startDate != null)) {
+      throw new InvalidTaskMutationError('Someday work cannot retain planning dates');
+    }
     const uniqueTaskIds = Array.from(new Set(taskIds));
     if (uniqueTaskIds.length === 0) {
       throw new InvalidTaskMutationError('Select at least one task for bulk planning');
     }
-    const todaySection = input.todaySection ?? 'none';
     const startDate = normalizeTaskCalendarDate(input.startDate, 'Start date') ?? null;
+    const todaySection = input.destination === 'someday'
+      ? null
+      : input.todaySection ?? (startDate ? 'next' : null);
     assertPlanningPlacement(input.destination, todaySection, startDate);
 
     return this.database.writeTransaction(async (transaction) => {
+      const occurredAt = this.now();
+      await assertFutureStartDate(transaction, ownerId, startDate, occurredAt);
       const currentTasks: TaskTodo[] = [];
       for (const taskId of uniqueTaskIds) {
         const current = await getOwnedTask(transaction, ownerId, taskId);
@@ -401,7 +449,6 @@ export class TaskRepository {
             'Bulk planning applies only to open, present tasks',
           );
         }
-        assertTaskCalendarRange(startDate, current.deadline);
         currentTasks.push(current);
       }
 
@@ -411,7 +458,7 @@ export class TaskRepository {
          FROM tasks_todos
          WHERE owner_id = ?
            AND destination = ?
-           AND today_section = ?
+           AND today_section IS ?
            AND lifecycle = 'open'
            AND disposition = 'present'
            AND id NOT IN (${placeholders})
@@ -419,7 +466,6 @@ export class TaskRepository {
          LIMIT 1`,
         [ownerId, input.destination, todaySection, ...uniqueTaskIds],
       );
-      const occurredAt = this.now();
       const mutationContext = normalizeMutationContext(context);
       let previousOrderKey = lastTask?.order_key ?? null;
       const movedTasks: TaskTodo[] = [];
@@ -512,8 +558,7 @@ export class TaskRepository {
     assertOwner(ownerId);
     const areaId = input.areaId ?? null;
     const projectId = input.projectId ?? null;
-    const headingId = input.headingId ?? null;
-    assertTaskContainer(areaId, projectId, headingId);
+    assertTaskContainer(areaId, projectId);
 
     return this.database.writeTransaction(async (transaction) => {
       const current = await getOwnedTask(transaction, ownerId, taskId);
@@ -522,7 +567,6 @@ export class TaskRepository {
         ownerId,
         areaId,
         projectId,
-        headingId,
       );
       const hierarchyOrderKey = input.hierarchyOrderKey !== undefined
         ? input.hierarchyOrderKey
@@ -531,7 +575,6 @@ export class TaskRepository {
           ownerId,
           areaId,
           projectId,
-          headingId,
           taskId,
         );
       return updateOwnedTask(
@@ -540,7 +583,6 @@ export class TaskRepository {
         {
           area_id: areaId,
           project_id: projectId,
-          heading_id: headingId,
           hierarchy_order_key: hierarchyOrderKey,
         },
         this.createId(),
@@ -587,32 +629,30 @@ export class TaskRepository {
       const patch = direction === 'undo'
         ? createTaskUndoPatch(current, event)
         : createTaskRedoPatch(current, event);
+      const occurredAt = this.now();
       assertSource(
         patch.source_kind,
         patch.source_url,
         patch.source_title,
         patch.source_external_id,
       );
-      assertTaskCalendarRange(
-        patch.start_date === undefined ? current.start_date : patch.start_date,
-        patch.deadline === undefined ? current.deadline : patch.deadline,
-      );
       assertPlanningPlacement(
         patch.destination === undefined ? current.destination : patch.destination,
         patch.today_section === undefined ? current.today_section : patch.today_section,
         patch.start_date === undefined ? current.start_date : patch.start_date,
       );
+      if (patch.start_date !== undefined) {
+        await assertFutureStartDate(transaction, ownerId, patch.start_date, occurredAt);
+      }
       assertTaskContainer(
         patch.area_id === undefined ? current.area_id : patch.area_id,
         patch.project_id === undefined ? current.project_id : patch.project_id,
-        patch.heading_id === undefined ? current.heading_id : patch.heading_id,
       );
       await assertOwnedTaskContainer(
         transaction,
         ownerId,
         patch.area_id,
         patch.project_id,
-        patch.heading_id,
       );
 
       return updateOwnedTask(
@@ -620,7 +660,7 @@ export class TaskRepository {
         current,
         patch,
         this.createId(),
-        this.now(),
+        occurredAt,
         normalizeMutationContext(context),
         event.id,
       );
@@ -658,23 +698,31 @@ export class TaskRepository {
           ? current.source_external_id
           : patch.source_external_id,
       );
-      assertTaskCalendarRange(
-        patch.start_date === undefined ? current.start_date : patch.start_date,
-        patch.deadline === undefined ? current.deadline : patch.deadline,
-      );
+      if (patch.destination === 'someday') {
+        patch.start_date = null;
+        patch.today_section = null;
+      } else if (
+        patch.start_date !== undefined
+        && patch.today_section === undefined
+        && current.today_section === null
+      ) {
+        patch.today_section = 'next';
+      }
       assertPlanningPlacement(
         patch.destination === undefined ? current.destination : patch.destination,
         patch.today_section === undefined ? current.today_section : patch.today_section,
         patch.start_date === undefined ? current.start_date : patch.start_date,
       );
+      const occurredAt = this.now();
+      if (patch.start_date !== undefined) {
+        await assertFutureStartDate(transaction, ownerId, patch.start_date, occurredAt);
+      }
       const areaId = patch.area_id === undefined ? current.area_id : patch.area_id;
       const projectId = patch.project_id === undefined ? current.project_id : patch.project_id;
-      const headingId = patch.heading_id === undefined ? current.heading_id : patch.heading_id;
-      assertTaskContainer(areaId, projectId, headingId);
+      assertTaskContainer(areaId, projectId);
       const containerChanged = (
         patch.area_id !== undefined
         || patch.project_id !== undefined
-        || patch.heading_id !== undefined
       );
       if (containerChanged) {
         await assertOwnedTaskContainer(
@@ -682,7 +730,6 @@ export class TaskRepository {
           ownerId,
           areaId,
           projectId,
-          headingId,
         );
       }
 
@@ -694,7 +741,6 @@ export class TaskRepository {
             ownerId,
             areaId,
             projectId,
-            headingId,
             taskId,
           ),
         }
@@ -705,7 +751,7 @@ export class TaskRepository {
         current,
         preparedPatch,
         this.createId(),
-        this.now(),
+        occurredAt,
         normalizeMutationContext(context),
       );
     });
@@ -792,12 +838,21 @@ function normalizeEditablePatch(patch: EditableTaskPatch): EditableTaskPatch {
   if (patch.deadline !== undefined) {
     normalized.deadline = normalizeTaskCalendarDate(patch.deadline, 'Deadline') ?? null;
   }
+  if (patch.primary_link !== undefined) {
+    normalized.primary_link = normalizeTaskPrimaryLink(patch.primary_link);
+    if ((normalized.primary_link?.length ?? 0) > 8000) {
+      throw new InvalidTaskMutationError('A Primary Link cannot exceed 8,000 characters');
+    }
+  }
   if (
     patch.actionability !== undefined
     && patch.actionability !== 'actionable'
     && patch.actionability !== 'waiting'
+    && patch.actionability !== 'rechecking'
   ) {
-    throw new InvalidTaskMutationError('Task actionability must be actionable or waiting');
+    throw new InvalidTaskMutationError(
+      'Task actionability must be actionable, waiting, or rechecking',
+    );
   }
   return Object.fromEntries(
     Object.entries(normalized).filter(([, value]) => value !== undefined),
@@ -818,15 +873,11 @@ function normalizeTitle(title: string): string {
 function assertTaskContainer(
   areaId: string | null,
   projectId: string | null,
-  headingId: string | null,
 ): void {
   if (areaId != null && projectId != null) {
     throw new InvalidTaskMutationError(
       'A task cannot belong directly to both an area and a project',
     );
-  }
-  if (headingId != null && projectId == null) {
-    throw new InvalidTaskMutationError('A task heading requires project membership');
   }
 }
 
@@ -835,7 +886,6 @@ async function assertOwnedTaskContainer(
   ownerId: string,
   areaId: string | null | undefined,
   projectId: string | null | undefined,
-  headingId: string | null | undefined,
 ): Promise<void> {
   if (areaId != null) {
     const area = await transaction.getOptional<{ id: string }>(
@@ -851,17 +901,6 @@ async function assertOwnedTaskContainer(
     );
     if (project === null) throw new InvalidTaskMutationError('The task project is unavailable');
   }
-  if (headingId != null) {
-    const heading = await transaction.getOptional<{ project_id: string }>(
-      'SELECT project_id FROM tasks_headings WHERE id = ? AND owner_id = ?',
-      [headingId, ownerId],
-    );
-    if (heading === null || heading.project_id !== projectId) {
-      throw new InvalidTaskMutationError(
-        'The task heading does not belong to the selected project',
-      );
-    }
-  }
 }
 
 async function nextHierarchyOrderKey(
@@ -869,10 +908,9 @@ async function nextHierarchyOrderKey(
   ownerId: string,
   areaId: string | null,
   projectId: string | null,
-  headingId: string | null,
   excludeTaskId?: string,
 ): Promise<string | null> {
-  if (areaId === null && projectId === null && headingId === null) return null;
+  if (areaId === null && projectId === null) return null;
   const excludedTaskClause = excludeTaskId ? 'AND id <> ?' : '';
   const lastTask = await transaction.getOptional<{ hierarchy_order_key: string }>(
     `SELECT hierarchy_order_key
@@ -880,14 +918,13 @@ async function nextHierarchyOrderKey(
      WHERE owner_id = ?
        AND area_id IS ?
        AND project_id IS ?
-       AND heading_id IS ?
        AND lifecycle = 'open'
        AND disposition = 'present'
        AND hierarchy_order_key IS NOT NULL
        ${excludedTaskClause}
      ORDER BY hierarchy_order_key DESC, id DESC
      LIMIT 1`,
-    [ownerId, areaId, projectId, headingId, ...(excludeTaskId ? [excludeTaskId] : [])],
+    [ownerId, areaId, projectId, ...(excludeTaskId ? [excludeTaskId] : [])],
   );
   return generateTaskOrderKey(lastTask?.hierarchy_order_key ?? null, null);
 }
@@ -914,14 +951,38 @@ function assertSource(
 
 function assertPlanningPlacement(
   destination: TaskDestination,
-  todaySection: TaskTodaySection,
+  todaySection: TaskTodaySection | null,
   startDate: string | null,
 ): void {
-  if (destination === 'someday' && todaySection !== 'none') {
-    throw new InvalidTaskMutationError('Someday work cannot appear in Today');
+  if (destination === 'someday' && (todaySection !== null || startDate !== null)) {
+    throw new InvalidTaskMutationError('Someday work cannot retain planning dates');
   }
-  if (destination === 'someday' && startDate !== null) {
-    throw new InvalidTaskMutationError('Someday work cannot retain a start date');
+  if (startDate !== null && todaySection === null) {
+    throw new InvalidTaskMutationError('A future start date requires a day horizon');
+  }
+}
+
+async function assertFutureStartDate(
+  transaction: Transaction,
+  ownerId: string,
+  startDate: string | null,
+  now: string,
+): Promise<void> {
+  if (startDate === null) return;
+  const [settings] = await transaction.getAll<Pick<TaskUserSettings, 'planning_timezone'>>(
+    `SELECT planning_timezone
+     FROM tasks_user_settings
+     WHERE owner_id = ?
+     LIMIT 1`,
+    [ownerId],
+  );
+  const planningTimeZone = settings?.planning_timezone
+    && isTaskPlanningTimeZone(settings.planning_timezone)
+    ? settings.planning_timezone
+    : 'UTC';
+  const planningDate = taskCalendarDateInTimeZone(planningTimeZone, new Date(now));
+  if (startDate <= planningDate) {
+    throw new InvalidTaskMutationError('Start date must be after today');
   }
 }
 

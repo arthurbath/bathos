@@ -78,7 +78,7 @@ SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT public.tasks_create_mail_capture(
   '73000000-0000-4000-8000-000000000010',
   '73000000-0000-4000-8000-000000000011',
-  'Retire source message', '', '2026-07-20', 'a0', NULL,
+  'Retire source message', '', NULL, 'a0', NULL,
   'Work', 'INBOX', 'mail-retire@example.test',
   'message://%3Cmail-retire%40example.test%3E',
   'Archive', 'Retirement test', NULL

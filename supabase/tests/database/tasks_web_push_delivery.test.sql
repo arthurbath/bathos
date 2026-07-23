@@ -72,18 +72,18 @@ INSERT INTO public.tasks_user_settings (
   '98000000-0000-4000-8000-000000000011'
 );
 INSERT INTO public.tasks_todos (
-  id, owner_id, title, destination, order_key, client_mutation_id
+  id, owner_id, title, destination, start_date, order_key, client_mutation_id
 ) VALUES
   (
     '98000000-0000-4000-8000-000000000020',
     '98000000-0000-4000-8000-000000000001',
-    'First synthetic push task', 'anytime', 'a0',
+    'First synthetic push task', 'anytime', '2099-01-01', 'a0',
     '98000000-0000-4000-8000-000000000021'
   ),
   (
     '98000000-0000-4000-8000-000000000022',
     '98000000-0000-4000-8000-000000000001',
-    'Second synthetic push task', 'anytime', 'a1',
+    'Second synthetic push task', 'anytime', '2099-01-01', 'a1',
     '98000000-0000-4000-8000-000000000023'
   );
 
@@ -93,7 +93,7 @@ SELECT lives_ok(
       'test.push_reminder_a',
       public.tasks_save_reminder(
         NULL, NULL, 'todo', '98000000-0000-4000-8000-000000000020',
-        '2020-01-01', '08:00', 'UTC', 'earlier',
+        '2099-01-01', '08:00', 'UTC', 'earlier',
         '98000000-0000-4000-8000-000000000030'
       )::text,
       false
@@ -107,7 +107,7 @@ SELECT lives_ok(
       'test.push_reminder_b',
       public.tasks_save_reminder(
         NULL, NULL, 'todo', '98000000-0000-4000-8000-000000000022',
-        '2020-01-01', '09:00', 'UTC', 'earlier',
+        '2099-01-01', '09:00', 'UTC', 'earlier',
         '98000000-0000-4000-8000-000000000031'
       )::text,
       false
@@ -177,7 +177,7 @@ SELECT set_config('request.jwt.claim.role', 'service_role', true);
 SELECT set_config(
   'test.push_claim_a',
   public.tasks_claim_web_push_deliveries(
-    '2020-01-01 08:30:00+00', 1
+    '2099-01-01 08:30:00+00', 1
   )::text,
   false
 );
@@ -197,7 +197,7 @@ SELECT is(
 );
 SELECT is(
   jsonb_array_length(
-    public.tasks_claim_web_push_deliveries('2020-01-01 08:30:00+00', 1) -> 'items'
+    public.tasks_claim_web_push_deliveries('2099-01-01 08:30:00+00', 1) -> 'items'
   ),
   0,
   'does not lease the same delivery again while its attempt lease is fresh'
@@ -253,7 +253,7 @@ SELECT is(
 SELECT is(
   jsonb_array_length(
     public.tasks_claim_due_reminders(
-      '2020-01-01 08:30:00+00', '98000000-0000-4000-8000-000000000040'
+      '2099-01-01 08:30:00+00', '98000000-0000-4000-8000-000000000040'
     ) -> 'items'
   ),
   0,
@@ -267,7 +267,7 @@ SELECT set_config('request.jwt.claim.role', 'service_role', true);
 SELECT set_config(
   'test.push_claim_b',
   public.tasks_claim_web_push_deliveries(
-    '2020-01-01 10:00:00+00', 1
+    '2099-01-01 10:00:00+00', 1
   )::text,
   false
 );

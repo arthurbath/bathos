@@ -19,7 +19,7 @@ const taskScopeSchema = z.enum(['planning', 'hierarchy']);
 const hierarchyScopeSchema = z.enum(['structural', 'planning']);
 const taskPlanningViewSchema = z.enum(['today', 'upcoming', 'anytime', 'someday']);
 const projectPlanningViewSchema = z.enum(['today', 'upcoming', 'anytime', 'someday']);
-const hierarchyTypeSchema = z.enum(['area', 'project', 'heading', 'checklist_item']);
+const hierarchyTypeSchema = z.enum(['area', 'project', 'checklist_item']);
 const calendarDateSchema = z.string().refine(isTaskCalendarDate, {
   message: 'Use an ISO calendar date in YYYY-MM-DD format.',
 });
@@ -28,7 +28,6 @@ type Tables = Database['public']['Tables'];
 type TaskTodoRow = Tables['tasks_todos']['Row'];
 type TaskAreaRow = Tables['tasks_areas']['Row'];
 type TaskProjectRow = Tables['tasks_projects']['Row'];
-type TaskHeadingRow = Tables['tasks_headings']['Row'];
 type TaskChecklistRow = Tables['tasks_checklist_items']['Row'];
 type TaskHistoryRow = Tables['tasks_history_events']['Row'];
 type HierarchyHistoryRow = Tables['tasks_hierarchy_history_events']['Row'];
@@ -37,7 +36,7 @@ type HierarchyType = z.infer<typeof hierarchyTypeSchema>;
 type Direction = z.infer<typeof directionSchema>;
 type TaskPlanningView = z.infer<typeof taskPlanningViewSchema>;
 type ProjectPlanningView = z.infer<typeof projectPlanningViewSchema>;
-type HierarchyRow = TaskAreaRow | TaskProjectRow | TaskHeadingRow | TaskChecklistRow;
+type HierarchyRow = TaskAreaRow | TaskProjectRow | TaskChecklistRow;
 type Snapshot = Record<string, Json | undefined>;
 
 type MutationBase = {
@@ -145,10 +144,6 @@ async function readHierarchyRecord(
     return readOne<TaskProjectRow>(auth.supabase.from('tasks_projects').select('*')
       .eq('owner_id', auth.userId).eq('id', id).maybeSingle());
   }
-  if (type === 'heading') {
-    return readOne<TaskHeadingRow>(auth.supabase.from('tasks_headings').select('*')
-      .eq('owner_id', auth.userId).eq('id', id).maybeSingle());
-  }
   return readOne<TaskChecklistRow>(auth.supabase.from('tasks_checklist_items').select('*')
     .eq('owner_id', auth.userId).eq('id', id).maybeSingle());
 }
@@ -244,7 +239,7 @@ function orderSection(
   planningDate: string,
 ): string {
   if (view === 'today') {
-    return record.today_section === 'none' ? 'inbox' : String(record.today_section);
+    return String(record.today_section);
   }
   if (view === 'upcoming') return `upcoming:${String(record.start_date ?? '')}`;
   return view;
@@ -263,8 +258,9 @@ function visibleInPlanning(
   }
   if (view === 'today') {
     return record.destination === 'anytime'
-      && ((record.start_date === null && record.today_section !== 'none')
-        || (typeof record.start_date === 'string' && record.start_date <= planningDate));
+      && typeof record.start_date === 'string'
+      && record.today_section !== null
+      && record.start_date <= planningDate;
   }
   return record.destination === view
     && (view !== 'anytime'
@@ -341,7 +337,6 @@ async function taskPeers(
   }
   return rows.filter((row) => row.area_id === current.area_id
       && row.project_id === current.project_id
-      && row.heading_id === current.heading_id
       && row.hierarchy_order_key !== null)
     .map((row) => ({ id: row.id, orderKey: row.hierarchy_order_key as string }));
 }
@@ -383,17 +378,6 @@ async function hierarchyPeers(
       .eq('owner_id', auth.userId).eq('disposition', 'present').eq('lifecycle', 'open')
       .order('order_key').order('id').range(from, to));
     return rows.filter((row) => row.area_id === project.area_id)
-      .map((row) => ({ id: row.id, orderKey: row.order_key }));
-  }
-  if (input.record_type === 'heading') {
-    const heading = current as TaskHeadingRow;
-    const project = await readHierarchyRecord(auth, 'project', heading.project_id) as TaskProjectRow | null;
-    if (project === null) throw new Error('The heading parent is unavailable.');
-    assertOpenPresent(project);
-    const rows = await readAll<TaskHeadingRow>((from, to) => auth.supabase
-      .from('tasks_headings').select('*').eq('owner_id', auth.userId).eq('disposition', 'present')
-      .order('order_key').order('id').range(from, to));
-    return rows.filter((row) => row.project_id === heading.project_id)
       .map((row) => ({ id: row.id, orderKey: row.order_key }));
   }
   const item = current as TaskChecklistRow;
@@ -539,12 +523,6 @@ async function updateHierarchyOrder(
       .eq('revision', input.expected_revision).eq('disposition', 'present').eq('lifecycle', 'open')
       .select('*').maybeSingle());
   }
-  if (input.record_type === 'heading') {
-    return readOne<TaskHeadingRow>(auth.supabase.from('tasks_headings').update(patch)
-      .eq('owner_id', auth.userId).eq('id', input.record_id)
-      .eq('revision', input.expected_revision).eq('disposition', 'present')
-      .select('*').maybeSingle());
-  }
   return readOne<TaskChecklistRow>(auth.supabase.from('tasks_checklist_items').update(patch)
     .eq('owner_id', auth.userId).eq('id', input.record_id)
     .eq('revision', input.expected_revision).eq('disposition', 'present')
@@ -680,7 +658,7 @@ export const reorderTask = defineTool({
 export const reorderTaskHierarchy = defineTool({
   name: 'reorder_task_hierarchy',
   title: 'Reorder Task Hierarchy',
-  description: 'Move one area, project, heading, or checklist item up or down within its exact structural peers, or reorder a project within one planning section.',
+  description: 'Move one area, project, or checklist item up or down within its exact structural peers, or reorder a project within one planning section.',
   inputSchema: {
     ...mutationBaseSchema,
     record_type: hierarchyTypeSchema,

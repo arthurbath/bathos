@@ -20,13 +20,10 @@ export function useTaskDeletedHierarchyRoots(ownerId: string) {
      SELECT id, title, deleted_at, 'project' AS root_type FROM tasks_projects
      WHERE owner_id = ? AND disposition = 'deleted' AND deletion_root_id = id
      UNION ALL
-     SELECT id, title, deleted_at, 'heading' AS root_type FROM tasks_headings
-     WHERE owner_id = ? AND disposition = 'deleted' AND deletion_root_id = id
-     UNION ALL
      SELECT id, title, deleted_at, 'checklist_item' AS root_type FROM tasks_checklist_items
      WHERE owner_id = ? AND disposition = 'deleted' AND deletion_root_id = id
      ORDER BY deleted_at DESC, id`,
-    [ownerId, ownerId, ownerId, ownerId],
+    [ownerId, ownerId, ownerId],
   );
 
   const restore = useCallback((root: DeletedTaskHierarchyRoot) => (

@@ -10,7 +10,7 @@ import {
 const preview: TaskPermanentDeletionPreview = {
   root: { type: 'project', id: 'project-a', title: 'Retired Project' },
   hierarchy: {
-    projects: ['project-a'], headings: ['heading-a'], todos: ['todo-a'],
+    projects: ['project-a'], todos: ['todo-a'],
     checklist_items: ['checklist-a'],
   },
   related: {

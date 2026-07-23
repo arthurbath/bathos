@@ -90,7 +90,6 @@ describe('task hierarchy operations repository', () => {
     const { repository, transaction } = createHarness({
       all: [[
         { entity_type: 'project', id: 'project-a', revision: 2 },
-        { entity_type: 'heading', id: 'heading-a', revision: 1 },
         { entity_type: 'todo', id: 'task-a', revision: 4 },
         { entity_type: 'checklist_item', id: 'item-a', revision: 1 },
       ]],
@@ -105,18 +104,18 @@ describe('task hierarchy operations repository', () => {
     });
 
     const calls = vi.mocked(transaction.execute).mock.calls;
-    expect(calls).toHaveLength(5);
-    for (const [query, parameters] of calls.slice(0, 4)) {
+    expect(calls).toHaveLength(4);
+    for (const [query, parameters] of calls.slice(0, 3)) {
       expect(query).toContain('deletion_root_id = ?');
       expect(parameters).toContain('project-a');
     }
-    expect(calls[4][0]).toContain('INSERT INTO tasks_hierarchy_operations');
+    expect(calls[3][0]).toContain('INSERT INTO tasks_hierarchy_operations');
   });
 
   it('restores an already-detached task without an empty SQL assignment', async () => {
     const { repository, transaction } = createHarness({
       all: [[{ entity_type: 'todo', id: 'task-a', revision: 4 }]],
-      get: [{ area_id: null, project_id: null, heading_id: null }],
+      get: [{ area_id: null, project_id: null }],
     });
 
     await repository.request({

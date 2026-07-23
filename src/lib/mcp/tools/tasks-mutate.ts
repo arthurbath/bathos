@@ -1,6 +1,7 @@
 import type { Database, Json } from '@/integrations/supabase/types';
-import { assertTaskCalendarRange, isTaskCalendarDate } from '../../../modules/tasks/domain/taskDates';
+import { isTaskCalendarDate } from '../../../modules/tasks/domain/taskDates';
 import { generateTaskOrderKey } from '../../../modules/tasks/domain/taskOrder';
+import { normalizeTaskPrimaryLink } from '../../../modules/tasks/domain/taskPrimaryLink';
 import {
   applyTaskStateTransition,
   type TaskStateTransition,
@@ -13,10 +14,11 @@ import {
   type AuthenticatedMcpContext,
 } from '../supabase';
 import { uuidSchema } from '../resource-utils';
+import { planningDateInTimeZone } from './tasks-read';
 
 const destinationSchema = z.enum(['anytime', 'someday']);
-const todaySectionSchema = z.enum(['none', 'inbox', 'now', 'next', 'later']);
-const actionabilitySchema = z.enum(['actionable', 'waiting']);
+const todaySectionSchema = z.enum(['inbox', 'now', 'next', 'later']);
+const actionabilitySchema = z.enum(['actionable', 'waiting', 'rechecking']);
 const sourceKindSchema = z.enum([
   'webpage',
   'mail_message',
@@ -54,15 +56,15 @@ export type UpdateTaskRequest = MutationBase & {
   notes?: string;
   actionability?: TaskActionability;
   source?: TaskSource | null;
+  primary_link?: string | null;
 };
 
 export type MoveTaskRequest = MutationBase & {
   destination?: TaskDestination;
-  today_section?: TaskTodaySection;
+  today_section?: TaskTodaySection | null;
   start_date?: string | null;
   area_id?: string | null;
   project_id?: string | null;
-  heading_id?: string | null;
 };
 
 export type ScheduleTaskRequest = MutationBase & {
@@ -101,8 +103,8 @@ const snapshotKeys = [
   'title', 'notes', 'lifecycle', 'completed_at', 'canceled_at', 'disposition',
   'deleted_at', 'destination', 'today_section', 'order_key', 'start_date', 'deadline',
   'actionability',
-  'source_kind', 'source_url', 'source_title', 'source_external_id', 'area_id',
-  'project_id', 'heading_id', 'hierarchy_order_key', 'deletion_root_id',
+  'source_kind', 'source_url', 'source_title', 'source_external_id', 'primary_link', 'area_id',
+  'project_id', 'hierarchy_order_key', 'deletion_root_id',
 ] as const;
 
 function trimRequired(value: string, label: string, maxLength: number): string {
@@ -305,14 +307,22 @@ function normalizeSource(source: TaskSource | null): Pick<
 
 function updatePatch(input: UpdateTaskRequest): TaskPatch {
   if (input.title === undefined && input.notes === undefined
-    && input.actionability === undefined && input.source === undefined) {
-    throw new Error('Update at least one of title, notes, actionability, or source.');
+    && input.actionability === undefined && input.source === undefined
+    && input.primary_link === undefined) {
+    throw new Error('Update at least one of title, notes, actionability, source, or Primary Link.');
+  }
+  const primaryLink = input.primary_link === undefined
+    ? undefined
+    : normalizeTaskPrimaryLink(input.primary_link);
+  if ((primaryLink?.length ?? 0) > 8_000) {
+    throw new Error('Primary Link cannot exceed 8000 characters.');
   }
   return {
     ...(input.title === undefined ? {} : { title: trimRequired(input.title, 'Task title', 500) }),
     ...(input.notes === undefined ? {} : { notes: input.notes }),
     ...(input.actionability === undefined ? {} : { actionability: input.actionability }),
     ...(input.source === undefined ? {} : normalizeSource(input.source)),
+    ...(input.primary_link === undefined ? {} : { primary_link: primaryLink }),
   };
 }
 
@@ -330,14 +340,14 @@ function changedPatch(current: Snapshot, patch: TaskPatch): TaskPatch {
 
 function validatePlanningPlacement(
   destination: TaskDestination,
-  todaySection: TaskTodaySection,
+  todaySection: TaskTodaySection | null,
   startDate: string | null,
 ): void {
-  if (destination === 'someday' && todaySection !== 'none') {
-    throw new Error('Someday work cannot appear in Today.');
+  if (destination === 'someday' && (todaySection !== null || startDate !== null)) {
+    throw new Error('Someday work cannot retain a start date or day horizon.');
   }
-  if (destination === 'someday' && startDate !== null) {
-    throw new Error('Someday work cannot retain a start date.');
+  if (destination === 'anytime' && startDate !== null && todaySection === null) {
+    throw new Error('Future-dated work requires a day horizon.');
   }
 }
 
@@ -345,17 +355,20 @@ async function nextPlanningOrderKey(
   auth: AuthenticatedMcpContext,
   taskId: string,
   destination: TaskDestination,
-  todaySection: TaskTodaySection,
+  todaySection: TaskTodaySection | null,
 ): Promise<string> {
-  const last = await readOne<{ order_key: string }>(auth.supabase
+  const query = auth.supabase
     .from('tasks_todos')
     .select('order_key')
     .eq('owner_id', auth.userId)
     .eq('destination', destination)
-    .eq('today_section', todaySection)
     .eq('lifecycle', 'open')
     .eq('disposition', 'present')
-    .neq('id', taskId)
+    .neq('id', taskId);
+  const scoped = todaySection === null
+    ? query.is('today_section', null)
+    : query.eq('today_section', todaySection);
+  const last = await readOne<{ order_key: string }>(scoped
     .order('order_key', { ascending: false })
     .order('id', { ascending: false })
     .limit(1)
@@ -367,30 +380,20 @@ async function validateContainer(
   auth: AuthenticatedMcpContext,
   areaId: string | null,
   projectId: string | null,
-  headingId: string | null,
 ): Promise<void> {
   if (areaId !== null && projectId !== null) {
     throw new Error('A task cannot belong directly to both an area and a project.');
   }
-  if (headingId !== null && projectId === null) {
-    throw new Error('A task heading requires project membership.');
-  }
-  const [area, project, heading] = await Promise.all([
+  const [area, project] = await Promise.all([
     areaId === null ? null : readOne<{ id: string }>(auth.supabase
       .from('tasks_areas').select('id').eq('owner_id', auth.userId).eq('id', areaId)
       .eq('disposition', 'present').maybeSingle()),
     projectId === null ? null : readOne<{ id: string }>(auth.supabase
       .from('tasks_projects').select('id').eq('owner_id', auth.userId).eq('id', projectId)
       .eq('disposition', 'present').eq('lifecycle', 'open').maybeSingle()),
-    headingId === null ? null : readOne<{ id: string; project_id: string }>(auth.supabase
-      .from('tasks_headings').select('id, project_id').eq('owner_id', auth.userId)
-      .eq('id', headingId).eq('disposition', 'present').maybeSingle()),
   ]);
   if (areaId !== null && area === null) throw new Error('The task area is unavailable.');
   if (projectId !== null && project === null) throw new Error('The task project is unavailable.');
-  if (headingId !== null && (heading === null || heading.project_id !== projectId)) {
-    throw new Error('The task heading does not belong to the selected project.');
-  }
 }
 
 async function nextHierarchyOrderKey(
@@ -398,9 +401,8 @@ async function nextHierarchyOrderKey(
   taskId: string,
   areaId: string | null,
   projectId: string | null,
-  headingId: string | null,
 ): Promise<string | null> {
-  if (areaId === null && projectId === null && headingId === null) return null;
+  if (areaId === null && projectId === null) return null;
   let query = auth.supabase
     .from('tasks_todos')
     .select('hierarchy_order_key')
@@ -410,7 +412,6 @@ async function nextHierarchyOrderKey(
     .neq('id', taskId);
   query = areaId === null ? query.is('area_id', null) : query.eq('area_id', areaId);
   query = projectId === null ? query.is('project_id', null) : query.eq('project_id', projectId);
-  query = headingId === null ? query.is('heading_id', null) : query.eq('heading_id', headingId);
   const last = await readOne<{ hierarchy_order_key: string | null }>(query
     .not('hierarchy_order_key', 'is', null)
     .order('hierarchy_order_key', { ascending: false })
@@ -424,6 +425,18 @@ function hasOwn(input: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(input, key);
 }
 
+async function ownerPlanningDate(auth: AuthenticatedMcpContext): Promise<string> {
+  const settings = await readOne<{ planning_timezone: string }>(auth.supabase
+    .from('tasks_user_settings')
+    .select('planning_timezone')
+    .eq('owner_id', auth.userId)
+    .maybeSingle());
+  if (!settings) {
+    throw new Error('Task planning settings are not initialized. Open the Tasks module once.');
+  }
+  return planningDateInTimeZone(settings.planning_timezone);
+}
+
 async function movePatch(
   input: MoveTaskRequest,
   current: TaskTodoRow,
@@ -433,10 +446,10 @@ async function movePatch(
   if (!planningRequested && (input.today_section !== undefined || input.start_date !== undefined)) {
     throw new Error('today_section and start_date require a destination.');
   }
-  const containerKeys = ['area_id', 'project_id', 'heading_id'] as const;
+  const containerKeys = ['area_id', 'project_id'] as const;
   const suppliedContainerKeys = containerKeys.filter((key) => hasOwn(input, key));
   if (suppliedContainerKeys.length > 0 && suppliedContainerKeys.length !== containerKeys.length) {
-    throw new Error('Container moves require area_id, project_id, and heading_id together; use null to clear a value.');
+    throw new Error('Container moves require area_id and project_id together; use null to clear a value.');
   }
   if (!planningRequested && suppliedContainerKeys.length === 0) {
     throw new Error('Move either planning placement or the complete task container.');
@@ -445,10 +458,14 @@ async function movePatch(
   const patch: TaskPatch = {};
   if (planningRequested) {
     const destination = input.destination!;
-    const todaySection = destination === 'someday' ? 'none' : input.today_section ?? 'none';
-    const startDate = input.start_date ?? null;
+    const startDate = destination === 'someday' ? null : input.start_date ?? null;
+    if (startDate !== null && startDate <= await ownerPlanningDate(auth)) {
+      throw new Error('Start date must be later than today in the owner planning time zone.');
+    }
+    const todaySection = destination === 'someday'
+      ? null
+      : startDate === null ? input.today_section ?? null : input.today_section ?? 'next';
     validatePlanningPlacement(destination, todaySection, startDate);
-    assertTaskCalendarRange(startDate, current.deadline);
     if (destination === current.destination
       && todaySection === current.today_section
       && startDate !== current.start_date) {
@@ -469,14 +486,12 @@ async function movePatch(
   if (suppliedContainerKeys.length === containerKeys.length) {
     const areaId = input.area_id ?? null;
     const projectId = input.project_id ?? null;
-    const headingId = input.heading_id ?? null;
-    await validateContainer(auth, areaId, projectId, headingId);
+    await validateContainer(auth, areaId, projectId);
     patch.area_id = areaId;
     patch.project_id = projectId;
-    patch.heading_id = headingId;
-    if (areaId !== current.area_id || projectId !== current.project_id || headingId !== current.heading_id) {
+    if (areaId !== current.area_id || projectId !== current.project_id) {
       patch.hierarchy_order_key = await nextHierarchyOrderKey(
-        auth, current.id, areaId, projectId, headingId,
+        auth, current.id, areaId, projectId,
       );
     }
   }
@@ -499,13 +514,16 @@ async function schedulePatch(
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error('Deadline must be a valid ISO calendar date.');
   }
-  assertTaskCalendarRange(startDate, deadline);
-
+  if (startDate !== null && startDate <= await ownerPlanningDate(auth)) {
+    throw new Error('Start date must be later than today in the owner planning time zone.');
+  }
   let destination = current.destination as TaskDestination;
-  let todaySection = current.today_section as TaskTodaySection;
+  let todaySection = current.today_section as TaskTodaySection | null;
   if (destination === 'someday' && startDate !== null) {
     destination = 'anytime';
-    todaySection = 'none';
+    todaySection = 'next';
+  } else if (startDate !== null && todaySection === null) {
+    todaySection = 'next';
   }
   validatePlanningPlacement(destination, todaySection, startDate);
 
@@ -557,16 +575,15 @@ function expectedAfterForRetry(
     const input = request.input;
     if (input.destination !== undefined) {
       expected.destination = input.destination;
+      expected.start_date = input.destination === 'someday' ? null : input.start_date ?? null;
       expected.today_section = input.destination === 'someday'
-        ? 'none'
-        : input.today_section ?? 'none';
-      expected.start_date = input.start_date ?? null;
+        ? null
+        : expected.start_date === null ? input.today_section ?? null : input.today_section ?? 'next';
       ignored.add('order_key');
     }
-    if (hasOwn(input, 'area_id') && hasOwn(input, 'project_id') && hasOwn(input, 'heading_id')) {
+    if (hasOwn(input, 'area_id') && hasOwn(input, 'project_id')) {
       expected.area_id = input.area_id ?? null;
       expected.project_id = input.project_id ?? null;
-      expected.heading_id = input.heading_id ?? null;
       ignored.add('hierarchy_order_key');
     }
     return { expected, ignored, transition: 'move' };
@@ -577,8 +594,10 @@ function expectedAfterForRetry(
     if (hasOwn(input, 'deadline')) expected.deadline = input.deadline ?? null;
     if (before.destination === 'someday' && expected.start_date !== null) {
       expected.destination = 'anytime';
-      expected.today_section = 'none';
+      expected.today_section = 'next';
       ignored.add('order_key');
+    } else if (expected.start_date !== null && before.today_section === null) {
+      expected.today_section = 'next';
     }
     return {
       expected,
@@ -927,13 +946,14 @@ const mutationBaseSchema = {
 export const updateTask = defineTool({
   name: 'update_task',
   title: 'Update Task',
-  description: 'Edit one current to-do title, notes, actionability, or complete typed source reference with an optimistic revision guard.',
+  description: 'Edit one current to-do title, notes, actionability, Primary Link, or complete typed source reference with an optimistic revision guard.',
   inputSchema: {
     ...mutationBaseSchema,
     title: z.string().max(500).optional(),
     notes: z.string().max(100_000).optional(),
-    actionability: actionabilitySchema.optional().describe('Mark the task actionable now or waiting on something external.'),
+    actionability: actionabilitySchema.optional().describe('Mark the task actionable, waiting on an outside party or signal, or requiring deliberate rechecking.'),
     source: sourceSchema.nullable().optional().describe('Complete replacement source, null to clear, or omit to preserve.'),
+    primary_link: z.string().max(8_000).nullable().optional().describe('Editable shortcut independent from typed source provenance.'),
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
   handler: (input, ctx) => toMcpResult(updateTaskData(input, requireAuthenticated(ctx))),
@@ -942,15 +962,14 @@ export const updateTask = defineTool({
 export const moveTask = defineTool({
   name: 'move_task',
   title: 'Move Task',
-  description: 'Move one open to-do between planning placements, hierarchy containers, or both. Container changes require all three container IDs, using null to clear.',
+  description: 'Move one open to-do between planning placements, hierarchy containers, or both. Container changes require both container IDs, using null to clear.',
   inputSchema: {
     ...mutationBaseSchema,
     destination: destinationSchema.optional(),
-    today_section: todaySectionSchema.optional(),
+    today_section: todaySectionSchema.nullable().optional(),
     start_date: calendarDateSchema.nullable().optional(),
     area_id: uuidSchema.nullable().optional(),
     project_id: uuidSchema.nullable().optional(),
-    heading_id: uuidSchema.nullable().optional(),
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
   handler: (input, ctx) => toMcpResult(moveTaskData(input, requireAuthenticated(ctx))),
