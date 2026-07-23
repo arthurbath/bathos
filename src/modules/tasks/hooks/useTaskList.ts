@@ -224,6 +224,35 @@ export function useTaskList(
     },
     [ownerId, planningDate, repository, setOptimisticTask, view],
   );
+  const duplicateTask = useCallback(
+    async (taskId: string) => {
+      const source = allTasks.find((task) => task.id === taskId);
+      if (!source || source.lifecycle !== 'open' || source.disposition !== 'present') {
+        throw new Error('Only an open task can be duplicated');
+      }
+      const duplicated = await repository.createTask({
+        ownerId,
+        title: source.title,
+        notes: source.notes,
+        destination: source.destination,
+        todaySection: source.today_section,
+        startDate: source.start_date,
+        deadline: source.deadline,
+        primaryLink: source.primary_link,
+        actionability: source.actionability,
+        areaId: source.area_id,
+        projectId: source.project_id,
+      });
+      setOptimisticTask(duplicated.id, taskIsVisible(
+        duplicated,
+        ownerId,
+        view,
+        planningDate,
+      ) ? duplicated : null);
+      return duplicated;
+    },
+    [allTasks, ownerId, planningDate, repository, setOptimisticTask, view],
+  );
   const moveTask = useCallback(
     async (taskId: string, input: TaskPlanningMoveInput) => {
       const currentTask = allTasks.find((task) => task.id === taskId);
@@ -344,6 +373,7 @@ export function useTaskList(
     reorderTask,
     reorderTaskTo,
     transitionTask,
+    duplicateTask,
     planningDate,
   };
 }

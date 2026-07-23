@@ -8,7 +8,10 @@ export function useTaskSearch(ownerId: string, active = true) {
      FROM tasks_todos
      WHERE owner_id = ?
        AND ? = 1
-       AND disposition = 'present'
+       AND (
+         disposition = 'present'
+         OR (disposition = 'deleted' AND deletion_root_id = id)
+       )
      ORDER BY updated_at DESC, id`,
     [ownerId, active ? 1 : 0],
   );

@@ -343,6 +343,50 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
+  it('duplicates mutable task content without copying source identity', async () => {
+    const source = {
+      ...originalTask,
+      notes: 'Copy these notes',
+      deadline: '2099-02-01',
+      primary_link: 'https://example.test',
+      source_kind: 'webpage' as const,
+      source_url: 'https://source.example.test',
+      source_external_id: 'external-a',
+    };
+    const duplicate = { ...source, id: 'task-copy', source_kind: null, source_url: null };
+    queryData = [source];
+    const repository = {
+      createTask: vi.fn().mockResolvedValue(duplicate),
+      updateTask: vi.fn(),
+      moveTask: vi.fn(),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+    try {
+      await act(async () => {
+        await latest.duplicateTask('task-a');
+      });
+      expect(repository.createTask).toHaveBeenCalledWith({
+        ownerId: 'owner-a',
+        title: 'Original title',
+        notes: 'Copy these notes',
+        destination: 'anytime',
+        todaySection: 'next',
+        startDate: '2000-01-01',
+        deadline: '2099-02-01',
+        primaryLink: 'https://example.test',
+        actionability: 'actionable',
+        areaId: null,
+        projectId: null,
+      });
+      expect(repository.createTask.mock.calls[0][0]).not.toHaveProperty('sourceKind');
+      expect(repository.createTask.mock.calls[0][0]).not.toHaveProperty('sourceExternalId');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('captures directly into Someday without Today membership', async () => {
     harnessView = 'someday';
     const repository = {

@@ -29,6 +29,7 @@ vi.mock('@/modules/tasks/TasksIndex', async () => {
         ReactModule.createElement(Router.Link, { to: '/tasks/anytime' }, 'Anytime'),
         ReactModule.createElement(Router.Link, { to: '/tasks/projects/project-a' }, 'Project'),
         ReactModule.createElement(Router.Link, { to: '/tasks/areas/area-a' }, 'Area'),
+        ReactModule.createElement(Router.Link, { to: '/tasks/search?q=renew' }, 'Search'),
         ReactModule.createElement(Router.Link, { to: '/tasks/unknown' }, 'Unknown'),
       );
     },
@@ -107,6 +108,11 @@ describe('Tasks route runtime boundary', () => {
       await followLink(container, 'Area');
       expect(container.querySelector('[data-testid="tasks-index"]'))
         .toHaveAttribute('data-pathname', '/tasks/areas/area-a');
+      expect(mockTasksLifecycle).toEqual({ mounts: 1, cleanups: 0 });
+
+      await followLink(container, 'Search');
+      expect(container.querySelector('[data-testid="tasks-index"]'))
+        .toHaveAttribute('data-pathname', '/tasks/search');
       expect(mockTasksLifecycle).toEqual({ mounts: 1, cleanups: 0 });
     } finally {
       cleanup(root, container);

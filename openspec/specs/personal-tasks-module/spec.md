@@ -313,7 +313,7 @@ The system SHALL represent workflow meaning through explicit structured concepts
 - **THEN** the interface derives that presentation from origin metadata rather than parsing the task title
 
 ### Requirement: Bulk Task Planning
-The system SHALL provide an accessible task-row selection mode for open tasks and SHALL apply supported day-horizon, future scheduling, Anytime, or Someday actions to selected records as one local transaction.
+The system SHALL provide an accessible task-row selection mode for open tasks, SHALL treat selection as a temporary context bounded by to-do rows and selection-owned surfaces, SHALL expose its controls as a fixed bottom overlay that does not move list content, and SHALL apply supported planning actions to selected records.
 
 #### Scenario: Enter selection with the platform modifier
 - **WHEN** a user Command-clicks a visible task on Mac or Control-clicks a visible task on Windows while selection is inactive
@@ -337,11 +337,39 @@ The system SHALL provide an accessible task-row selection mode for open tasks an
 
 #### Scenario: Operate selection accessibly
 - **WHEN** one or more visible tasks are selected in Today, Upcoming, Anytime, or Someday
-- **THEN** the interface reports the selected count, exposes Select All and Clear, and communicates each selected state to keyboard and assistive-technology users without requiring a persistent header selection button
+- **THEN** the fixed bottom selection overlay reports the selected count, exposes Select All and Select None, and communicates each selected state to keyboard and assistive-technology users without shifting list content or requiring a persistent header selection button
+
+#### Scenario: Select every visible to-do by keyboard
+- **WHEN** focus is not owned by an editable control and a user presses Command+A on Mac or Control+A on Windows in Today, Upcoming, Anytime, or Someday
+- **THEN** the interface suppresses the matching browser command, enters selection when necessary, and selects every to-do in the active view without selecting projects or other non-to-do content
+
+#### Scenario: Preserve native text selection
+- **WHEN** an editable input, textarea, select, or contenteditable region owns Command+A on Mac or Control+A on Windows
+- **THEN** the interface leaves the gesture available to that editable control and does not change bulk selection
+
+#### Scenario: Dismiss selection outside a to-do
+- **WHEN** bulk selection is active and the user presses the pointer outside every to-do row and outside the controls that operate the active selection
+- **THEN** the interface clears the selection and range anchor and returns to ordinary task interaction
+
+#### Scenario: Retain selection for owned interactions
+- **WHEN** bulk selection is active and the user interacts with a title or other control inside a to-do row, the bulk toolbar, or its planning, calendar, organization, or reminder surface
+- **THEN** the interface leaves selection active until the owned interaction applies its selection or planning behavior
+
+#### Scenario: Preserve access to the final task
+- **WHEN** the fixed selection overlay is visible above the list
+- **THEN** the list retains enough bottom scroll space for its final task and controls to move fully above the overlay
+
+#### Scenario: Exit selection directly
+- **WHEN** a user presses Escape, activates Done, changes views, or clicks outside a to-do and outside a selection-owned surface
+- **THEN** the client clears selection and its stable range anchor and returns to ordinary editing
 
 #### Scenario: Plan selected tasks
 - **WHEN** a user applies Today Inbox, Today Now, Today Next, Today Later, Remove from Today, Tomorrow, Anytime, or Someday to selected tasks
 - **THEN** the system updates every selected task's destination, start date, selected day horizon, dependent reminder, mutation metadata, revision, and relevant order in one local transaction while preserving selected order
+
+#### Scenario: Apply a focused bulk value
+- **WHEN** a selected-task keyboard command requires a start date, due date, organization, or reminder time
+- **THEN** the interface opens a centered selection-owned surface, moves focus to its primary date or selection control, and applies the chosen value to every eligible selected task
 
 #### Scenario: Preserve a bulk horizon while scheduling
 - **WHEN** a user applies a future date to selected tasks with an Inbox, Now, Next, or Later horizon
@@ -968,7 +996,7 @@ The system SHALL present a visible interaction reference that documents supporte
 - **THEN** the reference does not imply that Tasks will override native editing, browser, or unsupported ordering behavior
 
 ### Requirement: Keyboard-First Daily Operation
-The system SHALL provide modifier-based keyboard operation for capture, editing, Today planning, direct view navigation, list traversal, lifecycle transitions, and dialogs while suppressing every matching browser-level command inside the mounted Tasks module.
+The system SHALL provide modifier-based keyboard operation for capture, editing, Today planning, direct view navigation, list traversal, lifecycle transitions, find, and dialogs while suppressing every matching browser-level command inside the mounted Tasks module.
 
 #### Scenario: Navigate without a pointer
 - **WHEN** a keyboard user moves through a task view
@@ -986,9 +1014,9 @@ The system SHALL provide modifier-based keyboard operation for capture, editing,
 - **WHEN** completion, cancellation, movement, or recoverable deletion removes the focused task from the current view
 - **THEN** focus moves to the task now occupying the same visual position, then the prior task, then task capture or the primary view heading when no task remains
 
-#### Scenario: Open task capture, search, or keyboard help
-- **WHEN** a keyboard user presses Command+N or Command+/ on Mac, or Control+N or Control+/ on Windows
-- **THEN** the module respectively focuses task capture or opens a visible keyboard-command reference and suppresses the matching browser command
+#### Scenario: Open task capture, find, or keyboard help
+- **WHEN** a keyboard user presses Command+N, Command+F, or Command+/ on Mac, or Control+N, Control+F, or Control+/ on Windows
+- **THEN** the module respectively focuses task capture, opens quick find, or opens the keyboard-command reference and suppresses the matching browser command
 
 #### Scenario: Submit inline hierarchy capture
 - **WHEN** a keyboard user enters a nonblank area, project, project to-do, or checklist-item name and presses Enter without an active composition event
@@ -1003,8 +1031,8 @@ The system SHALL provide modifier-based keyboard operation for capture, editing,
 - **THEN** the module navigates through a real in-app link to the task's current planning or history view and opens or focuses the stable task record
 
 #### Scenario: Keep structural movement and temporal planning distinct
-- **WHEN** a user invokes `M` or `W` on a focused open task
-- **THEN** `M` changes only area or project placement while `W` changes only planning destination, start date, day horizon, or reminder time
+- **WHEN** a user invokes Command+M or Control+M, or a temporal planning command, on a focused open task
+- **THEN** the organization command changes only area or project placement while temporal commands change only planning destination, start date, day horizon, due date, or reminder time
 
 #### Scenario: Restore focus after a movement command
 - **WHEN** a structural or temporal movement command succeeds and its command surface closes
@@ -1015,7 +1043,7 @@ The system SHALL provide modifier-based keyboard operation for capture, editing,
 - **THEN** the local value changes immediately and the module persists the latest nonblank title or exact notes source after a short debounce without a Save or Cancel action
 
 #### Scenario: Autosave structured editing
-- **WHEN** a user changes actionability, organization, start date, day horizon, deadline, reminder time, or reminder ambiguity in an open to-do
+- **WHEN** a user changes actionability, organization, start date, day horizon, deadline, Primary Link, reminder time, or reminder ambiguity in an open to-do
 - **THEN** the module persists the changed field immediately without waiting for another field or an explicit submission
 
 #### Scenario: Preserve autosave order
@@ -1047,8 +1075,24 @@ The system SHALL provide modifier-based keyboard operation for capture, editing,
 - **THEN** Tasks suppresses browser and text-editor history everywhere in the module and invokes the available app-level undo or redo action, otherwise performing a Tasks no-op
 
 #### Scenario: Navigate views by number
-- **WHEN** the user presses Command+1 through Command+8 on Mac, or Control+1 through Control+8 on Windows
-- **THEN** Tasks navigates directly to Today, Upcoming, Anytime, Someday, Projects, Templates, Done, or Config respectively and suppresses browser tab-number navigation
+- **WHEN** the user presses Command+1 through Command+6 or Command+Comma on Mac, or Control+1 through Control+6 or Control+Comma on Windows
+- **THEN** Tasks navigates directly to Today, Upcoming, Anytime, Someday, Projects, Templates, or Config respectively and suppresses the matching browser navigation command
+
+#### Scenario: Plan one or many tasks from the keyboard
+- **WHEN** a user invokes the Today, Anytime, Someday, start date, due date, duplicate, organization, horizon, or reminder command with an open task or nonempty multi-selection
+- **THEN** the module targets the multi-selection when present and otherwise targets the open task, applies the command to every eligible target, and suppresses the matching browser command
+
+#### Scenario: Cycle Today with no Inbox transition
+- **WHEN** Command+T on Mac or Control+T on Windows targets work outside Today or already in Today
+- **THEN** outside work moves to canonical Today Now while Today work cycles Now to Next to Later to Now and never enters Inbox
+
+#### Scenario: Cycle a scheduled day horizon
+- **WHEN** Command+H on Mac or Control+H on Windows targets one or more tasks with future Start Dates
+- **THEN** each eligible task cycles Now to Next to Later to Now without changing its Start Date
+
+#### Scenario: Ignore an ineligible reminder command
+- **WHEN** Command+E on Mac or Control+E on Windows targets no task with a Start Date
+- **THEN** the module makes no reminder mutation or focus change
 
 #### Scenario: Open the next visible to-do
 - **WHEN** the user presses Control+S on Mac or Control+Shift+S on Windows
@@ -1209,6 +1253,51 @@ The system SHALL provide modifier-based keyboard operation for capture, editing,
 #### Scenario: Preserve native editing behavior
 - **WHEN** focus is inside an input, textarea, select, content-editable surface, menu, or dialog
 - **THEN** undocumented key chords do not replace native typing, composition, selection, or control behavior, while documented Tasks modifier commands retain precedence
+
+### Requirement: Global Task Quick Find
+The system SHALL provide a keyboard-first quick find across to-dos, projects, and areas and a live full task-results route.
+
+#### Scenario: Show the best quick matches
+- **WHEN** a user types a substring in quick find
+- **THEN** the surface updates with each keystroke and presents at most three matching to-do, project, or area results with their entity types
+
+#### Scenario: Close quick find
+- **WHEN** quick find is visible and the user presses Escape
+- **THEN** the surface closes without changing task data
+
+#### Scenario: Continue a search
+- **WHEN** the user activates Continue Search
+- **THEN** the module navigates through a real in-app link to `/tasks/search` with the current query and lists every matching to-do from every planning and lifecycle view
+
+#### Scenario: Refine full results
+- **WHEN** the user edits the query on the search-results page
+- **THEN** the URL query and full to-do results update with each keystroke
+
+#### Scenario: Open a hierarchy result
+- **WHEN** the user activates a project or area quick-find result
+- **THEN** a real in-app link opens that hierarchy record and preserves modified-click behavior
+
+### Requirement: Task Duplication
+The system SHALL duplicate active to-dos from an open task or multi-selection without copying immutable provenance or automation identity.
+
+#### Scenario: Duplicate mutable task content
+- **WHEN** the user invokes the duplicate command for one or more open present tasks
+- **THEN** the system creates one new task per source with the same user-editable title, notes, actionability, planning, container, deadline, and Primary Link
+
+#### Scenario: Exclude nonduplicable identity
+- **WHEN** a duplicate task is created
+- **THEN** it receives new record, mutation, order, and history identity and does not copy typed source, idempotency, reminder, recurrence, completion, cancellation, or deletion state
+
+### Requirement: Task Row Temporal Metadata
+The system SHALL distinguish Start and Due metadata in task rows with semantic Lucide icons and time-direction copy.
+
+#### Scenario: Show temporal types
+- **WHEN** a task row presents a Start Date or Due Date
+- **THEN** Start uses the Lucide Play icon and Due uses the Lucide FlagTriangleRight icon
+
+#### Scenario: Describe a future start
+- **WHEN** Upcoming presents a task whose Start Date is two days after the planning date
+- **THEN** the row presents the Play icon and the copy `In 2 days` rather than remaining-time copy
 
 ### Requirement: Deterministic Mail Capture Retry
 The system SHALL define a specialized Mail capture's idempotent request identity from caller-controlled task and structured source fields, and SHALL NOT treat service-generated task identity, planning date, or ordering as a caller request difference.

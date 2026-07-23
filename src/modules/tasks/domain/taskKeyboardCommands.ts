@@ -1,7 +1,9 @@
 export type TaskKeyboardCommand =
   | 'undo'
   | 'redo'
+  | 'select-all'
   | 'capture'
+  | 'find'
   | 'help'
   | 'view-today'
   | 'view-upcoming'
@@ -9,8 +11,16 @@ export type TaskKeyboardCommand =
   | 'view-someday'
   | 'view-projects'
   | 'view-templates'
-  | 'view-done'
   | 'view-config'
+  | 'plan-today'
+  | 'plan-anytime'
+  | 'plan-someday'
+  | 'open-deadline'
+  | 'duplicate'
+  | 'open-start-date'
+  | 'open-organization'
+  | 'cycle-horizon'
+  | 'focus-reminder'
   | 'complete-open'
   | 'open-next'
   | 'open-previous'
@@ -28,8 +38,6 @@ const numberedTaskCommands: Record<string, TaskKeyboardCommand> = {
   '4': 'view-someday',
   '5': 'view-projects',
   '6': 'view-templates',
-  '7': 'view-done',
-  '8': 'view-config',
 };
 
 export function getTaskKeyboardCommand(
@@ -44,9 +52,23 @@ export function getTaskKeyboardCommand(
   if (applicationModifier && !gesture.altKey && key === 'z') {
     return gesture.shiftKey ? 'redo' : 'undo';
   }
+  if (applicationModifier && !gesture.altKey && gesture.shiftKey && key === 'd') {
+    if (macLikePlatform) return 'duplicate';
+  }
   if (applicationModifier && !gesture.altKey && !gesture.shiftKey) {
+    if (key === 'a') return 'select-all';
     if (key === 'n') return 'capture';
+    if (key === 'f') return 'find';
     if (key === '/') return 'help';
+    if (key === ',') return 'view-config';
+    if (key === 't') return 'plan-today';
+    if (key === 'r') return 'plan-anytime';
+    if (key === 'o') return 'plan-someday';
+    if (key === 'd') return 'open-deadline';
+    if (key === 's') return 'open-start-date';
+    if (key === 'm') return 'open-organization';
+    if (key === 'h') return 'cycle-horizon';
+    if (key === 'e') return 'focus-reminder';
     if (numberedTaskCommands[key]) return numberedTaskCommands[key];
   }
 

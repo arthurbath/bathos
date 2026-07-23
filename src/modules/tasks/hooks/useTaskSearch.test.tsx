@@ -24,7 +24,7 @@ function cleanup(root: Root, container: HTMLElement) {
 }
 
 describe('useTaskSearch', () => {
-  it('queries all present owner tasks for local cross-view search', () => {
+  it('queries all owner task roots represented across active and Done views', () => {
     mocks.useQuery.mockReturnValue({
       data: [{ id: 'task-a' }],
       isLoading: false,
@@ -41,6 +41,9 @@ describe('useTaskSearch', () => {
         ['owner-a', 1],
       );
       expect(mocks.useQuery.mock.calls[0]?.[0]).toContain('ORDER BY updated_at DESC, id');
+      expect(mocks.useQuery.mock.calls[0]?.[0]).toContain(
+        "disposition = 'deleted' AND deletion_root_id = id",
+      );
       expect(latest).toEqual({
         tasks: [{ id: 'task-a' }],
         loading: false,

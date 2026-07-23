@@ -2,6 +2,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type MouseEvent,
   type ReactNode,
@@ -46,6 +47,134 @@ import type {
   TaskTodaySection,
   TaskTodo,
 } from '@/modules/tasks/types/tasks';
+
+export type TaskBulkCommandMode = 'start' | 'deadline' | 'organization' | 'reminder';
+
+export function TaskBulkCommandDialog({
+  mode,
+  selectedCount,
+  pending,
+  hierarchy,
+  planningDate,
+  onOpenChange,
+  onApplyDate,
+  onApplyOrganization,
+  onApplyReminder,
+}: {
+  mode: TaskBulkCommandMode | null;
+  selectedCount: number;
+  pending: boolean;
+  hierarchy: TaskHierarchyModel;
+  planningDate: string;
+  onOpenChange: (open: boolean) => void;
+  onApplyDate: (value: string) => Promise<void>;
+  onApplyOrganization: (patch: EditableTaskPatch) => Promise<void>;
+  onApplyReminder: (localTime: string) => Promise<void>;
+}) {
+  const [reminderTime, setReminderTime] = useState('');
+  const dateRef = useRef<HTMLButtonElement>(null);
+  const organizationRef = useRef<HTMLSelectElement>(null);
+  const reminderRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (mode === null) return;
+    const timer = window.setTimeout(() => {
+      if (mode === 'start' || mode === 'deadline') dateRef.current?.click();
+      else if (mode === 'organization') organizationRef.current?.focus();
+      else reminderRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [mode]);
+  const title = mode === 'start'
+    ? 'Set Start Date'
+    : mode === 'deadline'
+      ? 'Set Due Date'
+      : mode === 'organization'
+        ? 'Move Selected To'
+        : 'Set Reminder Time';
+
+  return (
+    <Dialog open={mode !== null} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="shadow-none sm:max-w-sm"
+        aria-describedby={undefined}
+        data-task-bulk-selection-surface
+      >
+        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+        <DialogBody className="space-y-4 pt-4">
+          <p className="text-sm text-muted-foreground">
+            Applies to {selectedCount} selected {selectedCount === 1 ? 'task' : 'tasks'}.
+          </p>
+          {mode === 'start' || mode === 'deadline' ? (
+            <DatePickerField
+              ref={dateRef}
+              value=""
+              onValueChange={(value) => void onApplyDate(value)}
+              placeholder={mode === 'start' ? 'Select Start Date' : 'Select Due Date'}
+              aria-label={mode === 'start' ? 'Start Date' : 'Due Date'}
+              disabled={pending}
+              minDate={mode === 'start' ? addTaskCalendarDays(planningDate, 1) : undefined}
+              popoverAlign="center"
+            />
+          ) : mode === 'organization' ? (
+            <select
+              ref={organizationRef}
+              defaultValue=""
+              disabled={pending}
+              aria-label="Area or Project"
+              onChange={(event) => {
+                const value = event.target.value;
+                if (!value) return;
+                const [kind, id] = value.split(':', 2);
+                void onApplyOrganization(kind === 'project'
+                  ? { project_id: id, area_id: null }
+                  : kind === 'area'
+                    ? { area_id: id, project_id: null }
+                    : { area_id: null, project_id: null });
+              }}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="" disabled>Select an Area or Project</option>
+              <option value="none">No Area or Project</option>
+              {hierarchy.areas.length > 0 ? (
+                <optgroup label="Areas">
+                  {hierarchy.areas.map((area) => (
+                    <option key={area.id} value={`area:${area.id}`}>{area.title}</option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {hierarchy.projects.length > 0 ? (
+                <optgroup label="Projects">
+                  {hierarchy.projects.map((project) => (
+                    <option key={project.id} value={`project:${project.id}`}>{project.title}</option>
+                  ))}
+                </optgroup>
+              ) : null}
+            </select>
+          ) : mode === 'reminder' ? (
+            <div className="flex gap-2">
+              <Input
+                ref={reminderRef}
+                type="time"
+                value={reminderTime}
+                aria-label="Reminder Time"
+                disabled={pending}
+                onChange={(event) => setReminderTime(event.target.value)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!reminderTime || pending}
+                onClick={() => void onApplyReminder(reminderTime)}
+              >
+                Apply
+              </Button>
+            </div>
+          ) : null}
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export type TaskTemporalAction = {
   label: string;
@@ -358,6 +487,7 @@ export function TaskKeyboardHelpDialog({
       label: 'Everywhere',
       commands: [
         ['Capture a Task', 'Command+N', 'Control+N'],
+        ['Quick Find', 'Command+F', 'Control+F'],
         ['Show Keyboard Help', 'Command+/', 'Control+/'],
         ['Open Today', 'Command+1', 'Control+1'],
         ['Open Upcoming', 'Command+2', 'Control+2'],
@@ -365,10 +495,10 @@ export function TaskKeyboardHelpDialog({
         ['Open Someday', 'Command+4', 'Control+4'],
         ['Open Projects', 'Command+5', 'Control+5'],
         ['Open Templates', 'Command+6', 'Control+6'],
-        ['Open Done', 'Command+7', 'Control+7'],
-        ['Open Config', 'Command+8', 'Control+8'],
+        ['Open Config', 'Command+,', 'Control+,'],
         ['Undo a Task Change', 'Command+Z', 'Control+Z'],
         ['Redo a Task Change', 'Command+Shift+Z', 'Control+Shift+Z'],
+        ['Select All Visible To-Dos', 'Command+A', 'Control+A'],
       ],
     },
     {
@@ -378,6 +508,15 @@ export function TaskKeyboardHelpDialog({
         ['Open Previous', 'Control+W', 'Control+Shift+W'],
         ['Mark Open To-Do Complete', 'Control+D', 'Control+Shift+D'],
         ['Close and Clear Focus', 'Control+X', 'Control+Shift+X'],
+        ['Move to or Cycle Today', 'Command+T', 'Control+T'],
+        ['Move to Anytime', 'Command+R', 'Control+R'],
+        ['Move to Someday', 'Command+O', 'Control+O'],
+        ['Choose Due Date', 'Command+D', 'Control+D'],
+        ['Duplicate', 'Command+Shift+D', 'Unavailable'],
+        ['Choose Start Date', 'Command+S', 'Control+S'],
+        ['Choose Area or Project', 'Command+M', 'Control+M'],
+        ['Cycle Day Horizon', 'Command+H', 'Control+H'],
+        ['Edit Reminder Time', 'Command+E', 'Control+E'],
         ['Reorder by Keyboard', 'Option+Up/Down', 'Alt+Up/Down'],
         ['Add or Remove Selection', 'Command-click', 'Control-click'],
         ['Replace Anchored Range', 'Shift-click', 'Shift-click'],
@@ -702,6 +841,7 @@ export function TaskBulkWhenDialog({
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !pending && onOpenChange(nextOpen)}>
       <DialogContent
+        data-task-bulk-selection-surface
         className="shadow-none"
         aria-describedby={undefined}
         onCloseAutoFocus={(event) => {
