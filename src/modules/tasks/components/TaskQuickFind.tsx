@@ -12,6 +12,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { shouldHandleWithBrowser } from '@/lib/navigation';
+import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
 import {
   createTaskSearchDocuments,
   filterTaskSearchDocuments,
@@ -175,7 +176,8 @@ export function TaskQuickFindDialog({
                     key={`${result.kind}:${result.id}`}
                     href={result.href}
                     onClick={(event) => activate(event, result)}
-                    className="flex items-center gap-3 px-2 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    className="flex h-16 items-center gap-3 overflow-hidden px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    data-task-compact-row
                   >
                     <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <span className="min-w-0">
@@ -255,7 +257,10 @@ export function TaskSearchResultsView({
         />
       </div>
       <section aria-label="Task Search Results">
-        <h3 className="mb-2 text-sm font-semibold text-muted-foreground">To-Dos ({results.length})</h3>
+        <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+          To-Dos
+          <TaskCountBadge count={results.length} label="To-Dos" />
+        </h3>
         {loading ? (
           <div className="flex min-h-24 items-center justify-center"><LoadingSpinner /></div>
         ) : error ? (
@@ -277,7 +282,8 @@ export function TaskSearchResultsView({
                     event.preventDefault();
                     onSelectTask(task, href);
                   }}
-                  className="block px-2 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="flex h-16 flex-col justify-center overflow-hidden px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  data-task-compact-row
                 >
                   <span className="block truncate text-sm font-medium text-foreground">{task.title}</span>
                   <span className="mt-1 block truncate text-xs text-muted-foreground">{taskDetail(task, hierarchyLabel)}</span>

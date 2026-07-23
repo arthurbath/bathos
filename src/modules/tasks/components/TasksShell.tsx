@@ -84,6 +84,7 @@ import {
   TaskQuickFindDialog,
   TaskSearchResultsView,
 } from '@/modules/tasks/components/TaskQuickFind';
+import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
 import {
   getTaskTodayMembershipSection,
   getTodayTaskSection,
@@ -1697,9 +1698,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   <section aria-labelledby="task-done-deleted-heading">
                     <h3
                       id="task-done-deleted-heading"
-                      className="mb-2 text-sm font-semibold text-muted-foreground"
+                      className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground"
                     >
-                      Deleted ({doneRoots.length})
+                      Deleted
+                      <TaskCountBadge count={doneRoots.length} label="Deleted Items" />
                     </h3>
                   <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
                     {doneRoots.map((root) => (
@@ -1739,9 +1741,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   <section aria-labelledby="task-done-todos-heading">
                     <h3
                       id="task-done-todos-heading"
-                      className="mb-2 text-sm font-semibold text-muted-foreground"
+                      className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground"
                     >
-                      To-Dos ({tasks.length})
+                      To-Dos
+                      <TaskCountBadge count={tasks.length} label="To-Dos" />
                     </h3>
                     <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
                       {tasks.map((task) => task.disposition === 'deleted' ? (
@@ -1902,8 +1905,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                     />
                     {tasks.length > 0 ? (
                       <section aria-label="Tasks">
-                        <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-                          Tasks ({tasks.length})
+                        <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                          Tasks
+                          <TaskCountBadge count={tasks.length} label="Tasks" />
                         </h3>
                         <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
                           {tasks.map((task) => renderActiveTask(task, tasks))}
@@ -2563,7 +2567,8 @@ function TodayTaskSections({
               className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground"
             >
               <Icon className="h-4 w-4" aria-hidden="true" />
-              {label} ({sectionTasks.length})
+              {label}
+              <TaskCountBadge count={sectionTasks.length} label="To-Dos" />
             </h3>
             <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
               {sectionTasks.map((task) => renderTask(task, sectionTasks))}
@@ -2604,9 +2609,10 @@ function UpcomingTaskSections({
           >
             <h3
               id={`tasks-${section.key.replace(':', '-')}-heading`}
-              className="mb-2 text-sm font-semibold text-muted-foreground"
+              className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground"
             >
-              {section.label} ({section.entries.length})
+              {section.label}
+              <TaskCountBadge count={section.entries.length} label="Items" />
             </h3>
             <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
               {section.entries.map((entry) => entry.kind === 'project'
@@ -2923,7 +2929,7 @@ function TaskRow({
         />
       ) : null}
       <div className="min-h-0 overflow-hidden">
-      <div className="flex min-h-14 items-center gap-3 px-2 sm:px-4">
+      <div className="flex h-16 items-center gap-3 overflow-hidden px-2 sm:px-4" data-task-row-header>
         {bulkSelection ? (
           <button
             type="button"
@@ -3005,7 +3011,7 @@ function TaskRow({
             : 'Enter Alt+ArrowUp Alt+ArrowDown'}
           data-task-title-control
           data-task-id={task.id}
-          className={`min-w-0 flex-1 py-4 text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draggableTask ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          className={`flex h-full min-w-0 flex-1 flex-col justify-center overflow-hidden text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draggableTask ? 'cursor-grab active:cursor-grabbing' : ''}`}
         >
           <span className="flex min-w-0 items-center gap-2">
             {todayMarker ? (
@@ -3019,28 +3025,36 @@ function TaskRow({
             ) : null}
             <span className="truncate">{task.title}</span>
           </span>
-          {hierarchyLabel ? (
-            <span className="mt-1 block text-xs font-normal text-info">{hierarchyLabel}</span>
-          ) : null}
-          {task.actionability === 'waiting' ? (
-            <span className="mt-1 inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
-              <Hourglass className="h-3.5 w-3.5" aria-hidden="true" />
-              Waiting
-            </span>
-          ) : task.actionability === 'rechecking' ? (
-            <span className="mt-1 inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
-              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-              Rechecking
-            </span>
-          ) : null}
           {(
-            (planningLabel !== null && (planningLabel || task.start_date))
+            hierarchyLabel
+            || task.actionability !== 'actionable'
+            || (planningLabel !== null && (planningLabel || task.start_date))
             || task.deadline
+            || (reminder && task.start_date)
           ) ? (
-            <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-normal text-muted-foreground">
+            <span
+              className="mt-0.5 flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap text-xs font-normal text-muted-foreground"
+              data-task-row-metadata
+            >
+              {hierarchyLabel ? (
+                <span className="min-w-0 shrink truncate text-info" title={hierarchyLabel}>
+                  {hierarchyLabel}
+                </span>
+              ) : null}
+              {task.actionability === 'waiting' ? (
+                <span className="inline-flex shrink-0 items-center gap-1" aria-label="Waiting">
+                  <Hourglass className="h-3.5 w-3.5" aria-hidden="true" />
+                  Waiting
+                </span>
+              ) : task.actionability === 'rechecking' ? (
+                <span className="inline-flex shrink-0 items-center gap-1" aria-label="Rechecking">
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                  Rechecking
+                </span>
+              ) : null}
               {planningLabel !== null && (planningLabel || task.start_date) ? (
                 <span
-                  className="inline-flex items-center gap-1"
+                  className="inline-flex shrink-0 items-center gap-1"
                   aria-label={`Starts ${planningLabel ?? formatTaskStartDateLabel(task.start_date!, planningDate)}`}
                 >
                   <Play className="h-3.5 w-3.5" aria-hidden="true" />
@@ -3049,19 +3063,22 @@ function TaskRow({
               ) : null}
               {task.deadline ? (
                 <span
-                  className="inline-flex items-center gap-1"
+                  className="inline-flex shrink-0 items-center gap-1"
                   aria-label={`Due ${formatTaskRelativeCalendarDate(task.deadline, planningDate)}`}
                 >
                   <FlagTriangleRight className="h-3.5 w-3.5" aria-hidden="true" />
                   {formatTaskRelativeCalendarDate(task.deadline, planningDate)}
                 </span>
               ) : null}
-            </span>
-          ) : null}
-          {reminder && task.start_date ? (
-            <span className="mt-1 inline-flex items-center gap-1 text-xs font-normal text-info">
-              <Bell className="h-3.5 w-3.5" aria-hidden="true" />
-              {formatReminderIntent(reminder, planningDate)}
+              {reminder && task.start_date ? (
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 text-info"
+                  aria-label={`Reminder ${formatReminderIntent(reminder, planningDate)}`}
+                >
+                  <Bell className="h-3.5 w-3.5" aria-hidden="true" />
+                  {formatReminderIntent(reminder, planningDate)}
+                </span>
+              ) : null}
             </span>
           ) : null}
         </button>

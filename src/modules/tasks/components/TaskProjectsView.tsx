@@ -13,6 +13,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
 import {
   Dialog,
   DialogBody,
@@ -319,12 +320,15 @@ function AreaSection({
           <TaskHierarchyEditableTitle id={sectionId} value={area.title} onSave={onRename!} />
         ) : (
           <h3 id={sectionId} className="text-sm font-semibold text-muted-foreground">
-            No Area ({projects.length})
+            <span className="flex items-center gap-2">
+              No Area
+              <TaskCountBadge count={projects.length} label="Projects" />
+            </span>
           </h3>
         )}
         {area ? (
           <div className="ml-auto flex gap-1">
-            <span className="self-center text-xs text-muted-foreground">{projects.length}</span>
+            <TaskCountBadge count={projects.length} label="Projects" />
             <a
               href={areaHref}
               aria-label={`Open ${area.title} Area`}

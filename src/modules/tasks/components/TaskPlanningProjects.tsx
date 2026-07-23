@@ -9,6 +9,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,7 +64,8 @@ export function TaskPlanningProjects({
         className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground"
       >
         <FolderKanban className="h-4 w-4" aria-hidden="true" />
-        Projects ({projects.length})
+        Projects
+        <TaskCountBadge count={projects.length} label="Projects" />
       </h3>
       <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
         {projects.map((project) => (

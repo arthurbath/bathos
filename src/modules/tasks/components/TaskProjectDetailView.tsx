@@ -36,6 +36,7 @@ import {
 } from '@/modules/tasks/components/TaskProjectsView';
 import { submitTaskFormOnEnter } from '@/modules/tasks/components/taskFormKeyboard';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
+import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import {
   TaskProjectReminderForm,
@@ -560,7 +561,8 @@ function ProjectTaskRow({
         <details className="group min-w-0 flex-1">
           <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-sm text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <ListChecks className="h-4 w-4" aria-hidden="true" />
-            Checklist ({checklistItems.length})
+            Checklist
+            <TaskCountBadge count={checklistItems.length} label="Checklist Items" />
           </summary>
           <ChecklistEditor
             task={task}

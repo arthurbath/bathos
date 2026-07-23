@@ -2341,6 +2341,7 @@ describe('TasksShell', () => {
       area_id: null,
       project_id: 'project-launch',
       hierarchy_order_key: 'a0',
+      actionability: 'waiting' as const,
     };
     const taskList = { ...defaultTaskList(), tasks: [organizedTask] };
     mockTaskList.mockReturnValue(taskList);
@@ -2354,6 +2355,11 @@ describe('TasksShell', () => {
 
     try {
       expect(container.textContent).toContain('Launch');
+      const rowHeader = container.querySelector('[data-task-row-header]');
+      const metadata = rowHeader?.querySelector('[data-task-row-metadata]');
+      expect(rowHeader).toHaveClass('h-16', 'overflow-hidden');
+      expect(metadata).toHaveClass('overflow-hidden', 'whitespace-nowrap');
+      expect(metadata?.children).toHaveLength(2);
       const titleButton = container.querySelector<HTMLButtonElement>('button[data-task-id="task-a"]')!;
       await act(async () => titleButton.click());
       const organization = container.querySelector<HTMLSelectElement>(
@@ -2880,8 +2886,10 @@ describe('TasksShell', () => {
       expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
       expect(mockTaskList).toHaveBeenCalledWith('owner-a', 'upcoming', null);
       expect(container.querySelector('[aria-label="Day Horizon Next"]')).toHaveClass('text-warning');
-      expect(container.querySelector('[aria-label="Upcoming Tasks"]')?.textContent)
-        .toContain('Friday, July 24 (1)');
+      const upcomingHeading = container.querySelector('#tasks-day-2026-07-24-heading');
+      expect(upcomingHeading?.textContent).not.toContain('(1)');
+      expect(upcomingHeading?.querySelector('[data-task-count-badge]'))
+        .toHaveAccessibleName('1 Items');
       const titleLine = container.querySelector('[data-task-id="task-a"] span.flex');
       expect(titleLine?.firstElementChild).toHaveAttribute('aria-label', 'Day Horizon Next');
       await openTaskMenuSurface(container, 'Existing task', 'When...');
@@ -3106,10 +3114,12 @@ describe('TasksShell', () => {
 
     try {
       expect(container.textContent).toContain('Now task');
-      expect(container.querySelector('#tasks-inbox-heading')?.textContent).toContain('Inbox (1)');
-      expect(container.querySelector('#tasks-now-heading')?.textContent).toContain('Now (1)');
-      expect(container.querySelector('#tasks-next-heading')?.textContent).toContain('Next (1)');
-      expect(container.querySelector('#tasks-later-heading')?.textContent).toContain('Later (1)');
+      for (const id of ['inbox', 'now', 'next', 'later']) {
+        const heading = container.querySelector(`#tasks-${id}-heading`);
+        expect(heading?.textContent).not.toContain('(1)');
+        expect(heading?.querySelector('[data-task-count-badge]'))
+          .toHaveAccessibleName('1 To-Dos');
+      }
 
       await openTaskMenuSurface(container, 'Now task', 'When...');
       const moveEvening = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
@@ -3143,8 +3153,10 @@ describe('TasksShell', () => {
     const { container, root } = renderShell('/tasks/today');
 
     try {
-      expect(container.querySelector('#task-planning-projects-heading')?.textContent)
-        .toContain('Projects (1)');
+      const projectsHeading = container.querySelector('#task-planning-projects-heading');
+      expect(projectsHeading?.textContent).not.toContain('(1)');
+      expect(projectsHeading?.querySelector('[data-task-count-badge]'))
+        .toHaveAccessibleName('1 Projects');
       expect(container.querySelector<HTMLAnchorElement>('a[href="/tasks/projects/project-plan"]')
         ?.textContent).toBe('Plan the launch');
 
@@ -3364,8 +3376,12 @@ describe('TasksShell', () => {
       const fullSearch = container.querySelector<HTMLInputElement>('[aria-label="Search All To-Dos"]');
       expect(fullSearch?.value).toBe('plan');
       expect(container.querySelector('[data-task-view-heading]')?.textContent).toContain('Search');
-      expect(container.querySelector('[aria-label="Task Search Results"]')?.textContent)
-        .toContain('To-Dos (3)');
+      const resultsHeading = container.querySelector(
+        '[aria-label="Task Search Results"] h3',
+      );
+      expect(resultsHeading?.textContent).not.toContain('(3)');
+      expect(resultsHeading?.querySelector('[data-task-count-badge]'))
+        .toHaveAccessibleName('3 To-Dos');
     } finally {
       cleanup(root, container);
     }

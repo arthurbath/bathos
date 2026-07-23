@@ -31,6 +31,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { shouldHandleWithBrowser } from '@/lib/navigation';
+import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
 import {
@@ -395,8 +396,9 @@ export function TaskSearchDialog({
           ) : null}
 
           <section aria-labelledby="task-search-results-heading">
-            <h3 id="task-search-results-heading" className="mb-2 text-xs font-semibold text-muted-foreground">
-              Tasks ({filteredDocuments.length})
+            <h3 id="task-search-results-heading" className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+              Tasks
+              <TaskCountBadge count={filteredDocuments.length} label="Tasks" />
             </h3>
             {loading ? (
               <div className="flex min-h-24 items-center justify-center"><LoadingSpinner /></div>
@@ -416,7 +418,8 @@ export function TaskSearchDialog({
                       key={task.id}
                       href={href}
                       onClick={(event) => handleTaskClick(event, task, href)}
-                      className="block px-2 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      className="flex h-16 flex-col justify-center overflow-hidden px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      data-task-compact-row
                     >
                       <span className="block truncate text-sm font-medium text-foreground">{task.title}</span>
                       <span className="mt-1 block truncate text-xs text-muted-foreground">

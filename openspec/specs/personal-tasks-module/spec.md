@@ -1534,6 +1534,25 @@ The system SHALL use the active view name, compact self-evident controls, progre
 - **WHEN** a user creates an area or project from Projects
 - **THEN** compact icon-only controls open title-only keyboard-complete BathOS dialogs and restore trigger focus after close
 
+### Requirement: Consistent Tasks list density
+The interface SHALL present count-bearing Tasks list and grouping headings with compact numeric badges and SHALL keep every collapsed to-do row at a uniform height independent of its secondary metadata.
+
+#### Scenario: Present grouping totals as badges
+- **WHEN** a Tasks list or grouping heading includes an item total
+- **THEN** the interface presents the total in an adjacent neutral badge rather than embedding it in parenthetical heading text
+
+#### Scenario: Keep closed rows uniform
+- **WHEN** a list contains collapsed to-dos with different combinations of hierarchy, actionability, scheduling, deadline, reminder, or other secondary details
+- **THEN** every collapsed to-do row occupies the same height
+
+#### Scenario: Bound secondary metadata
+- **WHEN** a collapsed to-do has one or more secondary details
+- **THEN** the interface presents those details in one bounded nonwrapping metadata line without increasing the row height
+
+#### Scenario: Preserve expanded editing
+- **WHEN** a user opens a to-do
+- **THEN** the complete editor expands beneath the fixed-height row header without clipping the editor content
+
 ### Requirement: Module Isolation
 The task module SHALL remain removable without importing code from another BathOS module or requiring another module's data.
 

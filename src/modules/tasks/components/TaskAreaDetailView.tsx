@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { shouldHandleWithBrowser, handleClientSideLinkNavigation } from '@/lib/navigation';
 import { TaskHierarchyEditableTitle } from '@/modules/tasks/components/TaskProjectsView';
+import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
 import { getTaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
@@ -88,7 +89,7 @@ export function TaskAreaDetailView({
           const route = getTaskPlanningRoute(task, planningDate);
           const href = `${basePath}/${route}`;
           return (
-            <div key={task.id} className="flex min-h-14 items-center">
+            <div key={task.id} className="flex h-16 items-center overflow-hidden" data-task-compact-row>
               <a
                 href={href}
                 onClick={(event) => {
@@ -96,7 +97,7 @@ export function TaskAreaDetailView({
                   event.preventDefault();
                   onOpenTask(task.id, href);
                 }}
-                className="flex min-h-14 min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4"
+                className="flex h-full min-w-0 flex-1 items-center gap-2 overflow-hidden px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4"
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-foreground">
@@ -158,8 +159,9 @@ function AreaWorkSection({
     <section aria-labelledby={headingId}>
       <div className="mb-2 flex min-h-9 items-center gap-2">
         <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        <h3 id={headingId} className="text-sm font-semibold text-foreground">
-          {title} ({count})
+        <h3 id={headingId} className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          {title}
+          <TaskCountBadge count={count} label="Items" />
         </h3>
       </div>
       <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
