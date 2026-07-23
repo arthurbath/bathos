@@ -3,9 +3,7 @@
 ## Purpose
 
 Define the private, tagless BathOS Tasks domain, its production synchronization and reminder boundaries, and the interaction, recovery, automation, and parallel-use contracts required for dependable personal task management.
-
 ## Requirements
-
 ### Requirement: Private-First Task Module
 The system SHALL provide a single-owner task module whose records are accessible only to the signed-in BathOS user unless a later specification explicitly adds sharing.
 
@@ -65,34 +63,42 @@ The system SHALL deploy remote task synchronization only through an explicitly a
 - **THEN** the system does not treat that topology as authoritative until uptime, monitoring, backup, upgrade, outage, and recovery behavior pass a later explicit review
 
 ### Requirement: Independent Task Day Horizon
-The system SHALL persist a to-do or project day horizon independently from its start date and SHALL support `none`, `inbox`, `now`, `next`, and `later` without treating the physical field as a second date or reminder time.
+The system SHALL store an optional to-do or project day horizon independently for active work and SHALL require one of `inbox`, `now`, `next`, or `later` while a future start date exists.
+
+#### Scenario: Default a newly assigned start date to Next
+- **WHEN** a user assigns a start date without explicitly selecting a day horizon
+- **THEN** the system stores `next` for that item
 
 #### Scenario: Retain a future day horizon
 - **WHEN** a user assigns a future start date and Inbox, Now, Next, or Later to an Anytime to-do or project
 - **THEN** the system keeps the item in Upcoming until its owner-local start date and retains the selected day horizon unchanged
 
-#### Scenario: Default due unclassified work to Inbox
-- **WHEN** an open present Anytime item with a stored `none` horizon reaches its owner-local start date
-- **THEN** the system includes it in Today Inbox without rewriting its stable identity, hierarchy, date, or stored horizon
+#### Scenario: Keep undated work outside Today
+- **WHEN** an open present Anytime item has no start date and no day horizon
+- **THEN** the system includes it in Anytime while withholding it from Today
 
-#### Scenario: Keep undated unclassified work outside Today
-- **WHEN** an open present Anytime item has no start date and a stored `none` horizon
-- **THEN** the system includes it in Anytime and withholds it from Today
+#### Scenario: Keep active undated work in Today
+- **WHEN** an open present Anytime item has no start date and an Inbox, Now, Next, or Later horizon
+- **THEN** the system includes it in Anytime and the selected Today section
 
 #### Scenario: Preserve horizon through structured generation and portability
 - **WHEN** templates, recurrence, MCP, export, merge, replacement restore, or synchronization carry an Anytime item's planning state
-- **THEN** the system validates and preserves its independent day horizon, including a horizon selected for a future start date
+- **THEN** the system requires a horizon for a future date, permits a horizon on active undated work, and normalizes reached dates to null while retaining or defaulting the active horizon
 
 ### Requirement: Core Task Organization
-The system SHALL organize active work through Anytime, Someday, areas, projects, headings, to-dos, and checklist items without requiring a separate Inbox destination or generic tags.
+The system SHALL organize active work through Anytime, Someday, areas, projects, to-dos, and checklist items without headings, a separate Inbox destination, generic tags, multiple membership, or required parent containers.
 
 #### Scenario: Organize work in a project
-- **WHEN** a user places a to-do under a project and optional heading
-- **THEN** the to-do appears in that hierarchy and retains its stable identity and planning membership
+- **WHEN** a user places a to-do under a project
+- **THEN** the to-do belongs to exactly that one project and retains its stable identity and planning membership
 
 #### Scenario: Organize ongoing responsibility
 - **WHEN** a user places a project or loose to-do in an area
-- **THEN** the system includes the item in that area's active work
+- **THEN** the item belongs to exactly that one area and the system includes it in that area's active work
+
+#### Scenario: Leave work unattached
+- **WHEN** a to-do has no project or area, or a project has no area
+- **THEN** the system preserves that valid unattached state without inventing a container
 
 #### Scenario: Review active work in an area
 - **WHEN** a user opens an area from Projects
@@ -100,18 +106,14 @@ The system SHALL organize active work through Anytime, Someday, areas, projects,
 
 #### Scenario: Keep project membership canonical
 - **WHEN** a to-do belongs to a project whose area changes
-- **THEN** the to-do remains in the project, derives its area from that project, and does not receive a competing direct area assignment
-
-#### Scenario: Organize a project with headings
-- **WHEN** a user places a to-do under a heading in a project
-- **THEN** the heading belongs to that same project and the system rejects cross-project or cross-owner hierarchy references
+- **THEN** the to-do remains in its one project, derives its area from that project, and does not retain a competing direct area assignment
 
 #### Scenario: Keep project identity legible beside lifecycle controls
 - **WHEN** a project with a long title is opened at 390 CSS pixels wide
 - **THEN** the complete project title occupies its own mobile row without overlapping or collapsing behind Complete, Cancel, Reopen, or Delete actions, and the actions remain fully operable
 
 #### Scenario: Move a to-do between containers
-- **WHEN** a user moves a to-do to an area, project, heading, or no container
+- **WHEN** a user moves a to-do to one area, one project, or no container
 - **THEN** the system clears incompatible parent references, preserves the to-do's stable identity and planning state, and assigns an order within the new hierarchy scope
 
 #### Scenario: Maintain a checklist
@@ -119,31 +121,51 @@ The system SHALL organize active work through Anytime, Someday, areas, projects,
 - **THEN** the checklist item remains owned by exactly one to-do and its completion state remains independent from the parent to-do's lifecycle
 
 #### Scenario: Order hierarchy independently from planning views
-- **WHEN** a user reorders an area, project, heading, project to-do, loose area to-do, or checklist item
+- **WHEN** a user reorders an area, project, project to-do, loose area to-do, unattached to-do, or checklist item
 - **THEN** the system changes only the selected item's hierarchy order and does not change its order or membership in Today, Anytime, Someday, Upcoming, or Done
+
+#### Scenario: Preserve to-dos while removing headings
+- **WHEN** the system migrates a to-do previously assigned to a heading
+- **THEN** it retains the to-do in the same project with the same stable identity, task content, planning state, hierarchy order, checklist, history, and source metadata while removing the heading reference
 
 #### Scenario: Capture new work for triage
 - **WHEN** a user or supported integration creates a to-do without an explicit planning placement
-- **THEN** the system creates one open present Anytime to-do marked for Today Inbox
+- **THEN** the system creates one open present Anytime to-do with no start date and the Today Next horizon
 
 ### Requirement: Readable Markdown Task Notes
-The system SHALL retain task notes as plain text while presenting complete safe Markdown and a full-height editing surface in an expanded to-do.
+The system SHALL retain task notes as plain text while presenting one complete, directly editable, live-styled Markdown source surface in an expanded to-do without separate editing and preview modes.
 
-#### Scenario: Read complete formatted notes
-- **WHEN** an expanded to-do has nonempty notes and notes editing is inactive
-- **THEN** the interface renders the complete notes without an internal height limit and styles CommonMark paragraphs, emphasis, strong text, inline code, and asterisk-prefixed lists
+#### Scenario: Edit complete live-styled source
+- **WHEN** a user opens a to-do and edits its notes
+- **THEN** the interface keeps the complete plain-text source directly editable without an internal height limit, preserves every Markdown delimiter visibly, and updates recognized Markdown styling as the source changes without requiring an alternate mode
+
+#### Scenario: Limit live Markdown recognition
+- **WHEN** notes contain supported Markdown syntax
+- **THEN** the editor recognizes headings introduced by one or more hashmarks and a space, single-asterisk italic, double-asterisk bold, asterisk-plus-space bullets, Markdown links, and single-backtick inline code while treating other Markdown constructs as ordinary text
+
+#### Scenario: Style Markdown indicators
+- **WHEN** the editor recognizes a heading, italic, bold, bullet, or Markdown link
+- **THEN** the original hashmark-and-space, asterisk, bracket, and parenthesis indicators remain visible in a fixed-width font while the complete recognized construct receives its heading, italic, bold, bullet, or link presentation
+
+#### Scenario: Style inline code completely
+- **WHEN** the editor recognizes text enclosed by single backticks on one line
+- **THEN** the complete string including both backticks uses a fixed-width font and a light semantic background
+
+#### Scenario: Continue an asterisk bullet
+- **WHEN** a user presses Enter without Shift while editing a line that begins with `* `
+- **THEN** the editor inserts a new line beginning with `* ` and wraps each bullet with a two-fixed-width-character hanging indent
 
 #### Scenario: Follow a note link
-- **WHEN** notes contain a Markdown link, autolink, or bare HTTP or HTTPS URL
-- **THEN** the rendered destination is a real safe link that preserves default browser opening behavior and does not make an unsafe protocol actionable
+- **WHEN** notes contain a Markdown link, bare HTTP(S) URL, or bare alphanumeric `scheme://` destination such as `message://`
+- **THEN** the live editor exposes the safe destination with a pointer cursor and no hover underline, opens HTTP(S) in a new browser context, dispatches `message://` to Mail, and keeps known executable or content-injection schemes inert
 
-#### Scenario: Edit complete notes
-- **WHEN** a user enters notes editing
-- **THEN** the interface shows the original Markdown source in an auto-growing plain-text control whose full content remains visible and whose changes save back to the same notes field
+#### Scenario: Preserve editing mechanics while styling
+- **WHEN** the editor retokenizes changed source
+- **THEN** it preserves the user's caret or selection, defers decoration during composition, accepts pasted content as plain text, yields documented undo and redo commands to Tasks, and autosaves the identical source to the same notes field
 
 #### Scenario: Start empty notes directly
 - **WHEN** an expanded to-do has empty notes
-- **THEN** the interface presents the editable notes control with its placeholder without requiring a separate preview step
+- **THEN** the same live editor presents its placeholder without requiring a separate preview step
 
 ### Requirement: Legible Task Lifecycle Feedback
 The system SHALL distinguish task completion from bulk selection by shape and SHALL provide brief recoverable visual feedback before terminal work leaves an active list.
@@ -165,39 +187,39 @@ The system SHALL derive Today, Upcoming, Anytime, Someday, and Done from task st
 
 #### Scenario: Defer work to a future date
 - **WHEN** a user assigns a future start date to a to-do or project
-- **THEN** the system includes the item in Upcoming, withholds it from Today and Anytime until its owner-local start date arrives, and preserves its selected day horizon
+- **THEN** the system includes the item in Upcoming, withholds it from Today and Anytime until its owner-local start date arrives, and stores its selected horizon or Next by default
 
 #### Scenario: Store an uncommitted possibility
 - **WHEN** a user assigns a to-do or project to Someday
-- **THEN** the system clears its start date and day horizon and withholds it from Today, Upcoming, and Anytime
+- **THEN** the system clears its start date, day horizon, and reminder and withholds it from Today, Upcoming, and Anytime
 
 #### Scenario: Activate Someday work
 - **WHEN** a user moves a Someday item to Anytime without a start date
-- **THEN** the system changes its destination to Anytime and includes it in Anytime without automatically assigning a day horizon
+- **THEN** the system changes its destination to Anytime, includes it in Anytime, and retains a null day horizon
 
 #### Scenario: Schedule Someday work
 - **WHEN** a user assigns a start date and optional day horizon to Someday work
-- **THEN** the system changes its destination to Anytime, includes it in Upcoming or available views according to that date, and preserves the chosen horizon
+- **THEN** the system changes its destination to Anytime, includes it in Upcoming or available views according to that date, and stores the chosen horizon or Next by default
 
-#### Scenario: Mark undated Anytime work for Today
-- **WHEN** a user places undated available Anytime work in Inbox, Now, Next, or Later
-- **THEN** the system keeps the same stable item in Anytime and also includes it in the selected Today section
+#### Scenario: Mark available Anytime work for Today
+- **WHEN** a user places available Anytime work in Inbox, Now, Next, or Later
+- **THEN** the system keeps a null start date, stores the selected horizon, keeps the same stable item in Anytime, and includes it in the selected Today section
 
 #### Scenario: Review the Today projection
 - **WHEN** a user opens Today
-- **THEN** the system shows eligible open present Anytime work and groups it in Inbox, Now, Next, and Later order without rendering an empty horizon heading
+- **THEN** the system shows eligible open present Anytime work with no future start date and a day horizon, then groups it in Inbox, Now, Next, and Later order without rendering an empty horizon heading
 
 #### Scenario: Review the Anytime pool
 - **WHEN** a user opens Anytime
-- **THEN** the system shows every open present Anytime item whose start date is absent, today, or earlier and marks its resolved Inbox, Now, Next, or Later placement when it also appears in Today
+- **THEN** the system shows every open present Anytime item without a future start date and marks Inbox, Now, Next, or Later for active work that also appears in Today
 
 #### Scenario: Select the Upcoming controlling date
 - **WHEN** an open present Anytime item has a future start date
-- **THEN** Upcoming uses that start date for membership, ordering, and grouping even when the item also has a different deadline
+- **THEN** Upcoming uses that start date for membership, ordering, and grouping even when its deadline is earlier or later
 
 #### Scenario: Fall back to a future deadline
 - **WHEN** an open present Anytime item has no future start date and has a future deadline
-- **THEN** Upcoming includes and groups the item by that deadline while the item remains available in Anytime when otherwise eligible
+- **THEN** Upcoming includes and groups the item by that deadline while the undated item remains available in Anytime with no day horizon
 
 #### Scenario: Group the next seven days individually
 - **WHEN** an Upcoming controlling date falls from tomorrow through the seventh owner-local date after today
@@ -212,35 +234,43 @@ The system SHALL derive Today, Upcoming, Anytime, Someday, and Done from task st
 - **THEN** the interface groups the item under its calendar year in chronological order
 
 #### Scenario: Preserve a future day horizon
-- **WHEN** a user opens Upcoming for an item with a future controlling date
-- **THEN** the interface preserves and exposes its selected Inbox, Now, Next, or Later horizon without showing the item in Today early
+- **WHEN** a user opens Upcoming for an item with a future start date
+- **THEN** the interface preserves and exposes its Inbox, Now, Next, or Later horizon without showing the item in Today early
 
-#### Scenario: Remove undated work from Today
-- **WHEN** a user removes Today placement from an undated to-do
-- **THEN** the system records the `none` horizon, removes the to-do from Today, and keeps it in Anytime without changing its identity or container
+#### Scenario: Remove work from Today
+- **WHEN** a user removes Today placement from a to-do
+- **THEN** the system clears its day horizon, removes the to-do from Today, and keeps it undated in Anytime without changing its identity or container
 
 #### Scenario: Activate deferred work
 - **WHEN** an Anytime item reaches its owner-local start date
-- **THEN** the system includes it in Anytime and Today under its selected horizon or Inbox when its horizon is `none`
+- **THEN** an idempotent activation clears its start date, retains its selected horizon, and includes it in Anytime and Today
 
 #### Scenario: Complete, cancel, or delete work
 - **WHEN** a user completes, cancels, or deletes a to-do or supported hierarchy root
 - **THEN** the system removes it from active planning views and includes it in Done until recovery or automatic purge
 
 ### Requirement: Tagless Structured Semantics
-The system SHALL represent workflow meaning through explicit structured concepts and SHALL NOT require generic tags, title parsing, or a generic metadata bag as canonical task data.
+The system SHALL represent workflow meaning through explicit structured concepts, including exactly three actionability states, and SHALL NOT require generic tags, title parsing, or a generic metadata bag as canonical task data.
 
-#### Scenario: Mark work as not immediately actionable
-- **WHEN** a user applies a defined non-actionable state to an open to-do
-- **THEN** the system stores `waiting` explicitly, preserves the to-do's planning placement, dates, hierarchy, lifecycle, and order, and can include or exclude it from relevant views without a tag
+#### Scenario: Default work to actionable
+- **WHEN** a caller creates a to-do without an explicit actionability value
+- **THEN** the system stores `actionable`
+
+#### Scenario: Wait for another party or signal
+- **WHEN** a user marks an open to-do as Waiting
+- **THEN** the system stores `waiting` explicitly and communicates that another party or outside event is expected to unblock the work
+
+#### Scenario: Recheck availability without an expected signal
+- **WHEN** a user marks an open to-do as Rechecking
+- **THEN** the system stores `rechecking` explicitly and communicates that the owner must deliberately test availability again because no outside notification or contact is expected
 
 #### Scenario: Return work to immediate actionability
-- **WHEN** a user changes a waiting open to-do back to `actionable`
+- **WHEN** a user changes waiting or rechecking open work back to `actionable`
 - **THEN** the system changes only its structured actionability and mutation metadata and leaves its other task dimensions intact
 
-#### Scenario: Preserve waiting work in a planned view
-- **WHEN** a waiting to-do belongs to Today, Anytime, Someday, Upcoming, a project, or another defined view
-- **THEN** the system keeps it in that deliberate placement, presents its waiting state explicitly, and excludes it only when an actionability filter requests actionable work
+#### Scenario: Preserve non-actionable work in a planned view
+- **WHEN** a waiting or rechecking to-do belongs to Today, Anytime, Someday, Upcoming, a project, or another defined view
+- **THEN** the system keeps it in that deliberate placement, presents its exact actionability state, and excludes it only when an actionability filter requests actionable work
 
 #### Scenario: Reject actionability changes outside active work
 - **WHEN** a caller attempts to change actionability on completed, canceled, or recoverably deleted work
@@ -253,6 +283,18 @@ The system SHALL represent workflow meaning through explicit structured concepts
 #### Scenario: Preserve a typed source
 - **WHEN** a task is captured from a webpage, Mail message, file, reading item, template, or import
 - **THEN** the system stores the stable source fields and source-specific lifecycle metadata defined for that type without requiring an emoji or text prefix
+
+#### Scenario: Edit a Primary Link independently
+- **WHEN** a user adds, changes, or clears a to-do's Primary Link
+- **THEN** the system changes only the optional shortcut and task mutation history without changing typed source identity or source-specific lifecycle records
+
+#### Scenario: Initialize a Mail Primary Link
+- **WHEN** verified Mail capture creates a to-do and its audited Mail source
+- **THEN** the system also initializes the editable Primary Link from the verified `message://` deep link without coupling later edits to the Mail source
+
+#### Scenario: Activate a Primary Link
+- **WHEN** a to-do has a nonblank Primary Link
+- **THEN** `message://` uses a Mail icon and operating-system dispatch, HTTP(S) uses a Link icon and new browser context, and another value uses a Link icon and an HTTPS destination formed by prepending `https://`
 
 #### Scenario: Reopen a structured task source
 - **WHEN** the interface displays present active or terminal work whose typed source contains a supported HTTP(S), Mail-message, or originating-Mac file reference
@@ -299,14 +341,18 @@ The system SHALL provide an accessible task-row selection mode for open tasks an
 
 #### Scenario: Plan selected tasks
 - **WHEN** a user applies Today Inbox, Today Now, Today Next, Today Later, Remove from Today, Tomorrow, Anytime, or Someday to selected tasks
-- **THEN** the system updates every selected task's destination, day horizon, start date, mutation metadata, revision, and relevant order in one local transaction while preserving selected order
+- **THEN** the system updates every selected task's destination, start date, selected day horizon, dependent reminder, mutation metadata, revision, and relevant order in one local transaction while preserving selected order
 
 #### Scenario: Preserve a bulk horizon while scheduling
 - **WHEN** a user applies a future date to selected tasks with an Inbox, Now, Next, or Later horizon
 - **THEN** the system retains the requested horizon for every valid selected task while the tasks remain in Upcoming
 
+#### Scenario: Allow deliberately overdue bulk work
+- **WHEN** a requested start date is later than one or more selected deadlines
+- **THEN** the system retains those deadlines and accepts the schedule when every selected record is otherwise valid
+
 #### Scenario: Reject one invalid bulk member
-- **WHEN** any selected task is no longer open and present or the requested start date conflicts with one selected deadline
+- **WHEN** any selected task is no longer open and present
 - **THEN** the system rejects the operation without writing any selected task and leaves selection available for correction or retry
 
 #### Scenario: Keep bulk scope bounded
@@ -314,11 +360,11 @@ The system SHALL provide an accessible task-row selection mode for open tasks an
 - **THEN** the client clears selection and its range anchor and returns to ordinary editing without adding bulk completion, deletion, or hierarchy mutation
 
 ### Requirement: Native Templates
-The system SHALL support reusable, revisioned to-do and project template definitions that are separate from active task records.
+The system SHALL support reusable, revisioned to-do and project template definitions that are separate from active task records and contain no heading layer.
 
 #### Scenario: Create work from a template
 - **WHEN** a user instantiates a to-do or project template revision with an explicit planning anchor
-- **THEN** the system atomically creates independent active records, resolves relative planning values, and records template, revision, instantiation, and template-node provenance
+- **THEN** the system atomically creates independent active areas, projects, to-dos, and checklist items, resolves relative planning values, and records template, revision, instantiation, and template-node provenance
 
 #### Scenario: Edit an instantiated task
 - **WHEN** a user edits work created from a template
@@ -342,7 +388,11 @@ The system SHALL support reusable, revisioned to-do and project template definit
 
 #### Scenario: Capture relative planning from current work
 - **WHEN** a user saves a current open to-do or project hierarchy as a template revision with an explicit reference date
-- **THEN** the system stores immutable relative start-date and deadline offsets, ordering, actionability, headings, and checklist content without treating the source work as the template definition
+- **THEN** the system stores immutable relative start-date and deadline offsets, independent day horizons, ordering, actionability, and checklist content without treating the source work as the template definition
+
+#### Scenario: Normalize a legacy heading template
+- **WHEN** the system instantiates a legacy project-template revision containing heading nodes
+- **THEN** it preserves each descendant to-do directly beneath the project in deterministic order and creates no heading record or reference
 
 #### Scenario: Capture a template during a concurrent edit
 - **WHEN** a source to-do or project hierarchy changes while template capture is reading it
@@ -404,34 +454,42 @@ The system SHALL model lifecycle, record disposition, planning destination, Toda
 - **THEN** the system restores valid prior hierarchy and active state, falling back to Anytime with no Today membership when the prior placement is no longer valid
 
 ### Requirement: Temporal Planning Semantics
-The system SHALL store start dates and deadlines as local calendar dates, store an independent day horizon, derive Today from the owner's IANA planning time zone, and store reminders as unambiguous resolved instants with their original local intent.
+The system SHALL store Start Date as a future-only deferral calendar fact, store Deadline independently, retain day horizons for active Today work, derive activation and Today from the owner's IANA planning time zone, and store reminder times as unambiguous instants resolved on the future start date.
 
-#### Scenario: Start date and deadline coexist
-- **WHEN** a to-do has both a start date and a later deadline
-- **THEN** the system uses the start date to control when the to-do becomes active and retains the deadline as the completion boundary
+#### Scenario: Start date and deadline coexist in either order
+- **WHEN** a to-do has both a start date and a deadline
+- **THEN** the system requires the start date to be future, uses it to control deferral, retains the deadline as an informational completion boundary, and accepts either ordering between those two dates
 
-#### Scenario: Reject an impossible date range
-- **WHEN** a caller supplies a deadline earlier than the start date
-- **THEN** the system rejects the mutation without partially changing temporal values
+#### Scenario: Continue work after its deadline
+- **WHEN** a caller assigns a start date later than the retained deadline
+- **THEN** the system accepts the mutation, preserves the overdue deadline, and keeps the item available according to the new start date
 
 #### Scenario: Travel across time zones
 - **WHEN** the owner's current or planning time zone changes
 - **THEN** date-only start and deadline values remain assigned to the same calendar dates and Today eligibility follows the owner-local planning date
 
-#### Scenario: Place work in a day horizon
-- **WHEN** a user selects Inbox, Now, Next, or Later for available or future Anytime work
-- **THEN** the system records the horizon without changing the start date or converting the horizon into an independent date or reminder time
+#### Scenario: Reject a reached Start Date
+- **WHEN** a user or automation attempts to assign today or an earlier calendar date as Start Date
+- **THEN** the system rejects the value without changing the task because Start Date represents only future deferral
 
-#### Scenario: Edit start date and horizon together
-- **WHEN** a user opens a to-do's temporal planning control
-- **THEN** the interface presents Start Date and Day Horizon together, supports complete keyboard operation, and saves either field without silently clearing the other
+#### Scenario: Activate a reached Start Date
+- **WHEN** time advances to a stored Start Date in the owner's planning time zone
+- **THEN** local and server activation converge on a null start date, retained day horizon, one accepted revision transition, and defensive Today visibility while synchronization catches up
+
+#### Scenario: Place work in a day horizon
+- **WHEN** a user selects Inbox, Now, Next, or Later for Anytime work
+- **THEN** the system records the active horizon without inventing a start date or reminder time
+
+#### Scenario: Edit start date and dependent controls
+- **WHEN** a user opens a to-do's temporal planning controls
+- **THEN** the interface always presents Start Date, presents Day Horizon for active Today or deferred work, and presents Reminder Time only when Start Date contains a future value, with complete keyboard operation
 
 #### Scenario: Resolve a reminder
-- **WHEN** a caller schedules a reminder with a local date, wall-clock time, and IANA time zone
-- **THEN** the system stores that intent and the resulting UTC instant used by every delivery client
+- **WHEN** a caller schedules a reminder with a wall-clock time and IANA time zone for an item with a start date
+- **THEN** the system stores that time intent and the resulting UTC instant on the item's future start date for every delivery client
 
 #### Scenario: Resolve a nonexistent reminder time
-- **WHEN** a requested local reminder time falls in a daylight-saving gap
+- **WHEN** a requested local reminder time falls in a daylight-saving gap on the item's start date
 - **THEN** the system selects the first valid instant after the gap and records the adjustment
 
 #### Scenario: Resolve an ambiguous reminder time
@@ -910,35 +968,35 @@ The system SHALL present a visible interaction reference that documents supporte
 - **THEN** the reference does not imply that Tasks will override native editing, browser, or unsupported ordering behavior
 
 ### Requirement: Keyboard-First Daily Operation
-The system SHALL provide complete keyboard operation for capture, editing, Today planning, navigation, search, selection, lifecycle transitions, and dialogs without overriding browser tab-number shortcuts.
+The system SHALL provide modifier-based keyboard operation for capture, editing, Today planning, direct view navigation, list traversal, lifecycle transitions, and dialogs while suppressing every matching browser-level command inside the mounted Tasks module.
 
 #### Scenario: Navigate without a pointer
 - **WHEN** a keyboard user moves through a task view
 - **THEN** focus remains visible and predictable across every interactive control
 
 #### Scenario: Complete selected work
-- **WHEN** a user invokes the completion command on the focused to-do
-- **THEN** the system completes that to-do and moves focus according to the documented next-item behavior
+- **WHEN** a user invokes Control+D on Mac or Control+Shift+D on Windows while a to-do is open
+- **THEN** the system toggles that to-do's pending completion state without closing its editor or transitioning it to Done
 
 #### Scenario: Invoke a task command safely
 - **WHEN** focus is on a task title and no editor, unrelated modal, or composition event owns keyboard input
-- **THEN** Enter opens editing, `C` completes the task, `M` opens structural movement, `W` opens temporal planning, Up or Down moves task focus, and Option+Up or Option+Down reorders within the current scope
+- **THEN** Enter retains ordinary button activation, Option+Up or Option+Down on Mac and Alt+Up or Alt+Down on Windows reorder within the current scope, and no unmodified letter or arrow key triggers a Tasks command
 
 #### Scenario: Preserve keyboard focus after a task leaves the view
 - **WHEN** completion, cancellation, movement, or recoverable deletion removes the focused task from the current view
 - **THEN** focus moves to the task now occupying the same visual position, then the prior task, then task capture or the primary view heading when no task remains
 
 #### Scenario: Open task capture, search, or keyboard help
-- **WHEN** a keyboard user presses `N`, `/`, or `?` outside an editable control or unrelated modal
-- **THEN** the module respectively focuses task capture, opens unified search and navigation, or opens a visible keyboard-command reference
+- **WHEN** a keyboard user presses Command+N or Command+/ on Mac, or Control+N or Control+/ on Windows
+- **THEN** the module respectively focuses task capture or opens a visible keyboard-command reference and suppresses the matching browser command
 
 #### Scenario: Submit inline hierarchy capture
-- **WHEN** a keyboard user enters a nonblank area, project, heading, project to-do, or checklist-item name and presses Enter without an active composition event
+- **WHEN** a keyboard user enters a nonblank area, project, project to-do, or checklist-item name and presses Enter without an active composition event
 - **THEN** the corresponding hierarchy form submits exactly as its visible add button would
 
 #### Scenario: Search and filter without unstructured labels
 - **WHEN** a user searches present work or filters the result set
-- **THEN** the module matches task text and structured source or hierarchy context, filters through explicit planning destination, lifecycle, actionability, and source-kind fields, and does not introduce generic tags
+- **THEN** the module matches task text and structured source or hierarchy context, filters through explicit planning destination, lifecycle, all three actionability states, and source-kind fields, and does not introduce generic tags
 
 #### Scenario: Open a task across views from search
 - **WHEN** a user activates a task search result
@@ -946,23 +1004,107 @@ The system SHALL provide complete keyboard operation for capture, editing, Today
 
 #### Scenario: Keep structural movement and temporal planning distinct
 - **WHEN** a user invokes `M` or `W` on a focused open task
-- **THEN** `M` changes only area, project, or heading placement while `W` changes only planning destination, Today section, or start date
+- **THEN** `M` changes only area or project placement while `W` changes only planning destination, start date, day horizon, or reminder time
 
 #### Scenario: Restore focus after a movement command
 - **WHEN** a structural or temporal movement command succeeds and its command surface closes
-- **THEN** focus returns to the moved task when it remains in the current view, or follows the same-position, prior-task, capture, and heading fallback when the move removes it
+- **THEN** focus returns to the moved task when it remains in the current view, or follows the same-position, prior-task, capture, and primary-heading fallback when the move removes it
 
-#### Scenario: Save or cancel an open editor
-- **WHEN** a keyboard user presses Command+Enter or Escape in an open task editor
-- **THEN** the module respectively saves valid changes or cancels editing and restores focus to the task title
+#### Scenario: Autosave free-text editing
+- **WHEN** a user changes a to-do title or notes in an open editor
+- **THEN** the local value changes immediately and the module persists the latest nonblank title or exact notes source after a short debounce without a Save or Cancel action
 
-#### Scenario: Leave browser and text-entry commands intact
-- **WHEN** focus is in an input, textarea, select, content-editable surface, or unrelated modal
-- **THEN** app-level single-key commands remain inactive, native Tab traversal and text undo continue, and the module does not claim Command+1 through Command+9, Command+T, Command+L, Command+R, or Command+W
+#### Scenario: Autosave structured editing
+- **WHEN** a user changes actionability, organization, start date, day horizon, deadline, reminder time, or reminder ambiguity in an open to-do
+- **THEN** the module persists the changed field immediately without waiting for another field or an explicit submission
+
+#### Scenario: Preserve autosave order
+- **WHEN** a user makes multiple edits while one or more earlier autosave writes remain in flight
+- **THEN** the module submits and resolves the writes in interaction order so an earlier request cannot replace a later accepted value
+
+#### Scenario: Flush autosave on close
+- **WHEN** a user closes an editor, opens another to-do, or leaves the current task view while a free-text debounce is pending
+- **THEN** the module submits the latest valid draft and waits for that ordered write before committing any deferred completion for the closing to-do
+
+#### Scenario: Keep autosave visually quiet
+- **WHEN** an autosave write is pending or succeeds
+- **THEN** the editor remains interactive and shows no routine saving or saved indicator
+
+#### Scenario: Preserve autosave history
+- **WHEN** an autosave batch is accepted
+- **THEN** it is recorded as an ordinary task mutation that can be traversed by app-level undo and redo across to-dos
+
+#### Scenario: Recover from autosave failure
+- **WHEN** an autosave write fails while the editor remains open
+- **THEN** the module reports the failure through its existing error notice, keeps the local draft available, and permits a later edit to retry persistence
+
+#### Scenario: Override browser commands intentionally
+- **WHEN** the user invokes a documented Tasks modifier command while focus is anywhere inside the mounted Tasks route, including an editable control
+- **THEN** a capture-phase handler prevents the default browser action, stops later keyboard handling, and dispatches only the Tasks command outside active composition
+
+#### Scenario: Own app undo and redo
+- **WHEN** the user presses Command+Z or Command+Shift+Z on Mac, or Control+Z or Control+Shift+Z on Windows
+- **THEN** Tasks suppresses browser and text-editor history everywhere in the module and invokes the available app-level undo or redo action, otherwise performing a Tasks no-op
+
+#### Scenario: Navigate views by number
+- **WHEN** the user presses Command+1 through Command+8 on Mac, or Control+1 through Control+8 on Windows
+- **THEN** Tasks navigates directly to Today, Upcoming, Anytime, Someday, Projects, Templates, Done, or Config respectively and suppresses browser tab-number navigation
+
+#### Scenario: Open the next visible to-do
+- **WHEN** the user presses Control+S on Mac or Control+Shift+S on Windows
+- **THEN** Tasks opens the first visible to-do when none is open, otherwise closes the current editor and opens the next visible to-do, closing without wrapping when the current to-do is last
+
+#### Scenario: Open the previous visible to-do
+- **WHEN** the user presses Control+W on Mac or Control+Shift+W on Windows
+- **THEN** Tasks opens the last visible to-do when none is open, otherwise closes the current editor and opens the previous visible to-do, closing without wrapping when the current to-do is first
+
+#### Scenario: Focus a newly opened title
+- **WHEN** a pointer, search result, or keyboard traversal command opens a to-do
+- **THEN** focus lands in the title input with its insertion point at the end and the page scrolls only as needed to reveal that title, never the bottom of a long editor
+
+#### Scenario: Animate inline editor disclosure
+- **WHEN** a user opens or closes a to-do and reduced motion is not requested
+- **THEN** Tasks quickly animates the editor's expansion or collapse and smoothly adjusts page scroll only when needed to reveal the opened row
+
+#### Scenario: Close an editor from outside
+- **WHEN** a pointer interaction begins outside the open to-do and any calendar, menu, listbox, or dialog launched from its editor
+- **THEN** Tasks flushes pending autosave, closes the editor, and commits any deferred completion through the ordinary close path
+
+#### Scenario: Retain an open task's list projection
+- **WHEN** autosaved planning or organization metadata would remove or regroup the currently open to-do
+- **THEN** Tasks keeps that row at its original visible position and group with the latest editable values until the editor closes, then applies current view membership exactly once
+
+#### Scenario: Edit repeated planning values before closure
+- **WHEN** a user changes Start Date, Day Horizon, Deadline, or Organization multiple times while the to-do remains open
+- **THEN** every accepted change autosaves in order without unmounting or moving the editor, and the final accepted state controls projection after closure
+
+#### Scenario: Reduce editor disclosure motion
+- **WHEN** the operating system requests reduced motion
+- **THEN** Tasks opens, closes, and reveals the editor without a visible expansion transition or smooth scrolling
+
+#### Scenario: Defer open to-do completion
+- **WHEN** a user activates the completion control while its to-do editor is open
+- **THEN** the control toggles a visible pending completion state and the to-do remains open and absent from Done
+
+#### Scenario: Commit deferred completion on close
+- **WHEN** an editor with pending completion closes, navigates to another to-do, or leaves its view
+- **THEN** Tasks flushes its pending autosave and transitions that to-do to Done exactly once after the editing session ends
+
+#### Scenario: Complete a closed to-do immediately
+- **WHEN** a user activates the completion control for a to-do whose editor is closed
+- **THEN** Tasks immediately transitions that to-do to Done and applies the documented focus fallback
+
+#### Scenario: Close and clear page focus
+- **WHEN** the user presses Control+X on Mac or Control+Shift+X on Windows while a to-do is open
+- **THEN** Tasks closes the editor, commits any pending completion, and removes focus from every page control
+
+#### Scenario: Preserve other native input behavior
+- **WHEN** focus is in an input, textarea, select, content-editable surface, menu, or dialog and the key chord is not a documented Tasks command
+- **THEN** native typing, composition, selection, Tab traversal, and control behavior remain available
 
 #### Scenario: Traverse a task and its complete editor
 - **WHEN** a keyboard user advances or reverses focus through a task row or expanded task editor
-- **THEN** every available interactive control receives visible focus in documented order, unavailable controls are skipped, and save or cancel returns focus to the task title
+- **THEN** every available interactive control receives visible focus in documented order and unavailable controls are skipped
 
 #### Scenario: Announce task controls and command surfaces
 - **WHEN** assistive technology inspects the task surface, an expanded editor, or a command dialog
@@ -982,7 +1124,7 @@ The system SHALL provide complete keyboard operation for capture, editing, Today
 
 #### Scenario: Capture from Raycast
 - **WHEN** the user submits a nonempty title through Raycast quick entry
-- **THEN** the authenticated task service creates exactly one Anytime to-do marked Today Later with `raycast` entry provenance and returns an accepted or already-applied receipt
+- **THEN** the authenticated task service creates exactly one undated Anytime to-do with Today Later horizon and `raycast` entry provenance, then returns an accepted or already-applied receipt
 
 #### Scenario: Authorize Raycast safely
 - **WHEN** the Raycast command has no usable delegated credential
@@ -994,7 +1136,7 @@ The system SHALL provide complete keyboard operation for capture, editing, Today
 
 #### Scenario: Capture the active browser page
 - **WHEN** the user invokes page capture while Safari, Safari Technology Preview, Google Chrome, or Google Chrome Canary has a normal HTTP(S) active tab
-- **THEN** the system creates one Anytime to-do marked Today Later with a cleaned deterministic title, `browser_capture` entry provenance, and a typed `webpage` source containing the exact accepted URL and optional browser title
+- **THEN** the system creates one undated Anytime to-do with Today Later horizon, a cleaned deterministic title, `browser_capture` entry provenance, and a typed `webpage` source containing the exact accepted URL and optional browser title
 
 #### Scenario: Reject unavailable browser context
 - **WHEN** the frontmost application is unsupported, has no browser window, or exposes an invalid, blank, non-HTTP(S), or browser-owned URL
@@ -1010,7 +1152,7 @@ The system SHALL provide complete keyboard operation for capture, editing, Today
 
 #### Scenario: Capture one selected Finder item
 - **WHEN** the user invokes Finder capture with exactly one file or folder selected
-- **THEN** the system creates one Anytime to-do marked Today Later with `raycast` entry provenance, the selected item's name, and a typed `file` source whose local `file://` reference is treated as originating-Mac context rather than a portable cross-device identifier
+- **THEN** the system creates one undated Anytime to-do with Today Later horizon, `raycast` entry provenance, the selected item's name, and a typed `file` source whose local `file://` reference is treated as originating-Mac context rather than a portable cross-device identifier
 
 #### Scenario: Reject an ambiguous Finder selection
 - **WHEN** Finder has no selected item or more than one selected item
@@ -1018,7 +1160,7 @@ The system SHALL provide complete keyboard operation for capture, editing, Today
 
 #### Scenario: Capture a reading item
 - **WHEN** the user invokes reading-list capture on a supported normal browser page
-- **THEN** the command uses the verified AI webpage-title workflow with its deterministic fallback and creates one unassigned Anytime to-do marked Today Later with `browser_capture` entry provenance, a typed `reading_item` source, and the source URL in notes
+- **THEN** the command uses the verified AI webpage-title workflow with its deterministic fallback and creates one unassigned undated Anytime to-do with Today Later horizon, `browser_capture` entry provenance, a typed `reading_item` source, and the source URL in notes
 
 #### Scenario: Present reading provenance structurally
 - **WHEN** reading-list capture creates a to-do
@@ -1030,7 +1172,7 @@ The system SHALL provide complete keyboard operation for capture, editing, Today
 
 #### Scenario: Create a processed Mail task
 - **WHEN** authenticated Mail capture supplies AI-processed title and notes, complete source identity, retirement destination, and optional verified work-area assignment
-- **THEN** the specialized service creates one unassigned or area-assigned Anytime task marked Today Later and retained source record in a single transaction with no generic fallback write
+- **THEN** the specialized service creates one unassigned or area-assigned undated Anytime task with Today Next horizon, an editable Primary Link initialized from the Mail deep link, and a retained source record in one transaction with no generic fallback write
 
 #### Scenario: Retire a Mail source only after verified movement
 - **WHEN** the integration begins retirement and then attempts the external Mail move
@@ -1050,27 +1192,23 @@ The system SHALL provide complete keyboard operation for capture, editing, Today
 
 #### Scenario: Gate Mail capture on a complete integration contract
 - **WHEN** parallel-use approval has not passed verification
-- **THEN** Mail capture remains disabled and Anytime Manager does not dual-write to BathOS
+- **THEN** Mail capture remains disabled and Inbox Manager does not dual-write to BathOS
 
 #### Scenario: Capture from the keyboard
-- **WHEN** focus is outside an editable control and the user presses `N`
+- **WHEN** the user presses Command+N on Mac or Control+N on Windows
 - **THEN** the interface focuses the current capture field or navigates to Today and focuses capture
 
-#### Scenario: Save from the keyboard
-- **WHEN** a task editor is open and the user presses Command+Enter or Control+Enter outside composition
-- **THEN** the editor submits the same validated save as the visible action
-
 #### Scenario: Navigate task views
-- **WHEN** focus is outside an editable control and the user presses `G` followed by a documented view key
-- **THEN** the interface navigates to Today, Upcoming, Anytime, Someday, Projects, Templates, Done, or Config without claiming browser tab-number shortcuts
+- **WHEN** the user presses the documented Command+number or Control+number chord
+- **THEN** the interface navigates directly to Today, Upcoming, Anytime, Someday, Projects, Templates, Done, or Config while suppressing browser tab-number behavior
 
 #### Scenario: Search tasks and views
-- **WHEN** focus is outside an editable control and the user presses `/`
+- **WHEN** the user activates the visible Search Tasks and Views control
 - **THEN** a dialog searches owner-scoped tasks and current views and supports keyboard selection without exposing retired Inbox, Logbook, or Trash destinations
 
 #### Scenario: Preserve native editing behavior
 - **WHEN** focus is inside an input, textarea, select, content-editable surface, menu, or dialog
-- **THEN** task shortcuts do not replace native typing, composition, selection, undo, or control behavior except for the documented form submission shortcut
+- **THEN** undocumented key chords do not replace native typing, composition, selection, or control behavior, while documented Tasks modifier commands retain precedence
 
 ### Requirement: Deterministic Mail Capture Retry
 The system SHALL define a specialized Mail capture's idempotent request identity from caller-controlled task and structured source fields, and SHALL NOT treat service-generated task identity, planning date, or ordering as a caller request difference.
@@ -1225,12 +1363,24 @@ The system SHALL use the active view name, compact self-evident controls, progre
 - **THEN** it shows compact icon-only Add Area and Add Project controls with nonempty programmatic names and does not render permanent creation fields
 
 #### Scenario: Mark a resolved day horizon
-- **WHEN** an Anytime or Upcoming row has a resolved Inbox, Now, Next, or Later horizon
+- **WHEN** an active Anytime or deferred Upcoming row has an Inbox, Now, Next, or Later horizon
 - **THEN** the row displays compact Lucide iconography with a nonempty accessible name identifying that horizon without repeating a verbose sentence
 
-#### Scenario: Omit an irrelevant day-horizon marker
-- **WHEN** an undated Anytime row has no explicit day horizon
+#### Scenario: Omit an unavailable day-horizon marker
+- **WHEN** an undated Anytime row has a null day horizon
 - **THEN** the row does not reserve empty marker space or show a decorative icon
+
+#### Scenario: Summarize nearby calendar dates relatively
+- **WHEN** a displayed Start Date, Deadline, or reminder date differs from the owner-local planning date by no more than 10 days
+- **THEN** the row uses Today, Tomorrow, one day ago, N days ago, or N days left as appropriate
+
+#### Scenario: Summarize distant calendar dates compactly
+- **WHEN** a displayed date is more than 10 days before or after the owner-local planning date
+- **THEN** the row uses a short month and numeric day such as Aug 27
+
+#### Scenario: Arrange the open editor compactly
+- **WHEN** a to-do editor is open
+- **THEN** Actionability and Organization share one responsive row, temporal controls use one compact responsive row with no full-width reminder container, and Deadline follows on the next row
 
 #### Scenario: Browse Done without archive ceremony
 - **WHEN** a user opens Done
@@ -1269,3 +1419,30 @@ The system SHALL migrate retired planning and terminal vocabulary without losing
 #### Scenario: Retire old routes
 - **WHEN** a user opens `/tasks/inbox`, `/tasks/logbook`, or `/tasks/trash`
 - **THEN** the router replaces the location with `/tasks/today` or `/tasks/done` and never renders a retired view
+
+### Requirement: Deferral-Anchored Reminder Time
+The system SHALL allow at most one active reminder per to-do or project, SHALL derive its calendar date from that item's future-only start date, and SHALL expose only its local time as user-editable reminder intent.
+
+#### Scenario: Add a reminder to scheduled work
+- **WHEN** a user assigns a reminder time to an open item with a start date
+- **THEN** the system resolves one reminder on that start date in the owner's planning time zone and does not request or store an independently chosen reminder date
+
+#### Scenario: Withhold reminders from undated work
+- **WHEN** an open item has no start date
+- **THEN** the interface hides Reminder Time and every mutation surface rejects a new reminder for that item
+
+#### Scenario: Clear a future start date with a reminder
+- **WHEN** a user manually clears the future start date from an item that has an active reminder
+- **THEN** the system cancels its reminder and pending occurrence while retaining or clearing its day horizon according to the requested active placement
+
+#### Scenario: Activate work without losing its same-day reminder
+- **WHEN** the owner-local start date arrives before the item's resolved reminder time
+- **THEN** activation clears the parent start date, retains its day horizon, and preserves the already-scheduled occurrence so it remains deliverable that day
+
+#### Scenario: Move the start date with a reminder
+- **WHEN** a user changes an item's start date while retaining its reminder time
+- **THEN** the system re-resolves the reminder against the new date and replaces the prior pending occurrence exactly once
+
+#### Scenario: Normalize existing reminder data
+- **WHEN** the start-anchored reminder migration encounters an active reminder
+- **THEN** it rebinds that reminder to its parent's start date when present and cancels it when the parent is undated without deleting the parent item

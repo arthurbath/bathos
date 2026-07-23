@@ -40,12 +40,12 @@
 
 ## 6. Documentation, acceptance, and release
 
-- [ ] 6.1 Update the Tasks guide, README, deployment documentation, topology evidence, and readiness report without retaining headings or obsolete reminder/date semantics
+- [x] 6.1 Update the Tasks guide, README, deployment documentation, topology evidence, and readiness report without retaining headings or obsolete reminder/date semantics
 - [x] 6.2 Run focused tests, the full Vitest suite, Tasks typecheck, lint, production build, strict OpenSpec validation, database tests, and Git whitespace checks
 - [x] 6.3 Verify desktop and mobile rendered behavior, custom-scheme activation, keyboard traversal, console health, and an existing installed PWA shell
 - [x] 6.4 Obtain explicit approval for the production migration, 21-table PowerSync normalization, MCP deployment, reminder-job compatibility, and matching web release
-- [ ] 6.5 Apply the approved release, run and clean up synthetic production fixtures, prove personal-content preservation and fresh synchronization, then sync and archive the change
-- [ ] 6.6 Commit and push main, then prove the worktree, remote history, production assets, database, PowerSync, reminder runtime, and OpenSpec state are clean and synchronized
+- [x] 6.5 Apply the approved release, run and clean up synthetic production fixtures, prove personal-content preservation and fresh synchronization, then sync and archive the change
+- [x] 6.6 Commit and push main, then prove the worktree, remote history, production assets, database, PowerSync, reminder runtime, and OpenSpec state are clean and synchronized
 
 ## 7. Future-only deferral and compact editing
 

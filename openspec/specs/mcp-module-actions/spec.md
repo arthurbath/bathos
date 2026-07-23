@@ -3,9 +3,7 @@
 ## Purpose
 
 Define authenticated MCP access to BathOS module data while preserving the signed-in user's existing Supabase RLS boundaries.
-
 ## Requirements
-
 ### Requirement: Authenticated MCP Module Access
 The BathOS MCP server SHALL expose module actions only for an OAuth-authenticated BathOS user, and every action SHALL use that user's Supabase bearer token so existing RLS policies remain authoritative.
 
@@ -77,30 +75,30 @@ The BathOS MCP server SHALL reject unsupported resources, unsupported operations
 - **THEN** the server rejects the request without issuing a database mutation
 
 ### Requirement: Personal Tasks MCP Resource Actions
-The BathOS MCP server SHALL let an authenticated user read and mutate their task hierarchy, templates, to-dos, checklists, planning values, day horizon, Done recovery state, and supported structured workflow fields under the current Tasks domain rules.
+The BathOS MCP server SHALL let an authenticated user read and mutate their heading-free task hierarchy, templates, to-dos, checklists, future-only Start Dates, independent day horizons, reminder time, Done recovery state, and supported structured workflow fields under the current Tasks domain rules.
 
 #### Scenario: Read task data
 - **WHEN** an authenticated MCP client requests task data or a defined task view
 - **THEN** the server returns only task records owned by the signed-in user
 
 #### Scenario: Read normalized task hierarchy
-- **WHEN** an authenticated MCP client requests the bounded hierarchy or scopes it to one area, project, heading, or to-do
-- **THEN** the server returns current owner-scoped records with stable relationship identifiers and explicit truncation metadata
+- **WHEN** an authenticated MCP client requests the bounded hierarchy or scopes it to one area, project, or to-do
+- **THEN** the server returns current owner-scoped areas, projects, to-dos, and checklist items with stable single-value relationship identifiers and explicit truncation metadata
 
 #### Scenario: Read one task record
-- **WHEN** an authenticated MCP client requests one current task record by type and stable identifier
+- **WHEN** an authenticated MCP client requests one current task record by supported type and stable identifier
 - **THEN** the server returns that owned record without exposing an owner identifier or a record owned by another user
 
 #### Scenario: Read a defined planning view
 - **WHEN** an authenticated MCP client requests Today, Upcoming, Anytime, Someday, or Done
-- **THEN** the server applies lifecycle, disposition, day-horizon, planning-date, time-zone, and ordering rules and returns separately typed project, to-do, or Done-root results
+- **THEN** the server applies lifecycle, disposition, future-only Start Date, independent day-horizon, planning-date, time-zone, and ordering rules and returns separately typed project, to-do, or Done-root results
 
 #### Scenario: Read native templates
 - **WHEN** an authenticated MCP client requests active or explicitly archived native templates
 - **THEN** the server returns only the signed-in owner's bounded template definitions and their current immutable revisions without exposing owner identifiers
 
 #### Scenario: Validate a hierarchy creation parent
-- **WHEN** an MCP client creates a project within an area, a heading within a project, or a checklist item within a to-do
+- **WHEN** an MCP client creates a project within an area or a checklist item within a to-do
 - **THEN** the server requires the parent to be present, owned by the signed-in user, and open when the parent has a lifecycle, without disclosing an inaccessible record
 
 #### Scenario: Retry hierarchy creation after later changes
@@ -113,7 +111,7 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their task
 
 #### Scenario: Create a Mail task atomically
 - **WHEN** a verified integration calls `create_mail_task` with complete structured Mail identity, retirement destination, AI-processed content, optional accessible area, and a new idempotency key
-- **THEN** the server atomically creates one Anytime to-do marked Today Inbox with `mail_automation` provenance and one retained Mail source, then returns the creation receipt and owner-safe records
+- **THEN** the server atomically creates one undated Anytime to-do with Today Next horizon, `mail_automation` provenance, one editable Primary Link initialized from the deep link, and one retained Mail source, then returns the creation receipt and owner-safe records
 
 #### Scenario: Deduplicate Mail capture by request and source identity
 - **WHEN** a verified integration retries the same Mail request UUID or later presents the same owner, account, and message identity with a different request UUID
@@ -136,8 +134,8 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their task
 - **THEN** the server applies the valid state transition only within the signed-in user's scope and returns the resulting state
 
 #### Scenario: Update hierarchy content through explicit tools
-- **WHEN** an authenticated MCP client calls `update_task_area`, `update_task_project`, `update_task_heading`, or `update_task_checklist_item` with supported content or checklist-completion input
-- **THEN** the server updates only those allowlisted fields on an owned present record and requires an open parent before changing a heading or checklist item
+- **WHEN** an authenticated MCP client calls `update_task_area`, `update_task_project`, or `update_task_checklist_item` with supported content or checklist-completion input
+- **THEN** the server updates only those allowlisted fields on an owned present record and requires an open parent before changing a checklist item
 
 #### Scenario: Require an optimistic hierarchy-update boundary
 - **WHEN** an MCP client calls a hierarchy content-update tool
@@ -157,7 +155,7 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their task
 
 #### Scenario: Transition hierarchy lifecycle and recovery explicitly
 - **WHEN** an authenticated MCP client calls `transition_task_hierarchy`
-- **THEN** the tool completes, cancels, or reopens only a project, or recoverably deletes or restores one area, project, heading, or checklist item, without exposing generic lifecycle fields, physical deletion, or to-do behavior already owned by `transition_task`
+- **THEN** the tool completes, cancels, or reopens only a project, or recoverably deletes or restores one area, project, or checklist item, without exposing generic lifecycle fields, physical deletion, or to-do behavior already owned by `transition_task`
 
 #### Scenario: Derive the atomic hierarchy revision set on the server
 - **WHEN** an MCP client requests a hierarchy lifecycle or recovery operation with the stable root identifier, current positive root revision, and logical mutation UUID
@@ -177,11 +175,11 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their task
 
 #### Scenario: Move a project through an explicit tool
 - **WHEN** an authenticated MCP client calls `move_task_project` with the current project revision and a new area, planning placement, or both
-- **THEN** the server validates the owned present area, project lifecycle, owner-local Today date, calendar range, and supported placement, appends generated structural and planning order keys when their scopes change, and never accepts raw order keys
+- **THEN** the server validates the owned present area, project lifecycle, owner-local Today date, supported placement, and single-area membership, appends generated structural and planning order keys when their scopes change, and never accepts raw order keys
 
 #### Scenario: Schedule a project through an explicit tool
 - **WHEN** an authenticated MCP client calls `schedule_task_project` with the current project revision and a start-date or deadline change
-- **THEN** the server validates date-only calendar values and range, activates scheduled Someday work into Anytime, preserves valid project placement, and never exposes lifecycle or arbitrary project fields through the scheduling operation
+- **THEN** the server validates date-only calendar values, allows the start date on either side of the deadline, activates scheduled Someday work into Anytime, enforces the future-schedule horizon and Start-Date-anchored reminder, and never exposes lifecycle or arbitrary project fields through the scheduling operation
 
 #### Scenario: Retry an accepted project movement or schedule
 - **WHEN** an MCP client retries the exact accepted project movement or scheduling request with the same mutation UUID after the current project has changed
@@ -248,28 +246,40 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their task
 - **THEN** schema validation rejects the retired value and identifies the current Today or Done vocabulary
 
 #### Scenario: Create a to-do through the narrow contract
-- **WHEN** an authenticated MCP client calls `create_task` with a new idempotency key, valid title, optional planning and container input, optional typed source, and optional supported integration channel
-- **THEN** the server creates exactly one open present to-do with declared or MCP provenance, stable identifiers, append-only history, and a default placement of Anytime plus Today Inbox
+- **WHEN** an authenticated MCP client calls `create_task` with a new idempotency key, valid title, optional planning and single-value container input, optional typed source, and optional supported integration channel
+- **THEN** the server creates exactly one open present to-do with declared or MCP provenance, stable identifiers, append-only history, no start date, and Today Next as its default planning placement
 
 #### Scenario: Deduplicate capture
 - **WHEN** a client retries an exact creation request or Mail source identity
 - **THEN** the server returns the existing task and source without creating duplicates and rejects changed reuse of the idempotency key
 
 #### Scenario: Create hierarchy records
-- **WHEN** a client calls a supported area, project, heading, or checklist creation tool
-- **THEN** the server creates one owner-scoped present record with validated parents, deterministic append ordering, and append-only history
+- **WHEN** a client calls a supported area, project, or checklist creation tool
+- **THEN** the server creates one owner-scoped present record with validated optional parents, deterministic append ordering, and append-only history
 
 #### Scenario: Move day horizon explicitly
-- **WHEN** a client moves available or future Anytime work to Inbox, Now, Next, Later, or no day horizon
-- **THEN** the server keeps destination Anytime, changes only the supported day horizon and relevant ordering, preserves the start date, and returns a revision-checked receipt
+- **WHEN** a client moves active or future Anytime work to Inbox, Now, Next, or Later
+- **THEN** the server keeps destination Anytime, changes the supported day horizon without inventing a start date, updates relevant ordering, and returns a revision-checked receipt
+
+#### Scenario: Clear a start date explicitly
+- **WHEN** a client clears an Anytime item's start date
+- **THEN** the server cancels its active reminder, retains or clears its day horizon according to the explicit active placement, and keeps the item in Anytime
 
 #### Scenario: Move between Anytime and Someday
 - **WHEN** a client moves a to-do or project between Anytime and Someday
-- **THEN** the server validates placement, clears incompatible dates or day horizon for Someday, generates the destination order, and does not accept a standalone Inbox or Today destination
+- **THEN** the server validates placement, clears start date, day horizon, and reminder for Someday, generates the destination order, and does not accept a standalone Inbox or Today destination
 
 #### Scenario: Schedule future work
 - **WHEN** a client assigns a future start date and optional Inbox, Now, Next, or Later horizon
-- **THEN** the server places the work in Anytime, preserves the selected horizon, includes it in Upcoming until the owner-local date, and preserves valid container and deadline state
+- **THEN** the server places the work in Anytime, stores the selected horizon or Next by default, includes it in Upcoming until the owner-local date, and preserves valid container and deadline state even when the deadline is earlier
+
+#### Scenario: Reject a nonfuture Start Date
+- **WHEN** a client assigns today or an earlier date as Start Date
+- **THEN** the server rejects the request without changing task data and directs the client to an active day horizon instead
+
+#### Scenario: Edit a Primary Link
+- **WHEN** an MCP client creates or updates a to-do with an optional Primary Link
+- **THEN** the server stores the literal shortcut through the narrow content contract, includes it in history and owner-safe reads, and does not modify structured source identity
 
 #### Scenario: Use explicit lifecycle and recovery tools
 - **WHEN** a client completes, cancels, reopens, deletes, or restores supported work
@@ -292,23 +302,27 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their task
 - **THEN** no MCP tool can defer the purge, resurrect purged content, or enumerate another owner's terminal records
 
 ### Requirement: Structured Task Automation Contract
-The BathOS MCP server SHALL expose explicit task fields for actionability, source/origin, templates, scheduling, recurrence, and completion without requiring clients to encode meaning in generic tags or task titles.
+The BathOS MCP server SHALL expose explicit task fields for three-state actionability, source/origin, templates, future-only scheduling with independent day horizons and reminders, recurrence, and completion without requiring clients to encode meaning in generic tags or task titles.
 
 #### Scenario: Set structured origin
 - **WHEN** an MCP client creates a task from a supported external source or collection integration
 - **THEN** the server validates the closed integration channel and typed source reference independently, defaults the channel to `mcp`, and does not require a title prefix
 
 #### Scenario: Set actionability
-- **WHEN** an MCP client changes whether a task can be acted on immediately
-- **THEN** the server accepts only `actionable` or `waiting`, requires an open present to-do and its current revision, stores the state rather than adding a tag, and returns an idempotent mutation receipt
+- **WHEN** an MCP client changes how an open present task can become actionable
+- **THEN** the server accepts only `actionable`, `waiting`, or `rechecking`, stores the state rather than adding a tag, and returns an idempotent mutation receipt
 
 #### Scenario: Set a structured day horizon
-- **WHEN** an MCP client creates, moves, or schedules Anytime work with `none`, `inbox`, `now`, `next`, or `later`
-- **THEN** the server validates the horizon independently from start date, preserves it for future work, and returns it in owner-safe planning state
+- **WHEN** an MCP client creates, moves, or schedules Anytime work with `inbox`, `now`, `next`, or `later`
+- **THEN** the server stores the active or deferred horizon without inventing a date, defaults future-dated work to `next` when omitted, and returns it in owner-safe planning state
+
+#### Scenario: Set a reminder time
+- **WHEN** an MCP client assigns a reminder time to a to-do or project
+- **THEN** the server requires the item to have a start date, resolves the reminder on that date in the supplied valid time zone, and accepts no independent reminder date
 
 #### Scenario: Instantiate a template
 - **WHEN** an MCP client requests creation from a task or project template
-- **THEN** the server requires an explicit anchor and idempotency UUID, fixes the actor and channel to MCP automation, and uses the atomic template-instantiation operation rather than exposing template storage as generic task duplication
+- **THEN** the server requires an explicit anchor and idempotency UUID, fixes the actor and channel to MCP automation, and uses the atomic heading-free template-instantiation operation rather than exposing template storage as generic task duplication
 
 ### Requirement: Task MCP Mutation Safety
 Task MCP mutations SHALL use stable identifiers, enforce ownership and valid state transitions, support idempotent creation where retries are plausible, and produce enough result information to audit the mutation.

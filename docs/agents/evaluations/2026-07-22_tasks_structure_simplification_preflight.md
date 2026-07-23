@@ -2,7 +2,7 @@
 
 **Date:** 2026 Jul 22
 **Category:** Production / Data Preservation / Release
-**Status:** Production Backend Accepted / Web Publish Pending
+**Status:** Accepted
 
 ## Scope
 
@@ -69,6 +69,8 @@ The production migration ledger is synchronized through `20260722204543_simplify
 The current PowerSync boundary contains exactly 21 published tables and 21 matching SELECT grants. `tasks_headings` has no publication membership or grant. All synchronized tables have RLS and full replica identity. The dedicated role retains the approved LOGIN, REPLICATION, and BYPASSRLS attributes without a non-SELECT table grant. PowerSync Sync Streams version 2 is Active with no issues. The once-per-minute activation, reminder-dispatch, and Done-retention jobs are active.
 
 MCP function version 12 is active with the matching schema-12 Tasks contract. A disposable owner-scoped production fixture proved future-only Start Date, retained active horizons, reminder rebinding and cancellation, same-day automatic activation, Rechecking, Primary Link, schema-12 export, heading absence, and a fresh PowerSync projection. The fixture passed, and an independent cleanup query returned zero synthetic users, to-dos, and projects.
+
+Commit `14512dd` was pushed to `main` and published through Lovable deployment `d2a9b460-6557-4d40-b119-ad071f7b055c`. Production serves entry bundle `index-BZbMxhYe.js` and Tasks chunk `TasksIndex-PV6HW_8E.js`. Authenticated Safari rendered the updated Upcoming view from the production domain, and the live chunk contains Primary Link, Rechecking, and the new open-next and open-previous command surfaces.
 
 ## Private Backup
 
