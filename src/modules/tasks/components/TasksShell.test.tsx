@@ -2954,6 +2954,8 @@ describe('TasksShell', () => {
       const titleLine = container.querySelector('[data-task-id="task-a"] span.flex');
       expect(titleLine?.firstElementChild).toHaveAttribute('aria-label', 'Day Horizon Next');
       await openTaskMenuSurface(container, 'Existing task', 'Start...');
+      expect(document.querySelector('[data-dialog-body="true"]')).toHaveClass('mx-0');
+      expect(document.querySelector('[data-task-start-picker]')).toHaveClass('mx-auto');
       const now = Array.from(document.querySelectorAll<HTMLButtonElement>(
         '[data-task-start-horizon]',
       )).find((button) => button.textContent?.includes('Now'));

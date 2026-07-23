@@ -121,7 +121,11 @@ function TaskStartPickerPanel({
   }, [active, focusTarget]);
 
   return (
-    <div ref={panelRef} className="w-[min(20rem,calc(100vw-2rem))]" data-task-start-picker>
+    <div
+      ref={panelRef}
+      className="mx-auto w-[min(20rem,calc(100vw-2rem))]"
+      data-task-start-picker
+    >
       <div className="space-y-2 p-3">
         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Today
@@ -343,7 +347,7 @@ export function TaskStartDialog({
         <DialogHeader className="px-4 pt-4">
           <DialogTitle>Start</DialogTitle>
         </DialogHeader>
-        <DialogBody className="p-0">
+        <DialogBody className="mx-0 p-0">
           <p className="truncate px-4 pb-3 text-sm font-medium text-foreground">
             {props.task.title}
           </p>

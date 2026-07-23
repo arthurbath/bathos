@@ -20,7 +20,7 @@
 ## 4. Verification And Release
 
 - [x] 4.1 Run targeted unit, integration, database, accessibility, and keyboard tests
-- [ ] 4.2 Perform screenshot-grounded rendered QA for desktop and mobile Start picker states and record `design-qa.md`
+- [x] 4.2 Perform screenshot-grounded rendered QA for desktop and mobile Start picker states and record `design-qa.md`
 - [x] 4.3 Run full tests, lint, build, database lint/tests, and OpenSpec validation
 - [ ] 4.4 Refresh the private production backup, apply the approved migration and web release, run and clean the owner-scoped acceptance fixture, and reconcile PowerSync
 - [ ] 4.5 Sync durable specs, archive the change, commit and push `main`, and prove repository and production parity
