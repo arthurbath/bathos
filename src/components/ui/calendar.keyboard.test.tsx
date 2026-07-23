@@ -417,4 +417,51 @@ describe('Calendar keyboard navigation', () => {
       unmount(root, container);
     }
   });
+
+  it('keeps Tab interception as the default and permits opt-in picker traversal', () => {
+    const defaultCalendar = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 6, 1)}
+        selected={new Date(2026, 6, 23)}
+        onSelect={() => {}}
+      />,
+    );
+    const traversableCalendar = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 6, 1)}
+        selected={new Date(2026, 6, 23)}
+        onSelect={() => {}}
+        allowTabExit
+      />,
+    );
+
+    try {
+      const trappedDay = getDayButton(defaultCalendar.container, '23')!;
+      const trappedEvent = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        trappedDay.dispatchEvent(trappedEvent);
+      });
+      expect(trappedEvent.defaultPrevented).toBe(true);
+
+      const traversableDay = getDayButton(traversableCalendar.container, '23')!;
+      const traversableEvent = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        traversableDay.dispatchEvent(traversableEvent);
+      });
+      expect(traversableEvent.defaultPrevented).toBe(false);
+    } finally {
+      unmount(defaultCalendar.root, defaultCalendar.container);
+      unmount(traversableCalendar.root, traversableCalendar.container);
+    }
+  });
 });

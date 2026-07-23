@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(34);
+SELECT plan(42);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -117,6 +117,23 @@ SELECT is(
   'next',
   'retains the active day horizon when the start date clears'
 );
+SELECT lives_ok(
+  $$
+    SELECT public.tasks_save_start_reminder(
+      NULL, NULL, 'todo', 'c2000000-0000-4000-8000-000000000020',
+      '10:15', 'America/Los_Angeles', 'earlier',
+      'c2000000-0000-4000-8000-000000000028'
+    )
+  $$,
+  'saves a reminder directly against Today work'
+);
+SELECT is(
+  (SELECT local_date FROM public.tasks_reminders
+    WHERE task_id = 'c2000000-0000-4000-8000-000000000020'
+      AND status = 'active'),
+  (clock_timestamp() AT TIME ZONE 'America/Los_Angeles')::date,
+  'anchors a directly created Today reminder to the owner planning date'
+);
 
 INSERT INTO public.tasks_todos (
   id, owner_id, title, destination, start_date, today_section, order_key,
@@ -163,8 +180,24 @@ WHERE id = 'c2000000-0000-4000-8000-000000000030';
 SELECT is(
   (SELECT status FROM public.tasks_reminders
     WHERE task_id = 'c2000000-0000-4000-8000-000000000030'),
+  'active',
+  'keeps the reminder active when a future Start becomes Today work'
+);
+SELECT is(
+  (SELECT local_date FROM public.tasks_reminders
+    WHERE task_id = 'c2000000-0000-4000-8000-000000000030'),
+  (clock_timestamp() AT TIME ZONE 'America/Los_Angeles')::date,
+  'rebinds a Today reminder to the owner planning date'
+);
+UPDATE public.tasks_todos
+SET today_section = NULL, revision = revision + 1,
+  client_mutation_id = 'c2000000-0000-4000-8000-000000000038'
+WHERE id = 'c2000000-0000-4000-8000-000000000030';
+SELECT is(
+  (SELECT status FROM public.tasks_reminders
+    WHERE task_id = 'c2000000-0000-4000-8000-000000000030'),
   'canceled',
-  'cancels the reminder when its parent start date clears'
+  'cancels the reminder when the complete Start intent clears'
 );
 
 INSERT INTO public.tasks_todos (
@@ -256,6 +289,52 @@ SELECT is(
   'message://mail-v12',
   'initializes editable Primary Link from the Mail deep link'
 );
+SELECT lives_ok(
+  $$
+    UPDATE public.tasks_todos
+    SET primary_link = NULL,
+      revision = revision + 1,
+      client_mutation_id = 'c2000000-0000-4000-8000-000000000042'
+    WHERE id = 'c2000000-0000-4000-8000-000000000041'
+  $$,
+  'allows the editable Mail Primary Link to be cleared'
+);
+SELECT is(
+  (SELECT primary_link FROM public.tasks_todos
+    WHERE id = 'c2000000-0000-4000-8000-000000000041'),
+  NULL,
+  'preserves an explicitly cleared Primary Link'
+);
+RESET ROLE;
+SELECT is(
+  tasks_private.normalize_export_v12_record(
+    'tasks_todos',
+    (
+      SELECT to_jsonb(task) - 'owner_id'
+      FROM public.tasks_todos AS task
+      WHERE task.id = 'c2000000-0000-4000-8000-000000000041'
+    ),
+    (clock_timestamp() AT TIME ZONE 'America/Los_Angeles')::date
+  ) ->> 'primary_link',
+  NULL,
+  'preserves explicit Primary Link null through export normalization'
+);
+SELECT is(
+  tasks_private.normalize_export_v12_record(
+    'tasks_todos',
+    (
+      SELECT (to_jsonb(task) - 'owner_id') - 'primary_link'
+      FROM public.tasks_todos AS task
+      WHERE task.id = 'c2000000-0000-4000-8000-000000000041'
+    ),
+    (clock_timestamp() AT TIME ZONE 'America/Los_Angeles')::date
+  ) ->> 'primary_link',
+  'message://mail-v12',
+  'initializes a missing legacy Primary Link from supported provenance'
+);
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', 'c2000000-0000-4000-8000-000000000001', true);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 INSERT INTO public.tasks_projects (
   id, owner_id, title, destination, start_date, order_key, planning_order_key,

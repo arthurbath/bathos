@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker> & {
+  allowTabExit?: boolean;
   onKeyDownCapture?: React.KeyboardEventHandler;
 };
 
@@ -268,7 +269,19 @@ function MonthPicker({
   );
 }
 
-function Calendar({ className, classNames, showOutsideDays = true, onKeyDownCapture, month, defaultMonth, today, onMonthChange, components, ...props }: CalendarProps) {
+function Calendar({
+  className,
+  classNames,
+  showOutsideDays = true,
+  allowTabExit = false,
+  onKeyDownCapture,
+  month,
+  defaultMonth,
+  today,
+  onMonthChange,
+  components,
+  ...props
+}: CalendarProps) {
   const isControlledMonth = month !== undefined;
   const [internalMonth, setInternalMonth] = React.useState<Date>(month ?? defaultMonth ?? today ?? new Date());
   const baseMonth = isControlledMonth ? month : internalMonth;
@@ -310,7 +323,7 @@ function Calendar({ className, classNames, showOutsideDays = true, onKeyDownCapt
   }, [isControlledMonth, onMonthChange]);
 
   const rootKeyDownCapture: React.KeyboardEventHandler<HTMLDivElement> = (event) => {
-    if (event.key === "Tab") {
+    if (event.key === "Tab" && !allowTabExit) {
       event.preventDefault();
       event.stopPropagation();
     }

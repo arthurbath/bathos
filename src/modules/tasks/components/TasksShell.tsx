@@ -74,12 +74,20 @@ import {
   TaskKeyboardHelpDialog,
   TaskBulkCommandDialog,
   TaskBulkWhenDialog,
+  TaskDoDialog,
   TaskMoveDialog,
   TaskSearchDialog,
-  TaskWhenDialog,
   type TaskTemporalAction,
   type TaskBulkCommandMode,
 } from '@/modules/tasks/components/TaskCommandSurfaces';
+import {
+  TaskStartDialog,
+  TaskStartPickerField,
+} from '@/modules/tasks/components/TaskStartPicker';
+import {
+  requestTaskStartPickerOpen,
+  type TaskStartPickerFocusTarget,
+} from '@/modules/tasks/components/taskStartPickerEvents';
 import {
   TaskQuickFindDialog,
   TaskSearchResultsView,
@@ -805,30 +813,36 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     mode: TaskBulkCommandMode,
   ) => {
     const targets = getTaskCommandTargets();
-    const eligibleTargets = mode === 'reminder'
-      ? targets.filter((task) => task.start_date !== null)
-      : targets;
-    if (eligibleTargets.length === 0) return;
     if (bulkMode && bulkSelection.size > 0) {
+      const eligibleTargets = mode === 'reminder'
+        ? targets.filter((task) => task.start_date !== null || task.today_section !== null)
+        : targets;
+      if (eligibleTargets.length === 0) return;
       commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
       setBulkCommandMode(mode);
       return;
     }
-    const task = eligibleTargets[0];
-    const controlId = mode === 'start'
-      ? `task-start-date-${task.id}`
+    const task = targets[0];
+    if (!task) return;
+    const controlId = mode === 'start' || mode === 'reminder'
+      ? `task-start-${task.id}`
       : mode === 'deadline'
         ? `task-deadline-${task.id}`
-        : mode === 'organization'
-          ? `task-organization-${task.id}`
-          : `task-reminder-time-${task.id}`;
+        : `task-organization-${task.id}`;
     window.setTimeout(() => {
       const control = document.getElementById(controlId);
       if (!(control instanceof HTMLElement)) return;
+      if (mode === 'start' || mode === 'reminder') {
+        requestTaskStartPickerOpen(
+          control,
+          mode satisfies TaskStartPickerFocusTarget,
+        );
+        return;
+      }
       control.focus();
-      if (mode === 'start' || mode === 'deadline') {
+      if (mode === 'deadline') {
         control.click();
       } else if (mode === 'organization' && control instanceof HTMLSelectElement) {
         const showPicker = (control as HTMLSelectElement & { showPicker?: () => void }).showPicker;
@@ -1083,9 +1097,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               today_section: input.todaySection ?? null,
               start_date: input.startDate ?? null,
             });
-            if (input.startDate === null) {
+            if (input.startDate === null && input.todaySection === null) {
               await cancelCreationDraftReminder();
-            } else if (input.startDate) {
+            } else {
               const persistedTaskId = creationDraftRef.current?.persistedTaskId;
               if (persistedTaskId) {
                 await rescheduleTaskReminders([{ ...task, id: persistedTaskId }]);
@@ -1093,8 +1107,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             }
           } else {
             await moveTask(task.id, input);
-            if (input.startDate === null) await cancelTaskReminders([task]);
-            else if (input.startDate) await rescheduleTaskReminders([task]);
+            if (input.startDate === null && input.todaySection === null) {
+              await cancelTaskReminders([task]);
+            } else {
+              await rescheduleTaskReminders([task]);
+            }
           }
         } catch (moveError) {
           showTaskError('Task Could Not Be Moved', moveError);
@@ -1170,8 +1187,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     try {
       await moveTasks(taskIds, input);
       const selectedTasks = tasks.filter(({ id }) => bulkSelection.has(id));
-      if (input.startDate === null) await cancelTaskReminders(selectedTasks);
-      else if (input.startDate) await rescheduleTaskReminders(selectedTasks);
+      if (input.startDate === null && input.todaySection === null) {
+        await cancelTaskReminders(selectedTasks);
+      } else {
+        await rescheduleTaskReminders(selectedTasks);
+      }
       clearTaskSelection();
       focusTaskListFallback();
     } catch (moveError) {
@@ -1324,21 +1344,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             throw completeError;
           }
         }}
-        onCancel={async () => {
-          try {
-            if (isCreationDraft) {
-              if (persistedDraftTaskId) {
-                await transitionTask(persistedDraftTaskId, 'cancel');
-              }
-              await setOpenTask(null);
-            } else {
-              await transitionTask(task.id, 'cancel');
-            }
-          } catch (cancelError) {
-            showTaskError('Task Could Not Be Canceled', cancelError);
-            throw cancelError;
-          }
-        }}
         planningActions={planningActionsForTask(task)}
         onMoveUp={!isCreationDraft
           && (view === 'today' || view === 'anytime' || view === 'someday')
@@ -1484,7 +1489,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const applyBulkReminder = async (localTime: string) => {
     setBulkPending(true);
     try {
-      const targets = getTaskCommandTargets().filter((task) => task.start_date !== null);
+      const targets = getTaskCommandTargets().filter(
+        (task) => task.start_date !== null || task.today_section !== null,
+      );
       for (const task of targets) {
         await reminders.save({
           rootType: 'todo',
@@ -2004,7 +2011,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         mode={bulkCommandMode}
         pending={bulkPending}
         selectedCount={bulkCommandMode === 'reminder'
-          ? tasks.filter((task) => bulkSelection.has(task.id) && task.start_date !== null).length
+          ? tasks.filter((task) => (
+            bulkSelection.has(task.id)
+            && (task.start_date !== null || task.today_section !== null)
+          )).length
           : bulkSelection.size}
         hierarchy={hierarchy}
         planningDate={planningDate}
@@ -2638,7 +2648,6 @@ function TaskRow({
   bulkSelection,
   onUpdate,
   onComplete,
-  onCancel,
   planningActions,
   onMoveUp,
   onMoveDown,
@@ -2669,7 +2678,6 @@ function TaskRow({
   };
   onUpdate: (patch: EditableTaskPatch) => Promise<void>;
   onComplete: () => Promise<void>;
-  onCancel: () => Promise<void>;
   planningActions: TaskTemporalAction[];
   onMoveUp?: () => Promise<void>;
   onMoveDown?: () => Promise<void>;
@@ -2691,7 +2699,8 @@ function TaskRow({
 }) {
   const [pending, setPending] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
-  const [whenOpen, setWhenOpen] = useState(false);
+  const [doOpen, setDoOpen] = useState(false);
+  const [startOpen, setStartOpen] = useState(false);
   const [dragPlacement, setDragPlacement] = useState<'before' | 'after' | null>(null);
   const [terminalExiting, setTerminalExiting] = useState(false);
   const [editorMounted, setEditorMounted] = useState(selected);
@@ -2868,6 +2877,39 @@ function TaskRow({
     ...action,
     run: () => runMovementAction(action.run),
   }));
+  const reminderTime = reminder?.local_time.slice(0, 5) ?? '';
+  const reminderAmbiguityChoice = reminder?.ambiguity_choice ?? 'earlier';
+  const applyStartPlanning = async ({
+    startDate,
+    todaySection,
+  }: {
+    startDate: string | null;
+    todaySection: TaskTodaySection | null;
+  }) => {
+    await onUpdate({
+      destination: 'anytime',
+      start_date: startDate,
+      today_section: todaySection,
+    });
+  };
+  const applyStartReminder = async (localTime: string) => {
+    if (!localTime) {
+      await onCancelReminder();
+      return;
+    }
+    await onSaveReminder({
+      localTime,
+      ambiguityChoice: reminderAmbiguityChoice,
+    });
+  };
+  const clearStart = async () => {
+    if (reminder || reminderTime) await onCancelReminder();
+    await onUpdate({
+      destination: 'anytime',
+      start_date: null,
+      today_section: null,
+    });
+  };
 
   return (
     <article
@@ -3030,7 +3072,7 @@ function TaskRow({
             || task.actionability !== 'actionable'
             || (planningLabel !== null && (planningLabel || task.start_date))
             || task.deadline
-            || (reminder && task.start_date)
+            || (reminder && (task.start_date || task.today_section))
           ) ? (
             <span
               className="mt-0.5 flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap text-xs font-normal text-muted-foreground"
@@ -3070,7 +3112,7 @@ function TaskRow({
                   {formatTaskRelativeCalendarDate(task.deadline, planningDate)}
                 </span>
               ) : null}
-              {reminder && task.start_date ? (
+              {reminder && (task.start_date || task.today_section) ? (
                 <span
                   className="inline-flex shrink-0 items-center gap-1 text-info"
                   aria-label={`Reminder ${formatReminderIntent(reminder, planningDate)}`}
@@ -3124,18 +3166,9 @@ function TaskRow({
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => setMoveOpen(true)}>Move...</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setWhenOpen(true)}>When...</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setDoOpen(true)}>Do...</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setStartOpen(true)}>Start...</DropdownMenuItem>
             <DropdownMenuSeparator />
-            {onMoveUp ? (
-              <DropdownMenuItem onSelect={() => void run(onMoveUp)}>Move Up</DropdownMenuItem>
-            ) : null}
-            {onMoveDown ? (
-              <DropdownMenuItem onSelect={() => void run(onMoveDown)}>Move Down</DropdownMenuItem>
-            ) : null}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => void runTerminalAction(onCancel, true, 50)}>
-              Cancel
-            </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
               onSelect={() => void runTerminalAction(onDelete, false, 50)}
@@ -3183,16 +3216,36 @@ function TaskRow({
         onCloseAutoFocus={() => titleButtonRef.current?.focus()}
         onMove={(patch) => runMovementAction(() => onUpdate(patch))}
       /> : null}
-      {!bulkSelection ? <TaskWhenDialog
-        open={whenOpen}
+      {!bulkSelection ? <TaskDoDialog
+        open={doOpen}
         task={task}
         actions={movementPlanningActions}
-        planningDate={planningDate}
         onOpenChange={(nextOpen) => {
-          setWhenOpen(nextOpen);
+          setDoOpen(nextOpen);
         }}
         onCloseAutoFocus={() => titleButtonRef.current?.focus()}
-        onPlan={(patch) => runMovementAction(() => onUpdate(patch))}
+      /> : null}
+      {!bulkSelection ? <TaskStartDialog
+        open={startOpen}
+        onOpenChange={setStartOpen}
+        onCloseAutoFocus={() => titleButtonRef.current?.focus()}
+        task={task}
+        reminder={reminder}
+        reminderTime={reminderTime}
+        ambiguityChoice={reminderAmbiguityChoice}
+        reminderTimeZone={reminderTimeZone}
+        reminderDisabled={reminderMode !== 'connected'}
+        reminderUnavailableMessage={reminderMode === 'connected'
+          ? null
+          : getTaskReminderUnavailableMessage(reminderMode)}
+        planningDate={planningDate}
+        onPlanningChange={applyStartPlanning}
+        onReminderChange={applyStartReminder}
+        onAmbiguityChange={(choice) => onSaveReminder({
+          localTime: reminderTime,
+          ambiguityChoice: choice,
+        })}
+        onClear={clearStart}
       /> : null}
       </div>
     </article>
@@ -3230,7 +3283,7 @@ function TaskEditor({
   const [primaryLink, setPrimaryLink] = useState(task.primary_link ?? '');
   const [actionability, setActionability] = useState(task.actionability);
   const [startDate, setStartDate] = useState(task.start_date ?? '');
-  const [todaySection, setTodaySection] = useState<TaskTodaySection>(task.today_section ?? 'next');
+  const [todaySection, setTodaySection] = useState<TaskTodaySection | null>(task.today_section);
   const [deadline, setDeadline] = useState(task.deadline ?? '');
   const [reminderTime, setReminderTime] = useState(reminder?.local_time.slice(0, 5) ?? '');
   const [ambiguityChoice, setAmbiguityChoice] = useState<'earlier' | 'later'>(
@@ -3357,20 +3410,43 @@ function TaskEditor({
     return enqueueOperation(() => onCancelReminderRef.current());
   }, [enqueueOperation, enqueueTaskPatch, takePendingTextPatch]);
 
-  const changeStartDate = (value: string) => {
-    const nextTodaySection = value ? (startDate ? todaySection : 'next') : todaySection;
-    setStartDate(value);
+  const changeStartPlanning = async ({
+    startDate: nextStartDate,
+    todaySection: nextTodaySection,
+  }: {
+    startDate: string | null;
+    todaySection: TaskTodaySection | null;
+  }) => {
+    setStartDate(nextStartDate ?? '');
     setTodaySection(nextTodaySection);
-    void persistImmediateTaskPatch({
-      start_date: value || null,
+    await persistImmediateTaskPatch({
+      destination: 'anytime',
+      start_date: nextStartDate,
       today_section: nextTodaySection,
     });
-    if (!value) {
-      setReminderTime('');
-      if (reminder !== null || reminderTime) void cancelReminder();
-    } else if (reminderTime) {
-      void persistReminder(reminderTime, ambiguityChoice);
+  };
+
+  const changeReminderTime = async (nextReminderTime: string) => {
+    setReminderTime(nextReminderTime);
+    if (nextReminderTime) {
+      await persistReminder(nextReminderTime, ambiguityChoice);
+    } else if (reminder !== null || reminderTime) {
+      await cancelReminder();
     }
+  };
+
+  const clearStartPlanning = async () => {
+    setStartDate('');
+    setTodaySection(null);
+    setReminderTime('');
+    if (reminder !== null || reminderTime) {
+      void cancelReminder();
+    }
+    await persistImmediateTaskPatch({
+      destination: 'anytime',
+      start_date: null,
+      today_section: null,
+    });
   };
 
   return (
@@ -3419,6 +3495,11 @@ function TaskEditor({
               const nextPrimaryLink = event.target.value;
               setPrimaryLink(nextPrimaryLink);
               scheduleTextPatch({ primary_link: nextPrimaryLink || null });
+            }}
+            onBlur={() => {
+              if (primaryLink !== '' || task.primary_link === null) return;
+              removePendingTextField('primary_link');
+              void persistImmediateTaskPatch({ primary_link: null });
             }}
           />
           {primaryLink ? (
@@ -3491,90 +3572,35 @@ function TaskEditor({
           </select>
       </div>
       </div>
-      <div data-task-editor-temporal-grid className="grid gap-3 sm:grid-cols-3">
+      <div data-task-editor-temporal-grid className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor={`task-start-date-${task.id}`}>
-            Start Date
+          <label className="text-sm font-medium text-foreground" htmlFor={`task-start-${task.id}`}>
+            Start
           </label>
-          <div className="flex gap-2">
-            <DatePickerField
-              id={`task-start-date-${task.id}`}
-              value={startDate}
-              onValueChange={changeStartDate}
-              placeholder="No Start Date"
-              aria-label="Start Date"
-              minDate={addTaskCalendarDays(planningDate, 1)}
-            />
-            {startDate ? (
-              <Button
-                type="button"
-                variant="clear"
-                size="icon"
-                aria-label="Clear Start Date"
-                onClick={() => changeStartDate('')}
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            ) : null}
-          </div>
-        </div>
-        {startDate || task.today_section !== null ? <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor={`task-day-horizon-${task.id}`}>
-            Day Horizon
-          </label>
-          <select
-            id={`task-day-horizon-${task.id}`}
-            value={todaySection}
-            onChange={(event) => {
-              const nextTodaySection = event.target.value as TaskTodaySection;
-              setTodaySection(nextTodaySection);
-              void persistImmediateTaskPatch({ today_section: nextTodaySection });
+          <TaskStartPickerField
+            task={{
+              ...task,
+              start_date: startDate || null,
+              today_section: todaySection,
             }}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="inbox">Inbox</option>
-            <option value="now">Now</option>
-            <option value="next">Next</option>
-            <option value="later">Later</option>
-          </select>
-        </div> : null}
-        {startDate ? <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor={`task-reminder-time-${task.id}`}>
-            Reminder Time
-          </label>
-          <div className="flex gap-2">
-            <Input
-              id={`task-reminder-time-${task.id}`}
-              type="time"
-              value={reminderTime}
-              onChange={(event) => {
-                const nextReminderTime = event.target.value;
-                setReminderTime(nextReminderTime);
-                if (nextReminderTime) {
-                  void persistReminder(nextReminderTime, ambiguityChoice);
-                } else if (reminder !== null || reminderTime) {
-                  void cancelReminder();
-                }
-              }}
-              disabled={reminderMode !== 'connected'}
-            />
-            {reminderTime ? (
-              <Button
-                type="button"
-                variant="clear"
-                size="icon"
-                disabled={reminderMode !== 'connected'}
-                aria-label="Clear Reminder"
-                onClick={() => {
-                  setReminderTime('');
-                  void cancelReminder();
-                }}
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            ) : null}
-          </div>
-        </div> : null}
+            reminder={reminder}
+            reminderTime={reminderTime}
+            ambiguityChoice={ambiguityChoice}
+            reminderTimeZone={reminderTimeZone}
+            reminderDisabled={reminderMode !== 'connected'}
+            reminderUnavailableMessage={reminderMode === 'connected'
+              ? null
+              : getTaskReminderUnavailableMessage(reminderMode)}
+            planningDate={planningDate}
+            onPlanningChange={changeStartPlanning}
+            onReminderChange={changeReminderTime}
+            onAmbiguityChange={async (nextChoice) => {
+              setAmbiguityChoice(nextChoice);
+              await persistReminder(reminderTime, nextChoice);
+            }}
+            onClear={clearStartPlanning}
+          />
+        </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1.5 sm:col-span-1">
@@ -3609,44 +3635,6 @@ function TaskEditor({
           </div>
         </div>
       </div>
-      {startDate && reminderTime ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground" htmlFor={`task-reminder-ambiguity-${task.id}`}>
-              Repeated Local Time
-            </label>
-            <select
-              id={`task-reminder-ambiguity-${task.id}`}
-              value={ambiguityChoice}
-              onChange={(event) => {
-                const nextChoice = event.target.value as 'earlier' | 'later';
-                setAmbiguityChoice(nextChoice);
-                void persistReminder(reminderTime, nextChoice);
-              }}
-              disabled={reminderMode !== 'connected'}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="earlier">Earlier Instance</option>
-              <option value="later">Later Instance</option>
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <span className="text-sm font-medium text-foreground">Time Zone</span>
-            <p className="flex h-10 items-center text-sm text-muted-foreground">
-              {reminderTimeZone}
-            </p>
-          </div>
-        </div>
-      ) : null}
-      {startDate && reminderMode !== 'connected' ? (
-          <p className="text-xs text-warning">
-            {getTaskReminderUnavailableMessage(reminderMode)}
-          </p>
-        ) : startDate && reminder?.resolution_kind === 'gap_forward' ? (
-          <p className="text-xs text-warning">
-            This local time was adjusted to the first valid instant after a daylight-saving gap.
-          </p>
-        ) : null}
     </div>
   );
 }

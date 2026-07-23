@@ -45,7 +45,6 @@ import { isMacLikeTaskPlatform } from '@/modules/tasks/domain/taskSelection';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type {
   TaskSourceKind,
-  TaskTodaySection,
   TaskTodo,
 } from '@/modules/tasks/types/tasks';
 
@@ -689,54 +688,25 @@ export function TaskMoveDialog({
   );
 }
 
-export function TaskWhenDialog({
+export function TaskDoDialog({
   open,
   task,
   actions,
-  planningDate,
   onOpenChange,
   onCloseAutoFocus,
-  onPlan,
 }: {
   open: boolean;
   task: TaskTodo;
   actions: TaskTemporalAction[];
-  planningDate: string;
   onOpenChange: (open: boolean) => void;
   onCloseAutoFocus: () => void;
-  onPlan: (patch: EditableTaskPatch) => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
-  const [startDate, setStartDate] = useState(task.start_date ?? '');
-  const [todaySection, setTodaySection] = useState<TaskTodaySection>(task.today_section ?? 'next');
-  useEffect(() => {
-    if (!open) return;
-    setStartDate(task.start_date ?? '');
-    setTodaySection(task.today_section ?? 'next');
-  }, [open, task.start_date, task.today_section]);
   const apply = async (action: TaskTemporalAction) => {
     if (pending) return;
     setPending(true);
     try {
       await action.run();
-      onOpenChange(false);
-    } catch {
-      // The task shell reports the error and keeps this surface available for retry.
-    } finally {
-      setPending(false);
-    }
-  };
-  const savePlanning = async () => {
-    if (pending) return;
-    setPending(true);
-    try {
-      await onPlan({
-        ...(task.destination === 'someday' && startDate
-          ? { destination: 'anytime' as const }
-          : {}),
-        start_date: startDate || null,
-        today_section: startDate ? todaySection : task.today_section,
-      });
       onOpenChange(false);
     } catch {
       // The task shell reports the error and keeps this surface available for retry.
@@ -755,50 +725,9 @@ export function TaskWhenDialog({
           onCloseAutoFocus();
         }}
       >
-        <DialogHeader><DialogTitle>Choose When</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Do</DialogTitle></DialogHeader>
         <DialogBody className="space-y-5 pt-4">
           <p className="mb-4 truncate text-sm font-medium text-foreground">{task.title}</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground" htmlFor={`task-when-start-${task.id}`}>
-                Start Date
-              </label>
-              <DatePickerField
-                id={`task-when-start-${task.id}`}
-                value={startDate}
-                onValueChange={(value) => {
-                  if (value && !startDate) setTodaySection('next');
-                  setStartDate(value);
-                }}
-                disabled={pending}
-                placeholder="No Start Date"
-                aria-label="Start Date"
-                minDate={addTaskCalendarDays(planningDate, 1)}
-              />
-            </div>
-            {startDate || task.today_section !== null ? <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground" htmlFor={`task-when-horizon-${task.id}`}>
-                Day Horizon
-              </label>
-              <select
-                id={`task-when-horizon-${task.id}`}
-                value={todaySection}
-                onChange={(event) => setTodaySection(event.target.value as TaskTodaySection)}
-                disabled={pending}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="inbox">Inbox</option>
-                <option value="now">Now</option>
-                <option value="next">Next</option>
-                <option value="later">Later</option>
-              </select>
-            </div> : null}
-          </div>
-          <div className="flex justify-end">
-            <Button type="button" size="sm" disabled={pending} onClick={() => void savePlanning()}>
-              Save Planning
-            </Button>
-          </div>
           <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
             {actions.map((action) => (
               <TaskCommandButton
