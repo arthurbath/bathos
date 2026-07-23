@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   getTaskUpcomingDate,
   getTaskUpcomingGroup,
+  getTaskUpcomingSections,
 } from '@/modules/tasks/domain/taskUpcoming';
+import {
+  taskProjectFixture,
+  taskTodoFixture,
+} from '@/modules/tasks/testing/taskFixtures';
 
 describe('task Upcoming derivation', () => {
   const planningDate = '2026-07-22';
@@ -48,5 +53,32 @@ describe('task Upcoming derivation', () => {
   it('clamps the 12-month boundary for leap-day planning dates', () => {
     expect(getTaskUpcomingGroup('2025-02-28', '2024-02-29', 'en-US').kind).toBe('month');
     expect(getTaskUpcomingGroup('2025-03-01', '2024-02-29', 'en-US').kind).toBe('year');
+  });
+
+  it('orders projects and to-dos together from the nearest exact date to the latest', () => {
+    const sections = getTaskUpcomingSections([
+      taskProjectFixture({ id: 'project-late', start_date: '2026-08-05' }),
+      taskProjectFixture({ id: 'project-equal', start_date: '2026-08-01' }),
+    ], [
+      taskTodoFixture({ id: 'task-near', start_date: '2026-07-23' }),
+      taskTodoFixture({ id: 'task-later-july', start_date: '2026-07-30' }),
+      taskTodoFixture({ id: 'task-equal', start_date: '2026-08-01' }),
+      taskTodoFixture({ id: 'task-latest', start_date: '2026-09-01' }),
+    ], planningDate, 'en-US');
+
+    expect(sections.map(({ label }) => label)).toEqual([
+      'Thursday, July 23',
+      'July 2026',
+      'August 2026',
+      'September 2026',
+    ]);
+    expect(sections.flatMap(({ entries }) => entries.map(({ item }) => item.id))).toEqual([
+      'task-near',
+      'task-later-july',
+      'project-equal',
+      'task-equal',
+      'project-late',
+      'task-latest',
+    ]);
   });
 });

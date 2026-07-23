@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   CheckCircle2,
   CircleSlash2,
@@ -29,7 +29,7 @@ import type { TaskProjectPlanningMoveInput } from '@/modules/tasks/hooks/useTask
 import type { TaskListView } from '@/modules/tasks/hooks/useTaskList';
 import type { TaskArea, TaskProject } from '@/modules/tasks/types/tasks';
 
-type TaskPlanningProjectsProps = {
+export type TaskPlanningProjectsProps = {
   projects: TaskProject[];
   areas: TaskArea[];
   basePath: string;
@@ -38,6 +38,10 @@ type TaskPlanningProjectsProps = {
   onMove: (project: TaskProject, input: TaskProjectPlanningMoveInput) => Promise<unknown>;
   onReorder: (project: TaskProject, direction: 'up' | 'down') => Promise<unknown>;
   onReopen: (project: TaskProject) => Promise<unknown>;
+};
+
+type TaskPlanningProjectItemProps = TaskPlanningProjectsProps & {
+  project: TaskProject;
 };
 
 export function TaskPlanningProjects({
@@ -50,10 +54,6 @@ export function TaskPlanningProjects({
   onReorder,
   onReopen,
 }: TaskPlanningProjectsProps) {
-  const areasById = useMemo(
-    () => new Map(areas.map((area) => [area.id, area])),
-    [areas],
-  );
   if (projects.length === 0) return null;
 
   return (
@@ -66,33 +66,62 @@ export function TaskPlanningProjects({
         Projects ({projects.length})
       </h3>
       <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-        {projects.map((project, index) => {
-          const section = projectPlanningOrderSection(project, view, planningDate);
-          const previous = projects[index - 1];
-          const next = projects[index + 1];
-          return (
-            <TaskPlanningProjectRow
-              key={project.id}
-              project={project}
-              area={project.area_id ? areasById.get(project.area_id) ?? null : null}
-              href={`${basePath}/projects/${project.id}`}
-              view={view}
-              planningDate={planningDate}
-              onMove={(input) => onMove(project, input)}
-              onMoveUp={previous
-                && projectPlanningOrderSection(previous, view, planningDate) === section
-                ? () => onReorder(project, 'up')
-                : undefined}
-              onMoveDown={next
-                && projectPlanningOrderSection(next, view, planningDate) === section
-                ? () => onReorder(project, 'down')
-                : undefined}
-              onReopen={() => onReopen(project)}
-            />
-          );
-        })}
+        {projects.map((project) => (
+          <TaskPlanningProjectItem
+            key={project.id}
+            project={project}
+            projects={projects}
+            areas={areas}
+            basePath={basePath}
+            view={view}
+            planningDate={planningDate}
+            onMove={onMove}
+            onReorder={onReorder}
+            onReopen={onReopen}
+          />
+        ))}
       </div>
     </section>
+  );
+}
+
+export function TaskPlanningProjectItem({
+  project,
+  projects,
+  areas,
+  basePath,
+  view,
+  planningDate,
+  onMove,
+  onReorder,
+  onReopen,
+}: TaskPlanningProjectItemProps) {
+  const index = projects.findIndex(({ id }) => id === project.id);
+  const section = projectPlanningOrderSection(project, view, planningDate);
+  const previous = index > 0 ? projects[index - 1] : undefined;
+  const next = index >= 0 ? projects[index + 1] : undefined;
+  const area = project.area_id
+    ? areas.find(({ id }) => id === project.area_id) ?? null
+    : null;
+
+  return (
+    <TaskPlanningProjectRow
+      project={project}
+      area={area}
+      href={`${basePath}/projects/${project.id}`}
+      view={view}
+      planningDate={planningDate}
+      onMove={(input) => onMove(project, input)}
+      onMoveUp={previous
+        && projectPlanningOrderSection(previous, view, planningDate) === section
+        ? () => onReorder(project, 'up')
+        : undefined}
+      onMoveDown={next
+        && projectPlanningOrderSection(next, view, planningDate) === section
+        ? () => onReorder(project, 'down')
+        : undefined}
+      onReopen={() => onReopen(project)}
+    />
   );
 }
 

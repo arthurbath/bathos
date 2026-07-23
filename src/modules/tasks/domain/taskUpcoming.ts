@@ -10,6 +10,24 @@ export type TaskUpcomingGroup = {
   date: string;
 };
 
+export type TaskUpcomingEntry =
+  | {
+    kind: 'project';
+    item: TaskProject;
+    controllingDate: string;
+    sourceIndex: number;
+  }
+  | {
+    kind: 'task';
+    item: TaskTodo;
+    controllingDate: string;
+    sourceIndex: number;
+  };
+
+export type TaskUpcomingSection = TaskUpcomingGroup & {
+  entries: TaskUpcomingEntry[];
+};
+
 export function getTaskUpcomingDate(
   item: UpcomingDatedItem,
   planningDate: string,
@@ -74,6 +92,53 @@ export function compareTaskUpcomingDates(
 ): number {
   return (getTaskUpcomingDate(left, planningDate) ?? '')
     .localeCompare(getTaskUpcomingDate(right, planningDate) ?? '');
+}
+
+export function getTaskUpcomingSections(
+  projects: readonly TaskProject[],
+  tasks: readonly TaskTodo[],
+  planningDate: string,
+  locale?: string,
+): TaskUpcomingSection[] {
+  const groups = new Map<string, TaskUpcomingSection>();
+  const entries: TaskUpcomingEntry[] = [
+    ...projects.flatMap((project, sourceIndex): TaskUpcomingEntry[] => {
+      const controllingDate = getTaskUpcomingDate(project, planningDate);
+      return controllingDate === null
+        ? []
+        : [{ kind: 'project', item: project, controllingDate, sourceIndex }];
+    }),
+    ...tasks.flatMap((task, sourceIndex): TaskUpcomingEntry[] => {
+      const controllingDate = getTaskUpcomingDate(task, planningDate);
+      return controllingDate === null
+        ? []
+        : [{ kind: 'task', item: task, controllingDate, sourceIndex }];
+    }),
+  ];
+
+  for (const entry of entries) {
+    const group = getTaskUpcomingGroup(entry.controllingDate, planningDate, locale);
+    const current = groups.get(group.key);
+    if (current) current.entries.push(entry);
+    else groups.set(group.key, { ...group, entries: [entry] });
+  }
+
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      entries: group.entries.sort(compareTaskUpcomingEntries),
+    }))
+    .sort((left, right) => (
+      left.entries[0].controllingDate.localeCompare(right.entries[0].controllingDate)
+    ));
+}
+
+function compareTaskUpcomingEntries(
+  left: TaskUpcomingEntry,
+  right: TaskUpcomingEntry,
+): number {
+  return left.controllingDate.localeCompare(right.controllingDate)
+    || (left.kind === right.kind ? left.sourceIndex - right.sourceIndex : left.kind === 'project' ? -1 : 1);
 }
 
 function addCalendarDays(value: string, days: number): string {

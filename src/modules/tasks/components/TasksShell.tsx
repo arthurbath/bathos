@@ -104,6 +104,7 @@ import {
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type {
   TaskReminder,
+  TaskProject,
   TaskTodaySection,
   TaskTodo,
 } from '@/modules/tasks/types/tasks';
@@ -113,7 +114,10 @@ import { TaskAreaDetailView } from '@/modules/tasks/components/TaskAreaDetailVie
 import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
 import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView';
 import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
-import { TaskPlanningProjects } from '@/modules/tasks/components/TaskPlanningProjects';
+import {
+  TaskPlanningProjectItem,
+  TaskPlanningProjects,
+} from '@/modules/tasks/components/TaskPlanningProjects';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
 import { TaskSyncDiagnosticsDialog } from '@/modules/tasks/components/TaskSyncDiagnosticsDialog';
 import {
@@ -126,8 +130,7 @@ import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import { deriveTaskViewProjects } from '@/modules/tasks/domain/taskProjectViews';
 import {
-  getTaskUpcomingDate,
-  getTaskUpcomingGroup,
+  getTaskUpcomingSections,
 } from '@/modules/tasks/domain/taskUpcoming';
 import {
   applyTaskSelectionGesture,
@@ -1812,58 +1815,103 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               </div>
             ) : (
               <div className="space-y-7">
-                <TaskPlanningProjects
-                  projects={planningProjects}
-                  areas={hierarchy.areas}
-                  basePath={basePath}
-                  view={taskListView}
-                  planningDate={planningDate}
-                  onMove={async (project, input) => {
-                    try {
-                      await hierarchy.moveProjectInPlanning(project.id, input);
-                    } catch (moveError) {
-                      showTaskError('Project Could Not Be Moved', moveError);
-                      throw moveError;
-                    }
-                  }}
-                  onReorder={async (project, direction) => {
-                    try {
-                      await hierarchy.reorderProjectInPlanning(
-                        project.id,
-                        direction,
-                        taskListView,
-                        planningDate,
-                      );
-                    } catch (reorderError) {
-                      showTaskError('Project Could Not Be Reordered', reorderError);
-                      throw reorderError;
-                    }
-                  }}
-                  onReopen={async (project) => {
-                    try {
-                      await hierarchy.transitionProject(project.id, 'reopen_project');
-                    } catch (reopenError) {
-                      showTaskError('Project Could Not Be Reopened', reopenError);
-                      throw reopenError;
-                    }
-                  }}
-                />
-                {tasks.length > 0 && view === 'upcoming' ? (
+                {view === 'upcoming' ? (
                   <UpcomingTaskSections
+                    projects={planningProjects}
                     tasks={tasks}
                     planningDate={planningDate}
+                    renderProject={(project) => (
+                      <TaskPlanningProjectItem
+                        key={project.id}
+                        project={project}
+                        projects={planningProjects}
+                        areas={hierarchy.areas}
+                        basePath={basePath}
+                        view={taskListView}
+                        planningDate={planningDate}
+                        onMove={async (candidate, input) => {
+                          try {
+                            await hierarchy.moveProjectInPlanning(candidate.id, input);
+                          } catch (moveError) {
+                            showTaskError('Project Could Not Be Moved', moveError);
+                            throw moveError;
+                          }
+                        }}
+                        onReorder={async (candidate, direction) => {
+                          try {
+                            await hierarchy.reorderProjectInPlanning(
+                              candidate.id,
+                              direction,
+                              taskListView,
+                              planningDate,
+                            );
+                          } catch (reorderError) {
+                            showTaskError('Project Could Not Be Reordered', reorderError);
+                            throw reorderError;
+                          }
+                        }}
+                        onReopen={async (candidate) => {
+                          try {
+                            await hierarchy.transitionProject(candidate.id, 'reopen_project');
+                          } catch (reopenError) {
+                            showTaskError('Project Could Not Be Reopened', reopenError);
+                            throw reopenError;
+                          }
+                        }}
+                      />
+                    )}
                     renderTask={renderActiveTask}
                   />
-                ) : tasks.length > 0 ? (
-                  <section aria-label="Tasks">
-                    <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-                      Tasks ({tasks.length})
-                    </h3>
-                    <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-                      {tasks.map((task) => renderActiveTask(task, tasks))}
-                    </div>
-                  </section>
-                ) : null}
+                ) : (
+                  <>
+                    <TaskPlanningProjects
+                      projects={planningProjects}
+                      areas={hierarchy.areas}
+                      basePath={basePath}
+                      view={taskListView}
+                      planningDate={planningDate}
+                      onMove={async (project, input) => {
+                        try {
+                          await hierarchy.moveProjectInPlanning(project.id, input);
+                        } catch (moveError) {
+                          showTaskError('Project Could Not Be Moved', moveError);
+                          throw moveError;
+                        }
+                      }}
+                      onReorder={async (project, direction) => {
+                        try {
+                          await hierarchy.reorderProjectInPlanning(
+                            project.id,
+                            direction,
+                            taskListView,
+                            planningDate,
+                          );
+                        } catch (reorderError) {
+                          showTaskError('Project Could Not Be Reordered', reorderError);
+                          throw reorderError;
+                        }
+                      }}
+                      onReopen={async (project) => {
+                        try {
+                          await hierarchy.transitionProject(project.id, 'reopen_project');
+                        } catch (reopenError) {
+                          showTaskError('Project Could Not Be Reopened', reopenError);
+                          throw reopenError;
+                        }
+                      }}
+                    />
+                    {tasks.length > 0 ? (
+                      <section aria-label="Tasks">
+                        <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
+                          Tasks ({tasks.length})
+                        </h3>
+                        <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+                          {tasks.map((task) => renderActiveTask(task, tasks))}
+                        </div>
+                      </section>
+                    ) : null}
+                  </>
+                )}
               </div>
             )}
           </section>}
@@ -2528,48 +2576,46 @@ function TodayTaskSections({
 }
 
 function UpcomingTaskSections({
+  projects,
   tasks,
   planningDate,
+  renderProject,
   renderTask,
 }: {
+  projects: TaskProject[];
   tasks: TaskTodo[];
   planningDate: string;
+  renderProject: (project: TaskProject) => ReactNode;
   renderTask: (task: TaskTodo, sectionTasks: TaskTodo[]) => ReactNode;
 }) {
-  const groups = new Map<string, {
-    label: string;
-    date: string;
-    tasks: TaskTodo[];
-  }>();
-  for (const task of tasks) {
-    const date = getTaskUpcomingDate(task, planningDate);
-    if (date === null) continue;
-    const group = getTaskUpcomingGroup(date, planningDate);
-    const current = groups.get(group.key);
-    if (current) {
-      current.tasks.push(task);
-    } else {
-      groups.set(group.key, { label: group.label, date: group.date, tasks: [task] });
-    }
-  }
+  const sections = getTaskUpcomingSections(projects, tasks, planningDate);
+  if (sections.length === 0) return null;
 
   return (
     <div className="space-y-7" aria-label="Upcoming Tasks">
-      {[...groups.entries()]
-        .sort(([, left], [, right]) => left.date.localeCompare(right.date))
-        .map(([key, group]) => (
-          <section key={key} aria-labelledby={`tasks-${key.replace(':', '-')}-heading`}>
+      {sections.map((section) => {
+        const sectionTasks = section.entries.flatMap((entry) => (
+          entry.kind === 'task' ? [entry.item] : []
+        ));
+        return (
+          <section
+            key={section.key}
+            aria-labelledby={`tasks-${section.key.replace(':', '-')}-heading`}
+          >
             <h3
-              id={`tasks-${key.replace(':', '-')}-heading`}
+              id={`tasks-${section.key.replace(':', '-')}-heading`}
               className="mb-2 text-sm font-semibold text-muted-foreground"
             >
-              {group.label} ({group.tasks.length})
+              {section.label} ({section.entries.length})
             </h3>
             <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-              {group.tasks.map((task) => renderTask(task, group.tasks))}
+              {section.entries.map((entry) => entry.kind === 'project'
+                ? renderProject(entry.item)
+                : renderTask(entry.item, sectionTasks))}
             </div>
           </section>
-        ))}
+        );
+      })}
     </div>
   );
 }

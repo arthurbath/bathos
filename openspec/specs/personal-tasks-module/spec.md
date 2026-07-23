@@ -249,6 +249,21 @@ The system SHALL derive Today, Upcoming, Anytime, Someday, and Done from task st
 - **WHEN** a user completes, cancels, or deletes a to-do or supported hierarchy root
 - **THEN** the system removes it from active planning views and includes it in Done until recovery or automatic purge
 
+### Requirement: Chronological Upcoming Presentation
+The system SHALL present the complete Upcoming view from the nearest controlling date to the latest controlling date, regardless of whether each dated item is a project or a to-do.
+
+#### Scenario: Interleave projects and to-dos chronologically
+- **WHEN** Upcoming contains projects and to-dos with different controlling dates
+- **THEN** the interface orders every item by controlling date from nearest to latest instead of rendering one entity type before the other
+
+#### Scenario: Order exact dates inside broader groups
+- **WHEN** multiple Upcoming items fall within the same month or year group
+- **THEN** the interface orders those items by their exact controlling dates from nearest to latest
+
+#### Scenario: Preserve deterministic equal-date order
+- **WHEN** multiple Upcoming items share the same controlling date
+- **THEN** the interface uses stable type-specific ordering without moving any later-dated item above an earlier-dated item
+
 ### Requirement: Tagless Structured Semantics
 The system SHALL represent workflow meaning through explicit structured concepts, including exactly three actionability states, and SHALL NOT require generic tags, title parsing, or a generic metadata bag as canonical task data.
 

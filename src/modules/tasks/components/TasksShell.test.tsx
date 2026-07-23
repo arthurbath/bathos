@@ -2917,6 +2917,67 @@ describe('TasksShell', () => {
     }
   });
 
+  it('orders the complete Upcoming surface from nearest to latest across projects and to-dos', () => {
+    const taskList = {
+      ...defaultTaskList(),
+      tasks: [
+        taskTodoFixture({
+          id: 'task-august-first',
+          title: 'August first task',
+          start_date: '2026-08-01',
+        }),
+        taskTodoFixture({
+          id: 'task-july-twenty-second',
+          title: 'July twenty-second task',
+          start_date: '2026-07-22',
+        }),
+        taskTodoFixture({
+          id: 'task-july-thirtieth',
+          title: 'July thirtieth task',
+          start_date: '2026-07-30',
+        }),
+      ],
+    };
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskHierarchy.mockReturnValue({
+      areas: [],
+      projects: [
+        taskProjectFixture({
+          id: 'project-september',
+          title: 'September project',
+          start_date: '2026-09-10',
+        }),
+        taskProjectFixture({
+          id: 'project-august-fifth',
+          title: 'August fifth project',
+          start_date: '2026-08-05',
+        }),
+      ],
+      loading: false,
+      error: null,
+      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
+      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
+      transitionProject: vi.fn().mockResolvedValue(undefined),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      const upcoming = container.querySelector('[aria-label="Upcoming Tasks"]');
+      const text = upcoming?.textContent ?? '';
+      expect(text.indexOf('July twenty-second task'))
+        .toBeLessThan(text.indexOf('July thirtieth task'));
+      expect(text.indexOf('July thirtieth task'))
+        .toBeLessThan(text.indexOf('August first task'));
+      expect(text.indexOf('August first task'))
+        .toBeLessThan(text.indexOf('August fifth project'));
+      expect(text.indexOf('August fifth project'))
+        .toBeLessThan(text.indexOf('September project'));
+      expect(upcoming?.querySelector('#task-planning-projects-heading')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('captures and manually plans active work in Anytime', async () => {
     const anytimeTask = { ...task, destination: 'anytime' as const };
     const taskList = { ...defaultTaskList(), tasks: [anytimeTask] };
