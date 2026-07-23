@@ -590,6 +590,7 @@ describe('Calendar keyboard navigation', () => {
       <Calendar
         mode="single"
         month={new Date(2026, 6, 1)}
+        today={new Date(2026, 6, 22)}
         selected={new Date(2026, 6, 23)}
         onSelect={() => {}}
       />,
@@ -598,6 +599,7 @@ describe('Calendar keyboard navigation', () => {
       <Calendar
         mode="single"
         month={new Date(2026, 6, 1)}
+        today={new Date(2026, 6, 22)}
         selected={new Date(2026, 6, 23)}
         onSelect={() => {}}
         allowTabExit
@@ -686,6 +688,8 @@ describe('Calendar keyboard navigation', () => {
       ));
       expect(months.slice(0, 6).every((month) => month.disabled)).toBe(true);
       expect(months[6]).not.toBeDisabled();
+      expect(months[6]).toHaveAttribute('aria-label', 'July 2026');
+      expect(months[6]?.className).toContain('border-primary');
       expect(container.querySelector<HTMLButtonElement>(
         'button[name="previous-year"]',
       )).toBeDisabled();
@@ -694,6 +698,12 @@ describe('Calendar keyboard navigation', () => {
       )?.className).toContain('disabled:invisible');
       expect(months[6]?.className).toContain('enabled:!cursor-pointer');
       expect(months[0]?.className).toContain('disabled:!cursor-not-allowed');
+      expect(months[6]?.querySelector(
+        '[data-calendar-current-month-icon="true"]',
+      )).toBeTruthy();
+      expect(container.querySelectorAll(
+        '[data-calendar-current-month-icon="true"]',
+      )).toHaveLength(1);
       expect(document.activeElement).toBe(months[6]);
 
       const nextYearButton = container.querySelector<HTMLButtonElement>(
@@ -708,33 +718,74 @@ describe('Calendar keyboard navigation', () => {
       });
       await flushUi();
       expect(document.activeElement).toBe(months[8]);
+
+      act(() => {
+        nextYearButton?.click();
+      });
+      await flushUi();
+      expect(container.textContent).toContain('2027');
+      expect(container.querySelector(
+        '[data-calendar-current-month-icon="true"]',
+      )).toBeFalsy();
     } finally {
       unmount(root, container);
     }
   });
 
-  it('distinguishes the owner planning date from a selected date', () => {
+  it('replaces an in-month current date number with an accessible star while preserving selection styling', () => {
     const { container, root } = mount(
       <Calendar
         mode="single"
-        month={new Date(2026, 6, 1)}
-        today={new Date(2026, 6, 23)}
-        selected={new Date(2026, 6, 24)}
+        month={new Date(2030, 2, 1)}
+        today={new Date(2030, 2, 14)}
+        selected={new Date(2030, 2, 14)}
         onSelect={() => {}}
       />,
     );
 
     try {
-      const today = getDayButton(container, '23');
-      const selected = getDayButton(container, '24');
+      const today = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][aria-current="date"]',
+      );
       expect(today).toHaveAttribute('aria-current', 'date');
+      expect(today).toHaveAttribute('aria-label', 'Thursday, March 14, 2030');
+      expect(today).toHaveAttribute('aria-selected', 'true');
+      expect(today?.textContent?.trim()).toBe('');
+      expect(today?.querySelector(
+        '[data-calendar-current-date-icon="true"]',
+      )).toBeTruthy();
       expect(today?.className).toContain('bg-accent');
-      expect(selected).toHaveAttribute('aria-selected', 'true');
-      expect(selected?.className).toContain('bg-primary');
-      expect(selected?.className).toContain('enabled:!cursor-pointer');
+      expect(today?.className).toContain('bg-primary');
+      expect(today?.className).toContain('enabled:!cursor-pointer');
       expect(container.querySelector<HTMLButtonElement>(
         'button[name="next-month"]',
       )?.className).toContain('enabled:!cursor-pointer');
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('keeps an outside copy of the current date numeric and does not duplicate the star', () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2030, 3, 1)}
+        today={new Date(2030, 2, 31)}
+        selected={new Date(2030, 3, 1)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      const outsideToday = getDayButton(container, '31', { outside: true });
+      expect(outsideToday).toHaveAttribute('aria-current', 'date');
+      expect(outsideToday?.textContent?.trim()).toBe('31');
+      expect(outsideToday?.querySelector(
+        '[data-calendar-current-date-icon="true"]',
+      )).toBeFalsy();
+      expect(container.querySelector(
+        '[data-calendar-current-date-icon="true"]',
+      )).toBeFalsy();
     } finally {
       unmount(root, container);
     }

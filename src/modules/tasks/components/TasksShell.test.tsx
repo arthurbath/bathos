@@ -3131,9 +3131,12 @@ describe('TasksShell', () => {
 
       const days = Array.from(document.querySelectorAll<HTMLButtonElement>('button[name="day"]'))
         .filter((button) => !button.className.includes('day-outside'));
-      const today = days.find((button) => button.textContent?.trim() === '20');
+      const today = days.find((button) => button.getAttribute('aria-current') === 'date');
       const tomorrow = days.find((button) => button.textContent?.trim() === '21');
       expect(today).toBeDisabled();
+      expect(today?.querySelector(
+        '[data-calendar-current-date-icon="true"]',
+      )).toBeTruthy();
       expect(tomorrow).not.toBeDisabled();
     } finally {
       cleanup(root, container);

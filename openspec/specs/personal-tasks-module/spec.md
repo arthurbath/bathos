@@ -469,8 +469,8 @@ The Tasks expanded to-do editor SHALL present Start and Deadline as a matched re
 - **THEN** focus moves to Clear and the visible calendar month does not change
 
 #### Scenario: Identify today in either calendar
-- **WHEN** the owner planning date is visible in the Start or Deadline calendar
-- **THEN** the calendar gives today a visible semantic highlight and an accessible current-date state independently from the selected-date state
+- **WHEN** the owner planning date is visible in the Start or Deadline day calendar or its month picker
+- **THEN** the shared Calendar replaces today's in-month numeric day label with Lucide's Star icon, places the same icon to the right of the current month name, preserves accessible current-date and month names, and retains selected-value highlighting independently
 
 ### Requirement: Flexible Reminder Time Entry
 The Tasks Start picker SHALL accept a bounded grammar of reasonable time shorthand, normalize accepted input to one visible local time, persist only canonical 24-hour reminder intent, and provide concise rejection feedback without exposing resolution metadata.

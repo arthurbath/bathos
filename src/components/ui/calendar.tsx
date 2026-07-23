@@ -1,6 +1,6 @@
 import * as React from "react";
-import { format } from "date-fns";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { format, isSameMonth } from "date-fns";
+import { ChevronLeft, ChevronRight, Star } from "lucide-react";
 import {
   Button as DayPickerButton,
   DayPicker,
@@ -32,6 +32,19 @@ const CALENDAR_HEADER_BUTTON_CLASS = `${CALENDAR_HEADER_CLASS} !cursor-pointer b
 function CalendarDay({ date, displayMonth }: DayProps) {
   const buttonRef = React.useRef<HTMLButtonElement>(null);
   const dayRender = useDayRender(date, displayMonth, buttonRef);
+  const isCurrentDate = Boolean(
+    dayRender.activeModifiers.today && isSameMonth(date, displayMonth),
+  );
+  const currentDateLabel = isCurrentDate
+    ? format(date, "EEEE, MMMM d, yyyy")
+    : undefined;
+  const dayContent = isCurrentDate ? (
+    <Star
+      aria-hidden="true"
+      className="h-3.5 w-3.5"
+      data-calendar-current-date-icon="true"
+    />
+  ) : dayRender.buttonProps.children;
 
   if (dayRender.isHidden) {
     return <div role="gridcell" />;
@@ -41,7 +54,10 @@ function CalendarDay({ date, displayMonth }: DayProps) {
       <div
         {...dayRender.divProps}
         aria-current={dayRender.activeModifiers.today ? "date" : undefined}
-      />
+        aria-label={currentDateLabel}
+      >
+        {dayContent}
+      </div>
     );
   }
   return (
@@ -50,7 +66,10 @@ function CalendarDay({ date, displayMonth }: DayProps) {
       ref={buttonRef}
       {...dayRender.buttonProps}
       aria-current={dayRender.activeModifiers.today ? "date" : undefined}
-    />
+      aria-label={currentDateLabel}
+    >
+      {dayContent}
+    </DayPickerButton>
   );
 }
 
@@ -205,12 +224,14 @@ function MonthPicker({
   year,
   activeMonth,
   minimumDate,
+  currentDate,
   onYearChange,
   onMonthSelect,
 }: {
   year: number;
   activeMonth: number | null;
   minimumDate?: Date;
+  currentDate: Date;
   onYearChange: (nextYear: number) => void;
   onMonthSelect: (nextMonthIndex: number) => void;
 }) {
@@ -362,6 +383,7 @@ function MonthPicker({
           {Array.from({ length: 12 }, (_, monthIndex) => {
             const monthDate = new Date(year, monthIndex, 1);
             const isSelected = monthIndex === activeMonth;
+            const isCurrentMonth = isSameMonth(monthDate, currentDate);
             const isDisabled = !isMonthSelectable(year, monthIndex, minimumDate);
             return (
               <button
@@ -375,7 +397,7 @@ function MonthPicker({
                 disabled={isDisabled}
                 className={cn(
                   buttonVariants({ variant: "clear" }),
-                  "h-9 px-0 enabled:!cursor-pointer disabled:!cursor-not-allowed",
+                  "h-9 gap-1.5 px-0 enabled:!cursor-pointer disabled:!cursor-not-allowed",
                   isSelected && "border border-primary bg-primary/10 text-primary",
                   isDisabled && "text-muted-foreground opacity-50",
                 )}
@@ -383,6 +405,13 @@ function MonthPicker({
                 onKeyDown={(event) => handleMonthGridKeyDown(event, monthIndex)}
               >
                 {format(monthDate, "MMM")}
+                {isCurrentMonth ? (
+                  <Star
+                    aria-hidden="true"
+                    className="h-3.5 w-3.5"
+                    data-calendar-current-month-icon="true"
+                  />
+                ) : null}
               </button>
             );
           })}
@@ -410,6 +439,7 @@ function Calendar({
 }: CalendarProps) {
   const isControlledMonth = month !== undefined;
   const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const resolvedToday = today ?? new Date();
   const initialMonth = clampMonthToMinimum(
     month ?? defaultMonth ?? today ?? new Date(),
     fromDate,
@@ -483,6 +513,7 @@ function Calendar({
           year={monthPickerYear}
           activeMonth={monthPickerActiveMonth}
           minimumDate={fromDate}
+          currentDate={resolvedToday}
           onYearChange={(nextYear) => {
             setMonthPickerActiveMonth(null);
             setMonthPickerYear(nextYear);
@@ -500,6 +531,7 @@ function Calendar({
           month={displayMonth}
           defaultMonth={displayMonth}
           fromDate={fromDate}
+          today={resolvedToday}
           className={cn("p-3", CALENDAR_DAY_VIEWPORT_CLASS, className)}
           onMonthChange={commitMonthChange}
           classNames={{
