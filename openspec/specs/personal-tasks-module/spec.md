@@ -449,6 +449,75 @@ The system SHALL support reusable, revisioned to-do and project template definit
 - **WHEN** an authenticated template RPC omits the owner identifier from its returned definition, revision, or instantiation
 - **THEN** the client assigns the already authenticated owner to the parsed result without requiring the server to echo an owner identifier
 
+### Requirement: Unified Task Start Picker
+The Tasks interface SHALL present a single autosaving Start control for Today horizon, future deferral date, and reminder intent by composing the established BathOS popover and calendar primitives with Tasks-specific controls.
+
+#### Scenario: Open the complete Start picker
+- **WHEN** a user activates Start from an open to-do or its action menu
+- **THEN** one BathOS popover presents Inbox, Now, Next, and Later Today horizons, a calendar, reminder time, and Clear without separate Start Date, Day Horizon, or Reminder Time editor fields
+
+#### Scenario: Choose a Today horizon
+- **WHEN** a user chooses Inbox, Now, Next, or Later in the Start picker
+- **THEN** Tasks immediately stores that active Today horizon with a null future Start Date and keeps the picker available for optional reminder editing
+
+#### Scenario: Choose a future Start date
+- **WHEN** a user chooses a date after the owner's planning date
+- **THEN** Tasks immediately stores that future Start Date, retains a valid selected day horizon for reached-date activation, and keeps the picker available for optional reminder editing
+
+#### Scenario: Prevent calendar scheduling for today or the past
+- **WHEN** the Start picker calendar displays the owner planning date or an earlier date
+- **THEN** those date buttons are disabled because Today placement is selected through an explicit day horizon
+
+#### Scenario: Add or clear a reminder inside Start
+- **WHEN** a task has a Today horizon or future Start Date and the user enters or clears a reminder time
+- **THEN** Tasks immediately saves or cancels the one dependent reminder through the authoritative reminder contract without requesting an independent reminder date
+
+#### Scenario: Clear Start
+- **WHEN** the user activates Clear in the Start picker
+- **THEN** Tasks immediately clears both future Start Date and Today horizon and cancels any active reminder and pending occurrence
+
+#### Scenario: Traverse the complete picker by keyboard
+- **WHEN** focus enters the Start picker
+- **THEN** Tab and Shift+Tab traverse its horizon, calendar, reminder, and clear controls, arrow keys navigate the shared calendar, Escape closes the popover, and close restores focus to the trigger
+
+#### Scenario: Open Start from the reminder command
+- **WHEN** Command+E on Mac or Control+E on Windows targets one open to-do or one or more selected to-dos
+- **THEN** Tasks opens the Start surface for an eligible single target with reminder time prefocused, or opens the existing multi-task reminder surface for eligible bulk work, and suppresses the matching browser command
+
+#### Scenario: Withhold a reminder from unplanned work
+- **WHEN** a task has neither a Today horizon nor a future Start Date
+- **THEN** the reminder time control remains visible for discovery but disabled until the user chooses a Start intent
+
+### Requirement: Focused To-Do Action Menu
+The Tasks interface SHALL keep the to-do ellipsis menu limited to actionability, structural Move, temporal Do, Start planning, and recoverable Delete while retaining drag and keyboard ordering outside that menu.
+
+#### Scenario: Present planning actions by intent
+- **WHEN** a user opens an active to-do's ellipsis menu
+- **THEN** the menu exposes Move for area or project placement, Do for Today, Anytime, and Someday placement, and Start for the unified Start picker
+
+#### Scenario: Omit redundant terminal action
+- **WHEN** a user opens an active to-do's ellipsis menu
+- **THEN** the menu exposes Delete and does not expose Cancel
+
+#### Scenario: Omit menu ordering commands
+- **WHEN** a user opens an active to-do's ellipsis menu
+- **THEN** the menu does not expose Move Up or Move Down while drag and Option or Alt arrow ordering remain available in supported views
+
+### Requirement: Explicit Primary Link Clearing
+The system SHALL preserve an explicitly cleared Primary Link independently from immutable typed source provenance.
+
+#### Scenario: Reopen a cleared Mail Primary Link
+- **WHEN** a user clears a Mail-captured to-do's Primary Link, closes the editor, and later reopens it
+- **THEN** the Primary Link remains null, the row exposes no Primary Link icon, and the immutable Mail source remains unchanged
+
+#### Scenario: Restore explicit null without legacy fallback
+- **WHEN** a current export envelope contains a `primary_link` key whose value is null
+- **THEN** restore preserves null and does not initialize the shortcut from `source_url`
+
+#### Scenario: Initialize a missing legacy Primary Link
+- **WHEN** an older export envelope omits the `primary_link` key for supported Mail provenance
+- **THEN** normalization MAY initialize the editable shortcut from the verified Mail source for backward compatibility
+
 ### Requirement: Orthogonal Task State
 The system SHALL model lifecycle, record disposition, planning destination, Today membership, and structured actionability as separate dimensions with revision-checked transitions and append-only history.
 
@@ -457,12 +526,12 @@ The system SHALL model lifecycle, record disposition, planning destination, Toda
 - **THEN** the system sets lifecycle to completed, records `completed_at`, removes the work from active views, includes it in Done, and appends one completion event
 
 #### Scenario: Cancel open work
-- **WHEN** a caller cancels present open work from the current revision
+- **WHEN** a non-web caller cancels present open work from the current revision
 - **THEN** the system sets lifecycle to canceled, records `canceled_at`, removes the work from active views, includes it in Done, and appends one cancellation event
 
-#### Scenario: Cancel an active to-do from the web interface
-- **WHEN** a user invokes the visible Cancel action for an active to-do
-- **THEN** the web client submits the ordinary revision-checked cancellation transition, removes the to-do from the active view, and makes the canceled record available in Done rather than deleting it
+#### Scenario: Omit cancellation from active to-do web actions
+- **WHEN** the web interface presents lifecycle actions for an active to-do
+- **THEN** it offers completion and recoverable deletion without exposing cancellation as a third terminal path
 
 #### Scenario: Reopen terminal work
 - **WHEN** a caller reopens completed or canceled work from Done during retention
@@ -497,7 +566,7 @@ The system SHALL model lifecycle, record disposition, planning destination, Toda
 - **THEN** the system restores valid prior hierarchy and active state, falling back to Anytime with no Today membership when the prior placement is no longer valid
 
 ### Requirement: Temporal Planning Semantics
-The system SHALL store Start Date as a future-only deferral calendar fact, store Deadline independently, retain day horizons for active Today work, derive activation and Today from the owner's IANA planning time zone, and store reminder times as unambiguous instants resolved on the future start date.
+The system SHALL store Start Date as a future-only deferral calendar fact, store Deadline independently, retain day horizons for active Today work, derive activation and Today from the owner's IANA planning time zone, and store reminder times as unambiguous instants resolved on the current Start intent.
 
 #### Scenario: Start date and deadline coexist in either order
 - **WHEN** a to-do has both a start date and a deadline
@@ -517,22 +586,22 @@ The system SHALL store Start Date as a future-only deferral calendar fact, store
 
 #### Scenario: Activate a reached Start Date
 - **WHEN** time advances to a stored Start Date in the owner's planning time zone
-- **THEN** local and server activation converge on a null start date, retained day horizon, one accepted revision transition, and defensive Today visibility while synchronization catches up
+- **THEN** local and server activation converge on a null start date, retained day horizon, one accepted revision transition, defensive Today visibility while synchronization catches up, and preservation of an already-resolved same-day reminder
 
 #### Scenario: Place work in a day horizon
 - **WHEN** a user selects Inbox, Now, Next, or Later for Anytime work
-- **THEN** the system records the active horizon without inventing a start date or reminder time
+- **THEN** the system records the active horizon without inventing a future Start Date
 
-#### Scenario: Edit start date and dependent controls
+#### Scenario: Edit Start and dependent controls
 - **WHEN** a user opens a to-do's temporal planning controls
-- **THEN** the interface always presents Start Date, presents Day Horizon for active Today or deferred work, and presents Reminder Time only when Start Date contains a future value, with complete keyboard operation
+- **THEN** one Start picker presents Today horizons, a future-only calendar, reminder time, and Clear with complete keyboard operation and immediate persistence
 
 #### Scenario: Resolve a reminder
-- **WHEN** a caller schedules a reminder with a wall-clock time and IANA time zone for an item with a start date
-- **THEN** the system stores that time intent and the resulting UTC instant on the item's future start date for every delivery client
+- **WHEN** a caller schedules a reminder with a wall-clock time and IANA time zone for an item with a future Start Date or Today horizon
+- **THEN** the system stores that time intent and resulting UTC instant on the future Start Date or owner planning date for every delivery client
 
 #### Scenario: Resolve a nonexistent reminder time
-- **WHEN** a requested local reminder time falls in a daylight-saving gap on the item's start date
+- **WHEN** a requested local reminder time falls in a daylight-saving gap on its effective reminder date
 - **THEN** the system selects the first valid instant after the gap and records the adjustment
 
 #### Scenario: Resolve an ambiguous reminder time
@@ -591,7 +660,7 @@ The system SHALL keep recurrence definitions separate from generated task occurr
 - **THEN** the client assigns the already authenticated owner to the parsed result while synchronized recurrence rows continue to validate their stored owner identifier
 
 ### Requirement: Stable Manual Ordering
-The system SHALL preserve intentional manual ordering across direct drag, keyboard or menu moves, same-view Today horizon changes, saves, refreshes, offline operation, and synchronization.
+The system SHALL preserve intentional manual ordering across direct drag, keyboard moves, same-view Today horizon changes, saves, refreshes, offline operation, and synchronization.
 
 #### Scenario: Reorder active work by drag
 - **WHEN** a user drags an active task before or after another task in a supported ordered scope
@@ -607,10 +676,10 @@ The system SHALL preserve intentional manual ordering across direct drag, keyboa
 
 #### Scenario: Retain non-pointer ordering
 - **WHEN** a user cannot or does not use drag-and-drop
-- **THEN** the interface retains keyboard and menu commands that move the focused task within the same supported scope
+- **THEN** the interface retains keyboard commands that move the focused task within the same supported scope
 
-#### Scenario: Reorder within a Today horizon by keyboard or menu
-- **WHEN** a user invokes a keyboard or menu reorder in Inbox, Now, Next, or Later
+#### Scenario: Reorder within a Today horizon by keyboard
+- **WHEN** a user invokes a keyboard reorder in Inbox, Now, Next, or Later
 - **THEN** the system changes only that item's order within the same visible section and does not infer a cross-section destination
 
 #### Scenario: Reorder active and inactive planning pools independently
@@ -1145,9 +1214,9 @@ The system SHALL provide modifier-based keyboard operation for full-editor creat
 - **WHEN** Command+H on Mac or Control+H on Windows targets one or more tasks with future Start Dates
 - **THEN** each eligible task cycles Now to Next to Later to Now without changing its Start Date
 
-#### Scenario: Ignore an ineligible reminder command
-- **WHEN** Command+E on Mac or Control+E on Windows targets no task with a Start Date
-- **THEN** the module makes no reminder mutation or focus change
+#### Scenario: Open reminder planning for unplanned work
+- **WHEN** Command+E on Mac or Control+E on Windows targets one task with neither a future Start Date nor a Today horizon
+- **THEN** the module opens Start with reminder entry disabled until the user chooses a Start intent and makes no reminder mutation
 
 #### Scenario: Open the next visible to-do
 - **WHEN** the user presses Control+S on Mac or Control+Shift+S on Windows
@@ -1584,28 +1653,36 @@ The system SHALL migrate retired planning and terminal vocabulary without losing
 - **THEN** the router replaces the location with `/tasks/today` or `/tasks/done` and never renders a retired view
 
 ### Requirement: Deferral-Anchored Reminder Time
-The system SHALL allow at most one active reminder per to-do or project, SHALL derive its calendar date from that item's future-only start date, and SHALL expose only its local time as user-editable reminder intent.
+The system SHALL allow at most one active reminder per to-do or project, SHALL derive its calendar date from the item's future Start Date or owner-local planning date for a Today horizon, and SHALL expose only its local time as user-editable reminder intent.
 
 #### Scenario: Add a reminder to scheduled work
-- **WHEN** a user assigns a reminder time to an open item with a start date
-- **THEN** the system resolves one reminder on that start date in the owner's planning time zone and does not request or store an independently chosen reminder date
+- **WHEN** a user assigns a reminder time to an open item with a future Start Date
+- **THEN** the system resolves one reminder on that Start Date in the owner's planning time zone and does not request or store an independently chosen reminder date
 
-#### Scenario: Withhold reminders from undated work
-- **WHEN** an open item has no start date
-- **THEN** the interface hides Reminder Time and every mutation surface rejects a new reminder for that item
+#### Scenario: Add a reminder to Today work
+- **WHEN** a user assigns a reminder time to an open item with a Today horizon and no future Start Date
+- **THEN** the system resolves one reminder on the owner's current planning date and does not request or store an independently chosen reminder date
 
-#### Scenario: Clear a future start date with a reminder
-- **WHEN** a user manually clears the future start date from an item that has an active reminder
-- **THEN** the system cancels its reminder and pending occurrence while retaining or clearing its day horizon according to the requested active placement
+#### Scenario: Withhold reminders from unplanned work
+- **WHEN** an open item has neither a future Start Date nor a Today horizon
+- **THEN** the interface disables reminder entry and every mutation surface rejects a new reminder for that item
+
+#### Scenario: Clear all Start intent with a reminder
+- **WHEN** a user clears both future Start Date and Today horizon from an item that has an active reminder
+- **THEN** the system cancels its reminder and pending occurrence
+
+#### Scenario: Move future work directly to Today
+- **WHEN** a user replaces a future Start Date with a Today horizon while retaining its reminder time
+- **THEN** the system re-resolves the reminder on the owner planning date and replaces the prior pending occurrence exactly once
 
 #### Scenario: Activate work without losing its same-day reminder
-- **WHEN** the owner-local start date arrives before the item's resolved reminder time
-- **THEN** activation clears the parent start date, retains its day horizon, and preserves the already-scheduled occurrence so it remains deliverable that day
+- **WHEN** the owner-local Start Date arrives before the item's resolved reminder time
+- **THEN** activation clears the parent Start Date, retains its day horizon, and preserves the already-scheduled occurrence so it remains deliverable that day
 
-#### Scenario: Move the start date with a reminder
-- **WHEN** a user changes an item's start date while retaining its reminder time
+#### Scenario: Move the Start Date with a reminder
+- **WHEN** a user changes an item's future Start Date while retaining its reminder time
 - **THEN** the system re-resolves the reminder against the new date and replaces the prior pending occurrence exactly once
 
 #### Scenario: Normalize existing reminder data
-- **WHEN** the start-anchored reminder migration encounters an active reminder
-- **THEN** it rebinds that reminder to its parent's start date when present and cancels it when the parent is undated without deleting the parent item
+- **WHEN** the effective-date reminder migration encounters an active reminder
+- **THEN** it rebinds that reminder to its parent's future Start Date or current Today planning date and cancels it only when the parent has neither Start form

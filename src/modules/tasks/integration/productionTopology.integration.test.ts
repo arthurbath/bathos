@@ -874,12 +874,11 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       (reminder) => reminder.status === 'active' && reminder.local_date === planningDate,
     );
 
-    const movedFuture = await moveTaskData({
+    const movedFuture = await scheduleTaskData({
       task_id: taskId,
       expected_revision: 2,
       client_mutation_id: crypto.randomUUID(),
       start_date: futureDate,
-      today_section: 'next',
     }, auth);
     expect(movedFuture).toMatchObject({
       mutation_outcome: 'applied',
@@ -904,6 +903,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       task_id: taskId,
       expected_revision: 3,
       client_mutation_id: crypto.randomUUID(),
+      destination: 'anytime',
       start_date: null,
       today_section: 'later',
     }, auth);
@@ -931,6 +931,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       task_id: taskId,
       expected_revision: 4,
       client_mutation_id: crypto.randomUUID(),
+      destination: 'anytime',
       start_date: null,
       today_section: null,
     }, auth);

@@ -14,6 +14,7 @@ This folder contains dated agent-facing security, performance, and technology ev
 
 | Date | File | Topic |
 |---|---|---|
+| 2026-07-23 | `2026-07-23_tasks_unified_start_release.md` | Unified task Start picker, explicit Primary Link clearing, private backup, and production acceptance |
 | 2026-07-22 | `2026-07-22_tasks_structure_simplification_preflight.md` | Heading-free Tasks scheduling migration, private backup, content-free production preflight, and bounded release acceptance |
 | 2026-07-21 | `2026-07-21_tasks_goal_readiness.md` | Tasks V1 acceptance coverage, current production evidence, and the final bounded-trial completion gate |
 | 2026-07-21 | `2026-07-21_tasks_route_runtime_stability.md` | Tasks route continuity, runtime preservation, and production browser acceptance |
