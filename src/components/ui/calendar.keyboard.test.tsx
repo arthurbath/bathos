@@ -187,6 +187,96 @@ describe('Calendar keyboard navigation', () => {
     }
   });
 
+  it('skips disabled dates above the focused date and reaches an enabled calendar control', async () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 6, 1)}
+        fromDate={new Date(2026, 6, 24)}
+        selected={new Date(2026, 6, 24)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      const firstEnabledDay = getDayButton(container, '24');
+      expect(firstEnabledDay).not.toBeDisabled();
+
+      act(() => {
+        firstEnabledDay?.focus();
+        firstEnabledDay?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowUp',
+          bubbles: true,
+        }));
+      });
+      await flushUi();
+
+      expect(document.activeElement).toBe(
+        container.querySelector('button[name="next-month"]'),
+      );
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('falls back to the month-year control when disabled dates and hidden previous navigation block the preferred path', async () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 6, 1)}
+        fromDate={new Date(2026, 6, 27)}
+        selected={new Date(2026, 6, 27)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      const firstEnabledDay = getDayButton(container, '27');
+      act(() => {
+        firstEnabledDay?.focus();
+        firstEnabledDay?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowUp',
+          bubbles: true,
+        }));
+      });
+      await flushUi();
+
+      expect(document.activeElement).toBe(
+        container.querySelector('button[name="caption-month-year"]'),
+      );
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('continues scanning upward when the date immediately above is disabled', async () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 3, 1)}
+        selected={new Date(2026, 3, 15)}
+        disabled={new Date(2026, 3, 8)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      const aprilFifteenth = getDayButton(container, '15');
+      act(() => {
+        aprilFifteenth?.focus();
+        aprilFifteenth?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowUp',
+          bubbles: true,
+        }));
+      });
+      await flushUi();
+
+      expect(document.activeElement).toBe(getDayButton(container, '1'));
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it('opens a month picker from the month-year caption and pages years', async () => {
     function Harness() {
       const [month, setMonth] = React.useState(new Date(2026, 3, 1));
@@ -482,6 +572,9 @@ describe('Calendar keyboard navigation', () => {
       expect(container.querySelector<HTMLButtonElement>(
         'button[name="previous-month"]',
       )).toBeDisabled();
+      expect(container.querySelector<HTMLButtonElement>(
+        'button[name="previous-month"]',
+      )?.className).toContain('disabled:invisible');
       expect(document.activeElement).toBe(getDayButton(container, '1'));
     } finally {
       unmount(root, container);
@@ -519,6 +612,11 @@ describe('Calendar keyboard navigation', () => {
       expect(container.querySelector<HTMLButtonElement>(
         'button[name="previous-year"]',
       )).toBeDisabled();
+      expect(container.querySelector<HTMLButtonElement>(
+        'button[name="previous-year"]',
+      )?.className).toContain('disabled:invisible');
+      expect(months[6]?.className).toContain('enabled:!cursor-pointer');
+      expect(months[0]?.className).toContain('disabled:!cursor-not-allowed');
       expect(document.activeElement).toBe(months[6]);
     } finally {
       unmount(root, container);
@@ -543,6 +641,10 @@ describe('Calendar keyboard navigation', () => {
       expect(today?.className).toContain('bg-accent');
       expect(selected).toHaveAttribute('aria-selected', 'true');
       expect(selected?.className).toContain('bg-primary');
+      expect(selected?.className).toContain('enabled:!cursor-pointer');
+      expect(container.querySelector<HTMLButtonElement>(
+        'button[name="next-month"]',
+      )?.className).toContain('enabled:!cursor-pointer');
     } finally {
       unmount(root, container);
     }

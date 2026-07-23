@@ -22,11 +22,11 @@ const CALENDAR_VIEWPORT_WIDTH_CLASS = "box-border w-[276px]";
 const CALENDAR_DAY_VIEWPORT_CLASS = `${CALENDAR_VIEWPORT_WIDTH_CLASS} min-h-[318px]`;
 const CALENDAR_CAPTION_CLASS = "flex justify-center pt-1 relative items-center";
 const CALENDAR_NAV_CLASS = "space-x-1 flex items-center";
-const CALENDAR_NAV_BUTTON_CLASS = "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100";
-const CALENDAR_NAV_PREV_CLASS = "absolute left-1";
+const CALENDAR_NAV_BUTTON_CLASS = "h-7 w-7 bg-transparent p-0 opacity-50 enabled:!cursor-pointer hover:opacity-100 disabled:!cursor-not-allowed";
+const CALENDAR_NAV_PREV_CLASS = "absolute left-1 disabled:invisible";
 const CALENDAR_NAV_NEXT_CLASS = "absolute right-1";
 const CALENDAR_HEADER_CLASS = "inline-flex items-center justify-center rounded-md px-2 py-1 text-sm font-medium focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0";
-const CALENDAR_HEADER_BUTTON_CLASS = `${CALENDAR_HEADER_CLASS} border border-transparent bg-transparent text-white transition-colors hover:bg-primary/10 hover:text-primary`;
+const CALENDAR_HEADER_BUTTON_CLASS = `${CALENDAR_HEADER_CLASS} !cursor-pointer border border-transparent bg-transparent text-white transition-colors hover:bg-primary/10 hover:text-primary`;
 
 function CalendarDay({ date, displayMonth }: DayProps) {
   const buttonRef = React.useRef<HTMLButtonElement>(null);
@@ -59,6 +59,37 @@ function getFocusableDayRows(root: HTMLElement): HTMLButtonElement[][] {
     .filter((row) => row.length > 0);
 }
 
+function canReceiveCalendarFocus(button: HTMLButtonElement | null | undefined): button is HTMLButtonElement {
+  return Boolean(button && !button.disabled && button.style.visibility !== "hidden");
+}
+
+function getCalendarHeaderTarget(
+  colIndex: number,
+  previousMonthButton: HTMLButtonElement | null,
+  captionButton: HTMLButtonElement | null,
+  nextMonthButton: HTMLButtonElement | null,
+): HTMLButtonElement | null {
+  const preferred = colIndex >= 2 && colIndex <= 4
+    ? captionButton
+    : (colIndex >= 5 ? nextMonthButton : previousMonthButton);
+  if (canReceiveCalendarFocus(preferred)) return preferred;
+  return [captionButton, nextMonthButton, previousMonthButton]
+    .find(canReceiveCalendarFocus) ?? null;
+}
+
+function findEnabledDayAbove(
+  rows: HTMLButtonElement[][],
+  rowIndex: number,
+  colIndex: number,
+): HTMLButtonElement | null {
+  for (let candidateRowIndex = rowIndex - 1; candidateRowIndex >= 0; candidateRowIndex -= 1) {
+    const candidateRow = rows[candidateRowIndex];
+    const candidate = candidateRow?.[Math.min(colIndex, candidateRow.length - 1)];
+    if (canReceiveCalendarFocus(candidate)) return candidate;
+  }
+  return null;
+}
+
 function focusCalendarArrowTarget(root: HTMLElement, activeElement: HTMLElement, key: string): boolean {
   const previousMonthButton = root.querySelector<HTMLButtonElement>('button[name="previous-month"]');
   const nextMonthButton = root.querySelector<HTMLButtonElement>('button[name="next-month"]');
@@ -77,9 +108,13 @@ function focusCalendarArrowTarget(root: HTMLElement, activeElement: HTMLElement,
     } else if (key === "ArrowRight") {
       target = colIndex < rows[rowIndex].length - 1 ? rows[rowIndex][colIndex + 1] : (rows[rowIndex + 1]?.[0] ?? nextMonthButton);
     } else if (key === "ArrowUp") {
-      target = rowIndex > 0
-        ? rows[rowIndex - 1]?.[Math.min(colIndex, rows[rowIndex - 1].length - 1)]
-        : (colIndex >= 2 && colIndex <= 4 ? captionButton : (colIndex >= 5 ? nextMonthButton : previousMonthButton));
+      target = findEnabledDayAbove(rows, rowIndex, colIndex)
+        ?? getCalendarHeaderTarget(
+          colIndex,
+          previousMonthButton,
+          captionButton,
+          nextMonthButton,
+        );
     } else if (key === "ArrowDown") {
       target = rows[rowIndex + 1]?.[Math.min(colIndex, rows[rowIndex + 1].length - 1)];
     }
@@ -302,7 +337,7 @@ function MonthPicker({
                 disabled={isDisabled}
                 className={cn(
                   buttonVariants({ variant: "clear" }),
-                  "h-9 px-0",
+                  "h-9 px-0 enabled:!cursor-pointer disabled:!cursor-not-allowed",
                   isSelected && "border border-primary bg-primary/10 text-primary",
                   isDisabled && "text-muted-foreground opacity-50",
                 )}
@@ -442,7 +477,10 @@ function Calendar({
             head_cell: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
             row: "flex w-full mt-2",
             cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-            day: cn(buttonVariants({ variant: "clear" }), "h-9 w-9 p-0 font-normal aria-selected:opacity-100"),
+            day: cn(
+              buttonVariants({ variant: "clear" }),
+              "h-9 w-9 p-0 font-normal enabled:!cursor-pointer disabled:!cursor-not-allowed aria-selected:opacity-100",
+            ),
             day_range_end: "day-range-end",
             day_selected:
               "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",

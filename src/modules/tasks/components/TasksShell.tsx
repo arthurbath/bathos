@@ -1634,7 +1634,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               planningDate={planningDate}
               reminder={reminders.byRootId.get(projectId) ?? null}
               reminderMode={reminderAvailability}
-              reminderTimeZone={reminders.planningTimeZone}
               onSaveReminder={async (input) => {
                 try {
                   await reminders.save({
@@ -2878,7 +2877,6 @@ function TaskRow({
     run: () => runMovementAction(action.run),
   }));
   const reminderTime = reminder?.local_time.slice(0, 5) ?? '';
-  const reminderAmbiguityChoice = reminder?.ambiguity_choice ?? 'earlier';
   const applyStartPlanning = async ({
     startDate,
     todaySection,
@@ -2899,7 +2897,7 @@ function TaskRow({
     }
     await onSaveReminder({
       localTime,
-      ambiguityChoice: reminderAmbiguityChoice,
+      ambiguityChoice: 'earlier',
     });
   };
   const clearStart = async () => {
@@ -3232,7 +3230,6 @@ function TaskRow({
         task={task}
         reminder={reminder}
         reminderTime={reminderTime}
-        ambiguityChoice={reminderAmbiguityChoice}
         reminderTimeZone={reminderTimeZone}
         reminderDisabled={reminderMode !== 'connected'}
         reminderUnavailableMessage={reminderMode === 'connected'
@@ -3241,10 +3238,6 @@ function TaskRow({
         planningDate={planningDate}
         onPlanningChange={applyStartPlanning}
         onReminderChange={applyStartReminder}
-        onAmbiguityChange={(choice) => onSaveReminder({
-          localTime: reminderTime,
-          ambiguityChoice: choice,
-        })}
         onClear={clearStart}
       /> : null}
       </div>
@@ -3286,9 +3279,6 @@ function TaskEditor({
   const [todaySection, setTodaySection] = useState<TaskTodaySection | null>(task.today_section);
   const [deadline, setDeadline] = useState(task.deadline ?? '');
   const [reminderTime, setReminderTime] = useState(reminder?.local_time.slice(0, 5) ?? '');
-  const [ambiguityChoice, setAmbiguityChoice] = useState<'earlier' | 'later'>(
-    reminder?.ambiguity_choice ?? 'earlier',
-  );
   const [organization, setOrganization] = useState(taskOrganizationValue(task));
   const titleInputRef = useRef<HTMLInputElement>(null);
   const operationQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -3392,15 +3382,12 @@ function TaskEditor({
     };
   }, [flushAutosave, onRegisterAutosave, task.id]);
 
-  const persistReminder = useCallback((
-    localTime: string,
-    choice: 'earlier' | 'later',
-  ) => {
+  const persistReminder = useCallback((localTime: string) => {
     const pendingTextPatch = takePendingTextPatch();
     if (Object.keys(pendingTextPatch).length > 0) enqueueTaskPatch(pendingTextPatch);
     return enqueueOperation(() => onSaveReminderRef.current({
       localTime,
-      ambiguityChoice: choice,
+      ambiguityChoice: 'earlier',
     }));
   }, [enqueueOperation, enqueueTaskPatch, takePendingTextPatch]);
 
@@ -3429,7 +3416,7 @@ function TaskEditor({
   const changeReminderTime = async (nextReminderTime: string) => {
     setReminderTime(nextReminderTime);
     if (nextReminderTime) {
-      await persistReminder(nextReminderTime, ambiguityChoice);
+      await persistReminder(nextReminderTime);
     } else if (reminder !== null || reminderTime) {
       await cancelReminder();
     }
@@ -3585,7 +3572,6 @@ function TaskEditor({
             }}
             reminder={reminder}
             reminderTime={reminderTime}
-            ambiguityChoice={ambiguityChoice}
             reminderTimeZone={reminderTimeZone}
             reminderDisabled={reminderMode !== 'connected'}
             reminderUnavailableMessage={reminderMode === 'connected'
@@ -3594,10 +3580,6 @@ function TaskEditor({
             planningDate={planningDate}
             onPlanningChange={changeStartPlanning}
             onReminderChange={changeReminderTime}
-            onAmbiguityChange={async (nextChoice) => {
-              setAmbiguityChoice(nextChoice);
-              await persistReminder(reminderTime, nextChoice);
-            }}
             onClear={clearStartPlanning}
           />
         </div>

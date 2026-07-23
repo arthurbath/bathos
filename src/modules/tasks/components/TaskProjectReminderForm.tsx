@@ -18,25 +18,19 @@ export function TaskProjectReminderForm({
   projectId,
   reminder,
   mode,
-  timeZone,
   onSave,
   onCancel,
 }: {
   projectId: string;
   reminder: TaskReminder | null;
   mode: TaskReminderAvailability;
-  timeZone: string;
   onSave: (input: ProjectReminderInput) => Promise<void>;
   onCancel: () => Promise<void>;
 }) {
   const [localTime, setLocalTime] = useState(reminder?.local_time.slice(0, 5) ?? '');
-  const [ambiguityChoice, setAmbiguityChoice] = useState<'earlier' | 'later'>(
-    reminder?.ambiguity_choice ?? 'earlier',
-  );
   const [saving, setSaving] = useState(false);
   const connected = mode === 'connected';
-  const changed = localTime !== (reminder?.local_time.slice(0, 5) ?? '')
-    || ambiguityChoice !== (reminder?.ambiguity_choice ?? 'earlier');
+  const changed = localTime !== (reminder?.local_time.slice(0, 5) ?? '');
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -44,7 +38,7 @@ export function TaskProjectReminderForm({
     setSaving(true);
     try {
       if (localTime) {
-        await onSave({ localTime, ambiguityChoice });
+        await onSave({ localTime, ambiguityChoice: 'earlier' });
       } else if (reminder) {
         await onCancel();
       }
@@ -94,34 +88,6 @@ export function TaskProjectReminderForm({
           ) : null}
         </div>
       </div>
-      {localTime ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <label
-              className="text-sm font-medium text-foreground"
-              htmlFor={`project-reminder-ambiguity-${projectId}`}
-            >
-              Repeated Local Time
-            </label>
-            <select
-              id={`project-reminder-ambiguity-${projectId}`}
-              value={ambiguityChoice}
-              onChange={(event) => setAmbiguityChoice(
-                event.target.value as 'earlier' | 'later',
-              )}
-              disabled={saving || !connected}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="earlier">Earlier Instance</option>
-              <option value="later">Later Instance</option>
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <span className="text-sm font-medium text-foreground">Time Zone</span>
-            <p className="flex h-10 items-center text-sm text-muted-foreground">{timeZone}</p>
-          </div>
-        </div>
-      ) : null}
       {!connected ? (
         <p className="text-xs text-warning">
           {getTaskReminderUnavailableMessage(mode)}

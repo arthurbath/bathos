@@ -469,7 +469,7 @@ The Tasks expanded to-do editor SHALL present Start and Deadline as a matched re
 - **THEN** the calendar gives today a visible semantic highlight and an accessible current-date state independently from the selected-date state
 
 ### Requirement: Flexible Reminder Time Entry
-The Tasks Start picker SHALL accept a bounded grammar of reasonable time shorthand, normalize accepted input to one visible local time, and persist only canonical 24-hour reminder intent.
+The Tasks Start picker SHALL accept a bounded grammar of reasonable time shorthand, normalize accepted input to one visible local time, persist only canonical 24-hour reminder intent, and provide concise rejection feedback without exposing resolution metadata.
 
 #### Scenario: Normalize meridiem shorthand
 - **WHEN** a user enters `1p`, `1pm`, `1 pm`, `1:3p`, `1:30p`, `1:30pm`, `1:30 pm`, or `130p`
@@ -479,13 +479,13 @@ The Tasks Start picker SHALL accept a bounded grammar of reasonable time shortha
 - **WHEN** a user enters `1`, `13`, `130`, or `1300` for future work
 - **THEN** Tasks interprets the values as 1:00 am, 1:00 pm, 1:30 am, and 1:00 pm respectively
 
-#### Scenario: Reject malformed reminder input silently
+#### Scenario: Reject malformed reminder input
 - **WHEN** a user commits an impossible or unsupported value such as `25` or `asdf`
-- **THEN** Tasks performs no reminder mutation, restores the last committed display value, and shows no validation message
+- **THEN** Tasks performs no reminder mutation, restores the last committed display value, and briefly shows `Not allowed.`
 
 #### Scenario: Reject an explicit elapsed Today time
 - **WHEN** a Today reminder entry explicitly resolves to an owner-local instant that is not later than the current time
-- **THEN** Tasks performs no reminder mutation and restores the last committed display value
+- **THEN** Tasks performs no reminder mutation, restores the last committed display value, and briefly shows `Not allowed.`
 
 #### Scenario: Resolve ambiguous Today shorthand to the remaining future meridiem
 - **WHEN** an unsuffixed 1-12-hour reminder value has an elapsed AM interpretation but a future PM interpretation on the owner planning date
@@ -493,7 +493,7 @@ The Tasks Start picker SHALL accept a bounded grammar of reasonable time shortha
 
 #### Scenario: Reject fully elapsed ambiguous Today shorthand
 - **WHEN** both AM and PM interpretations of an unsuffixed 1-12-hour value have elapsed on the owner planning date
-- **THEN** Tasks performs no reminder mutation and restores the last committed display value
+- **THEN** Tasks performs no reminder mutation, restores the last committed display value, and briefly shows `Not allowed.`
 
 #### Scenario: Accept any valid time for future work
 - **WHEN** a reminder belongs to a future Start date
@@ -510,6 +510,10 @@ The Tasks Start picker SHALL accept a bounded grammar of reasonable time shortha
 #### Scenario: Keep Reminder compact
 - **WHEN** the Start picker renders Reminder
 - **THEN** its label and text input share one line and the input uses only the width needed for a time value
+
+#### Scenario: Keep reminder resolution metadata internal
+- **WHEN** Tasks presents reminder editing for a to-do or project
+- **THEN** the interface omits repeated-time selection and time-zone display while persistence uses the deterministic earlier repeated-time instance and the authoritative planning time zone internally
 
 ### Requirement: Unified Task Start Picker
 The Tasks interface SHALL present a single autosaving Start control for Today horizon, future deferral date, and reminder intent by composing the established BathOS popover and calendar primitives with Tasks-specific controls.
@@ -542,6 +546,18 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 - **WHEN** the user pages the Start calendar or opens its month picker
 - **THEN** months with no selectable date after the owner planning date are unavailable through month navigation, year navigation, pointer selection, and keyboard selection
 
+#### Scenario: Escape a disabled date boundary
+- **WHEN** a focused selectable date has one or more disabled dates above it and the user presses ArrowUp
+- **THEN** focus skips the disabled dates, reaches an enabled date when one exists above, or reaches the appropriate calendar header control when none exists
+
+#### Scenario: Hide unavailable backward navigation
+- **WHEN** no earlier calendar month or month-picker year contains an allowed Start date
+- **THEN** the corresponding backward navigation symbol is not visible and the month or year caption remains horizontally centered
+
+#### Scenario: Preserve calendar cursor meaning
+- **WHEN** a pointer rests or moves over a calendar date, month, caption, or paging action
+- **THEN** every enabled action consistently uses a pointer cursor and every disabled action consistently uses a not-allowed cursor without settling to the default cursor
+
 #### Scenario: Open on the earliest usable month
 - **WHEN** a task has no future Start Date and the owner planning date is the final day of its month
 - **THEN** the Start calendar opens on the following month because the current month contains no selectable Start date
@@ -560,11 +576,11 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 
 #### Scenario: Traverse the complete picker with Tab
 - **WHEN** focus enters the Start picker
-- **THEN** Tab and Shift+Tab traverse its horizon, calendar, reminder, optional ambiguity, and Clear controls, Escape closes the popover, and close restores focus to the trigger
+- **THEN** Tab and Shift+Tab traverse its horizon, calendar, reminder, and Clear controls, Escape closes the popover, and close restores focus to the trigger
 
 #### Scenario: Traverse the complete picker with arrow keys
 - **WHEN** focus is within Start and the user presses an arrow key outside ordinary reminder text editing
-- **THEN** focus moves predictably among Today horizons, calendar header and dates, Reminder, optional ambiguity, and Clear while skipping disabled destinations
+- **THEN** focus moves predictably among Today horizons, calendar header and dates, Reminder, and Clear while skipping disabled destinations
 
 #### Scenario: Activate a focused Start action
 - **WHEN** a user presses Enter or Space on a focused Today horizon, calendar action, selectable date, month, year pager, or Clear

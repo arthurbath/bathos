@@ -2611,7 +2611,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('silently restores the committed reminder after malformed input', async () => {
+  it('restores the committed reminder and reports malformed input as not allowed', async () => {
     const saveReminder = vi.fn().mockResolvedValue(undefined);
     const activeReminder = taskReminderFixture({
       root_type: 'todo',
@@ -2663,7 +2663,10 @@ describe('TasksShell', () => {
       expect(space.defaultPrevented).toBe(false);
       expect(time.value).toBe('9:00 am');
       expect(saveReminder).not.toHaveBeenCalled();
-      expect(mockToast).not.toHaveBeenCalled();
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Not allowed.',
+        duration: 1_800,
+      });
     } finally {
       cleanup(root, container);
     }
@@ -2726,19 +2729,11 @@ describe('TasksShell', () => {
       });
       const reminderInput = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a');
       expect(document.activeElement).toBe(reminderInput);
+      expect(document.body.textContent).not.toContain('Repeated Time');
+      expect(document.body.textContent).not.toContain('Time Zone');
 
       await act(async () => {
         reminderInput?.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'ArrowDown',
-          bubbles: true,
-          cancelable: true,
-        }));
-      });
-      const ambiguity = document.querySelector<HTMLSelectElement>('#task-start-ambiguity-task-a');
-      expect(document.activeElement).toBe(ambiguity);
-
-      await act(async () => {
-        ambiguity?.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'ArrowDown',
           bubbles: true,
           cancelable: true,
@@ -2756,7 +2751,7 @@ describe('TasksShell', () => {
             cancelable: true,
           }));
       });
-      expect(document.activeElement).toBe(ambiguity);
+      expect(document.activeElement).toBe(reminderInput);
     } finally {
       cleanup(root, container);
     }

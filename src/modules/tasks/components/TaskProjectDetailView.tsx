@@ -59,7 +59,6 @@ export function TaskProjectDetailView({
   planningDate,
   reminder,
   reminderMode,
-  reminderTimeZone,
   onSaveReminder,
   onCancelReminder,
 }: {
@@ -69,7 +68,6 @@ export function TaskProjectDetailView({
   planningDate: string;
   reminder: TaskReminder | null;
   reminderMode: TaskReminderAvailability;
-  reminderTimeZone: string;
   onSaveReminder: (input: ProjectReminderInput) => Promise<void>;
   onCancelReminder: () => Promise<void>;
 }) {
@@ -208,7 +206,6 @@ export function TaskProjectDetailView({
               projectId={project.id}
               reminder={reminder}
               mode={reminderMode}
-              timeZone={reminderTimeZone}
               onSave={onSaveReminder}
               onCancel={onCancelReminder}
             />

@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import {
@@ -56,14 +57,12 @@ type TaskStartPickerProps = {
   task: Pick<TaskTodo, 'id' | 'title' | 'start_date' | 'today_section'>;
   reminder: TaskReminder | null;
   reminderTime: string;
-  ambiguityChoice: 'earlier' | 'later';
   reminderTimeZone: string;
   reminderDisabled: boolean;
   reminderUnavailableMessage?: string | null;
   planningDate: string;
   onPlanningChange: (selection: PlanningSelection) => Promise<void>;
   onReminderChange: (localTime: string) => Promise<void>;
-  onAmbiguityChange: (choice: 'earlier' | 'later') => Promise<void>;
   onClear: () => Promise<void>;
 };
 
@@ -82,14 +81,12 @@ function TaskStartPickerPanel({
   task,
   reminder,
   reminderTime,
-  ambiguityChoice,
   reminderTimeZone,
   reminderDisabled,
   reminderUnavailableMessage,
   planningDate,
   onPlanningChange,
   onReminderChange,
-  onAmbiguityChange,
   onClear,
   focusTarget,
   active,
@@ -143,11 +140,6 @@ function TaskStartPickerPanel({
     (selectedHorizon ?? firstHorizonRef.current)?.focus();
   };
 
-  const getAmbiguityControl = () => (
-    panelRef.current?.querySelector<HTMLSelectElement>(`#task-start-ambiguity-${task.id}`)
-    ?? null
-  );
-
   const focusCalendarDay = (position: 'first' | 'last') => {
     const days = Array.from(panelRef.current?.querySelectorAll<HTMLButtonElement>(
       'button[name="day"]:not(:disabled)',
@@ -186,22 +178,6 @@ function TaskStartPickerPanel({
     if (target === reminderRef.current) {
       if (event.key === 'ArrowUp') focusCalendarDay('last');
       else if (event.key === 'ArrowDown') {
-        (
-          getAmbiguityControl()
-          ?? panelRef.current?.querySelector<HTMLButtonElement>('[data-task-start-clear]')
-        )?.focus();
-      } else return;
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-
-    const ambiguityControl = target.closest<HTMLSelectElement>(
-      `#task-start-ambiguity-${task.id}`,
-    );
-    if (ambiguityControl) {
-      if (event.key === 'ArrowUp') reminderRef.current?.focus();
-      else if (event.key === 'ArrowDown') {
         panelRef.current?.querySelector<HTMLButtonElement>('[data-task-start-clear]')?.focus();
       } else return;
       event.preventDefault();
@@ -211,7 +187,7 @@ function TaskStartPickerPanel({
 
     const clearButton = target.closest<HTMLButtonElement>('[data-task-start-clear]');
     if (clearButton && event.key === 'ArrowUp') {
-      (getAmbiguityControl() ?? reminderRef.current)?.focus();
+      reminderRef.current?.focus();
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -273,6 +249,10 @@ function TaskStartPickerPanel({
     if (!resolved) {
       setReminderInput(committedReminderDisplay);
       reminderInputConfirmedRef.current = true;
+      toast({
+        title: 'Not allowed.',
+        duration: 1_800,
+      });
       return false;
     }
 
@@ -388,35 +368,6 @@ function TaskStartPickerPanel({
         </div>
         {reminderUnavailableMessage ? (
           <p className="text-xs text-warning">{reminderUnavailableMessage}</p>
-        ) : null}
-        {reminderTime && !reminderDisabled && planned ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <label
-                className="text-xs font-medium text-muted-foreground"
-                htmlFor={`task-start-ambiguity-${task.id}`}
-              >
-                Repeated Time
-              </label>
-              <select
-                id={`task-start-ambiguity-${task.id}`}
-                value={ambiguityChoice}
-                onChange={(event) => void onAmbiguityChange(
-                  event.target.value as 'earlier' | 'later',
-                )}
-                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="earlier">Earlier</option>
-                <option value="later">Later</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Time Zone</span>
-              <p className="flex h-9 items-center truncate text-xs text-muted-foreground">
-                {reminderTimeZone}
-              </p>
-            </div>
-          </div>
         ) : null}
         {reminder?.resolution_kind === 'gap_forward' ? (
           <p className="text-xs text-warning">

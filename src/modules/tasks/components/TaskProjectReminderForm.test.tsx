@@ -30,7 +30,6 @@ function renderForm({
       projectId="project-a"
       reminder={reminder}
       mode={mode}
-      timeZone="America/Los_Angeles"
       onSave={onSave}
       onCancel={onCancel}
     />,
@@ -62,6 +61,8 @@ describe('TaskProjectReminderForm', () => {
         localTime: '10:30',
         ambiguityChoice: 'earlier',
       });
+      expect(container.textContent).not.toContain('Repeated Local Time');
+      expect(container.textContent).not.toContain('Time Zone');
 
       await act(async () => {
         container.querySelector<HTMLButtonElement>('[aria-label="Clear Project Reminder"]')
