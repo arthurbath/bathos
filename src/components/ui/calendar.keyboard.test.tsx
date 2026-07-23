@@ -464,4 +464,87 @@ describe('Calendar keyboard navigation', () => {
       unmount(traversableCalendar.root, traversableCalendar.container);
     }
   });
+
+  it('clamps to the earliest selectable month and focuses its first enabled date', async () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 6, 1)}
+        fromDate={new Date(2026, 7, 1)}
+        initialFocusDate={new Date(2026, 7, 1)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      await flushUi();
+      expect(container.textContent).toContain('August 2026');
+      expect(container.querySelector<HTMLButtonElement>(
+        'button[name="previous-month"]',
+      )).toBeDisabled();
+      expect(document.activeElement).toBe(getDayButton(container, '1'));
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('disables elapsed months and years in the centered month picker', async () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 6, 1)}
+        fromDate={new Date(2026, 6, 23)}
+        selected={new Date(2026, 6, 24)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      act(() => {
+        container.querySelector<HTMLButtonElement>(
+          'button[name="caption-month-year"]',
+        )?.click();
+      });
+      await flushUi();
+
+      const picker = container.querySelector<HTMLElement>(
+        '[data-calendar-month-picker="true"]',
+      );
+      expect(picker?.className).toContain('mx-auto');
+      const months = Array.from(container.querySelectorAll<HTMLButtonElement>(
+        'button[name="month"]',
+      ));
+      expect(months.slice(0, 6).every((month) => month.disabled)).toBe(true);
+      expect(months[6]).not.toBeDisabled();
+      expect(container.querySelector<HTMLButtonElement>(
+        'button[name="previous-year"]',
+      )).toBeDisabled();
+      expect(document.activeElement).toBe(months[6]);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('distinguishes the owner planning date from a selected date', () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 6, 1)}
+        today={new Date(2026, 6, 23)}
+        selected={new Date(2026, 6, 24)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      const today = getDayButton(container, '23');
+      const selected = getDayButton(container, '24');
+      expect(today).toHaveAttribute('aria-current', 'date');
+      expect(today?.className).toContain('bg-accent');
+      expect(selected).toHaveAttribute('aria-selected', 'true');
+      expect(selected?.className).toContain('bg-primary');
+    } finally {
+      unmount(root, container);
+    }
+  });
 });

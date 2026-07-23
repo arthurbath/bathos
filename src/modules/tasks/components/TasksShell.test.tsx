@@ -2420,15 +2420,16 @@ describe('TasksShell', () => {
         titleButton?.click();
       });
 
-      const clearDeadline = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Clear Deadline"]',
-      );
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('#task-deadline-task-a')?.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(container.querySelector('button[aria-label="Clear Deadline"]')).toBeNull();
+      const clearDeadline = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Clear');
       await act(async () => {
         clearDeadline?.click();
-      });
-      const form = container.querySelector<HTMLFormElement>(`#task-title-${task.id}`)?.form;
-      await act(async () => {
-        form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        await Promise.resolve();
       });
 
       expect(taskList.updateTask).toHaveBeenCalledWith('task-a', { deadline: null });
@@ -2465,15 +2466,297 @@ describe('TasksShell', () => {
         requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
       });
       const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
-      await act(async () => setInputValue(time, '10:30'));
       await act(async () => {
-        time.form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        setInputValue(time, '10:30');
+        time.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
       });
 
       expect(saveReminder).toHaveBeenCalledWith(expect.objectContaining({
         rootType: 'todo', rootId: 'task-a', reminder,
         localTime: '10:30', ambiguityChoice: 'earlier',
       }));
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('places Start and Deadline in one responsive row with matching calendar icons', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      const temporalGrid = container.querySelector('[data-task-editor-temporal-grid]');
+      expect(temporalGrid).toHaveClass('sm:grid-cols-2');
+      expect(temporalGrid?.children).toHaveLength(2);
+      expect(temporalGrid?.querySelectorAll('svg.lucide-calendar')).toHaveLength(2);
+      expect(container.querySelector('button[aria-label="Clear Deadline"]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('focuses Inbox when Start opens without a planning intent', async () => {
+    const unplannedTask = taskTodoFixture({
+      ...task,
+      destination: 'anytime',
+      start_date: null,
+      today_section: null,
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [unplannedTask] });
+    const { container, root } = renderShell('/tasks/anytime');
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.activeElement).toBe(
+        document.querySelector('[data-task-start-horizon="inbox"]'),
+      );
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('focuses the selected future date when Start opens', async () => {
+    const futureTask = taskTodoFixture({
+      ...task,
+      start_date: '2026-07-24',
+      today_section: 'next',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [futureTask] });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      const selectedDay = document.querySelector<HTMLButtonElement>(
+        'button[name="day"][aria-selected="true"]',
+      );
+      expect(selectedDay?.textContent?.trim()).toBe('24');
+      expect(document.activeElement).toBe(selectedDay);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('normalizes reminder shorthand before a second Enter closes Start', async () => {
+    const saveReminder = vi.fn().mockResolvedValue(undefined);
+    const futureTask = taskTodoFixture({
+      ...task,
+      start_date: '2026-07-24',
+      today_section: 'next',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [futureTask] });
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), dueItems: [],
+      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
+      await act(async () => {
+        setInputValue(time, '1:3p');
+        time.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      expect(saveReminder).toHaveBeenCalledWith(expect.objectContaining({
+        rootType: 'todo',
+        rootId: 'task-a',
+        localTime: '13:30',
+      }));
+      expect(time.value).toBe('1:30 pm');
+      expect(document.querySelector('[data-task-start-picker]')).toBeTruthy();
+
+      await act(async () => {
+        time.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.querySelector('[data-task-start-picker]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('silently restores the committed reminder after malformed input', async () => {
+    const saveReminder = vi.fn().mockResolvedValue(undefined);
+    const activeReminder = taskReminderFixture({
+      root_type: 'todo',
+      task_id: 'task-a',
+      project_id: null,
+      local_time: '09:00:00',
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    mockTaskReminders.mockReturnValue({
+      reminders: [activeReminder],
+      byRootId: new Map([['task-a', activeReminder]]),
+      dueItems: [],
+      mode: 'connected',
+      planningTimeZone: 'America/Los_Angeles',
+      loading: false,
+      error: null,
+      save: saveReminder,
+      cancel: vi.fn(),
+      acknowledge: vi.fn(),
+      claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
+      expect(time.value).toBe('9:00 am');
+      const space = new KeyboardEvent('keydown', {
+        key: ' ',
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => {
+        time.dispatchEvent(space);
+        setInputValue(time, 'asdf');
+        time.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      expect(space.defaultPrevented).toBe(false);
+      expect(time.value).toBe('9:00 am');
+      expect(saveReminder).not.toHaveBeenCalled();
+      expect(mockToast).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('moves arrow focus through Today, calendar, Reminder, and Clear', async () => {
+    const activeReminder = taskReminderFixture({
+      root_type: 'todo',
+      task_id: 'task-a',
+      project_id: null,
+      local_time: '09:00:00',
+    });
+    const todayTask = taskTodoFixture({
+      ...task,
+      start_date: null,
+      today_section: 'next',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [todayTask] });
+    mockTaskReminders.mockReturnValue({
+      reminders: [activeReminder], byRootId: new Map([['task-a', activeReminder]]), dueItems: [],
+      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: null, save: vi.fn(), cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      const selectedHorizon = document.querySelector<HTMLButtonElement>(
+        '[data-task-start-horizon="next"]',
+      )!;
+      expect(document.activeElement).toBe(selectedHorizon);
+
+      await act(async () => {
+        selectedHorizon.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      expect((document.activeElement as HTMLElement)?.getAttribute('name')).toBe('day');
+      expect(document.activeElement).not.toBeDisabled();
+
+      const enabledDays = Array.from(document.querySelectorAll<HTMLButtonElement>(
+        'button[name="day"]:not(:disabled)',
+      )).filter((button) => !button.className.includes('day-outside'));
+      const finalDay = enabledDays.at(-1)!;
+      await act(async () => {
+        finalDay.focus();
+        finalDay.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      const reminderInput = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a');
+      expect(document.activeElement).toBe(reminderInput);
+
+      await act(async () => {
+        reminderInput?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      const ambiguity = document.querySelector<HTMLSelectElement>('#task-start-ambiguity-task-a');
+      expect(document.activeElement).toBe(ambiguity);
+
+      await act(async () => {
+        ambiguity?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      expect(document.activeElement).toBe(
+        document.querySelector('[data-task-start-clear]'),
+      );
+
+      await act(async () => {
+        document.querySelector<HTMLButtonElement>('[data-task-start-clear]')
+          ?.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowUp',
+            bubbles: true,
+            cancelable: true,
+          }));
+      });
+      expect(document.activeElement).toBe(ambiguity);
     } finally {
       cleanup(root, container);
     }

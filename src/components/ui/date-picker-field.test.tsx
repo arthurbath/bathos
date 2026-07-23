@@ -88,4 +88,40 @@ describe('DatePickerField', () => {
       unmount(root, container);
     }
   });
+
+  it('clears inside the popover and restores focus to the trigger', async () => {
+    const onValueChange = vi.fn();
+    const { container, root } = mount(
+      <DatePickerField
+        id="clearable-date"
+        value="2026-07-23"
+        todayDate="2026-07-20"
+        clearable
+        onValueChange={onValueChange}
+      />,
+    );
+
+    try {
+      const trigger = container.querySelector<HTMLButtonElement>('#clearable-date');
+      act(() => {
+        trigger?.click();
+      });
+      await flushUi();
+      const clear = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Clear');
+      expect(clear).toBeTruthy();
+
+      act(() => {
+        clear?.click();
+      });
+      await flushUi();
+      await flushUi();
+
+      expect(onValueChange).toHaveBeenCalledWith('');
+      expect(document.activeElement).toBe(trigger);
+      expect(document.body.querySelector('[data-radix-popper-content-wrapper]')).toBeNull();
+    } finally {
+      unmount(root, container);
+    }
+  });
 });

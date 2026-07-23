@@ -1,13 +1,19 @@
 import * as React from "react";
 import { format } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { DayPicker } from "react-day-picker";
+import {
+  Button as DayPickerButton,
+  DayPicker,
+  type DayProps,
+  useDayRender,
+} from "react-day-picker";
 
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker> & {
   allowTabExit?: boolean;
+  initialFocusDate?: Date;
   onKeyDownCapture?: React.KeyboardEventHandler;
 };
 
@@ -21,6 +27,31 @@ const CALENDAR_NAV_PREV_CLASS = "absolute left-1";
 const CALENDAR_NAV_NEXT_CLASS = "absolute right-1";
 const CALENDAR_HEADER_CLASS = "inline-flex items-center justify-center rounded-md px-2 py-1 text-sm font-medium focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0";
 const CALENDAR_HEADER_BUTTON_CLASS = `${CALENDAR_HEADER_CLASS} border border-transparent bg-transparent text-white transition-colors hover:bg-primary/10 hover:text-primary`;
+
+function CalendarDay({ date, displayMonth }: DayProps) {
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+  const dayRender = useDayRender(date, displayMonth, buttonRef);
+
+  if (dayRender.isHidden) {
+    return <div role="gridcell" />;
+  }
+  if (!dayRender.isButton) {
+    return (
+      <div
+        {...dayRender.divProps}
+        aria-current={dayRender.activeModifiers.today ? "date" : undefined}
+      />
+    );
+  }
+  return (
+    <DayPickerButton
+      name="day"
+      ref={buttonRef}
+      {...dayRender.buttonProps}
+      aria-current={dayRender.activeModifiers.today ? "date" : undefined}
+    />
+  );
+}
 
 function getFocusableDayRows(root: HTMLElement): HTMLButtonElement[][] {
   return Array.from(root.querySelectorAll("tbody tr"))
@@ -112,11 +143,13 @@ function focusCalendarArrowTarget(root: HTMLElement, activeElement: HTMLElement,
 function MonthPicker({
   year,
   activeMonth,
+  minimumDate,
   onYearChange,
   onMonthSelect,
 }: {
   year: number;
   activeMonth: number | null;
+  minimumDate?: Date;
   onYearChange: (nextYear: number) => void;
   onMonthSelect: (nextMonthIndex: number) => void;
 }) {
@@ -131,46 +164,59 @@ function MonthPicker({
         prevYearButtonRef.current?.focus();
       } else if (pendingYearButtonFocusRef.current === "next") {
         nextYearButtonRef.current?.focus();
-      } else if (activeMonth !== null) {
-        monthButtonRefs.current[activeMonth]?.focus();
+      } else {
+        const preferredMonth = activeMonth !== null
+          && isMonthSelectable(year, activeMonth, minimumDate)
+          ? activeMonth
+          : firstSelectableMonthIndex(year, minimumDate);
+        if (preferredMonth !== null) {
+          monthButtonRefs.current[preferredMonth]?.focus();
+        }
       }
       pendingYearButtonFocusRef.current = null;
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [activeMonth, year]);
+  }, [activeMonth, minimumDate, year]);
 
   const focusMonthAt = (index: number) => {
-    monthButtonRefs.current[index]?.focus();
+    const candidate = monthButtonRefs.current[index];
+    if (!candidate?.disabled) candidate.focus();
   };
 
   const pageYear = (position: "previous" | "next") => {
+    const nextYear = position === "previous" ? year - 1 : year + 1;
+    if (firstSelectableMonthIndex(nextYear, minimumDate) === null) return;
     pendingYearButtonFocusRef.current = position;
-    onYearChange(position === "previous" ? year - 1 : year + 1);
+    onYearChange(nextYear);
   };
 
   const handleMonthGridKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, monthIndex: number) => {
     if (event.key === "ArrowLeft") {
       event.preventDefault();
-      if (monthIndex > 0) focusMonthAt(monthIndex - 1);
-      else prevYearButtonRef.current?.focus();
+      const previousMonth = findSelectableMonth(monthIndex, -1, year, minimumDate);
+      if (previousMonth !== null) focusMonthAt(previousMonth);
+      else if (!prevYearButtonRef.current?.disabled) prevYearButtonRef.current?.focus();
       return;
     }
     if (event.key === "ArrowRight") {
       event.preventDefault();
-      if (monthIndex < 11) focusMonthAt(monthIndex + 1);
+      const nextMonth = findSelectableMonth(monthIndex, 1, year, minimumDate);
+      if (nextMonth !== null) focusMonthAt(nextMonth);
       else nextYearButtonRef.current?.focus();
       return;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      if (monthIndex - 3 >= 0) focusMonthAt(monthIndex - 3);
+      const priorRowMonth = findSelectableMonth(monthIndex, -3, year, minimumDate);
+      if (priorRowMonth !== null && priorRowMonth < monthIndex) focusMonthAt(priorRowMonth);
       else if (monthIndex % 3 === 2) nextYearButtonRef.current?.focus();
-      else prevYearButtonRef.current?.focus();
+      else if (!prevYearButtonRef.current?.disabled) prevYearButtonRef.current?.focus();
       return;
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      if (monthIndex + 3 <= 11) focusMonthAt(monthIndex + 3);
+      const nextRowMonth = findSelectableMonth(monthIndex, 3, year, minimumDate);
+      if (nextRowMonth !== null && nextRowMonth > monthIndex) focusMonthAt(nextRowMonth);
       return;
     }
   };
@@ -197,7 +243,7 @@ function MonthPicker({
   };
 
   return (
-    <div className={cn("p-3", CALENDAR_VIEWPORT_WIDTH_CLASS)} data-calendar-month-picker="true">
+    <div className={cn("mx-auto p-3", CALENDAR_VIEWPORT_WIDTH_CLASS)} data-calendar-month-picker="true">
       <div className="space-y-4">
         <div className={CALENDAR_CAPTION_CLASS} data-calendar-month-picker-caption="true">
           <div className={CALENDAR_HEADER_CLASS} data-calendar-month-picker-year-label="true">
@@ -209,6 +255,7 @@ function MonthPicker({
               type="button"
               name="previous-year"
               aria-label="Go to previous year"
+              disabled={firstSelectableMonthIndex(year - 1, minimumDate) === null}
               className={cn(
                 "rdp-button_reset rdp-button",
                 buttonVariants({ variant: "clear" }),
@@ -242,6 +289,7 @@ function MonthPicker({
           {Array.from({ length: 12 }, (_, monthIndex) => {
             const monthDate = new Date(year, monthIndex, 1);
             const isSelected = monthIndex === activeMonth;
+            const isDisabled = !isMonthSelectable(year, monthIndex, minimumDate);
             return (
               <button
                 key={monthIndex}
@@ -251,10 +299,12 @@ function MonthPicker({
                 type="button"
                 name="month"
                 aria-label={format(monthDate, "MMMM yyyy")}
+                disabled={isDisabled}
                 className={cn(
                   buttonVariants({ variant: "clear" }),
                   "h-9 px-0",
                   isSelected && "border border-primary bg-primary/10 text-primary",
+                  isDisabled && "text-muted-foreground opacity-50",
                 )}
                 onClick={() => onMonthSelect(monthIndex)}
                 onKeyDown={(event) => handleMonthGridKeyDown(event, monthIndex)}
@@ -274,25 +324,33 @@ function Calendar({
   classNames,
   showOutsideDays = true,
   allowTabExit = false,
+  initialFocusDate,
   onKeyDownCapture,
   month,
   defaultMonth,
   today,
+  fromDate,
   onMonthChange,
   components,
   ...props
 }: CalendarProps) {
   const isControlledMonth = month !== undefined;
-  const [internalMonth, setInternalMonth] = React.useState<Date>(month ?? defaultMonth ?? today ?? new Date());
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const initialMonth = clampMonthToMinimum(
+    month ?? defaultMonth ?? today ?? new Date(),
+    fromDate,
+  );
+  const [internalMonth, setInternalMonth] = React.useState<Date>(initialMonth);
   const baseMonth = isControlledMonth ? month : internalMonth;
   const displayMonth = React.useMemo(
-    () => new Date((baseMonth ?? new Date()).getFullYear(), (baseMonth ?? new Date()).getMonth(), 1),
-    [baseMonth],
+    () => clampMonthToMinimum(baseMonth ?? new Date(), fromDate),
+    [baseMonth, fromDate],
   );
   const [viewMode, setViewMode] = React.useState<CalendarViewMode>("day");
   const [monthPickerYear, setMonthPickerYear] = React.useState<number>(displayMonth.getFullYear());
   const [monthPickerActiveMonth, setMonthPickerActiveMonth] = React.useState<number | null>(displayMonth.getMonth());
   const [pendingDayFocusDate, setPendingDayFocusDate] = React.useState<Date | null>(null);
+  const initialFocusTime = initialFocusDate?.valueOf();
 
   React.useEffect(() => {
     if (viewMode !== "month") return;
@@ -302,25 +360,28 @@ function Calendar({
   React.useEffect(() => {
     if (!pendingDayFocusDate || viewMode !== "day") return;
     const timer = window.setTimeout(() => {
-      const root = document.querySelector<HTMLElement>('[data-calendar-root="true"]');
-      const buttons = Array.from(root?.querySelectorAll<HTMLButtonElement>('button[name="day"]') ?? []);
-      const targetButton = buttons.find((button) => {
-        const label = button.getAttribute("aria-label") ?? "";
-        return button.textContent?.trim() === "1" && label.includes(format(pendingDayFocusDate, "MMMM")) && label.includes(String(pendingDayFocusDate.getFullYear()));
-      }) ?? buttons.find((button) => button.textContent?.trim() === "1" && !button.className.includes("day-outside"));
+      const targetButton = findDayButton(rootRef.current, pendingDayFocusDate);
       targetButton?.focus();
       setPendingDayFocusDate(null);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [pendingDayFocusDate, viewMode]);
 
+  React.useEffect(() => {
+    if (initialFocusTime === undefined || viewMode !== "day") return;
+    const timer = window.setTimeout(() => {
+      findDayButton(rootRef.current, new Date(initialFocusTime))?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [initialFocusTime, viewMode]);
+
   const commitMonthChange = React.useCallback((nextMonth: Date) => {
-    const normalized = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
+    const normalized = clampMonthToMinimum(nextMonth, fromDate);
     if (!isControlledMonth) {
       setInternalMonth(normalized);
     }
     onMonthChange?.(normalized);
-  }, [isControlledMonth, onMonthChange]);
+  }, [fromDate, isControlledMonth, onMonthChange]);
 
   const rootKeyDownCapture: React.KeyboardEventHandler<HTMLDivElement> = (event) => {
     if (event.key === "Tab" && !allowTabExit) {
@@ -339,11 +400,12 @@ function Calendar({
   };
 
   return (
-    <div data-calendar-root="true" onKeyDownCapture={rootKeyDownCapture}>
+    <div ref={rootRef} data-calendar-root="true" onKeyDownCapture={rootKeyDownCapture}>
       {viewMode === "month" ? (
         <MonthPicker
           year={monthPickerYear}
           activeMonth={monthPickerActiveMonth}
+          minimumDate={fromDate}
           onYearChange={(nextYear) => {
             setMonthPickerActiveMonth(null);
             setMonthPickerYear(nextYear);
@@ -351,7 +413,7 @@ function Calendar({
           onMonthSelect={(nextMonthIndex) => {
             const nextMonth = new Date(monthPickerYear, nextMonthIndex, 1);
             commitMonthChange(nextMonth);
-            setPendingDayFocusDate(nextMonth);
+            setPendingDayFocusDate(firstSelectableDateInMonth(nextMonth, fromDate));
             setViewMode("day");
           }}
         />
@@ -360,6 +422,7 @@ function Calendar({
           showOutsideDays={showOutsideDays}
           month={displayMonth}
           defaultMonth={displayMonth}
+          fromDate={fromDate}
           className={cn("p-3", CALENDAR_DAY_VIEWPORT_CLASS, className)}
           onMonthChange={commitMonthChange}
           classNames={{
@@ -394,6 +457,7 @@ function Calendar({
           components={{
             IconLeft: ({ ..._props }) => <ChevronLeft className="h-4 w-4" />,
             IconRight: ({ ..._props }) => <ChevronRight className="h-4 w-4" />,
+            Day: CalendarDay,
             CaptionLabel: ({ displayMonth: captionMonth, id }) => (
               <button
                 type="button"
@@ -421,3 +485,61 @@ function Calendar({
 Calendar.displayName = "Calendar";
 
 export { Calendar };
+
+function clampMonthToMinimum(value: Date, minimumDate?: Date): Date {
+  const month = new Date(value.getFullYear(), value.getMonth(), 1);
+  if (!minimumDate) return month;
+  const minimumMonth = new Date(minimumDate.getFullYear(), minimumDate.getMonth(), 1);
+  return month < minimumMonth ? minimumMonth : month;
+}
+
+function firstSelectableDateInMonth(month: Date, minimumDate?: Date): Date {
+  if (
+    minimumDate
+    && month.getFullYear() === minimumDate.getFullYear()
+    && month.getMonth() === minimumDate.getMonth()
+  ) {
+    return minimumDate;
+  }
+  return new Date(month.getFullYear(), month.getMonth(), 1);
+}
+
+function isMonthSelectable(year: number, monthIndex: number, minimumDate?: Date): boolean {
+  if (!minimumDate) return true;
+  const monthEnd = new Date(year, monthIndex + 1, 0);
+  return monthEnd >= minimumDate;
+}
+
+function firstSelectableMonthIndex(year: number, minimumDate?: Date): number | null {
+  for (let monthIndex = 0; monthIndex < 12; monthIndex += 1) {
+    if (isMonthSelectable(year, monthIndex, minimumDate)) return monthIndex;
+  }
+  return null;
+}
+
+function findSelectableMonth(
+  startIndex: number,
+  step: number,
+  year: number,
+  minimumDate?: Date,
+): number | null {
+  let index = startIndex + step;
+  while (index >= 0 && index <= 11) {
+    if (isMonthSelectable(year, index, minimumDate)) return index;
+    index += step < 0 ? -1 : 1;
+  }
+  return null;
+}
+
+function findDayButton(root: HTMLElement | null, date: Date): HTMLButtonElement | null {
+  const buttons = Array.from(root?.querySelectorAll<HTMLButtonElement>('button[name="day"]') ?? []);
+  return buttons.find((button) => {
+    const label = button.getAttribute("aria-label") ?? "";
+    return button.textContent?.trim() === String(date.getDate())
+      && label.includes(format(date, "MMMM"))
+      && label.includes(String(date.getFullYear()));
+  }) ?? buttons.find((button) => (
+    button.textContent?.trim() === String(date.getDate())
+    && !button.className.includes("day-outside")
+  )) ?? null;
+}

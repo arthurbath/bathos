@@ -3601,38 +3601,23 @@ function TaskEditor({
             onClear={clearStartPlanning}
           />
         </div>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="space-y-1.5 sm:col-span-1">
+        <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor={`task-deadline-${task.id}`}>
             Deadline
           </label>
-          <div className="flex gap-2">
-            <DatePickerField
-              id={`task-deadline-${task.id}`}
-              value={deadline}
-              onValueChange={(value) => {
-                setDeadline(value);
-                void persistImmediateTaskPatch({ deadline: value || null });
-              }}
-              placeholder="No Deadline"
-              aria-label="Deadline"
-            />
-            {deadline ? (
-              <Button
-                type="button"
-                variant="clear"
-                size="icon"
-                aria-label="Clear Deadline"
-                onClick={() => {
-                  setDeadline('');
-                  void persistImmediateTaskPatch({ deadline: null });
-                }}
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            ) : null}
-          </div>
+          <DatePickerField
+            id={`task-deadline-${task.id}`}
+            value={deadline}
+            onValueChange={(value) => {
+              setDeadline(value);
+              void persistImmediateTaskPatch({ deadline: value || null });
+            }}
+            placeholder="No Deadline"
+            aria-label="Deadline"
+            todayDate={planningDate}
+            clearable
+            clearLabel="Clear"
+          />
         </div>
       </div>
     </div>

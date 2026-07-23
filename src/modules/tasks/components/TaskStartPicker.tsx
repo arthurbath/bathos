@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import {
   Bell,
-  CalendarDays,
+  CalendarIcon,
   Clock2,
   Clock5,
   Clock8,
@@ -33,6 +33,10 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
+import {
+  formatTaskReminderTimeDisplay,
+  resolveTaskReminderTimeInput,
+} from '@/modules/tasks/domain/taskReminderTimeInput';
 import type {
   TaskReminder,
   TaskTodaySection,
@@ -89,9 +93,11 @@ function TaskStartPickerPanel({
   onClear,
   focusTarget,
   active,
+  onRequestClose,
 }: TaskStartPickerProps & {
   focusTarget: TaskStartPickerFocusTarget;
   active: boolean;
+  onRequestClose: () => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const reminderRef = useRef<HTMLInputElement>(null);
@@ -99,8 +105,18 @@ function TaskStartPickerPanel({
   const selectedDate = parseDatePickerFieldValue(task.start_date ?? undefined);
   const minimumDateValue = addTaskCalendarDays(planningDate, 1);
   const minimumDate = parseDatePickerFieldValue(minimumDateValue);
+  const planningToday = parseDatePickerFieldValue(planningDate);
   const visibleMonth = selectedDate ?? minimumDate ?? new Date();
   const planned = task.start_date !== null || task.today_section !== null;
+  const committedReminderDisplay = formatTaskReminderTimeDisplay(reminderTime) ?? '';
+  const [reminderInput, setReminderInput] = useState(committedReminderDisplay);
+  const reminderInputConfirmedRef = useRef(true);
+
+  useEffect(() => {
+    if (document.activeElement === reminderRef.current) return;
+    setReminderInput(committedReminderDisplay);
+    reminderInputConfirmedRef.current = true;
+  }, [committedReminderDisplay]);
 
   useEffect(() => {
     if (!active) return;
@@ -120,11 +136,166 @@ function TaskStartPickerPanel({
     return () => window.clearTimeout(timer);
   }, [active, focusTarget]);
 
+  const focusSelectedHorizon = () => {
+    const selectedHorizon = panelRef.current?.querySelector<HTMLButtonElement>(
+      '[data-task-start-horizon][aria-pressed="true"]',
+    );
+    (selectedHorizon ?? firstHorizonRef.current)?.focus();
+  };
+
+  const getAmbiguityControl = () => (
+    panelRef.current?.querySelector<HTMLSelectElement>(`#task-start-ambiguity-${task.id}`)
+    ?? null
+  );
+
+  const focusCalendarDay = (position: 'first' | 'last') => {
+    const days = Array.from(panelRef.current?.querySelectorAll<HTMLButtonElement>(
+      'button[name="day"]:not(:disabled)',
+    ) ?? []).filter((button) => !button.className.includes('day-outside'));
+    const selectedDay = days.find((button) => button.getAttribute('aria-selected') === 'true');
+    (selectedDay ?? (position === 'first' ? days[0] : days.at(-1)))?.focus();
+  };
+
+  const handlePanelKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (
+      event.key !== 'ArrowLeft'
+      && event.key !== 'ArrowRight'
+      && event.key !== 'ArrowUp'
+      && event.key !== 'ArrowDown'
+    ) {
+      return;
+    }
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (!target) return;
+
+    const horizon = target.closest<HTMLButtonElement>('[data-task-start-horizon]');
+    if (horizon) {
+      const horizons = Array.from(panelRef.current?.querySelectorAll<HTMLButtonElement>(
+        '[data-task-start-horizon]:not(:disabled)',
+      ) ?? []);
+      const index = horizons.indexOf(horizon);
+      if (event.key === 'ArrowLeft' && index > 0) horizons[index - 1]?.focus();
+      else if (event.key === 'ArrowRight' && index < horizons.length - 1) horizons[index + 1]?.focus();
+      else if (event.key === 'ArrowDown') focusCalendarDay('first');
+      else return;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (target === reminderRef.current) {
+      if (event.key === 'ArrowUp') focusCalendarDay('last');
+      else if (event.key === 'ArrowDown') {
+        (
+          getAmbiguityControl()
+          ?? panelRef.current?.querySelector<HTMLButtonElement>('[data-task-start-clear]')
+        )?.focus();
+      } else return;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    const ambiguityControl = target.closest<HTMLSelectElement>(
+      `#task-start-ambiguity-${task.id}`,
+    );
+    if (ambiguityControl) {
+      if (event.key === 'ArrowUp') reminderRef.current?.focus();
+      else if (event.key === 'ArrowDown') {
+        panelRef.current?.querySelector<HTMLButtonElement>('[data-task-start-clear]')?.focus();
+      } else return;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    const clearButton = target.closest<HTMLButtonElement>('[data-task-start-clear]');
+    if (clearButton && event.key === 'ArrowUp') {
+      (getAmbiguityControl() ?? reminderRef.current)?.focus();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    const calendarHeader = target.closest<HTMLButtonElement>(
+      'button[name="caption-month-year"], button[name="previous-month"], button[name="next-month"], button[name="previous-year"], button[name="next-year"]',
+    );
+    if (calendarHeader && event.key === 'ArrowUp') {
+      focusSelectedHorizon();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    const monthButton = target.closest<HTMLButtonElement>('button[name="month"]');
+    if (monthButton && event.key === 'ArrowDown') {
+      const months = Array.from(panelRef.current?.querySelectorAll<HTMLButtonElement>(
+        'button[name="month"]:not(:disabled)',
+      ) ?? []);
+      const index = months.indexOf(monthButton);
+      if (index >= Math.max(0, months.length - 3)) {
+        reminderRef.current?.focus();
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      return;
+    }
+
+    const dayButton = target.closest<HTMLButtonElement>('button[name="day"]');
+    if (dayButton && event.key === 'ArrowDown') {
+      const rows = Array.from(panelRef.current?.querySelectorAll('tbody tr') ?? []);
+      const row = dayButton.closest('tr');
+      const rowIndex = row ? rows.indexOf(row) : -1;
+      const hasEnabledDayBelow = rows.slice(rowIndex + 1).some((candidateRow) => (
+        candidateRow.querySelector('button[name="day"]:not(:disabled)')
+      ));
+      if (!hasEnabledDayBelow) {
+        reminderRef.current?.focus();
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }
+  };
+
+  const commitReminderInput = async (): Promise<boolean> => {
+    const rawValue = reminderInput;
+    if (!rawValue.trim()) {
+      if (reminderTime) await onReminderChange('');
+      setReminderInput('');
+      reminderInputConfirmedRef.current = true;
+      return true;
+    }
+
+    const resolved = resolveTaskReminderTimeInput(rawValue, {
+      today: task.start_date === null && task.today_section !== null,
+      timeZone: reminderTimeZone,
+    });
+    if (!resolved) {
+      setReminderInput(committedReminderDisplay);
+      reminderInputConfirmedRef.current = true;
+      return false;
+    }
+
+    try {
+      if (resolved.localTime !== reminderTime) {
+        await onReminderChange(resolved.localTime);
+      }
+      setReminderInput(resolved.displayTime);
+      reminderInputConfirmedRef.current = true;
+      return true;
+    } catch {
+      setReminderInput(committedReminderDisplay);
+      reminderInputConfirmedRef.current = true;
+      return false;
+    }
+  };
+
   return (
     <div
       ref={panelRef}
       className="mx-auto w-[min(20rem,calc(100vw-2rem))]"
       data-task-start-picker
+      onKeyDownCapture={handlePanelKeyDownCapture}
     >
       <div className="space-y-2 p-3">
         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -163,7 +334,10 @@ function TaskStartPickerPanel({
           mode="single"
           selected={selectedDate}
           disabled={minimumDate ? { before: minimumDate } : undefined}
+          fromDate={minimumDate}
           defaultMonth={visibleMonth}
+          today={planningToday}
+          initialFocusDate={selectedDate ?? minimumDate}
           onSelect={(date) => {
             if (!date) return;
             void onPlanningChange({
@@ -177,19 +351,41 @@ function TaskStartPickerPanel({
       </div>
 
       <div className="space-y-3 border-t border-[hsl(var(--grid-sticky-line))] p-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Bell className="h-4 w-4" aria-hidden />
-          <label htmlFor={`task-start-reminder-${task.id}`}>Reminder</label>
+        <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
+            <Bell className="h-4 w-4 shrink-0" aria-hidden />
+            <label htmlFor={`task-start-reminder-${task.id}`}>Reminder</label>
+          </div>
+          <Input
+            ref={reminderRef}
+            id={`task-start-reminder-${task.id}`}
+            type="text"
+            inputMode="text"
+            autoComplete="off"
+            value={reminderInput}
+            placeholder="No Reminder"
+            aria-label="Reminder Time"
+            disabled={reminderDisabled || !planned}
+            className="ml-auto w-32 shrink-0"
+            onChange={(event) => {
+              reminderInputConfirmedRef.current = false;
+              setReminderInput(event.target.value);
+            }}
+            onBlur={() => {
+              if (!reminderInputConfirmedRef.current) void commitReminderInput();
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return;
+              event.preventDefault();
+              event.stopPropagation();
+              if (reminderInputConfirmedRef.current) {
+                onRequestClose();
+                return;
+              }
+              void commitReminderInput();
+            }}
+          />
         </div>
-        <Input
-          ref={reminderRef}
-          id={`task-start-reminder-${task.id}`}
-          type="time"
-          value={reminderTime}
-          aria-label="Reminder Time"
-          disabled={reminderDisabled || !planned}
-          onChange={(event) => void onReminderChange(event.target.value)}
-        />
         {reminderUnavailableMessage ? (
           <p className="text-xs text-warning">{reminderUnavailableMessage}</p>
         ) : null}
@@ -233,9 +429,12 @@ function TaskStartPickerPanel({
         <Button
           type="button"
           variant="clear"
+          data-task-start-clear
           className="w-full justify-start gap-2 text-muted-foreground"
           disabled={!planned && !reminderTime}
-          onClick={() => void onClear()}
+          onClick={() => {
+            void onClear().then(onRequestClose);
+          }}
         >
           <X className="h-4 w-4" aria-hidden />
           Clear
@@ -303,7 +502,6 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
               && 'text-muted-foreground',
           )}
         >
-          <CalendarDays className="mr-2 h-4 w-4 shrink-0" aria-hidden />
           <span className="truncate">{summary}</span>
           {props.reminderTime ? (
             <Bell
@@ -311,6 +509,13 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
               aria-label={`Reminder ${props.reminderTime}`}
             />
           ) : null}
+          <CalendarIcon
+            className={cn(
+              'h-4 w-4 shrink-0 text-foreground opacity-50',
+              !props.reminderTime && 'ml-auto',
+            )}
+            aria-hidden
+          />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -318,7 +523,12 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
         className="w-auto p-0 shadow-none"
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
-        <TaskStartPickerPanel {...props} focusTarget={focusTarget} active={open} />
+        <TaskStartPickerPanel
+          {...props}
+          focusTarget={focusTarget}
+          active={open}
+          onRequestClose={() => setOpen(false)}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -355,6 +565,7 @@ export function TaskStartDialog({
             {...props}
             focusTarget="start"
             active={open}
+            onRequestClose={() => onOpenChange(false)}
           />
         </DialogBody>
       </DialogContent>
