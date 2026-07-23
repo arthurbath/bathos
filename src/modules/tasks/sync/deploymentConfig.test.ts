@@ -127,6 +127,18 @@ describe('Tasks PowerSync deployment configuration', () => {
     );
   });
 
+  it('keeps the unified Start gate synthetic, focused, and cleanup-backed', () => {
+    expect(productionProvisioner).toContain("'synthetic-unified-start'");
+    expect(productionProvisioner).toContain("'test:tasks:production-unified-start'");
+    expect(packageJson).toContain('"test:tasks:production-unified-start"');
+    expect(packageJson).toContain(
+      "-t 'proves unified Start planning, explicit link clearing, and a fresh projection'",
+    );
+    expect(packageJson).not.toContain(
+      'test:tasks:production-unified-start": "npm run test:tasks:production-topology',
+    );
+  });
+
   it('keeps the undo and redo production gate synthetic, focused, and cleanup-backed', () => {
     expect(productionProvisioner).toContain("'synthetic-undo-redo'");
     expect(productionProvisioner).toContain("'test:tasks:production-undo-redo'");

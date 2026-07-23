@@ -165,7 +165,7 @@ export function useTaskList(
       }
       const defaults: TaskListCreateInput = {
         title: typeof input === 'string' ? input : input.title,
-        destination: view === 'today' || view === 'upcoming' ? 'anytime' : view,
+        destination: view === 'someday' ? 'someday' : 'anytime',
         todaySection: view === 'someday' || view === 'upcoming' ? null : 'next',
         startDate: null,
       };

@@ -7,13 +7,13 @@ import {
   Clock8,
   Inbox,
   X,
+  type LucideIcon,
 } from 'lucide-react';
 import {
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ComponentType,
 } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -66,7 +66,7 @@ type TaskStartPickerProps = {
 const todayChoices: Array<{
   value: TaskTodaySection;
   label: string;
-  Icon: ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
+  Icon: LucideIcon;
 }> = [
   { value: 'inbox', label: 'Inbox', Icon: Inbox },
   { value: 'now', label: 'Now', Icon: Clock2 },

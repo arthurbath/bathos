@@ -68,7 +68,9 @@ The gate creates two synthetic owners, proves owner isolation, exact Raycast cap
 
 After the structure-simplification release, run `node scripts/provision-tasks-production.mjs synthetic-structure-simplification POWER_SYNC_URL`. The focused fixture proves dated to-do and project Next defaults, Rechecking, Start Date later than Deadline, time-only reminder rebinding and cancellation, schema-12 export, the heading-free 21-table projection, fresh-client synchronization, and account-cascade cleanup.
 
-After it passes, independently confirm that the two synthetic users and their task rows are absent. Only then add the public HTTPS endpoint as `VITE_TASKS_POWERSYNC_ENDPOINT` to the intended BathOS deployment and repeat a browser-level acceptance pass with synthetic data.
+After the unified Start release, run `node scripts/provision-tasks-production.mjs synthetic-unified-start POWER_SYNC_URL`. The focused fixture proves that a Mail-captured Primary Link can be explicitly cleared without changing immutable Mail provenance, the explicit null survives export and a fresh PowerSync projection, Today and future Start reminders rebind to the authoritative planning date, clearing all Start intent cancels the reminder, and account cleanup removes every synthetic row and local database.
+
+After a gate passes, independently confirm that every synthetic user and task row is absent. Only then add the public HTTPS endpoint as `VITE_TASKS_POWERSYNC_ENDPOINT` to the intended BathOS deployment and repeat a browser-level acceptance pass with synthetic data.
 
 ## Operational Boundaries
 

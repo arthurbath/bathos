@@ -12,13 +12,20 @@ import { afterAll, describe, expect, it } from 'vitest';
 import type { Database } from '@/integrations/supabase/types';
 import { createTaskData } from '@/lib/mcp/tools/tasks-create';
 import { createTaskProjectData } from '@/lib/mcp/tools/tasks-hierarchy-create';
-import { scheduleTaskData, transitionTaskData, updateTaskData } from '@/lib/mcp/tools/tasks-mutate';
+import { createMailTaskData } from '@/lib/mcp/tools/tasks-mail';
+import {
+  moveTaskData,
+  scheduleTaskData,
+  transitionTaskData,
+  updateTaskData,
+} from '@/lib/mcp/tools/tasks-mutate';
 import { getTaskViewData, planningDateInTimeZone } from '@/lib/mcp/tools/tasks-read';
 import { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
 import { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
+import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import { cleanupProductionTopology } from '@/modules/tasks/integration/productionTopologyCleanup';
 import { bindTasksDatabaseOwner } from '@/modules/tasks/sync/database';
 import { createTasksSupabaseConnector } from '@/modules/tasks/sync/connector';
@@ -661,7 +668,8 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       waitForLocalReminder(
         setupClient.database,
         savedReminder.reminder.id,
-        (reminder) => reminder.status === 'canceled',
+        (reminder) => reminder.status === 'active'
+          && reminder.local_date === planningDateInTimeZone('America/Los_Angeles'),
       ),
     ]);
 
@@ -734,7 +742,8 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       waitForLocalReminder(
         freshClient.database,
         savedReminder.reminder.id,
-        (reminder) => reminder.status === 'canceled',
+        (reminder) => reminder.status === 'active'
+          && reminder.local_date === planningDateInTimeZone('America/Los_Angeles'),
       ),
     ]);
     expect(await freshClient.database.getOptional(
@@ -750,6 +759,255 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       .eq('owner_id', owner.id);
     expect(residueError).toBeNull();
     expect(residueCount).toBe(0);
+  });
+
+  it('proves unified Start planning, explicit link clearing, and a fresh projection', async () => {
+    const environment = productionEnvironment();
+    testDirectory ??= await mkdtemp(join(tmpdir(), 'bathos-tasks-production-topology-'));
+    admin ??= createClient<Database>(environment.supabaseUrl, environment.serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const owner = await createSyntheticOwner('unified-start', environment);
+    const connector = createTasksSupabaseConnector({
+      endpoint: environment.powerSyncUrl,
+      supabase: owner.client,
+    });
+    const setupClient = await openClient(
+      testDirectory,
+      'unified-start-setup.db',
+      owner.id,
+      connector,
+    );
+    const planningTimeZone = 'America/Los_Angeles';
+    await setupClient.repository.ensurePlanningSettings(owner.id, planningTimeZone);
+    await waitForUploadQueue(setupClient.database, 0);
+
+    const auth = { userId: owner.id, email: owner.email, supabase: owner.client };
+    const planningDate = planningDateInTimeZone(planningTimeZone);
+    const futureDate = addTaskCalendarDays(planningDate, 3);
+    const messageIdentifier = `<${crypto.randomUUID()}@example.test>`;
+    const deepLink = `message://${crypto.randomUUID()}`;
+    const capture = await createMailTaskData({
+      idempotency_key: crypto.randomUUID(),
+      title: 'Synthetic Unified Start Mail Task',
+      notes: 'Disposable unified Start validation only',
+      account_identifier: 'synthetic-unified-start',
+      mailbox_identifier: 'synthetic-inbox',
+      message_identifier: messageIdentifier,
+      deep_link: deepLink,
+      retirement_destination_identifier: 'synthetic-archive',
+      source_title: 'Synthetic unified Start source',
+    }, auth);
+    expect(capture).toMatchObject({
+      idempotency_outcome: 'created',
+      receipt: { outcome: 'accepted', mutation_channel: 'mail_automation' },
+    });
+
+    const { data: initialSource, error: initialSourceError } = await owner.client
+      .from('tasks_mail_sources')
+      .select('task_id, message_identifier, deep_link, lifecycle, revision')
+      .eq('message_identifier', messageIdentifier)
+      .single();
+    expect(initialSourceError).toBeNull();
+    if (!initialSource) throw new Error('The synthetic Mail source is unavailable.');
+    const taskId = initialSource.task_id;
+    await waitForLocalTask(
+      setupClient.database,
+      taskId,
+      (task) => task.revision === 1
+        && task.primary_link === deepLink
+        && task.source_url === deepLink
+        && task.today_section === 'next'
+        && task.start_date === null,
+    );
+
+    const clearedLink = await updateTaskData({
+      task_id: taskId,
+      expected_revision: 1,
+      client_mutation_id: crypto.randomUUID(),
+      primary_link: null,
+    }, auth);
+    expect(clearedLink).toMatchObject({
+      mutation_outcome: 'applied',
+      task: {
+        revision: 2,
+        primary_link: null,
+        source_kind: 'mail_message',
+        source_url: deepLink,
+      },
+    });
+    await waitForLocalTask(
+      setupClient.database,
+      taskId,
+      (task) => task.revision === 2
+        && task.primary_link === null
+        && task.source_url === deepLink,
+    );
+
+    const exportAfterClear = await new TaskPortabilityService(owner.client).createExport();
+    expect(exportAfterClear.data.tasks_todos.find((task) => task.id === taskId)).toMatchObject({
+      primary_link: null,
+      source_kind: 'mail_message',
+      source_url: deepLink,
+    });
+
+    const reminderService = new TaskReminderService(owner.client);
+    const todayReminder = await reminderService.save({
+      rootType: 'todo',
+      rootId: taskId,
+      localTime: '23:59',
+      timeZone: planningTimeZone,
+      mutationChannel: 'mcp',
+      actorType: 'automation',
+    });
+    expect(todayReminder).toMatchObject({
+      outcome: 'accepted',
+      reminder: {
+        status: 'active',
+        local_date: planningDate,
+      },
+    });
+    await waitForLocalReminder(
+      setupClient.database,
+      todayReminder.reminder.id,
+      (reminder) => reminder.status === 'active' && reminder.local_date === planningDate,
+    );
+
+    const movedFuture = await moveTaskData({
+      task_id: taskId,
+      expected_revision: 2,
+      client_mutation_id: crypto.randomUUID(),
+      start_date: futureDate,
+      today_section: 'next',
+    }, auth);
+    expect(movedFuture).toMatchObject({
+      mutation_outcome: 'applied',
+      task: { revision: 3, start_date: futureDate, today_section: 'next' },
+    });
+    await Promise.all([
+      waitForLocalTask(
+        setupClient.database,
+        taskId,
+        (task) => task.revision === 3
+          && task.start_date === futureDate
+          && task.primary_link === null,
+      ),
+      waitForLocalReminder(
+        setupClient.database,
+        todayReminder.reminder.id,
+        (reminder) => reminder.status === 'active' && reminder.local_date === futureDate,
+      ),
+    ]);
+
+    const movedToday = await moveTaskData({
+      task_id: taskId,
+      expected_revision: 3,
+      client_mutation_id: crypto.randomUUID(),
+      start_date: null,
+      today_section: 'later',
+    }, auth);
+    expect(movedToday).toMatchObject({
+      mutation_outcome: 'applied',
+      task: { revision: 4, start_date: null, today_section: 'later' },
+    });
+    await Promise.all([
+      waitForLocalTask(
+        setupClient.database,
+        taskId,
+        (task) => task.revision === 4
+          && task.start_date === null
+          && task.today_section === 'later'
+          && task.primary_link === null,
+      ),
+      waitForLocalReminder(
+        setupClient.database,
+        todayReminder.reminder.id,
+        (reminder) => reminder.status === 'active' && reminder.local_date === planningDate,
+      ),
+    ]);
+
+    const clearedStart = await moveTaskData({
+      task_id: taskId,
+      expected_revision: 4,
+      client_mutation_id: crypto.randomUUID(),
+      start_date: null,
+      today_section: null,
+    }, auth);
+    expect(clearedStart).toMatchObject({
+      mutation_outcome: 'applied',
+      task: { revision: 5, start_date: null, today_section: null },
+    });
+    await Promise.all([
+      waitForLocalTask(
+        setupClient.database,
+        taskId,
+        (task) => task.revision === 5
+          && task.start_date === null
+          && task.today_section === null
+          && task.primary_link === null,
+      ),
+      waitForLocalReminder(
+        setupClient.database,
+        todayReminder.reminder.id,
+        (reminder) => reminder.status === 'canceled',
+      ),
+    ]);
+
+    const { data: retainedSource, error: retainedSourceError } = await owner.client
+      .from('tasks_mail_sources')
+      .select('task_id, message_identifier, deep_link, lifecycle, revision')
+      .eq('task_id', taskId)
+      .single();
+    expect(retainedSourceError).toBeNull();
+    expect(retainedSource).toEqual(initialSource);
+
+    await disposeClient(setupClient);
+    const freshClient = await openClient(
+      testDirectory,
+      'unified-start-fresh.db',
+      owner.id,
+      connector,
+    );
+    await Promise.all([
+      waitForLocalTask(
+        freshClient.database,
+        taskId,
+        (task) => task.revision === 5
+          && task.primary_link === null
+          && task.source_url === deepLink
+          && task.start_date === null
+          && task.today_section === null,
+      ),
+      waitForLocalReminder(
+        freshClient.database,
+        todayReminder.reminder.id,
+        (reminder) => reminder.status === 'canceled',
+      ),
+    ]);
+    expect(await freshClient.database.getOptional<{ count: number }>(
+      `SELECT count(*) AS count
+       FROM tasks_reminder_occurrences
+       WHERE reminder_id = ? AND status = 'scheduled'`,
+      [todayReminder.reminder.id],
+    )).toEqual({ count: 0 });
+
+    await disposeClient(freshClient);
+    await signOutSyntheticClient(owner.client);
+    await deleteSyntheticOwner(owner.id);
+    const residueChecks = await Promise.all([
+      admin.from('tasks_todos').select('id', { count: 'exact', head: true }).eq('owner_id', owner.id),
+      admin.from('tasks_mail_sources').select('task_id', { count: 'exact', head: true })
+        .eq('owner_id', owner.id),
+      admin.from('tasks_history_events').select('id', { count: 'exact', head: true })
+        .eq('owner_id', owner.id),
+      admin.from('tasks_reminders').select('id', { count: 'exact', head: true })
+        .eq('owner_id', owner.id),
+    ]);
+    for (const residue of residueChecks) {
+      expect(residue.error).toBeNull();
+      expect(residue.count).toBe(0);
+    }
   });
 
   it('proves the owner-local day-31 Done purge boundary and fresh projection removal', async () => {

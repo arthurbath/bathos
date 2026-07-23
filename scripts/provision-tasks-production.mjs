@@ -275,6 +275,7 @@ function runSyntheticTopology(powerSyncUrl, testScript = 'test:tasks:production-
   const successMessages = {
     'test:tasks:production-day-horizon': 'Synthetic production day-horizon gate passed.\n',
     'test:tasks:production-structure-simplification': 'Synthetic production structure-simplification gate passed.\n',
+    'test:tasks:production-unified-start': 'Synthetic production unified Start gate passed.\n',
     'test:tasks:production-undo-redo': 'Synthetic production undo/redo gate passed.\n',
   };
   const successMessage = successMessages[testScript]
@@ -290,10 +291,11 @@ if (![
   'verify-reminders',
   'synthetic-day-horizon',
   'synthetic-structure-simplification',
+  'synthetic-unified-start',
   'synthetic-undo-redo',
   'synthetic-topology',
 ].includes(command)) {
-  fail('Usage: node scripts/provision-tasks-production.mjs <sync-database|verify-sync-database|reminders|verify-reminders|synthetic-day-horizon|synthetic-structure-simplification|synthetic-undo-redo|synthetic-topology> [PowerSync URL]');
+  fail('Usage: node scripts/provision-tasks-production.mjs <sync-database|verify-sync-database|reminders|verify-reminders|synthetic-day-horizon|synthetic-structure-simplification|synthetic-unified-start|synthetic-undo-redo|synthetic-topology> [PowerSync URL]');
 }
 
 const tempDirectory = mkdtempSync(join(tmpdir(), 'bathos-tasks-production-'));
@@ -307,6 +309,9 @@ try {
   }
   if (command === 'synthetic-structure-simplification') {
     runSyntheticTopology(process.argv[3], 'test:tasks:production-structure-simplification');
+  }
+  if (command === 'synthetic-unified-start') {
+    runSyntheticTopology(process.argv[3], 'test:tasks:production-unified-start');
   }
   if (command === 'synthetic-undo-redo') {
     runSyntheticTopology(process.argv[3], 'test:tasks:production-undo-redo');
