@@ -28,6 +28,7 @@ import {
   Clock5,
   Clock8,
   DatabaseBackup,
+  ExternalLink,
   Hourglass,
   Inbox,
   ListTodo,
@@ -58,6 +59,15 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import { CARD_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
@@ -120,6 +130,10 @@ import type {
   TaskTodo,
 } from '@/modules/tasks/types/tasks';
 import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/taskEditorPlanning';
+import {
+  getTaskPrimaryLinkHref,
+  getTaskPrimaryLinkKind,
+} from '@/modules/tasks/domain/taskPrimaryLink';
 import { TaskProjectDetailView } from '@/modules/tasks/components/TaskProjectDetailView';
 import { TaskAreaDetailView } from '@/modules/tasks/components/TaskAreaDetailView';
 import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
@@ -3473,9 +3487,13 @@ function TaskEditor({
     });
   };
 
+  const primaryLinkHref = getTaskPrimaryLinkHref(primaryLink);
+  const primaryLinkOpensBrowserTab = getTaskPrimaryLinkKind(primaryLink) === 'link';
+
   return (
     <div
-      className="space-y-3 border-t border-[hsl(var(--grid-sticky-line))] px-4 py-4 sm:ml-14"
+      className="space-y-3 px-1.5 pb-3 pt-1 sm:px-3"
+      data-task-editor-form
     >
       <label className="sr-only" htmlFor={`task-title-${task.id}`}>
         Task Title
@@ -3512,6 +3530,7 @@ function TaskEditor({
         <div className="flex gap-2">
           <Input
             id={`task-primary-link-${task.id}`}
+            type="url"
             value={primaryLink}
             placeholder="No Primary Link"
             inputMode="url"
@@ -3526,75 +3545,25 @@ function TaskEditor({
               void persistImmediateTaskPatch({ primary_link: null });
             }}
           />
-          {primaryLink ? (
-            <Button
-              type="button"
-              variant="clear"
-              size="icon"
-              aria-label="Clear Primary Link"
-              onClick={() => {
-                setPrimaryLink('');
-                removePendingTextField('primary_link');
-                void persistImmediateTaskPatch({ primary_link: null });
-              }}
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          ) : null}
-        </div>
-      </div>
-      <div data-task-editor-identity-grid className="grid gap-3 sm:grid-cols-2">
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground" htmlFor={`task-actionability-${task.id}`}>
-          Actionability
-        </label>
-        <select
-          id={`task-actionability-${task.id}`}
-          value={actionability}
-          onChange={(event) => {
-            const nextActionability = event.target.value as TaskTodo['actionability'];
-            setActionability(nextActionability);
-            void persistImmediateTaskPatch({ actionability: nextActionability });
-          }}
-          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <option value="actionable">Actionable</option>
-          <option value="waiting">Waiting</option>
-          <option value="rechecking">Rechecking</option>
-        </select>
-      </div>
-      <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor={`task-organization-${task.id}`}>
-            Organization
-          </label>
-          <select
-            id={`task-organization-${task.id}`}
-            value={organization}
-            onChange={(event) => {
-              const nextOrganization = event.target.value;
-              setOrganization(nextOrganization);
-              void persistImmediateTaskPatch(parseTaskOrganization(nextOrganization));
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 shrink-0 border-[hsl(var(--grid-sticky-line))] bg-background"
+            aria-label="Open Primary Link"
+            disabled={primaryLinkHref === null}
+            onClick={() => {
+              if (primaryLinkHref === null) return;
+              window.open(
+                primaryLinkHref,
+                primaryLinkOpensBrowserTab ? '_blank' : '_self',
+                'noopener,noreferrer',
+              );
             }}
-            disabled={hierarchy.loading}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <option value="none">No Area or Project</option>
-            {hierarchy.areas.length > 0 ? (
-              <optgroup label="Areas">
-                {hierarchy.areas.map((area) => (
-                  <option key={area.id} value={`area:${area.id}`}>{area.title}</option>
-                ))}
-              </optgroup>
-            ) : null}
-            {hierarchy.projects.length > 0 ? (
-              <optgroup label="Projects">
-                {hierarchy.projects.map((project) => (
-                  <option key={project.id} value={`project:${project.id}`}>{project.title}</option>
-                ))}
-              </optgroup>
-            ) : null}
-          </select>
-      </div>
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </div>
       </div>
       <div data-task-editor-temporal-grid className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
@@ -3640,6 +3609,68 @@ function TaskEditor({
             clearable
             clearLabel="Clear"
           />
+        </div>
+      </div>
+      <div data-task-editor-identity-grid className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground" htmlFor={`task-actionability-${task.id}`}>
+            Actionability
+          </label>
+          <Select
+            value={actionability}
+            onValueChange={(value) => {
+              const nextActionability = value as TaskTodo['actionability'];
+              setActionability(nextActionability);
+              void persistImmediateTaskPatch({ actionability: nextActionability });
+            }}
+          >
+            <SelectTrigger id={`task-actionability-${task.id}`} aria-label="Actionability">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="actionable">Actionable</SelectItem>
+              <SelectItem value="waiting">Waiting</SelectItem>
+              <SelectItem value="rechecking">Rechecking</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground" htmlFor={`task-organization-${task.id}`}>
+            Organization
+          </label>
+          <Select
+            value={organization}
+            onValueChange={(nextOrganization) => {
+              setOrganization(nextOrganization);
+              void persistImmediateTaskPatch(parseTaskOrganization(nextOrganization));
+            }}
+            disabled={hierarchy.loading}
+          >
+            <SelectTrigger id={`task-organization-${task.id}`} aria-label="Organization">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No Area or Project</SelectItem>
+              {hierarchy.areas.length > 0 ? (
+                <SelectGroup>
+                  <SelectLabel>Areas</SelectLabel>
+                  {hierarchy.areas.map((area) => (
+                    <SelectItem key={area.id} value={`area:${area.id}`}>{area.title}</SelectItem>
+                  ))}
+                </SelectGroup>
+              ) : null}
+              {hierarchy.projects.length > 0 ? (
+                <SelectGroup>
+                  <SelectLabel>Projects</SelectLabel>
+                  {hierarchy.projects.map((project) => (
+                    <SelectItem key={project.id} value={`project:${project.id}`}>
+                      {project.title}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ) : null}
+            </SelectContent>
+          </Select>
         </div>
       </div>
     </div>

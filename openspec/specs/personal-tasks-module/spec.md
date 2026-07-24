@@ -1781,7 +1781,19 @@ The system SHALL use the active view name, compact self-evident controls, progre
 
 #### Scenario: Arrange the open editor compactly
 - **WHEN** a to-do editor is open
-- **THEN** Actionability and Organization share one responsive row, temporal controls use one compact responsive row with no full-width reminder container, and Deadline follows on the next row
+- **THEN** the card presents its summary row followed by Title, Notes, Primary Link, Start, Deadline, Actionability, and Organization in DOM, visual, and keyboard order, with each responsive pair preserving that sequence
+
+#### Scenario: Use the task card as the editor boundary
+- **WHEN** a to-do editor expands
+- **THEN** the form has no redundant top rule or checkbox-column indentation, uses only a small top gap, follows the card's ordinary responsive horizontal padding, and lets its controls fill the resulting content width
+
+#### Scenario: Use shared BathOS form controls
+- **WHEN** the expanded editor presents Notes, Actionability, or Organization
+- **THEN** Notes matches the standard Input and date-control border and focus treatment while both dropdowns use the shared BathOS Select trigger, popover, selection, and keyboard conventions
+
+#### Scenario: Present the Primary Link as a URL control
+- **WHEN** the expanded editor presents Primary Link
+- **THEN** it uses a standard full-size URL input with an adjacent named open-link control for its current nonblank destination and does not present a dedicated one-click clear button
 
 #### Scenario: Browse Done without archive ceremony
 - **WHEN** a user opens Done

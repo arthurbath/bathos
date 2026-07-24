@@ -17,6 +17,13 @@ import { getTasksStorageStatusLabel } from './tasksStorageStatus';
 import { TasksShell } from './TasksShell';
 import { useBathosFormInteractions } from '@/platform/hooks/useCommandEnterSubmit';
 
+if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.scrollIntoView !== 'function') {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: () => undefined,
+  });
+}
+
 const { mockToast } = vi.hoisted(() => ({ mockToast: vi.fn() }));
 const mockTaskList = vi.fn();
 const mockTaskSearch = vi.fn();
@@ -369,6 +376,30 @@ function setSelectValue(select: HTMLSelectElement, value: string) {
   select.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+async function selectBathosOption(trigger: HTMLButtonElement, optionLabel: string) {
+  await act(async () => {
+    trigger.focus();
+    trigger.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    }));
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  });
+  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))
+    .find((candidate) => candidate.textContent?.trim() === optionLabel);
+  if (!option) throw new Error(`BathOS Select option not found: ${optionLabel}`);
+  await act(async () => {
+    option.focus();
+    option.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    }));
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  });
+}
+
 function expectInteractiveControlsToHaveNames(scope: ParentNode) {
   const controls = Array.from(new Set(scope.querySelectorAll<HTMLElement>([
     'a[href]',
@@ -583,10 +614,8 @@ describe('TasksShell', () => {
       });
       const actionability = document.getElementById(
         'task-actionability-task-draft:new',
-      ) as HTMLSelectElement;
-      await act(async () => {
-        setSelectValue(actionability, 'waiting');
-      });
+      ) as HTMLButtonElement;
+      await selectBathosOption(actionability, 'Waiting');
       expect(taskList.createTask).not.toHaveBeenCalled();
 
       const title = document.getElementById('task-title-task-draft:new') as HTMLInputElement;
@@ -2103,16 +2132,44 @@ describe('TasksShell', () => {
       const editorTitle = container.querySelector<HTMLInputElement>('#task-title-task-a')!;
       const notes = container.querySelector<HTMLDivElement>('#task-notes-task-a')!;
       const primaryLink = container.querySelector<HTMLInputElement>('#task-primary-link-task-a')!;
-      const actionability = container.querySelector<HTMLSelectElement>('#task-actionability-task-a')!;
-      const organization = container.querySelector<HTMLSelectElement>('#task-organization-task-a')!;
+      const actionability = container.querySelector<HTMLButtonElement>('#task-actionability-task-a')!;
+      const organization = container.querySelector<HTMLButtonElement>('#task-organization-task-a')!;
       const start = container.querySelector<HTMLButtonElement>('#task-start-task-a')!;
       const deadline = container.querySelector<HTMLButtonElement>('#task-deadline-task-a')!;
-      const editor = editorTitle.parentElement!;
+      const editor = container.querySelector<HTMLElement>('[data-task-editor-form]')!;
 
       expect(Array.from(editor.querySelectorAll<HTMLButtonElement>('button'))
         .some((button) => button.textContent === 'Cancel')).toBe(false);
       expect(Array.from(editor.querySelectorAll<HTMLButtonElement>('button'))
         .some((button) => button.textContent === 'Save')).toBe(false);
+      expect(editor).toHaveClass('px-1.5', 'pb-3', 'pt-1', 'sm:px-3');
+      expect(editor).not.toHaveClass('border-t', 'py-4', 'sm:ml-14');
+      expect(notes).toHaveClass(
+        'border-[hsl(var(--grid-sticky-line))]',
+        'focus:border-ring',
+        'focus:ring-ring/65',
+      );
+      expect(actionability).toHaveAttribute('role', 'combobox');
+      expect(organization).toHaveAttribute('role', 'combobox');
+      expect(actionability).toHaveClass('border-[hsl(var(--grid-sticky-line))]');
+      expect(organization).toHaveClass('border-[hsl(var(--grid-sticky-line))]');
+      expect(Array.from(editor.querySelectorAll<HTMLElement>([
+        '[data-task-editor-title]',
+        '#task-notes-task-a',
+        '#task-primary-link-task-a',
+        '#task-start-task-a',
+        '#task-deadline-task-a',
+        '#task-actionability-task-a',
+        '#task-organization-task-a',
+      ].join(','))).map((control) => control.id)).toEqual([
+        'task-title-task-a',
+        'task-notes-task-a',
+        'task-primary-link-task-a',
+        'task-start-task-a',
+        'task-deadline-task-a',
+        'task-actionability-task-a',
+        'task-organization-task-a',
+      ]);
 
       expect(document.activeElement).toBe(editorTitle);
       await tab();
@@ -2120,15 +2177,15 @@ describe('TasksShell', () => {
       await tab();
       expect(document.activeElement).toBe(primaryLink);
       await tab();
-      expect(document.activeElement).toBe(actionability);
-      await tab();
-      expect(document.activeElement).toBe(organization);
-      await tab();
       expect(document.activeElement).toBe(start);
       await tab();
       expect(document.activeElement).toBe(deadline);
+      await tab();
+      expect(document.activeElement).toBe(actionability);
+      await tab();
+      expect(document.activeElement).toBe(organization);
       await tab(true);
-      expect(document.activeElement).toBe(start);
+      expect(document.activeElement).toBe(actionability);
     } finally {
       cleanup(root, container);
     }
@@ -2350,23 +2407,11 @@ describe('TasksShell', () => {
       await act(async () => {
         container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
       });
-      const actionability = container.querySelector<HTMLSelectElement>(
+      const actionability = container.querySelector<HTMLButtonElement>(
         '#task-actionability-task-a',
       )!;
-      await act(async () => {
-        setSelectValue(actionability, 'waiting');
-        await Promise.resolve();
-      });
-      await act(async () => {
-        requestTaskStartPickerOpenForTest(container, 'task-a');
-      });
-      const later = Array.from(document.querySelectorAll<HTMLButtonElement>(
-        '[data-task-start-horizon]',
-      )).find((button) => button.textContent?.includes('Later'));
-      await act(async () => {
-        later?.click();
-        await Promise.resolve();
-      });
+      await selectBathosOption(actionability, 'Waiting');
+      await selectBathosOption(actionability, 'Rechecking');
 
       expect(taskList.updateTask).toHaveBeenCalledTimes(1);
       expect(taskList.updateTask).toHaveBeenNthCalledWith(1, 'task-a', {
@@ -2378,11 +2423,11 @@ describe('TasksShell', () => {
         await firstWrite;
         await Promise.resolve();
       });
-      expect(taskList.updateTask).toHaveBeenCalledTimes(2);
+      await waitFor(() => {
+        expect(taskList.updateTask).toHaveBeenCalledTimes(2);
+      });
       expect(taskList.updateTask).toHaveBeenNthCalledWith(2, 'task-a', {
-        destination: 'anytime',
-        start_date: null,
-        today_section: 'later',
+        actionability: 'rechecking',
       });
     } finally {
       cleanup(root, container);
@@ -2512,14 +2557,11 @@ describe('TasksShell', () => {
       await act(async () => titleButton.click());
       expect(row).toHaveClass('bg-foreground/[0.05]');
       expect(row?.querySelector('[data-task-editor-region]')).not.toBeNull();
-      const organization = container.querySelector<HTMLSelectElement>(
+      const organization = container.querySelector<HTMLButtonElement>(
         '#task-organization-task-a',
       )!;
-      expect(organization.value).toBe('project:project-launch');
-      await act(async () => setSelectValue(organization, 'area:area-work'));
-      await act(async () => {
-        organization.form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-      });
+      expect(organization).toHaveTextContent('Launch');
+      await selectBathosOption(organization, 'Work');
 
       expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
         area_id: 'area-work',
@@ -3219,7 +3261,7 @@ describe('TasksShell', () => {
       });
       expect(document.querySelector('[data-task-start-picker]')).toBeNull();
       expect(document.activeElement).toBe(
-        container.querySelector('#task-organization-task-a'),
+        container.querySelector('#task-primary-link-task-a'),
       );
       expect(taskList.updateTask).not.toHaveBeenCalled();
     } finally {
@@ -4463,25 +4505,33 @@ describe('TasksShell', () => {
     }
   });
 
-  it('clears Primary Link immediately from the open editor', async () => {
+  it('uses the standard URL control and opens Primary Link without a clear button', async () => {
     const taskList = {
       ...defaultTaskList(),
       tasks: [taskTodoFixture({ ...task, primary_link: 'https://example.test' })],
     };
     mockTaskList.mockReturnValue(taskList);
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     const { container, root } = renderShell();
     try {
       await act(async () => {
         container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
       });
+      const input = container.querySelector<HTMLInputElement>('#task-primary-link-task-a')!;
+      const openLink = container.querySelector<HTMLButtonElement>('[aria-label="Open Primary Link"]')!;
+      expect(input).toHaveAttribute('type', 'url');
+      expect(input).toHaveClass('border-[hsl(var(--grid-sticky-line))]');
+      expect(container.querySelector('[aria-label="Clear Primary Link"]')).toBeNull();
       await act(async () => {
-        container.querySelector<HTMLButtonElement>('[aria-label="Clear Primary Link"]')?.click();
-        await Promise.resolve();
+        openLink.click();
       });
-      await waitFor(() => {
-        expect(taskList.updateTask).toHaveBeenCalledWith('task-a', { primary_link: null });
-      });
+      expect(open).toHaveBeenCalledWith(
+        'https://example.test',
+        '_blank',
+        'noopener,noreferrer',
+      );
     } finally {
+      open.mockRestore();
       cleanup(root, container);
     }
   });
