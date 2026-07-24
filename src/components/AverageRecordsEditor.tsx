@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarIcon, Minus, Plus } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Minus, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DataGridAddFormAffixInput } from '@/components/ui/data-grid-add-form-affix-input';
 import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DatePickerField } from '@/components/ui/date-picker-field';
 import {
   DEFAULT_CURRENT_PERIOD_HANDLING,
   getAverageCalculationDetails,
@@ -14,7 +13,6 @@ import {
   type BudgetCurrentPeriodHandling,
   type BudgetValueType,
 } from '@/lib/budgetAveraging';
-import { cn } from '@/lib/utils';
 
 interface AverageRecordsEditorProps {
   valueType: Extract<BudgetValueType, 'monthly_averaged' | 'yearly_averaged'>;
@@ -25,7 +23,6 @@ interface AverageRecordsEditorProps {
   disabled?: boolean;
   averageLabel?: string;
   autoFocusAddButton?: boolean;
-  onSubmitFromAmountEnter?: () => void;
   currentDate?: Date;
 }
 
@@ -72,85 +69,20 @@ function DateRecordPicker({
   disabled: boolean;
   onChange: (date: Date) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const recordDate = record.date;
-  const recordMonth = record.month;
-  const recordYear = record.year;
-  const selectedDate = useMemo(
-    () => {
-      const parsed = parseDateInputValue(recordDate);
-      if (parsed) return parsed;
-      return new Date(recordYear, valueType === 'monthly_averaged' ? ((recordMonth ?? 1) - 1) : 0, 1);
-    },
-    [recordDate, recordMonth, recordYear, valueType],
-  );
-  const [visibleMonth, setVisibleMonth] = useState<Date>(() => new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const shouldRestoreFocusRef = useRef(false);
-
-  useEffect(() => {
-    if (!open) return;
-    setVisibleMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
-  }, [open, selectedDate]);
-
-  const scheduleTriggerFocusRestore = () => {
-    window.setTimeout(() => {
-      window.setTimeout(() => {
-        triggerRef.current?.focus();
-      }, 0);
-    }, 0);
-  };
-
+  const selectedDate = getRecordDate(record, valueType);
   return (
-    <Popover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-        if (!nextOpen && shouldRestoreFocusRef.current) {
-          shouldRestoreFocusRef.current = false;
-          scheduleTriggerFocusRestore();
-        }
+    <DatePickerField
+      value={toDateInputValue(selectedDate)}
+      onValueChange={(value) => {
+        const nextDate = parseDateInputValue(value);
+        if (nextDate) onChange(nextDate);
       }}
-    >
-      <PopoverTrigger asChild>
-        <Button
-          ref={triggerRef}
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          data-average-record-primary-input="true"
-          data-average-record-row={rowIndex}
-          className={cn(
-            'h-9 w-full justify-between border-[hsl(var(--grid-sticky-line))] bg-background px-3 text-left text-sm font-normal',
-            'hover:bg-background',
-          )}
-        >
-          <span>{format(selectedDate, 'MMM d, yyyy')}</span>
-          <CalendarIcon className="ml-2 h-4 w-4 shrink-0 text-foreground opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-auto p-0"
-        align="start"
-        onOpenAutoFocus={(event) => event.preventDefault()}
-      >
-        <Calendar
-          mode="single"
-          selected={selectedDate}
-          month={visibleMonth}
-          onMonthChange={setVisibleMonth}
-          onSelect={(nextDate) => {
-            if (!nextDate) return;
-            shouldRestoreFocusRef.current = true;
-            onChange(nextDate);
-            setOpen(false);
-            scheduleTriggerFocusRestore();
-          }}
-          initialFocus
-        />
-      </PopoverContent>
-    </Popover>
+      disabled={disabled}
+      data-average-record-primary-input="true"
+      data-average-record-row={rowIndex}
+      aria-label={`${valueType === 'monthly_averaged' ? 'Month' : 'Year'} record date`}
+      className="h-9 text-sm"
+    />
   );
 }
 
@@ -163,7 +95,6 @@ export function AverageRecordsEditor({
   disabled = false,
   averageLabel,
   autoFocusAddButton = false,
-  onSubmitFromAmountEnter,
   currentDate = new Date(),
 }: AverageRecordsEditorProps) {
   const modeLabel = valueType === 'monthly_averaged' ? 'month' : 'year';
@@ -316,11 +247,6 @@ export function AverageRecordsEditor({
                   prefix="$"
                   value={blankAmountRows.includes(index) ? '' : String(record.amount)}
                   onChange={(event) => handleAmountChange(index, event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'Enter' || disabled || !onSubmitFromAmountEnter) return;
-                    event.preventDefault();
-                    onSubmitFromAmountEnter();
-                  }}
                   disabled={disabled}
                   className="h-9 text-sm"
                 />

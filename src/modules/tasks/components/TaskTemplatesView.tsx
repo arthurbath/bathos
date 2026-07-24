@@ -158,7 +158,7 @@ export function TaskTemplatesView({
         <div className="flex items-center justify-between gap-4">
           <h3 className="text-sm font-semibold">{selectedTemplate ? 'Save Template Revision' : 'Save Template'}</h3>
           {selectedTemplate ? (
-            <Button type="button" variant="clear" size="sm" onClick={resetCapture}>Cancel</Button>
+            <Button type="button" data-bathos-form-cancel="true" variant="clear" size="sm" onClick={resetCapture}>Cancel</Button>
           ) : null}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">

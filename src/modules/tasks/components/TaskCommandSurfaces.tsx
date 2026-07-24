@@ -510,7 +510,7 @@ export function TaskKeyboardHelpDialog({
         ['Open Previous', 'Control+W', 'Control+Shift+W'],
         ['Mark Open To-Do Complete', 'Control+D', 'Control+Shift+D'],
         ['Toggle Completion', 'Command+K', 'Control+K'],
-        ['Close and Clear Focus', 'Control+X', 'Control+Shift+X'],
+        ['Close and Clear Focus', 'Control+X', 'Unavailable'],
         ['Move to or Cycle Today', 'Command+T', 'Control+T'],
         ['Move to Anytime', 'Command+R', 'Control+R'],
         ['Move to Someday', 'Command+O', 'Control+O'],
@@ -530,7 +530,7 @@ export function TaskKeyboardHelpDialog({
     {
       label: 'Editor and Surfaces',
       commands: [
-        ['Close Open To-Do', 'Command+Return or Escape', 'Control+Return or Escape'],
+        ['Close Open To-Do', 'Command+Return or Command+Escape', 'Control+Return or Control+Shift+X'],
         ['Move Through Controls', 'Tab/Shift+Tab', 'Tab/Shift+Tab'],
       ],
     },

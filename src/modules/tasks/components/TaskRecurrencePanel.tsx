@@ -193,7 +193,7 @@ export function TaskRecurrencePanel({
       <form onSubmit={save} className="space-y-4 rounded-md border border-[hsl(var(--grid-sticky-line))] p-4">
         <div className="flex items-center justify-between gap-4">
           <h3 className="text-sm font-semibold">{editingId ? 'Save Repeat Revision' : 'Save Repeat'}</h3>
-          {editingId ? <Button type="button" variant="clear" size="sm" onClick={reset}>Cancel</Button> : null}
+          {editingId ? <Button type="button" data-bathos-form-cancel="true" variant="clear" size="sm" onClick={reset}>Cancel</Button> : null}
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Template">

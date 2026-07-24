@@ -250,8 +250,8 @@ describe('Tasks MCP hierarchy creation tools', () => {
       area_id: areaId,
       destination: 'anytime',
       today_section: 'later',
-      start_date: '2026-07-24',
-      deadline: '2026-07-21',
+      start_date: '2099-07-24',
+      deadline: '2099-07-21',
     }, authFor(ownerA, client));
 
     expect(result.record).toMatchObject({
@@ -261,8 +261,8 @@ describe('Tasks MCP hierarchy creation tools', () => {
       lifecycle: 'open',
       destination: 'anytime',
       today_section: 'later',
-      start_date: '2026-07-24',
-      deadline: '2026-07-21',
+      start_date: '2099-07-24',
+      deadline: '2099-07-21',
     });
 
     const inaccessible = new FakeHierarchyClient({ tasks_areas: [parentArea(ownerB)] });

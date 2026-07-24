@@ -338,12 +338,12 @@ describe('Tasks MCP creation tool', () => {
     const overdue = await createTaskData(request({
       idempotency_key: '20000000-0000-4000-8000-000000000009',
       destination: 'anytime',
-      start_date: '2026-07-24',
-      deadline: '2026-07-20',
+      start_date: '2099-07-24',
+      deadline: '2099-07-20',
     }), authFor(ownerA, client));
     expect(overdue.task).toMatchObject({
-      start_date: '2026-07-24',
-      deadline: '2026-07-20',
+      start_date: '2099-07-24',
+      deadline: '2099-07-20',
       today_section: 'later',
     });
     expect(client.taskInsertCount).toBe(1);

@@ -164,7 +164,7 @@ describe('IncomesTab averaged rows', () => {
     expect(converted.average_records).toEqual([{ year: 2026, month: null, amount: 0, date: '2026-01-01' }]);
   });
 
-  it('saves and closes the edit records modal when pressing enter in an amount input', async () => {
+  it('keeps the edit records modal open when pressing unmodified Return in an amount input', async () => {
     const onUpdate = vi.fn(async () => {});
     const incomes: Income[] = [
       {
@@ -213,8 +213,8 @@ describe('IncomesTab averaged rows', () => {
       });
       await flushUi();
 
-      expect(onUpdate).toHaveBeenCalledTimes(1);
-      expect(document.body.textContent).not.toContain('Edit Yearly Records');
+      expect(onUpdate).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain('Edit Yearly Records');
     } finally {
       unmount(root, container);
     }

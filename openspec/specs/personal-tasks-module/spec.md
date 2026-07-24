@@ -546,6 +546,29 @@ The Tasks unified Start picker SHALL allow reminder entry before a to-do has a S
 - **WHEN** a user enters a valid reminder before a new-task draft has a persistent identifier
 - **THEN** Tasks retains Today · Inbox in the draft, retains the pending reminder intent, and persists the planned to-do before saving its reminder after the first valid title
 
+### Requirement: Shared Task Editor Form Commands
+The Tasks expanded to-do editor SHALL act as an autosaving form scope under the shared BathOS form-control interaction contract. Form submit and form cancel SHALL both flush pending valid autosave and close the editor because accepted task changes cannot be canceled retroactively.
+
+#### Scenario: Close a task with the form-submit command
+- **WHEN** a task editor is open and the user presses Command+Return on Mac or Control+Return on Windows outside active composition
+- **THEN** Tasks suppresses the matching browser action, flushes pending autosave, closes the editor from any focused task field, and commits deferred completion through the ordinary close path
+
+#### Scenario: Close a task with the form-cancel command
+- **WHEN** a task editor is open and the user presses Command+Escape on Mac or Control+Shift+X on Windows outside active composition
+- **THEN** Tasks suppresses the matching browser action, flushes pending autosave, closes the editor from any focused task field, and commits deferred completion without claiming to revert accepted edits
+
+#### Scenario: Keep plain Escape field-local
+- **WHEN** a task editor is open and the user presses unmodified Escape
+- **THEN** the deepest open task field layer may cancel or revert itself, but the task editor remains open when no field layer owns Escape
+
+#### Scenario: Discard an untitled task draft on form close
+- **WHEN** either task form command closes a draft whose title never became nonblank
+- **THEN** Tasks removes the local draft without creating synchronized work, history, sources, reminders, or a success toast
+
+#### Scenario: Present the revised close commands
+- **WHEN** the user opens the Tasks keyboard-command reference
+- **THEN** the close action shows Command+Return or Command+Escape on Mac and Control+Return or Control+Shift+X on Windows, and it no longer presents plain Escape as a task-editor close command
+
 ### Requirement: Unified Task Start Picker
 The Tasks interface SHALL present a single autosaving Start control for Today horizon, future deferral date, and reminder intent by composing the established BathOS popover and calendar primitives with Tasks-specific controls.
 
@@ -563,11 +586,11 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 
 #### Scenario: Choose a Today horizon
 - **WHEN** a user chooses Inbox, Now, Next, or Later in the Start picker
-- **THEN** Tasks immediately stores that active Today horizon with a null future Start Date and keeps the picker available for optional reminder editing unless Enter confirmed the final selection
+- **THEN** Tasks immediately stores that active Today horizon with a null future Start Date and keeps the picker available for optional reminder editing unless Return confirmed the final selection
 
 #### Scenario: Choose a future Start date
 - **WHEN** a user chooses a date after the owner's planning date
-- **THEN** Tasks immediately stores that future Start Date, retains a valid selected day horizon for reached-date activation, and keeps the picker available for optional reminder editing unless Enter confirmed the final selection
+- **THEN** Tasks immediately stores that future Start Date, retains a valid selected day horizon for reached-date activation, and keeps the picker available for optional reminder editing unless Return confirmed the final selection
 
 #### Scenario: Prevent calendar scheduling for today or the past
 - **WHEN** the Start picker calendar displays the owner planning date or an earlier date
@@ -605,9 +628,9 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 - **WHEN** the user activates Clear in the Start picker
 - **THEN** Tasks immediately clears both future Start Date and Today horizon, cancels any active reminder and pending occurrence, and treats keyboard activation as a committed final action
 
-#### Scenario: Traverse the complete picker with Tab
-- **WHEN** focus enters the Start picker
-- **THEN** Tab and Shift+Tab traverse its horizon, calendar, reminder, and Clear controls, Escape closes the popover, and close restores focus to the trigger
+#### Scenario: Leave Start with Tab
+- **WHEN** focus is anywhere inside Start and the user presses Tab or Shift+Tab
+- **THEN** Tasks closes Start without selecting a merely focused date, restores the committed task state, and moves focus to the next or previous control in the containing task editor rather than traversing Start's internal controls
 
 #### Scenario: Traverse the complete picker with arrow keys
 - **WHEN** focus is within Start and the user presses an arrow key outside ordinary reminder text editing
@@ -624,6 +647,10 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 #### Scenario: Activate other focused Start actions
 - **WHEN** a user presses Space on a focused Today horizon, calendar action, selectable date, month, year pager, or Clear
 - **THEN** Tasks performs the same action as pointer activation, while Space inside Reminder remains text input
+
+#### Scenario: Cancel Start without closing the task
+- **WHEN** a user presses unmodified Escape inside Start
+- **THEN** Tasks closes Start, restores its trigger focus and pre-open provisional field state, and leaves the containing task editor open
 
 #### Scenario: Open Start from the reminder command
 - **WHEN** Command+E on Mac or Control+E on Windows targets one open to-do or one or more selected to-dos
@@ -1383,9 +1410,13 @@ The system SHALL provide modifier-based keyboard operation for full-editor creat
 - **WHEN** a pointer interaction begins outside the open to-do and any calendar, menu, listbox, or dialog launched from its editor
 - **THEN** Tasks flushes pending autosave, closes the editor, and commits any deferred completion through the ordinary close path
 
-#### Scenario: Close an editor with Command Return or Escape
-- **WHEN** a task editor is open and the user presses Command+Return on Mac, Control+Return on Windows, or Escape while no nested dialog or popover owns Escape
-- **THEN** Tasks flushes autosave and closes the editor from any focused task field with the same deferred-completion semantics as the ordinary close path
+#### Scenario: Close an editor with a form command
+- **WHEN** a task editor is open and the user presses Command+Return or Command+Escape on Mac, or Control+Return or Control+Shift+X on Windows, outside active composition
+- **THEN** Tasks suppresses the matching browser action, flushes autosave, closes the editor from any focused task field, and commits deferred completion through the ordinary close path
+
+#### Scenario: Keep plain Escape field-local
+- **WHEN** a task editor is open and the user presses unmodified Escape
+- **THEN** the deepest open task field layer may cancel or revert itself, but the task editor remains open when no field layer owns Escape
 
 #### Scenario: Retain an open task's list projection
 - **WHEN** autosaved planning or organization metadata would remove or regroup the currently open to-do
@@ -1412,7 +1443,7 @@ The system SHALL provide modifier-based keyboard operation for full-editor creat
 - **THEN** Tasks immediately transitions that to-do to Done and applies the documented focus fallback
 
 #### Scenario: Close and clear page focus
-- **WHEN** the user presses Control+X on Mac or Control+Shift+X on Windows while a to-do is open
+- **WHEN** the user presses Control+X on Mac while a to-do is open
 - **THEN** Tasks closes the editor, commits any pending completion, and removes focus from every page control
 
 #### Scenario: Preserve other native input behavior

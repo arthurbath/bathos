@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -31,13 +31,19 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { useBathosFormInteractions } from "@/platform/hooks/useCommandEnterSubmit";
+
+function FormInteractionsHarness({ children }: { children: React.ReactNode }) {
+  useBathosFormInteractions();
+  return <>{children}</>;
+}
 
 function mount(ui: React.ReactElement) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(ui);
+    root.render(<FormInteractionsHarness>{ui}</FormInteractionsHarness>);
   });
   return { container, root };
 }
@@ -94,7 +100,23 @@ async function dispatchTabOnActiveElement(shiftKey = false) {
 
 async function dispatchCommandEnter(target: HTMLElement) {
   await act(async () => {
-    target.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+    target.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+  });
+}
+
+async function dispatchEscape(target: HTMLElement, metaKey = false) {
+  await act(async () => {
+    target.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Escape",
+      metaKey,
+      bubbles: true,
+      cancelable: true,
+    }));
   });
 }
 
@@ -352,6 +374,13 @@ function SheetSubmitShortcutHarness() {
 }
 
 describe("Modal focus conventions", () => {
+  beforeEach(() => {
+    Object.defineProperty(window.navigator, "platform", {
+      configurable: true,
+      value: "MacIntel",
+    });
+  });
+
   afterEach(() => {
     setWindowInnerWidth(1024);
     Object.defineProperty(window, "visualViewport", {
@@ -489,7 +518,7 @@ describe("Modal focus conventions", () => {
     }
   });
 
-  it("submits dialog forms and closes the dialog on command enter", async () => {
+  it("submits dialog forms without adding implicit persistence or closure", async () => {
     const { container, root } = mount(<DialogSubmitShortcutHarness />);
     try {
       await waitForCondition(() => {
@@ -502,14 +531,14 @@ describe("Modal focus conventions", () => {
 
       await waitForCondition(() => {
         expect(container.querySelector('[data-testid="dialog-submit-count"]')?.textContent).toBe("1");
-        expect(container.querySelector('[data-testid="dialog-open-state"]')?.textContent).toBe("closed");
+        expect(container.querySelector('[data-testid="dialog-open-state"]')?.textContent).toBe("open");
       });
     } finally {
       unmount(root, container);
     }
   });
 
-  it("closes dialogs without forms on command enter", async () => {
+  it("cancels dialogs on command escape", async () => {
     const { container, root } = mount(<DialogCloseShortcutHarness />);
     try {
       await waitForCondition(() => {
@@ -518,7 +547,7 @@ describe("Modal focus conventions", () => {
 
       const content = document.querySelector<HTMLElement>('[data-testid="dialog-content"]');
       expect(content).not.toBeNull();
-      await dispatchCommandEnter(content!);
+      await dispatchEscape(content!, true);
 
       await waitForCondition(() => {
         expect(container.querySelector('[data-testid="dialog-open-state"]')?.textContent).toBe("closed");
@@ -528,7 +557,7 @@ describe("Modal focus conventions", () => {
     }
   });
 
-  it("triggers dialog confirm actions and closes when no form is present", async () => {
+  it("triggers declared dialog confirm actions without implicit closure", async () => {
     const { container, root } = mount(<DialogConfirmShortcutHarness />);
     try {
       await waitForCondition(() => {
@@ -541,14 +570,14 @@ describe("Modal focus conventions", () => {
 
       await waitForCondition(() => {
         expect(container.querySelector('[data-testid="dialog-confirm-count"]')?.textContent).toBe("1");
-        expect(container.querySelector('[data-testid="dialog-open-state"]')?.textContent).toBe("closed");
+        expect(container.querySelector('[data-testid="dialog-open-state"]')?.textContent).toBe("open");
       });
     } finally {
       unmount(root, container);
     }
   });
 
-  it("closes alert dialogs on command enter", async () => {
+  it("activates declared alert dialog actions on command enter", async () => {
     const { container, root } = mount(<AlertDialogShortcutHarness />);
     try {
       await waitForCondition(() => {
@@ -567,7 +596,7 @@ describe("Modal focus conventions", () => {
     }
   });
 
-  it("submits sheet forms and closes the sheet on command enter", async () => {
+  it("submits sheet forms without adding implicit persistence or closure", async () => {
     const { container, root } = mount(<SheetSubmitShortcutHarness />);
     try {
       await waitForCondition(() => {
@@ -580,8 +609,23 @@ describe("Modal focus conventions", () => {
 
       await waitForCondition(() => {
         expect(container.querySelector('[data-testid="sheet-submit-count"]')?.textContent).toBe("1");
-        expect(container.querySelector('[data-testid="sheet-open-state"]')?.textContent).toBe("closed");
+        expect(container.querySelector('[data-testid="sheet-open-state"]')?.textContent).toBe("open");
       });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("keeps dialogs open on plain escape", async () => {
+    const { container, root } = mount(<DialogCloseShortcutHarness />);
+    try {
+      await waitForCondition(() => {
+        expect(document.querySelector('[data-testid="dialog-content"]')).not.toBeNull();
+      });
+
+      const content = document.querySelector<HTMLElement>('[data-testid="dialog-content"]')!;
+      await dispatchEscape(content);
+      expect(container.querySelector('[data-testid="dialog-open-state"]')?.textContent).toBe("open");
     } finally {
       unmount(root, container);
     }

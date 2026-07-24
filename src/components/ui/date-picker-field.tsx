@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { focusAdjacentFormControl } from '@/platform/formInteractions';
 
 export function parseDatePickerFieldValue(value: string | undefined): Date | undefined {
   if (!value) return undefined;
@@ -56,6 +57,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   );
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const clearButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const tabExitDirectionRef = React.useRef<'forward' | 'backward' | null>(null);
   const selectedDate = parseDatePickerFieldValue(value);
   const minimumDate = parseDatePickerFieldValue(minDate);
   const calendarToday = parseDatePickerFieldValue(todayDate);
@@ -89,6 +91,13 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
             className,
           )}
           {...props}
+          onKeyDown={(event) => {
+            props.onKeyDown?.(event);
+            if (event.defaultPrevented || !clearable || !value) return;
+            if (event.key !== 'Backspace' && event.key !== 'Delete') return;
+            event.preventDefault();
+            onValueChange('');
+          }}
         >
           <span className="truncate">{selectedDate ? format(selectedDate, displayFormat) : placeholder}</span>
           <CalendarIcon className="ml-auto h-4 w-4 shrink-0 text-foreground opacity-50" />
@@ -98,6 +107,22 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
         className="w-auto p-0"
         align={popoverAlign}
         onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => {
+          const direction = tabExitDirectionRef.current;
+          if (!direction) return;
+          event.preventDefault();
+          tabExitDirectionRef.current = null;
+          if (triggerRef.current) {
+            focusAdjacentFormControl(triggerRef.current, direction === 'backward');
+          }
+        }}
+        onKeyDownCapture={(event) => {
+          if (event.key !== 'Tab') return;
+          event.preventDefault();
+          event.stopPropagation();
+          tabExitDirectionRef.current = event.shiftKey ? 'backward' : 'forward';
+          setOpen(false);
+        }}
       >
         <Calendar
           mode="single"
@@ -107,6 +132,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
           month={visibleMonth}
           today={calendarToday}
           initialFocusDate={selectedDate ?? minimumDate ?? calendarToday}
+          allowTabExit
           onMonthChange={setVisibleMonth}
           onDayGridExitDown={() => {
             if (clearButtonRef.current?.disabled) return false;

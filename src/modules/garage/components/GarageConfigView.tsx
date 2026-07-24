@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingState, useReactTable } from '@tanstack/react-table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
+import { DatePickerField } from '@/components/ui/date-picker-field';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
@@ -20,6 +21,7 @@ import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import { GARAGE_VEHICLES_GRID_DEFAULT_WIDTHS, GRID_FIXED_COLUMNS } from '@/lib/gridColumnWidths';
 import { cn } from '@/lib/utils';
 import type { GarageVehicle } from '@/modules/garage/types/garage';
+import { focusAdjacentFormControl } from '@/platform/formInteractions';
 
 const columnHelper = createColumnHelper<GarageVehicle>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
@@ -187,6 +189,8 @@ function VehicleDateCell({
 }) {
   const ctx = useDataGrid();
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const tabExitDirectionRef = useRef<'forward' | 'backward' | null>(null);
   const parsedDate = parseDateInputValue(value ?? '');
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => getCalendarMonthForDateInput(value ?? ''));
 
@@ -199,6 +203,7 @@ function VehicleDateCell({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
+          ref={triggerRef}
           type="button"
           data-grid-focus-only="true"
           {...gridNavProps(ctx, navCol)}
@@ -234,7 +239,27 @@ function VehicleDateCell({
           <CalendarIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-foreground opacity-50" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start" onOpenAutoFocus={(event) => event.preventDefault()}>
+      <PopoverContent
+        className="w-auto p-0"
+        align="start"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => {
+          const direction = tabExitDirectionRef.current;
+          if (!direction) return;
+          event.preventDefault();
+          tabExitDirectionRef.current = null;
+          if (triggerRef.current) {
+            focusAdjacentFormControl(triggerRef.current, direction === 'backward');
+          }
+        }}
+        onKeyDownCapture={(event) => {
+          if (event.key !== 'Tab') return;
+          event.preventDefault();
+          event.stopPropagation();
+          tabExitDirectionRef.current = event.shiftKey ? 'backward' : 'forward';
+          setOpen(false);
+        }}
+      >
         <Calendar
           mode="single"
           selected={parsedDate}
@@ -258,6 +283,7 @@ function VehicleDateCell({
             }
             setOpen(false);
           }}
+          allowTabExit
           initialFocus
         />
       </PopoverContent>
@@ -331,10 +357,6 @@ export function GarageConfigView({
   const [formOpen, setFormOpen] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
   const [vehicleForm, setVehicleForm] = useState<VehicleFormState>(emptyVehicleState());
-  const [inServicePickerOpen, setInServicePickerOpen] = useState(false);
-  const [inServicePickerMonth, setInServicePickerMonth] = useState<Date>(
-    () => getCalendarMonthForDateInput(''),
-  );
   const [hasAutoOpenedModal, setHasAutoOpenedModal] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<GarageVehicle | null>(null);
@@ -354,7 +376,6 @@ export function GarageConfigView({
 
   const openAddVehicle = useCallback(() => {
     setVehicleForm(emptyVehicleState());
-    setInServicePickerOpen(false);
     setFormOpen(true);
   }, []);
 
@@ -673,45 +694,16 @@ export function GarageConfigView({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="garage-vehicle-date">In-service Date</Label>
-                <Popover
-                  open={inServicePickerOpen}
-                  onOpenChange={(nextOpen) => {
-                    setInServicePickerOpen(nextOpen);
-                    if (nextOpen) {
-                      setInServicePickerMonth(getCalendarMonthForDateInput(vehicleForm.in_service_date));
-                    }
+                <DatePickerField
+                  id="garage-vehicle-date"
+                  value={vehicleForm.in_service_date}
+                  onValueChange={(value) => {
+                    setVehicleForm((prev) => ({ ...prev, in_service_date: value }));
                   }}
-                >
-                  <PopoverTrigger asChild>
-                    <Button
-                      id="garage-vehicle-date"
-                      type="button"
-                      variant="outline"
-                      className={cn(
-                        'h-10 w-full justify-start rounded-md border-[hsl(var(--grid-sticky-line))] bg-background px-3 py-2 text-left text-base font-normal text-foreground hover:bg-background hover:text-foreground md:text-sm',
-                        !vehicleForm.in_service_date && 'text-muted-foreground',
-                      )}
-                    >
-                      <span className="truncate">{vehicleForm.in_service_date
-                        ? format(parseDateInputValue(vehicleForm.in_service_date) ?? new Date(`${vehicleForm.in_service_date}T00:00:00`), 'MMMM d, yyyy')
-                        : ''}</span>
-                      <CalendarIcon className="ml-auto h-4 w-4 shrink-0 text-foreground opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={parseDateInputValue(vehicleForm.in_service_date)}
-                      month={inServicePickerMonth}
-                      onMonthChange={setInServicePickerMonth}
-                      onSelect={(date) => {
-                        setVehicleForm((prev) => ({ ...prev, in_service_date: date ? toDateInputValue(date) : '' }));
-                        setInServicePickerOpen(false);
-                      }}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                  placeholder="No Date"
+                  displayFormat="MMMM d, yyyy"
+                  clearable
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="garage-vehicle-odo">Current Mileage</Label>

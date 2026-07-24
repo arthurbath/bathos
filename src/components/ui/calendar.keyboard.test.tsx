@@ -199,7 +199,9 @@ describe('Calendar keyboard navigation', () => {
     );
 
     try {
-      const firstEnabledDay = getDayButton(container, '24');
+      const firstEnabledDay = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][aria-current="date"]',
+      );
       expect(firstEnabledDay).not.toBeDisabled();
 
       act(() => {

@@ -25,7 +25,7 @@ export type TaskKeyboardCommand =
   | 'complete-open'
   | 'open-next'
   | 'open-previous'
-  | 'close-editor';
+  | 'close-and-clear-focus';
 
 type TaskKeyboardGesture = Pick<
   KeyboardEvent,
@@ -57,7 +57,6 @@ export function getTaskKeyboardCommand(
     if (macLikePlatform) return 'duplicate';
   }
   if (applicationModifier && !gesture.altKey && !gesture.shiftKey) {
-    if (key === 'enter') return 'close-editor';
     if (key === 'a') return 'select-all';
     if (key === 'n') return 'capture';
     if (key === 'k') return 'toggle-completion';
@@ -75,14 +74,6 @@ export function getTaskKeyboardCommand(
     if (numberedTaskCommands[key]) return numberedTaskCommands[key];
   }
 
-  if (
-    key === 'escape'
-    && !gesture.metaKey
-    && !gesture.ctrlKey
-    && !gesture.altKey
-    && !gesture.shiftKey
-  ) return 'close-editor';
-
   const taskControlModifier = gesture.ctrlKey
     && !gesture.metaKey
     && !gesture.altKey
@@ -91,6 +82,6 @@ export function getTaskKeyboardCommand(
   if (key === 'd') return 'complete-open';
   if (key === 's') return 'open-next';
   if (key === 'w') return 'open-previous';
-  if (key === 'x') return 'close-editor';
+  if (key === 'x' && macLikePlatform) return 'close-and-clear-focus';
   return null;
 }

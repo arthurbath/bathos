@@ -973,9 +973,6 @@ export function IncomesTab({
                 onCurrentPeriodHandlingChange={currentPeriodHandling => setAverageEditorState(prev => prev ? { ...prev, currentPeriodHandling } : prev)}
                 disabled={savingAverageEditor}
                 autoFocusAddButton
-                onSubmitFromAmountEnter={() => {
-                  void handleSaveAverageEditor();
-                }}
               />
             )}
           </DialogBody>

@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import { taskChecklistItemFixture, taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 import type { TaskChecklistItem, TaskTodo } from '@/modules/tasks/types/tasks';
+import { useBathosFormInteractions } from '@/platform/hooks/useCommandEnterSubmit';
 import { TaskProjectDetailView } from './TaskProjectDetailView';
 
 const mockUseTaskProjectDetail = vi.fn();
@@ -67,6 +68,7 @@ function renderDetail(hierarchyModel: TaskHierarchyModel) {
   const root = createRoot(container);
   act(() => root.render(
     <MemoryRouter>
+      <TestFormInteractions />
       <TaskProjectDetailView
         ownerId="owner-a"
         projectId="project-a"
@@ -80,6 +82,11 @@ function renderDetail(hierarchyModel: TaskHierarchyModel) {
     </MemoryRouter>,
   ));
   return { container, root };
+}
+
+function TestFormInteractions() {
+  useBathosFormInteractions();
+  return null;
 }
 
 function cleanup(root: Root, container: HTMLElement) {

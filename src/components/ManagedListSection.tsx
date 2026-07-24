@@ -17,6 +17,7 @@ import { EMPTY_GRID_VIEW_FILTERS, sanitizeSortingState, useGridViewPreferences }
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 import { COLOR_SWATCHES, normalizePaletteColor } from '@/lib/colors';
 import { CONFIG_CATEGORIES_GRID_DEFAULT_WIDTHS, GRID_ACTIONS_COLUMN_ID, GRID_FIXED_COLUMNS, GRID_MIN_COLUMN_WIDTH } from '@/lib/gridColumnWidths';
+import { focusAdjacentFormControl } from '@/platform/formInteractions';
 
 interface ManagedItem {
   id: string;
@@ -67,6 +68,7 @@ function ColorPicker({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const swatchRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const restoreTriggerFocusRef = useRef(false);
+  const tabExitDirectionRef = useRef<'forward' | 'backward' | null>(null);
   const SWATCH_COLUMNS = 5;
 
   const focusTrigger = useCallback(() => {
@@ -163,6 +165,23 @@ function ColorPicker({
         align="start"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
+        }}
+        onCloseAutoFocus={(event) => {
+          const direction = tabExitDirectionRef.current;
+          if (!direction) return;
+          event.preventDefault();
+          tabExitDirectionRef.current = null;
+          if (triggerRef.current) {
+            focusAdjacentFormControl(triggerRef.current, direction === 'backward');
+          }
+        }}
+        onKeyDownCapture={(event) => {
+          if (event.key !== 'Tab') return;
+          event.preventDefault();
+          event.stopPropagation();
+          restoreTriggerFocusRef.current = false;
+          tabExitDirectionRef.current = event.shiftKey ? 'backward' : 'forward';
+          setOpen(false);
         }}
         onEscapeKeyDown={() => {
           restoreTriggerFocusRef.current = true;
@@ -605,12 +624,6 @@ export function ManagedListSection({
               autoFocus
               disabled={adding}
               onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  void handleAdd();
-                }
-              }}
             />
           </DialogBody>
           <DialogFooter>

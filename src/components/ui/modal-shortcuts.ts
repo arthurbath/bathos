@@ -24,17 +24,6 @@ const MODAL_FORM_CONTROL_SELECTOR = [
   '[contenteditable="true"]',
 ].join(", ");
 
-const MODAL_CONFIRM_SELECTOR = [
-  '[data-dialog-confirm="true"]:not([disabled]):not([aria-disabled="true"])',
-  '[data-alert-dialog-action="true"]:not([disabled]):not([aria-disabled="true"])',
-].join(", ");
-
-const MODAL_SHORTCUT_CLOSE_SELECTOR = [
-  '[data-modal-shortcut-close="true"]',
-  '[data-modal-close="true"]',
-  '[data-alert-dialog-cancel="true"]',
-].join(", ");
-
 const isFocusableVisible = (element: HTMLElement) => {
   if (element.hidden) return false;
   const style = window.getComputedStyle(element);
@@ -67,33 +56,11 @@ export const getModalOpenAutoFocusHandler = (
 
     const focusTarget =
       content.querySelector<HTMLElement>(MODAL_FORM_CONTROL_SELECTOR) ??
-      content.querySelector<HTMLElement>(MODAL_CONFIRM_SELECTOR) ??
+      content.querySelector<HTMLElement>('[data-bathos-form-submit="true"], [data-dialog-confirm="true"], [data-alert-dialog-action="true"]') ??
       getModalFocusableElements(content)[0] ??
       content;
     focusTarget.focus();
   };
-};
-
-const isSubmitShortcut = (event: React.KeyboardEvent<HTMLElement>) =>
-  event.key === "Enter" && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !(event.nativeEvent as KeyboardEvent).isComposing;
-
-const closeModalFromContent = (content: HTMLElement) => {
-  const closeTrigger = content.querySelector<HTMLElement>(MODAL_SHORTCUT_CLOSE_SELECTOR);
-  closeTrigger?.click();
-};
-
-const submitFirstFormInContent = (content: HTMLElement) => {
-  const form = content.querySelector<HTMLFormElement>("form");
-  if (!form) return false;
-  form.requestSubmit();
-  return true;
-};
-
-const triggerConfirmActionInContent = (content: HTMLElement) => {
-  const confirmAction = content.querySelector<HTMLElement>(MODAL_CONFIRM_SELECTOR);
-  if (!confirmAction) return false;
-  confirmAction.click();
-  return true;
 };
 
 export const getModalKeyDownHandler = (
@@ -105,15 +72,6 @@ export const getModalKeyDownHandler = (
     if (event.defaultPrevented) return;
 
     const content = event.currentTarget;
-
-    if (isSubmitShortcut(event)) {
-      event.preventDefault();
-      if (!submitFirstFormInContent(content)) {
-        triggerConfirmActionInContent(content);
-      }
-      closeModalFromContent(content);
-      return;
-    }
 
     if (event.key !== "Tab") return;
 
@@ -140,5 +98,17 @@ export const getModalKeyDownHandler = (
       : (activeIndex + 1) % focusables.length;
 
     focusables[nextIndex]?.focus();
+  };
+};
+
+export const getModalEscapeKeyDownHandler = (
+  onEscapeKeyDown?: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>["onEscapeKeyDown"]
+    | React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>["onEscapeKeyDown"],
+) => {
+  return (event: KeyboardEvent) => {
+    onEscapeKeyDown?.(event);
+    if (!event.defaultPrevented) {
+      event.preventDefault();
+    }
   };
 };

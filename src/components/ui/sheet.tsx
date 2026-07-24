@@ -4,7 +4,11 @@ import { X } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import { getModalKeyDownHandler, getModalOpenAutoFocusHandler } from "@/components/ui/modal-shortcuts";
+import {
+  getModalEscapeKeyDownHandler,
+  getModalKeyDownHandler,
+  getModalOpenAutoFocusHandler,
+} from "@/components/ui/modal-shortcuts";
 
 const Sheet = SheetPrimitive.Root;
 
@@ -53,18 +57,24 @@ interface SheetContentProps
     VariantProps<typeof sheetVariants> {}
 
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
-  ({ side = "right", className, children, onOpenAutoFocus, onKeyDown, ...props }, ref) => (
+  ({ side = "right", className, children, onEscapeKeyDown, onOpenAutoFocus, onKeyDown, ...props }, ref) => (
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content
         ref={ref}
+        data-bathos-form-scope="true"
+        onEscapeKeyDown={getModalEscapeKeyDownHandler(onEscapeKeyDown)}
         onOpenAutoFocus={getModalOpenAutoFocusHandler(onOpenAutoFocus)}
         onKeyDown={getModalKeyDownHandler(onKeyDown)}
         className={cn(sheetVariants({ side }), className)}
         {...props}
       >
         {children}
-        <SheetPrimitive.Close data-modal-close="true" className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-secondary hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+        <SheetPrimitive.Close
+          data-bathos-form-cancel="true"
+          data-modal-close="true"
+          className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-secondary hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
+        >
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>

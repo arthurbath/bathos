@@ -1,9 +1,10 @@
-import { useState, useEffect, type KeyboardEvent } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { getModalKeyDownHandler } from '@/components/ui/modal-shortcuts';
 import { useModalViewportStyle } from '@/components/ui/modal-viewport';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { TermsDocument } from './TermsDocument';
@@ -42,9 +43,6 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = original; };
   }, []);
-
-  const isCommandEnter = (event: KeyboardEvent<HTMLElement>) =>
-    event.key === 'Enter' && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !(event.nativeEvent as globalThis.KeyboardEvent).isComposing;
 
   const handleAgree = async () => {
     setIsAgreeing(true);
@@ -111,14 +109,13 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 max-sm:items-start max-sm:p-0">
           <div className="absolute inset-0 cursor-pointer bg-black/50" onClick={() => setShowFeedbackModal(false)} />
           <div
+            data-bathos-form-scope="true"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Feedback"
             className="relative w-full max-w-md overflow-hidden rounded-lg border bg-card shadow-lg max-sm:fixed max-sm:left-0 max-sm:right-0 max-sm:top-[calc(var(--bathos-modal-vv-top,0px)+env(safe-area-inset-top,0px))] max-sm:grid max-sm:h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-w-none max-sm:grid-rows-[auto_minmax(0,1fr)_auto]"
             style={modalViewportStyle}
-            onKeyDown={(event) => {
-              if (!isCommandEnter(event)) return;
-              event.preventDefault();
-              void handleSendFeedback();
-              setShowFeedbackModal(false);
-            }}
+            onKeyDown={getModalKeyDownHandler()}
           >
             <div className="px-6 py-5 border-b">
               <h2 className="text-lg font-semibold text-center">Feedback</h2>
@@ -130,6 +127,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
               <div className="relative">
                 <Textarea
                   value={feedbackMessage}
+                  autoFocus
                   onChange={(e) => setFeedbackMessage(e.target.value)}
                   placeholder="Type your message…"
                   className="min-h-[140px] resize-none pr-3 pb-8"
@@ -142,10 +140,11 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
               </div>
             </div>
             <div className="px-6 py-4 border-t flex gap-3">
-              <Button variant="outline" onClick={() => setShowFeedbackModal(false)} className="flex-1" disabled={isSendingFeedback}>
+              <Button data-bathos-form-cancel="true" variant="outline" onClick={() => setShowFeedbackModal(false)} className="flex-1" disabled={isSendingFeedback}>
                 Cancel
               </Button>
               <Button
+                data-bathos-form-submit="true"
                 onClick={handleSendFeedback}
                 className="flex-1"
                 disabled={isSendingFeedback || !feedbackMessage.trim() || isOverLimit}
@@ -162,13 +161,13 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
         <div className="fixed inset-0 z-[92] flex items-center justify-center p-4 max-sm:items-start max-sm:p-0">
           <div className="absolute inset-0 cursor-pointer bg-black/50" onClick={() => setShowTermsModal(false)} />
           <div
+            data-bathos-form-scope="true"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Terms of Service and Privacy Policy"
             className="relative grid h-[90vh] w-full max-w-4xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border bg-card shadow-lg max-sm:fixed max-sm:left-0 max-sm:right-0 max-sm:top-[calc(var(--bathos-modal-vv-top,0px)+env(safe-area-inset-top,0px))] max-sm:h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-w-none"
             style={modalViewportStyle}
-            onKeyDown={(event) => {
-              if (!isCommandEnter(event)) return;
-              event.preventDefault();
-              setShowTermsModal(false);
-            }}
+            onKeyDown={getModalKeyDownHandler()}
           >
             <div className="shrink-0 border-b px-6 py-4">
               <h2 className="text-lg font-semibold text-center">Terms of Service and Privacy Policy</h2>
@@ -177,7 +176,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
               <TermsDocument className="text-sm md:text-[15px]" />
             </div>
             <div className="shrink-0 border-t px-6 py-4">
-              <Button variant="outline" className="w-full" onClick={() => setShowTermsModal(false)}>
+              <Button autoFocus data-bathos-form-cancel="true" variant="outline" className="w-full" onClick={() => setShowTermsModal(false)}>
                 Close
               </Button>
             </div>
@@ -187,13 +186,13 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
 
       {/* Main Overlay */}
       <div
+        data-bathos-form-scope="true"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label="Terms and Privacy Update"
         className="relative w-full max-w-md overflow-hidden rounded-lg border bg-card shadow-lg max-sm:fixed max-sm:left-0 max-sm:right-0 max-sm:top-[calc(var(--bathos-modal-vv-top,0px)+env(safe-area-inset-top,0px))] max-sm:grid max-sm:h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-w-none max-sm:grid-rows-[auto_minmax(0,1fr)_auto]"
         style={modalViewportStyle}
-        onKeyDown={(event) => {
-          if (!isCommandEnter(event)) return;
-          event.preventDefault();
-          void handleAgree();
-        }}
+        onKeyDown={getModalKeyDownHandler()}
       >
         <div className="px-6 py-5 border-b">
           <h2 className="text-lg font-semibold text-center">Terms & Privacy Update</h2>
@@ -227,7 +226,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
         <div className="px-6 py-4 border-t flex gap-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="flex-1" disabled={isAgreeing || isLoggingOut}>
+              <Button autoFocus variant="outline" className="flex-1" disabled={isAgreeing || isLoggingOut}>
                 Inquire/Decline
                 <ChevronDown className="ml-2 h-4 w-4" />
               </Button>
@@ -249,7 +248,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button onClick={handleAgree} className="flex-1" disabled={isAgreeing || isLoggingOut}>
+          <Button data-bathos-form-submit="true" onClick={handleAgree} className="flex-1" disabled={isAgreeing || isLoggingOut}>
             {isAgreeing ? 'Saving…' : 'Agree'}
           </Button>
         </div>

@@ -183,7 +183,7 @@ function PartnersCard({ partnerX, partnerY, wageGapAdjustmentEnabled, partnerXWa
       <CardHeader>
         <CardTitle>Partners</CardTitle>
       </CardHeader>
-      <CardContent data-command-enter-scope="true" className="space-y-4">
+      <CardContent data-bathos-form-scope="true" className="space-y-4">
         <div className="flex items-end gap-3">
           <div className="flex-1 space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Partner A</label>
@@ -249,7 +249,7 @@ function PartnersCard({ partnerX, partnerY, wageGapAdjustmentEnabled, partnerXWa
         </div>
         <div className="border-t pt-3">
           <div className="flex justify-end">
-          <Button data-command-enter-confirm="true" onClick={handleSave} disabled={!dirty || saving || !nameX.trim() || !nameY.trim() || hasInvalidCents || (wageGapEnabled && !hasAtLeastOneWageGapValue)}>
+          <Button data-bathos-form-submit="true" onClick={handleSave} disabled={!dirty || saving || !nameX.trim() || !nameY.trim() || hasInvalidCents || (wageGapEnabled && !hasAtLeastOneWageGapValue)}>
             {saving ? 'Saving…' : 'Save'}
           </Button>
           </div>
@@ -696,12 +696,6 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
                 disabled={adding}
                 placeholder="New payment method name"
                 onChange={(event) => setName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    void handleAdd();
-                  }
-                }}
               />
             </div>
             <div className="space-y-1.5">

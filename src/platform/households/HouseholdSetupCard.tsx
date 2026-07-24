@@ -117,7 +117,7 @@ export function HouseholdSetupCard({
               </TabsList>
 
               <TabsContent value="create">
-                <form onSubmit={handleCreate} className="space-y-4 pt-2">
+                <form data-bathos-return-submits="true" onSubmit={handleCreate} className="space-y-4 pt-2">
                   <Button type="submit" className="w-full gap-1.5" disabled={loading}>
                     <Users className="h-4 w-4" />
                     {loading ? 'Creating...' : createButtonLabel}
@@ -126,7 +126,7 @@ export function HouseholdSetupCard({
               </TabsContent>
 
               <TabsContent value="join">
-                <form onSubmit={handleJoin} className="space-y-4 pt-2">
+                <form data-bathos-return-submits="true" onSubmit={handleJoin} className="space-y-4 pt-2">
                   <div className="space-y-2">
                     <label htmlFor="householdInviteCode" className="text-sm font-medium text-foreground">
                       {joinInputLabel}

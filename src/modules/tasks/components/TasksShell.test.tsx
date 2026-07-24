@@ -15,6 +15,7 @@ import { normalizeTaskEditorPlanningPatch } from './taskEditorPlanning';
 import { requestTaskStartPickerOpen } from './taskStartPickerEvents';
 import { getTasksStorageStatusLabel } from './tasksStorageStatus';
 import { TasksShell } from './TasksShell';
+import { useBathosFormInteractions } from '@/platform/hooks/useCommandEnterSubmit';
 
 const { mockToast } = vi.hoisted(() => ({ mockToast: vi.fn() }));
 const mockTaskList = vi.fn();
@@ -315,19 +316,26 @@ function defaultTasksRuntime() {
   };
 }
 
+function FormInteractionsHarness({ children }: { children: React.ReactNode }) {
+  useBathosFormInteractions();
+  return <>{children}</>;
+}
+
 function renderShell(initialEntry = '/tasks/today') {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   const render = () => {
     root.render(
-      <MemoryRouter initialEntries={[initialEntry]}>
-        <TasksShell
-          userId="owner-a"
-          displayName="Owner"
-          onSignOut={vi.fn()}
-        />
-      </MemoryRouter>,
+      <FormInteractionsHarness>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <TasksShell
+            userId="owner-a"
+            displayName="Owner"
+            onSignOut={vi.fn()}
+          />
+        </MemoryRouter>
+      </FormInteractionsHarness>,
     );
   };
 
@@ -663,7 +671,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('discards an untitled draft when Escape closes the editor', async () => {
+  it('keeps an untitled draft open on plain Escape and discards it on the form-submit command', async () => {
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell();
@@ -681,8 +689,17 @@ describe('TasksShell', () => {
       await act(async () => {
         title.dispatchEvent(close);
       });
+      expect(container.querySelector('[id="task-title-task-draft:new"]')).toBe(title);
+      expect(close.defaultPrevented).toBe(false);
+
+      const submitClose = new KeyboardEvent('keydown', {
+        key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true,
+      });
+      await act(async () => {
+        title.dispatchEvent(submitClose);
+      });
       await waitForTaskEditorExit(container, 'task-draft:new');
-      expect(close.defaultPrevented).toBe(true);
+      expect(submitClose.defaultPrevented).toBe(true);
       expect(taskList.createTask).not.toHaveBeenCalled();
       expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({ title: 'Task Saved' }));
     } finally {
@@ -930,11 +947,18 @@ describe('TasksShell', () => {
       expect(dialog.textContent).toContain('Keyboard Commands');
       expect(dialog.textContent).toContain('Open Next');
       expect(dialog.textContent).toContain('Toggle Completion');
-      expect(dialog.textContent).toContain('Command+Return or Escape');
+      expect(dialog.textContent).toContain('Command+Return or Command+Escape');
       expect(helpEvent.defaultPrevented).toBe(true);
       await act(async () => {
         (document.activeElement ?? dialog).dispatchEvent(new KeyboardEvent('keydown', {
           key: 'Escape', bubbles: true, cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(dialog.dataset.state).toBe('open');
+      await act(async () => {
+        (document.activeElement ?? dialog).dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'x', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true,
         }));
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
@@ -2178,6 +2202,13 @@ describe('TasksShell', () => {
           key: 'Escape', bubbles: true, cancelable: true,
         }));
       });
+      expect(dialog.dataset.state).toBe('open');
+      await act(async () => {
+        placement.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'x', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
       expect(dialog.dataset.state).toBe('closed');
     } finally {
       cleanup(root, container);
@@ -3049,6 +3080,57 @@ describe('TasksShell', () => {
     }
   });
 
+  it('closes Start on Tab and Shift+Tab without selecting the focused value', async () => {
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      const initialFocus = document.activeElement as HTMLElement;
+      await act(async () => {
+        initialFocus.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.querySelector('[data-task-start-picker]')).toBeNull();
+      expect(document.activeElement).toBe(
+        container.querySelector('#task-deadline-task-a'),
+      );
+      expect(taskList.updateTask).not.toHaveBeenCalled();
+
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      await act(async () => {
+        document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Tab',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.querySelector('[data-task-start-picker]')).toBeNull();
+      expect(document.activeElement).toBe(
+        container.querySelector('#task-organization-task-a'),
+      );
+      expect(taskList.updateTask).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('commits a Today horizon once and closes Start when Enter confirms it', async () => {
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
@@ -3424,7 +3506,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('closes editing with Control+Shift+X and clears page focus', async () => {
+  it('closes editing with the Windows form-cancel command', async () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const { container, root } = renderShell();
 
@@ -3449,30 +3531,6 @@ describe('TasksShell', () => {
 
       await waitForTaskEditorExit(container);
       expect(closeEvent.defaultPrevented).toBe(true);
-      expect(document.activeElement).toBe(document.body);
-    } finally {
-      cleanup(root, container);
-    }
-  });
-
-  it('falls back to keyup when the browser consumes the close-command keydown', async () => {
-    mockTaskList.mockReturnValue(defaultTaskList());
-    const { container, root } = renderShell();
-
-    try {
-      await act(async () => {
-        container.querySelector<HTMLButtonElement>('[data-task-title-control][data-task-id="task-a"]')
-          ?.click();
-      });
-      const editorTitle = container.querySelector<HTMLInputElement>('#task-title-task-a')!;
-      const closeEvent = new KeyboardEvent('keyup', {
-        key: 'x', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true,
-      });
-      await act(async () => editorTitle.dispatchEvent(closeEvent));
-
-      expect(closeEvent.defaultPrevented).toBe(true);
-      await waitForTaskEditorExit(container);
-      expect(document.activeElement).toBe(document.body);
     } finally {
       cleanup(root, container);
     }

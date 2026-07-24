@@ -132,7 +132,7 @@ export default function AuthPage() {
             </TabsList>
 
             <TabsContent value="login">
-              <form onSubmit={handleLogin} className="space-y-4 pt-2">
+              <form data-bathos-return-submits="true" onSubmit={handleLogin} className="space-y-4 pt-2">
                 <Input placeholder="Email" type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required />
                 <Input placeholder="Password" type="password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required />
                 <Button type="submit" className="w-full" disabled={loading}>Sign In</Button>
@@ -145,7 +145,7 @@ export default function AuthPage() {
             </TabsContent>
 
             <TabsContent value="signup">
-              <form onSubmit={handleSignup} className="space-y-4 pt-2">
+              <form data-bathos-return-submits="true" onSubmit={handleSignup} className="space-y-4 pt-2">
                 <Input placeholder="Display name" value={signupName} onChange={e => setSignupName(e.target.value)} required />
                 <Input placeholder="Email" type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} required />
                 <Input placeholder="Password" type="password" value={signupPassword} onChange={e => setSignupPassword(e.target.value)} required minLength={8} />

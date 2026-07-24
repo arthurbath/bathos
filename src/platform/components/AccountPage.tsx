@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthContext } from '@/platform/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useIsAdmin } from '@/platform/hooks/useIsAdmin';
@@ -41,10 +41,6 @@ export default function AccountPage() {
   const [displayName, setDisplayName] = useState('');
   const [editingName, setEditingName] = useState(false);
   const [savingName, setSavingName] = useState(false);
-  const displayNameInputRef = useRef<HTMLInputElement>(null);
-  const displayNameCancelButtonRef = useRef<HTMLButtonElement>(null);
-  const displayNameSaveButtonRef = useRef<HTMLButtonElement>(null);
-
   const [userEmail, setUserEmail] = useState('');
   const [showChangeEmail, setShowChangeEmail] = useState(false);
 
@@ -92,26 +88,6 @@ export default function AccountPage() {
       setEditingName(false);
     }
     setSavingName(false);
-  };
-
-  const handleDisplayNameEditorTab = (event: React.KeyboardEvent<HTMLInputElement | HTMLButtonElement>) => {
-    if (event.key !== 'Tab') return;
-
-    const focusableElements = [
-      displayNameInputRef.current,
-      displayNameCancelButtonRef.current,
-      displayNameSaveButtonRef.current,
-    ].filter((element): element is HTMLInputElement | HTMLButtonElement => !!element && !element.disabled);
-
-    if (focusableElements.length === 0) return;
-
-    const currentIndex = focusableElements.indexOf(event.currentTarget);
-    if (currentIndex === -1) return;
-
-    event.preventDefault();
-    const direction = event.shiftKey ? -1 : 1;
-    const nextIndex = (currentIndex + direction + focusableElements.length) % focusableElements.length;
-    focusableElements[nextIndex].focus();
   };
 
   const handleChangeEmail = async (e: React.FormEvent) => {
@@ -251,28 +227,24 @@ export default function AccountPage() {
             <section className="space-y-2">
               <p className="text-sm font-medium text-muted-foreground">Display Name</p>
               {editingName ? (
-                <div className="flex items-center gap-2">
+                <div data-bathos-form-scope="true" className="flex items-center gap-2">
                   <Input
-                    ref={displayNameInputRef}
                     value={displayName}
                     onChange={e => setDisplayName(e.target.value)}
-                    onKeyDown={handleDisplayNameEditorTab}
                     autoFocus
                     className="min-w-0 flex-1"
                   />
                   <div className="flex shrink-0 gap-2">
                     <Button
-                      ref={displayNameCancelButtonRef}
+                      data-bathos-form-cancel="true"
                       variant="outline"
                       onClick={() => setEditingName(false)}
-                      onKeyDown={handleDisplayNameEditorTab}
                     >
                       Cancel
                     </Button>
                     <Button
-                      ref={displayNameSaveButtonRef}
+                      data-bathos-form-submit="true"
                       onClick={handleSaveName}
-                      onKeyDown={handleDisplayNameEditorTab}
                       disabled={savingName || !displayName.trim()}
                     >
                       {savingName ? 'Saving...' : 'Save'}

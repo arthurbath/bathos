@@ -34,7 +34,6 @@ import {
   TaskHierarchyEditableTitle,
   TaskHierarchyOrderButton,
 } from '@/modules/tasks/components/TaskProjectsView';
-import { submitTaskFormOnEnter } from '@/modules/tasks/components/taskFormKeyboard';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
 import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
@@ -214,11 +213,10 @@ export function TaskProjectDetailView({
       ) : null}
 
       {project.lifecycle === 'open' ? <div>
-        <form onSubmit={createTask} className="flex gap-2">
+        <form data-bathos-return-submits="true" onSubmit={createTask} className="flex gap-2">
           <Input
             value={newTaskTitle}
             onChange={(event) => setNewTaskTitle(event.target.value)}
-            onKeyDown={submitTaskFormOnEnter}
             aria-label="New Project Task Name"
             placeholder="New Task"
           />
@@ -657,11 +655,10 @@ function ChecklistEditor({
           </Button>
         </div>
       ))}
-      <form onSubmit={create} className="flex gap-2">
+      <form data-bathos-return-submits="true" onSubmit={create} className="flex gap-2">
         <Input
           value={title}
           onChange={(event) => setTitle(event.target.value)}
-          onKeyDown={submitTaskFormOnEnter}
           aria-label={`New Checklist Item for ${task.title}`}
           placeholder="New Checklist Item"
           className="h-9"

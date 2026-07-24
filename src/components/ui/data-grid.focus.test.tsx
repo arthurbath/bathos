@@ -754,6 +754,16 @@ function ColorPickerHarness() {
   return <DataGrid table={table} />;
 }
 
+function ColorPickerFormHarness() {
+  return (
+    <form>
+      <input id="before-color" />
+      <ColorPicker color="#3B82F6" onChange={() => {}} />
+      <input id="after-color" />
+    </form>
+  );
+}
+
 function GridSelectHarness() {
   const [rows, setRows] = React.useState<SelectRowData[]>([
     { id: "row-a", owner: "X" },
@@ -1591,9 +1601,16 @@ async function dispatchInputChange(input: HTMLInputElement, value: string) {
 }
 
 async function dispatchTab(input: HTMLInputElement, shiftKey = false) {
-  await act(async () => {
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true }));
+  const event = new KeyboardEvent("keydown", {
+    key: "Tab",
+    shiftKey,
+    bubbles: true,
+    cancelable: true,
   });
+  await act(async () => {
+    input.dispatchEvent(event);
+  });
+  return event;
 }
 
 async function dispatchEnter(input: HTMLInputElement) {
@@ -1721,6 +1738,50 @@ function unmount(root: Root, container: HTMLElement) {
 }
 
 describe("DataGrid focus after commit resort", () => {
+  it("wraps Tab and Shift+Tab across rows", async () => {
+    const { container, root } = mount(<SortableGridHarness initialSorting={[{ id: "name", desc: false }]} />);
+    try {
+      const firstRowLastCell = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="1"]');
+      const secondRowFirstCell = container.querySelector<HTMLInputElement>('input[data-row-id="row-b"][data-col="0"]');
+      expect(firstRowLastCell).not.toBeNull();
+      expect(secondRowFirstCell).not.toBeNull();
+
+      await act(async () => {
+        firstRowLastCell!.focus();
+      });
+      const forwardEvent = await dispatchTab(firstRowLastCell!);
+      await waitForCondition(() => {
+        expect(document.activeElement).toBe(secondRowFirstCell);
+      });
+      expect(forwardEvent.defaultPrevented).toBe(true);
+
+      const reverseEvent = await dispatchTab(secondRowFirstCell!, true);
+      await waitForCondition(() => {
+        expect(document.activeElement).toBe(firstRowLastCell);
+      });
+      expect(reverseEvent.defaultPrevented).toBe(true);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("lets browser Tab traversal leave the grid at either boundary", async () => {
+    const { container, root } = mount(<SortableGridHarness initialSorting={[{ id: "name", desc: false }]} />);
+    try {
+      const firstCell = container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]');
+      const lastCell = container.querySelector<HTMLInputElement>('input[data-row-id="row-b"][data-col="1"]');
+      expect(firstCell).not.toBeNull();
+      expect(lastCell).not.toBeNull();
+
+      const reverseBoundaryEvent = await dispatchTab(firstCell!, true);
+      const forwardBoundaryEvent = await dispatchTab(lastCell!);
+      expect(reverseBoundaryEvent.defaultPrevented).toBe(false);
+      expect(forwardBoundaryEvent.defaultPrevented).toBe(false);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it("enters editable mode on touch pointerdown before focus", async () => {
     const { container, root } = mount(<SortableGridHarness initialSorting={[{ id: "name", desc: false }]} />);
     try {
@@ -1776,6 +1837,15 @@ describe("DataGrid focus after commit resort", () => {
       });
 
       await dispatchArrow(secondUrlInput, "ArrowUp");
+      expect(document.activeElement).toBe(secondUrlInput);
+
+      secondUrlInput.setSelectionRange(0, 0);
+      await dispatchArrow(secondUrlInput, "ArrowLeft");
+      expect(document.activeElement).toBe(secondUrlInput);
+
+      const end = secondUrlInput.value.length;
+      secondUrlInput.setSelectionRange(end, end);
+      await dispatchArrow(secondUrlInput, "ArrowRight");
       expect(document.activeElement).toBe(secondUrlInput);
 
       await dispatchInputChange(secondUrlInput, "https://example.com/replaced");
@@ -2105,6 +2175,7 @@ describe("DataGrid undo and redo", () => {
       await waitForCondition(() => {
         expect(container.querySelector<HTMLInputElement>('input[data-row-id="row-a"][data-col="0"]')?.value).toBe("Alpha edited");
         expect(container.querySelector<HTMLInputElement>('input[data-row-id="row-b"][data-col="0"]')?.value).toBe("Bravo edited");
+        expect(container.querySelector<HTMLInputElement>('input[data-row-id="row-b"][data-col="0"]')?.getAttribute("data-grid-editing")).toBe("false");
       });
 
       await dispatchHistoryShortcut({ key: "z", metaKey: true });
@@ -2454,6 +2525,36 @@ describe("DataGrid escape cancellation", () => {
         const active = document.activeElement as HTMLElement | null;
         expect(active?.getAttribute("data-row-id")).toBe("row-a");
         expect(active?.getAttribute("data-col")).toBe("0");
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("closes the color palette via Tab and advances to the adjacent form control", async () => {
+    const { container, root } = mount(<ColorPickerFormHarness />);
+    try {
+      const trigger = container.querySelector<HTMLButtonElement>('button[title="Pick color"]')!;
+      await act(async () => {
+        trigger.focus();
+      });
+      await dispatchEnterOnElement(trigger);
+      await waitForCondition(() => {
+        expect((document.activeElement as HTMLElement | null)?.getAttribute("aria-label"))
+          .toMatch(/^Use /);
+      });
+
+      const swatch = document.activeElement as HTMLElement;
+      await act(async () => {
+        swatch.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "Tab",
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await waitForCondition(() => {
+        expect(document.querySelector<HTMLElement>('[aria-label^="Use "]')).toBeNull();
+        expect(document.activeElement).toBe(container.querySelector("#after-color"));
       });
     } finally {
       unmount(root, container);

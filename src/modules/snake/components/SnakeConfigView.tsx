@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createColumnHelper, getCoreRowModel, getSortedRowModel, type SortingState, useReactTable } from '@tanstack/react-table';
 import { format } from 'date-fns';
 import { CalendarIcon, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
@@ -22,6 +22,7 @@ import { GRID_FIXED_COLUMNS, SNAKE_SNAKES_GRID_DEFAULT_WIDTHS } from '@/lib/grid
 import { cn } from '@/lib/utils';
 import { HouseholdManagementPanel, type HouseholdMember } from '@/platform/households';
 import type { Snake, SnakeHouseholdData, SnakeInput, SnakeSex, SnakeUpdate } from '@/modules/snake/types/snake';
+import { focusAdjacentFormControl } from '@/platform/formInteractions';
 
 interface SnakeConfigViewProps {
   userId: string;
@@ -144,6 +145,8 @@ function SnakeDateCell({
 }) {
   const ctx = useDataGrid();
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const tabExitDirectionRef = useRef<'forward' | 'backward' | null>(null);
   const parsedDate = parseDateInputValue(value);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => getCalendarMonthForDateInput(value));
 
@@ -156,6 +159,7 @@ function SnakeDateCell({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
+          ref={triggerRef}
           type="button"
           data-grid-focus-only="true"
           {...gridNavProps(ctx, navCol)}
@@ -175,7 +179,27 @@ function SnakeDateCell({
           <CalendarIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-foreground opacity-50" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start" onOpenAutoFocus={(event) => event.preventDefault()}>
+      <PopoverContent
+        className="w-auto p-0"
+        align="start"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => {
+          const direction = tabExitDirectionRef.current;
+          if (!direction) return;
+          event.preventDefault();
+          tabExitDirectionRef.current = null;
+          if (triggerRef.current) {
+            focusAdjacentFormControl(triggerRef.current, direction === 'backward');
+          }
+        }}
+        onKeyDownCapture={(event) => {
+          if (event.key !== 'Tab') return;
+          event.preventDefault();
+          event.stopPropagation();
+          tabExitDirectionRef.current = event.shiftKey ? 'backward' : 'forward';
+          setOpen(false);
+        }}
+      >
         <Calendar
           mode="single"
           selected={parsedDate}
@@ -200,6 +224,7 @@ function SnakeDateCell({
             }
             setOpen(false);
           }}
+          allowTabExit
           initialFocus
         />
       </PopoverContent>

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { DataGridAddFormLabel } from '@/components/ui/data-grid-add-form-label';
+import { DatePickerField } from '@/components/ui/date-picker-field';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -35,6 +36,7 @@ import type {
 } from '@/modules/garage/types/garage';
 import { GARAGE_SERVICE_NAME_REQUIRED_ERROR, validateGarageServiceName } from '@/modules/garage/lib/serviceNames';
 import { getDefaultReceiptName } from '@/modules/garage/lib/receiptNames';
+import { focusAdjacentFormControl } from '@/platform/formInteractions';
 
 const columnHelper = createColumnHelper<GarageServicingWithRelations>();
 const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
@@ -143,6 +145,8 @@ function ServicingDateCell({
 }) {
   const ctx = useDataGrid();
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const tabExitDirectionRef = useRef<'forward' | 'backward' | null>(null);
   const parsedDate = parseDateInputValue(value);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => getCalendarMonthForDateInput(value));
 
@@ -155,6 +159,7 @@ function ServicingDateCell({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
+          ref={triggerRef}
           type="button"
           data-grid-focus-only="true"
           {...gridNavProps(ctx, navCol)}
@@ -180,6 +185,22 @@ function ServicingDateCell({
         className="w-auto p-0"
         align="start"
         onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => {
+          const direction = tabExitDirectionRef.current;
+          if (!direction) return;
+          event.preventDefault();
+          tabExitDirectionRef.current = null;
+          if (triggerRef.current) {
+            focusAdjacentFormControl(triggerRef.current, direction === 'backward');
+          }
+        }}
+        onKeyDownCapture={(event) => {
+          if (event.key !== 'Tab') return;
+          event.preventDefault();
+          event.stopPropagation();
+          tabExitDirectionRef.current = event.shiftKey ? 'backward' : 'forward';
+          setOpen(false);
+        }}
       >
         <Calendar
           mode="single"
@@ -205,6 +226,7 @@ function ServicingDateCell({
             }
             setOpen(false);
           }}
+          allowTabExit
           initialFocus
         />
       </PopoverContent>
@@ -377,7 +399,6 @@ export function GarageServicingsGrid({
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogBusy, setDialogBusy] = useState(false);
-  const [serviceDatePickerOpen, setServiceDatePickerOpen] = useState(false);
   const [servicePickerOpen, setServicePickerOpen] = useState(false);
   const [servicePickerQuery, setServicePickerQuery] = useState('');
   const [addServiceDialogOpen, setAddServiceDialogOpen] = useState(false);
@@ -392,13 +413,11 @@ export function GarageServicingsGrid({
   const [receiptDropActive, setReceiptDropActive] = useState(false);
   const [dialogFocusTarget, setDialogFocusTarget] = useState<ServicingDialogFocusTarget>('default');
   const [formState, setFormState] = useState<ServicingFormState>(createDefaultFormState);
-  const [serviceDatePickerMonth, setServiceDatePickerMonth] = useState<Date>(
-    () => getCalendarMonthForDateInput(new Date().toISOString().slice(0, 10)),
-  );
   const servicePickerSearchRef = useRef<HTMLInputElement | null>(null);
   const servicePickerItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const servicePickerAddNewRef = useRef<HTMLButtonElement | null>(null);
   const serviceOutcomeAddButtonRef = useRef<HTMLButtonElement | null>(null);
+  const servicePickerTabExitDirectionRef = useRef<'forward' | 'backward' | null>(null);
   const serviceDateButtonRef = useRef<HTMLButtonElement | null>(null);
   const shopInputRef = useRef<HTMLInputElement | null>(null);
   const shopSuggestionItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -412,7 +431,6 @@ export function GarageServicingsGrid({
 
   const resetForm = () => {
     setEditingServicing(null);
-    setServiceDatePickerOpen(false);
     setServicePickerOpen(false);
     setServicePickerQuery('');
     setShopSuggestionsOpen(false);
@@ -436,7 +454,6 @@ export function GarageServicingsGrid({
   ) => {
     dialogBodyScrollTopRef.current = 0;
     setDialogFocusTarget(focusTarget);
-    setServiceDatePickerOpen(false);
     setServicePickerOpen(false);
     setServicePickerQuery('');
     setShopSuggestionsOpen(false);
@@ -1004,7 +1021,6 @@ export function GarageServicingsGrid({
       <Dialog open={dialogOpen} onOpenChange={(open) => {
         if (dialogBusy) return;
         setDialogOpen(open);
-        if (!open) setServiceDatePickerOpen(false);
       }}>
         <DialogContent aria-describedby={undefined} className="max-h-[85vh] max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
           <DialogHeader>
@@ -1027,50 +1043,14 @@ export function GarageServicingsGrid({
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-2">
                 <DataGridAddFormLabel htmlFor="garage-servicing-date" required>Date</DataGridAddFormLabel>
-                <Popover
-                  open={serviceDatePickerOpen}
-                  onOpenChange={(nextOpen) => {
-                    setServiceDatePickerOpen(nextOpen);
-                    if (nextOpen) {
-                      setServiceDatePickerMonth(getCalendarMonthForDateInput(formState.service_date));
-                    }
+                <DatePickerField
+                  ref={serviceDateButtonRef}
+                  id="garage-servicing-date"
+                  value={formState.service_date}
+                  onValueChange={(value) => {
+                    setFormState((prev) => ({ ...prev, service_date: value }));
                   }}
-                >
-                  <PopoverTrigger asChild>
-                    <Button
-                      ref={serviceDateButtonRef}
-                      id="garage-servicing-date"
-                      type="button"
-                      variant="outline"
-                      className={cn(
-                        'h-10 w-full justify-start rounded-md border-[hsl(var(--grid-sticky-line))] bg-background px-3 py-2 text-left text-base font-normal text-foreground hover:bg-background hover:text-foreground md:text-sm',
-                        !formState.service_date && 'text-muted-foreground',
-                      )}
-                    >
-                      <span className="truncate">{formState.service_date
-                        ? format(parseDateInputValue(formState.service_date) ?? new Date(`${formState.service_date}T00:00:00`), 'MMM d, yyyy')
-                        : 'Pick a date'}</span>
-                      <CalendarIcon className="ml-auto h-4 w-4 shrink-0 text-foreground opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={parseDateInputValue(formState.service_date)}
-                      month={serviceDatePickerMonth}
-                      onMonthChange={setServiceDatePickerMonth}
-                      onSelect={(date) => {
-                        if (!date) {
-                          setServiceDatePickerOpen(false);
-                          return;
-                        }
-                        setFormState((prev) => ({ ...prev, service_date: toDateInputValue(date) }));
-                        setServiceDatePickerOpen(false);
-                      }}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="garage-servicing-mileage">Mileage</Label>
@@ -1194,6 +1174,25 @@ export function GarageServicingsGrid({
                       event.preventDefault();
                       servicePickerSearchRef.current?.focus({ preventScroll: true });
                     }}
+                    onCloseAutoFocus={(event) => {
+                      const direction = servicePickerTabExitDirectionRef.current;
+                      if (!direction) return;
+                      event.preventDefault();
+                      servicePickerTabExitDirectionRef.current = null;
+                      if (serviceOutcomeAddButtonRef.current) {
+                        focusAdjacentFormControl(
+                          serviceOutcomeAddButtonRef.current,
+                          direction === 'backward',
+                        );
+                      }
+                    }}
+                    onKeyDownCapture={(event) => {
+                      if (event.key !== 'Tab') return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      servicePickerTabExitDirectionRef.current = event.shiftKey ? 'backward' : 'forward';
+                      setServicePickerOpen(false);
+                    }}
                   >
                     <div className="max-h-48 overflow-y-auto sm:max-h-72">
                       <div className="sticky top-0 z-10 rounded-tl-md rounded-tr-md border-b bg-popover p-2">
@@ -1207,10 +1206,6 @@ export function GarageServicingsGrid({
                           autoCapitalize="off"
                           spellCheck={false}
                           onKeyDown={(event) => {
-                            if (event.key === 'Tab') {
-                              event.preventDefault();
-                              return;
-                            }
                             if (event.key !== 'ArrowDown') return;
                             event.preventDefault();
                             if (filteredAddableServices.length === 0) {
@@ -1232,10 +1227,6 @@ export function GarageServicingsGrid({
                               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted focus:bg-muted focus:outline-none"
                               onClick={() => openAddServiceDialog(servicePickerQueryTrimmed)}
                               onKeyDown={(event) => {
-                                if (event.key === 'Tab') {
-                                  event.preventDefault();
-                                  return;
-                                }
                                 if (event.key === 'ArrowUp') {
                                   event.preventDefault();
                                   servicePickerSearchRef.current?.focus();
@@ -1266,10 +1257,6 @@ export function GarageServicingsGrid({
                               className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted focus:bg-muted focus:outline-none"
                               onClick={() => addServiceOutcome(service.id)}
                               onKeyDown={(event) => {
-                                if (event.key === 'Tab') {
-                                  event.preventDefault();
-                                  return;
-                                }
                                 if (event.key === 'ArrowDown') {
                                   event.preventDefault();
                                   const nextIndex = Math.min(index + 1, filteredAddableServices.length - 1);

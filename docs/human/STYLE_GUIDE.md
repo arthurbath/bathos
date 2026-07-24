@@ -121,18 +121,42 @@ Use lowercase for these words when they appear in the middle of a label:
   - `Group Label (N)`
 - Apply this consistently across modules so grouped tables expose comparable density and scanability.
 
-## Form Modal Interaction
+## Form Control Interaction
 
-All form-style modals (Add/Edit dialogs) must follow one keyboard interaction model:
+All ordinary forms, in-page form scopes, and form-style modals follow one keyboard interaction model:
 
-- Tab moves focus forward through every interactive field in top-to-bottom order; Shift+Tab moves backward.
-- Inputs use native editing behavior on focus (no separate focus/edit modes).
-- Date fields use the shared `DatePickerField` button-plus-calendar popover. Date values are selected from the picker rather than typed into a native text/date input.
-- Selects are keyboard-usable from the trigger: Space/Enter opens, arrow keys navigate options, Enter/Space confirms.
-- Checkboxes keep/receive focus when toggled so tabbing can continue naturally afterward.
-- Custom controls (e.g., color pickers) must remain in the normal tab order and be keyboard operable.
+- Text, number, email, password, URL, and time fields edit natively whenever focused. They do not have separate focused and editing modes outside a DataGrid.
+- Tab moves to the next enabled visible control in DOM order. Shift+Tab moves backward. Modal traversal wraps inside the modal.
+- Unmodified Return in a single-line text field does not submit by default. A compact or gateway form that requires Return submission must opt in explicitly.
+- Textareas preserve native Return newline behavior.
+- Buttons, button-like composite triggers, and static links activate with Space or Return. Checkboxes and switches toggle with Space or Return and retain focus.
+- Mac form commands are Command+Return to submit and Command+Escape to cancel. Windows form commands are Control+Return to submit and Control+Shift+X to cancel.
+- Form commands act on the nearest form or declared form scope. Native forms submit through `requestSubmit()` so validation remains authoritative.
+- Plain Escape is field-local. It may close and revert the deepest open select, date picker, color picker, or similar field layer, but it does not cancel a form or close a modal.
+- A draft form's visible Cancel or Close action defines its cancel semantics. An autosaving form flushes accepted changes and closes without claiming to revert persisted work.
+- Gateway login, signup, password-recovery, password-reset, and household-entry forms opt into Return submission.
 
-This is a standing standard for all new and updated form modals.
+Composite controls follow these additional rules:
+
+- A closed select opens with Space or Return. Arrow keys navigate its options, Space or Return commits, Escape cancels, and Tab/Shift+Tab commit the current accepted state and move to the adjacent form control.
+- A staged multi-select commits with Return or Tab. Escape restores the state that existed when it opened.
+- Date fields use the shared `DatePickerField` button-plus-calendar popover. Space or Return opens it. Arrow keys traverse enabled calendar controls. Space or Return activates the focused action. Escape cancels and restores trigger focus.
+- The internal controls of an open date picker are not separate Tab stops in the containing form. Tab or Shift+Tab closes the picker without selecting a merely focused date and moves to the next or previous form control.
+- File inputs retain native browser selection and security behavior.
+- Custom color controls open with Space or Return, use arrows for palette traversal, commit with Space or Return, cancel with Escape, and commit-and-exit with Tab.
+- Delete or Backspace resets a checkbox or switch to off, clears a closed multi-select, and resets a select or date only when that control declares a legal reset target.
+
+DataGrid text-entry cells intentionally use a spreadsheet interaction model:
+
+- Keyboard traversal focuses a text-entry cell without starting editing. Pointer activation starts editing at the chosen insertion point.
+- Return starts editing at the end of the current value. A second Return commits and returns to focused mode.
+- Printable input from focused mode replaces the complete value and starts editing.
+- Escape while editing restores the value that existed when editing began.
+- Arrow keys move spatially only in focused mode. While editing, every arrow key retains native cursor and selection behavior, including at the beginning and end of the text.
+- Tab and Shift+Tab commit, move horizontally, wrap across rows, skip unavailable controls, and leave the grid through native browser traversal at the outer boundaries.
+- Delete and Backspace reset a focused non-editing cell only when the caller declares a legal reset target. Never infer a select reset from its first option.
+
+This is the standing standard for all new and updated BathOS controls.
 
 ## Tooltip Interaction
 

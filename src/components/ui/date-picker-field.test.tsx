@@ -28,6 +28,83 @@ async function flushUi() {
 }
 
 describe('DatePickerField', () => {
+  it('closes on Tab and moves to the adjacent form control', async () => {
+    const { container, root } = mount(
+      <form>
+        <button type="button" id="before-date">Before</button>
+        <DatePickerField
+          id="tab-exit-date"
+          value="2026-03-02"
+          onValueChange={vi.fn()}
+        />
+        <input id="after-date" />
+      </form>,
+    );
+
+    try {
+      const trigger = container.querySelector<HTMLButtonElement>('#tab-exit-date')!;
+      act(() => {
+        trigger.click();
+      });
+      await flushUi();
+
+      const active = document.activeElement as HTMLElement;
+      expect(active.getAttribute('name')).toBe('day');
+      act(() => {
+        active.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Tab',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await flushUi();
+      await flushUi();
+
+      expect(document.body.querySelector('[data-radix-popper-content-wrapper]')).toBeNull();
+      expect(document.activeElement).toBe(container.querySelector('#after-date'));
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('closes on Shift+Tab and moves to the preceding form control', async () => {
+    const { container, root } = mount(
+      <form>
+        <button type="button" id="before-date">Before</button>
+        <DatePickerField
+          id="reverse-tab-exit-date"
+          value="2026-03-02"
+          onValueChange={vi.fn()}
+        />
+        <input id="after-date" />
+      </form>,
+    );
+
+    try {
+      const trigger = container.querySelector<HTMLButtonElement>('#reverse-tab-exit-date')!;
+      act(() => {
+        trigger.click();
+      });
+      await flushUi();
+
+      const active = document.activeElement as HTMLElement;
+      act(() => {
+        active.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Tab',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await flushUi();
+      await flushUi();
+
+      expect(document.activeElement).toBe(container.querySelector('#before-date'));
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it('renders a picker-only date field and emits yyyy-mm-dd values from the calendar', async () => {
     const onValueChange = vi.fn();
     const { container, root } = mount(
@@ -120,6 +197,34 @@ describe('DatePickerField', () => {
       expect(onValueChange).toHaveBeenCalledWith('');
       expect(document.activeElement).toBe(trigger);
       expect(document.body.querySelector('[data-radix-popper-content-wrapper]')).toBeNull();
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('clears an optional closed date with Delete', async () => {
+    const onValueChange = vi.fn();
+    const { container, root } = mount(
+      <DatePickerField
+        id="delete-clearable-date"
+        value="2026-07-23"
+        clearable
+        onValueChange={onValueChange}
+      />,
+    );
+
+    try {
+      const trigger = container.querySelector<HTMLButtonElement>('#delete-clearable-date')!;
+      act(() => {
+        trigger.focus();
+        trigger.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Delete',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      expect(onValueChange).toHaveBeenCalledWith('');
+      expect(document.activeElement).toBe(trigger);
     } finally {
       unmount(root, container);
     }

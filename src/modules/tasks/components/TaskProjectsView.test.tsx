@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { taskAreaFixture, taskProjectFixture } from '@/modules/tasks/testing/taskFixtures';
 import type { TaskArea, TaskProject } from '@/modules/tasks/types/tasks';
+import { useBathosFormInteractions } from '@/platform/hooks/useCommandEnterSubmit';
 import { TaskProjectsView } from './TaskProjectsView';
 
 Object.defineProperties(HTMLElement.prototype, {
@@ -49,10 +50,16 @@ function renderView(hierarchy: ReturnType<typeof defaultHierarchy>) {
   const root = createRoot(container);
   act(() => root.render(
     <MemoryRouter>
+      <TestFormInteractions />
       <TaskProjectsView hierarchy={hierarchy} />
     </MemoryRouter>,
   ));
   return { container, root };
+}
+
+function TestFormInteractions() {
+  useBathosFormInteractions();
+  return null;
 }
 
 function cleanup(root: Root, container: HTMLElement) {

@@ -35,7 +35,6 @@ import { toast } from '@/hooks/use-toast';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type { TaskArea, TaskProject } from '@/modules/tasks/types/tasks';
-import { submitTaskFormOnEnter } from '@/modules/tasks/components/taskFormKeyboard';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 
 export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel }) {
@@ -144,7 +143,7 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
           }}
         >
           <DialogHeader><DialogTitle>Add Area</DialogTitle></DialogHeader>
-          <form className="contents" onSubmit={createArea}>
+          <form data-bathos-return-submits="true" className="contents" onSubmit={createArea}>
             <DialogBody className="space-y-2 pt-4">
               <label htmlFor="new-task-area-title" className="text-sm font-medium text-foreground">
                 Name <span className="text-destructive" aria-hidden="true">*</span>
@@ -154,7 +153,6 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
                 autoFocus
                 value={newAreaTitle}
                 onChange={(event) => setNewAreaTitle(event.target.value)}
-                onKeyDown={submitTaskFormOnEnter}
                 disabled={creatingArea}
                 autoComplete="off"
               />
@@ -190,7 +188,7 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
           }}
         >
           <DialogHeader><DialogTitle>Add Project</DialogTitle></DialogHeader>
-          <form className="contents" onSubmit={createProject}>
+          <form data-bathos-return-submits="true" className="contents" onSubmit={createProject}>
             <DialogBody className="space-y-4 pt-4">
               <div className="space-y-2">
                 <label htmlFor="new-task-project-title" className="text-sm font-medium text-foreground">
@@ -201,7 +199,6 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
                   autoFocus
                   value={newProjectTitle}
                   onChange={(event) => setNewProjectTitle(event.target.value)}
-                  onKeyDown={submitTaskFormOnEnter}
                   disabled={creatingProject}
                   autoComplete="off"
                 />
@@ -472,12 +469,6 @@ export function TaskHierarchyEditableTitle({
     <form
       className="flex min-w-0 flex-1 gap-1"
       onSubmit={save}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          cancel();
-        }
-      }}
     >
       <Input
         autoFocus
@@ -489,6 +480,7 @@ export function TaskHierarchyEditableTitle({
       />
       <Button
         type="submit"
+        data-bathos-form-submit="true"
         variant="clear"
         size="icon"
         disabled={saving || !title.trim()}
@@ -498,6 +490,7 @@ export function TaskHierarchyEditableTitle({
       </Button>
       <Button
         type="button"
+        data-bathos-form-cancel="true"
         variant="clear"
         size="icon"
         disabled={saving}

@@ -107,7 +107,6 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
                 placeholder="e.g. Housing, Food, Transport"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAdd()}
               />
               <Button variant="outline-success" onClick={handleAdd} disabled={!name.trim() || adding} className="gap-1.5 shrink-0">
                 <Plus className="h-4 w-4" /> Add
@@ -145,10 +144,6 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
                               value={editValue}
                               onChange={e => setEditValue(e.target.value)}
                               onBlur={commitEdit}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') commitEdit();
-                                if (e.key === 'Escape') setEditingId(null);
-                              }}
                             />
                           ) : (
                             <span className="font-medium">{cat.name}</span>

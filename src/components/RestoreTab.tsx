@@ -393,12 +393,6 @@ export function RestoreTab({
               autoFocus
               disabled={saving}
               onChange={(event) => setNotes(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  void handleSave();
-                }
-              }}
             />
           </DialogBody>
           <DialogFooter>

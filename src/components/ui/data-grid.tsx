@@ -601,10 +601,17 @@ function useGridNav(
     };
 
     if (e.key === 'Tab') {
+      const focusableCells = getFocusableCells();
+      const currentIndex = focusableCells.indexOf(el);
+      if (currentIndex < 0) return false;
+      const nextIndex = e.shiftKey ? currentIndex - 1 : currentIndex + 1;
+      const nextCell = focusableCells[nextIndex];
+      if (!nextCell) return false;
+      const nextRow = Number(nextCell.dataset.row);
+      const nextCol = Number(nextCell.dataset.col);
+      if (Number.isNaN(nextRow) || Number.isNaN(nextCol)) return false;
       e.preventDefault();
-      const nextCol = e.shiftKey ? findPrevCol(row, col) : findNextCol(row, col);
-      if (nextCol === null) return false;
-      moveTo(row, nextCol);
+      moveTo(nextRow, nextCol);
       return true;
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       if (isTextInput && isEditing) return false;
@@ -618,25 +625,7 @@ function useGridNav(
       return true;
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       if (e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return false;
-
-      let shouldNavigate = true;
-      if (isTextInput) {
-        if (!isEditing) {
-          shouldNavigate = true;
-        } else if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-          const start = target.selectionStart;
-          const end = target.selectionEnd;
-          if (start !== null && end !== null) {
-            const atStart = start === 0 && end === 0;
-            const atEnd = start === target.value.length && end === target.value.length;
-            shouldNavigate = e.key === 'ArrowLeft' ? atStart : atEnd;
-          }
-        }
-      } else {
-        shouldNavigate = true;
-      }
-
-      if (!shouldNavigate) return false;
+      if (isTextInput && isEditing) return false;
 
       const nextCol = e.key === 'ArrowLeft' ? findPrevCol(row, col) : findNextCol(row, col);
       if (nextCol === null) return false;
@@ -645,7 +634,7 @@ function useGridNav(
       return true;
     }
     return false;
-  }, [findNextCol, findPrevCol, findTargetBeforeSort, focusWithRetry, getMaxRow, onNavigateTarget, resolveColInRow]);
+  }, [findNextCol, findPrevCol, findTargetBeforeSort, focusWithRetry, getFocusableCells, getMaxRow, onNavigateTarget, resolveColInRow]);
 
   const onCellMouseDown = useCallback(() => {
     pointerInitiatedFocusRef.current = true;
@@ -1270,7 +1259,11 @@ export function DataGrid<TData>({
 const CELL_INPUT_CLASS = 'min-w-0 h-7 rounded-md border border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 !text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
 
 function isPrintableEntryKey(e: React.KeyboardEvent<HTMLInputElement>) {
-  return e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey;
+  return e.key.length === 1
+    && !e.metaKey
+    && !e.ctrlKey
+    && !e.altKey
+    && !e.nativeEvent.isComposing;
 }
 
 function isNumberEntryKey(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -1633,8 +1626,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
         if (e.key === 'Tab') {
           suppressBlurCommitRef.current = true;
           commit();
-          const moved = ctx.onCellKeyDown(e);
-          if (!moved) suppressBlurCommitRef.current = false;
+          ctx.onCellKeyDown(e);
         }
       }}
       className={cn(CELL_INPUT_CLASS, !editing && 'caret-transparent', 'disabled:opacity-60 disabled:cursor-not-allowed', isLongText && '!min-w-0 flex-1', className)}
@@ -2012,8 +2004,7 @@ export function GridUrlCell({
               scheduleInNextFrame(() => ref.current?.select());
               return;
             }
-            const moved = ctx.onCellKeyDown(event);
-            if (!moved) suppressBlurCommitRef.current = false;
+            ctx.onCellKeyDown(event);
           }
         }}
         className={cn(CELL_INPUT_CLASS, !editing && 'caret-transparent', '!min-w-0 flex-1', className)}
@@ -2331,8 +2322,7 @@ export function GridCurrencyCell({ value, onChange, navCol, className, disabled 
           if (e.key === 'Tab') {
             suppressBlurCommitRef.current = true;
             commit();
-            const moved = ctx.onCellKeyDown(e);
-            if (!moved) suppressBlurCommitRef.current = false;
+            ctx.onCellKeyDown(e);
           }
         }}
         className={cn(CELL_INPUT_CLASS, '!w-full pl-4 pr-2 !text-right', !editing && 'caret-transparent', 'disabled:opacity-60 disabled:cursor-not-allowed', className)}
@@ -2616,8 +2606,7 @@ export function GridPercentCell({ value, onChange, navCol, className, disabled =
           if (e.key === 'Tab') {
             suppressBlurCommitRef.current = true;
             commit();
-            const moved = ctx.onCellKeyDown(e);
-            if (!moved) suppressBlurCommitRef.current = false;
+            ctx.onCellKeyDown(e);
           }
         }}
         className={cn(CELL_INPUT_CLASS, '!w-full pr-6 !text-right', !editing && 'caret-transparent', 'disabled:opacity-60 disabled:cursor-not-allowed', className)}

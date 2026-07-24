@@ -18,7 +18,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import TermsGate from "@/platform/components/TermsGate";
 import AuthCallbackToasts from "@/platform/components/AuthCallbackToasts";
 import { useDocumentHead } from "@/platform/hooks/useDocumentHead";
-import { useCommandEnterSubmit } from "@/platform/hooks/useCommandEnterSubmit";
+import { useBathosFormInteractions } from "@/platform/hooks/useCommandEnterSubmit";
 import { isLikelyNetworkError } from "@/lib/networkErrors";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import { DataGridHistoryProvider } from "@/components/ui/data-grid-history";
@@ -71,8 +71,8 @@ function DocumentHead() {
   return null;
 }
 
-function GlobalCommandEnterSubmit() {
-  useCommandEnterSubmit();
+function GlobalFormInteractions() {
+  useBathosFormInteractions();
   return null;
 }
 
@@ -109,7 +109,7 @@ export function ScrollToTopOnPathnameChange() {
 export function AppRoutes() {
   return (
     <PullToRefresh>
-      <GlobalCommandEnterSubmit />
+      <GlobalFormInteractions />
       <ScrollToTopOnPathnameChange />
       <Routes>
         <Route path="/" element={<LauncherPage />} />

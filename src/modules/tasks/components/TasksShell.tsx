@@ -904,7 +904,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       }
       const command = getTaskKeyboardCommand(event, macLikePlatform);
       if (command === null) return;
-      if (command === 'close-editor' && selectedTaskIdRef.current === null) return;
+      if (command === 'close-and-clear-focus' && selectedTaskIdRef.current === null) return;
       if (command === 'select-all') {
         if (isTaskEditableTarget(event.target) || !bulkEligible || tasks.length === 0) return;
         event.preventDefault();
@@ -1009,23 +1009,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         openRelativeTask(-1);
         return;
       }
-      if (command === 'close-editor') void setOpenTask(null, true);
-    };
-
-    const handleKeyUp = (event: globalThis.KeyboardEvent) => {
-      if (getTaskKeyboardCommand(event, macLikePlatform) !== 'close-editor') return;
-      if (event.key === 'Escape' && taskNestedSurfaceOwnsEscape(event.target)) return;
-      if (selectedTaskIdRef.current === null) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (!event.isComposing) void setOpenTask(null, true);
+      if (command === 'close-and-clear-focus') void setOpenTask(null, true);
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
-    window.addEventListener('keyup', handleKeyUp, true);
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
-      window.removeEventListener('keyup', handleKeyUp, true);
     };
   }, [
     basePath,
@@ -3186,6 +3175,7 @@ function TaskRow({
       {editorMounted && !bulkSelection ? (
         <div
           ref={editorRegionRef}
+          data-bathos-form-scope="true"
           data-task-editor-region
           data-state={selected ? (editorExpanded ? 'open' : 'opening') : 'closing'}
           aria-hidden={selected ? undefined : true}
@@ -3208,6 +3198,24 @@ function TaskRow({
               onCancelReminder={onCancelReminder}
               onRegisterAutosave={onRegisterAutosave}
             />
+            <button
+              type="button"
+              tabIndex={-1}
+              data-bathos-form-submit="true"
+              className="sr-only"
+              onClick={onCloseEditor}
+            >
+              Close To-Do
+            </button>
+            <button
+              type="button"
+              tabIndex={-1}
+              data-bathos-form-cancel="true"
+              className="sr-only"
+              onClick={onCloseEditor}
+            >
+              Close To-Do
+            </button>
           </div>
         </div>
       ) : null}
@@ -3462,7 +3470,7 @@ function TaskEditor({
         ref={titleInputRef}
         id={`task-title-${task.id}`}
         data-task-editor-title
-        aria-keyshortcuts="Meta+Enter Control+Enter Escape"
+        aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Shift+X"
         value={title}
         onChange={(event) => {
           const nextTitle = event.target.value;

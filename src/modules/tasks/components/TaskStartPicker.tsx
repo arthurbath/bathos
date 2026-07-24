@@ -33,6 +33,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { focusAdjacentFormControl } from '@/platform/formInteractions';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import {
   formatTaskReminderTimeDisplay,
@@ -91,10 +92,12 @@ function TaskStartPickerPanel({
   focusTarget,
   active,
   onRequestClose,
+  onTabExit,
 }: TaskStartPickerProps & {
   focusTarget: TaskStartPickerFocusTarget;
   active: boolean;
   onRequestClose: () => void;
+  onTabExit: (backwards: boolean) => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const reminderRef = useRef<HTMLInputElement>(null);
@@ -167,6 +170,18 @@ function TaskStartPickerPanel({
   };
 
   const handlePanelKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      event.stopPropagation();
+      onTabExit(event.shiftKey);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      onRequestClose();
+      return;
+    }
     if (
       event.key !== 'ArrowLeft'
       && event.key !== 'ArrowRight'
@@ -373,6 +388,7 @@ function TaskStartPickerPanel({
             value={reminderInput}
             placeholder="No Reminder"
             aria-label="Reminder Time"
+            data-bathos-field-return-owned="true"
             disabled={reminderDisabled}
             className="ml-auto w-32 shrink-0"
             onChange={(event) => {
@@ -442,6 +458,7 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
   const [open, setOpen] = useState(false);
   const [focusTarget, setFocusTarget] = useState<TaskStartPickerFocusTarget>('start');
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const tabExitDirectionRef = useRef<'forward' | 'backward' | null>(null);
   const summary = useMemo(
     () => getStartSummary(props.task.start_date, props.task.today_section),
     [props.task.start_date, props.task.today_section],
@@ -501,12 +518,28 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
         align="start"
         className="w-auto p-0 shadow-none"
         onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => {
+          const direction = tabExitDirectionRef.current;
+          if (!direction) return;
+          event.preventDefault();
+          tabExitDirectionRef.current = null;
+          if (triggerRef.current) {
+            focusAdjacentFormControl(triggerRef.current, direction === 'backward');
+          }
+        }}
       >
         <TaskStartPickerPanel
           {...props}
           focusTarget={focusTarget}
           active={open}
           onRequestClose={() => setOpen(false)}
+          onTabExit={(backwards) => {
+            tabExitDirectionRef.current = backwards ? 'backward' : 'forward';
+            if (triggerRef.current) {
+              focusAdjacentFormControl(triggerRef.current, backwards);
+            }
+            setOpen(false);
+          }}
         />
       </PopoverContent>
     </Popover>
@@ -545,6 +578,7 @@ export function TaskStartDialog({
             focusTarget="start"
             active={open}
             onRequestClose={() => onOpenChange(false)}
+            onTabExit={() => onOpenChange(false)}
           />
         </DialogBody>
       </DialogContent>

@@ -1,3 +1,5 @@
+import { isMacLikePlatform } from "@/lib/platform";
+
 export type TaskSelectionState = {
   active: boolean;
   anchorId: string | null;
@@ -47,5 +49,5 @@ export function applyTaskSelectionGesture(
 }
 
 export function isMacLikeTaskPlatform(platform: string): boolean {
-  return /Mac|iPhone|iPad|iPod/i.test(platform);
+  return isMacLikePlatform(platform);
 }

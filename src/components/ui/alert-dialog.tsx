@@ -3,7 +3,11 @@ import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
 
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
-import { getModalKeyDownHandler, getModalOpenAutoFocusHandler } from "@/components/ui/modal-shortcuts";
+import {
+  getModalEscapeKeyDownHandler,
+  getModalKeyDownHandler,
+  getModalOpenAutoFocusHandler,
+} from "@/components/ui/modal-shortcuts";
 import { useModalViewportStyle } from "@/components/ui/modal-viewport";
 
 const AlertDialog = AlertDialogPrimitive.Root;
@@ -30,7 +34,8 @@ AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName;
 const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
->(({ className, onOpenAutoFocus, onKeyDown, style, ...props }, ref) => {
+>(({ className, onEscapeKeyDown, onOpenAutoFocus, onKeyDown, style, ...props }, ref) => {
+  const handleEscapeKeyDown = getModalEscapeKeyDownHandler(onEscapeKeyDown);
   const handleOpenAutoFocus = getModalOpenAutoFocusHandler(onOpenAutoFocus);
   const handleKeyDown = getModalKeyDownHandler(onKeyDown);
   const viewportStyle = useModalViewportStyle(style);
@@ -40,6 +45,8 @@ const AlertDialogContent = React.forwardRef<
       <AlertDialogOverlay />
       <AlertDialogPrimitive.Content
         ref={ref}
+        data-bathos-form-scope="true"
+        onEscapeKeyDown={handleEscapeKeyDown}
         onOpenAutoFocus={handleOpenAutoFocus}
         onKeyDown={handleKeyDown}
         className={cn(
@@ -52,6 +59,7 @@ const AlertDialogContent = React.forwardRef<
       >
         {props.children}
         <AlertDialogPrimitive.Cancel
+          data-bathos-form-cancel="true"
           data-modal-shortcut-close="true"
           tabIndex={-1}
           aria-hidden="true"
@@ -106,6 +114,7 @@ const AlertDialogAction = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Action
     ref={ref}
+    data-bathos-form-submit="true"
     data-alert-dialog-action="true"
     tabIndex={props.tabIndex ?? 0}
     className={cn(buttonVariants(), className)}
@@ -120,6 +129,7 @@ const AlertDialogCancel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Cancel
     ref={ref}
+    data-bathos-form-cancel="true"
     data-alert-dialog-cancel="true"
     tabIndex={props.tabIndex ?? 0}
     className={cn(buttonVariants({ variant: "outline" }), className)}

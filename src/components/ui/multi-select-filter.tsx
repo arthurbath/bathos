@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { SquareCheckBig } from 'lucide-react';
+import { focusAdjacentFormControl } from '@/platform/formInteractions';
 
 export interface MultiSelectFilterOption<TValue extends string> {
   value: TValue;
@@ -49,7 +50,8 @@ export function MultiSelectFilter<TValue extends string>({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const draftValuesRef = useRef<TValue[]>(selectedValues);
   const committedForCloseRef = useRef(false);
-  const closeFocusActionRef = useRef<'trigger' | 'grid' | null>(null);
+  const cancelCloseRef = useRef(false);
+  const closeFocusActionRef = useRef<'trigger' | 'grid-next' | 'grid-previous' | 'next' | 'previous' | null>(null);
   const [open, setOpen] = useState(false);
   const [draftValues, setDraftValues] = useState<TValue[]>(selectedValues);
   const committedSelectedSet = new Set(selectedValues);
@@ -163,6 +165,13 @@ export function MultiSelectFilter<TValue extends string>({
       setOpen(true);
       return;
     }
+    if (cancelCloseRef.current) {
+      cancelCloseRef.current = false;
+      draftValuesRef.current = selectedValues;
+      setDraftValues(selectedValues);
+      setOpen(false);
+      return;
+    }
     commitDraftValues();
     setOpen(false);
   };
@@ -183,8 +192,7 @@ export function MultiSelectFilter<TValue extends string>({
   };
 
   const handleMenuKeyDownCapture = (event: KeyboardEvent<HTMLElement>) => {
-    if (!deferSelectionUntilClose) return;
-    if (event.key === 'Enter') {
+    if (deferSelectionUntilClose && event.key === 'Enter') {
       event.preventDefault();
       event.stopPropagation();
       const commitResult = commitDraftValues();
@@ -195,13 +203,14 @@ export function MultiSelectFilter<TValue extends string>({
       return;
     }
     if (event.key === 'Tab') {
+      event.preventDefault();
+      event.stopPropagation();
       const commitResult = commitDraftValues();
-      closeFocusActionRef.current = 'grid';
+      const isGridTrigger = triggerProps?.['data-row'] != null && triggerProps?.['data-col'] != null;
+      closeFocusActionRef.current = isGridTrigger
+        ? (event.shiftKey ? 'grid-previous' : 'grid-next')
+        : (event.shiftKey ? 'previous' : 'next');
       setOpen(false);
-      const onKeyDown = triggerProps?.onKeyDown;
-      if (typeof onKeyDown === 'function') {
-        onKeyDown(event);
-      }
       if (commitResult) void commitResult.catch(() => undefined);
     }
   };
@@ -214,8 +223,18 @@ export function MultiSelectFilter<TValue extends string>({
       focusTrigger();
       return;
     }
-    if (closeFocusAction === 'grid') {
+    if (closeFocusAction === 'grid-next' || closeFocusAction === 'grid-previous') {
       event.preventDefault();
+      if (triggerRef.current) {
+        focusAdjacentFormControl(triggerRef.current, closeFocusAction === 'grid-previous');
+      }
+      return;
+    }
+    if (closeFocusAction === 'next' || closeFocusAction === 'previous') {
+      event.preventDefault();
+      if (triggerRef.current) {
+        focusAdjacentFormControl(triggerRef.current, closeFocusAction === 'previous');
+      }
     }
   };
 
@@ -224,6 +243,8 @@ export function MultiSelectFilter<TValue extends string>({
     'data-row-id': triggerProps?.['data-row-id'],
     'data-col': triggerProps?.['data-col'],
   };
+  const triggerKeyDown = triggerProps?.onKeyDown;
+  const isGridTrigger = triggerProps?.['data-row'] != null && triggerProps?.['data-col'] != null;
 
   return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange}>
@@ -239,6 +260,18 @@ export function MultiSelectFilter<TValue extends string>({
           )}
           aria-label={label}
           {...triggerProps}
+          onKeyDown={(event) => {
+            if (typeof triggerKeyDown === 'function') {
+              triggerKeyDown(event);
+            }
+            if (
+              event.defaultPrevented
+              || isGridTrigger
+              || (event.key !== 'Delete' && event.key !== 'Backspace')
+            ) return;
+            event.preventDefault();
+            void onSelectedValuesChange([]);
+          }}
         >
           <span className="min-w-0 truncate">{summary}</span>
           <SquareCheckBig aria-hidden="true" className="!h-3.5 !w-3.5 shrink-0 text-muted-foreground" />
@@ -249,6 +282,9 @@ export function MultiSelectFilter<TValue extends string>({
         className={cn('w-56 bg-popover', className)}
         onKeyDownCapture={handleMenuKeyDownCapture}
         onCloseAutoFocus={handleCloseAutoFocus}
+        onEscapeKeyDown={() => {
+          cancelCloseRef.current = true;
+        }}
         {...contentGridProps}
       >
         {options.map((option) => (

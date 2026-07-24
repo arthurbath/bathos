@@ -1,43 +1,81 @@
 import { useEffect } from "react";
 
-const FORM_SELECTOR = "form";
-const MODAL_SELECTOR = '[role="dialog"], [role="alertdialog"]';
-const COMMAND_SCOPE_SELECTOR = '[data-command-enter-scope="true"]';
-const COMMAND_CONFIRM_SELECTOR = '[data-command-enter-confirm="true"]';
+import {
+  currentPlatformIsMacLike,
+  fieldOwnsReturn,
+  getBathosFormCommand,
+  getNearestFormInteractionScope,
+  isSingleLineTextEntry,
+  scopeAllowsReturnSubmit,
+  cancelNearestFormScope,
+  submitNearestFormScope,
+} from "@/platform/formInteractions";
 
-const isCommandEnter = (event: KeyboardEvent) =>
-  event.key === "Enter" && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.isComposing;
-
-const isActionableElement = (element: HTMLElement) => {
-  if ("disabled" in element && typeof element.disabled === "boolean" && element.disabled) return false;
-  if (element.getAttribute("aria-disabled") === "true") return false;
-  return true;
-};
-
-export function useCommandEnterSubmit() {
+export function useBathosFormInteractions() {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isCommandEnter(event)) return;
+      if (event.isComposing) return;
 
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (!target) return;
-      if (target.closest(MODAL_SELECTOR)) return;
 
-      const form = target.closest<HTMLFormElement>(FORM_SELECTOR);
-      if (form) {
+      const unmodified = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey;
+      if (unmodified && event.key === " ") {
+        const link = target.closest<HTMLAnchorElement>("a[href]");
+        if (link) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          link.click();
+          return;
+        }
+      }
+
+      if (
+        unmodified
+        && (event.key === "Enter" || event.key === "Delete" || event.key === "Backspace")
+        && !target.closest("[data-row][data-col]")
+      ) {
+        const binaryControl = target.closest<HTMLElement>(
+          'input[type="checkbox"], [role="checkbox"], [role="switch"]',
+        );
+        if (binaryControl && isActionableBinaryControl(binaryControl)) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          if (event.key === "Enter" || binaryControlIsChecked(binaryControl)) {
+            binaryControl.click();
+          }
+          return;
+        }
+      }
+
+      const command = getBathosFormCommand(event, currentPlatformIsMacLike());
+      if (command) {
+        const handled = command === "submit"
+          ? submitNearestFormScope(target)
+          : cancelNearestFormScope(target);
+        if (!handled) return;
         event.preventDefault();
-        form.requestSubmit();
+        event.stopImmediatePropagation();
         return;
       }
 
-      const scope = target.closest<HTMLElement>(COMMAND_SCOPE_SELECTOR);
-      if (!scope) return;
-
-      const confirmAction = scope.querySelector<HTMLElement>(COMMAND_CONFIRM_SELECTOR);
-      if (!confirmAction || !isActionableElement(confirmAction)) return;
+      if (
+        event.key !== "Enter"
+        || event.metaKey
+        || event.ctrlKey
+        || event.altKey
+        || event.shiftKey
+        || !isSingleLineTextEntry(target)
+        || fieldOwnsReturn(target)
+      ) return;
 
       event.preventDefault();
-      confirmAction.click();
+      if (
+        scopeAllowsReturnSubmit(target)
+        && getNearestFormInteractionScope(target)
+      ) {
+        submitNearestFormScope(target);
+      }
     };
 
     document.addEventListener("keydown", handleKeyDown, true);
@@ -46,3 +84,18 @@ export function useCommandEnterSubmit() {
     };
   }, []);
 }
+
+function isActionableBinaryControl(control: HTMLElement): boolean {
+  return !(
+    ("disabled" in control && control.disabled === true)
+    || control.getAttribute("aria-disabled") === "true"
+  );
+}
+
+function binaryControlIsChecked(control: HTMLElement): boolean {
+  if (control instanceof HTMLInputElement) return control.checked;
+  const checked = control.getAttribute("aria-checked");
+  return checked === "true" || checked === "mixed";
+}
+
+export const useCommandEnterSubmit = useBathosFormInteractions;

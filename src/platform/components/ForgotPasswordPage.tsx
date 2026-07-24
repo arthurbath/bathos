@@ -62,7 +62,7 @@ export default function ForgotPasswordPage() {
           <CardTitle>Forgot Password</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form data-bathos-return-submits="true" onSubmit={handleSubmit} className="space-y-4">
             <Input
               type="email"
               placeholder="Enter your email"

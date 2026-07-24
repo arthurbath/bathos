@@ -46,7 +46,7 @@ Press `Command+/` on Mac or `Control+/` on Windows to open the current keyboard 
 | Open the first task or the next task down | `Control+S` | `Control+Shift+S` |
 | Open the last task or the previous task up | `Control+W` | `Control+Shift+W` |
 | Mark the open task complete or incomplete | `Control+D` | `Control+Shift+D` |
-| Close the open task and clear page focus | `Control+X` | `Control+Shift+X` |
+| Close the open task and clear page focus | `Control+X` | Unavailable |
 | Reorder the focused task | `Option+Up/Down` | `Alt+Up/Down` |
 
 The numbered views are Today, Upcoming, Anytime, Someday, Projects, Templates, Done, and Config in that order. Open-next and open-previous do not wrap at the list boundaries. Opening a task puts the insertion point at the end of its title and scrolls only as much as needed to reveal it. Marking an open task complete keeps it open so its metadata can still be edited. Tasks moves it to Done only when the editor closes. Clicking the checkbox of a closed task completes it immediately.
