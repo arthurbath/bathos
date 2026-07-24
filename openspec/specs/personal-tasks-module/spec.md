@@ -519,6 +519,33 @@ The Tasks Start picker SHALL accept a bounded grammar of reasonable time shortha
 - **WHEN** Tasks presents reminder editing for a to-do or project
 - **THEN** the interface omits repeated-time selection and time-zone display while persistence uses the deterministic earlier repeated-time instance and the authoritative planning time zone internally
 
+### Requirement: Reminder-Initiated Today Planning
+The Tasks unified Start picker SHALL allow reminder entry before a to-do has a Start Date or Today horizon and SHALL convert a successfully entered reminder into owner-local Today · Inbox planning without replacing an existing planning choice.
+
+#### Scenario: Offer Reminder before planning
+- **WHEN** connected reminder storage is available and a present open to-do has neither a future Start Date nor a Today horizon
+- **THEN** its Start picker keeps Reminder editable without requiring a preliminary planning selection
+
+#### Scenario: Default an unplanned reminder to Today Inbox
+- **WHEN** a user saves a valid reminder time on a to-do with neither a future Start Date nor a Today horizon
+- **THEN** Tasks first persists the to-do as Anytime with a null future Start Date and the Inbox Today horizon, then saves the reminder for the owner's current planning date
+
+#### Scenario: Preserve an existing Today horizon
+- **WHEN** a user saves a reminder on a to-do already placed in Today Inbox, Now, Next, or Later
+- **THEN** Tasks preserves that horizon and changes only the reminder
+
+#### Scenario: Preserve an existing future Start Date
+- **WHEN** a user saves a reminder on a to-do with a future Start Date
+- **THEN** Tasks preserves the future Start Date and its day horizon and schedules the reminder for that Start Date
+
+#### Scenario: Reject an elapsed time before default planning
+- **WHEN** a user enters a time that has already elapsed on the owner planning date for an otherwise unplanned to-do
+- **THEN** Tasks reports `Not allowed.`, saves neither Today · Inbox planning nor a reminder, and restores the last committed reminder display
+
+#### Scenario: Retain reminder planning in an untitled draft
+- **WHEN** a user enters a valid reminder before a new-task draft has a persistent identifier
+- **THEN** Tasks retains Today · Inbox in the draft, retains the pending reminder intent, and persists the planned to-do before saving its reminder after the first valid title
+
 ### Requirement: Unified Task Start Picker
 The Tasks interface SHALL present a single autosaving Start control for Today horizon, future deferral date, and reminder intent by composing the established BathOS popover and calendar primitives with Tasks-specific controls.
 
@@ -571,8 +598,8 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 - **THEN** the year heading, navigation, and month grid are horizontally centered within the same viewport as the day calendar
 
 #### Scenario: Add or clear a reminder inside Start
-- **WHEN** a task has a Today horizon or future Start Date and the user enters or clears a reminder time
-- **THEN** Tasks immediately saves or cancels the one dependent reminder through the authoritative reminder contract without requesting an independent reminder date
+- **WHEN** connected reminder storage is available and a user enters or clears a reminder time for a present open to-do
+- **THEN** Tasks immediately saves or cancels the one dependent reminder through the authoritative reminder contract, first assigning Today · Inbox when the to-do has no Start intent and never requesting an independent reminder date
 
 #### Scenario: Clear Start
 - **WHEN** the user activates Clear in the Start picker
@@ -602,9 +629,9 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 - **WHEN** Command+E on Mac or Control+E on Windows targets one open to-do or one or more selected to-dos
 - **THEN** Tasks opens the Start surface for an eligible single target with reminder time prefocused, or opens the existing multi-task reminder surface for eligible bulk work, and suppresses the matching browser command
 
-#### Scenario: Withhold a reminder from unplanned work
+#### Scenario: Keep Reminder available before planning
 - **WHEN** a task has neither a Today horizon nor a future Start Date
-- **THEN** the reminder time control remains visible for discovery but disabled until the user chooses a Start intent
+- **THEN** the reminder time control remains visible and editable whenever connected reminder storage is available
 
 ### Requirement: Focused To-Do Action Menu
 The Tasks interface SHALL keep the to-do ellipsis menu limited to actionability, structural Move, temporal Do, Start planning, and recoverable Delete while retaining drag and keyboard ordering outside that menu.
@@ -1334,7 +1361,7 @@ The system SHALL provide modifier-based keyboard operation for full-editor creat
 
 #### Scenario: Open reminder planning for unplanned work
 - **WHEN** Command+E on Mac or Control+E on Windows targets one task with neither a future Start Date nor a Today horizon
-- **THEN** the module opens Start with reminder entry disabled until the user chooses a Start intent and makes no reminder mutation
+- **THEN** the module opens Start with Reminder editable, and a valid reminder first assigns Today · Inbox before reminder persistence
 
 #### Scenario: Open the next visible to-do
 - **WHEN** the user presses Control+S on Mac or Control+Shift+S on Windows
@@ -1781,9 +1808,9 @@ The system SHALL allow at most one active reminder per to-do or project, SHALL d
 - **WHEN** a user assigns a reminder time to an open item with a Today horizon and no future Start Date
 - **THEN** the system resolves one reminder on the owner's current planning date and does not request or store an independently chosen reminder date
 
-#### Scenario: Withhold reminders from unplanned work
-- **WHEN** an open item has neither a future Start Date nor a Today horizon
-- **THEN** the interface disables reminder entry and every mutation surface rejects a new reminder for that item
+#### Scenario: Default reminder planning for unplanned work
+- **WHEN** an open to-do has neither a future Start Date nor a Today horizon and the user saves a valid reminder time
+- **THEN** the system first assigns Today · Inbox and then resolves the reminder on the owner's current planning date
 
 #### Scenario: Clear all Start intent with a reminder
 - **WHEN** a user clears both future Start Date and Today horizon from an item that has an active reminder

@@ -2895,6 +2895,13 @@ function TaskRow({
       await onCancelReminder();
       return;
     }
+    if (task.start_date === null && task.today_section === null) {
+      await onUpdate({
+        destination: 'anytime',
+        start_date: null,
+        today_section: 'inbox',
+      });
+    }
     await onSaveReminder({
       localTime,
       ambiguityChoice: 'earlier',
@@ -3416,6 +3423,14 @@ function TaskEditor({
   const changeReminderTime = async (nextReminderTime: string) => {
     setReminderTime(nextReminderTime);
     if (nextReminderTime) {
+      if (!startDate && todaySection === null) {
+        setTodaySection('inbox');
+        await persistImmediateTaskPatch({
+          destination: 'anytime',
+          start_date: null,
+          today_section: 'inbox',
+        });
+      }
       await persistReminder(nextReminderTime);
     } else if (reminder !== null || reminderTime) {
       await cancelReminder();

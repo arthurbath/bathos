@@ -402,7 +402,10 @@ function requestTaskStartPickerOpenForTest(
   taskId: string,
   focusTarget: 'start' | 'reminder' = 'start',
 ) {
-  const trigger = container.querySelector<HTMLElement>(`#task-start-${taskId}`);
+  const trigger = document.getElementById(`task-start-${taskId}`);
+  if (trigger && !container.contains(trigger)) {
+    throw new Error(`Task Start trigger was outside the rendered shell for ${taskId}`);
+  }
   if (!trigger) throw new Error(`Task Start trigger was not found for ${taskId}`);
   requestTaskStartPickerOpen(trigger, focusTarget);
 }
@@ -590,6 +593,73 @@ describe('TasksShell', () => {
       }));
     } finally {
       cleanup(root, container);
+    }
+  });
+
+  it('retains Today Inbox and a pending reminder until an untitled draft is created', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-20T20:00:00.000Z'));
+    const taskList = defaultTaskList();
+    const saveReminder = vi.fn().mockResolvedValue(undefined);
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), dueItems: [],
+      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/anytime');
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'n', ctrlKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-draft:new', 'reminder');
+      });
+      const reminderTime = document.getElementById(
+        'task-start-reminder-task-draft:new',
+      ) as HTMLInputElement;
+      expect(reminderTime).toBeEnabled();
+
+      await act(async () => {
+        setInputValue(reminderTime, '2p');
+        reminderTime.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      expect(taskList.createTask).not.toHaveBeenCalled();
+      expect(saveReminder).not.toHaveBeenCalled();
+      expect(document.getElementById('task-start-task-draft:new'))
+        .toHaveTextContent('Today · Inbox');
+
+      const title = document.getElementById('task-title-task-draft:new') as HTMLInputElement;
+      await act(async () => {
+        setInputValue(title, 'Reminder-backed draft');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 425));
+      });
+
+      expect(taskList.createTask).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Reminder-backed draft',
+        destination: 'anytime',
+        startDate: null,
+        todaySection: 'inbox',
+      }));
+      expect(saveReminder).toHaveBeenCalledWith(expect.objectContaining({
+        rootType: 'todo',
+        rootId: 'task-created',
+        reminder: null,
+        localTime: '14:00',
+      }));
+      expect(taskList.createTask.mock.invocationCallOrder[0])
+        .toBeLessThan(saveReminder.mock.invocationCallOrder[0]);
+    } finally {
+      cleanup(root, container);
+      vi.useRealTimers();
     }
   });
 
@@ -2485,6 +2555,214 @@ describe('TasksShell', () => {
     }
   });
 
+  it('plans an unplanned to-do for Today Inbox before saving its reminder', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-20T20:00:00.000Z'));
+    const unplannedTask = taskTodoFixture({
+      ...task,
+      destination: 'anytime',
+      start_date: null,
+      today_section: null,
+    });
+    const taskList = { ...defaultTaskList(), tasks: [unplannedTask] };
+    const saveReminder = vi.fn().mockResolvedValue(undefined);
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), dueItems: [],
+      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/anytime');
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
+      });
+      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
+      expect(time).toBeEnabled();
+
+      await act(async () => {
+        setInputValue(time, '2p');
+        time.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+        destination: 'anytime',
+        start_date: null,
+        today_section: 'inbox',
+      });
+      expect(saveReminder).toHaveBeenCalledWith(expect.objectContaining({
+        rootType: 'todo',
+        rootId: 'task-a',
+        localTime: '14:00',
+        ambiguityChoice: 'earlier',
+      }));
+      expect(taskList.updateTask.mock.invocationCallOrder[0])
+        .toBeLessThan(saveReminder.mock.invocationCallOrder[0]);
+      expect(container.querySelector('#task-start-task-a')).toHaveTextContent('Today · Inbox');
+    } finally {
+      cleanup(root, container);
+      vi.useRealTimers();
+    }
+  });
+
+  it('applies the same unplanned reminder default from the row Start dialog', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-20T20:00:00.000Z'));
+    const unplannedTask = taskTodoFixture({
+      ...task,
+      destination: 'anytime',
+      start_date: null,
+      today_section: null,
+    });
+    const taskList = { ...defaultTaskList(), tasks: [unplannedTask] };
+    const saveReminder = vi.fn().mockResolvedValue(undefined);
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), dueItems: [],
+      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/anytime');
+
+    try {
+      await openTaskMenuSurface(container, 'Existing task', 'Start...');
+      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
+      expect(time).toBeEnabled();
+
+      await act(async () => {
+        setInputValue(time, '2p');
+        time.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+        destination: 'anytime',
+        start_date: null,
+        today_section: 'inbox',
+      });
+      expect(saveReminder).toHaveBeenCalledWith(expect.objectContaining({
+        rootType: 'todo',
+        rootId: 'task-a',
+        localTime: '14:00',
+      }));
+      expect(taskList.updateTask.mock.invocationCallOrder[0])
+        .toBeLessThan(saveReminder.mock.invocationCallOrder[0]);
+    } finally {
+      cleanup(root, container);
+      vi.useRealTimers();
+    }
+  });
+
+  it('preserves an existing Today horizon when saving a reminder', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-20T20:00:00.000Z'));
+    const laterTask = taskTodoFixture({
+      ...task,
+      start_date: null,
+      today_section: 'later',
+    });
+    const taskList = { ...defaultTaskList(), tasks: [laterTask] };
+    const saveReminder = vi.fn().mockResolvedValue(undefined);
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), dueItems: [],
+      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
+      });
+      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
+      await act(async () => {
+        setInputValue(time, '2p');
+        time.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+
+      expect(taskList.updateTask).not.toHaveBeenCalled();
+      expect(saveReminder).toHaveBeenCalledWith(expect.objectContaining({
+        localTime: '14:00',
+      }));
+      expect(container.querySelector('#task-start-task-a')).toHaveTextContent('Today · Later');
+    } finally {
+      cleanup(root, container);
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects an elapsed reminder before planning an unplanned to-do', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-20T20:00:00.000Z'));
+    const unplannedTask = taskTodoFixture({
+      ...task,
+      destination: 'anytime',
+      start_date: null,
+      today_section: null,
+    });
+    const taskList = { ...defaultTaskList(), tasks: [unplannedTask] };
+    const saveReminder = vi.fn().mockResolvedValue(undefined);
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), dueItems: [],
+      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/anytime');
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
+      });
+      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
+      await act(async () => {
+        setInputValue(time, '12p');
+        time.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+
+      expect(time).toHaveValue('');
+      expect(taskList.updateTask).not.toHaveBeenCalled();
+      expect(saveReminder).not.toHaveBeenCalled();
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Not allowed.',
+        duration: 1_800,
+      });
+    } finally {
+      cleanup(root, container);
+      vi.useRealTimers();
+    }
+  });
+
   it('places Start and Deadline in one responsive row with matching calendar icons', async () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const { container, root } = renderShell();
@@ -2535,7 +2813,8 @@ describe('TasksShell', () => {
       start_date: '2026-07-24',
       today_section: 'next',
     });
-    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [futureTask] });
+    const taskList = { ...defaultTaskList(), tasks: [futureTask] };
+    mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell('/tasks/upcoming');
 
     try {
@@ -2563,7 +2842,8 @@ describe('TasksShell', () => {
       start_date: '2026-07-24',
       today_section: 'next',
     });
-    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [futureTask] });
+    const taskList = { ...defaultTaskList(), tasks: [futureTask] };
+    mockTaskList.mockReturnValue(taskList);
     mockTaskReminders.mockReturnValue({
       reminders: [], byRootId: new Map(), dueItems: [],
       mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
@@ -2594,6 +2874,7 @@ describe('TasksShell', () => {
         rootId: 'task-a',
         localTime: '13:30',
       }));
+      expect(taskList.updateTask).not.toHaveBeenCalled();
       expect(time.value).toBe('1:30 pm');
       expect(document.querySelector('[data-task-start-picker]')).toBeTruthy();
 

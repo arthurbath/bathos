@@ -247,7 +247,7 @@ function TaskStartPickerPanel({
     }
 
     const resolved = resolveTaskReminderTimeInput(rawValue, {
-      today: task.start_date === null && task.today_section !== null,
+      today: task.start_date === null,
       timeZone: reminderTimeZone,
     });
     if (!resolved) {
@@ -373,7 +373,7 @@ function TaskStartPickerPanel({
             value={reminderInput}
             placeholder="No Reminder"
             aria-label="Reminder Time"
-            disabled={reminderDisabled || !planned}
+            disabled={reminderDisabled}
             className="ml-auto w-32 shrink-0"
             onChange={(event) => {
               reminderInputConfirmedRef.current = false;
