@@ -141,6 +141,91 @@ describe('DatePickerField', () => {
     }
   });
 
+  it.each([
+    ['Space', ' '],
+    ['Return', 'Enter'],
+  ])('commits once, closes, and restores trigger focus when %s confirms a date', async (_label, key) => {
+    const onValueChange = vi.fn();
+    const { container, root } = mount(
+      <DatePickerField
+        id={`keyboard-confirm-date-${key === ' ' ? 'space' : 'return'}`}
+        value="2026-03-02"
+        onValueChange={onValueChange}
+      />,
+    );
+
+    try {
+      const trigger = container.querySelector<HTMLButtonElement>('button')!;
+      act(() => {
+        trigger.click();
+      });
+      await flushUi();
+
+      const dayFifteen = Array.from(document.body.querySelectorAll<HTMLButtonElement>(
+        'button[name="day"]',
+      )).find((button) => (
+        button.textContent?.trim() === '15'
+        && !button.className.includes('day-outside')
+      ));
+      expect(dayFifteen).toBeTruthy();
+
+      act(() => {
+        dayFifteen?.focus();
+        dayFifteen?.dispatchEvent(new KeyboardEvent('keydown', {
+          key,
+          bubbles: true,
+          cancelable: true,
+        }));
+        dayFifteen?.click();
+      });
+      await flushUi();
+      await flushUi();
+
+      expect(onValueChange).toHaveBeenCalledTimes(1);
+      expect(onValueChange).toHaveBeenCalledWith('2026-03-15');
+      expect(document.body.querySelector('[data-radix-popper-content-wrapper]')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('keeps the popover open when Return activates calendar navigation', async () => {
+    const { container, root } = mount(
+      <DatePickerField
+        id="navigation-date"
+        value="2026-03-02"
+        onValueChange={vi.fn()}
+      />,
+    );
+
+    try {
+      act(() => {
+        container.querySelector<HTMLButtonElement>('#navigation-date')?.click();
+      });
+      await flushUi();
+
+      const caption = document.body.querySelector<HTMLButtonElement>(
+        'button[name="caption-month-year"]',
+      );
+      act(() => {
+        caption?.focus();
+        caption?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        caption?.click();
+      });
+      await flushUi();
+
+      expect(document.body.querySelector('[data-radix-popper-content-wrapper]')).toBeTruthy();
+      expect(document.body.querySelector('[data-calendar-month-picker="true"]')).toBeTruthy();
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it('disables calendar dates before an explicit minimum', async () => {
     const { container, root } = mount(
       <DatePickerField

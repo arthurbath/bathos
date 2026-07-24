@@ -111,7 +111,6 @@ function TaskStartPickerPanel({
   const committedReminderDisplay = formatTaskReminderTimeDisplay(reminderTime) ?? '';
   const [reminderInput, setReminderInput] = useState(committedReminderDisplay);
   const reminderInputConfirmedRef = useRef(true);
-  const keyboardDateConfirmationRef = useRef(false);
 
   useEffect(() => {
     if (document.activeElement === reminderRef.current) return;
@@ -315,19 +314,10 @@ function TaskStartPickerPanel({
                   'h-auto min-w-0 flex-col gap-1 px-1.5 py-2 text-xs',
                   selected && 'bg-accent text-accent-foreground',
                 )}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter') return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void onPlanningChange({
-                    startDate: null,
-                    todaySection: value,
-                  }).then(onRequestClose);
-                }}
                 onClick={() => void onPlanningChange({
                   startDate: null,
                   todaySection: value,
-                })}
+                }).then(onRequestClose)}
               >
                 <Icon className="h-4 w-4" aria-hidden />
                 <span className="truncate">{label}</span>
@@ -351,22 +341,12 @@ function TaskStartPickerPanel({
             reminderRef.current?.focus();
             return Boolean(reminderRef.current);
           }}
-          onKeyDownCapture={(event) => {
-            const target = event.target instanceof HTMLElement ? event.target : null;
-            if (target?.closest('button[name="day"]:not(:disabled)')) {
-              keyboardDateConfirmationRef.current = event.key === 'Enter';
-            }
-          }}
           onSelect={(date) => {
             if (!date) return;
-            const closeAfterSave = keyboardDateConfirmationRef.current;
-            keyboardDateConfirmationRef.current = false;
             void onPlanningChange({
               startDate: toDatePickerFieldValue(date),
               todaySection: task.today_section ?? 'next',
-            }).then(() => {
-              if (closeAfterSave) onRequestClose();
-            });
+            }).then(onRequestClose);
           }}
           allowTabExit
           className="mx-auto"

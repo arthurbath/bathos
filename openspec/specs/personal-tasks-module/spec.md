@@ -570,7 +570,7 @@ The Tasks expanded to-do editor SHALL act as an autosaving form scope under the 
 - **THEN** the close action shows Command+Return or Command+Escape on Mac and Control+Return or Control+Shift+X on Windows, and it no longer presents plain Escape as a task-editor close command
 
 ### Requirement: Unified Task Start Picker
-The Tasks interface SHALL present a single autosaving Start control for Today horizon, future deferral date, and reminder intent by composing the established BathOS popover and calendar primitives with Tasks-specific controls.
+The Tasks interface SHALL present a single autosaving Start control for Today horizon, future deferral date, and reminder intent by composing the established BathOS popover and calendar primitives with Tasks-specific controls. Activating a final Start selection by pointer, Space, or Return SHALL persist that selection and close the picker.
 
 #### Scenario: Open the complete Start picker
 - **WHEN** a user activates Start from an open to-do or its action menu
@@ -585,12 +585,12 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 - **THEN** keyboard focus lands on Today Inbox
 
 #### Scenario: Choose a Today horizon
-- **WHEN** a user chooses Inbox, Now, Next, or Later in the Start picker
-- **THEN** Tasks immediately stores that active Today horizon with a null future Start Date and keeps the picker available for optional reminder editing unless Return confirmed the final selection
+- **WHEN** a user activates Inbox, Now, Next, or Later with pointer input, Space, or Return
+- **THEN** Tasks stores that active Today horizon with a null future Start Date exactly once, closes Start after autosave succeeds, and restores focus to the trigger
 
 #### Scenario: Choose a future Start date
-- **WHEN** a user chooses a date after the owner's planning date
-- **THEN** Tasks immediately stores that future Start Date, retains a valid selected day horizon for reached-date activation, and keeps the picker available for optional reminder editing unless Return confirmed the final selection
+- **WHEN** a user activates a legal date after the owner's planning date with pointer input, Space, or Return
+- **THEN** Tasks stores that future Start Date with a valid selected day horizon exactly once, closes Start after autosave succeeds, and restores focus to the trigger
 
 #### Scenario: Prevent calendar scheduling for today or the past
 - **WHEN** the Start picker calendar displays the owner planning date or an earlier date
@@ -625,8 +625,8 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 - **THEN** Tasks immediately saves or cancels the one dependent reminder through the authoritative reminder contract, first assigning Today · Inbox when the to-do has no Start intent and never requesting an independent reminder date
 
 #### Scenario: Clear Start
-- **WHEN** the user activates Clear in the Start picker
-- **THEN** Tasks immediately clears both future Start Date and Today horizon, cancels any active reminder and pending occurrence, and treats keyboard activation as a committed final action
+- **WHEN** the user activates Clear with pointer input, Space, or Return
+- **THEN** Tasks immediately clears both future Start Date and Today horizon, cancels any active reminder and pending occurrence, closes Start after autosave succeeds, and commits the action exactly once
 
 #### Scenario: Leave Start with Tab
 - **WHEN** focus is anywhere inside Start and the user presses Tab or Shift+Tab
@@ -636,17 +636,13 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 - **WHEN** focus is within Start and the user presses an arrow key outside ordinary reminder text editing
 - **THEN** downward focus moves in visible order from Today horizons to the calendar header, then to enabled dates or months, Reminder, and Clear while reverse navigation follows the same structure and skips disabled destinations
 
-#### Scenario: Confirm a final Start selection with Enter
-- **WHEN** keyboard focus is on a Today horizon, selectable date, or Clear and the user presses Enter
-- **THEN** Tasks performs the selection once, waits for its immediate autosave, closes Start, and restores focus to the trigger
-
 #### Scenario: Keep Start open for internal calendar navigation
-- **WHEN** keyboard focus is on a calendar pager, month or year caption, or selectable month and the user presses Enter
+- **WHEN** keyboard focus is on a calendar pager, month or year caption, or selectable month and the user activates it with Space or Return
 - **THEN** Tasks performs the calendar page or view action and keeps Start open with focus inside the picker
 
-#### Scenario: Activate other focused Start actions
-- **WHEN** a user presses Space on a focused Today horizon, calendar action, selectable date, month, year pager, or Clear
-- **THEN** Tasks performs the same action as pointer activation, while Space inside Reminder remains text input
+#### Scenario: Preserve Reminder text entry
+- **WHEN** keyboard focus is in Reminder and the user enters Space or other text
+- **THEN** Tasks treats it as reminder input rather than a Start-selection command
 
 #### Scenario: Cancel Start without closing the task
 - **WHEN** a user presses unmodified Escape inside Start

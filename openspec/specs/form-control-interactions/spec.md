@@ -156,7 +156,7 @@ Arbitrary non-DataGrid forms SHALL use Tab and Shift+Tab as their only shared in
 - **THEN** the field commits its current accepted or staged state, closes, and moves to the next or previous containing-form control
 
 ### Requirement: Date pickers are arrow-navigable and Tab-exiting
-Shared date pickers SHALL use Space, Return, pointer input, and arrow navigation internally. Their internal controls SHALL NOT become a multi-stop segment of the containing form's Tab order.
+Shared date pickers SHALL use Space, Return, pointer input, and arrow navigation internally. Space, Return, and pointer activation SHALL be equivalent when they activate a final selection, and internal controls SHALL NOT become a multi-stop segment of the containing form's Tab order.
 
 #### Scenario: Open a date picker
 - **WHEN** a focused date-picker trigger receives Space, Return, or pointer activation
@@ -166,9 +166,13 @@ Shared date pickers SHALL use Space, Return, pointer input, and arrow navigation
 - **WHEN** a user presses arrow keys inside an open date picker outside a text-entry subcontrol
 - **THEN** focus moves among enabled calendar, caption, paging, month, year, and picker-specific controls without changing the committed date merely because focus moved
 
-#### Scenario: Commit a date-picker action
-- **WHEN** a user activates a focused legal date or navigation action with Space, Return, or pointer input
-- **THEN** the picker either commits and closes for a final selection or performs the internal navigation action and remains open
+#### Scenario: Confirm a final date-picker selection
+- **WHEN** a user activates a focused legal date, Clear action, or other final-selection action with Space, Return, or pointer input
+- **THEN** the picker commits that selection exactly once, closes after the owner accepts it, and restores focus to the trigger
+
+#### Scenario: Keep date-picker navigation open
+- **WHEN** a user activates a calendar pager, caption, month, year, or another navigation-only action with Space, Return, or pointer input
+- **THEN** the picker performs the internal navigation action without committing a final value and remains open
 
 #### Scenario: Leave a date picker with Tab
 - **WHEN** a user presses Tab or Shift+Tab anywhere inside an open date picker
