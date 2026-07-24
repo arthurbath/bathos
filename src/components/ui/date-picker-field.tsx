@@ -30,6 +30,7 @@ interface DatePickerFieldProps extends Omit<React.ButtonHTMLAttributes<HTMLButto
   onValueChange: (value: string) => void;
   placeholder?: string;
   displayFormat?: string;
+  displayValue?: string;
   popoverAlign?: 'start' | 'center' | 'end';
   minDate?: string;
   todayDate?: string;
@@ -42,6 +43,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   onValueChange,
   placeholder = 'Pick a date',
   displayFormat = 'MMM d, yyyy',
+  displayValue,
   popoverAlign = 'start',
   minDate,
   todayDate,
@@ -99,7 +101,9 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
             onValueChange('');
           }}
         >
-          <span className="truncate">{selectedDate ? format(selectedDate, displayFormat) : placeholder}</span>
+          <span className="truncate">
+            {selectedDate ? displayValue ?? format(selectedDate, displayFormat) : placeholder}
+          </span>
           <CalendarIcon className="ml-auto h-4 w-4 shrink-0 text-foreground opacity-50" />
         </Button>
       </PopoverTrigger>

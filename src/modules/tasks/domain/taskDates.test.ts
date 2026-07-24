@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertTaskCalendarRange,
   addTaskCalendarDays,
+  formatTaskDateControlLabel,
   formatTaskRelativeCalendarDate,
   isTaskCalendarDate,
   isTaskPlanningTimeZone,
@@ -63,7 +64,7 @@ describe('task calendar dates', () => {
     const planningDate = '2026-07-22';
     expect(formatTaskRelativeCalendarDate('2026-07-22', planningDate, 'en-US')).toBe('Today');
     expect(formatTaskRelativeCalendarDate('2026-07-23', planningDate, 'en-US')).toBe('Tomorrow');
-    expect(formatTaskRelativeCalendarDate('2026-07-21', planningDate, 'en-US')).toBe('one day ago');
+    expect(formatTaskRelativeCalendarDate('2026-07-21', planningDate, 'en-US')).toBe('1 day ago');
     expect(formatTaskRelativeCalendarDate('2026-07-28', planningDate, 'en-US')).toBe('6 days left');
     expect(formatTaskRelativeCalendarDate('2026-07-12', planningDate, 'en-US')).toBe('10 days ago');
   });
@@ -71,5 +72,13 @@ describe('task calendar dates', () => {
   it('uses short month and day outside the 10-day relative window', () => {
     expect(formatTaskRelativeCalendarDate('2026-08-27', '2026-07-22', 'en-US')).toBe('Aug 27');
     expect(formatTaskRelativeCalendarDate('2026-07-11', '2026-07-22', 'en-US')).toBe('Jul 11');
+  });
+
+  it('masks only yesterday, today, and tomorrow in date-control labels', () => {
+    const planningDate = '2026-07-22';
+    expect(formatTaskDateControlLabel('2026-07-21', planningDate, 'en-US')).toBe('Yesterday');
+    expect(formatTaskDateControlLabel('2026-07-22', planningDate, 'en-US')).toBe('Today');
+    expect(formatTaskDateControlLabel('2026-07-23', planningDate, 'en-US')).toBe('Tomorrow');
+    expect(formatTaskDateControlLabel('2026-07-24', planningDate, 'en-US')).toBe('Jul 24, 2026');
   });
 });

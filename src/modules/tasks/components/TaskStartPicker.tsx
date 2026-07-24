@@ -1,4 +1,3 @@
-import { format } from 'date-fns';
 import {
   Bell,
   CalendarIcon,
@@ -34,7 +33,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { focusAdjacentFormControl } from '@/platform/formInteractions';
-import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
+import {
+  addTaskCalendarDays,
+  formatTaskDateControlLabel,
+} from '@/modules/tasks/domain/taskDates';
 import {
   formatTaskReminderTimeDisplay,
   resolveTaskReminderTimeInput,
@@ -422,10 +424,10 @@ function TaskStartPickerPanel({
 function getStartSummary(
   startDate: string | null,
   todaySection: TaskTodaySection | null,
+  planningDate: string,
 ): string {
   if (startDate) {
-    const date = parseDatePickerFieldValue(startDate);
-    return date ? format(date, 'MMM d, yyyy') : startDate;
+    return formatTaskDateControlLabel(startDate, planningDate);
   }
   if (todaySection) {
     const label = todayChoices.find((choice) => choice.value === todaySection)?.label;
@@ -440,8 +442,12 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const tabExitDirectionRef = useRef<'forward' | 'backward' | null>(null);
   const summary = useMemo(
-    () => getStartSummary(props.task.start_date, props.task.today_section),
-    [props.task.start_date, props.task.today_section],
+    () => getStartSummary(
+      props.task.start_date,
+      props.task.today_section,
+      props.planningDate,
+    ),
+    [props.planningDate, props.task.start_date, props.task.today_section],
   );
 
   useEffect(() => {

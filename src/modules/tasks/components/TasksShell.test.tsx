@@ -2482,8 +2482,20 @@ describe('TasksShell', () => {
       expect(container.textContent).toContain('Launch');
       const rowHeader = container.querySelector('[data-task-row-header]');
       const metadata = rowHeader?.querySelector('[data-task-row-metadata]');
-      expect(rowHeader).toHaveClass('h-16', 'overflow-hidden');
-      expect(metadata).toHaveClass('overflow-hidden', 'whitespace-nowrap');
+      expect(rowHeader).toHaveClass(
+        'h-14',
+        'gap-2',
+        'overflow-hidden',
+        'px-1.5',
+        'sm:px-3',
+      );
+      expect(metadata).toHaveClass(
+        'gap-x-2.5',
+        'leading-4',
+        'overflow-hidden',
+        'whitespace-nowrap',
+      );
+      expect(metadata).not.toHaveClass('mt-0.5');
       expect(metadata?.children).toHaveLength(2);
       const titleButton = container.querySelector<HTMLButtonElement>('button[data-task-id="task-a"]')!;
       await act(async () => titleButton.click());
@@ -2500,6 +2512,77 @@ describe('TasksShell', () => {
         area_id: 'area-work',
         project_id: null,
       });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('masks immediate Start and Deadline dates in their editor controls', async () => {
+    const tomorrowTask = taskTodoFixture({
+      ...task,
+      id: 'task-tomorrow',
+      title: 'Tomorrow task',
+      start_date: '2026-07-21',
+      today_section: 'next',
+      deadline: '2026-07-21',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [tomorrowTask] });
+    const { container, root } = renderShell('/tasks/anytime');
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-tomorrow"]')?.click();
+      });
+      expect(container.querySelector('#task-start-task-tomorrow')).toHaveTextContent('Tomorrow');
+      expect(container.querySelector('#task-deadline-task-tomorrow')).toHaveTextContent('Tomorrow');
+      expect(container.querySelector('#task-start-task-tomorrow')).not.toHaveTextContent('Jul 21');
+      expect(container.querySelector('#task-deadline-task-tomorrow')).not.toHaveTextContent('Jul 21');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('shows Yesterday in the Deadline input while keeping overdue row copy numeric and destructive', async () => {
+    const overdueTask = taskTodoFixture({
+      ...task,
+      id: 'task-overdue',
+      title: 'Overdue task',
+      start_date: null,
+      today_section: null,
+      deadline: '2026-07-19',
+    });
+    const dueTodayTask = taskTodoFixture({
+      ...task,
+      id: 'task-due-today',
+      title: 'Due today task',
+      start_date: null,
+      today_section: null,
+      deadline: '2026-07-20',
+    });
+    const futureTask = taskTodoFixture({
+      ...task,
+      id: 'task-due-tomorrow',
+      title: 'Due tomorrow task',
+      start_date: null,
+      today_section: null,
+      deadline: '2026-07-21',
+    });
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [overdueTask, dueTodayTask, futureTask],
+    });
+    const { container, root } = renderShell('/tasks/anytime');
+
+    try {
+      expect(container.querySelector('[aria-label="Due 1 day ago"]')).toHaveClass('text-destructive');
+      expect(container.querySelector('[aria-label="Due Today"]')).toHaveClass('text-destructive');
+      expect(container.querySelector('[aria-label="Due Tomorrow"]')).not.toHaveClass('text-destructive');
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-overdue"]')?.click();
+      });
+      expect(container.querySelector('#task-deadline-task-overdue')).toHaveTextContent('Yesterday');
+      expect(container.querySelector('#task-deadline-task-overdue')).not.toHaveTextContent('Jul 19');
     } finally {
       cleanup(root, container);
     }

@@ -68,7 +68,9 @@ import type {
 import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import {
   addTaskCalendarDays,
+  formatTaskDateControlLabel,
   formatTaskRelativeCalendarDate,
+  isTaskCalendarDate,
 } from '@/modules/tasks/domain/taskDates';
 import {
   TaskKeyboardHelpDialog,
@@ -2711,6 +2713,10 @@ function TaskRow({
       : todayMarker === 'later'
         ? Clock8
         : Inbox;
+  const deadlineIsUrgent = task.deadline !== null
+    && isTaskCalendarDate(task.deadline)
+    && isTaskCalendarDate(planningDate)
+    && task.deadline <= planningDate;
 
   useEffect(() => {
     const cancelScheduledMotion = () => {
@@ -2965,7 +2971,7 @@ function TaskRow({
         />
       ) : null}
       <div className="min-h-0 overflow-hidden">
-      <div className="flex h-16 items-center gap-3 overflow-hidden px-2 sm:px-4" data-task-row-header>
+      <div className="flex h-14 items-center gap-2 overflow-hidden px-1.5 sm:px-3" data-task-row-header>
         {bulkSelection ? (
           <button
             type="button"
@@ -3069,7 +3075,7 @@ function TaskRow({
             || (reminder && (task.start_date || task.today_section))
           ) ? (
             <span
-              className="mt-0.5 flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap text-xs font-normal text-muted-foreground"
+              className="flex min-w-0 items-center gap-x-2.5 overflow-hidden whitespace-nowrap text-xs font-normal leading-4 text-muted-foreground"
               data-task-row-metadata
             >
               {hierarchyLabel ? (
@@ -3099,7 +3105,9 @@ function TaskRow({
               ) : null}
               {task.deadline ? (
                 <span
-                  className="inline-flex shrink-0 items-center gap-1"
+                  className={`inline-flex shrink-0 items-center gap-1 ${
+                    deadlineIsUrgent ? 'text-destructive' : ''
+                  }`}
                   aria-label={`Due ${formatTaskRelativeCalendarDate(task.deadline, planningDate)}`}
                 >
                   <FlagTriangleRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -3613,6 +3621,9 @@ function TaskEditor({
           <DatePickerField
             id={`task-deadline-${task.id}`}
             value={deadline}
+            displayValue={deadline
+              ? formatTaskDateControlLabel(deadline, planningDate)
+              : undefined}
             onValueChange={(value) => {
               setDeadline(value);
               void persistImmediateTaskPatch({ deadline: value || null });

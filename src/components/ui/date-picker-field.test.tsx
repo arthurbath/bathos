@@ -141,6 +141,24 @@ describe('DatePickerField', () => {
     }
   });
 
+  it('renders an optional controlled display value without changing the selected date', () => {
+    const { container, root } = mount(
+      <DatePickerField
+        id="display-date"
+        value="2026-03-02"
+        displayValue="Tomorrow"
+        onValueChange={vi.fn()}
+      />,
+    );
+
+    try {
+      expect(container.querySelector('#display-date')).toHaveTextContent('Tomorrow');
+      expect(container.querySelector('#display-date')).not.toHaveTextContent('Mar 2, 2026');
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it.each([
     ['Space', ' '],
     ['Return', 'Enter'],

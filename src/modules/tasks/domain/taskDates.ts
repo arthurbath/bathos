@@ -107,15 +107,38 @@ export function formatTaskRelativeCalendarDate(
   const offset = calendarEpochDay(value) - calendarEpochDay(planningDate);
   if (offset === 0) return 'Today';
   if (offset === 1) return 'Tomorrow';
-  if (offset === -1) return 'one day ago';
+  if (offset === -1) return '1 day ago';
   if (offset > 1 && offset <= 10) return `${offset} days left`;
   if (offset < -1 && offset >= -10) return `${Math.abs(offset)} days ago`;
 
+  return formatTaskCalendarDate(value, locale, false);
+}
+
+export function formatTaskDateControlLabel(
+  value: string,
+  planningDate: string,
+  locale?: string,
+): string {
+  if (!isTaskCalendarDate(value) || !isTaskCalendarDate(planningDate)) return value;
+  const offset = calendarEpochDay(value) - calendarEpochDay(planningDate);
+  if (offset === -1) return 'Yesterday';
+  if (offset === 0) return 'Today';
+  if (offset === 1) return 'Tomorrow';
+
+  return formatTaskCalendarDate(value, locale, true);
+}
+
+function formatTaskCalendarDate(
+  value: string,
+  locale: string | undefined,
+  includeYear: boolean,
+): string {
   const [year, month, day] = value.split('-').map(Number);
   return new Intl.DateTimeFormat(locale, {
     timeZone: 'UTC',
     month: 'short',
     day: 'numeric',
+    ...(includeYear ? { year: 'numeric' as const } : {}),
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
