@@ -2482,6 +2482,8 @@ describe('TasksShell', () => {
       expect(container.textContent).toContain('Launch');
       const rowHeader = container.querySelector('[data-task-row-header]');
       const metadata = rowHeader?.querySelector('[data-task-row-metadata]');
+      const row = rowHeader?.closest('[data-task-planning-card]');
+      const list = row?.closest('[data-task-planning-list]');
       expect(rowHeader).toHaveClass(
         'h-14',
         'gap-2',
@@ -2494,11 +2496,22 @@ describe('TasksShell', () => {
         'leading-4',
         'overflow-hidden',
         'whitespace-nowrap',
+        'mt-0.5',
       );
-      expect(metadata).not.toHaveClass('mt-0.5');
+      expect(row).toHaveClass(
+        'overflow-hidden',
+        'rounded-md',
+        'border',
+        'border-foreground/10',
+        'bg-foreground/[0.02]',
+      );
+      expect(list).toHaveClass('space-y-1');
+      expect(list).not.toHaveClass('divide-y', 'border-y');
       expect(metadata?.children).toHaveLength(2);
       const titleButton = container.querySelector<HTMLButtonElement>('button[data-task-id="task-a"]')!;
       await act(async () => titleButton.click());
+      expect(row).toHaveClass('bg-foreground/[0.05]');
+      expect(row?.querySelector('[data-task-editor-region]')).not.toBeNull();
       const organization = container.querySelector<HTMLSelectElement>(
         '#task-organization-task-a',
       )!;
@@ -4120,8 +4133,21 @@ describe('TasksShell', () => {
       expect(projectsHeading?.textContent).not.toContain('(1)');
       expect(projectsHeading?.querySelector('[data-task-count-badge]'))
         .toHaveAccessibleName('1 Projects');
-      expect(container.querySelector<HTMLAnchorElement>('a[href="/tasks/projects/project-plan"]')
-        ?.textContent).toBe('Plan the launch');
+      const projectLink = container.querySelector<HTMLAnchorElement>(
+        'a[href="/tasks/projects/project-plan"]',
+      );
+      expect(projectLink?.textContent).toBe('Plan the launch');
+      const projectCard = projectLink?.closest('[data-task-planning-card]');
+      const projectList = projectCard?.closest('[data-task-planning-list]');
+      expect(projectCard).toHaveClass(
+        'overflow-hidden',
+        'rounded-md',
+        'border',
+        'border-foreground/10',
+        'bg-foreground/[0.02]',
+      );
+      expect(projectList).toHaveClass('space-y-1');
+      expect(projectList).not.toHaveClass('divide-y', 'border-y');
 
       const actions = container.querySelector<HTMLButtonElement>(
         'button[aria-label="Planning actions for Plan the launch"]',

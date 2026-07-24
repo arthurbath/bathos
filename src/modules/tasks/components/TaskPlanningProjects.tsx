@@ -30,6 +30,10 @@ import type { TaskProjectPlanningMoveInput } from '@/modules/tasks/hooks/useTask
 import type { TaskListView } from '@/modules/tasks/hooks/useTaskList';
 import type { TaskArea, TaskProject } from '@/modules/tasks/types/tasks';
 
+export const TASK_PLANNING_LIST_CLASS = 'space-y-1';
+export const TASK_PLANNING_ITEM_FRAME_CLASS = 'overflow-hidden rounded-md border border-foreground/10';
+export const TASK_PLANNING_ITEM_BACKGROUND_CLASS = 'bg-foreground/[0.02]';
+
 export type TaskPlanningProjectsProps = {
   projects: TaskProject[];
   areas: TaskArea[];
@@ -67,7 +71,7 @@ export function TaskPlanningProjects({
         Projects
         <TaskCountBadge count={projects.length} label="Projects" />
       </h3>
-      <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+      <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
         {projects.map((project) => (
           <TaskPlanningProjectItem
             key={project.id}
@@ -169,7 +173,10 @@ function TaskPlanningProjectRow({
     : getProjectPlanningActions(project, view, planningDate);
 
   return (
-    <article className="flex min-h-16 items-center gap-3 px-2 sm:px-4">
+    <article
+      className={`flex min-h-16 items-center gap-3 px-2 sm:px-4 ${TASK_PLANNING_ITEM_FRAME_CLASS} ${TASK_PLANNING_ITEM_BACKGROUND_CLASS}`}
+      data-task-planning-card
+    >
       {terminal ? (
         <TerminalIcon
           className={`h-5 w-5 shrink-0 ${completed ? 'text-success' : 'text-muted-foreground'}`}

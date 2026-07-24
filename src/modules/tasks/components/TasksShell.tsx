@@ -126,6 +126,9 @@ import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
 import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView';
 import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
 import {
+  TASK_PLANNING_ITEM_BACKGROUND_CLASS,
+  TASK_PLANNING_ITEM_FRAME_CLASS,
+  TASK_PLANNING_LIST_CLASS,
   TaskPlanningProjectItem,
   TaskPlanningProjects,
 } from '@/modules/tasks/components/TaskPlanningProjects';
@@ -1580,7 +1583,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
           {creationDraft ? (
             <section aria-label="New Task">
-              <div className="border-y border-[hsl(var(--grid-sticky-line))]">
+              <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
                 {renderActiveTask(creationDraft.task, [creationDraft.task])}
               </div>
             </section>
@@ -1906,7 +1909,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                           Tasks
                           <TaskCountBadge count={tasks.length} label="Tasks" />
                         </h3>
-                        <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+                        <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
                           {tasks.map((task) => renderActiveTask(task, tasks))}
                         </div>
                       </section>
@@ -2570,7 +2573,7 @@ function TodayTaskSections({
               {label}
               <TaskCountBadge count={sectionTasks.length} label="To-Dos" />
             </h3>
-            <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+            <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
               {sectionTasks.map((task) => renderTask(task, sectionTasks))}
             </div>
           </section>
@@ -2614,7 +2617,7 @@ function UpcomingTaskSections({
               {section.label}
               <TaskCountBadge count={section.entries.length} label="Items" />
             </h3>
-            <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+            <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
               {section.entries.map((entry) => entry.kind === 'project'
                 ? renderProject(entry.item)
                 : renderTask(entry.item, sectionTasks))}
@@ -2956,10 +2959,13 @@ function TaskRow({
         suppressClickUntilRef.current = Date.now() + 250;
       }}
       className={[
-        'relative grid transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none',
+        `relative grid ${TASK_PLANNING_ITEM_FRAME_CLASS} transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none`,
         terminalExiting ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100',
-        selected || bulkSelection?.selected ? 'bg-foreground/[0.04]' : '',
+        selected || bulkSelection?.selected
+          ? 'bg-foreground/[0.05]'
+          : TASK_PLANNING_ITEM_BACKGROUND_CLASS,
       ].filter(Boolean).join(' ') || undefined}
+      data-task-planning-card
       data-terminal-exiting={terminalExiting ? 'true' : undefined}
     >
       {dragPlacement ? (
@@ -3075,7 +3081,7 @@ function TaskRow({
             || (reminder && (task.start_date || task.today_section))
           ) ? (
             <span
-              className="flex min-w-0 items-center gap-x-2.5 overflow-hidden whitespace-nowrap text-xs font-normal leading-4 text-muted-foreground"
+              className="mt-0.5 flex min-w-0 items-center gap-x-2.5 overflow-hidden whitespace-nowrap text-xs font-normal leading-4 text-muted-foreground"
               data-task-row-metadata
             >
               {hierarchyLabel ? (

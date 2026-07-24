@@ -1792,7 +1792,7 @@ The system SHALL use the active view name, compact self-evident controls, progre
 - **THEN** compact icon-only controls open title-only keyboard-complete BathOS dialogs and restore trigger focus after close
 
 ### Requirement: Consistent Tasks list density
-The interface SHALL present count-bearing Tasks list and grouping headings with compact numeric badges and SHALL keep every collapsed to-do row at a dense uniform height independent of its secondary metadata.
+The interface SHALL present count-bearing Tasks list and grouping headings with compact numeric badges, SHALL keep every collapsed to-do at a dense uniform height, and SHALL bound primary planning items with subtle individual rounded rectangles.
 
 #### Scenario: Present grouping totals as badges
 - **WHEN** a Tasks list or grouping heading includes an item total
@@ -1808,11 +1808,19 @@ The interface SHALL present count-bearing Tasks list and grouping headings with 
 
 #### Scenario: Use compact internal spacing
 - **WHEN** a collapsed to-do row renders its title, optional metadata, checkbox, source, and actions
-- **THEN** it uses compact horizontal padding and gaps and keeps the title and metadata lines close enough to maximize visible rows without clipping controls or text
+- **THEN** it uses compact horizontal padding and gaps and gives the title and metadata lines a small visible separation without clipping controls or text
+
+#### Scenario: Bound planning items individually
+- **WHEN** a primary Today, Upcoming, Anytime, or Someday planning list renders adjacent active to-dos or planning projects
+- **THEN** each item appears inside its own rounded rectangle with a quiet semantic border, a barely differentiated dark surface, no shadow, and a very small gap before the next item
+
+#### Scenario: Preserve interactive card states
+- **WHEN** a planning item is selected, bulk-selected, focused, dragged, terminally transitioning, or expanded
+- **THEN** its interaction treatment remains visible and contained within the same rounded boundary
 
 #### Scenario: Preserve expanded editing
 - **WHEN** a user opens a to-do
-- **THEN** the complete editor expands beneath the fixed-height row header without clipping the editor content
+- **THEN** the complete editor expands inside the selected rectangle beneath the fixed-height row header without clipping the editor content
 
 ### Requirement: Module Isolation
 The task module SHALL remain removable without importing code from another BathOS module or requiring another module's data.
