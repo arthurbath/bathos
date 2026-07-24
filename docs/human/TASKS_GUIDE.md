@@ -24,7 +24,7 @@ BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/ta
 
 Today, Upcoming, Anytime, and Someday remain directly available in the primary navigation. Open More for Projects, Templates, Done, and Config.
 
-Press `Command+N` on Mac or `Control+N` on Windows from Today, Anytime, or Someday to focus the capture field. Today and Anytime captures begin as active Next work without a Start Date. Someday captures remain inactive and undated. Raycast and Mail capture use the same active Next default unless they explicitly request another valid placement.
+Press `Control+N` on Mac or `Control+Shift+N` on Windows from Today, Upcoming, Anytime, or Someday to insert a blank complete task editor at the top of the view. Today drafts begin in Today Now. Anytime and Upcoming drafts begin as unplanned Anytime work, so an Upcoming draft leaves that view after it is saved unless a future Start or Deadline makes it visible there. Someday drafts remain inactive and undated. Raycast and Mail capture use their own explicit placement rules.
 
 Use Start Date only to defer work to a future owner-local date. Today and earlier dates are rejected. Day Horizon independently records Inbox, Now, Next, or Later for active Today work and the section a deferred item will enter. Assigning a Start Date defaults a missing horizon to Next. When that date arrives, local and server activation clear Start Date while retaining the horizon. A future Start Date controls Upcoming placement even when it is later than the deadline. If no future start exists, a future deadline controls Upcoming placement instead. Upcoming groups tomorrow through the next seven days individually, later work through the next 12 months by month, and more distant work by year. Active undated work remains in Anytime and appears in Today whenever it has a horizon.
 
@@ -34,26 +34,49 @@ Structured webpage, file, reading-item, and Mail sources remain distinct from th
 
 ## Keyboard Commands
 
-Press `Command+/` on Mac or `Control+/` on Windows to open the current keyboard and pointer reference. The panel always shows Mac and Windows commands and identifies the current platform. Tasks claims every command listed below before browser-level keyboard handling while the module is mounted.
+Press `Command+/` on Mac or `Control+/` on Windows to open the current keyboard and pointer reference. The panel always shows Mac and Windows commands and identifies the current platform. Tasks reserves the Control-based task commands while the module is mounted, including when a text field is active. Standard Command shortcuts on Mac and Control shortcuts on Windows retain their expected browser and operating-system intent except where Tasks supplies the matching task-level behavior described below. There is currently no keyboard shortcut for Find.
 
 | Action | Mac | Windows |
 | --- | --- | --- |
-| Capture a task | `Command+N` | `Control+N` |
 | Open keyboard help | `Command+/` | `Control+/` |
-| Open Today, Upcoming, Anytime, Someday, Projects, Templates, Done, or Config | `Command+1` through `Command+8` | `Control+1` through `Control+8` |
 | Undo the latest safe task change | `Command+Z` | `Control+Z` |
-| Redo the latest undone task change | `Command+Shift+Z` | `Control+Shift+Z` |
-| Open the first task or the next task down | `Control+S` | `Control+Shift+S` |
-| Open the last task or the previous task up | `Control+W` | `Control+Shift+W` |
-| Mark the open task complete or incomplete | `Control+D` | `Control+Shift+D` |
-| Close the open task and clear page focus | `Control+X` | Unavailable |
+| Redo the latest undone task change | `Command+Shift+Z` or `Command+Y` | `Control+Y` |
+| Select all visible to-dos | `Command+A` | `Control+A` |
+| Duplicate the open or selected to-dos | `Command+D` | `Control+D` |
+| Cut selected to-dos | `Command+X` | `Control+X` |
+| Copy selected to-dos | `Command+C` | `Control+C` |
+| Paste to-dos or text | `Command+V` | `Control+V` |
+| Close an open to-do | `Command+Return` or `Command+Escape` | `Control+Return` |
+
+Cut, Copy, Paste, and Select All remain native when an editable text control owns the command. Outside text editing, task Cut and Copy require selection mode. Paste reconstructs a structured BathOS Tasks payload when available. Other nonblank clipboard text becomes one new task whose Title contains the clipboard text. Today paste produces Today Inbox work. Anytime paste produces unplanned Anytime work. Someday paste produces undated Someday work. Area and project detail views apply their visible organization. Upcoming, Done, Config, Projects, Templates, and Search reject task paste.
+
+| Task-specific action | Mac | Windows |
+| --- | --- | --- |
+| New task | `Control+N` | `Control+Shift+N` |
+| Open Today | `Control+W` | `Control+Shift+W` |
+| Open Upcoming | `Control+E` | `Control+Shift+E` |
+| Open Anytime | `Control+R` | `Control+Shift+R` |
+| Open Someday | `Control+T` | `Control+Shift+T` |
+| Open Done | `Control+Y` | `Control+Shift+Y` |
+| Open Config | `Control+U` | `Control+Shift+U` |
+| Toggle Done | `Control+A` | `Control+Shift+A` |
+| Open the previous to-do | `Control+S` | `Control+Shift+S` |
+| Choose Start | `Control+D` | `Control+Shift+D` |
+| Cycle Day Horizon | `Control+F` | `Control+Shift+F` |
+| Cycle Actionability | `Control+G` | `Control+Shift+G` |
+| Edit Reminder Time | `Control+H` | `Control+Shift+H` |
+| Close the open to-do | `Control+Z` | `Control+Shift+Z` |
+| Open the next to-do | `Control+X` | `Control+Shift+X` |
+| Choose Deadline | `Control+C` | `Control+Shift+C` |
+| Choose Area or Project | `Control+V` | `Control+Shift+V` |
+| Checklist editing, reserved | `Control+B` | `Control+Shift+B` |
 | Reorder the focused task | `Option+Up/Down` | `Alt+Up/Down` |
 
-The numbered views are Today, Upcoming, Anytime, Someday, Projects, Templates, Done, and Config in that order. Open-next and open-previous do not wrap at the list boundaries. Opening a task puts the insertion point at the end of its title and scrolls only as much as needed to reveal it. Marking an open task complete keeps it open so its metadata can still be edited. Tasks moves it to Done only when the editor closes. Clicking the checkbox of a closed task completes it immediately.
+Open-next and open-previous do not wrap at the list boundaries. With no open task, Open Next starts at the top and Open Previous starts at the bottom. Opening a task puts the insertion point at the end of its Title and scrolls only as much as needed to reveal it. Marking an open task complete keeps it open so its metadata can still be edited. Tasks moves it to Done only when the editor closes. Clicking the checkbox of a closed task completes it immediately.
 
 Tasks retains up to 100 safe forward changes for keyboard undo and redo. Each accepted autosave batch is an ordinary forward change, and a new forward change clears the redo path. The client rebuilds that cursor when synchronized history changes and temporarily withholds undo or redo until the current task and cursor-tip snapshots agree. It never skips an unsafe latest event to reach older history. The server independently rejects any stale inverse, preventing older work from overwriting intervening changes.
 
-Command-click on Mac or Control-click on Windows enters selection mode and toggles a task. Shift-click replaces the selection with the contiguous range between the original anchor and the newly clicked task. Once selection mode is active, an ordinary click also toggles a task. Choose `Done` in the selection bar to return to ordinary single-click editing.
+Command-click on Mac or Control-click on Windows enters selection mode and toggles a task. Shift-click replaces the selection with the contiguous range between the original anchor and the newly clicked task. Once selection mode is active, an ordinary click also toggles a task. Choose `Done` in the selection bar to return to ordinary single-click editing. Done rows support selection for Copy and Duplicate. Cut is unavailable there because Done represents terminal history rather than present work.
 
 Drag a Today task before or after a task in another visible Today section to change its day horizon and order together. Empty Today sections remain hidden and do not act as drop zones. Dragging within Anytime or Someday changes order only. Keyboard and row-menu reorder commands remain section-bounded alternatives.
 

@@ -76,6 +76,7 @@ import type {
   TaskPlanningMoveInput,
 } from '@/modules/tasks/data/taskRepository';
 import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
+import { TaskClipboardService } from '@/modules/tasks/data/taskClipboardService';
 import {
   addTaskCalendarDays,
   formatTaskDateControlLabel,
@@ -169,8 +170,13 @@ import {
   type TaskKeyboardCommand,
 } from '@/modules/tasks/domain/taskKeyboardCommands';
 import {
+  parseTaskClipboard,
+  serializeTaskClipboard,
+  type TaskClipboardDestination,
+  type TaskClipboardSnapshot,
+} from '@/modules/tasks/domain/taskClipboard';
+import {
   cycleTaskShortcutHorizon,
-  getTaskTodayShortcutHorizon,
 } from '@/modules/tasks/domain/taskShortcutPlanning';
 import {
   NEW_TASK_DRAFT_ID,
@@ -215,8 +221,7 @@ const taskCommandPaths: Partial<Record<TaskKeyboardCommand, string>> = {
   'view-upcoming': '/upcoming',
   'view-anytime': '/anytime',
   'view-someday': '/someday',
-  'view-projects': '/projects',
-  'view-templates': '/templates',
+  'view-done': '/done',
   'view-config': '/config',
 };
 
@@ -264,12 +269,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const bulkEligible = view === 'today'
     || view === 'upcoming'
     || view === 'anytime'
-    || view === 'someday';
+    || view === 'someday'
+    || view === 'done';
   const {
+    database,
+    repository,
+    hierarchyRepository,
+    reminderService,
+    recurrenceService,
     mode,
     syncState,
     pendingUploadCount,
     portabilityService,
+    planningTimeZone,
     prepareForSignOut,
   } = useTasksRuntime();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -286,7 +298,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     reorderTask,
     reorderTaskTo,
     transitionTask,
-    duplicateTask,
     planningDate,
   } = useTaskList(userId, taskListView, selectedTaskId);
   const {
@@ -309,6 +320,26 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       : projectedTasks,
     [creationDraft?.persistedTaskId, projectedTasks],
   );
+  const selectableTasks = useMemo(
+    () => tasks.filter((task) => task.disposition === 'present'
+      && (view === 'done' ? task.lifecycle !== 'open' : task.lifecycle === 'open')),
+    [tasks, view],
+  );
+  const taskClipboardService = useMemo(() => new TaskClipboardService(
+    database,
+    repository,
+    hierarchyRepository,
+    reminderService,
+    recurrenceService,
+    userId,
+  ), [
+    database,
+    hierarchyRepository,
+    recurrenceService,
+    reminderService,
+    repository,
+    userId,
+  ]);
   const [deferredCompletionTaskIds, setDeferredCompletionTaskIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -651,7 +682,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [clearTaskSelection, setOpenTask, view]);
 
   useEffect(() => {
-    const visibleIds = new Set(tasks.map(({ id }) => id));
+    const visibleIds = new Set(selectableTasks.map(({ id }) => id));
     setBulkSelection((current) => {
       const next = new Set(Array.from(current).filter((taskId) => visibleIds.has(taskId)));
       return next.size === current.size ? current : next;
@@ -661,7 +692,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         ? current
         : Array.from(bulkSelection).find((taskId) => visibleIds.has(taskId)) ?? null
     ));
-  }, [bulkSelection, tasks]);
+  }, [bulkSelection, selectableTasks]);
 
   useEffect(() => {
     const parameters = new URLSearchParams(location.search);
@@ -698,16 +729,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   const getTaskCommandTargets = useCallback((): TaskTodo[] => {
     if (bulkMode && bulkSelection.size > 0) {
-      return tasks.filter((task) => bulkSelection.has(task.id));
+      return selectableTasks.filter((task) => bulkSelection.has(task.id));
     }
     const taskId = selectedTaskIdRef.current;
     if (taskId === null) return [];
     if (taskId === NEW_TASK_DRAFT_ID && creationDraftRef.current !== null) {
       return [creationDraftRef.current.task];
     }
-    const task = tasks.find((candidate) => candidate.id === taskId);
+    const task = selectableTasks.find((candidate) => candidate.id === taskId);
     return task ? [task] : [];
-  }, [bulkMode, bulkSelection, tasks]);
+  }, [bulkMode, bulkSelection, selectableTasks]);
 
   const cancelTaskReminders = useCallback(async (targets: readonly TaskTodo[]) => {
     for (const task of targets) {
@@ -730,46 +761,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
   }, [reminders]);
 
-  const runPlanningShortcut = useCallback(async (
-    command: 'today' | 'anytime' | 'someday' | 'horizon',
-  ) => {
+  const runHorizonShortcut = useCallback(async () => {
     const targets = getTaskCommandTargets();
     if (targets.length === 0) return;
     try {
-      const draftTarget = targets.find((task) => task.id === NEW_TASK_DRAFT_ID);
-      const persistedTargets = targets.filter((task) => task.id !== NEW_TASK_DRAFT_ID);
-      if (command === 'anytime' || command === 'someday') {
-        if (draftTarget) {
-          await saveCreationDraftPatch({
-            destination: command,
-            today_section: null,
-            start_date: null,
-          });
-          await cancelCreationDraftReminder();
-        }
-        if (persistedTargets.length > 0) {
-          await moveTasks(persistedTargets.map(({ id }) => id), {
-            destination: command,
-            todaySection: null,
-            startDate: null,
-          });
-          await cancelTaskReminders(persistedTargets);
-        }
-        return;
-      }
-      const eligible = command === 'horizon'
-        ? targets.filter((task) => task.start_date !== null)
-        : targets;
       const groups = new Map<string, {
         todaySection: TaskTodaySection;
         startDate: string | null;
         tasks: TaskTodo[];
       }>();
-      for (const task of eligible) {
-        const horizon = command === 'today'
-          ? getTaskTodayShortcutHorizon(task, planningDate)
-          : cycleTaskShortcutHorizon(task.today_section);
-        const startDate = command === 'today' ? null : task.start_date;
+      for (const task of targets) {
+        const horizon = cycleTaskShortcutHorizon(task.today_section);
+        const startDate = task.start_date;
         const key = `${horizon}:${startDate ?? ''}`;
         const group = groups.get(key);
         if (group) group.tasks.push(task);
@@ -795,19 +798,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           });
         }
       }
-      if (command === 'today') {
-        if (draftTarget) await cancelCreationDraftReminder();
-        await cancelTaskReminders(persistedTargets);
-      }
     } catch (shortcutError) {
       showTaskError('Task Command Could Not Be Applied', shortcutError);
     }
   }, [
-    cancelCreationDraftReminder,
-    cancelTaskReminders,
     getTaskCommandTargets,
     moveTasks,
-    planningDate,
     saveCreationDraftPatch,
   ]);
 
@@ -815,18 +811,185 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const targets = getTaskCommandTargets();
     if (targets.length === 0) return;
     try {
-      for (const task of targets) {
-        if (task.id === NEW_TASK_DRAFT_ID) {
-          const persistedTaskId = creationDraftRef.current?.persistedTaskId;
-          if (persistedTaskId) await duplicateTask(persistedTaskId);
-        } else {
-          await duplicateTask(task.id);
-        }
+      const snapshotTargets = targets.flatMap((task) => {
+        if (task.id !== NEW_TASK_DRAFT_ID) return [task];
+        const persistedTaskId = creationDraftRef.current?.persistedTaskId;
+        return persistedTaskId ? [{ ...task, id: persistedTaskId }] : [];
+      });
+      if (snapshotTargets.length === 0) return;
+      const openTaskId = selectedTaskIdRef.current;
+      const duplicatesOpenTask = targets.length === 1
+        && openTaskId !== null
+        && targets[0].id === openTaskId;
+      if (duplicatesOpenTask) {
+        const closed = await setOpenTask(null);
+        if (!closed) return;
       }
+      const snapshots = await taskClipboardService.snapshot(snapshotTargets);
+      const duplicated = await taskClipboardService.reconstruct(snapshots, {
+        destination: 'source',
+        connected: mode === 'connected',
+        planningDate,
+        planningTimeZone,
+        atTop: false,
+      });
+      if (bulkMode) clearTaskSelection();
+      if (duplicatesOpenTask && duplicated[0]) await setOpenTask(duplicated[0].id);
+      toast({
+        title: duplicated.length === 1 ? 'Task Duplicated' : 'Tasks Duplicated',
+        description: `${duplicated.length} ${duplicated.length === 1 ? 'task' : 'tasks'} created.`,
+      });
     } catch (duplicateError) {
       showTaskError('Task Could Not Be Duplicated', duplicateError);
     }
-  }, [duplicateTask, getTaskCommandTargets]);
+  }, [
+    bulkMode,
+    clearTaskSelection,
+    getTaskCommandTargets,
+    mode,
+    planningDate,
+    planningTimeZone,
+    setOpenTask,
+    taskClipboardService,
+  ]);
+
+  const getClipboardDestination = useCallback((): TaskClipboardDestination | null => {
+    if (view === 'today' || view === 'anytime' || view === 'someday') {
+      return { kind: view };
+    }
+    if (view === 'area' && areaId) return { kind: 'area', areaId };
+    if (view === 'project' && projectId) {
+      const project = hierarchy.projects.find((candidate) => candidate.id === projectId);
+      if (!project) return null;
+      return {
+        kind: 'project',
+        projectId,
+        areaId: project.area_id,
+      };
+    }
+    return null;
+  }, [areaId, hierarchy.projects, projectId, view]);
+
+  const runTaskClipboardWrite = useCallback(async (
+    operation: 'copy' | 'cut',
+    event: ClipboardEvent,
+  ) => {
+    if (!bulkMode || bulkSelection.size === 0) return;
+    const targets = selectableTasks.filter((task) => bulkSelection.has(task.id));
+    if (targets.length === 0) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (operation === 'cut' && targets.some((task) => (
+      task.lifecycle !== 'open' || task.disposition !== 'present'
+    ))) {
+      toast({
+        title: 'Cut Not Available',
+        description: 'Tasks in Done can be copied or duplicated, but not cut.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      const serialized = taskClipboardService.snapshot(targets)
+        .then((snapshots) => serializeTaskClipboard(operation, snapshots));
+      await writeTaskClipboardText(serialized, event);
+      if (operation === 'cut') {
+        setBulkPending(true);
+        try {
+          for (const task of targets) await transitionTask(task.id, 'delete');
+          clearTaskSelection();
+        } finally {
+          setBulkPending(false);
+        }
+      }
+      toast({
+        title: operation === 'copy' ? 'Tasks Copied' : 'Tasks Cut',
+        description: `${targets.length} ${targets.length === 1 ? 'task' : 'tasks'} ${operation === 'copy' ? 'copied' : 'cut'}.`,
+      });
+    } catch (clipboardError) {
+      showTaskError(operation === 'copy' ? 'Tasks Could Not Be Copied' : 'Tasks Could Not Be Cut', clipboardError);
+    }
+  }, [
+    bulkMode,
+    bulkSelection,
+    clearTaskSelection,
+    selectableTasks,
+    taskClipboardService,
+    transitionTask,
+  ]);
+
+  const runTaskPaste = useCallback(async (text: string) => {
+    const destination = getClipboardDestination();
+    if (destination === null) {
+      toast({
+        title: 'Paste Not Available',
+        description: 'Tasks can be pasted into Today, Anytime, Someday, an area, or a project.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const parsed = parseTaskClipboard(text);
+    if (parsed.kind === 'empty') return;
+    if (parsed.kind === 'invalid-task-payload') {
+      toast({
+        title: 'Tasks Could Not Be Pasted',
+        description: parsed.reason,
+        variant: 'destructive',
+      });
+      return;
+    }
+    const snapshots: TaskClipboardSnapshot[] = parsed.kind === 'tasks'
+      ? parsed.envelope.tasks
+      : [createPlainTextTaskSnapshot(parsed.title)];
+    setBulkPending(true);
+    try {
+      const created = await taskClipboardService.reconstruct(snapshots, {
+        destination,
+        connected: mode === 'connected',
+        planningDate,
+        planningTimeZone,
+        atTop: true,
+      });
+      clearTaskSelection();
+      toast({
+        title: created.length === 1 ? 'Task Pasted' : 'Tasks Pasted',
+        description: `${created.length} ${created.length === 1 ? 'task' : 'tasks'} pasted.`,
+      });
+    } catch (pasteError) {
+      showTaskError('Tasks Could Not Be Pasted', pasteError);
+    } finally {
+      setBulkPending(false);
+    }
+  }, [
+    clearTaskSelection,
+    getClipboardDestination,
+    mode,
+    planningDate,
+    planningTimeZone,
+    taskClipboardService,
+  ]);
+
+  const runCycleActionabilityShortcut = useCallback(async () => {
+    const targets = getTaskCommandTargets();
+    if (targets.length === 0) return;
+    const nextActionability = {
+      actionable: 'waiting',
+      waiting: 'rechecking',
+      rechecking: 'actionable',
+    } as const;
+    try {
+      for (const task of targets) {
+        const actionability = nextActionability[task.actionability];
+        if (task.id === NEW_TASK_DRAFT_ID) {
+          await saveCreationDraftPatch({ actionability });
+        } else if (task.lifecycle === 'open' && task.disposition === 'present') {
+          await updateTask(task.id, { actionability });
+        }
+      }
+    } catch (cycleError) {
+      showTaskError('Task Actionability Could Not Be Changed', cycleError);
+    }
+  }, [getTaskCommandTargets, saveCreationDraftPatch, updateTask]);
 
   const openTaskCommandField = useCallback((
     mode: TaskBulkCommandMode,
@@ -878,15 +1041,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   const runToggleCompletionShortcut = useCallback(async () => {
     if (bulkMode && bulkSelection.size > 0) {
-      const targetIds = tasks
-        .filter((task) => bulkSelection.has(task.id))
-        .map(({ id }) => id);
+      const targets = selectableTasks.filter((task) => bulkSelection.has(task.id));
       setBulkPending(true);
       try {
-        for (const taskId of targetIds) await transitionTask(taskId, 'complete');
+        for (const task of targets) {
+          await transitionTask(task.id, task.lifecycle === 'open' ? 'complete' : 'reopen');
+        }
         clearTaskSelection();
       } catch (completeError) {
-        showTaskError('Selected Tasks Could Not Be Completed', completeError);
+        showTaskError('Selected Tasks Could Not Be Toggled', completeError);
       } finally {
         setBulkPending(false);
       }
@@ -898,10 +1061,37 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     bulkMode,
     bulkSelection,
     clearTaskSelection,
-    tasks,
+    selectableTasks,
     toggleDeferredCompletion,
     transitionTask,
   ]);
+
+  useEffect(() => {
+    const handleCopy = (event: ClipboardEvent) => {
+      if (isTaskEditableTarget(event.target)) return;
+      void runTaskClipboardWrite('copy', event);
+    };
+    const handleCut = (event: ClipboardEvent) => {
+      if (isTaskEditableTarget(event.target)) return;
+      void runTaskClipboardWrite('cut', event);
+    };
+    const handlePaste = (event: ClipboardEvent) => {
+      if (isTaskEditableTarget(event.target)) return;
+      const text = event.clipboardData?.getData('text/plain') ?? '';
+      if (!text) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void runTaskPaste(text);
+    };
+    window.addEventListener('copy', handleCopy, true);
+    window.addEventListener('cut', handleCut, true);
+    window.addEventListener('paste', handlePaste, true);
+    return () => {
+      window.removeEventListener('copy', handleCopy, true);
+      window.removeEventListener('cut', handleCut, true);
+      window.removeEventListener('paste', handlePaste, true);
+    };
+  }, [runTaskClipboardWrite, runTaskPaste]);
 
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -923,13 +1113,23 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       }
       const command = getTaskKeyboardCommand(event, macLikePlatform);
       if (command === null) return;
-      if (command === 'close-and-clear-focus' && selectedTaskIdRef.current === null) return;
+      if (
+        (command === 'copy' || command === 'cut' || command === 'paste')
+        && isTaskEditableTarget(event.target)
+      ) return;
+      if (command === 'copy' || command === 'cut' || command === 'paste') return;
+      if (command === 'close-task' && selectedTaskIdRef.current === null) return;
+      if (command === 'duplicate' && getTaskCommandTargets().length === 0) return;
       if (command === 'select-all') {
-        if (isTaskEditableTarget(event.target) || !bulkEligible || tasks.length === 0) return;
+        if (
+          isTaskEditableTarget(event.target)
+          || !bulkEligible
+          || selectableTasks.length === 0
+        ) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         if (event.isComposing) return;
-        const visibleTaskIds = tasks.map(({ id }) => id);
+        const visibleTaskIds = selectableTasks.map(({ id }) => id);
         void setOpenTask(null).then((closed) => {
           if (!closed) return;
           setBulkMode(true);
@@ -954,13 +1154,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         void beginTaskCreation();
         return;
       }
-      if (command === 'find') {
-        commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null;
-        setQuickFindOpen(true);
-        return;
-      }
       if (command === 'help') {
         commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
           ? document.activeElement
@@ -975,29 +1168,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         });
         return;
       }
-      if (command === 'complete-open') {
-        const taskId = selectedTaskIdRef.current;
-        if (taskId !== null) toggleDeferredCompletion(taskId);
-        return;
-      }
       if (command === 'toggle-completion') {
         void runToggleCompletionShortcut();
         return;
       }
-      if (command === 'plan-today') {
-        void runPlanningShortcut('today');
-        return;
-      }
-      if (command === 'plan-anytime') {
-        void runPlanningShortcut('anytime');
-        return;
-      }
-      if (command === 'plan-someday') {
-        void runPlanningShortcut('someday');
-        return;
-      }
       if (command === 'cycle-horizon') {
-        void runPlanningShortcut('horizon');
+        void runHorizonShortcut();
+        return;
+      }
+      if (command === 'cycle-actionability') {
+        void runCycleActionabilityShortcut();
         return;
       }
       if (command === 'duplicate') {
@@ -1028,7 +1208,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         openRelativeTask(-1);
         return;
       }
-      if (command === 'close-and-clear-focus') void setOpenTask(null, true);
+      if (command === 'open-checklist') return;
+      if (command === 'close-task') void setOpenTask(null, true);
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
@@ -1043,13 +1224,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     bulkMode,
     bulkWhenOpen,
     clearTaskSelection,
+    getTaskCommandTargets,
     keyboardHelpOpen,
     macLikePlatform,
     navigate,
     openTaskCommandField,
     openRelativeTask,
     runDuplicateShortcut,
-    runPlanningShortcut,
+    runCycleActionabilityShortcut,
+    runHorizonShortcut,
     runToggleCompletionShortcut,
     runTaskRedo,
     runTaskUndo,
@@ -1057,8 +1240,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     taskRedoAvailable,
     taskUndoAvailable,
     taskUndoPending,
-    tasks,
-    toggleDeferredCompletion,
+    selectableTasks,
     searchOpen,
     quickFindOpen,
   ]);
@@ -1289,6 +1471,29 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     event.preventDefault();
     void setOpenTask(null);
+    setBulkMode(next.active);
+    setBulkSelectionAnchorId(next.anchorId);
+    setBulkSelection(next.selectedIds);
+  };
+
+  const handleDoneTaskPointerSelection = (
+    event: MouseEvent<HTMLButtonElement>,
+    taskId: string,
+  ) => {
+    const next = applyTaskSelectionGesture({
+      active: bulkMode,
+      anchorId: bulkSelectionAnchorId,
+      selectedIds: bulkSelection,
+    }, {
+      taskId,
+      visibleTaskIds: selectableTasks.map(({ id }) => id),
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      macLikePlatform,
+    });
+    if (next === null) return;
+    event.preventDefault();
     setBulkMode(next.active);
     setBulkSelectionAnchorId(next.anchorId);
     setBulkSelection(next.selectedIds);
@@ -1544,7 +1749,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 variant="clear"
                 size="icon"
                 aria-label="New Task"
-                aria-keyshortcuts="Meta+N Control+N"
+                aria-keyshortcuts="Control+N Control+Shift+N"
                 onClick={() => void beginTaskCreation()}
                 className="h-9 w-9 text-muted-foreground"
               >
@@ -1777,6 +1982,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         <DoneTaskRow
                           key={task.id}
                           task={task}
+                          bulkSelection={bulkMode ? {
+                            selected: bulkSelection.has(task.id),
+                            onSelect: (event) => handleDoneTaskPointerSelection(event, task.id),
+                          } : {
+                            selected: false,
+                            onSelect: (event) => handleDoneTaskPointerSelection(event, task.id),
+                          }}
                           onReopen={async () => {
                             try {
                               await transitionTask(task.id, 'reopen');
@@ -1939,9 +2151,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       {bulkMode ? (
         <TaskBulkToolbar
           selectedCount={bulkSelection.size}
-          totalCount={tasks.length}
+          totalCount={selectableTasks.length}
           pending={bulkPending}
-          onSelectAll={() => setBulkSelection(new Set(tasks.map(({ id }) => id)))}
+          planningAvailable={view !== 'done'}
+          onSelectAll={() => setBulkSelection(new Set(selectableTasks.map(({ id }) => id)))}
           onClear={() => setBulkSelection(new Set())}
           onPlan={() => openCommandSurface(setBulkWhenOpen)}
           onDone={() => {
@@ -2040,6 +2253,7 @@ function TaskBulkToolbar({
   selectedCount,
   totalCount,
   pending,
+  planningAvailable,
   onSelectAll,
   onClear,
   onPlan,
@@ -2048,6 +2262,7 @@ function TaskBulkToolbar({
   selectedCount: number;
   totalCount: number;
   pending: boolean;
+  planningAvailable: boolean;
   onSelectAll: () => void;
   onClear: () => void;
   onPlan: () => void;
@@ -2080,15 +2295,17 @@ function TaskBulkToolbar({
       >
         Select None
       </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={pending || selectedCount === 0}
-        onClick={onPlan}
-      >
-        Plan Selected
-      </Button>
+      {planningAvailable ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending || selectedCount === 0}
+          onClick={onPlan}
+        >
+          Plan Selected
+        </Button>
+      ) : null}
       <Button type="button" variant="clear" size="sm" disabled={pending} onClick={onDone}>
         Done
       </Button>
@@ -2421,9 +2638,14 @@ function TaskWebPushCapability({
 
 function DoneTaskRow({
   task,
+  bulkSelection,
   onReopen,
 }: {
   task: TaskTodo;
+  bulkSelection: {
+    selected: boolean;
+    onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
+  };
   onReopen: () => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
@@ -2445,25 +2667,43 @@ function DoneTaskRow({
   return (
     <article
       tabIndex={-1}
+      data-task-row-id={task.id}
       data-task-search-id={task.id}
-      className="flex min-h-16 items-center gap-3 px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4"
+      className={[
+        'flex min-h-16 items-center gap-3 px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4',
+        bulkSelection.selected ? 'bg-info/10 ring-1 ring-inset ring-info/40' : '',
+      ].filter(Boolean).join(' ')}
     >
-      <Icon
-        className={`h-5 w-5 shrink-0 ${completed ? 'text-success' : 'text-muted-foreground'}`}
-        aria-hidden="true"
-      />
-      <div className="min-w-0 flex-1 py-3">
-        <p className="truncate text-[15px] font-medium leading-5 text-foreground">{task.title}</p>
-        <p className="text-xs text-muted-foreground">
-          {completed ? 'Completed' : 'Canceled'}
-          {terminalAt ? (
-            <>
-              {' · '}
-              <time dateTime={terminalAt}>{formatTaskTerminalDate(terminalAt)}</time>
-            </>
-          ) : null}
-        </p>
-      </div>
+      <button
+        type="button"
+        aria-pressed={bulkSelection.selected}
+        aria-label={`${bulkSelection.selected ? 'Deselect' : 'Select'} ${task.title}`}
+        className="flex min-w-0 flex-1 items-center gap-3 py-3 text-left"
+        onClick={bulkSelection.onSelect}
+      >
+        {bulkSelection.selected ? (
+          <SquareCheckBig className="h-5 w-5 shrink-0 text-info" aria-hidden="true" />
+        ) : (
+          <Icon
+            className={`h-5 w-5 shrink-0 ${completed ? 'text-success' : 'text-muted-foreground'}`}
+            aria-hidden="true"
+          />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-medium leading-5 text-foreground">
+            {task.title}
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            {completed ? 'Completed' : 'Canceled'}
+            {terminalAt ? (
+              <>
+                {' · '}
+                <time dateTime={terminalAt}>{formatTaskTerminalDate(terminalAt)}</time>
+              </>
+            ) : null}
+          </span>
+        </span>
+      </button>
       <TaskSourceIndicator task={task} />
       <Button
         type="button"
@@ -2768,12 +3008,14 @@ function TaskRow({
 
       setEditorExpanded(false);
       editorAnimationFrameRef.current = window.requestAnimationFrame(() => {
-        editorAnimationFrameRef.current = null;
-        setEditorExpanded(true);
-        editorScrollFrameRef.current = window.requestAnimationFrame(() => {
-          editorScrollFrameRef.current = null;
-          articleRef.current?.querySelector<HTMLElement>('[data-task-editor-title]')
-            ?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+        editorAnimationFrameRef.current = window.requestAnimationFrame(() => {
+          editorAnimationFrameRef.current = null;
+          setEditorExpanded(true);
+          editorScrollFrameRef.current = window.requestAnimationFrame(() => {
+            editorScrollFrameRef.current = null;
+            articleRef.current?.querySelector<HTMLElement>('[data-task-editor-title]')
+              ?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+          });
         });
       });
       return cancelScheduledMotion;
@@ -3502,7 +3744,7 @@ function TaskEditor({
         ref={titleInputRef}
         id={`task-title-${task.id}`}
         data-task-editor-title
-        aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Shift+X"
+        aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Z Control+Shift+Z"
         value={title}
         onChange={(event) => {
           const nextTitle = event.target.value;
@@ -3675,6 +3917,50 @@ function TaskEditor({
       </div>
     </div>
   );
+}
+
+async function writeTaskClipboardText(
+  textPromise: Promise<string>,
+  event: ClipboardEvent,
+): Promise<void> {
+  if (
+    typeof ClipboardItem !== 'undefined'
+    && globalThis.navigator?.clipboard?.write
+  ) {
+    const item = new ClipboardItem({
+      'text/plain': textPromise.then((text) => new Blob([text], { type: 'text/plain' })),
+    });
+    await globalThis.navigator.clipboard.write([item]);
+    return;
+  }
+  const text = await textPromise;
+  if (event.clipboardData) {
+    event.clipboardData.setData('text/plain', text);
+    return;
+  }
+  if (globalThis.navigator?.clipboard?.writeText) {
+    await globalThis.navigator.clipboard.writeText(text);
+    return;
+  }
+  throw new Error('The browser clipboard is unavailable');
+}
+
+function createPlainTextTaskSnapshot(title: string): TaskClipboardSnapshot {
+  return {
+    title,
+    notes: '',
+    primaryLink: null,
+    destination: 'anytime',
+    todaySection: null,
+    startDate: null,
+    deadline: null,
+    actionability: 'actionable',
+    areaId: null,
+    projectId: null,
+    checklist: [],
+    reminder: null,
+    recurrence: null,
+  };
 }
 
 function showTaskError(title: string, error: unknown): void {

@@ -15,7 +15,12 @@ import {
 
 const detectedAt = '2026-07-20T05:00:00.000Z';
 
-function taskInsertEntry(destination: 'anytime' | 'someday' = 'anytime') {
+function taskInsertEntry(
+  destination: 'anytime' | 'someday' = 'anytime',
+  todaySection: 'inbox' | 'now' | 'next' | 'later' | null = destination === 'someday'
+    ? null
+    : 'later',
+) {
   return new CrudEntry(1, UpdateType.PUT, 'tasks_todos', 'task-a', 1, {
     owner_id: 'owner-a',
     title: 'Offline task',
@@ -23,7 +28,7 @@ function taskInsertEntry(destination: 'anytime' | 'someday' = 'anytime') {
     lifecycle: 'open',
     disposition: 'present',
     destination,
-    today_section: destination === 'someday' ? 'none' : 'later',
+    today_section: todaySection,
     actionability: 'actionable',
     order_key: 'a0',
     start_date: null,
@@ -246,6 +251,22 @@ describe('task sync connector', () => {
         expect.objectContaining({ destination }),
       );
     }
+  });
+
+  it('preserves an explicit null Today horizon for unplanned inserts', async () => {
+    const { connector, database, remoteStore } = createHarness(
+      taskInsertEntry('anytime', null),
+    );
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.insertTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destination: 'anytime',
+        today_section: null,
+        start_date: null,
+      }),
+    );
   });
 
   it('uses the prior revision as the optimistic update precondition', async () => {

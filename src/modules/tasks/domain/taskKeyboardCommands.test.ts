@@ -12,83 +12,76 @@ const gesture = (overrides: Partial<KeyboardEvent> = {}) => ({
 } as KeyboardEvent);
 
 describe('getTaskKeyboardCommand', () => {
-  it('maps Mac application commands and numbered views', () => {
-    expect(getTaskKeyboardCommand(gesture({ key: 'n', metaKey: true }), true)).toBe('capture');
-    expect(getTaskKeyboardCommand(gesture({ key: 'k', metaKey: true }), true))
-      .toBe('toggle-completion');
+  it('maps the approved Mac Command actions', () => {
+    expect(getTaskKeyboardCommand(gesture({ key: 'n', metaKey: true }), true)).toBeNull();
     expect(getTaskKeyboardCommand(gesture({ key: 'Enter', metaKey: true }), true))
-      .toBeNull();
+      .toBe('close-task');
+    expect(getTaskKeyboardCommand(gesture({ key: 'Escape', metaKey: true }), true))
+      .toBe('close-task');
     expect(getTaskKeyboardCommand(gesture({ key: '/', metaKey: true }), true)).toBe('help');
-    expect(getTaskKeyboardCommand(gesture({ key: 'f', metaKey: true }), true)).toBe('find');
-    expect(getTaskKeyboardCommand(gesture({ key: '1', metaKey: true }), true)).toBe('view-today');
-    expect(getTaskKeyboardCommand(gesture({ key: ',', metaKey: true }), true)).toBe('view-config');
-    expect(getTaskKeyboardCommand(gesture({ key: 't', metaKey: true }), true)).toBe('plan-today');
-    expect(getTaskKeyboardCommand(gesture({ key: 'r', metaKey: true }), true)).toBe('plan-anytime');
-    expect(getTaskKeyboardCommand(gesture({ key: 'o', metaKey: true }), true)).toBe('plan-someday');
-    expect(getTaskKeyboardCommand(gesture({ key: 'd', metaKey: true }), true)).toBe('open-deadline');
-    expect(getTaskKeyboardCommand(
-      gesture({ key: 'd', metaKey: true, shiftKey: true }),
-      true,
-    )).toBe('duplicate');
-    expect(getTaskKeyboardCommand(gesture({ key: 's', metaKey: true }), true)).toBe('open-start-date');
-    expect(getTaskKeyboardCommand(gesture({ key: 'm', metaKey: true }), true)).toBe('open-organization');
-    expect(getTaskKeyboardCommand(gesture({ key: 'h', metaKey: true }), true)).toBe('cycle-horizon');
-    expect(getTaskKeyboardCommand(gesture({ key: 'e', metaKey: true }), true)).toBe('focus-reminder');
+    expect(getTaskKeyboardCommand(gesture({ key: 'd', metaKey: true }), true)).toBe('duplicate');
+    expect(getTaskKeyboardCommand(gesture({ key: 'x', metaKey: true }), true)).toBe('cut');
+    expect(getTaskKeyboardCommand(gesture({ key: 'c', metaKey: true }), true)).toBe('copy');
+    expect(getTaskKeyboardCommand(gesture({ key: 'v', metaKey: true }), true)).toBe('paste');
     expect(getTaskKeyboardCommand(gesture({ key: 'z', metaKey: true }), true)).toBe('undo');
     expect(getTaskKeyboardCommand(gesture({ key: 'a', metaKey: true }), true)).toBe('select-all');
     expect(getTaskKeyboardCommand(
       gesture({ key: 'z', metaKey: true, shiftKey: true }),
       true,
     )).toBe('redo');
+    expect(getTaskKeyboardCommand(gesture({ key: 'y', metaKey: true }), true)).toBe('redo');
+    expect(getTaskKeyboardCommand(gesture({ key: 'f', metaKey: true }), true)).toBeNull();
+    expect(getTaskKeyboardCommand(gesture({ key: '1', metaKey: true }), true)).toBeNull();
   });
 
-  it('maps Windows application commands and numbered views', () => {
-    expect(getTaskKeyboardCommand(gesture({ key: 'n', ctrlKey: true }), false)).toBe('capture');
-    expect(getTaskKeyboardCommand(gesture({ key: 'k', ctrlKey: true }), false))
-      .toBe('toggle-completion');
+  it('maps Windows application commands without colliding redo and close', () => {
+    expect(getTaskKeyboardCommand(gesture({ key: 'n', ctrlKey: true }), false)).toBeNull();
     expect(getTaskKeyboardCommand(gesture({ key: 'Enter', ctrlKey: true }), false))
-      .toBeNull();
+      .toBe('close-task');
+    expect(getTaskKeyboardCommand(gesture({ key: 'Escape', ctrlKey: true }), false))
+      .toBe('close-task');
     expect(getTaskKeyboardCommand(gesture({ key: '/', ctrlKey: true }), false)).toBe('help');
-    expect(getTaskKeyboardCommand(gesture({ key: 'f', ctrlKey: true }), false)).toBe('find');
-    expect(getTaskKeyboardCommand(gesture({ key: '5', ctrlKey: true }), false)).toBe('view-projects');
-    expect(getTaskKeyboardCommand(gesture({ key: '7', ctrlKey: true }), false)).toBeNull();
-    expect(getTaskKeyboardCommand(gesture({ key: ',', ctrlKey: true }), false)).toBe('view-config');
-    expect(getTaskKeyboardCommand(gesture({ key: 't', ctrlKey: true }), false)).toBe('plan-today');
-    expect(getTaskKeyboardCommand(gesture({ key: 'd', ctrlKey: true }), false)).toBe('open-deadline');
+    expect(getTaskKeyboardCommand(gesture({ key: 'd', ctrlKey: true }), false)).toBe('duplicate');
+    expect(getTaskKeyboardCommand(gesture({ key: 'x', ctrlKey: true }), false)).toBe('cut');
+    expect(getTaskKeyboardCommand(gesture({ key: 'c', ctrlKey: true }), false)).toBe('copy');
+    expect(getTaskKeyboardCommand(gesture({ key: 'v', ctrlKey: true }), false)).toBe('paste');
     expect(getTaskKeyboardCommand(gesture({ key: 'z', ctrlKey: true }), false)).toBe('undo');
     expect(getTaskKeyboardCommand(gesture({ key: 'a', ctrlKey: true }), false)).toBe('select-all');
+    expect(getTaskKeyboardCommand(gesture({ key: 'y', ctrlKey: true }), false)).toBe('redo');
     expect(getTaskKeyboardCommand(
       gesture({ key: 'z', ctrlKey: true, shiftKey: true }),
       false,
-    )).toBe('redo');
+    )).toBe('close-task');
   });
 
-  it('maps the platform-specific task traversal and lifecycle chords', () => {
-    expect(getTaskKeyboardCommand(gesture({ key: 'd', ctrlKey: true }), true))
-      .toBe('complete-open');
-    expect(getTaskKeyboardCommand(gesture({ key: 's', ctrlKey: true }), true))
-      .toBe('open-next');
-    expect(getTaskKeyboardCommand(gesture({ key: 'w', ctrlKey: true }), true))
-      .toBe('open-previous');
-    expect(getTaskKeyboardCommand(gesture({ key: 'x', ctrlKey: true }), true))
-      .toBe('close-and-clear-focus');
-
-    expect(getTaskKeyboardCommand(
-      gesture({ key: 'd', ctrlKey: true, shiftKey: true }),
-      false,
-    )).toBe('complete-open');
-    expect(getTaskKeyboardCommand(
-      gesture({ key: 's', ctrlKey: true, shiftKey: true }),
-      false,
-    )).toBe('open-next');
-    expect(getTaskKeyboardCommand(
-      gesture({ key: 'w', ctrlKey: true, shiftKey: true }),
-      false,
-    )).toBe('open-previous');
-    expect(getTaskKeyboardCommand(
-      gesture({ key: 'x', ctrlKey: true, shiftKey: true }),
-      false,
-    )).toBeNull();
+  it('maps every Tasks-specific chord on Mac and Windows', () => {
+    const bindings: Record<string, string> = {
+      w: 'view-today',
+      e: 'view-upcoming',
+      r: 'view-anytime',
+      t: 'view-someday',
+      y: 'view-done',
+      u: 'view-config',
+      a: 'toggle-completion',
+      s: 'open-previous',
+      d: 'open-start-date',
+      f: 'cycle-horizon',
+      g: 'cycle-actionability',
+      h: 'focus-reminder',
+      z: 'close-task',
+      x: 'open-next',
+      c: 'open-deadline',
+      v: 'open-organization',
+      b: 'open-checklist',
+      n: 'capture',
+    };
+    for (const [key, command] of Object.entries(bindings)) {
+      expect(getTaskKeyboardCommand(gesture({ key, ctrlKey: true }), true)).toBe(command);
+      expect(getTaskKeyboardCommand(
+        gesture({ key, ctrlKey: true, shiftKey: true }),
+        false,
+      )).toBe(command);
+    }
   });
 
   it('rejects single characters and incomplete or extra modifiers', () => {
@@ -101,7 +94,7 @@ describe('getTaskKeyboardCommand', () => {
     expect(getTaskKeyboardCommand(gesture({ key: 's', ctrlKey: true, shiftKey: true }), true))
       .toBeNull();
     expect(getTaskKeyboardCommand(gesture({ key: 's', ctrlKey: true }), false))
-      .toBe('open-start-date');
+      .toBeNull();
     expect(getTaskKeyboardCommand(
       gesture({ key: '1', ctrlKey: true, altKey: true }),
       false,
