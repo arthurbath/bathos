@@ -75,3 +75,11 @@ Rollback requires restoring the prior constraints and trigger, assigning Next to
 ## Open Questions
 
 None. Reached future work enters Today Next, preserving the prior default without storing a premature future horizon.
+
+## Production Acceptance
+
+The approved release completed on 2026 Jul 25. A fresh owner-only logical backup was written immediately before production mutation and verified twice with the same SHA-256 digest. Migration `20260725001910_enforce_exclusive_tasks_start_horizons.sql` then applied successfully after a clean transactional rollback exposed six terminal historical Starts that needed preservation. The corrected migration activates reached open work before replacing the trigger, clears every obsolete horizon paired with a Start, preserves terminal historical Starts, and applies future-only validation when work returns to an open present state.
+
+Production retains 24 to-dos and no projects. The eight preflight Start/horizon conflicts are normalized to zero, all active Starts satisfy the future-only invariant, and six terminal historical Starts remain intact. MCP function version 13, Lovable deployment `e40935e8-a34f-47ce-90c1-c4911d8251c6`, the exact 21-table PowerSync publication, and all three once-per-minute Tasks jobs are active. The owner-scoped exclusive-Start fixture passed Supabase and fresh PowerSync acceptance, and cleanup independently returned zero synthetic users, to-dos, projects, settings, and reminders. Current advisors contain only documented preexisting findings and no regression from this migration.
+
+Inbox Manager permanent parallel mode was enabled at `2026-07-25T14:54:43.778Z` with no expiry or acceptance limit. The first ordinary new-Mail run completed successfully and reused its established final AI results to create three verified Things tasks and three BathOS Today Inbox tasks. The installed runtime remained healthy with zero pending requests, retries, handoff failures, item incidents, or enrichment incidents. Supabase contained each opaque accepted task ID at revision 1 with one structured Mail source and one creation event. A fresh disposable PowerSync database independently projected the same three tasks and three creation events, then disconnected, cleared, closed, and removed its local files. No backfill or Mail-retirement synchronization ran.

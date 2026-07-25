@@ -44,6 +44,6 @@
 
 - [x] 5.1 Refresh and verify the private production backup and report affected-root preflight counts
 - [x] 5.2 Obtain explicit approval for the migration, MCP deployment, web publication, and disposable fixture
-- [ ] 5.3 Apply the approved coordinated release and clean up the owner-scoped fixture
-- [ ] 5.4 Verify PowerSync, cron, advisors, production parity, and final invariants
-- [ ] 5.5 Verify one new natural Mail delivery uses the existing AI result and arrives in both Things and BathOS Today Inbox
+- [x] 5.3 Apply the approved coordinated release and clean up the owner-scoped fixture
+- [x] 5.4 Verify PowerSync, cron, advisors, production parity, and final invariants
+- [x] 5.5 Verify one new natural Mail delivery uses the existing AI result and arrives in both Things and BathOS Today Inbox

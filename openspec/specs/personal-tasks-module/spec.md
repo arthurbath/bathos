@@ -89,6 +89,64 @@ The system SHALL store Start and a Today horizon as mutually exclusive planning 
 - **WHEN** retained completed, canceled, or deleted work contains the historical Start that applied while it was active
 - **THEN** the system preserves that historical date, clears any obsolete Today horizon, and applies future-only Start validation when the work returns to an active present state
 
+### Requirement: Immediate Horizon Command Presentation
+Tasks SHALL make the accepted result of its horizon-cycle command visible immediately wherever the target is presented.
+
+#### Scenario: Cycle an existing Today horizon
+- **WHEN** Control+R on Mac or Control+Shift+R on Windows targets work already in Today
+- **THEN** Tasks cycles Now to Next, Next to Later, Later to Now, and Inbox to Now while keeping the work in Today
+
+#### Scenario: Cycle work not currently in Today
+- **WHEN** the horizon command targets unplanned, Someday, or future-start work
+- **THEN** Tasks moves the work to Today Now by clearing future Start or Someday placement and assigning the Now horizon
+
+#### Scenario: Reflect an open-task command
+- **WHEN** the horizon command changes an open task
+- **THEN** its Start control and task-row horizon icon show the optimistic accepted value without waiting for synchronization or closing the editor
+
+#### Scenario: Retain an open task's presentation slot
+- **WHEN** an open task receives a planning, actionability, organization, Start, Deadline, or other metadata edit that would change current view membership, grouping, or automatic sort position
+- **THEN** Tasks shows the accepted metadata immediately while retaining the task's original visible group and slot until the editor closes
+
+#### Scenario: Apply deferred placement after close
+- **WHEN** the user closes an edited task whose accepted metadata changes current view membership, grouping, or automatic sort position
+- **THEN** Tasks closes the editor, briefly retains the closed task in its original slot, applies the current projection once, removes or repositions the task as required, and animates an on-page position change with calm motion when motion is allowed
+
+#### Scenario: Settle a completed task before removal
+- **WHEN** the user completes a task by keyboard command or pointer
+- **THEN** Tasks immediately shows the completion intent, briefly retains the task in place, and only then animates and removes it from the active list
+
+#### Scenario: Respect reduced motion while settling
+- **WHEN** the user requests reduced motion
+- **THEN** Tasks omits decorative movement and collapse delays while preserving the accepted task mutation
+
+#### Scenario: Retain lifecycle undo intent during projection lag
+- **WHEN** the user invokes undo immediately after completing a task and the local task mutation is accepted before its matching history event is projected
+- **THEN** Tasks retains the undo intent for that exact client mutation, withholds older history, and performs the guarded inverse as soon as the matching task and history projections agree
+
+#### Scenario: Keep buffered history movement bounded
+- **WHEN** the exact requested mutation does not become safely undoable within the bounded projection-wait interval
+- **THEN** Tasks performs no inverse, does not apply the request to a later unrelated mutation, and preserves the authoritative history cursor
+
+#### Scenario: Preserve Anytime manual order
+- **WHEN** planning or other metadata changes for a task that remains in the Anytime destination
+- **THEN** Tasks preserves its manual order key before, during, and after editing rather than ranking it by Start, Today horizon, Someday intent, actionability, or other metadata
+
+### Requirement: Someday Start Selection
+The Tasks unified Start picker SHALL expose Someday as an explicit planning choice alongside clearing Start.
+
+#### Scenario: Show Someday planning
+- **WHEN** a task is planned for Someday
+- **THEN** its closed Start control displays `Someday`
+
+#### Scenario: Move a task to Someday from Start
+- **WHEN** a user selects Someday in the unified Start picker
+- **THEN** Tasks clears future Start and Today horizon, stores the Someday destination, cancels any Start-bound reminder, closes the picker, and excludes the task from Today, Upcoming, and Anytime
+
+#### Scenario: Present terminal Start choices together
+- **WHEN** the unified Start picker is open
+- **THEN** Clear and Someday appear as sibling actions on one footer row and remain reachable by pointer and keyboard
+
 ### Requirement: Core Task Organization
 The system SHALL organize active work through Anytime, Someday, areas, projects, to-dos, and checklist items without headings, a separate Inbox destination, generic tags, multiple membership, or required parent containers.
 
@@ -533,15 +591,15 @@ The Tasks Start picker SHALL accept a bounded grammar of reasonable time shortha
 - **THEN** the interface omits repeated-time selection and time-zone display while persistence uses the deterministic earlier repeated-time instance and the authoritative planning time zone internally
 
 ### Requirement: Reminder-Initiated Today Planning
-The Tasks unified Start picker SHALL allow reminder entry before a to-do has a Start Date or Today horizon and SHALL convert a successfully entered reminder into owner-local Today · Inbox planning without replacing an existing planning choice.
+The Tasks unified Start picker SHALL allow reminder entry before a task has Start planning and SHALL convert a successfully entered reminder into owner-local Today Inbox planning without replacing an existing planning choice.
 
 #### Scenario: Offer Reminder before planning
 - **WHEN** connected reminder storage is available and a present open to-do has neither a future Start Date nor a Today horizon
 - **THEN** its Start picker keeps Reminder editable without requiring a preliminary planning selection
 
 #### Scenario: Default an unplanned reminder to Today Inbox
-- **WHEN** a user confirms one valid reminder time on a to-do with neither a future Start Date nor a Today horizon
-- **THEN** Tasks first persists the to-do as Anytime with a null future Start Date and the Inbox Today horizon, then saves exactly one reminder for the owner's current planning date, preserves the entered value while synchronization settles, closes Start after acceptance, and does not report a failure for temporary planning-projection lag
+- **WHEN** a user confirms one valid reminder time on a task without Start planning
+- **THEN** Tasks assigns Today Inbox before saving exactly one reminder, preserves the entered reminder value while synchronization settles, closes the Start picker after acceptance, and does not report a failure for temporary planning-projection lag
 
 #### Scenario: Preserve an existing Today horizon
 - **WHEN** a user saves a reminder on a to-do already placed in Today Inbox, Now, Next, or Later
