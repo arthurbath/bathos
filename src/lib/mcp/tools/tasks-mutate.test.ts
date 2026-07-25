@@ -476,12 +476,12 @@ describe('Tasks MCP mutation tools', () => {
       tasks_user_settings: [settings()],
     });
     const result = await scheduleTaskData({
-      ...base(), start_date: '2026-07-25', deadline: '2026-07-31',
+      ...base(), start_date: '2099-07-25', deadline: '2099-07-31',
     }, authFor(ownerA, client));
     expect(result).toMatchObject({
       mutation_outcome: 'applied',
       receipt: { transition: 'move' },
-      task: { destination: 'anytime', start_date: '2026-07-25', deadline: '2026-07-31' },
+      task: { destination: 'anytime', start_date: '2099-07-25', deadline: '2099-07-31' },
     });
   });
 

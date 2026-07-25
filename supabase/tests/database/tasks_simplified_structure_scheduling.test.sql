@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(44);
+SELECT plan(50);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -304,6 +304,61 @@ SELECT is(
     WHERE id = 'c2000000-0000-4000-8000-000000000041'),
   NULL,
   'preserves an explicitly cleared Primary Link'
+);
+SELECT lives_ok(
+  $$
+    INSERT INTO public.tasks_todos (
+      id, owner_id, title, lifecycle, completed_at, destination,
+      start_date, today_section, order_key, client_mutation_id
+    ) VALUES (
+      'c2000000-0000-4000-8000-000000000044',
+      'c2000000-0000-4000-8000-000000000001',
+      'Historical completed task', 'completed', clock_timestamp(), 'anytime',
+      DATE '2020-01-01', 'later', 'a4',
+      'c2000000-0000-4000-8000-000000000045'
+    )
+  $$,
+  'allows retained terminal task history with a past Start'
+);
+SELECT is(
+  (SELECT start_date FROM public.tasks_todos
+    WHERE id = 'c2000000-0000-4000-8000-000000000044'),
+  DATE '2020-01-01',
+  'preserves the historical terminal task Start'
+);
+SELECT is(
+  (SELECT today_section FROM public.tasks_todos
+    WHERE id = 'c2000000-0000-4000-8000-000000000044'),
+  NULL,
+  'clears the obsolete terminal task horizon'
+);
+SELECT lives_ok(
+  $$
+    INSERT INTO public.tasks_projects (
+      id, owner_id, title, lifecycle, completed_at, destination,
+      start_date, today_section, order_key, planning_order_key,
+      client_mutation_id
+    ) VALUES (
+      'c2000000-0000-4000-8000-000000000046',
+      'c2000000-0000-4000-8000-000000000001',
+      'Historical completed project', 'completed', clock_timestamp(), 'anytime',
+      DATE '2020-01-01', 'later', 'a4', 'a4',
+      'c2000000-0000-4000-8000-000000000047'
+    )
+  $$,
+  'allows retained terminal project history with a past Start'
+);
+SELECT is(
+  (SELECT start_date FROM public.tasks_projects
+    WHERE id = 'c2000000-0000-4000-8000-000000000046'),
+  DATE '2020-01-01',
+  'preserves the historical terminal project Start'
+);
+SELECT is(
+  (SELECT today_section FROM public.tasks_projects
+    WHERE id = 'c2000000-0000-4000-8000-000000000046'),
+  NULL,
+  'clears the obsolete terminal project horizon'
 );
 RESET ROLE;
 SELECT is(

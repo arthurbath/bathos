@@ -63,7 +63,7 @@ The system SHALL deploy remote task synchronization only through an explicitly a
 - **THEN** the system does not treat that topology as authoritative until uptime, monitoring, backup, upgrade, outage, and recovery behavior pass a later explicit review
 
 ### Requirement: Exclusive Start And Today Horizon
-The system SHALL store a future Start and a Today horizon as mutually exclusive planning states for every to-do and project.
+The system SHALL store Start and a Today horizon as mutually exclusive planning states for every to-do and project, and SHALL require Start to be future-only for active present work while preserving supported terminal history.
 
 #### Scenario: Assign a future Start
 - **WHEN** a user assigns a future Start to an Anytime to-do or project
@@ -84,6 +84,10 @@ The system SHALL store a future Start and a Today horizon as mutually exclusive 
 #### Scenario: Preserve horizon through structured generation and portability
 - **WHEN** templates, recurrence, MCP, export, merge, replacement restore, or synchronization carry an Anytime item's planning state
 - **THEN** the system clears the horizon for a future Start, permits a horizon only for active Today work, and activates reached dates into Today Next
+
+#### Scenario: Preserve terminal Start history
+- **WHEN** retained completed, canceled, or deleted work contains the historical Start that applied while it was active
+- **THEN** the system preserves that historical date, clears any obsolete Today horizon, and applies future-only Start validation when the work returns to an active present state
 
 ### Requirement: Core Task Organization
 The system SHALL organize active work through Anytime, Someday, areas, projects, to-dos, and checklist items without headings, a separate Inbox destination, generic tags, multiple membership, or required parent containers.

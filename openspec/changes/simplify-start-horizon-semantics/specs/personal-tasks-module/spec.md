@@ -19,6 +19,10 @@ Tasks SHALL represent future Start and Today horizon as mutually exclusive plann
 - **WHEN** the revised contract is deployed over a future-start item that still stores a horizon
 - **THEN** the migration clears only that inapplicable horizon while preserving Start, reminder intent, content, organization, ordering, history, and stable identity
 
+#### Scenario: Preserve terminal Start history
+- **WHEN** retained completed, canceled, or deleted work contains the historical Start that applied while it was active
+- **THEN** Tasks preserves that historical date, clears any obsolete Today horizon, and applies future-only Start validation when the work returns to an active present state
+
 ### Requirement: Immediate Horizon Command Presentation
 Tasks SHALL make the accepted result of its horizon-cycle command visible immediately wherever the target is presented.
 

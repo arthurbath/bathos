@@ -7,6 +7,10 @@ ALTER TABLE public.tasks_todos
 ALTER TABLE public.tasks_projects
   DROP CONSTRAINT tasks_projects_planning_placement_valid;
 
+-- Close the race between release preflight and migration execution by activating
+-- any open present Starts that reached their owner-local date in that interval.
+SELECT tasks_private.activate_due_roots(clock_timestamp(), NULL);
+
 CREATE OR REPLACE FUNCTION tasks_private.normalize_root_planning()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -23,17 +27,22 @@ BEGIN
   END IF;
 
   IF NEW.start_date IS NOT NULL THEN
-    SELECT (clock_timestamp() AT TIME ZONE COALESCE(settings.planning_timezone, 'UTC'))::date
-    INTO _planning_date
-    FROM public.tasks_user_settings AS settings
-    WHERE settings.owner_id = NEW.owner_id;
-    _planning_date := COALESCE(
-      _planning_date,
-      (clock_timestamp() AT TIME ZONE 'UTC')::date
-    );
-    IF NEW.start_date <= _planning_date THEN
-      RAISE EXCEPTION 'Start must be later than today in the owner planning time zone'
-        USING ERRCODE = '22023';
+    -- Retained terminal history may contain the Start that was meaningful when
+    -- the work was active. Future-only validation governs active present work,
+    -- while every state still enforces Start/horizon exclusivity.
+    IF NEW.lifecycle = 'open' AND NEW.disposition = 'present' THEN
+      SELECT (clock_timestamp() AT TIME ZONE COALESCE(settings.planning_timezone, 'UTC'))::date
+      INTO _planning_date
+      FROM public.tasks_user_settings AS settings
+      WHERE settings.owner_id = NEW.owner_id;
+      _planning_date := COALESCE(
+        _planning_date,
+        (clock_timestamp() AT TIME ZONE 'UTC')::date
+      );
+      IF NEW.start_date <= _planning_date THEN
+        RAISE EXCEPTION 'Start must be later than today in the owner planning time zone'
+          USING ERRCODE = '22023';
+      END IF;
     END IF;
     NEW.today_section := NULL;
   ELSIF NEW.today_section IS NOT NULL THEN
