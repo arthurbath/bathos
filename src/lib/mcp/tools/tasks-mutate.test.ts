@@ -436,6 +436,40 @@ describe('Tasks MCP mutation tools', () => {
     expect(result.task.order_key).toMatch(/^a/);
   });
 
+  it('preserves Anytime manual order when changing only its Today horizon', async () => {
+    const otherTaskId = crypto.randomUUID();
+    const client = new FakeTasksClient({
+      tasks_todos: [
+        task({ order_key: 'a0', today_section: 'now' }),
+        task({
+          id: otherTaskId,
+          client_mutation_id: crypto.randomUUID(),
+          order_key: 'z0',
+          today_section: 'later',
+        }),
+      ],
+      tasks_user_settings: [settings()],
+    });
+
+    const result = await moveTaskData({
+      ...base(),
+      destination: 'anytime',
+      today_section: 'later',
+      start_date: null,
+      area_id: null,
+      project_id: null,
+    }, authFor(ownerA, client));
+
+    expect(result).toMatchObject({
+      mutation_outcome: 'applied',
+      task: {
+        destination: 'anytime',
+        today_section: 'later',
+        order_key: 'a0',
+      },
+    });
+  });
+
   it('activates Someday work when scheduling a start date', async () => {
     const client = new FakeTasksClient({
       tasks_todos: [task({ destination: 'someday' })],
@@ -451,7 +485,7 @@ describe('Tasks MCP mutation tools', () => {
     });
   });
 
-  it('retains the Later horizon when scheduling work into the future', async () => {
+  it('clears the Today horizon when scheduling work into the future', async () => {
     const client = new FakeTasksClient({
       tasks_todos: [task({
         destination: 'anytime',
@@ -465,8 +499,8 @@ describe('Tasks MCP mutation tools', () => {
     }, authFor(ownerA, client));
     expect(result).toMatchObject({
       mutation_outcome: 'applied',
-      receipt: { transition: 'update' },
-      task: { destination: 'anytime', today_section: 'later', start_date: '2099-07-25' },
+      receipt: { transition: 'move' },
+      task: { destination: 'anytime', today_section: null, start_date: '2099-07-25' },
     });
   });
 

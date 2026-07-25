@@ -42,10 +42,10 @@ function createHarness(results: unknown[] = []) {
 }
 
 describe('task hierarchy repository', () => {
-  it('activates reached project dates locally without clearing their horizon', async () => {
+  it('activates reached project dates into Today Next', async () => {
     const { repository, transaction } = createHarness();
     vi.mocked(transaction.getAll).mockResolvedValueOnce([
-      taskProjectFixture({ start_date: '2026-07-20', today_section: 'later' }),
+      taskProjectFixture({ start_date: '2026-07-20', today_section: null }),
     ]);
 
     await expect(
@@ -54,7 +54,7 @@ describe('task hierarchy repository', () => {
       expect.objectContaining({
         id: 'project-a',
         start_date: null,
-        today_section: 'later',
+        today_section: 'next',
         last_mutation_channel: 'native',
         last_actor_type: 'system',
         revision: 2,
@@ -118,7 +118,7 @@ describe('task hierarchy repository', () => {
     ]);
     await expect(rejected.repository.updateProject('owner-a', project.id, {
       start_date: '2026-07-20',
-    })).rejects.toThrow('Project start date must be after today');
+    })).rejects.toThrow("Start must be after Today");
     expect(rejected.transaction.execute).not.toHaveBeenCalled();
 
     const accepted = createHarness([project]);
@@ -127,7 +127,10 @@ describe('task hierarchy repository', () => {
     ]);
     await expect(accepted.repository.updateProject('owner-a', project.id, {
       start_date: '2026-07-20',
-    })).resolves.toMatchObject({ start_date: '2026-07-20' });
+    })).resolves.toMatchObject({
+      start_date: '2026-07-20',
+      today_section: null,
+    });
   });
 
   it('creates checklist items beneath one explicit parent', async () => {

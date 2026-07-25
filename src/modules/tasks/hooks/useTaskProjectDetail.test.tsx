@@ -27,9 +27,10 @@ const item = checklistItem('item-a', false);
 let taskRows: TaskTodo[];
 let checklistRows: TaskChecklistItem[];
 let latest: ReturnType<typeof useTaskProjectDetail>;
+let harnessForwardMutation: ReturnType<typeof vi.fn>;
 
 function Harness() {
-  latest = useTaskProjectDetail('owner-a', 'project-a');
+  latest = useTaskProjectDetail('owner-a', 'project-a', harnessForwardMutation);
   return null;
 }
 
@@ -50,6 +51,7 @@ describe('useTaskProjectDetail', () => {
   beforeEach(() => {
     taskRows = [beta, gamma, alpha];
     checklistRows = [item];
+    harnessForwardMutation = vi.fn();
     mocks.useQuery.mockReset().mockImplementation((query: string) => ({
       data: query.includes('FROM tasks_todos') ? taskRows : checklistRows,
       isLoading: false,
@@ -121,6 +123,10 @@ describe('useTaskProjectDetail', () => {
       expect(patch.hierarchy_order_key < alpha.hierarchy_order_key!).toBe(true);
       expect(patch).not.toHaveProperty('order_key');
       expect(patch).not.toHaveProperty('destination');
+      expect(harnessForwardMutation).toHaveBeenCalledWith(expect.objectContaining({
+        id: beta.id,
+        client_mutation_id: `${beta.id}-reordered`,
+      }));
     } finally {
       cleanup(root, container);
     }

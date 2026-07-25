@@ -160,6 +160,7 @@ describe('TaskClipboardService', () => {
       },
       recurrence: {
         name: 'Daily review',
+        status: 'active',
         templateId: '99999999-9999-4999-8999-999999999999',
         templateRevision: 1,
         ruleMode: 'calendar',

@@ -14,6 +14,9 @@ import { createTaskData } from '@/lib/mcp/tools/tasks-create';
 import { createTaskProjectData } from '@/lib/mcp/tools/tasks-hierarchy-create';
 import { createMailTaskData } from '@/lib/mcp/tools/tasks-mail';
 import {
+  moveTaskProjectData,
+} from '@/lib/mcp/tools/tasks-project-mutate';
+import {
   moveTaskData,
   scheduleTaskData,
   transitionTaskData,
@@ -304,117 +307,289 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     expect(residueCount).toBe(0);
   });
 
-  it('proves future day-horizon activation through a fresh projection and cleanup', async () => {
+  it('proves exclusive Start and Today horizons through a fresh projection and cleanup', async () => {
     const environment = productionEnvironment();
     testDirectory ??= await mkdtemp(join(tmpdir(), 'bathos-tasks-production-topology-'));
     admin ??= createClient<Database>(environment.supabaseUrl, environment.serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const owner = await createSyntheticOwner('day-horizon', environment);
+    const owner = await createSyntheticOwner('exclusive-start', environment);
     const connector = createTasksSupabaseConnector({
       endpoint: environment.powerSyncUrl,
       supabase: owner.client,
     });
     const setupClient = await openClient(
       testDirectory,
-      'day-horizon-setup.db',
+      'exclusive-start-setup.db',
       owner.id,
       connector,
     );
-    await setupClient.repository.ensurePlanningSettings(owner.id, 'America/Los_Angeles');
+    const planningTimeZone = 'America/Los_Angeles';
+    await setupClient.repository.ensurePlanningSettings(owner.id, planningTimeZone);
     await waitForUploadQueue(setupClient.database, 0);
 
     const auth = { userId: owner.id, email: owner.email, supabase: owner.client };
-    const horizons = ['inbox', 'now', 'next', 'later'] as const;
-    const creations = [];
-    for (const horizon of horizons) {
-      creations.push(await createTaskData({
-        idempotency_key: crypto.randomUUID(),
-        title: `Synthetic Day Horizon ${horizon}`,
-        notes: 'Disposable future day-horizon validation only',
-        destination: 'anytime',
-        today_section: horizon,
-        start_date: '2099-12-31',
-        entry_channel: 'mcp',
-      }, auth));
-    }
-
-    await Promise.all(creations.map(({ task }) => waitForLocalTask(
-      setupClient.database,
-      task.id,
-      (projected) => projected.revision === 1
-        && projected.start_date === '2099-12-31'
-        && projected.today_section === task.today_section,
-    )));
-
-    const planningDate = planningDateInTimeZone('America/Los_Angeles');
-    for (const { task } of creations) {
-      const scheduled = await scheduleTaskData({
-        task_id: task.id,
-        expected_revision: 1,
-        client_mutation_id: crypto.randomUUID(),
-        start_date: planningDate,
-      }, auth);
-      expect(scheduled.mutation_outcome).toBe('applied');
-      expect(scheduled.task).toMatchObject({
-        revision: 2,
-        start_date: planningDate,
-        today_section: task.today_section,
-      });
-    }
-
-    const todayView = await getTaskViewData({
-      view: 'today',
-      planning_date: planningDate,
-      limit: 50,
+    const planningDate = planningDateInTimeZone(planningTimeZone);
+    const futureDate = addTaskCalendarDays(planningDate, 1);
+    const futureTask = await createTaskData({
+      idempotency_key: crypto.randomUUID(),
+      title: 'Synthetic Exclusive Start Task',
+      notes: 'Disposable exclusive Start validation only',
+      destination: 'anytime',
+      today_section: 'later',
+      start_date: futureDate,
+      entry_channel: 'mcp',
     }, auth);
-    if (!('todos' in todayView)) throw new Error('Expected a Today planning result.');
-    expect(Object.fromEntries(todayView.todos.map((task) => [task.id, task.derived_section])))
-      .toEqual(Object.fromEntries(creations.map(({ task }) => [
-        task.id,
-        task.today_section,
-      ])));
+    expect(futureTask.task).toMatchObject({
+      revision: 1,
+      start_date: futureDate,
+      today_section: null,
+    });
 
-    await Promise.all(creations.map(({ task }) => waitForLocalTask(
-      setupClient.database,
-      task.id,
-      (projected) => projected.revision === 2
-        && projected.start_date === planningDate
-        && projected.today_section === task.today_section,
-    )));
+    const futureProjectCreation = await createTaskProjectData({
+      idempotency_key: crypto.randomUUID(),
+      title: 'Synthetic Exclusive Start Project',
+      notes: 'Disposable exclusive Start project validation only',
+      destination: 'anytime',
+      today_section: 'later',
+      start_date: futureDate,
+    }, auth);
+    if (!('planning_order_key' in futureProjectCreation.record)) {
+      throw new Error('Expected a project creation result.');
+    }
+    const futureProject = futureProjectCreation.record as TaskProject;
+    expect(futureProject).toMatchObject({
+      revision: 1,
+      start_date: futureDate,
+      today_section: null,
+    });
+
+    await Promise.all([
+      waitForLocalTask(
+        setupClient.database,
+        futureTask.task.id,
+        (task) => task.revision === 1
+          && task.start_date === futureDate
+          && task.today_section === null,
+      ),
+      waitForLocalProject(
+        setupClient.database,
+        futureProject.id,
+        (project) => project.revision === 1
+          && project.start_date === futureDate
+          && project.today_section === null,
+      ),
+    ]);
+
+    const reminderService = new TaskReminderService(owner.client);
+    const futureReminder = await reminderService.save({
+      rootType: 'todo',
+      rootId: futureTask.task.id,
+      localTime: '09:00',
+      timeZone: planningTimeZone,
+      mutationChannel: 'mcp',
+      actorType: 'automation',
+    });
+    expect(futureReminder).toMatchObject({
+      outcome: 'accepted',
+      reminder: {
+        local_date: futureDate,
+        status: 'active',
+      },
+    });
+
+    const canonicalExport = await new TaskPortabilityService(owner.client).createExport();
+    expect(canonicalExport.data.tasks_todos.find(
+      (task) => task.id === futureTask.task.id,
+    )).toMatchObject({
+      start_date: futureDate,
+      today_section: null,
+    });
+    expect(canonicalExport.data.tasks_projects.find(
+      (project) => project.id === futureProject.id,
+    )).toMatchObject({
+      start_date: futureDate,
+      today_section: null,
+    });
+
+    const movedTask = await moveTaskData({
+      task_id: futureTask.task.id,
+      expected_revision: 1,
+      client_mutation_id: crypto.randomUUID(),
+      destination: 'anytime',
+      start_date: null,
+      today_section: 'now',
+    }, auth);
+    expect(movedTask).toMatchObject({
+      mutation_outcome: 'applied',
+      task: {
+        revision: 2,
+        start_date: null,
+        today_section: 'now',
+      },
+    });
+    const movedProject = await moveTaskProjectData({
+      project_id: futureProject.id,
+      expected_revision: 1,
+      client_mutation_id: crypto.randomUUID(),
+      destination: 'anytime',
+      start_date: null,
+      today_section: 'later',
+    }, auth);
+    expect(movedProject).toMatchObject({
+      mutation_outcome: 'applied',
+      project: {
+        revision: 2,
+        start_date: null,
+        today_section: 'later',
+      },
+    });
+    await Promise.all([
+      waitForLocalTask(
+        setupClient.database,
+        futureTask.task.id,
+        (task) => task.revision === 2
+          && task.start_date === null
+          && task.today_section === 'now',
+      ),
+      waitForLocalProject(
+        setupClient.database,
+        futureProject.id,
+        (project) => project.revision === 2
+          && project.start_date === null
+          && project.today_section === 'later',
+      ),
+      waitForLocalReminder(
+        setupClient.database,
+        futureReminder.reminder.id,
+        (reminder) => reminder.status === 'active'
+          && reminder.local_date === planningDate,
+      ),
+    ]);
+
+    const activationTask = await createTaskData({
+      idempotency_key: crypto.randomUUID(),
+      title: 'Synthetic Exclusive Start Activation Task',
+      notes: 'Disposable reached-Start validation only',
+      destination: 'anytime',
+      today_section: 'inbox',
+      start_date: futureDate,
+      entry_channel: 'mcp',
+    }, auth);
+    const activationProjectCreation = await createTaskProjectData({
+      idempotency_key: crypto.randomUUID(),
+      title: 'Synthetic Exclusive Start Activation Project',
+      notes: 'Disposable reached-Start project validation only',
+      destination: 'anytime',
+      today_section: 'inbox',
+      start_date: futureDate,
+    }, auth);
+    if (!('planning_order_key' in activationProjectCreation.record)) {
+      throw new Error('Expected an activation project creation result.');
+    }
+    const activationProject = activationProjectCreation.record as TaskProject;
+    const activationReminder = await reminderService.save({
+      rootType: 'todo',
+      rootId: activationTask.task.id,
+      localTime: '09:00',
+      timeZone: planningTimeZone,
+      mutationChannel: 'mcp',
+      actorType: 'automation',
+    });
+    runScopedDueActivation(owner.id, `${futureDate}T20:00:00.000Z`);
+
+    await Promise.all([
+      waitForLocalTask(
+        setupClient.database,
+        activationTask.task.id,
+        (task) => task.revision === 2
+          && task.start_date === null
+          && task.today_section === 'next',
+      ),
+      waitForLocalProject(
+        setupClient.database,
+        activationProject.id,
+        (project) => project.revision === 2
+          && project.start_date === null
+          && project.today_section === 'next',
+      ),
+      waitForLocalReminder(
+        setupClient.database,
+        activationReminder.reminder.id,
+        (reminder) => reminder.status === 'active'
+          && reminder.local_date === futureDate,
+      ),
+    ]);
+
     await disposeClient(setupClient);
-
     const freshClient = await openClient(
       testDirectory,
-      'day-horizon-fresh.db',
+      'exclusive-start-fresh.db',
       owner.id,
       connector,
     );
-    await Promise.all(creations.map(({ task }) => waitForLocalTask(
-      freshClient.database,
-      task.id,
-      (projected) => projected.revision === 2
-        && projected.start_date === planningDate
-        && projected.today_section === task.today_section,
-    )));
+    await Promise.all([
+      waitForLocalTask(
+        freshClient.database,
+        futureTask.task.id,
+        (task) => task.revision === 2
+          && task.start_date === null
+          && task.today_section === 'now',
+      ),
+      waitForLocalProject(
+        freshClient.database,
+        futureProject.id,
+        (project) => project.revision === 2
+          && project.start_date === null
+          && project.today_section === 'later',
+      ),
+      waitForLocalTask(
+        freshClient.database,
+        activationTask.task.id,
+        (task) => task.revision === 2
+          && task.start_date === null
+          && task.today_section === 'next',
+      ),
+      waitForLocalProject(
+        freshClient.database,
+        activationProject.id,
+        (project) => project.revision === 2
+          && project.start_date === null
+          && project.today_section === 'next',
+      ),
+    ]);
+    await disposeClient(freshClient);
 
     const { count: taskCount, error: taskCountError } = await admin
       .from('tasks_todos')
       .select('id', { count: 'exact', head: true })
       .eq('owner_id', owner.id);
     expect(taskCountError).toBeNull();
-    expect(taskCount).toBe(horizons.length);
-
-    await disposeClient(freshClient);
-    await signOutSyntheticClient(owner.client);
-    await deleteSyntheticOwner(owner.id);
-    const { count: residueCount, error: residueError } = await admin
-      .from('tasks_todos')
+    expect(taskCount).toBe(2);
+    const { count: projectCount, error: projectCountError } = await admin
+      .from('tasks_projects')
       .select('id', { count: 'exact', head: true })
       .eq('owner_id', owner.id);
-    expect(residueError).toBeNull();
-    expect(residueCount).toBe(0);
+    expect(projectCountError).toBeNull();
+    expect(projectCount).toBe(2);
+
+    await signOutSyntheticClient(owner.client);
+    await deleteSyntheticOwner(owner.id);
+    const residueChecks = await Promise.all([
+      admin.from('tasks_todos').select('id', { count: 'exact', head: true })
+        .eq('owner_id', owner.id),
+      admin.from('tasks_projects').select('id', { count: 'exact', head: true })
+        .eq('owner_id', owner.id),
+      admin.from('tasks_history_events').select('id', { count: 'exact', head: true })
+        .eq('owner_id', owner.id),
+      admin.from('tasks_reminders').select('id', { count: 'exact', head: true })
+        .eq('owner_id', owner.id),
+    ]);
+    for (const residue of residueChecks) {
+      expect(residue.error).toBeNull();
+      expect(residue.count).toBe(0);
+    }
   });
 
   it('proves deep undo and redo through a fresh projection and cleanup', async () => {
@@ -585,7 +760,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       actionability: 'rechecking',
       start_date: '2099-12-31',
       deadline: '2099-01-01',
-      today_section: 'next',
+      today_section: null,
       primary_link: 'https://example.test/synthetic-structure-simplification',
     });
     const taskId = taskCreation.task.id;
@@ -605,19 +780,19 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     expect(project).toMatchObject({
       start_date: '2099-12-31',
       deadline: '2099-01-01',
-      today_section: 'next',
+      today_section: null,
     });
 
     await Promise.all([
       waitForLocalTask(
         setupClient.database,
         taskId,
-        (task) => task.today_section === 'next' && task.actionability === 'rechecking',
+        (task) => task.today_section === null && task.actionability === 'rechecking',
       ),
       waitForLocalProject(
         setupClient.database,
         project.id,
-        (projected) => projected.today_section === 'next',
+        (projected) => projected.today_section === null,
       ),
     ]);
 
@@ -658,18 +833,17 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       start_date: null,
     }, auth);
     expect(cleared.mutation_outcome).toBe('applied');
-    expect(cleared.task).toMatchObject({ start_date: null, today_section: 'next' });
+    expect(cleared.task).toMatchObject({ start_date: null, today_section: null });
     await Promise.all([
       waitForLocalTask(
         setupClient.database,
         taskId,
-        (task) => task.revision === 3 && task.start_date === null && task.today_section === 'next',
+        (task) => task.revision === 3 && task.start_date === null && task.today_section === null,
       ),
       waitForLocalReminder(
         setupClient.database,
         savedReminder.reminder.id,
-        (reminder) => reminder.status === 'active'
-          && reminder.local_date === planningDateInTimeZone('America/Los_Angeles'),
+        (reminder) => reminder.status === 'canceled',
       ),
     ]);
 
@@ -679,7 +853,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     expect(taskExport.data.tasks_todos.find((task) => task.id === taskId)).toMatchObject({
       actionability: 'rechecking',
       start_date: null,
-      today_section: 'next',
+      today_section: null,
       primary_link: 'https://example.test/synthetic-structure-simplification',
     });
 
@@ -707,7 +881,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       waitForLocalTask(
         setupClient.database,
         activationTaskId,
-        (task) => task.start_date === null && task.today_section === 'later',
+        (task) => task.start_date === null && task.today_section === 'next',
       ),
       waitForLocalReminder(
         setupClient.database,
@@ -732,18 +906,18 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       waitForLocalProject(
         freshClient.database,
         project.id,
-        (projected) => projected.today_section === 'next',
+        (projected) => projected.start_date === '2099-12-31'
+          && projected.today_section === null,
       ),
       waitForLocalTask(
         freshClient.database,
         activationTaskId,
-        (task) => task.start_date === null && task.today_section === 'later',
+        (task) => task.start_date === null && task.today_section === 'next',
       ),
       waitForLocalReminder(
         freshClient.database,
         savedReminder.reminder.id,
-        (reminder) => reminder.status === 'active'
-          && reminder.local_date === planningDateInTimeZone('America/Los_Angeles'),
+        (reminder) => reminder.status === 'canceled',
       ),
     ]);
     expect(await freshClient.database.getOptional(
@@ -882,7 +1056,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     }, auth);
     expect(movedFuture).toMatchObject({
       mutation_outcome: 'applied',
-      task: { revision: 3, start_date: futureDate, today_section: 'next' },
+      task: { revision: 3, start_date: futureDate, today_section: null },
     });
     await Promise.all([
       waitForLocalTask(

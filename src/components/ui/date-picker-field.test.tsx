@@ -194,13 +194,61 @@ describe('DatePickerField', () => {
           bubbles: true,
           cancelable: true,
         }));
-        dayFifteen?.click();
       });
       await flushUi();
       await flushUi();
 
       expect(onValueChange).toHaveBeenCalledTimes(1);
       expect(onValueChange).toHaveBeenCalledWith('2026-03-15');
+      expect(document.body.querySelector('[data-radix-popper-content-wrapper]')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it.each([
+    ['pointer activation', null],
+    ['Return', 'Enter'],
+  ])('accepts the already-selected date with %s and closes the popover', async (_label, key) => {
+    const onValueChange = vi.fn();
+    const { container, root } = mount(
+      <DatePickerField
+        id={`reconfirm-date-${key ?? 'pointer'}`}
+        value="2026-03-02"
+        onValueChange={onValueChange}
+      />,
+    );
+
+    try {
+      const trigger = container.querySelector<HTMLButtonElement>('button')!;
+      act(() => {
+        trigger.click();
+      });
+      await flushUi();
+
+      const selectedDay = document.body.querySelector<HTMLButtonElement>(
+        'button[name="day"][aria-selected="true"]',
+      );
+      expect(selectedDay).toBeTruthy();
+
+      act(() => {
+        selectedDay?.focus();
+        if (key) {
+          selectedDay?.dispatchEvent(new KeyboardEvent('keydown', {
+            key,
+            bubbles: true,
+            cancelable: true,
+          }));
+        } else {
+          selectedDay?.click();
+        }
+      });
+      await flushUi();
+      await flushUi();
+
+      expect(onValueChange).toHaveBeenCalledTimes(1);
+      expect(onValueChange).toHaveBeenCalledWith('2026-03-02');
       expect(document.body.querySelector('[data-radix-popper-content-wrapper]')).toBeNull();
       expect(document.activeElement).toBe(trigger);
     } finally {

@@ -8,10 +8,21 @@ import {
   generateTaskMoveOrderKey,
   generateTaskOrderKey,
 } from '@/modules/tasks/domain/taskOrder';
+import type {
+  TaskForwardMutationReservation,
+  TaskForwardMutationSource,
+} from '@/modules/tasks/hooks/useTaskUndo';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskChecklistItem, TaskTodo } from '@/modules/tasks/types/tasks';
 
-export function useTaskProjectDetail(ownerId: string, projectId: string) {
+export function useTaskProjectDetail(
+  ownerId: string,
+  projectId: string,
+  onForwardMutation?: (task: TaskTodo) => void,
+  reserveForwardMutation?: (
+    source: TaskForwardMutationSource,
+  ) => TaskForwardMutationReservation,
+) {
   const {
     repository,
     hierarchyRepository,
@@ -79,6 +90,9 @@ export function useTaskProjectDetail(ownerId: string, projectId: string) {
 
   const updateTask = useCallback(async (taskId: string, patch: EditableTaskPatch) => {
     const currentTask = tasks.find(({ id }) => id === taskId);
+    const reservation = currentTask
+      ? reserveForwardMutation?.(currentTask)
+      : undefined;
     if (currentTask) {
       setOptimisticTasks((current) => ({
         ...current,
@@ -87,13 +101,16 @@ export function useTaskProjectDetail(ownerId: string, projectId: string) {
     }
     try {
       const task = await repository.updateTask(ownerId, taskId, patch);
+      reservation?.commit(task);
+      onForwardMutation?.(task);
       setOptimisticTasks((current) => ({ ...current, [taskId]: task }));
       return task;
     } catch (error) {
+      reservation?.cancel();
       setOptimisticTasks((current) => withoutKey(current, taskId));
       throw error;
     }
-  }, [ownerId, repository, tasks]);
+  }, [onForwardMutation, ownerId, repository, reserveForwardMutation, tasks]);
 
   const reorderTask = useCallback(async (taskId: string, direction: 'up' | 'down') => {
     const task = tasks.find(({ id }) => id === taskId);

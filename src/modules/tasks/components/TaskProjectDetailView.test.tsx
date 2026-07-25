@@ -241,7 +241,7 @@ describe('TaskProjectDetailView', () => {
         '#project-destination-project-a',
       )!;
       await act(async () => setControlValue(destination, 'someday'));
-      expect(container.querySelector<HTMLButtonElement>('[aria-label="Project Start Date"]')
+      expect(container.querySelector<HTMLButtonElement>('[aria-label="Start"]')
         ?.hasAttribute('disabled')).toBe(true);
 
       await act(async () => {
@@ -260,7 +260,7 @@ describe('TaskProjectDetailView', () => {
     }
   });
 
-  it('retains a selected day horizon on a future-start project', async () => {
+  it('moves a future-start project into Today when a horizon is selected', async () => {
     const hierarchyModel = hierarchy();
     mockUseTaskProjectDetail.mockReturnValue(detail());
     const { container, root } = renderDetail(hierarchyModel);
@@ -279,7 +279,7 @@ describe('TaskProjectDetailView', () => {
       expect(hierarchyModel.updateProject).toHaveBeenCalledWith('project-a', {
         destination: 'anytime',
         today_section: 'inbox',
-        start_date: '2026-07-24',
+        start_date: null,
         deadline: '2026-07-25',
       });
     } finally {

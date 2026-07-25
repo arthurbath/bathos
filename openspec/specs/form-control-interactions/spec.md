@@ -156,7 +156,7 @@ Arbitrary non-DataGrid forms SHALL use Tab and Shift+Tab as their only shared in
 - **THEN** the field commits its current accepted or staged state, closes, and moves to the next or previous containing-form control
 
 ### Requirement: Date pickers are arrow-navigable and Tab-exiting
-Shared date pickers SHALL use Space, Return, pointer input, and arrow navigation internally. Space, Return, and pointer activation SHALL be equivalent when they activate a final selection, and internal controls SHALL NOT become a multi-stop segment of the containing form's Tab order.
+Shared date pickers SHALL use Space, Return, pointer input, and arrow navigation internally. Space, Return, and pointer activation SHALL be equivalent when they activate a final selection, including when the activated legal date is already the committed value, and internal controls SHALL NOT become a multi-stop segment of the containing form's Tab order.
 
 #### Scenario: Open a date picker
 - **WHEN** a focused date-picker trigger receives Space, Return, or pointer activation
@@ -169,6 +169,10 @@ Shared date pickers SHALL use Space, Return, pointer input, and arrow navigation
 #### Scenario: Confirm a final date-picker selection
 - **WHEN** a user activates a focused legal date, Clear action, or other final-selection action with Space, Return, or pointer input
 - **THEN** the picker commits that selection exactly once, closes after the owner accepts it, and restores focus to the trigger
+
+#### Scenario: Confirm the already-selected date
+- **WHEN** a user activates the already-selected legal date with Space, Return, or pointer input
+- **THEN** the picker accepts that date as the user's final selection, preserves the committed value, closes, and restores focus to the trigger
 
 #### Scenario: Keep date-picker navigation open
 - **WHEN** a user activates a calendar pager, caption, month, year, or another navigation-only action with Space, Return, or pointer input

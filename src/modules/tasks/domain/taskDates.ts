@@ -30,7 +30,7 @@ export function assertTaskCalendarRange(
   deadline: string | null,
 ): void {
   if (startDate !== null && deadline !== null && deadline < startDate) {
-    throw new InvalidTaskCalendarRangeError('Deadline cannot be earlier than the start date');
+    throw new InvalidTaskCalendarRangeError("Deadline cannot be earlier than Start");
   }
 }
 

@@ -11,7 +11,12 @@ import {
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 
-export type CalendarProps = React.ComponentProps<typeof DayPicker> & {
+type SingleDayPickerProps = Extract<
+  React.ComponentProps<typeof DayPicker>,
+  { mode: "single" }
+>;
+
+export type CalendarProps = SingleDayPickerProps & {
   allowTabExit?: boolean;
   initialFocusDate?: Date;
   onDayGridExitDown?: () => boolean;
@@ -492,6 +497,17 @@ function Calendar({
       event.preventDefault();
       event.stopPropagation();
     }
+    if (
+      viewMode === "day"
+      && (event.key === "Enter" || event.key === " ")
+      && event.target instanceof HTMLButtonElement
+      && event.target.getAttribute("name") === "day"
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.target.click();
+      return;
+    }
     if (viewMode === "day" && (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")) {
       const root = event.currentTarget as HTMLElement;
       const activeElement = event.target instanceof HTMLElement ? event.target : null;
@@ -589,6 +605,7 @@ function Calendar({
             ...components,
           }}
           {...props}
+          required={props.mode === "single" ? props.required ?? true : props.required}
         />
       )}
     </div>

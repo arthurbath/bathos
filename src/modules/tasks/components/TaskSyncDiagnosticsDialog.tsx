@@ -69,7 +69,7 @@ export function TaskSyncDiagnosticsDialog({
           </button>
         )}
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent footerless aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Synchronization Details</DialogTitle>
         </DialogHeader>

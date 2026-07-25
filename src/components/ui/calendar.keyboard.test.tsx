@@ -1,7 +1,7 @@
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Calendar } from '@/components/ui/calendar';
 
 function mount(ui: React.ReactElement) {
@@ -35,6 +35,70 @@ function getDayButton(container: HTMLElement, text: string, { outside = false }:
 }
 
 describe('Calendar keyboard navigation', () => {
+  it('preserves and re-emits the selected day when it is activated again', () => {
+    const selected = new Date(2026, 2, 2);
+    const onSelect = vi.fn();
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={selected}
+        selected={selected}
+        onSelect={onSelect}
+      />,
+    );
+
+    try {
+      const selectedDay = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][aria-selected="true"]',
+      );
+      expect(selectedDay).toBeTruthy();
+
+      act(() => {
+        selectedDay?.click();
+      });
+
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith(
+        selected,
+        selected,
+        expect.any(Object),
+        expect.any(Object),
+      );
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('honors an explicit opt-out from required single-date selection', () => {
+    const selected = new Date(2026, 2, 2);
+    const onSelect = vi.fn();
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={selected}
+        selected={selected}
+        onSelect={onSelect}
+        required={false}
+      />,
+    );
+
+    try {
+      const selectedDay = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][aria-selected="true"]',
+      );
+      expect(selectedDay).toBeTruthy();
+
+      act(() => {
+        selectedDay?.click();
+      });
+
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect.mock.calls[0]?.[0]).toBeUndefined();
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it('moves focus to an outside day without changing the visible month', async () => {
     const { container, root } = mount(
       <Calendar

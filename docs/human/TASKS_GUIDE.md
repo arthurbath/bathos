@@ -15,70 +15,78 @@ BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/ta
 | View | Purpose |
 | --- | --- |
 | Today | Eligible Anytime work grouped into Inbox, Now, Next, and Later |
-| Upcoming | Work controlled by a future start date or, when no future start exists, a future deadline |
+| Upcoming | Work controlled by a future Start or, when no future start exists, a future Deadline |
 | Anytime | All active work available now, including every Today task |
 | Someday | Inactive work kept for possible future attention |
-| Done | Completed, canceled, and recoverably deleted work retained for 30 full owner-local days |
+| Done | Completed, canceled, and recoverably deleted tasks retained for 30 full owner-local days |
 | Projects | Areas, projects, project tasks, and checklists |
-| Templates | Reusable to-do and project structures |
+| Templates | Reusable task and project structures |
 
 Today, Upcoming, Anytime, and Someday remain directly available in the primary navigation. Open More for Projects, Templates, Done, and Config.
 
-Press `Control+N` on Mac or `Control+Shift+N` on Windows from Today, Upcoming, Anytime, or Someday to insert a blank complete task editor at the top of the view. Today drafts begin in Today Now. Anytime and Upcoming drafts begin as unplanned Anytime work, so an Upcoming draft leaves that view after it is saved unless a future Start or Deadline makes it visible there. Someday drafts remain inactive and undated. Raycast and Mail capture use their own explicit placement rules.
+Press `Control+A` on Mac or `Control+Shift+A` on Windows from Today, Upcoming, Anytime, or Someday to insert a blank complete task editor at the top of the view. Today drafts begin in Today Now. Anytime and Upcoming drafts begin as unplanned Anytime work, so an Upcoming draft leaves that view after it is saved unless a future Start or Deadline makes it visible there. Someday drafts remain inactive and undated. Raycast and Mail capture use their own explicit placement rules.
 
-Use Start Date only to defer work to a future owner-local date. Today and earlier dates are rejected. Day Horizon independently records Inbox, Now, Next, or Later for active Today work and the section a deferred item will enter. Assigning a Start Date defaults a missing horizon to Next. When that date arrives, local and server activation clear Start Date while retaining the horizon. A future Start Date controls Upcoming placement even when it is later than the deadline. If no future start exists, a future deadline controls Upcoming placement instead. Upcoming groups tomorrow through the next seven days individually, later work through the next 12 months by month, and more distant work by year. Active undated work remains in Anytime and appears in Today whenever it has a horizon.
+Use Start only to defer work to a future owner-local date. Today and earlier dates are rejected. A future Start has no Today horizon. Inbox, Now, Next, and Later apply only to work in Today, and selecting one clears any future Start. When a Start arrives, local and server activation clear it and place the item in Today Next. A future Start controls Upcoming placement even when it is later than the Deadline. If no future Start exists, a future Deadline controls Upcoming placement instead. Upcoming groups tomorrow through the next seven days individually, later work through the next 12 months by month, and more distant work by year. Active undated work remains in Anytime and appears in Today whenever it has a horizon.
 
-Use deadlines for the last acceptable date. A deadline may be earlier than Start Date when work has been deliberately rescheduled past that boundary. Reminder Time appears only for deferred work and always resolves on the current Start Date. Changing a future Start Date rebinds the reminder, and manually clearing it cancels the reminder. Automatic activation preserves that day's already-resolved occurrence so a later reminder still delivers. Mark work as `Waiting` when another party or event is expected to unblock it, or `Rechecking` when no signal is expected and you must test availability again. Every change in an expanded to-do saves automatically. Title and notes typing is briefly debounced, while selects, dates, organization, and reminders persist immediately. Closing an editor flushes its final valid draft. There are no Save or Cancel actions and no routine saving indicator. Open editors expand inline with a quick transition and close when you click outside the to-do; calendars, menus, and dialogs opened from that to-do remain part of the editing session.
+Use Deadline for the last acceptable date. A Deadline may be earlier than Start when work has been deliberately rescheduled past that boundary. Reminder Time appears only for deferred work and always resolves on the current Start. Changing a future Start rebinds the reminder, and manually clearing it cancels the reminder. Automatic activation preserves that day's already-resolved occurrence so a later reminder still delivers. Mark work as `Waiting` when another party or event is expected to unblock it, or `Rechecking` when no signal is expected and you must test availability again. Every change in an expanded task saves automatically. Title and notes typing is briefly debounced, while selects, dates, organization, and reminders persist immediately. Closing an editor flushes its final valid draft. There are no Save or Cancel actions and no routine saving indicator. Open editors expand inline with a quick transition and close when you click outside the task. Calendars, menus, and dialogs opened from that task remain part of the editing session.
 
 Structured webpage, file, reading-item, and Mail sources remain distinct from the task title and notes. Primary Link is the editable shortcut shown on the task row: `message://` values use the Mail icon, HTTP(S) values use the Link icon, and other nonblank values open as HTTPS destinations. Mail capture initializes Primary Link from its audited message deep link without replacing source provenance. Expanded notes are always directly editable and style supported Markdown as you type without hiding its source. The supported subset is headings, asterisk emphasis, double-asterisk strong text, asterisk bullets, Markdown links, and inline code. Heading, emphasis, strong, bullet, and link indicators use a fixed-width font. Inline code uses a fixed-width font and a light background across the complete delimited string. Safe HTTP(S), `message://`, and other application links remain actionable. Press Enter in an asterisk bullet to begin the next bullet.
 
 ## Keyboard Commands
 
-Press `Command+/` on Mac or `Control+/` on Windows to open the current keyboard and pointer reference. The panel always shows Mac and Windows commands and identifies the current platform. Tasks reserves the Control-based task commands while the module is mounted, including when a text field is active. Standard Command shortcuts on Mac and Control shortcuts on Windows retain their expected browser and operating-system intent except where Tasks supplies the matching task-level behavior described below. There is currently no keyboard shortcut for Find.
+Press `⌘/` on Mac or `⌃/` on Windows to open the current keyboard and pointer reference. The panel always shows Mac and Windows commands and identifies the current platform. Config also displays the shortcut as a quiet reminder. Tasks reserves the documented task commands while the module is mounted, including when a text field is active. Standard Command shortcuts on Mac and Control shortcuts on Windows retain their expected browser and operating-system intent except where Tasks supplies the matching task-level behavior described below. There is currently no keyboard shortcut for Find.
 
 | Action | Mac | Windows |
 | --- | --- | --- |
-| Open keyboard help | `Command+/` | `Control+/` |
-| Undo the latest safe task change | `Command+Z` | `Control+Z` |
-| Redo the latest undone task change | `Command+Shift+Z` or `Command+Y` | `Control+Y` |
-| Select all visible to-dos | `Command+A` | `Control+A` |
-| Duplicate the open or selected to-dos | `Command+D` | `Control+D` |
-| Cut selected to-dos | `Command+X` | `Control+X` |
-| Copy selected to-dos | `Command+C` | `Control+C` |
-| Paste to-dos or text | `Command+V` | `Control+V` |
-| Close an open to-do | `Command+Return` or `Command+Escape` | `Control+Return` |
+| Undo the Latest Safe Task Change | `⌘Z` or `⌃Z` | `⌃Z` |
+| Redo the Latest Undone Task Change | `⌘Y` or `⌘⇧Z` | `⌃Y` or `⌃⇧Z` |
+| Select All Visible Tasks | `⌘A` | `⌃A` |
+| Duplicate the Focused, Open, or Selected Tasks | `⌘D` | `⌃D` |
+| Cut Focused or Selected Tasks | `⌘X` | `⌃X` |
+| Copy Focused or Selected Tasks | `⌘C` | `⌃C` |
+| Paste Tasks or Text | `⌘V` | `⌃V` |
+| Close an Open Task | `⌘Return` or `⌘Escape` | `⌃Return` |
+| Show Keyboard Commands | `⌘/` | `⌃/` |
 
-Cut, Copy, Paste, and Select All remain native when an editable text control owns the command. Outside text editing, task Cut and Copy require selection mode. Paste reconstructs a structured BathOS Tasks payload when available. Other nonblank clipboard text becomes one new task whose Title contains the clipboard text. Today paste produces Today Inbox work. Anytime paste produces unplanned Anytime work. Someday paste produces undated Someday work. Area and project detail views apply their visible organization. Upcoming, Done, Config, Projects, Templates, and Search reject task paste.
+Cut, Copy, Paste, and Select All remain native when an editable text control owns the command. Outside text editing, task Cut and Copy target either the single focused task or every task in multiple selection. Paste reconstructs a structured BathOS Tasks payload when available. Other nonblank clipboard text becomes one new task whose Title contains the clipboard text. Today paste produces Today Inbox work. Anytime paste produces unplanned Anytime work. Someday paste produces undated Someday work. Area and project detail views apply their visible organization. Upcoming, Done, Config, Projects, Templates, and Search reject task paste.
+
+| View navigation | Mac | Windows |
+| --- | --- | --- |
+| Open Today | `⌘1` | `⌃1` |
+| Open Upcoming | `⌘2` | `⌃2` |
+| Open Anytime | `⌘3` | `⌃3` |
+| Open Someday | `⌘4` | `⌃4` |
+| Open Done | `⌘5` | `⌃5` |
+| Open Config | `⌘6` | `⌃6` |
 
 | Task-specific action | Mac | Windows |
 | --- | --- | --- |
-| New task | `Control+N` | `Control+Shift+N` |
-| Open Today | `Control+W` | `Control+Shift+W` |
-| Open Upcoming | `Control+E` | `Control+Shift+E` |
-| Open Anytime | `Control+R` | `Control+Shift+R` |
-| Open Someday | `Control+T` | `Control+Shift+T` |
-| Open Done | `Control+Y` | `Control+Shift+Y` |
-| Open Config | `Control+U` | `Control+Shift+U` |
-| Toggle Done | `Control+A` | `Control+Shift+A` |
-| Open the previous to-do | `Control+S` | `Control+Shift+S` |
-| Choose Start | `Control+D` | `Control+Shift+D` |
-| Cycle Day Horizon | `Control+F` | `Control+Shift+F` |
-| Cycle Actionability | `Control+G` | `Control+Shift+G` |
-| Edit Reminder Time | `Control+H` | `Control+Shift+H` |
-| Close the open to-do | `Control+Z` | `Control+Shift+Z` |
-| Open the next to-do | `Control+X` | `Control+Shift+X` |
-| Choose Deadline | `Control+C` | `Control+Shift+C` |
-| Choose Area or Project | `Control+V` | `Control+Shift+V` |
-| Checklist editing, reserved | `Control+B` | `Control+Shift+B` |
-| Reorder the focused task | `Option+Up/Down` | `Alt+Up/Down` |
+| Open/Close Task | `⌃Q` | `⌃⇧Q` |
+| Open the Previous Task | `⌃W` | `⌃⇧W` |
+| Choose Start | `⌃E` | `⌃⇧E` |
+| Cycle Day Horizon | `⌃R` | `⌃⇧R` |
+| Clear Start | `⌃T` | `⌃⇧T` |
+| New Task | `⌃A` | `⌃⇧A` |
+| Open the Next Task | `⌃S` | `⌃⇧S` |
+| Choose Deadline | `⌃D` | `⌃⇧D` |
+| Cycle Actionability | `⌃F` | `⌃⇧F` |
+| Set Start to Someday | `⌃G` | `⌃⇧G` |
+| Toggle Done | `⌃X` | `⌃⇧X` |
+| Edit Checklist | `⌃C` | `⌃⇧C` |
+| Choose Area or Project | `⌃V` | `⌃⇧V` |
+| Edit Reminder Time | `⌃B` | `⌃⇧B` |
 
-Open-next and open-previous do not wrap at the list boundaries. With no open task, Open Next starts at the top and Open Previous starts at the bottom. Opening a task puts the insertion point at the end of its Title and scrolls only as much as needed to reveal it. Marking an open task complete keeps it open so its metadata can still be edited. Tasks moves it to Done only when the editor closes. Clicking the checkbox of a closed task completes it immediately.
+Tab and Shift+Tab follow the native page order through each closed task row and its available completion, title, source-link, and actions controls, then continue beyond the task list. Starting granular Tab traversal clears any whole-task focus without interrupting the browser's focus movement. When no task is focused, open, or multiply selected and no nested surface owns the keyboard, press Space from the Tasks page background to focus the first visible task without opening it. Space on a task row reached by Tab promotes that same row into whole-task focus without advancing. After whole-task focus is established, Space advances, Shift+Space reverses, and Up or Down moves through visible tasks. These whole-task movements wrap at both ends and scroll the destination into view. Held Space does not repeat movement. Space retains its native behavior on task controls, links, editors, dialogs, menus, popovers, and unrelated page controls. Escape relinquishes focus from a collapsed task row or one of its granular controls when no nested surface owns Escape. Return opens a whole-task-focused closed task. Open/Close Task opens a focused closed task or closes an open task and returns focus to its row. When completion, lifecycle, menu, or task-owned dialog actions return to the collapsed list, focus lands on the complete task row or its same-position fallback rather than a nested row control.
 
-Tasks retains up to 100 safe forward changes for keyboard undo and redo. Each accepted autosave batch is an ordinary forward change, and a new forward change clears the redo path. The client rebuilds that cursor when synchronized history changes and temporarily withholds undo or redo until the current task and cursor-tip snapshots agree. It never skips an unsafe latest event to reach older history. The server independently rejects any stale inverse, preventing older work from overwriting intervening changes.
+Open Next and Open Previous do not wrap at the list boundaries. With no focused or open task, Open Next starts at the top and Open Previous starts at the bottom. With a closed task focused, either command opens the adjacent task. With a task open, either command closes it before opening the adjacent task. Reaching a boundary closes an open task and retains focus on that row. Opening a task puts the insertion point at the end of its Title and scrolls only as much as needed to reveal it. Marking an open task complete keeps it open so its metadata can still be edited. Tasks moves it to Done only when the editor closes. Clicking the checkbox of a closed task completes it immediately.
 
-Command-click on Mac or Control-click on Windows enters selection mode and toggles a task. Shift-click replaces the selection with the contiguous range between the original anchor and the newly clicked task. Once selection mode is active, an ordinary click also toggles a task. Choose `Done` in the selection bar to return to ordinary single-click editing. Done rows support selection for Copy and Duplicate. Cut is unavailable there because Done represents terminal history rather than present work.
+Clear Start moves targeted work to unplanned Anytime and cancels its Start-dependent reminder. Set Start to Someday moves targeted work to Someday and cancels its Start-dependent reminder. Both preserve Deadline, actionability, and organization. Cycle Day Horizon moves non-Today work to Today before cycling its Today horizon.
 
-Drag a Today task before or after a task in another visible Today section to change its day horizon and order together. Empty Today sections remain hidden and do not act as drop zones. Dragging within Anytime or Someday changes order only. Keyboard and row-menu reorder commands remain section-bounded alternatives.
+Tasks retains up to 100 safe forward changes for keyboard undo and redo. Every editable task mutation participates in this history, including completion, cancellation, deletion, reopening, and restoration. Tasks reserves a mutation before asynchronous persistence or a departing-row animation begins. If Undo arrives immediately, Tasks waits for that exact mutation and its synchronized task and history projections instead of traversing an older event. Each accepted autosave batch is an ordinary forward change, and a new forward change clears the redo path. The client rebuilds that cursor when synchronized history changes and temporarily withholds undo or redo until the current task and cursor-tip snapshots agree. It never skips an unsafe latest event to reach older history. The server independently rejects any stale inverse, preventing older work from overwriting intervening changes.
+
+The first Command-click on Mac, Control-click on Windows, or Shift-click focuses one closed task and establishes the range anchor without showing the multiple-selection toolbar. A second modified click or a Shift-click away from the anchor selects at least two tasks and reveals the toolbar. Once multiple selection is active, an ordinary click also toggles a task. Reducing the set to one task dismisses the toolbar and retains that task as the single focused task. Reducing it to zero clears task focus. Clicking outside every task or switching views clears task focus and multiple selection. Modified clicks on task links retain native link behavior, and direct clicks on completion or action controls perform only their own actions. Done rows support focus and selection for Copy and Duplicate. Cut is unavailable there because Done represents retained terminal task states rather than active work.
+
+Drag a Today task before or after a task in another visible Today section to change its day horizon and order together. Empty Today sections remain hidden and do not act as drop zones. Dragging within Anytime or Someday changes order only. Keyboard task reordering is not currently supported.
 
 ## Capture from Raycast
 
@@ -131,7 +139,7 @@ Use Backup and Restore under Config to download a checksum-protected JSON backup
 
 - Merge restore validates the backup and adds records that do not conflict with existing stable identifiers.
 - Replace restore downloads a required pre-restore backup, asks for separate confirmation, and replaces the synchronized task graph in one server transaction.
-- Completed, canceled, and deleted work remains recoverable through Done until its retention boundary.
+- Completed, canceled, and deleted tasks remain recoverable through Done until their retention boundary. Uncheck a completed task to reopen it, activate a canceled task's leading control to reopen it, or activate a deleted task's leading trash control to restore it. The trash changes to a restore icon on hover or keyboard focus.
 - Terminal content is automatically purged at the owner-local midnight beginning its 31st day in Done. The interface does not expose routine permanent deletion.
 - Current backups use schema version 12 and omit the retired heading entity. Supported schema 3 through 11 backups flatten heading children into their projects and normalize former Inbox, Today, daytime, evening, Logbook, and Trash semantics before restore.
 

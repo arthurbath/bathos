@@ -18,11 +18,19 @@ import {
   getTaskUpcomingDate,
 } from '@/modules/tasks/domain/taskUpcoming';
 import type { TaskStateTransition } from '@/modules/tasks/domain/taskState';
+import type {
+  TaskForwardMutationReservation,
+  TaskForwardMutationSource,
+} from '@/modules/tasks/hooks/useTaskUndo';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
 
 export type TaskListView = TaskDestination | 'today' | 'upcoming' | 'done';
 export type TodayTaskSection = 'inbox' | 'now' | 'next' | 'later';
+export type RetainedTaskViewPlacement = Pick<
+  TaskTodo,
+  'destination' | 'today_section' | 'start_date' | 'deadline' | 'order_key'
+>;
 export type TaskListCreateInput = Omit<
   CreateTaskInput,
   'ownerId' | 'orderKey' | 'todaySection'
@@ -35,6 +43,10 @@ export function useTaskList(
   ownerId: string,
   view: TaskListView,
   retainedTaskId: string | null = null,
+  onForwardMutation?: (task: TaskTodo) => void,
+  reserveForwardMutation?: (
+    source: TaskForwardMutationSource,
+  ) => TaskForwardMutationReservation,
 ) {
   const { repository, planningTimeZone } = useTasksRuntime();
   const planningDate = useTaskPlanningDate(planningTimeZone);
@@ -114,14 +126,27 @@ export function useTaskList(
     query.data,
     optimisticTasks,
   ), [optimisticTasks, query.data]);
-  const retainedProjectionRef = useRef<{ id: string; task: TaskTodo } | null>(null);
-  if (retainedProjectionRef.current?.id !== retainedTaskId) {
-    const retainedTask = retainedTaskId === null
-      ? null
-      : allTasks.find((task) => task.id === retainedTaskId) ?? null;
-    retainedProjectionRef.current = retainedTask === null
-      ? null
-      : { id: retainedTask.id, task: retainedTask };
+  const retainedProjectionRef = useRef<{
+    id: string;
+    view: TaskListView;
+    task: TaskTodo;
+  } | null>(null);
+  if (retainedTaskId === null) {
+    retainedProjectionRef.current = null;
+  } else if (
+    retainedProjectionRef.current?.id !== retainedTaskId
+    || retainedProjectionRef.current.view !== view
+  ) {
+    const retainedTask = allTasks.find((task) => task.id === retainedTaskId) ?? null;
+    if (retainedTask !== null) {
+      retainedProjectionRef.current = {
+        id: retainedTask.id,
+        view,
+        task: retainedTask,
+      };
+    } else {
+      retainedProjectionRef.current = null;
+    }
   }
   const retainedProjection = retainedProjectionRef.current;
   const tasks = useMemo(() => deriveTaskViewTasks(
@@ -173,7 +198,6 @@ export function useTaskList(
       const firstScopedTask = requested.atTop
         ? allTasks
           .filter((task) => task.destination === requested.destination
-            && task.today_section === requested.todaySection
             && task.lifecycle === 'open'
             && task.disposition === 'present')
           .sort((left, right) => compareTaskOrder(
@@ -197,6 +221,9 @@ export function useTaskList(
   const updateTask = useCallback(
     async (taskId: string, patch: EditableTaskPatch) => {
       const currentTask = allTasks.find((task) => task.id === taskId);
+      const reservation = currentTask
+        ? reserveForwardMutation?.(currentTask)
+        : undefined;
       if (currentTask) {
         const optimisticTask = {
           ...currentTask,
@@ -215,6 +242,8 @@ export function useTaskList(
 
       try {
         const updatedTask = await repository.updateTask(ownerId, taskId, patch);
+        reservation?.commit(updatedTask);
+        onForwardMutation?.(updatedTask);
         setOptimisticTask(
           taskId,
           retainedTaskId === taskId || taskIsVisible(updatedTask, ownerId, view, planningDate)
@@ -223,34 +252,70 @@ export function useTaskList(
         );
         return updatedTask;
       } catch (error) {
+        reservation?.cancel();
         setOptimisticTask(taskId, undefined);
         throw error;
       }
     },
-    [allTasks, ownerId, planningDate, repository, retainedTaskId, setOptimisticTask, view],
+    [
+      allTasks,
+      onForwardMutation,
+      ownerId,
+      planningDate,
+      repository,
+      reserveForwardMutation,
+      retainedTaskId,
+      setOptimisticTask,
+      view,
+    ],
   );
   const transitionTask = useCallback(
-    async (taskId: string, transition: TaskStateTransition) => {
+    async (
+      taskId: string,
+      transition: TaskStateTransition,
+      reservedMutation?: TaskForwardMutationReservation,
+    ) => {
+      const currentTask = allTasks.find((task) => task.id === taskId);
+      const reservation = reservedMutation ?? (
+        currentTask ? reserveForwardMutation?.(currentTask) : undefined
+      );
       const leavesCurrentView = transition === 'complete'
         || transition === 'cancel'
         || transition === 'delete'
         || (view === 'done' && (transition === 'reopen' || transition === 'restore'));
-      if (leavesCurrentView) {
+      if (leavesCurrentView && retainedTaskId !== taskId) {
         setOptimisticTask(taskId, null);
       }
 
       try {
         const transitionedTask = await repository.transitionTask(ownerId, taskId, transition);
-        setOptimisticTask(taskId, taskIsVisible(transitionedTask, ownerId, view, planningDate)
-          ? transitionedTask
-          : null);
+        reservation?.commit(transitionedTask);
+        onForwardMutation?.(transitionedTask);
+        setOptimisticTask(
+          taskId,
+          retainedTaskId === taskId
+            || taskIsVisible(transitionedTask, ownerId, view, planningDate)
+            ? transitionedTask
+            : null,
+        );
         return transitionedTask;
       } catch (error) {
+        reservation?.cancel();
         setOptimisticTask(taskId, undefined);
         throw error;
       }
     },
-    [ownerId, planningDate, repository, setOptimisticTask, view],
+    [
+      allTasks,
+      onForwardMutation,
+      ownerId,
+      planningDate,
+      repository,
+      reserveForwardMutation,
+      retainedTaskId,
+      setOptimisticTask,
+      view,
+    ],
   );
   const duplicateTask = useCallback(
     async (taskId: string) => {
@@ -284,13 +349,18 @@ export function useTaskList(
   const moveTask = useCallback(
     async (taskId: string, input: TaskPlanningMoveInput) => {
       const currentTask = allTasks.find((task) => task.id === taskId);
+      const reservation = currentTask
+        ? reserveForwardMutation?.(currentTask)
+        : undefined;
       if (currentTask) {
         const optimisticTask = {
           ...currentTask,
           destination: input.destination,
           today_section: input.destination === 'someday'
             ? null
-            : input.todaySection ?? (input.startDate ? 'next' : null),
+            : input.startDate
+              ? null
+              : input.todaySection ?? null,
           start_date: input.startDate ?? null,
           revision: currentTask.revision + 1,
           client_mutation_id: `optimistic:${currentTask.client_mutation_id}`,
@@ -306,6 +376,8 @@ export function useTaskList(
 
       try {
         const movedTask = await repository.moveTask(ownerId, taskId, input);
+        reservation?.commit(movedTask);
+        onForwardMutation?.(movedTask);
         setOptimisticTask(
           taskId,
           retainedTaskId === taskId || taskIsVisible(movedTask, ownerId, view, planningDate)
@@ -314,24 +386,88 @@ export function useTaskList(
         );
         return movedTask;
       } catch (error) {
+        reservation?.cancel();
         setOptimisticTask(taskId, undefined);
         throw error;
       }
     },
-    [allTasks, ownerId, planningDate, repository, retainedTaskId, setOptimisticTask, view],
+    [
+      allTasks,
+      onForwardMutation,
+      ownerId,
+      planningDate,
+      repository,
+      reserveForwardMutation,
+      retainedTaskId,
+      setOptimisticTask,
+      view,
+    ],
   );
   const moveTasks = useCallback(
     async (taskIds: string[], input: TaskPlanningMoveInput) => {
-      const movedTasks = await repository.moveTasks(ownerId, taskIds, input);
-      for (const movedTask of movedTasks) {
+      const taskIdSet = new Set(taskIds);
+      const currentTasks = allTasks.filter((task) => taskIdSet.has(task.id));
+      const reservations = new Map(currentTasks.map((task) => [
+        task.id,
+        reserveForwardMutation?.(task),
+      ]));
+      for (const currentTask of currentTasks) {
+        const optimisticTask = {
+          ...currentTask,
+          destination: input.destination,
+          today_section: input.destination === 'someday'
+            ? null
+            : input.startDate
+              ? null
+              : input.todaySection ?? null,
+          start_date: input.startDate ?? null,
+          revision: currentTask.revision + 1,
+          client_mutation_id: `optimistic:${currentTask.client_mutation_id}`,
+          updated_at: new Date().toISOString(),
+        };
         setOptimisticTask(
-          movedTask.id,
-          taskIsVisible(movedTask, ownerId, view, planningDate) ? movedTask : null,
+          currentTask.id,
+          retainedTaskId === currentTask.id
+            || taskIsVisible(optimisticTask, ownerId, view, planningDate)
+            ? optimisticTask
+            : null,
         );
       }
-      return movedTasks;
+      try {
+        const movedTasks = await repository.moveTasks(ownerId, taskIds, input);
+        const movedTaskIds = new Set(movedTasks.map(({ id }) => id));
+        for (const movedTask of movedTasks) {
+          reservations.get(movedTask.id)?.commit(movedTask);
+          onForwardMutation?.(movedTask);
+          setOptimisticTask(
+            movedTask.id,
+            retainedTaskId === movedTask.id
+              || taskIsVisible(movedTask, ownerId, view, planningDate)
+              ? movedTask
+            : null,
+          );
+        }
+        for (const [taskId, reservation] of reservations) {
+          if (!movedTaskIds.has(taskId)) reservation?.cancel();
+        }
+        return movedTasks;
+      } catch (error) {
+        for (const reservation of reservations.values()) reservation?.cancel();
+        for (const taskId of taskIds) setOptimisticTask(taskId, undefined);
+        throw error;
+      }
     },
-    [ownerId, planningDate, repository, setOptimisticTask, view],
+    [
+      allTasks,
+      onForwardMutation,
+      ownerId,
+      planningDate,
+      repository,
+      reserveForwardMutation,
+      retainedTaskId,
+      setOptimisticTask,
+      view,
+    ],
   );
   const reorderTask = useCallback(
     async (taskId: string, direction: 'up' | 'down') => {
@@ -403,6 +539,7 @@ export function useTaskList(
     transitionTask,
     duplicateTask,
     planningDate,
+    retainedTaskPlacement: retainedProjection?.task ?? null,
   };
 }
 
@@ -417,10 +554,12 @@ export function deriveTaskViewTasks(
   return mergedTasks
     .filter((task) => task.id === retainedTaskId
       || taskIsVisible(task, ownerId, view, planningDate))
-    .map((task) => task.id === retainedTaskId && retainedProjection !== null
-      ? freezeTaskViewProjection(task, retainedProjection)
-      : task)
-    .sort((left, right) => compareTasksForView(left, right, view, planningDate));
+    .sort((left, right) => compareTasksForView(
+      taskWithRetainedViewPlacement(left, retainedTaskId, retainedProjection),
+      taskWithRetainedViewPlacement(right, retainedTaskId, retainedProjection),
+      view,
+      planningDate,
+    ));
 }
 
 function mergeTaskRecords(
@@ -435,14 +574,19 @@ function mergeTaskRecords(
   return Array.from(merged.values());
 }
 
-function freezeTaskViewProjection(task: TaskTodo, projection: TaskTodo): TaskTodo {
+export function taskWithRetainedViewPlacement(
+  task: TaskTodo,
+  retainedTaskId: string | null,
+  retainedPlacement: RetainedTaskViewPlacement | null,
+): TaskTodo {
+  if (task.id !== retainedTaskId || retainedPlacement === null) return task;
   return {
     ...task,
-    destination: projection.destination,
-    today_section: projection.today_section,
-    start_date: projection.start_date,
-    deadline: projection.deadline,
-    order_key: projection.order_key,
+    destination: retainedPlacement.destination,
+    today_section: retainedPlacement.today_section,
+    start_date: retainedPlacement.start_date,
+    deadline: retainedPlacement.deadline,
+    order_key: retainedPlacement.order_key,
   };
 }
 

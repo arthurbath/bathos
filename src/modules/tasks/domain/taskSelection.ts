@@ -3,6 +3,7 @@ import { isMacLikePlatform } from "@/lib/platform";
 export type TaskSelectionState = {
   active: boolean;
   anchorId: string | null;
+  focusedId: string | null;
   selectedIds: Set<string>;
 };
 
@@ -24,28 +25,69 @@ export function applyTaskSelectionGesture(
     return null;
   }
 
-  const anchorId = current.anchorId ?? gesture.taskId;
+  const normalize = (
+    selectedIds: Set<string>,
+    anchorId: string | null,
+  ): TaskSelectionState => {
+    if (selectedIds.size === 0) {
+      return {
+        active: false,
+        anchorId: null,
+        focusedId: null,
+        selectedIds,
+      };
+    }
+
+    if (selectedIds.size === 1) {
+      const focusedId = [...selectedIds][0];
+      return {
+        active: false,
+        anchorId: focusedId,
+        focusedId,
+        selectedIds: new Set(),
+      };
+    }
+
+    return {
+      active: true,
+      anchorId,
+      focusedId: null,
+      selectedIds,
+    };
+  };
+
+  if (!current.active && current.focusedId === null) {
+    return {
+      active: false,
+      anchorId: gesture.taskId,
+      focusedId: gesture.taskId,
+      selectedIds: new Set(),
+    };
+  }
+
+  const anchorId = current.anchorId ?? current.focusedId ?? gesture.taskId;
   if (gesture.shiftKey) {
     const anchorIndex = gesture.visibleTaskIds.indexOf(anchorId);
     const taskIndex = gesture.visibleTaskIds.indexOf(gesture.taskId);
     if (anchorIndex >= 0 && taskIndex >= 0) {
       const start = Math.min(anchorIndex, taskIndex);
       const end = Math.max(anchorIndex, taskIndex);
-      return {
-        active: true,
+      return normalize(
+        new Set(gesture.visibleTaskIds.slice(start, end + 1)),
         anchorId,
-        selectedIds: new Set(gesture.visibleTaskIds.slice(start, end + 1)),
-      };
+      );
     }
   }
 
-  const selectedIds = new Set(current.selectedIds);
+  const selectedIds = current.active
+    ? new Set(current.selectedIds)
+    : new Set(current.focusedId ? [current.focusedId] : []);
   if (selectedIds.has(gesture.taskId)) {
     selectedIds.delete(gesture.taskId);
   } else {
     selectedIds.add(gesture.taskId);
   }
-  return { active: true, anchorId, selectedIds };
+  return normalize(selectedIds, anchorId);
 }
 
 export function isMacLikeTaskPlatform(platform: string): boolean {

@@ -28,7 +28,7 @@ describe('task shortcut planning', () => {
     }), '2026-07-22')).toBe('next');
     expect(getTaskTodayShortcutHorizon(taskTodoFixture({
       destination: 'anytime',
-      today_section: 'later',
+      today_section: null,
       start_date: '2026-07-23',
     }), '2026-07-22')).toBe('now');
   });

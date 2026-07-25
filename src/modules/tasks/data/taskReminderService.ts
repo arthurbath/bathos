@@ -22,6 +22,7 @@ import {
 type TaskReminderClient = Pick<SupabaseClient<Database>, 'rpc'>;
 
 export const TASK_REMINDER_CLAIM_TIMEOUT_MS = 10_000;
+const TASK_REMINDER_PLANNING_RETRY_DELAYS_MS = [150, 300, 600, 1_200, 2_400] as const;
 
 export type TaskReminderSaveInput = {
   reminder?: TaskReminder | null;
@@ -89,7 +90,8 @@ export class TaskReminderService {
     ) {
       throw new InvalidTaskReminderError('A valid reminder time and time zone are required');
     }
-    const { data, error } = await this.client.rpc('tasks_save_start_reminder', {
+    const mutationId = input.mutationId ?? crypto.randomUUID();
+    const request = {
       _reminder_id: (input.reminder?.id ?? null) as unknown as string,
       _expected_record_revision: (input.reminder?.record_revision ?? null) as unknown as number,
       _root_type: input.rootType,
@@ -97,24 +99,35 @@ export class TaskReminderService {
       _local_time: input.localTime,
       _time_zone: input.timeZone,
       _ambiguity_choice: input.ambiguityChoice ?? 'earlier',
-      _mutation_id: input.mutationId ?? crypto.randomUUID(),
+      _mutation_id: mutationId,
       _mutation_channel: input.mutationChannel ?? 'web',
       _actor_type: input.actorType ?? 'user',
-    });
-    if (error) throw error;
-    const result = requireRecord(data, 'Reminder save returned an invalid result');
-    const outcome = requireEnum(
-      result.outcome,
-      ['accepted', 'already_applied', 'conflict'] as const,
-      'reminder save outcome',
-    );
-    return {
-      outcome,
-      reminder: parseTaskReminder(result.reminder),
-      ...(outcome === 'conflict'
-        ? {}
-        : { occurrence: parseTaskReminderOccurrence(result.occurrence) }),
     };
+
+    for (let attempt = 0; ; attempt += 1) {
+      const { data, error } = await this.client.rpc('tasks_save_start_reminder', request);
+      if (error) {
+        const retryDelay = TASK_REMINDER_PLANNING_RETRY_DELAYS_MS[attempt];
+        if (!isPendingRootPlanningError(error) || retryDelay === undefined) {
+          throw normalizeReminderServiceError(error, 'Unable to save reminder');
+        }
+        await waitForReminderPlanning(retryDelay);
+        continue;
+      }
+      const result = requireRecord(data, 'Reminder save returned an invalid result');
+      const outcome = requireEnum(
+        result.outcome,
+        ['accepted', 'already_applied', 'conflict'] as const,
+        'reminder save outcome',
+      );
+      return {
+        outcome,
+        reminder: parseTaskReminder(result.reminder),
+        ...(outcome === 'conflict'
+          ? {}
+          : { occurrence: parseTaskReminderOccurrence(result.occurrence) }),
+      };
+    }
   }
 
   async cancel(
@@ -269,6 +282,29 @@ export class TaskReminderService {
       ),
     };
   }
+}
+
+function isPendingRootPlanningError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const record = error as { code?: unknown; message?: unknown };
+  return record.code === '22023'
+    && typeof record.message === 'string'
+    && record.message.startsWith('A reminder requires');
+}
+
+function normalizeReminderServiceError(error: unknown, fallback: string): Error {
+  if (error instanceof Error) return error;
+  if (typeof error === 'object' && error !== null) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message) return new Error(message);
+  }
+  return new Error(fallback);
+}
+
+function waitForReminderPlanning(delayMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
 }
 
 async function settleReminderClaim<T>(

@@ -50,7 +50,7 @@ describe('task calendar dates', () => {
     expect(() => assertTaskCalendarRange('2026-07-19', null)).not.toThrow();
     expect(() => assertTaskCalendarRange('2026-07-19', '2026-07-19')).not.toThrow();
     expect(() => assertTaskCalendarRange('2026-07-20', '2026-07-19')).toThrow(
-      'Deadline cannot be earlier than the start date',
+      "Deadline cannot be earlier than Start",
     );
   });
 

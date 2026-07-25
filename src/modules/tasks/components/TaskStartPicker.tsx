@@ -1,6 +1,7 @@
 import {
   Bell,
   CalendarIcon,
+  CircleDashed,
   Clock2,
   Clock5,
   Clock8,
@@ -52,12 +53,13 @@ import {
 } from './taskStartPickerEvents';
 
 type PlanningSelection = {
+  destination: TaskTodo['destination'];
   startDate: string | null;
   todaySection: TaskTodaySection | null;
 };
 
 type TaskStartPickerProps = {
-  task: Pick<TaskTodo, 'id' | 'title' | 'start_date' | 'today_section'>;
+  task: Pick<TaskTodo, 'id' | 'title' | 'destination' | 'start_date' | 'today_section'>;
   reminder: TaskReminder | null;
   reminderTime: string;
   reminderTimeZone: string;
@@ -109,10 +111,13 @@ function TaskStartPickerPanel({
   const minimumDate = parseDatePickerFieldValue(minimumDateValue);
   const planningToday = parseDatePickerFieldValue(planningDate);
   const visibleMonth = selectedDate ?? minimumDate ?? new Date();
-  const planned = task.start_date !== null || task.today_section !== null;
+  const planned = task.destination === 'someday'
+    || task.start_date !== null
+    || task.today_section !== null;
   const committedReminderDisplay = formatTaskReminderTimeDisplay(reminderTime) ?? '';
   const [reminderInput, setReminderInput] = useState(committedReminderDisplay);
   const reminderInputConfirmedRef = useRef(true);
+  const reminderCommitRef = useRef<Promise<boolean> | null>(null);
 
   useEffect(() => {
     if (document.activeElement === reminderRef.current) return;
@@ -133,7 +138,10 @@ function TaskStartPickerPanel({
       const selectedDay = panelRef.current?.querySelector<HTMLButtonElement>(
         'button[name="day"][aria-selected="true"]',
       );
-      (selectedHorizon ?? selectedDay ?? firstHorizonRef.current)?.focus();
+      const selectedSomeday = panelRef.current?.querySelector<HTMLButtonElement>(
+        '[data-task-start-someday][aria-pressed="true"]',
+      );
+      (selectedHorizon ?? selectedDay ?? selectedSomeday ?? firstHorizonRef.current)?.focus();
     }, 0);
     return () => window.clearTimeout(timer);
   }, [active, focusTarget]);
@@ -151,6 +159,14 @@ function TaskStartPickerPanel({
     ) ?? []).filter((button) => !button.className.includes('day-outside'));
     const selectedDay = days.find((button) => button.getAttribute('aria-selected') === 'true');
     (selectedDay ?? (position === 'first' ? days[0] : days.at(-1)))?.focus();
+  };
+
+  const focusFooterAction = () => {
+    const footerAction = panelRef.current?.querySelector<HTMLButtonElement>(
+      '[data-task-start-footer-action]:not(:disabled)',
+    );
+    footerAction?.focus();
+    return Boolean(footerAction);
   };
 
   const focusCalendarHeader = () => {
@@ -211,17 +227,27 @@ function TaskStartPickerPanel({
 
     if (target === reminderRef.current) {
       if (event.key === 'ArrowUp') focusCalendarDay('last');
-      else if (event.key === 'ArrowDown') {
-        panelRef.current?.querySelector<HTMLButtonElement>('[data-task-start-clear]')?.focus();
-      } else return;
+      else if (event.key === 'ArrowDown') focusFooterAction();
+      else return;
       event.preventDefault();
       event.stopPropagation();
       return;
     }
 
-    const clearButton = target.closest<HTMLButtonElement>('[data-task-start-clear]');
-    if (clearButton && event.key === 'ArrowUp') {
-      reminderRef.current?.focus();
+    const footerAction = target.closest<HTMLButtonElement>('[data-task-start-footer-action]');
+    if (footerAction) {
+      const footerActions = Array.from(panelRef.current?.querySelectorAll<HTMLButtonElement>(
+        '[data-task-start-footer-action]:not(:disabled)',
+      ) ?? []);
+      const index = footerActions.indexOf(footerAction);
+      if (event.key === 'ArrowLeft' && index > 0) footerActions[index - 1]?.focus();
+      else if (event.key === 'ArrowRight' && index < footerActions.length - 1) {
+        footerActions[index + 1]?.focus();
+      } else if (event.key === 'ArrowUp') {
+        if (reminderRef.current?.disabled) focusCalendarDay('last');
+        else reminderRef.current?.focus();
+      }
+      else return;
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -244,7 +270,8 @@ function TaskStartPickerPanel({
       ) ?? []);
       const index = months.indexOf(monthButton);
       if (index >= Math.max(0, months.length - 3)) {
-        reminderRef.current?.focus();
+        if (reminderRef.current?.disabled) focusFooterAction();
+        else reminderRef.current?.focus();
         event.preventDefault();
         event.stopPropagation();
       }
@@ -253,41 +280,54 @@ function TaskStartPickerPanel({
 
   };
 
-  const commitReminderInput = async (): Promise<boolean> => {
-    const rawValue = reminderInput;
-    if (!rawValue.trim()) {
-      if (reminderTime) await onReminderChange('');
-      setReminderInput('');
-      reminderInputConfirmedRef.current = true;
-      return true;
-    }
+  const commitReminderInput = (): Promise<boolean> => {
+    if (reminderCommitRef.current !== null) return reminderCommitRef.current;
 
-    const resolved = resolveTaskReminderTimeInput(rawValue, {
-      today: task.start_date === null,
-      timeZone: reminderTimeZone,
-    });
-    if (!resolved) {
-      setReminderInput(committedReminderDisplay);
-      reminderInputConfirmedRef.current = true;
-      toast({
-        title: 'Not allowed.',
-        duration: 1_800,
-      });
-      return false;
-    }
-
-    try {
-      if (resolved.localTime !== reminderTime) {
-        await onReminderChange(resolved.localTime);
+    const commit = (async () => {
+      const rawValue = reminderInput;
+      if (!rawValue.trim()) {
+        reminderInputConfirmedRef.current = true;
+        try {
+          if (reminderTime) await onReminderChange('');
+          setReminderInput('');
+          return true;
+        } catch {
+          setReminderInput(committedReminderDisplay);
+          return false;
+        }
       }
-      setReminderInput(resolved.displayTime);
+
+      const resolved = resolveTaskReminderTimeInput(rawValue, {
+        today: task.start_date === null,
+        timeZone: reminderTimeZone,
+      });
+      if (!resolved) {
+        setReminderInput(committedReminderDisplay);
+        reminderInputConfirmedRef.current = true;
+        toast({
+          title: 'Not allowed.',
+          duration: 1_800,
+        });
+        return false;
+      }
+
       reminderInputConfirmedRef.current = true;
-      return true;
-    } catch {
-      setReminderInput(committedReminderDisplay);
-      reminderInputConfirmedRef.current = true;
-      return false;
-    }
+      try {
+        if (resolved.localTime !== reminderTime) {
+          await onReminderChange(resolved.localTime);
+        }
+        setReminderInput(resolved.displayTime);
+        return true;
+      } catch {
+        setReminderInput(committedReminderDisplay);
+        return false;
+      }
+    })();
+    reminderCommitRef.current = commit;
+    void commit.finally(() => {
+      if (reminderCommitRef.current === commit) reminderCommitRef.current = null;
+    });
+    return commit;
   };
 
   return (
@@ -317,6 +357,7 @@ function TaskStartPickerPanel({
                   selected && 'bg-accent text-accent-foreground',
                 )}
                 onClick={() => void onPlanningChange({
+                  destination: 'anytime',
                   startDate: null,
                   todaySection: value,
                 }).then(onRequestClose)}
@@ -339,13 +380,14 @@ function TaskStartPickerPanel({
           today={planningToday}
           initialFocusDate={selectedDate ?? minimumDate}
           onDayGridExitDown={() => {
-            if (reminderRef.current?.disabled) return false;
+            if (reminderRef.current?.disabled) return focusFooterAction();
             reminderRef.current?.focus();
             return Boolean(reminderRef.current);
           }}
           onSelect={(date) => {
             if (!date) return;
             void onPlanningChange({
+              destination: 'anytime',
               startDate: toDatePickerFieldValue(date),
               todaySection: task.today_section ?? 'next',
             }).then(onRequestClose);
@@ -388,7 +430,9 @@ function TaskStartPickerPanel({
                 onRequestClose();
                 return;
               }
-              void commitReminderInput();
+              void commitReminderInput().then((accepted) => {
+                if (accepted) onRequestClose();
+              });
             }}
           />
         </div>
@@ -402,11 +446,15 @@ function TaskStartPickerPanel({
         ) : null}
       </div>
 
-      <div className="border-t border-[hsl(var(--grid-sticky-line))] p-2">
+      <div
+        className="grid grid-cols-2 gap-1 border-t border-[hsl(var(--grid-sticky-line))] p-2"
+        data-task-start-footer
+      >
         <Button
           type="button"
           variant="clear"
           data-task-start-clear
+          data-task-start-footer-action
           className="w-full justify-start gap-2 text-muted-foreground"
           disabled={!planned && !reminderTime}
           onClick={() => {
@@ -416,12 +464,36 @@ function TaskStartPickerPanel({
           <X className="h-4 w-4" aria-hidden />
           Clear
         </Button>
+        <Button
+          type="button"
+          variant="clear"
+          aria-pressed={task.destination === 'someday'}
+          data-task-start-someday
+          data-task-start-footer-action
+          className={cn(
+            'w-full justify-start gap-2',
+            task.destination === 'someday'
+              ? 'bg-accent text-accent-foreground'
+              : 'text-muted-foreground',
+          )}
+          onClick={() => {
+            void onPlanningChange({
+              destination: 'someday',
+              startDate: null,
+              todaySection: null,
+            }).then(onRequestClose);
+          }}
+        >
+          <CircleDashed className="h-4 w-4" aria-hidden />
+          Someday
+        </Button>
       </div>
     </div>
   );
 }
 
 function getStartSummary(
+  destination: TaskTodo['destination'],
   startDate: string | null,
   todaySection: TaskTodaySection | null,
   planningDate: string,
@@ -433,7 +505,8 @@ function getStartSummary(
     const label = todayChoices.find((choice) => choice.value === todaySection)?.label;
     return `Today · ${label ?? todaySection}`;
   }
-  return 'No Start';
+  if (destination === 'someday') return 'Someday';
+  return "No Start";
 }
 
 export function TaskStartPickerField(props: TaskStartPickerProps) {
@@ -443,11 +516,17 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
   const tabExitDirectionRef = useRef<'forward' | 'backward' | null>(null);
   const summary = useMemo(
     () => getStartSummary(
+      props.task.destination,
       props.task.start_date,
       props.task.today_section,
       props.planningDate,
     ),
-    [props.planningDate, props.task.start_date, props.task.today_section],
+    [
+      props.planningDate,
+      props.task.destination,
+      props.task.start_date,
+      props.task.today_section,
+    ],
   );
 
   useEffect(() => {
@@ -478,8 +557,9 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
           variant="outline"
           aria-label="Start"
           className={cn(
-            'h-10 w-full justify-start rounded-md border-[hsl(var(--grid-sticky-line))] bg-background px-3 text-left font-normal hover:bg-background',
-            props.task.start_date === null
+            'h-10 w-full justify-start rounded-md border-[hsl(var(--grid-sticky-line))] bg-background px-3 text-left font-normal enabled:hover:bg-background',
+            props.task.destination !== 'someday'
+              && props.task.start_date === null
               && props.task.today_section === null
               && 'text-muted-foreground',
           )}
@@ -545,6 +625,7 @@ export function TaskStartDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        footerless
         className="w-auto max-w-[calc(100vw-2rem)] p-0 shadow-none sm:max-w-none"
         aria-describedby={undefined}
         onCloseAutoFocus={(event) => {
@@ -555,7 +636,7 @@ export function TaskStartDialog({
         <DialogHeader className="px-4 pt-4">
           <DialogTitle>Start</DialogTitle>
         </DialogHeader>
-        <DialogBody className="mx-0 p-0">
+        <DialogBody className="mx-0 mb-0 border-b-0 p-0">
           <p className="truncate px-4 pb-3 text-sm font-medium text-foreground">
             {props.task.title}
           </p>

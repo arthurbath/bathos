@@ -77,7 +77,8 @@ SELECT lives_ok(
     VALUES (
       '72000000-0000-4000-8000-000000000011',
       '72000000-0000-4000-8000-000000000001',
-      'Synthetic future task', 'anytime', 'a1', '2026-07-25',
+      'Synthetic future task', 'anytime', 'a1',
+      (clock_timestamp() AT TIME ZONE 'UTC')::date + 7,
       '72000000-0000-4000-8000-000000000021'
     )
   $$,
@@ -116,7 +117,7 @@ SELECT is(
     SELECT count(*)::integer
     FROM public.tasks_todos
     WHERE owner_id = '72000000-0000-4000-8000-000000000001'
-      AND start_date > DATE '2026-07-20'
+      AND start_date > (clock_timestamp() AT TIME ZONE 'UTC')::date
       AND lifecycle = 'open'
       AND disposition = 'present'
   ),
@@ -216,9 +217,9 @@ SELECT lives_ok(
 RESET ROLE;
 SELECT ok(
   tasks_private.todo_export_planning_is_valid_v3(
-    '{"destination":"anytime","today_section":"next","start_date":"2026-07-25"}'::jsonb
+    '{"destination":"anytime","today_section":"none","start_date":"2099-07-25"}'::jsonb
   ),
-  'accepts future Anytime placement in export validation'
+  'accepts horizon-free future Anytime placement in legacy export validation'
 );
 SELECT is(
   tasks_private.todo_export_planning_is_valid_v3(

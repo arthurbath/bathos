@@ -63,6 +63,60 @@ describe('TaskReminderService', () => {
     }));
   });
 
+  it('retries the exact temporary root-planning lag with one mutation id', async () => {
+    vi.useFakeTimers();
+    try {
+      const rpc = vi.fn()
+        .mockResolvedValueOnce({
+          data: null,
+          error: {
+            code: '22023',
+            message: 'A reminder requires a Start date or Today horizon',
+          },
+        })
+        .mockResolvedValueOnce({
+          data: { outcome: 'accepted', reminder, occurrence },
+          error: null,
+        });
+      const service = new TaskReminderService({ rpc } as never);
+
+      const saved = service.save({
+        rootType: 'todo',
+        rootId: 'task-a',
+        localTime: '09:00',
+        timeZone: 'America/Los_Angeles',
+        mutationId: 'mutation-a',
+      });
+      await vi.runAllTimersAsync();
+
+      await expect(saved).resolves.toMatchObject({ outcome: 'accepted', reminder });
+      expect(rpc).toHaveBeenCalledTimes(2);
+      expect(rpc.mock.calls[0]?.[1]).toMatchObject({ _mutation_id: 'mutation-a' });
+      expect(rpc.mock.calls[1]?.[1]).toMatchObject({ _mutation_id: 'mutation-a' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not retry or obscure an unrelated reminder failure', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        code: '42501',
+        message: 'Authentication is required to save reminders',
+      },
+    });
+    const service = new TaskReminderService({ rpc } as never);
+
+    await expect(service.save({
+      rootType: 'todo',
+      rootId: 'task-a',
+      localTime: '09:00',
+      timeZone: 'America/Los_Angeles',
+    })).rejects.toThrow('Authentication is required to save reminders');
+    expect(rpc).toHaveBeenCalledOnce();
+  });
+
   it('rejects malformed local intent before calling the server', async () => {
     const rpc = vi.fn();
     const service = new TaskReminderService({ rpc } as never);

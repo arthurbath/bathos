@@ -228,7 +228,7 @@ export function parseTaskRecurrenceRevision(
   requirePositiveInteger(record.revision, 'recurrence revision');
   requirePositiveInteger(record.template_revision, 'recurrence template revision');
   requirePositiveInteger(record.interval_count, 'recurrence interval');
-  requireCalendarDate(record.start_date, 'recurrence start date');
+  requireCalendarDate(record.start_date, 'recurrence start');
   requireText(record.planning_timezone, 'recurrence planning time zone');
   return {
     ...record,

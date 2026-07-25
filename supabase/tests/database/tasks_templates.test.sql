@@ -212,8 +212,8 @@ SELECT is(
         #>> '{result,root_id}'
     )::uuid
   ),
-  'later',
-  'preserves the relative This Evening intent'
+  NULL,
+  'keeps generated future work outside Today horizons'
 );
 SELECT is(
   (

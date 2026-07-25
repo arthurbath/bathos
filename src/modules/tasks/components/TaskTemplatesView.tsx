@@ -174,7 +174,7 @@ export function TaskTemplatesView({
               disabled={!connected || Boolean(selectedTemplate)}
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <option value="todo">To-Do</option>
+              <option value="todo">Task</option>
               <option value="project">Project</option>
             </select>
           </label>
@@ -239,7 +239,7 @@ export function TaskTemplatesView({
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-sm font-semibold">{template.name}</h3>
                     <p className="text-xs text-muted-foreground">
-                      {template.kind === 'project' ? 'Project' : 'To-Do'} / Revision {template.current_revision}
+                      {template.kind === 'project' ? 'Project' : 'Task'} / Revision {template.current_revision}
                       {nodeCount === null ? '' : ` / ${nodeCount} ${nodeCount === 1 ? 'Item' : 'Items'}`}
                     </p>
                   </div>
@@ -345,7 +345,7 @@ function ArchiveTemplateButton({
         <AlertDialogHeader><AlertDialogTitle>Archive Template</AlertDialogTitle></AlertDialogHeader>
         <AlertDialogBody>
           <AlertDialogDescription>
-            Archive {template.name}? Existing to-dos and projects created from it will not change.
+            Archive {template.name}? Existing tasks and projects created from it will not change.
           </AlertDialogDescription>
         </AlertDialogBody>
         <AlertDialogFooter>

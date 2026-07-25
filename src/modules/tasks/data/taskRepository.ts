@@ -12,6 +12,8 @@ import {
   createTaskRedoPatch,
   createTaskUndoPatch,
   parseTaskHistoryEvent,
+  UnsafeTaskRedoError,
+  UnsafeTaskUndoError,
   type TaskHistorySnapshot,
   type TaskHistoryStorageRow,
 } from '@/modules/tasks/domain/taskHistory';
@@ -186,7 +188,7 @@ export class TaskRepository {
       throw new InvalidTaskMutationError('Someday work cannot retain planning dates');
     }
     const requestedStartDate = input.startDate;
-    const startDate = normalizeTaskCalendarDate(requestedStartDate, 'Start date') ?? null;
+    const startDate = normalizeTaskCalendarDate(requestedStartDate, "Start") ?? null;
     const deadline = normalizeTaskCalendarDate(input.deadline, 'Deadline') ?? null;
     assertTaskContainer(input.areaId ?? null, input.projectId ?? null);
 
@@ -194,7 +196,9 @@ export class TaskRepository {
       const timestamp = this.now();
       const todaySection = destination === 'someday'
         ? null
-        : input.todaySection ?? (startDate || input.startDate === undefined ? 'next' : null);
+        : startDate
+          ? null
+          : input.todaySection ?? (input.startDate === undefined ? 'next' : null);
       assertPlanningPlacement(destination, todaySection, startDate);
       await assertFutureStartDate(transaction, input.ownerId, startDate, timestamp);
       await assertOwnedTaskContainer(
@@ -210,12 +214,11 @@ export class TaskRepository {
              FROM tasks_todos
              WHERE owner_id = ?
                AND destination = ?
-               AND today_section IS ?
                AND lifecycle = 'open'
                AND disposition = 'present'
              ORDER BY order_key DESC, id DESC
              LIMIT 1`,
-            [input.ownerId, destination, todaySection],
+            [input.ownerId, destination],
           );
       const hierarchyOrderKey = input.hierarchyOrderKey !== undefined
         ? input.hierarchyOrderKey
@@ -350,7 +353,7 @@ export class TaskRepository {
         activated.push(await updateOwnedTask(
           transaction,
           current,
-          { start_date: null },
+          { start_date: null, today_section: 'next' },
           this.createId(),
           occurredAt,
           { channel: 'native', actorType: 'system' },
@@ -379,29 +382,32 @@ export class TaskRepository {
     if (input.destination === 'someday' && (input.todaySection != null || input.startDate != null)) {
       throw new InvalidTaskMutationError('Someday work cannot retain planning dates');
     }
-    const startDate = normalizeTaskCalendarDate(input.startDate, 'Start date') ?? null;
+    const startDate = normalizeTaskCalendarDate(input.startDate, "Start") ?? null;
     const todaySection = input.destination === 'someday'
       ? null
-      : input.todaySection ?? (startDate ? 'next' : null);
+      : startDate
+        ? null
+        : input.todaySection ?? null;
     assertPlanningPlacement(input.destination, todaySection, startDate);
 
     return this.database.writeTransaction(async (transaction) => {
       const occurredAt = this.now();
       await assertFutureStartDate(transaction, ownerId, startDate, occurredAt);
       const current = await getOwnedTask(transaction, ownerId, taskId);
-      const lastTask = await transaction.getOptional<{ order_key: string }>(
-        `SELECT order_key
-         FROM tasks_todos
-         WHERE owner_id = ?
-           AND destination = ?
-           AND today_section IS ?
-           AND lifecycle = 'open'
-           AND disposition = 'present'
-           AND id <> ?
-         ORDER BY order_key DESC, id DESC
-         LIMIT 1`,
-        [ownerId, input.destination, todaySection, taskId],
-      );
+      const destinationChanged = current.destination !== input.destination;
+      const lastTask = destinationChanged
+        ? await transaction.getOptional<{ order_key: string }>(
+            `SELECT order_key
+             FROM tasks_todos
+             WHERE owner_id = ?
+               AND destination = ?
+               AND lifecycle = 'open'
+               AND disposition = 'present'
+             ORDER BY order_key DESC, id DESC
+             LIMIT 1`,
+            [ownerId, input.destination],
+          )
+        : null;
       return updateOwnedTask(
         transaction,
         current,
@@ -409,7 +415,9 @@ export class TaskRepository {
           destination: input.destination,
           today_section: todaySection,
           start_date: startDate,
-          order_key: generateTaskOrderKey(lastTask?.order_key ?? null, null),
+          ...(destinationChanged ? {
+            order_key: generateTaskOrderKey(lastTask?.order_key ?? null, null),
+          } : {}),
         },
         this.createId(),
         occurredAt,
@@ -432,10 +440,12 @@ export class TaskRepository {
     if (uniqueTaskIds.length === 0) {
       throw new InvalidTaskMutationError('Select at least one task for bulk planning');
     }
-    const startDate = normalizeTaskCalendarDate(input.startDate, 'Start date') ?? null;
+    const startDate = normalizeTaskCalendarDate(input.startDate, "Start") ?? null;
     const todaySection = input.destination === 'someday'
       ? null
-      : input.todaySection ?? (startDate ? 'next' : null);
+      : startDate
+        ? null
+        : input.todaySection ?? null;
     assertPlanningPlacement(input.destination, todaySection, startDate);
 
     return this.database.writeTransaction(async (transaction) => {
@@ -452,26 +462,31 @@ export class TaskRepository {
         currentTasks.push(current);
       }
 
-      const placeholders = uniqueTaskIds.map(() => '?').join(', ');
-      const lastTask = await transaction.getOptional<{ order_key: string }>(
-        `SELECT order_key
-         FROM tasks_todos
-         WHERE owner_id = ?
-           AND destination = ?
-           AND today_section IS ?
-           AND lifecycle = 'open'
-           AND disposition = 'present'
-           AND id NOT IN (${placeholders})
-         ORDER BY order_key DESC, id DESC
-         LIMIT 1`,
-        [ownerId, input.destination, todaySection, ...uniqueTaskIds],
+      const destinationChanges = currentTasks.some(
+        (current) => current.destination !== input.destination,
       );
+      const lastTask = destinationChanges
+        ? await transaction.getOptional<{ order_key: string }>(
+            `SELECT order_key
+             FROM tasks_todos
+             WHERE owner_id = ?
+               AND destination = ?
+               AND lifecycle = 'open'
+               AND disposition = 'present'
+             ORDER BY order_key DESC, id DESC
+             LIMIT 1`,
+            [ownerId, input.destination],
+          )
+        : null;
       const mutationContext = normalizeMutationContext(context);
       let previousOrderKey = lastTask?.order_key ?? null;
       const movedTasks: TaskTodo[] = [];
 
       for (const current of currentTasks) {
-        const orderKey = generateTaskOrderKey(previousOrderKey, null);
+        const destinationChanged = current.destination !== input.destination;
+        const orderKey = destinationChanged
+          ? generateTaskOrderKey(previousOrderKey, null)
+          : current.order_key;
         const moved = await updateOwnedTask(
           transaction,
           current,
@@ -486,7 +501,7 @@ export class TaskRepository {
           mutationContext,
         );
         movedTasks.push(moved);
-        previousOrderKey = orderKey;
+        if (destinationChanged) previousOrderKey = orderKey;
       }
 
       return movedTasks;
@@ -630,19 +645,28 @@ export class TaskRepository {
         ? createTaskUndoPatch(current, event)
         : createTaskRedoPatch(current, event);
       const occurredAt = this.now();
-      assertSource(
-        patch.source_kind,
-        patch.source_url,
-        patch.source_title,
-        patch.source_external_id,
-      );
-      assertPlanningPlacement(
-        patch.destination === undefined ? current.destination : patch.destination,
-        patch.today_section === undefined ? current.today_section : patch.today_section,
-        patch.start_date === undefined ? current.start_date : patch.start_date,
-      );
-      if (patch.start_date !== undefined) {
-        await assertFutureStartDate(transaction, ownerId, patch.start_date, occurredAt);
+      try {
+        assertSource(
+          patch.source_kind,
+          patch.source_url,
+          patch.source_title,
+          patch.source_external_id,
+        );
+        assertPlanningPlacement(
+          patch.destination === undefined ? current.destination : patch.destination,
+          patch.today_section === undefined ? current.today_section : patch.today_section,
+          patch.start_date === undefined ? current.start_date : patch.start_date,
+        );
+        if (patch.start_date !== undefined) {
+          await assertFutureStartDate(transaction, ownerId, patch.start_date, occurredAt);
+        }
+      } catch (error) {
+        if (error instanceof InvalidTaskMutationError) {
+          throw direction === 'undo'
+            ? new UnsafeTaskUndoError('There are no more task changes to undo')
+            : new UnsafeTaskRedoError('There are no more task changes to redo');
+        }
+        throw error;
       }
       assertTaskContainer(
         patch.area_id === undefined ? current.area_id : patch.area_id,
@@ -701,12 +725,17 @@ export class TaskRepository {
       if (patch.destination === 'someday') {
         patch.start_date = null;
         patch.today_section = null;
+      } else if (patch.start_date) {
+        patch.today_section = null;
+      } else if (patch.today_section) {
+        patch.start_date = null;
       } else if (
-        patch.start_date !== undefined
+        patch.start_date === undefined
         && patch.today_section === undefined
-        && current.today_section === null
+        && current.start_date !== null
+        && current.today_section !== null
       ) {
-        patch.today_section = 'next';
+        patch.today_section = null;
       }
       assertPlanningPlacement(
         patch.destination === undefined ? current.destination : patch.destination,
@@ -833,7 +862,7 @@ function normalizeEditablePatch(patch: EditableTaskPatch): EditableTaskPatch {
     normalized.title = normalizeTitle(patch.title);
   }
   if (patch.start_date !== undefined) {
-    normalized.start_date = normalizeTaskCalendarDate(patch.start_date, 'Start date') ?? null;
+    normalized.start_date = normalizeTaskCalendarDate(patch.start_date, "Start") ?? null;
   }
   if (patch.deadline !== undefined) {
     normalized.deadline = normalizeTaskCalendarDate(patch.deadline, 'Deadline') ?? null;
@@ -957,8 +986,8 @@ function assertPlanningPlacement(
   if (destination === 'someday' && (todaySection !== null || startDate !== null)) {
     throw new InvalidTaskMutationError('Someday work cannot retain planning dates');
   }
-  if (startDate !== null && todaySection === null) {
-    throw new InvalidTaskMutationError('A future start date requires a day horizon');
+  if (startDate !== null && todaySection !== null) {
+    throw new InvalidTaskMutationError('A future Start cannot retain a Today horizon');
   }
 }
 
@@ -982,7 +1011,7 @@ async function assertFutureStartDate(
     : 'UTC';
   const planningDate = taskCalendarDateInTimeZone(planningTimeZone, new Date(now));
   if (startDate <= planningDate) {
-    throw new InvalidTaskMutationError('Start date must be after today');
+    throw new InvalidTaskMutationError("Start must be after Today");
   }
 }
 

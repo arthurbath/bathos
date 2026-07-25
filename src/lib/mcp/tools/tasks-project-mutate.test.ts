@@ -322,10 +322,10 @@ describe('Tasks MCP project movement and scheduling tools', () => {
 
     expect(result).toMatchObject({
       mutation_outcome: 'applied',
-      receipt: { transition: 'update', outcome: 'accepted' },
+      receipt: { transition: 'reorder', outcome: 'accepted' },
       project: {
         destination: 'anytime',
-        today_section: 'next',
+        today_section: null,
         start_date: '2026-07-24',
         deadline: '2026-07-25',
         revision: 2,
@@ -333,7 +333,7 @@ describe('Tasks MCP project movement and scheduling tools', () => {
     });
   });
 
-  it('retains a project day horizon when scheduling it into the future', async () => {
+  it('clears a project Today horizon when scheduling it into the future', async () => {
     const client = new FakeProjectMutationClient({
       tasks_projects: [project({ today_section: 'later' })],
       tasks_user_settings: [settings()],
@@ -350,7 +350,7 @@ describe('Tasks MCP project movement and scheduling tools', () => {
       receipt: { transition: 'update', outcome: 'accepted' },
       project: {
         destination: 'anytime',
-        today_section: 'later',
+        today_section: null,
         start_date: '2099-07-24',
         revision: 2,
       },

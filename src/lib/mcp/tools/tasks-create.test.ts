@@ -344,7 +344,7 @@ describe('Tasks MCP creation tool', () => {
     expect(overdue.task).toMatchObject({
       start_date: '2099-07-24',
       deadline: '2099-07-20',
-      today_section: 'later',
+      today_section: null,
     });
     expect(client.taskInsertCount).toBe(1);
   });

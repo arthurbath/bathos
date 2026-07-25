@@ -247,6 +247,21 @@ function DialogBodyRefHarness({ onReady }: { onReady: (node: HTMLDivElement | nu
   );
 }
 
+function FooterlessDialogHarness() {
+  return (
+    <Dialog open onOpenChange={() => {}}>
+      <DialogContent footerless data-testid="footerless-dialog" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>Reference</DialogTitle>
+        </DialogHeader>
+        <DialogBody data-testid="footerless-dialog-body">
+          <p>Reference content</p>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DialogSubmitShortcutHarness() {
   const [open, setOpen] = React.useState(true);
   const [submissions, setSubmissions] = React.useState(0);
@@ -473,6 +488,41 @@ describe("Modal focus conventions", () => {
     try {
       await waitForCondition(() => {
         expect(bodyNode).toBeInstanceOf(HTMLDivElement);
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("removes the empty footer track and bottom divider from footerless dialogs", async () => {
+    const { container, root } = mount(<FooterlessDialogHarness />);
+    try {
+      await waitForCondition(() => {
+        const content = document.querySelector<HTMLElement>('[data-testid="footerless-dialog"]');
+        const body = document.querySelector<HTMLElement>('[data-testid="footerless-dialog-body"]');
+
+        expect(content).not.toBeNull();
+        expect(body).not.toBeNull();
+        expect(content?.dataset.dialogFooterless).toBe("true");
+        expect(content?.className).toContain("!grid-rows-[auto_minmax(0,1fr)]");
+        expect(body?.className).toContain("-mb-[25px]");
+        expect(body?.className).toContain("border-b-0");
+        expect(content?.querySelector('[data-dialog-footer="true"]')).toBeNull();
+      });
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it("keeps action-bearing dialog footers in the standard three-row layout", async () => {
+    const { container, root } = mount(<DialogWithSettingsHarness />);
+    try {
+      await waitForCondition(() => {
+        const content = document.querySelector<HTMLElement>('[role="dialog"]');
+        expect(content).not.toBeNull();
+        expect(content?.dataset.dialogFooterless).toBeUndefined();
+        expect(content?.querySelector('[data-dialog-footer="true"]')).not.toBeNull();
+        expect(content?.className).not.toContain("!grid-rows-[auto_minmax(0,1fr)]");
       });
     } finally {
       unmount(root, container);

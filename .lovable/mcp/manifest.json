@@ -450,7 +450,7 @@
       {
         "name": "get_task_hierarchy",
         "title": "Get Task Hierarchy",
-        "description": "Read the signed-in user's normalized task areas, projects, headings, to-dos, and checklist items. Returns stable ids and relationship fields without mutating data.",
+        "description": "Read the signed-in user's normalized task areas, projects, to-dos, and checklist items. Returns stable ids and relationship fields without mutating data.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,
@@ -465,11 +465,10 @@
                 "all",
                 "area",
                 "project",
-                "heading",
                 "todo"
               ],
               "default": "all",
-              "description": "Read the complete bounded hierarchy or scope it to one area, project, heading, or to-do."
+              "description": "Read the complete bounded hierarchy or scope it to one area, project, or to-do."
             },
             "root_id": {
               "type": "string",
@@ -497,7 +496,7 @@
       {
         "name": "get_task_record",
         "title": "Get Task Record",
-        "description": "Read one task area, project, heading, to-do, or checklist item by stable id for the signed-in user.",
+        "description": "Read one task area, project, to-do, or checklist item by stable id for the signed-in user.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,
@@ -511,7 +510,6 @@
               "enum": [
                 "area",
                 "project",
-                "heading",
                 "todo",
                 "checklist_item"
               ]
@@ -699,27 +697,34 @@
                 "anytime",
                 "someday"
               ],
-              "default": "anytime"
+              "description": "Omit for ordinary active capture in Today Next. Explicit Anytime without a Start or horizon remains undated."
             },
             "today_section": {
-              "type": "string",
-              "enum": [
-                "none",
-                "inbox",
-                "now",
-                "next",
-                "later"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "inbox",
+                    "now",
+                    "next",
+                    "later"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
               ],
-              "default": "inbox"
+              "description": "Today work may use a horizon. A future Start has no horizon."
             },
             "actionability": {
               "type": "string",
               "enum": [
                 "actionable",
-                "waiting"
+                "waiting",
+                "rechecking"
               ],
               "default": "actionable",
-              "description": "Whether the task can be acted on now or is waiting on something external."
+              "description": "Whether the task is actionable, waiting on an outside party or signal, or requires deliberate rechecking."
             },
             "entry_channel": {
               "type": "string",
@@ -760,9 +765,6 @@
             "project_id": {
               "$ref": "#/properties/area_id"
             },
-            "heading_id": {
-              "$ref": "#/properties/area_id"
-            },
             "source": {
               "type": "object",
               "properties": {
@@ -794,6 +796,18 @@
               ],
               "additionalProperties": false,
               "description": "Optional typed source reference. Template provenance is reserved for template instantiation."
+            },
+            "primary_link": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8000
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional editable shortcut, stored independently from typed source provenance."
             }
           },
           "required": [
@@ -877,15 +891,20 @@
               "default": "anytime"
             },
             "today_section": {
-              "type": "string",
-              "enum": [
-                "none",
-                "inbox",
-                "now",
-                "next",
-                "later"
-              ],
-              "default": "none"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "inbox",
+                    "now",
+                    "next",
+                    "later"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "start_date": {
               "anyOf": [
@@ -911,43 +930,6 @@
           "required": [
             "idempotency_key",
             "title"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": null
-      },
-      {
-        "name": "create_task_heading",
-        "title": "Create Task Heading",
-        "description": "Create one owner-scoped heading beneath an accessible open project.",
-        "annotations": {
-          "readOnlyHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "idempotency_key": {
-              "type": "string",
-              "format": "uuid",
-              "description": "Stable UUID for this logical creation request. Reuse it only for an exact retry."
-            },
-            "title": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 500
-            },
-            "project_id": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          "required": [
-            "idempotency_key",
-            "title",
-            "project_id"
           ],
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
@@ -1081,49 +1063,6 @@
         "outputSchema": null
       },
       {
-        "name": "update_task_heading",
-        "title": "Update Task Heading",
-        "description": "Rename one owner-scoped heading beneath an open project through an optimistic revision boundary.",
-        "annotations": {
-          "readOnlyHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "expected_revision": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "description": "Current positive record revision."
-            },
-            "client_mutation_id": {
-              "type": "string",
-              "format": "uuid",
-              "description": "Stable UUID for this exact logical mutation."
-            },
-            "heading_id": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "title": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 500
-            }
-          },
-          "required": [
-            "expected_revision",
-            "client_mutation_id",
-            "heading_id",
-            "title"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": null
-      },
-      {
         "name": "update_task_checklist_item",
         "title": "Update Task Checklist Item",
         "description": "Edit or complete one owner-scoped checklist item beneath an open to-do through an optimistic revision boundary.",
@@ -1171,7 +1110,7 @@
       {
         "name": "transition_task_hierarchy",
         "title": "Transition Task Hierarchy",
-        "description": "Complete, cancel, or reopen one project, or recoverably delete or restore one area, project, heading, or checklist item with one atomic revision-checked hierarchy operation. Permanent deletion is not available.",
+        "description": "Complete, cancel, or reopen one project, or recoverably delete or restore one area, project, or checklist item with one atomic revision-checked hierarchy operation. Permanent deletion is not available.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -1186,7 +1125,6 @@
               "enum": [
                 "area",
                 "project",
-                "heading",
                 "checklist_item"
               ]
             },
@@ -1283,13 +1221,19 @@
               ]
             },
             "today_section": {
-              "type": "string",
-              "enum": [
-                "none",
-                "inbox",
-                "now",
-                "next",
-                "later"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "inbox",
+                    "now",
+                    "next",
+                    "later"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "start_date": {
@@ -1316,7 +1260,7 @@
       {
         "name": "schedule_task_project",
         "title": "Schedule Task Project",
-        "description": "Set or clear one open project start date or deadline without accepting timestamps or time-zone offsets.",
+        "description": "Set or clear one open project Start or Deadline without accepting timestamps or time-zone offsets.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -1374,7 +1318,7 @@
       {
         "name": "create_mail_task",
         "title": "Create Mail Task",
-        "description": "Atomically create one AI-processed Today task and its structured Mail source lifecycle record. Intended for a verified Mail integration, not generic task creation.",
+        "description": "Atomically create one AI-processed Today Inbox task and its structured Mail source lifecycle record. Intended for a verified Mail integration, not generic task creation.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -1538,7 +1482,7 @@
       {
         "name": "update_task",
         "title": "Update Task",
-        "description": "Edit one current to-do title, notes, actionability, or complete typed source reference with an optimistic revision guard.",
+        "description": "Edit one current to-do title, notes, actionability, Primary Link, or complete typed source reference with an optimistic revision guard.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -1574,9 +1518,10 @@
               "type": "string",
               "enum": [
                 "actionable",
-                "waiting"
+                "waiting",
+                "rechecking"
               ],
-              "description": "Mark the task actionable now or waiting on something external."
+              "description": "Mark the task actionable, waiting on an outside party or signal, or requiring deliberate rechecking."
             },
             "source": {
               "anyOf": [
@@ -1616,6 +1561,18 @@
                 }
               ],
               "description": "Complete replacement source, null to clear, or omit to preserve."
+            },
+            "primary_link": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8000
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Editable shortcut independent from typed source provenance."
             }
           },
           "required": [
@@ -1631,7 +1588,7 @@
       {
         "name": "move_task",
         "title": "Move Task",
-        "description": "Move one open to-do between planning placements, hierarchy containers, or both. Container changes require all three container IDs, using null to clear.",
+        "description": "Move one open to-do between planning placements, hierarchy containers, or both. Container changes require both container IDs, using null to clear.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -1663,13 +1620,19 @@
               ]
             },
             "today_section": {
-              "type": "string",
-              "enum": [
-                "none",
-                "inbox",
-                "now",
-                "next",
-                "later"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "inbox",
+                    "now",
+                    "next",
+                    "later"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "start_date": {
@@ -1702,16 +1665,6 @@
                   "type": "null"
                 }
               ]
-            },
-            "heading_id": {
-              "anyOf": [
-                {
-                  "$ref": "#/properties/area_id/anyOf/0"
-                },
-                {
-                  "type": "null"
-                }
-              ]
             }
           },
           "required": [
@@ -1727,7 +1680,7 @@
       {
         "name": "schedule_task",
         "title": "Schedule Task",
-        "description": "Set or clear one open to-do start date or deadline without accepting timestamps or time-zone offsets.",
+        "description": "Set or clear one open task Start or Deadline without accepting timestamps or time-zone offsets.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -1904,7 +1857,7 @@
       {
         "name": "reorder_task_hierarchy",
         "title": "Reorder Task Hierarchy",
-        "description": "Move one area, project, heading, or checklist item up or down within its exact structural peers, or reorder a project within one planning section.",
+        "description": "Move one area, project, or checklist item up or down within its exact structural peers, or reorder a project within one planning section.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -1936,7 +1889,6 @@
               "enum": [
                 "area",
                 "project",
-                "heading",
                 "checklist_item"
               ]
             },
@@ -2004,7 +1956,7 @@
             "anchor_date": {
               "type": "string",
               "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-              "description": "Explicit reference date used to preserve relative start dates and deadlines."
+              "description": "Explicit reference date used to preserve relative Starts and Deadlines."
             },
             "target_area_id": {
               "$ref": "#/properties/template_id",
@@ -2214,7 +2166,7 @@
       {
         "name": "save_task_reminder",
         "title": "Save Task Reminder",
-        "description": "Create or revise one task or project reminder from explicit local date, wall-clock time, IANA time zone, and daylight-saving ambiguity choice.",
+        "description": "Create or revise one task or project reminder at a wall-clock time on its Start, using an IANA time zone and daylight-saving ambiguity choice.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -2243,10 +2195,6 @@
             "root_id": {
               "$ref": "#/properties/reminder_id"
             },
-            "local_date": {
-              "type": "string",
-              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
-            },
             "local_time": {
               "type": "string",
               "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$"
@@ -2273,7 +2221,6 @@
           "required": [
             "root_type",
             "root_id",
-            "local_date",
             "local_time",
             "time_zone",
             "idempotency_key"

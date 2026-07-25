@@ -15,6 +15,7 @@ import {
   TASK_HISTORY_LIMIT,
   useTaskUndo,
 } from './useTaskUndo';
+import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
 const mocks = vi.hoisted(() => ({
   useQuery: vi.fn(),
@@ -244,6 +245,240 @@ describe('useTaskUndo', () => {
       rerender(root);
       expect(latest.event?.id).toBe(newer.id);
       expect(latest.available).toBe(true);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('anchors completion undo before the forward write returns', async () => {
+    const older = historyRow(0);
+    const beforeCompletion = taskTodoFixture({
+      title: 'Title 1',
+      revision: 2,
+      client_mutation_id: 'mutation-0',
+    });
+    const completedTask = taskTodoFixture({
+      ...beforeCompletion,
+      lifecycle: 'completed',
+      completed_at: '2026-07-20T05:00:00.000Z',
+      revision: 3,
+      client_mutation_id: 'mutation-complete',
+      updated_at: '2026-07-20T05:00:00.000Z',
+    });
+    const completionEvent = historyRow(1, {
+      id: 'event-complete',
+      client_mutation_id: completedTask.client_mutation_id,
+      base_revision: 2,
+      result_revision: 3,
+      transition: 'complete',
+      occurred_at: completedTask.updated_at,
+      before_state: JSON.stringify(snapshotTask(beforeCompletion)),
+      after_state: JSON.stringify({
+        ...snapshotTask(completedTask),
+        completed_at: '2026-07-20T05:00:00.000+00:00',
+      }),
+    });
+    const reopenedTask = taskTodoFixture({
+      ...beforeCompletion,
+      revision: 4,
+      client_mutation_id: 'mutation-undo',
+    });
+    let historyData = [older];
+    let taskData = [beforeCompletion];
+    const repository = {
+      undoTask: vi.fn().mockResolvedValue(reopenedTask),
+      redoTask: vi.fn(),
+    };
+    mocks.useQuery.mockImplementation((sql: string) => ({
+      data: sql.includes('tasks_history_events') ? historyData : taskData,
+      isLoading: false,
+      error: null,
+    }));
+    mocks.useTasksRuntime.mockReturnValue({ repository });
+    const { container, root } = renderHookHarness();
+
+    try {
+      let reservation!: ReturnType<typeof latest.reserveForwardMutation>;
+      act(() => {
+        reservation = latest.reserveForwardMutation(beforeCompletion);
+      });
+
+      let undoPromise!: Promise<TaskTodo | null>;
+      act(() => {
+        undoPromise = latest.undoWhenAvailable(500);
+      });
+      expect(repository.undoTask).not.toHaveBeenCalled();
+
+      act(() => {
+        reservation.commit(completedTask);
+      });
+      expect(repository.undoTask).not.toHaveBeenCalled();
+
+      historyData = [completionEvent, older];
+      taskData = [completedTask];
+      rerender(root);
+
+      await act(async () => {
+        await expect(undoPromise).resolves.toEqual(reopenedTask);
+      });
+      expect(repository.undoTask).toHaveBeenCalledOnce();
+      expect(repository.undoTask).toHaveBeenCalledWith('owner-a', completionEvent.id);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('cancels a failed forward reservation without undoing older history', async () => {
+    const older = historyRow(0);
+    const taskData = [taskTodoFixture({ title: 'Title 1' })];
+    const repository = {
+      undoTask: vi.fn(),
+      redoTask: vi.fn(),
+    };
+    mocks.useQuery.mockImplementation((sql: string) => ({
+      data: sql.includes('tasks_history_events') ? [older] : taskData,
+      isLoading: false,
+      error: null,
+    }));
+    mocks.useTasksRuntime.mockReturnValue({ repository });
+    const { container, root } = renderHookHarness();
+
+    try {
+      let reservation!: ReturnType<typeof latest.reserveForwardMutation>;
+      act(() => {
+        reservation = latest.reserveForwardMutation(taskData[0]);
+      });
+      let undoPromise!: Promise<TaskTodo | null>;
+      act(() => {
+        undoPromise = latest.undoWhenAvailable(500);
+      });
+      act(() => {
+        reservation.cancel();
+      });
+
+      await act(async () => {
+        await expect(undoPromise).resolves.toBeNull();
+      });
+      expect(repository.undoTask).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('retains an immediate completion undo until the exact history event projects', async () => {
+    const older = historyRow(0);
+    const beforeCompletion = taskTodoFixture({
+      title: 'Title 1',
+      revision: 2,
+      client_mutation_id: 'mutation-0',
+    });
+    const completedTask = taskTodoFixture({
+      ...beforeCompletion,
+      lifecycle: 'completed',
+      completed_at: '2026-07-20T05:00:00.000Z',
+      revision: 3,
+      client_mutation_id: 'mutation-complete',
+      updated_at: '2026-07-20T05:00:00.000Z',
+    });
+    const completionEvent = historyRow(1, {
+      id: 'event-complete',
+      client_mutation_id: completedTask.client_mutation_id,
+      base_revision: 2,
+      result_revision: 3,
+      transition: 'complete',
+      occurred_at: completedTask.updated_at,
+      before_state: JSON.stringify(snapshotTask(beforeCompletion)),
+      after_state: JSON.stringify(snapshotTask(completedTask)),
+    });
+    const reopenedTask = taskTodoFixture({
+      ...beforeCompletion,
+      revision: 4,
+      client_mutation_id: 'mutation-undo',
+    });
+    let historyData = [older];
+    let taskData = [beforeCompletion];
+    const repository = {
+      undoTask: vi.fn().mockResolvedValue(reopenedTask),
+      redoTask: vi.fn(),
+    };
+    mocks.useQuery.mockImplementation((sql: string) => ({
+      data: sql.includes('tasks_history_events') ? historyData : taskData,
+      isLoading: false,
+      error: null,
+    }));
+    mocks.useTasksRuntime.mockReturnValue({ repository });
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.available).toBe(true);
+      act(() => {
+        latest.registerForwardMutation(completedTask);
+      });
+      expect(latest.available).toBe(false);
+
+      let undoPromise!: Promise<TaskTodo | null>;
+      act(() => {
+        undoPromise = latest.undoWhenAvailable(500);
+      });
+
+      historyData = [completionEvent, older];
+      taskData = [completedTask];
+      rerender(root);
+
+      let undone: TaskTodo | null = null;
+      await act(async () => {
+        undone = await undoPromise;
+      });
+      expect(undone).toEqual(reopenedTask);
+      expect(repository.undoTask).toHaveBeenCalledTimes(1);
+      expect(repository.undoTask).toHaveBeenCalledWith('owner-a', completionEvent.id);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('does not substitute an older or unrelated event while a completion is unprojected', async () => {
+    const older = historyRow(0);
+    const completedTask = taskTodoFixture({
+      title: 'Completed task',
+      lifecycle: 'completed',
+      completed_at: '2026-07-20T05:00:00.000Z',
+      revision: 2,
+      client_mutation_id: 'mutation-complete',
+      updated_at: '2026-07-20T05:00:00.000Z',
+    });
+    let historyData = [older];
+    const repository = {
+      undoTask: vi.fn(),
+      redoTask: vi.fn(),
+    };
+    mocks.useQuery.mockImplementation((sql: string) => ({
+      data: sql.includes('tasks_history_events') ? historyData : [completedTask],
+      isLoading: false,
+      error: null,
+    }));
+    mocks.useTasksRuntime.mockReturnValue({ repository });
+    const { container, root } = renderHookHarness();
+
+    try {
+      act(() => {
+        latest.registerForwardMutation(completedTask);
+      });
+
+      const unrelated = historyRow(2, {
+        id: 'event-unrelated',
+        task_id: 'task-other',
+        client_mutation_id: 'mutation-unrelated',
+      });
+      historyData = [unrelated, older];
+      rerender(root);
+
+      let result: TaskTodo | null = completedTask;
+      await act(async () => {
+        result = await latest.undoWhenAvailable(40);
+      });
+      expect(result).toBeNull();
+      expect(repository.undoTask).not.toHaveBeenCalled();
     } finally {
       cleanup(root, container);
     }

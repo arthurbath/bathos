@@ -291,7 +291,7 @@ function getProjectPlanningActions(
     label: 'Move to Tomorrow',
     input: {
       destination: 'anytime',
-      todaySection: section,
+      todaySection: null,
       startDate: addTaskCalendarDays(planningDate, 1),
     },
   }, {
@@ -317,12 +317,9 @@ function projectPlanningLabel(
     details.push(`Today ${section[0].toUpperCase()}${section.slice(1)}`);
   } else if (view === 'upcoming' && project.start_date) {
     details.push(`Starts ${formatTaskRelativeCalendarDate(project.start_date, planningDate)}`);
-    if (project.today_section !== null) {
-      details.push(`Today ${project.today_section[0].toUpperCase()}${project.today_section.slice(1)}`);
-    }
   }
   if (project.deadline) {
-    details.push(`Due ${formatTaskRelativeCalendarDate(project.deadline, planningDate)}`);
+    details.push(`Deadline ${formatTaskRelativeCalendarDate(project.deadline, planningDate)}`);
   }
   if (areaTitle) details.push(areaTitle);
   return details.length > 0 ? details.join(' · ') : 'Project';

@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(19);
+SELECT plan(20);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -87,6 +87,12 @@ SELECT is(
   (SELECT result #>> '{task,destination}' FROM first_capture),
   'anytime',
   'places processed Mail capture in Anytime'
+);
+
+SELECT is(
+  (SELECT result #>> '{task,today_section}' FROM first_capture),
+  'inbox',
+  'places processed Mail capture in Today Inbox'
 );
 
 SELECT is(

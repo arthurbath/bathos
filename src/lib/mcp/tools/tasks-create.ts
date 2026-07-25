@@ -139,7 +139,7 @@ function normalizeRequest(input: CreateTaskRequest): NormalizedCreateTaskRequest
   const destination = input.destination ?? 'anytime';
   const requestedStartDate = input.start_date ?? null;
   if (requestedStartDate !== null && !isTaskCalendarDate(requestedStartDate)) {
-    throw new Error('Start date must be a valid ISO calendar date.');
+    throw new Error('Start must be a valid ISO calendar date.');
   }
   const deadline = input.deadline ?? null;
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
@@ -147,7 +147,7 @@ function normalizeRequest(input: CreateTaskRequest): NormalizedCreateTaskRequest
   }
   const requestedTodaySection = input.today_section ?? null;
   if (destination === 'someday' && (requestedTodaySection !== null || requestedStartDate !== null)) {
-    throw new Error('Someday work cannot retain a start date or day horizon.');
+    throw new Error('Someday work cannot retain a Start or day horizon.');
   }
   return {
     idempotencyKey: input.idempotency_key,
@@ -237,7 +237,7 @@ function assertSameCreationRequest(
     const expectedStartDate = request.requestedStartDate;
     const expectedTodaySection = request.destination === 'someday'
       ? null
-      : expectedStartDate === null ? request.todaySection : request.todaySection ?? 'next';
+      : expectedStartDate === null ? request.todaySection : null;
     checks.push([state.start_date, expectedStartDate]);
     checks.push([state.today_section, expectedTodaySection]);
   }
@@ -292,8 +292,6 @@ async function validateContainer(
 
 async function nextPlanningOrderKey(
   request: NormalizedCreateTaskRequest,
-  startDate: string | null,
-  todaySection: TaskTodaySection | null,
   auth: AuthenticatedMcpContext,
 ): Promise<string> {
   const query = auth.supabase
@@ -303,10 +301,7 @@ async function nextPlanningOrderKey(
     .eq('destination', request.destination)
     .eq('lifecycle', 'open')
     .eq('disposition', 'present');
-  const scoped = todaySection === null
-    ? query.is('today_section', null)
-    : query.eq('today_section', todaySection);
-  const last = await readOne<{ order_key: string }>(scoped
+  const last = await readOne<{ order_key: string }>(query
     .order('order_key', { ascending: false })
     .order('id', { ascending: false })
     .limit(1)
@@ -385,15 +380,15 @@ export async function createTaskData(
   await validateContainer(request, auth);
   const startDate = request.destination === 'someday' ? null : request.requestedStartDate;
   if (startDate !== null && startDate <= await ownerPlanningDate(auth)) {
-    throw new Error('Start date must be later than today in the owner planning time zone.');
+    throw new Error('Start must be later than today in the owner planning time zone.');
   }
   const todaySection = request.destination === 'someday'
     ? null
     : startDate !== null
-      ? request.todaySection ?? 'next'
+      ? null
       : request.placementWasImplicit ? 'next' : request.todaySection;
   const [orderKey, hierarchyOrderKey] = await Promise.all([
-    nextPlanningOrderKey(request, startDate, todaySection, auth),
+    nextPlanningOrderKey(request, auth),
     nextHierarchyOrderKey(request, auth),
   ]);
   const timestamp = new Date().toISOString();
@@ -454,8 +449,8 @@ export const createTask = defineTool({
     idempotency_key: uuidSchema.describe('Stable UUID for this logical creation request. Reuse it only to retry the exact same request.'),
     title: z.string().trim().min(1).max(500),
     notes: z.string().max(100_000).default(''),
-    destination: destinationSchema.optional().describe('Omit for ordinary active capture in Today Next. Explicit Anytime without a start date or horizon remains undated.'),
-    today_section: todaySectionSchema.nullable().optional().describe('Active work may use a horizon without a start date. Future-dated work defaults to Next when omitted.'),
+    destination: destinationSchema.optional().describe('Omit for ordinary active capture in Today Next. Explicit Anytime without a Start or horizon remains undated.'),
+    today_section: todaySectionSchema.nullable().optional().describe('Today work may use a horizon. A future Start has no horizon.'),
     actionability: actionabilitySchema.default('actionable').describe('Whether the task is actionable, waiting on an outside party or signal, or requires deliberate rechecking.'),
     entry_channel: integrationChannelSchema.default('mcp').describe('Structured integration that collected the task. Ordinary MCP clients should keep the default.'),
     start_date: calendarDateSchema.nullable().optional(),

@@ -30,7 +30,11 @@ const sourcePresentations: Record<TaskSourceKind, SourcePresentation> = {
   other: { icon: Link2, label: 'Source' },
 };
 
-export function TaskSourceIndicator({ task }: { task: TaskTodo }) {
+export function TaskSourceIndicator({
+  task,
+}: {
+  task: TaskTodo;
+}) {
   const primaryLinkKind = getTaskPrimaryLinkKind(task.primary_link);
   const href = getTaskPrimaryLinkHref(task.primary_link);
   const className = 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';

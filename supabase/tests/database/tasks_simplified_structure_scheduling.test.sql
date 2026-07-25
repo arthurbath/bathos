@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(42);
+SELECT plan(44);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -72,8 +72,8 @@ SELECT lives_ok(
 SELECT is(
   (SELECT today_section FROM public.tasks_todos
     WHERE id = 'c2000000-0000-4000-8000-000000000020'),
-  'next',
-  'defaults a dated task without a horizon to Next'
+  NULL,
+  'stores a future Start without a Today horizon'
 );
 SELECT is(
   (SELECT actionability FROM public.tasks_todos
@@ -98,18 +98,18 @@ SELECT throws_ok(
     WHERE id = 'c2000000-0000-4000-8000-000000000020'
   $$,
   '22023',
-  'Start Date must be later than today in the owner planning time zone',
-  'rejects a reached Start Date at the PostgreSQL mutation boundary'
+  'Start must be later than today in the owner planning time zone',
+  'rejects a reached Start at the PostgreSQL mutation boundary'
 );
 
 SELECT lives_ok(
   $$
     UPDATE public.tasks_todos
-    SET start_date = NULL, revision = revision + 1,
+    SET start_date = NULL, today_section = 'next', revision = revision + 1,
       client_mutation_id = 'c2000000-0000-4000-8000-000000000022'
     WHERE id = 'c2000000-0000-4000-8000-000000000020'
   $$,
-  'clears a task start date without requiring a separate horizon write'
+  'moves a task from its future Start into Today Next'
 );
 SELECT is(
   (SELECT today_section FROM public.tasks_todos
@@ -174,7 +174,7 @@ SELECT is(
   'rebinds the active reminder to the new start date'
 );
 UPDATE public.tasks_todos
-SET start_date = NULL, revision = revision + 1,
+SET start_date = NULL, today_section = 'next', revision = revision + 1,
   client_mutation_id = 'c2000000-0000-4000-8000-000000000034'
 WHERE id = 'c2000000-0000-4000-8000-000000000030';
 SELECT is(
@@ -246,8 +246,8 @@ SELECT is(
 SELECT is(
   (SELECT today_section FROM public.tasks_todos
     WHERE id = 'c2000000-0000-4000-8000-000000000035'),
-  'later',
-  'retains the selected day horizon after activation'
+  'next',
+  'activates a reached Start into Today Next'
 );
 SELECT is(
   (SELECT status FROM public.tasks_reminders
@@ -276,8 +276,8 @@ SELECT set_config(
 );
 SELECT is(
   current_setting('test.tasks_v12_mail')::jsonb #>> '{task,today_section}',
-  'next',
-  'captures Mail work in Next'
+  'inbox',
+  'captures Mail work in Today Inbox'
 );
 SELECT is(
   current_setting('test.tasks_v12_mail')::jsonb #>> '{task,start_date}',
@@ -331,6 +331,27 @@ SELECT is(
   ) ->> 'primary_link',
   'message://mail-v12',
   'initializes a missing legacy Primary Link from supported provenance'
+);
+SELECT is(
+  tasks_private.normalize_export_v12_record(
+    'tasks_todos',
+    jsonb_build_object(
+      'destination', 'anytime',
+      'start_date', '2099-07-22',
+      'today_section', 'later'
+    ),
+    DATE '2099-07-22'
+  ) ->> 'today_section',
+  'next',
+  'normalizes a reached legacy future horizon to Today Next'
+);
+SELECT is(
+  tasks_private.resolve_template_planning(
+    'anytime', 'later', 0, NULL,
+    DATE '2099-07-22', DATE '2099-07-22', true
+  ) ->> 'today_section',
+  'next',
+  'instantiates a reached template Start into Today Next'
 );
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', 'c2000000-0000-4000-8000-000000000001', true);

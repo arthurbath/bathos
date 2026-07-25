@@ -43,7 +43,12 @@ import {
 } from '@/modules/tasks/components/TaskProjectReminderForm';
 import type { TaskReminderAvailability } from '@/modules/tasks/components/taskReminderAvailability';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
+import type { TaskTodaySection } from '@/modules/tasks/types/tasks';
 import { useTaskProjectDetail } from '@/modules/tasks/hooks/useTaskProjectDetail';
+import type {
+  TaskForwardMutationReservation,
+  TaskForwardMutationSource,
+} from '@/modules/tasks/hooks/useTaskUndo';
 import type {
   TaskChecklistItem,
   TaskReminder,
@@ -60,6 +65,8 @@ export function TaskProjectDetailView({
   reminderMode,
   onSaveReminder,
   onCancelReminder,
+  onTaskMutation,
+  reserveTaskMutation,
 }: {
   ownerId: string;
   projectId: string;
@@ -69,8 +76,17 @@ export function TaskProjectDetailView({
   reminderMode: TaskReminderAvailability;
   onSaveReminder: (input: ProjectReminderInput) => Promise<void>;
   onCancelReminder: () => Promise<void>;
+  onTaskMutation?: (task: TaskTodo) => void;
+  reserveTaskMutation?: (
+    source: TaskForwardMutationSource,
+  ) => TaskForwardMutationReservation;
 }) {
-  const detail = useTaskProjectDetail(ownerId, projectId);
+  const detail = useTaskProjectDetail(
+    ownerId,
+    projectId,
+    onTaskMutation,
+    reserveTaskMutation,
+  );
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
   const project = hierarchy.projects.find(({ id }) => id === projectId);
@@ -288,14 +304,16 @@ function ProjectPlanningForm({
   onSave: (patch: Parameters<TaskHierarchyModel['updateProject']>[1]) => Promise<unknown>;
 }) {
   const [destination, setDestination] = useState(project.destination);
-  const [todaySection, setTodaySection] = useState(project.today_section ?? 'next');
+  const [todaySection, setTodaySection] = useState<TaskTodaySection | null>(
+    project.today_section,
+  );
   const [startDate, setStartDate] = useState(project.start_date ?? '');
   const [deadline, setDeadline] = useState(project.deadline ?? '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setDestination(project.destination);
-    setTodaySection(project.today_section ?? 'next');
+    setTodaySection(project.today_section);
     setStartDate(project.start_date ?? '');
     setDeadline(project.deadline ?? '');
   }, [
@@ -308,7 +326,9 @@ function ProjectPlanningForm({
   const normalizedStartDate = destination === 'someday'
     ? null
     : startDate || null;
-  const normalizedTodaySection = destination === 'someday' ? null : todaySection;
+  const normalizedTodaySection = destination === 'someday' || normalizedStartDate !== null
+    ? null
+    : todaySection;
   const changed = destination !== project.destination
     || normalizedTodaySection !== project.today_section
     || normalizedStartDate !== project.start_date
@@ -353,7 +373,7 @@ function ProjectPlanningForm({
               setDestination(next);
               if (next === 'someday') {
                 setStartDate('');
-                setTodaySection('next');
+                setTodaySection(null);
               }
             }}
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -368,11 +388,16 @@ function ProjectPlanningForm({
           </label>
           <select
             id={`project-today-section-${project.id}`}
-            value={normalizedTodaySection}
+            value={normalizedTodaySection ?? ''}
             disabled={saving}
-            onChange={(event) => setTodaySection(event.target.value as typeof todaySection)}
+            onChange={(event) => {
+              const next = event.target.value || null;
+              setTodaySection(next as TaskTodaySection | null);
+              if (next !== null) setStartDate('');
+            }}
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
+            <option value="">None</option>
             <option value="inbox">Inbox</option>
             <option value="now">Now</option>
             <option value="next">Next</option>
@@ -383,19 +408,19 @@ function ProjectPlanningForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor={`project-start-date-${project.id}`}>
-            Start Date
+            Start
           </label>
           <div className="flex gap-2">
             <DatePickerField
               id={`project-start-date-${project.id}`}
               value={destination === 'someday' ? '' : startDate}
               onValueChange={(value) => {
-                if (value && !startDate) setTodaySection('next');
+                if (value) setTodaySection(null);
                 setStartDate(value);
               }}
               disabled={saving || destination === 'someday'}
-              placeholder="No Start Date"
-              aria-label="Project Start Date"
+              placeholder="No Start"
+              aria-label="Start"
               minDate={addTaskCalendarDays(planningDate, 1)}
             />
             {destination !== 'someday' && startDate ? (
@@ -404,7 +429,7 @@ function ProjectPlanningForm({
                 variant="clear"
                 size="icon"
                 disabled={saving}
-                aria-label="Clear Project Start Date"
+                aria-label="Clear Start"
                 onClick={() => setStartDate('')}
               >
                 <X className="h-4 w-4" aria-hidden="true" />

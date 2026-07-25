@@ -81,11 +81,14 @@ export function applyTaskCreationDraftPatch(
   draft: TaskCreationDraft,
   patch: EditableTaskPatch,
 ): TaskCreationDraft {
+  const normalizedPatch = { ...patch };
+  if (normalizedPatch.start_date) normalizedPatch.today_section = null;
+  else if (normalizedPatch.today_section) normalizedPatch.start_date = null;
   return {
     ...draft,
     task: {
       ...draft.task,
-      ...patch,
+      ...normalizedPatch,
       updated_at: new Date().toISOString(),
     },
   };

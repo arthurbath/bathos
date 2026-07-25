@@ -103,13 +103,13 @@ describe('Tasks PowerSync deployment configuration', () => {
     );
   });
 
-  it('keeps the day-horizon production gate synthetic, focused, and cleanup-backed', () => {
-    expect(productionProvisioner).toContain("'synthetic-day-horizon'");
-    expect(productionProvisioner).toContain("'test:tasks:production-day-horizon'");
-    expect(packageJson).toContain('"test:tasks:production-day-horizon"');
-    expect(packageJson).toContain("-t 'proves future day-horizon activation'");
+  it('keeps the exclusive Start production gate synthetic, focused, and cleanup-backed', () => {
+    expect(productionProvisioner).toContain("'synthetic-exclusive-start'");
+    expect(productionProvisioner).toContain("'test:tasks:production-exclusive-start'");
+    expect(packageJson).toContain('"test:tasks:production-exclusive-start"');
+    expect(packageJson).toContain("-t 'proves exclusive Start and Today horizons'");
     expect(packageJson).not.toContain(
-      'test:tasks:production-day-horizon": "npm run test:tasks:production-topology',
+      'test:tasks:production-exclusive-start": "npm run test:tasks:production-topology',
     );
   });
 

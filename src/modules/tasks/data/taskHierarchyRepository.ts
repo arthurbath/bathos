@@ -216,6 +216,8 @@ export class TaskHierarchyRepository {
   ): Promise<TaskProject> {
     const normalized = normalizePatch(patch);
     if (normalized.title !== undefined) normalized.title = normalizeTitle(normalized.title);
+    if (normalized.start_date) normalized.today_section = null;
+    else if (normalized.today_section) normalized.start_date = null;
     return this.updateRow<TaskProject>(
       'tasks_projects',
       'project',
@@ -270,6 +272,7 @@ export class TaskHierarchyRepository {
         const next: TaskProject = {
           ...current,
           start_date: null,
+          today_section: 'next',
           last_mutation_channel: 'native',
           last_actor_type: 'system',
           revision: current.revision + 1,
@@ -278,11 +281,12 @@ export class TaskHierarchyRepository {
         };
         await transaction.execute(
           `UPDATE tasks_projects
-           SET start_date = ?, last_mutation_channel = ?, last_actor_type = ?,
+           SET start_date = ?, today_section = ?, last_mutation_channel = ?, last_actor_type = ?,
              revision = ?, client_mutation_id = ?, updated_at = ?
            WHERE id = ? AND owner_id = ?`,
           [
             next.start_date,
+            next.today_section,
             next.last_mutation_channel,
             next.last_actor_type,
             next.revision,
@@ -516,10 +520,10 @@ function assertProjectPlanning(patch: TaskProjectPatch): void {
     && patch.start_date !== undefined
     && patch.start_date !== null
   ) {
-    throw new InvalidTaskMutationError('Someday projects cannot have a start date');
+    throw new InvalidTaskMutationError("Someday projects cannot have a Start");
   }
-  if (patch.start_date != null && patch.today_section === null) {
-    throw new InvalidTaskMutationError('A future project start date requires a day horizon');
+  if (patch.start_date != null && patch.today_section != null) {
+    throw new InvalidTaskMutationError('A future Start cannot retain a Today horizon');
   }
 }
 
@@ -543,7 +547,7 @@ async function assertFutureProjectStartDate(
     : 'UTC';
   const planningDate = taskCalendarDateInTimeZone(planningTimeZone, new Date(now));
   if (startDate <= planningDate) {
-    throw new InvalidTaskMutationError('Project start date must be after today');
+    throw new InvalidTaskMutationError("Start must be after Today");
   }
 }
 

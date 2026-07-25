@@ -1104,7 +1104,7 @@ function normalizeRequest(input) {
   const destination = input.destination ?? "anytime";
   const requestedStartDate = input.start_date ?? null;
   if (requestedStartDate !== null && !isTaskCalendarDate(requestedStartDate)) {
-    throw new Error("Start date must be a valid ISO calendar date.");
+    throw new Error("Start must be a valid ISO calendar date.");
   }
   const deadline = input.deadline ?? null;
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
@@ -1112,7 +1112,7 @@ function normalizeRequest(input) {
   }
   const requestedTodaySection = input.today_section ?? null;
   if (destination === "someday" && (requestedTodaySection !== null || requestedStartDate !== null)) {
-    throw new Error("Someday work cannot retain a start date or day horizon.");
+    throw new Error("Someday work cannot retain a Start or day horizon.");
   }
   return {
     idempotencyKey: input.idempotency_key,
@@ -1174,7 +1174,7 @@ function assertSameCreationRequest(request, existing) {
     checks.push([state.start_date, null]);
   } else {
     const expectedStartDate = request.requestedStartDate;
-    const expectedTodaySection = request.destination === "someday" ? null : expectedStartDate === null ? request.todaySection : request.todaySection ?? "next";
+    const expectedTodaySection = request.destination === "someday" ? null : expectedStartDate === null ? request.todaySection : null;
     checks.push([state.start_date, expectedStartDate]);
     checks.push([state.today_section, expectedTodaySection]);
   }
@@ -1204,10 +1204,9 @@ async function validateContainer(request, auth2) {
   if (request.areaId !== null && area === null) throw new Error("The task area is unavailable.");
   if (request.projectId !== null && project === null) throw new Error("The task project is unavailable.");
 }
-async function nextPlanningOrderKey(request, startDate, todaySection2, auth2) {
+async function nextPlanningOrderKey(request, auth2) {
   const query = auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", request.destination).eq("lifecycle", "open").eq("disposition", "present");
-  const scoped = todaySection2 === null ? query.is("today_section", null) : query.eq("today_section", todaySection2);
-  const last = await readOne2(scoped.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne2(query.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function nextHierarchyOrderKey(request, auth2) {
@@ -1257,11 +1256,11 @@ async function createTaskData(input, auth2) {
   await validateContainer(request, auth2);
   const startDate = request.destination === "someday" ? null : request.requestedStartDate;
   if (startDate !== null && startDate <= await ownerPlanningDate(auth2)) {
-    throw new Error("Start date must be later than today in the owner planning time zone.");
+    throw new Error("Start must be later than today in the owner planning time zone.");
   }
-  const todaySection2 = request.destination === "someday" ? null : startDate !== null ? request.todaySection ?? "next" : request.placementWasImplicit ? "next" : request.todaySection;
+  const todaySection2 = request.destination === "someday" ? null : startDate !== null ? null : request.placementWasImplicit ? "next" : request.todaySection;
   const [orderKey, hierarchyOrderKey] = await Promise.all([
-    nextPlanningOrderKey(request, startDate, todaySection2, auth2),
+    nextPlanningOrderKey(request, auth2),
     nextHierarchyOrderKey(request, auth2)
   ]);
   const timestamp = (/* @__PURE__ */ new Date()).toISOString();
@@ -1321,8 +1320,8 @@ var createTask = defineTool({
     idempotency_key: uuidSchema.describe("Stable UUID for this logical creation request. Reuse it only to retry the exact same request."),
     title: z.string().trim().min(1).max(500),
     notes: z.string().max(1e5).default(""),
-    destination: destinationSchema.optional().describe("Omit for ordinary active capture in Today Next. Explicit Anytime without a start date or horizon remains undated."),
-    today_section: todaySectionSchema.nullable().optional().describe("Active work may use a horizon without a start date. Future-dated work defaults to Next when omitted."),
+    destination: destinationSchema.optional().describe("Omit for ordinary active capture in Today Next. Explicit Anytime without a Start or horizon remains undated."),
+    today_section: todaySectionSchema.nullable().optional().describe("Today work may use a horizon. A future Start has no horizon."),
     actionability: actionabilitySchema.default("actionable").describe("Whether the task is actionable, waiting on an outside party or signal, or requires deliberate rechecking."),
     entry_channel: integrationChannelSchema.default("mcp").describe("Structured integration that collected the task. Ordinary MCP clients should keep the default."),
     start_date: calendarDateSchema.nullable().optional(),
@@ -1500,10 +1499,10 @@ async function createTaskProjectData(input, auth2) {
   const startDate = input.start_date ?? null;
   const deadline = input.deadline ?? null;
   if (input.destination === "someday" && (input.today_section != null || startDate !== null)) {
-    throw new Error("Someday projects cannot retain a start date or day horizon.");
+    throw new Error("Someday projects cannot retain a Start or day horizon.");
   }
   if (startDate !== null && !isTaskCalendarDate(startDate)) {
-    throw new Error("Start date must be a valid ISO calendar date.");
+    throw new Error("Start must be a valid ISO calendar date.");
   }
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error("Deadline must be a valid ISO calendar date.");
@@ -1518,10 +1517,10 @@ async function createTaskProjectData(input, auth2) {
       throw new Error("Task planning settings are not initialized. Open the Tasks module once.");
     }
     if (startDate <= planningDateInTimeZone(settings.planning_timezone)) {
-      throw new Error("Start date must be later than today in the owner planning time zone.");
+      throw new Error("Start must be later than today in the owner planning time zone.");
     }
   }
-  const todaySection2 = input.destination === "someday" ? null : startDate === null ? input.today_section ?? null : input.today_section ?? "next";
+  const todaySection2 = input.destination === "someday" ? null : startDate === null ? input.today_section ?? null : null;
   const expected = {
     title,
     notes: input.notes,
@@ -2267,10 +2266,10 @@ function assertMutable2(project) {
 }
 function validatePlanningPlacement(destination, todaySection2, startDate) {
   if (destination === "someday" && (todaySection2 !== null || startDate !== null)) {
-    throw new Error("Someday projects cannot retain a start date or day horizon.");
+    throw new Error("Someday projects cannot retain a Start or day horizon.");
   }
-  if (destination === "anytime" && startDate !== null && todaySection2 === null) {
-    throw new Error("A future-dated project requires a day horizon.");
+  if (startDate !== null && todaySection2 !== null) {
+    throw new Error("A future Start cannot retain a Today horizon.");
   }
 }
 async function validateArea(auth2, areaId) {
@@ -2319,9 +2318,9 @@ async function movePatch(input, current, auth2) {
     const destination = input.destination;
     const startDate = destination === "someday" ? null : input.start_date ?? null;
     if (startDate !== null && startDate <= await ownerPlanningDate2(auth2)) {
-      throw new Error("Start date must be later than today in the owner planning time zone.");
+      throw new Error("Start must be later than today in the owner planning time zone.");
     }
-    const todaySection2 = destination === "someday" ? null : startDate === null ? input.today_section ?? null : input.today_section ?? "next";
+    const todaySection2 = destination === "someday" ? null : startDate === null ? input.today_section ?? null : null;
     validatePlanningPlacement(destination, todaySection2, startDate);
     if (destination === current.destination && todaySection2 === current.today_section && startDate !== current.start_date) {
       throw new Error("Use schedule_task_project to change dates without moving planning placement.");
@@ -2347,21 +2346,21 @@ async function schedulePatch(input, current, auth2) {
   const startDate = hasOwn(input, "start_date") ? input.start_date ?? null : current.start_date;
   const deadline = hasOwn(input, "deadline") ? input.deadline ?? null : current.deadline;
   if (startDate !== null && !isTaskCalendarDate(startDate)) {
-    throw new Error("Start date must be a valid ISO calendar date.");
+    throw new Error("Start must be a valid ISO calendar date.");
   }
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error("Deadline must be a valid ISO calendar date.");
   }
   if (startDate !== null && startDate <= await ownerPlanningDate2(auth2)) {
-    throw new Error("Start date must be later than today in the owner planning time zone.");
+    throw new Error("Start must be later than today in the owner planning time zone.");
   }
   let destination = current.destination;
   let todaySection2 = current.today_section;
   if (destination === "someday" && startDate !== null) {
     destination = "anytime";
-    todaySection2 = "next";
-  } else if (startDate !== null && todaySection2 === null) {
-    todaySection2 = "next";
+  }
+  if (startDate !== null) {
+    todaySection2 = null;
   }
   validatePlanningPlacement(destination, todaySection2, startDate);
   const patch = { start_date: startDate, deadline };
@@ -2396,7 +2395,7 @@ function expectedAfterForRetry(request, before, after) {
     if (input2.destination !== void 0) {
       expected.destination = input2.destination;
       expected.start_date = input2.destination === "someday" ? null : input2.start_date ?? null;
-      expected.today_section = input2.destination === "someday" ? null : expected.start_date === null ? input2.today_section ?? null : input2.today_section ?? "next";
+      expected.today_section = input2.destination === "someday" ? null : expected.start_date === null ? input2.today_section ?? null : null;
       ignored.add("planning_order_key");
     }
     return { expected, ignored };
@@ -2406,10 +2405,10 @@ function expectedAfterForRetry(request, before, after) {
   if (hasOwn(input, "deadline")) expected.deadline = input.deadline ?? null;
   if (before.destination === "someday" && expected.start_date !== null) {
     expected.destination = "anytime";
-    expected.today_section = "next";
+    expected.today_section = null;
     ignored.add("planning_order_key");
-  } else if (expected.start_date !== null && before.today_section === null) {
-    expected.today_section = "next";
+  } else if (expected.start_date !== null) {
+    expected.today_section = null;
   }
   return { expected, ignored };
 }
@@ -2560,7 +2559,7 @@ var moveTaskProject = defineTool({
 var scheduleTaskProject = defineTool({
   name: "schedule_task_project",
   title: "Schedule Task Project",
-  description: "Set or clear one open project start date or deadline without accepting timestamps or time-zone offsets.",
+  description: "Set or clear one open project Start or Deadline without accepting timestamps or time-zone offsets.",
   inputSchema: {
     ...mutationBaseSchema,
     start_date: calendarDateSchema3.nullable().optional(),
@@ -2597,7 +2596,7 @@ async function validateArea2(areaId, auth2) {
   return area.id;
 }
 async function nextPlanningOrderKey3(auth2) {
-  const last = await readOne7(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", "anytime").eq("today_section", "next").eq("lifecycle", "open").eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne7(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", "anytime").eq("lifecycle", "open").eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function nextAreaOrderKey2(areaId, auth2) {
@@ -2643,7 +2642,7 @@ async function createMailTaskData(input, auth2) {
 var createMailTask = defineTool({
   name: "create_mail_task",
   title: "Create Mail Task",
-  description: "Atomically create one AI-processed Today task and its structured Mail source lifecycle record. Intended for a verified Mail integration, not generic task creation.",
+  description: "Atomically create one AI-processed Today Inbox task and its structured Mail source lifecycle record. Intended for a verified Mail integration, not generic task creation.",
   inputSchema: {
     idempotency_key: uuidSchema.describe("Stable UUID for this logical Mail capture. Reuse it only for an exact retry."),
     title: z.string().trim().min(1).max(500),
@@ -3010,16 +3009,15 @@ function changedPatch3(current, patch) {
 }
 function validatePlanningPlacement2(destination, todaySection2, startDate) {
   if (destination === "someday" && (todaySection2 !== null || startDate !== null)) {
-    throw new Error("Someday work cannot retain a start date or day horizon.");
+    throw new Error("Someday work cannot retain a Start or day horizon.");
   }
-  if (destination === "anytime" && startDate !== null && todaySection2 === null) {
-    throw new Error("Future-dated work requires a day horizon.");
+  if (startDate !== null && todaySection2 !== null) {
+    throw new Error("A future Start cannot retain a Today horizon.");
   }
 }
-async function nextPlanningOrderKey4(auth2, taskId, destination, todaySection2) {
+async function nextPlanningOrderKey4(auth2, taskId, destination) {
   const query = auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", destination).eq("lifecycle", "open").eq("disposition", "present").neq("id", taskId);
-  const scoped = todaySection2 === null ? query.is("today_section", null) : query.eq("today_section", todaySection2);
-  const last = await readOne8(scoped.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne8(query.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function validateContainer2(auth2, areaId, projectId) {
@@ -3069,9 +3067,9 @@ async function movePatch2(input, current, auth2) {
     const destination = input.destination;
     const startDate = destination === "someday" ? null : input.start_date ?? null;
     if (startDate !== null && startDate <= await ownerPlanningDate3(auth2)) {
-      throw new Error("Start date must be later than today in the owner planning time zone.");
+      throw new Error("Start must be later than today in the owner planning time zone.");
     }
-    const todaySection2 = destination === "someday" ? null : startDate === null ? input.today_section ?? null : input.today_section ?? "next";
+    const todaySection2 = destination === "someday" ? null : startDate === null ? input.today_section ?? null : null;
     validatePlanningPlacement2(destination, todaySection2, startDate);
     if (destination === current.destination && todaySection2 === current.today_section && startDate !== current.start_date) {
       throw new Error("Use schedule_task to change dates without moving planning placement.");
@@ -3079,12 +3077,11 @@ async function movePatch2(input, current, auth2) {
     patch.destination = destination;
     patch.today_section = todaySection2;
     patch.start_date = startDate;
-    if (destination !== current.destination || todaySection2 !== current.today_section || startDate !== current.start_date) {
+    if (destination !== current.destination) {
       patch.order_key = await nextPlanningOrderKey4(
         auth2,
         current.id,
-        destination,
-        todaySection2
+        destination
       );
     }
   }
@@ -3112,28 +3109,28 @@ async function schedulePatch2(input, current, auth2) {
   const startDate = hasOwn2(input, "start_date") ? input.start_date ?? null : current.start_date;
   const deadline = hasOwn2(input, "deadline") ? input.deadline ?? null : current.deadline;
   if (startDate !== null && !isTaskCalendarDate(startDate)) {
-    throw new Error("Start date must be a valid ISO calendar date.");
+    throw new Error("Start must be a valid ISO calendar date.");
   }
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error("Deadline must be a valid ISO calendar date.");
   }
   if (startDate !== null && startDate <= await ownerPlanningDate3(auth2)) {
-    throw new Error("Start date must be later than today in the owner planning time zone.");
+    throw new Error("Start must be later than today in the owner planning time zone.");
   }
   let destination = current.destination;
   let todaySection2 = current.today_section;
   if (destination === "someday" && startDate !== null) {
     destination = "anytime";
-    todaySection2 = "next";
-  } else if (startDate !== null && todaySection2 === null) {
-    todaySection2 = "next";
+  }
+  if (startDate !== null) {
+    todaySection2 = null;
   }
   validatePlanningPlacement2(destination, todaySection2, startDate);
   const patch = { start_date: startDate, deadline };
   if (destination !== current.destination) {
     patch.destination = destination;
     patch.today_section = todaySection2;
-    patch.order_key = await nextPlanningOrderKey4(auth2, current.id, destination, todaySection2);
+    patch.order_key = await nextPlanningOrderKey4(auth2, current.id, destination);
   } else if (todaySection2 !== current.today_section) {
     patch.today_section = todaySection2;
   }
@@ -3168,7 +3165,7 @@ function expectedAfterForRetry2(request, before, after) {
     if (input.destination !== void 0) {
       expected.destination = input.destination;
       expected.start_date = input.destination === "someday" ? null : input.start_date ?? null;
-      expected.today_section = input.destination === "someday" ? null : expected.start_date === null ? input.today_section ?? null : input.today_section ?? "next";
+      expected.today_section = input.destination === "someday" ? null : expected.start_date === null ? input.today_section ?? null : null;
       ignored.add("order_key");
     }
     if (hasOwn2(input, "area_id") && hasOwn2(input, "project_id")) {
@@ -3184,10 +3181,10 @@ function expectedAfterForRetry2(request, before, after) {
     if (hasOwn2(input, "deadline")) expected.deadline = input.deadline ?? null;
     if (before.destination === "someday" && expected.start_date !== null) {
       expected.destination = "anytime";
-      expected.today_section = "next";
+      expected.today_section = null;
       ignored.add("order_key");
-    } else if (expected.start_date !== null && before.today_section === null) {
-      expected.today_section = "next";
+    } else if (expected.start_date !== null) {
+      expected.today_section = null;
     }
     return {
       expected,
@@ -3494,7 +3491,7 @@ var moveTask = defineTool({
 var scheduleTask = defineTool({
   name: "schedule_task",
   title: "Schedule Task",
-  description: "Set or clear one open to-do start date or deadline without accepting timestamps or time-zone offsets.",
+  description: "Set or clear one open task Start or Deadline without accepting timestamps or time-zone offsets.",
   inputSchema: {
     ...mutationBaseSchema2,
     start_date: calendarDateSchema4.nullable().optional(),
@@ -4048,7 +4045,7 @@ var instantiateTaskTemplate = defineTool({
   inputSchema: {
     template_id: uuidSchema,
     template_revision: z.number().int().positive().optional().describe("Immutable revision to create. Defaults to the template current revision."),
-    anchor_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("Explicit reference date used to preserve relative start dates and deadlines."),
+    anchor_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("Explicit reference date used to preserve relative Starts and Deadlines."),
     target_area_id: uuidSchema.optional().describe("Optional accessible destination area for a project template."),
     idempotency_key: uuidSchema.describe("Stable UUID for this exact creation request. Reuse only for an exact retry.")
   },
@@ -4283,7 +4280,7 @@ var getTaskReminders = defineTool({
 var saveTaskReminder = defineTool({
   name: "save_task_reminder",
   title: "Save Task Reminder",
-  description: "Create or revise one task or project reminder at a wall-clock time on its Start date, using an IANA time zone and daylight-saving ambiguity choice.",
+  description: "Create or revise one task or project reminder at a wall-clock time on its Start, using an IANA time zone and daylight-saving ambiguity choice.",
   inputSchema: {
     reminder_id: uuidSchema.optional().describe("Existing reminder to revise. Omit to create."),
     expected_record_revision: z.number().int().positive().optional().describe("Required current record revision when revising an existing reminder."),
@@ -4321,7 +4318,7 @@ var mcp_default = defineMcp({
   name: "bathos-mcp",
   title: "BathOS",
   version: "0.1.0",
-  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, planning views, native templates, recurrence definitions, and resolved reminders plus guarded creation and content updates for to-dos, areas, projects, and checklist items; move, reorder, schedule, template-instantiation, recurrence, reminder, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates. Reminder times are tied to each item's start date and use its IANA time zone and daylight-saving ambiguity choice. Neither uses tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
+  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, planning views, native templates, recurrence definitions, and resolved reminders plus guarded creation and content updates for to-dos, areas, projects, and checklist items; move, reorder, schedule, template-instantiation, recurrence, reminder, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates. Reminder times are tied to each item's Start and use its IANA time zone and daylight-saving ambiguity choice. Neither uses tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"

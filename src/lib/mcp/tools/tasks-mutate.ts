@@ -344,10 +344,10 @@ function validatePlanningPlacement(
   startDate: string | null,
 ): void {
   if (destination === 'someday' && (todaySection !== null || startDate !== null)) {
-    throw new Error('Someday work cannot retain a start date or day horizon.');
+    throw new Error('Someday work cannot retain a Start or day horizon.');
   }
-  if (destination === 'anytime' && startDate !== null && todaySection === null) {
-    throw new Error('Future-dated work requires a day horizon.');
+  if (startDate !== null && todaySection !== null) {
+    throw new Error('A future Start cannot retain a Today horizon.');
   }
 }
 
@@ -355,7 +355,6 @@ async function nextPlanningOrderKey(
   auth: AuthenticatedMcpContext,
   taskId: string,
   destination: TaskDestination,
-  todaySection: TaskTodaySection | null,
 ): Promise<string> {
   const query = auth.supabase
     .from('tasks_todos')
@@ -365,10 +364,7 @@ async function nextPlanningOrderKey(
     .eq('lifecycle', 'open')
     .eq('disposition', 'present')
     .neq('id', taskId);
-  const scoped = todaySection === null
-    ? query.is('today_section', null)
-    : query.eq('today_section', todaySection);
-  const last = await readOne<{ order_key: string }>(scoped
+  const last = await readOne<{ order_key: string }>(query
     .order('order_key', { ascending: false })
     .order('id', { ascending: false })
     .limit(1)
@@ -460,11 +456,11 @@ async function movePatch(
     const destination = input.destination!;
     const startDate = destination === 'someday' ? null : input.start_date ?? null;
     if (startDate !== null && startDate <= await ownerPlanningDate(auth)) {
-      throw new Error('Start date must be later than today in the owner planning time zone.');
+      throw new Error('Start must be later than today in the owner planning time zone.');
     }
     const todaySection = destination === 'someday'
       ? null
-      : startDate === null ? input.today_section ?? null : input.today_section ?? 'next';
+      : startDate === null ? input.today_section ?? null : null;
     validatePlanningPlacement(destination, todaySection, startDate);
     if (destination === current.destination
       && todaySection === current.today_section
@@ -474,11 +470,9 @@ async function movePatch(
     patch.destination = destination;
     patch.today_section = todaySection;
     patch.start_date = startDate;
-    if (destination !== current.destination
-      || todaySection !== current.today_section
-      || startDate !== current.start_date) {
+    if (destination !== current.destination) {
       patch.order_key = await nextPlanningOrderKey(
-        auth, current.id, destination, todaySection,
+        auth, current.id, destination,
       );
     }
   }
@@ -509,21 +503,21 @@ async function schedulePatch(
   const startDate = hasOwn(input, 'start_date') ? input.start_date ?? null : current.start_date;
   const deadline = hasOwn(input, 'deadline') ? input.deadline ?? null : current.deadline;
   if (startDate !== null && !isTaskCalendarDate(startDate)) {
-    throw new Error('Start date must be a valid ISO calendar date.');
+    throw new Error('Start must be a valid ISO calendar date.');
   }
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error('Deadline must be a valid ISO calendar date.');
   }
   if (startDate !== null && startDate <= await ownerPlanningDate(auth)) {
-    throw new Error('Start date must be later than today in the owner planning time zone.');
+    throw new Error('Start must be later than today in the owner planning time zone.');
   }
   let destination = current.destination as TaskDestination;
   let todaySection = current.today_section as TaskTodaySection | null;
   if (destination === 'someday' && startDate !== null) {
     destination = 'anytime';
-    todaySection = 'next';
-  } else if (startDate !== null && todaySection === null) {
-    todaySection = 'next';
+  }
+  if (startDate !== null) {
+    todaySection = null;
   }
   validatePlanningPlacement(destination, todaySection, startDate);
 
@@ -531,7 +525,7 @@ async function schedulePatch(
   if (destination !== current.destination) {
     patch.destination = destination;
     patch.today_section = todaySection;
-    patch.order_key = await nextPlanningOrderKey(auth, current.id, destination, todaySection);
+    patch.order_key = await nextPlanningOrderKey(auth, current.id, destination);
   } else if (todaySection !== current.today_section) {
     patch.today_section = todaySection;
   }
@@ -578,7 +572,7 @@ function expectedAfterForRetry(
       expected.start_date = input.destination === 'someday' ? null : input.start_date ?? null;
       expected.today_section = input.destination === 'someday'
         ? null
-        : expected.start_date === null ? input.today_section ?? null : input.today_section ?? 'next';
+        : expected.start_date === null ? input.today_section ?? null : null;
       ignored.add('order_key');
     }
     if (hasOwn(input, 'area_id') && hasOwn(input, 'project_id')) {
@@ -594,10 +588,10 @@ function expectedAfterForRetry(
     if (hasOwn(input, 'deadline')) expected.deadline = input.deadline ?? null;
     if (before.destination === 'someday' && expected.start_date !== null) {
       expected.destination = 'anytime';
-      expected.today_section = 'next';
+      expected.today_section = null;
       ignored.add('order_key');
-    } else if (expected.start_date !== null && before.today_section === null) {
-      expected.today_section = 'next';
+    } else if (expected.start_date !== null) {
+      expected.today_section = null;
     }
     return {
       expected,
@@ -978,7 +972,7 @@ export const moveTask = defineTool({
 export const scheduleTask = defineTool({
   name: 'schedule_task',
   title: 'Schedule Task',
-  description: 'Set or clear one open to-do start date or deadline without accepting timestamps or time-zone offsets.',
+  description: 'Set or clear one open task Start or Deadline without accepting timestamps or time-zone offsets.',
   inputSchema: {
     ...mutationBaseSchema,
     start_date: calendarDateSchema.nullable().optional(),

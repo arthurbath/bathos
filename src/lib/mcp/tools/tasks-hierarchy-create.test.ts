@@ -260,7 +260,7 @@ describe('Tasks MCP hierarchy creation tools', () => {
       notes: 'Keep this bounded',
       lifecycle: 'open',
       destination: 'anytime',
-      today_section: 'later',
+      today_section: null,
       start_date: '2099-07-24',
       deadline: '2099-07-21',
     });

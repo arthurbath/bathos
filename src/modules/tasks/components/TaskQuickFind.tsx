@@ -141,6 +141,7 @@ export function TaskQuickFindDialog({
       if (!nextOpen) setQuery('');
     }}>
       <DialogContent
+        footerless
         className="shadow-none sm:max-w-lg"
         aria-describedby={undefined}
         onCloseAutoFocus={(event) => {
@@ -156,8 +157,8 @@ export function TaskQuickFindDialog({
               autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              aria-label="Find To-Dos, Projects, and Areas"
-              placeholder="Find To-Dos, Projects, and Areas"
+              aria-label="Find Tasks, Projects, and Areas"
+              placeholder="Find Tasks, Projects, and Areas"
               className="pl-9"
             />
           </div>
@@ -207,7 +208,6 @@ export function TaskQuickFindDialog({
             </a>
           </Button>
         </DialogBody>
-        <div className="text-xs text-muted-foreground">Escape Closes</div>
       </DialogContent>
     </Dialog>
   );
@@ -251,15 +251,15 @@ export function TaskSearchResultsView({
           autoFocus
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          aria-label="Search All To-Dos"
-          placeholder="Search All To-Dos"
+          aria-label="Search All Tasks"
+          placeholder="Search All Tasks"
           className="pl-9"
         />
       </div>
       <section aria-label="Task Search Results">
         <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-          To-Dos
-          <TaskCountBadge count={results.length} label="To-Dos" />
+          Tasks
+          <TaskCountBadge count={results.length} label="Tasks" />
         </h3>
         {loading ? (
           <div className="flex min-h-24 items-center justify-center"><LoadingSpinner /></div>
@@ -268,7 +268,7 @@ export function TaskSearchResultsView({
         ) : !deferredQuery ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Enter a Search Term</p>
         ) : results.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">No Matching To-Dos</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">No Matching Tasks</p>
         ) : (
           <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
             {results.map(({ task, hierarchyLabel }) => {

@@ -90,7 +90,7 @@ describe('TaskAreaDetailView', () => {
 
     try {
       expect(mockUseTaskAreaDetail).toHaveBeenCalledWith('owner-a', 'area-a');
-      const looseHeading = container.querySelector('#task-area-loose-to-dos');
+      const looseHeading = container.querySelector('#task-area-loose-tasks');
       expect(looseHeading?.textContent).not.toContain('(1)');
       expect(looseHeading?.querySelector('[data-task-count-badge]'))
         .toHaveAccessibleName('1 Items');

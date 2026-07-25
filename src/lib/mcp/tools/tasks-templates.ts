@@ -111,7 +111,7 @@ export const instantiateTaskTemplate = defineTool({
     template_revision: z.number().int().positive().optional()
       .describe('Immutable revision to create. Defaults to the template current revision.'),
     anchor_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
-      .describe('Explicit reference date used to preserve relative start dates and deadlines.'),
+      .describe('Explicit reference date used to preserve relative Starts and Deadlines.'),
     target_area_id: uuidSchema.optional()
       .describe('Optional accessible destination area for a project template.'),
     idempotency_key: uuidSchema

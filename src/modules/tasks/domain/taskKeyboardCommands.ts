@@ -6,7 +6,7 @@ export type TaskKeyboardCommand =
   | 'cut'
   | 'paste'
   | 'duplicate'
-  | 'help'
+  | 'keyboard-help'
   | 'close-task'
   | 'capture'
   | 'view-today'
@@ -17,6 +17,8 @@ export type TaskKeyboardCommand =
   | 'view-config'
   | 'toggle-completion'
   | 'open-start-date'
+  | 'clear-start'
+  | 'set-someday'
   | 'cycle-horizon'
   | 'cycle-actionability'
   | 'focus-reminder'
@@ -32,24 +34,40 @@ type TaskKeyboardGesture = Pick<
 >;
 
 const taskControlCommands: Record<string, TaskKeyboardCommand> = {
-  w: 'view-today',
-  e: 'view-upcoming',
-  r: 'view-anytime',
-  t: 'view-someday',
-  y: 'view-done',
-  u: 'view-config',
-  a: 'toggle-completion',
-  s: 'open-previous',
-  d: 'open-start-date',
-  f: 'cycle-horizon',
-  g: 'cycle-actionability',
-  h: 'focus-reminder',
-  z: 'close-task',
-  x: 'open-next',
-  c: 'open-deadline',
+  q: 'close-task',
+  w: 'open-previous',
+  e: 'open-start-date',
+  r: 'cycle-horizon',
+  t: 'clear-start',
+  a: 'capture',
+  s: 'open-next',
+  d: 'open-deadline',
+  f: 'cycle-actionability',
+  g: 'set-someday',
+  z: 'undo',
+  x: 'toggle-completion',
+  c: 'open-checklist',
   v: 'open-organization',
-  b: 'open-checklist',
-  n: 'capture',
+  b: 'focus-reminder',
+};
+
+const applicationCommands: Record<string, TaskKeyboardCommand> = {
+  '/': 'keyboard-help',
+  '1': 'view-today',
+  '2': 'view-upcoming',
+  '3': 'view-anytime',
+  '4': 'view-someday',
+  '5': 'view-done',
+  '6': 'view-config',
+  y: 'redo',
+  a: 'select-all',
+  d: 'duplicate',
+  x: 'cut',
+  c: 'copy',
+  v: 'paste',
+  z: 'undo',
+  enter: 'close-task',
+  escape: 'close-task',
 };
 
 export function getTaskKeyboardCommand(
@@ -65,22 +83,14 @@ export function getTaskKeyboardCommand(
     && !gesture.altKey
     && gesture.shiftKey === !macLikePlatform;
 
+  if (applicationModifier && !gesture.altKey && gesture.shiftKey && key === 'z') {
+    return 'redo';
+  }
   if (taskControlModifier) return taskControlCommands[key] ?? null;
 
   if (applicationModifier && !gesture.altKey) {
-    if (key === 'z') {
-      if (gesture.shiftKey) return macLikePlatform ? 'redo' : 'close-task';
-      return 'undo';
-    }
     if (gesture.shiftKey) return null;
-    if (key === 'y') return 'redo';
-    if (key === 'a') return 'select-all';
-    if (key === 'd') return 'duplicate';
-    if (key === 'x') return 'cut';
-    if (key === 'c') return 'copy';
-    if (key === 'v') return 'paste';
-    if (key === '/') return 'help';
-    if (key === 'enter' || key === 'escape') return 'close-task';
+    return applicationCommands[key] ?? null;
   }
 
   return null;

@@ -21,7 +21,7 @@ const currentTask: TaskTodo = taskTodoFixture({
   completed_at: '2026-07-20T04:30:00.000Z',
   destination: 'anytime',
   today_section: 'next',
-  start_date: '2026-07-20',
+  start_date: null,
   revision: 2,
   client_mutation_id: 'mutation-b',
   updated_at: '2026-07-20T04:30:00.000Z',
@@ -64,7 +64,7 @@ describe('task history', () => {
         deleted_at: null,
         destination: 'anytime',
         today_section: 'next',
-        start_date: '2026-07-20',
+        start_date: null,
         source_kind: null,
         source_title: null,
         source_external_id: null,
@@ -96,6 +96,24 @@ describe('task history', () => {
     const event = parseTaskHistoryEvent(historyRow());
 
     expect(createTaskUndoPatch({ ...currentTask, revision: 8 }, event)).toEqual(event.before_state);
+  });
+
+  it('treats PostgreSQL and JavaScript spellings of the same terminal instant as equal', () => {
+    const event = parseTaskHistoryEvent(historyRow({
+      after_state: JSON.stringify({
+        ...snapshotTask(currentTask),
+        completed_at: '2026-07-20T04:30:00.000+00:00',
+      }),
+    }));
+
+    expect(createTaskUndoPatch(currentTask, event)).toEqual(event.before_state);
+    expect(() => createTaskUndoPatch(
+      {
+        ...currentTask,
+        completed_at: '2026-07-20T04:30:00.001Z',
+      },
+      event,
+    )).toThrow(UnsafeTaskUndoError);
   });
 
   it('creates a guarded redo patch from the source event after-state', () => {

@@ -233,7 +233,7 @@ export function parseTaskTemplateSnapshot(value: unknown): TaskTemplateSnapshot 
       root: parseTodoNode(record.root, false),
     } satisfies TaskTodoTemplateSnapshot;
   }
-  // Legacy project snapshots may contain headings. Their descendant to-dos are
+  // Legacy project snapshots may contain headings. Their descendant tasks are
   // intentionally flattened into the project when parsed.
   if (record.headings !== undefined) {
     requireArray(record.headings, 'Project template headings are invalid');
@@ -256,14 +256,14 @@ export function parseTaskTemplateSnapshot(value: unknown): TaskTemplateSnapshot 
       start_offset_days: root.start_offset_days,
       deadline_offset_days: root.deadline_offset_days,
     },
-    todos: requireArray(record.todos, 'Project template to-dos are invalid').map(
+    todos: requireArray(record.todos, 'Project template tasks are invalid').map(
       (todo) => parseTodoNode(todo, true),
     ),
   } satisfies TaskProjectTemplateSnapshot;
 }
 
 function parseTodoNode(value: unknown, _includeLegacyHeading: boolean) {
-  const record = requireRecord(value, 'Template to-do node is invalid');
+  const record = requireRecord(value, 'Template task node is invalid');
   const legacyDestination = requireText(record.destination, 'template destination');
   const destination = legacyDestination === 'inbox' || legacyDestination === 'today'
     ? 'anytime'

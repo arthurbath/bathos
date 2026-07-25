@@ -32,9 +32,17 @@ let latest: ReturnType<typeof useTaskList>;
 let queryData: TaskTodo[];
 let harnessView: TaskListView;
 let harnessRetainedTaskId: string | null;
+let harnessForwardMutation: ReturnType<typeof vi.fn>;
+let harnessReserveForwardMutation: ReturnType<typeof vi.fn>;
 
 function Harness() {
-  latest = useTaskList('owner-a', harnessView, harnessRetainedTaskId);
+  latest = useTaskList(
+    'owner-a',
+    harnessView,
+    harnessRetainedTaskId,
+    harnessForwardMutation,
+    harnessReserveForwardMutation,
+  );
   return null;
 }
 
@@ -69,6 +77,8 @@ describe('useTaskList optimistic display', () => {
   beforeEach(() => {
     harnessView = 'today';
     harnessRetainedTaskId = null;
+    harnessForwardMutation = vi.fn();
+    harnessReserveForwardMutation = vi.fn();
     queryData = [originalTask];
     mocks.useQuery.mockReset().mockImplementation(() => ({
       data: queryData,
@@ -144,6 +154,109 @@ describe('useTaskList optimistic display', () => {
         await expect(completionPromise).rejects.toThrow('write failed');
       });
       expect(latest.tasks).toEqual([originalTask]);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('reserves completion before persistence and settles the exact accepted mutation', async () => {
+    const pendingCompletion = deferred<TaskTodo>();
+    const commit = vi.fn();
+    const cancel = vi.fn();
+    harnessReserveForwardMutation.mockReturnValue({ commit, cancel });
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      transitionTask: vi.fn().mockReturnValue(pendingCompletion.promise),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      let completionPromise!: Promise<TaskTodo>;
+      act(() => {
+        completionPromise = latest.transitionTask('task-a', 'complete');
+      });
+
+      expect(harnessReserveForwardMutation).toHaveBeenCalledWith(originalTask);
+      expect(repository.transitionTask).toHaveBeenCalledWith(
+        'owner-a',
+        'task-a',
+        'complete',
+      );
+      expect(commit).not.toHaveBeenCalled();
+
+      const completedTask = {
+        ...originalTask,
+        lifecycle: 'completed' as const,
+        completed_at: '2026-07-20T04:02:00.000Z',
+        revision: 2,
+        client_mutation_id: 'mutation-completed',
+      };
+      await act(async () => {
+        pendingCompletion.resolve(completedTask);
+        await completionPromise;
+      });
+      expect(commit).toHaveBeenCalledWith(completedTask);
+      expect(cancel).not.toHaveBeenCalled();
+      expect(harnessForwardMutation).toHaveBeenCalledWith(completedTask);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('cancels a reserved mutation when persistence fails', async () => {
+    const commit = vi.fn();
+    const cancel = vi.fn();
+    harnessReserveForwardMutation.mockReturnValue({ commit, cancel });
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn().mockRejectedValue(new Error('write failed')),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      await act(async () => {
+        await expect(latest.updateTask('task-a', { title: 'Changed' }))
+          .rejects.toThrow('write failed');
+      });
+      expect(harnessReserveForwardMutation).toHaveBeenCalledWith(originalTask);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(commit).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('retains a completed open-editor task until the settling projection is released', async () => {
+    harnessRetainedTaskId = 'task-a';
+    const completedTask = {
+      ...originalTask,
+      lifecycle: 'completed' as const,
+      completed_at: '2026-07-20T04:02:00.000Z',
+      revision: 2,
+      client_mutation_id: 'mutation-completed',
+    };
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      transitionTask: vi.fn().mockResolvedValue(completedTask),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      await act(async () => {
+        await latest.transitionTask('task-a', 'complete');
+      });
+      expect(harnessForwardMutation).toHaveBeenCalledWith(completedTask);
+      expect(latest.tasks).toEqual([completedTask]);
+
+      harnessRetainedTaskId = null;
+      rerender(root);
+      expect(latest.tasks).toEqual([]);
     } finally {
       cleanup(root, container);
     }
@@ -553,18 +666,41 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
-  it('retains an open task in its original view group until retention ends', async () => {
+  it('retains an open task in its original visible slot while showing current metadata', async () => {
+    harnessView = 'today';
     harnessRetainedTaskId = 'task-a';
-    const deferredTask = {
+    const precedingTask = taskTodoFixture({
+      id: 'task-before',
+      title: 'Before',
+      today_section: 'next',
+      start_date: null,
+      order_key: 'a0',
+    });
+    const retainedTask = {
       ...originalTask,
-      start_date: '2099-01-02',
-      today_section: 'later' as const,
+      today_section: 'next' as const,
+      start_date: null,
+      order_key: 'a1',
+    };
+    const followingTask = taskTodoFixture({
+      id: 'task-after',
+      title: 'After',
+      today_section: 'next',
+      start_date: null,
+      order_key: 'a2',
+    });
+    queryData = [precedingTask, retainedTask, followingTask];
+    const replannedTask = {
+      ...retainedTask,
+      actionability: 'waiting' as const,
+      today_section: 'now' as const,
+      order_key: 'z9',
       revision: 2,
-      client_mutation_id: 'mutation-deferred',
+      client_mutation_id: 'mutation-replanned',
     };
     const repository = {
       createTask: vi.fn(),
-      updateTask: vi.fn().mockResolvedValue(deferredTask),
+      updateTask: vi.fn().mockResolvedValue(replannedTask),
       moveTask: vi.fn(),
       transitionTask: vi.fn(),
     };
@@ -574,20 +710,91 @@ describe('useTaskList optimistic display', () => {
     try {
       await act(async () => {
         await latest.updateTask('task-a', {
-          start_date: '2099-01-02',
-          today_section: 'later',
+          actionability: 'waiting',
+          today_section: 'now',
         });
       });
-      expect(latest.tasks).toHaveLength(1);
-      expect(latest.tasks[0]).toMatchObject({
+      expect(latest.tasks.map(({ id }) => id)).toEqual([
+        'task-before',
+        'task-a',
+        'task-after',
+      ]);
+      expect(latest.tasks[1]).toMatchObject({
         id: 'task-a',
-        start_date: originalTask.start_date,
-        today_section: originalTask.today_section,
+        actionability: 'waiting',
+        today_section: 'now',
+        order_key: 'z9',
+      });
+      expect(latest.retainedTaskPlacement).toMatchObject({
+        id: 'task-a',
+        today_section: 'next',
+        order_key: 'a1',
       });
 
       harnessRetainedTaskId = null;
       rerender(root);
-      expect(latest.tasks).toEqual([]);
+      expect(latest.tasks.map(({ id }) => id)).toEqual([
+        'task-a',
+        'task-before',
+        'task-after',
+      ]);
+      expect(latest.retainedTaskPlacement).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('projects a retained future task into Today immediately during a bulk horizon move', async () => {
+    harnessView = 'upcoming';
+    harnessRetainedTaskId = 'task-a';
+    const futureTask = {
+      ...originalTask,
+      today_section: null,
+      start_date: '2099-01-02',
+    };
+    queryData = [futureTask];
+    const pendingMove = deferred<TaskTodo[]>();
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      moveTask: vi.fn(),
+      moveTasks: vi.fn().mockReturnValue(pendingMove.promise),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      let movePromise!: Promise<TaskTodo[]>;
+      await act(async () => {
+        movePromise = latest.moveTasks(['task-a'], {
+          destination: 'anytime',
+          todaySection: 'now',
+          startDate: null,
+        });
+        await Promise.resolve();
+      });
+      expect(latest.tasks[0]).toMatchObject({
+        id: 'task-a',
+        start_date: null,
+        today_section: 'now',
+      });
+
+      await act(async () => {
+        pendingMove.resolve([{
+          ...futureTask,
+          start_date: null,
+          today_section: 'now',
+          revision: 2,
+          client_mutation_id: 'mutation-moved',
+        }]);
+        await movePromise;
+      });
+      expect(latest.tasks[0]).toMatchObject({
+        id: 'task-a',
+        start_date: null,
+        today_section: 'now',
+      });
     } finally {
       cleanup(root, container);
     }

@@ -256,7 +256,7 @@ export function TaskRecurrencePanel({
               disabled={!connected}
             />
           </Field>
-          <Field label="Start Date">
+          <Field label="Recurrence Start">
             <DatePickerField value={startDate} onValueChange={setStartDate} disabled={!connected} />
           </Field>
           <Field label="Missed Events">

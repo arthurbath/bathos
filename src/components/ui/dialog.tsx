@@ -18,6 +18,8 @@ const DialogPortal = DialogPrimitive.Portal;
 
 const DialogClose = DialogPrimitive.Close;
 
+const DialogLayoutContext = React.createContext({ footerless: false });
+
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
@@ -34,13 +36,14 @@ const DialogOverlay = React.forwardRef<
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 interface DialogContentProps extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
+  footerless?: boolean;
   hideClose?: boolean;
 }
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(({ className, children, onEscapeKeyDown, onOpenAutoFocus, onKeyDown, hideClose, style, ...props }, ref) => {
+>(({ className, children, footerless = false, onEscapeKeyDown, onOpenAutoFocus, onKeyDown, hideClose, style, ...props }, ref) => {
   const handleEscapeKeyDown = getModalEscapeKeyDownHandler(onEscapeKeyDown);
   const handleOpenAutoFocus = getModalOpenAutoFocusHandler(onOpenAutoFocus);
   const handleKeyDown = getModalKeyDownHandler(onKeyDown);
@@ -52,6 +55,7 @@ const DialogContent = React.forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         data-bathos-form-scope="true"
+        data-dialog-footerless={footerless ? "true" : undefined}
         onEscapeKeyDown={handleEscapeKeyDown}
         onOpenAutoFocus={handleOpenAutoFocus}
         onKeyDown={handleKeyDown}
@@ -59,11 +63,14 @@ const DialogContent = React.forwardRef<
           "fixed left-[50%] top-[50%] z-50 max-h-[calc(100dvh-2rem)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
           className,
           "grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg max-sm:left-0 max-sm:right-0 max-sm:top-[calc(var(--bathos-modal-vv-top,0px)+env(safe-area-inset-top,0px))] max-sm:h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-h-[calc(var(--bathos-modal-vv-height,100dvh)-env(safe-area-inset-top,0px))] max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:!animate-none max-sm:!duration-0 max-sm:!transition-none max-sm:data-[state=closed]:!animate-none max-sm:data-[state=open]:!animate-none",
+          footerless && "!grid-rows-[auto_minmax(0,1fr)]",
         )}
         style={viewportStyle}
         {...props}
       >
-        {children}
+        <DialogLayoutContext.Provider value={{ footerless }}>
+          {children}
+        </DialogLayoutContext.Provider>
         {!hideClose && (
           <DialogPrimitive.Close
             data-bathos-form-cancel="true"
@@ -86,19 +93,30 @@ const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 DialogHeader.displayName = "DialogHeader";
 
 const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
-      data-dialog-body="true"
-      className={cn("-mx-6 min-h-0 overflow-y-auto border-y border-border px-6 pt-2 pb-[25px]", className)}
-      {...props}
-    />
-  ),
+  ({ className, ...props }, ref) => {
+    const { footerless } = React.useContext(DialogLayoutContext);
+    return (
+      <div
+        ref={ref}
+        data-dialog-body="true"
+        className={cn(
+          "-mx-6 min-h-0 overflow-y-auto border-y border-border px-6 pt-2 pb-[25px]",
+          footerless && "-mb-[25px] border-b-0",
+          className,
+        )}
+        {...props}
+      />
+    );
+  },
 );
 DialogBody.displayName = "DialogBody";
 
 const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("-mb-[5px] flex flex-row justify-end gap-2", className)} {...props} />
+  <div
+    data-dialog-footer="true"
+    className={cn("-mb-[5px] flex flex-row justify-end gap-2", className)}
+    {...props}
+  />
 );
 DialogFooter.displayName = "DialogFooter";
 

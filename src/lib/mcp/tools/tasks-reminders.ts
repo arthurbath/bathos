@@ -133,7 +133,7 @@ export const getTaskReminders = defineTool({
 export const saveTaskReminder = defineTool({
   name: 'save_task_reminder',
   title: 'Save Task Reminder',
-  description: 'Create or revise one task or project reminder at a wall-clock time on its Start date, using an IANA time zone and daylight-saving ambiguity choice.',
+  description: 'Create or revise one task or project reminder at a wall-clock time on its Start, using an IANA time zone and daylight-saving ambiguity choice.',
   inputSchema: {
     reminder_id: uuidSchema.optional().describe('Existing reminder to revise. Omit to create.'),
     expected_record_revision: z.number().int().positive().optional()

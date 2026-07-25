@@ -47,7 +47,7 @@ describe('task creation drafts', () => {
       title: 'Scheduled work',
       notes: 'Context',
       destination: 'anytime',
-      todaySection: 'later',
+      todaySection: null,
       startDate: '2026-07-24',
       deadline: null,
       primaryLink: null,

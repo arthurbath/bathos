@@ -12,17 +12,12 @@ export function normalizeTaskEditorPlanningPatch(
     && patch.start_date !== null;
   if (activatesSomeday) {
     normalizedPatch.destination = 'anytime';
-    normalizedPatch.today_section = patch.today_section ?? 'next';
+    normalizedPatch.today_section = null;
   }
   if (patch.start_date !== undefined && patch.start_date !== null && patch.start_date <= planningDate) {
-    throw new Error('Start Date must be later than today');
+    throw new Error("Start must be later than Today");
   }
-  if (
-    patch.start_date
-    && patch.today_section === undefined
-    && task.today_section === null
-  ) {
-    normalizedPatch.today_section = 'next';
-  }
+  if (patch.start_date) normalizedPatch.today_section = null;
+  else if (patch.today_section) normalizedPatch.start_date = null;
   return normalizedPatch;
 }

@@ -184,7 +184,7 @@ export function planTaskClipboardPaste(
         ? { destination: 'anytime' as const, todaySection: null, startDate: null }
         : {
           destination: snapshot.destination,
-          todaySection: snapshot.todaySection,
+          todaySection: snapshot.startDate === null ? snapshot.todaySection : null,
           startDate: snapshot.startDate,
         };
 
@@ -228,7 +228,7 @@ function parseSnapshot(value: unknown): TaskClipboardSnapshot {
     taskTodaySections,
     'Task day horizon',
   );
-  const startDate = requireNullableDate(row.startDate, 'Task Start');
+  const startDate = requireNullableDate(row.startDate, 'Start');
   const deadline = requireNullableDate(row.deadline, 'Task Deadline');
   const actionability = requireEnum(
     row.actionability,

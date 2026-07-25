@@ -79,12 +79,12 @@ export function TaskAreaDetailView({
       </div>
 
       <AreaWorkSection
-        title="Loose To-Dos"
+        title="Loose Tasks"
         icon={ListTodo}
         count={detail.tasks.length}
       >
         {detail.tasks.length === 0 ? (
-          <p className="px-4 py-5 text-sm text-muted-foreground">No Loose To-Dos</p>
+          <p className="px-4 py-5 text-sm text-muted-foreground">No Loose Tasks</p>
         ) : detail.tasks.map((task) => {
           const route = getTaskPlanningRoute(task, planningDate);
           const href = `${basePath}/${route}`;

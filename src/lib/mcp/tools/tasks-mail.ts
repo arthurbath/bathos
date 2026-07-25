@@ -78,7 +78,6 @@ async function nextPlanningOrderKey(
     .select('order_key')
     .eq('owner_id', auth.userId)
     .eq('destination', 'anytime')
-    .eq('today_section', 'next')
     .eq('lifecycle', 'open')
     .eq('disposition', 'present')
     .order('order_key', { ascending: false })
@@ -151,7 +150,7 @@ export async function createMailTaskData(
 export const createMailTask = defineTool({
   name: 'create_mail_task',
   title: 'Create Mail Task',
-  description: 'Atomically create one AI-processed Today task and its structured Mail source lifecycle record. Intended for a verified Mail integration, not generic task creation.',
+  description: 'Atomically create one AI-processed Today Inbox task and its structured Mail source lifecycle record. Intended for a verified Mail integration, not generic task creation.',
   inputSchema: {
     idempotency_key: uuidSchema.describe('Stable UUID for this logical Mail capture. Reuse it only for an exact retry.'),
     title: z.string().trim().min(1).max(500),

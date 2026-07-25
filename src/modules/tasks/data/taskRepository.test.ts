@@ -2,7 +2,11 @@ import type { Transaction } from '@powersync/web';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
-import { snapshotTask, type TaskHistoryStorageRow } from '@/modules/tasks/domain/taskHistory';
+import {
+  snapshotTask,
+  UnsafeTaskUndoError,
+  type TaskHistoryStorageRow,
+} from '@/modules/tasks/domain/taskHistory';
 import { taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 
 import {
@@ -79,7 +83,7 @@ describe('task repository', () => {
     ).rejects.toThrow('A recognized IANA planning time zone is required');
   });
 
-  it('activates reached local start dates once while retaining their day horizon', async () => {
+  it('activates reached local start dates into Today Next', async () => {
     const { repository, transaction } = createHarness(null);
     vi.mocked(transaction.getAll).mockResolvedValueOnce([
       { ...existingTask, start_date: '2026-07-20' },
@@ -157,7 +161,7 @@ describe('task repository', () => {
       ownerId: 'owner-a',
       title: 'Reached start date',
       startDate: '2026-07-20',
-    })).rejects.toThrow('Start date must be after today');
+    })).rejects.toThrow("Start must be after Today");
     expect(rejected.transaction.execute).not.toHaveBeenCalled();
 
     const accepted = createHarness(null);
@@ -170,7 +174,7 @@ describe('task repository', () => {
       startDate: '2026-07-20',
     })).resolves.toMatchObject({
       start_date: '2026-07-20',
-      today_section: 'next',
+      today_section: null,
     });
   });
 
@@ -224,41 +228,38 @@ describe('task repository', () => {
     }
   });
 
-  it('moves work to a Today section at the end of that section order', async () => {
+  it('preserves manual order when changing planning within the same destination', async () => {
     const { repository, transaction } = createHarness(existingTask);
-    vi.mocked(transaction.getOptional)
-      .mockResolvedValueOnce(existingTask)
-      .mockResolvedValueOnce({ order_key: 'a0' });
+    vi.mocked(transaction.getOptional).mockResolvedValueOnce(existingTask);
 
     const moved = await repository.moveTask('owner-a', 'task-a', {
       destination: 'anytime',
       todaySection: 'later',
-      startDate: '2026-07-21',
+      startDate: null,
     });
 
     expect(moved).toMatchObject({
       destination: 'anytime',
       today_section: 'later',
-      start_date: '2026-07-21',
+      start_date: null,
       revision: 2,
     });
-    expect(moved.order_key > 'a0').toBe(true);
-    expect(vi.mocked(transaction.getOptional).mock.calls.at(-1)?.[0]).toContain('today_section IS ?');
+    expect(moved.order_key).toBe(existingTask.order_key);
+    expect(transaction.getOptional).toHaveBeenCalledOnce();
   });
 
   it('moves active work to Anytime or Someday with destination-scoped planning', async () => {
     const anytimeHarness = createHarness(existingTask);
-    vi.mocked(anytimeHarness.transaction.getOptional)
-      .mockResolvedValueOnce(existingTask)
-      .mockResolvedValueOnce({ order_key: 'a0' });
+    vi.mocked(anytimeHarness.transaction.getOptional).mockResolvedValueOnce(existingTask);
 
     await expect(anytimeHarness.repository.moveTask('owner-a', 'task-a', {
       destination: 'anytime',
       startDate: '2026-07-24',
     })).resolves.toMatchObject({
       destination: 'anytime',
-      today_section: 'next',
+      today_section: null,
       start_date: '2026-07-24',
+      order_key: existingTask.order_key,
     });
 
     const scheduledTask = {
@@ -271,21 +272,23 @@ describe('task repository', () => {
     const somedayHarness = createHarness(scheduledTask);
     vi.mocked(somedayHarness.transaction.getOptional)
       .mockResolvedValueOnce(scheduledTask)
-      .mockResolvedValueOnce(null);
+      .mockResolvedValueOnce({ order_key: 'a9' });
 
-    await expect(somedayHarness.repository.moveTask('owner-a', 'task-a', {
+    const somedayTask = await somedayHarness.repository.moveTask('owner-a', 'task-a', {
       destination: 'someday',
       todaySection: null,
       startDate: null,
-    })).resolves.toMatchObject({
+    });
+    expect(somedayTask).toMatchObject({
       destination: 'someday',
       today_section: null,
       start_date: null,
       deadline: '2026-07-24',
     });
+    expect(somedayTask.order_key > 'a9').toBe(true);
   });
 
-  it('plans multiple selected tasks atomically and preserves their input order', async () => {
+  it('plans multiple same-destination tasks without changing their manual order', async () => {
     const secondTask = {
       ...existingTask,
       id: 'task-b',
@@ -296,13 +299,12 @@ describe('task repository', () => {
     const { database, repository, transaction } = createHarness(null);
     vi.mocked(transaction.getOptional)
       .mockResolvedValueOnce(existingTask)
-      .mockResolvedValueOnce(secondTask)
-      .mockResolvedValueOnce({ order_key: 'a9' });
+      .mockResolvedValueOnce(secondTask);
 
     const moved = await repository.moveTasks('owner-a', ['task-a', 'task-b'], {
       destination: 'anytime',
       todaySection: 'later',
-      startDate: '2026-07-21',
+      startDate: null,
     });
 
     expect(database.writeTransaction).toHaveBeenCalledOnce();
@@ -311,14 +313,13 @@ describe('task repository', () => {
     expect(moved[0]).toMatchObject({
       destination: 'anytime',
       today_section: 'later',
-      start_date: '2026-07-21',
+      start_date: null,
+      order_key: existingTask.order_key,
       revision: 2,
     });
-    expect(moved[1].order_key > moved[0].order_key).toBe(true);
+    expect(moved[1].order_key).toBe(secondTask.order_key);
     expect(transaction.execute).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(transaction.getOptional).mock.calls[2][0]).toContain(
-      'id NOT IN (?, ?)',
-    );
+    expect(transaction.getOptional).toHaveBeenCalledTimes(2);
   });
 
   it('rejects an invalid bulk member before writing any selected task', async () => {
@@ -471,6 +472,9 @@ describe('task repository', () => {
     expect(undone).toMatchObject({
       lifecycle: 'open',
       completed_at: null,
+      destination: 'anytime',
+      today_section: 'next',
+      start_date: null,
       revision: 3,
       client_mutation_id: 'task-new',
       last_mutation_channel: 'raycast',
@@ -480,6 +484,45 @@ describe('task repository', () => {
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain(
       'undo_source_event_id = ?',
     );
+  });
+
+  it('treats a history target with an elapsed Start as an unavailable undo boundary', async () => {
+    const current = {
+      ...existingTask,
+      revision: 2,
+      client_mutation_id: 'mutation-clear-start',
+    };
+    const before = {
+      ...snapshotTask(current),
+      start_date: '2026-07-19',
+      today_section: null,
+    };
+    const event: TaskHistoryStorageRow = {
+      id: 'event-clear-start',
+      owner_id: 'owner-a',
+      task_id: 'task-a',
+      client_mutation_id: current.client_mutation_id,
+      actor_type: 'user',
+      mutation_channel: 'web',
+      affected_ids: JSON.stringify(['task-a']),
+      base_revision: 1,
+      result_revision: 2,
+      transition: 'move',
+      occurred_at: timestamp,
+      outcome: 'accepted',
+      code: null,
+      before_state: JSON.stringify(before),
+      after_state: JSON.stringify(snapshotTask(current)),
+    };
+    const { repository, transaction } = createHarness(null);
+    vi.mocked(transaction.getOptional)
+      .mockResolvedValueOnce(event)
+      .mockResolvedValueOnce(current);
+
+    await expect(repository.undoTask('owner-a', event.id)).rejects.toBeInstanceOf(
+      UnsafeTaskUndoError,
+    );
+    expect(transaction.execute).not.toHaveBeenCalled();
   });
 
   it('reapplies the source after-state as a guarded redo mutation', async () => {

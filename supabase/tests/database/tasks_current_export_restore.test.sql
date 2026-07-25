@@ -89,8 +89,8 @@ SELECT is(
 SELECT is(
   current_setting('test.tasks_export_v12')::jsonb
     #>> '{data,tasks_todos,0,today_section}',
-  'later',
-  'emits the current day horizon'
+  NULL,
+  'emits no Today horizon alongside a future Start'
 );
 SELECT ok(
   NOT (current_setting('test.tasks_export_v12')::jsonb
@@ -214,8 +214,8 @@ SELECT is(
 SELECT is(
   (SELECT today_section FROM public.tasks_todos
     WHERE id = 'dc000000-0000-4000-8000-000000000020'),
-  'later',
-  'preserves the legacy child day horizon'
+  NULL,
+  'normalizes the legacy child to a horizon-free future Start'
 );
 SELECT ok(
   NOT ((SELECT snapshot FROM public.tasks_template_revisions LIMIT 1) ? 'headings'),

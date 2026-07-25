@@ -27,6 +27,10 @@ vi.mock('@/modules/tasks/hooks/useTaskUndo', () => ({
     error: null,
     event: null,
     undo: vi.fn(),
+    redo: vi.fn(),
+    undoWhenAvailable: vi.fn().mockResolvedValue(null),
+    redoWhenAvailable: vi.fn().mockResolvedValue(null),
+    registerForwardMutation: vi.fn(),
   }),
 }));
 vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({

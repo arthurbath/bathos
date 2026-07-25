@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type ReactNode,
   type RefObject,
@@ -21,7 +22,6 @@ import {
   Circle,
   CircleCheckBig,
   CircleDashed,
-  CircleHelp,
   CircleSlash2,
   Cloud,
   Clock2,
@@ -110,13 +110,22 @@ import {
   getTaskTodayMembershipSection,
   getTodayTaskSection,
   taskIsVisible,
+  taskWithRetainedViewPlacement,
   useTaskList,
+  type RetainedTaskViewPlacement,
   type TaskListView,
   type TodayTaskSection,
 } from '@/modules/tasks/hooks/useTaskList';
 import { useTaskHierarchy, type TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import { useTaskSearch } from '@/modules/tasks/hooks/useTaskSearch';
-import { useTaskUndo } from '@/modules/tasks/hooks/useTaskUndo';
+import {
+  UnsafeTaskRedoError,
+  UnsafeTaskUndoError,
+} from '@/modules/tasks/domain/taskHistory';
+import {
+  useTaskUndo,
+  type TaskForwardMutationReservation,
+} from '@/modules/tasks/hooks/useTaskUndo';
 import { useTaskReminders } from '@/modules/tasks/hooks/useTaskReminders';
 import type { TaskWebPushModel } from '@/modules/tasks/hooks/useTaskWebPush';
 import {
@@ -176,8 +185,10 @@ import {
   type TaskClipboardSnapshot,
 } from '@/modules/tasks/domain/taskClipboard';
 import {
-  cycleTaskShortcutHorizon,
+  getTaskTodayShortcutHorizon,
 } from '@/modules/tasks/domain/taskShortcutPlanning';
+import { getNextTaskActionability } from '@/modules/tasks/domain/taskActionability';
+import { formatTaskReminderTimeDisplay } from '@/modules/tasks/domain/taskReminderTimeInput';
 import {
   NEW_TASK_DRAFT_ID,
   applyTaskCreationDraftPatch,
@@ -198,7 +209,11 @@ const TaskMarkdownNotes = lazy(async () => {
 });
 
 const TASK_EDITOR_TEXT_AUTOSAVE_DELAY_MS = 400;
-const TASK_EDITOR_EXPANSION_DURATION_MS = 150;
+const TASK_EDITOR_EXPANSION_DURATION_MS = 220;
+const TASK_POST_CLOSE_SETTLE_DELAY_MS = 180;
+const TASK_PLACEMENT_ANIMATION_DURATION_MS = 240;
+const TASK_TERMINAL_SETTLE_DELAY_MS = 180;
+const TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS = 220;
 
 const primaryTaskViews = [
   { path: '/today', label: 'Today', icon: CalendarDays },
@@ -227,6 +242,53 @@ const taskCommandPaths: Partial<Record<TaskKeyboardCommand, string>> = {
 
 type TaskShellView = TaskListView | 'projects' | 'project' | 'area' | 'templates' | 'config' | 'search';
 
+function taskMotionAllowed(): boolean {
+  return !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
+function waitForTaskMotion(milliseconds: number): Promise<void> {
+  if (!taskMotionAllowed()) return Promise.resolve();
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function taskPlacementChanged(
+  task: TaskTodo | undefined,
+  retainedPlacement: RetainedTaskViewPlacement | null | undefined,
+): boolean {
+  if (task === undefined || retainedPlacement == null) return false;
+  return task.destination !== retainedPlacement.destination
+    || task.today_section !== retainedPlacement.today_section
+    || task.start_date !== retainedPlacement.start_date
+    || task.deadline !== retainedPlacement.deadline
+    || task.order_key !== retainedPlacement.order_key;
+}
+
+function animateTaskPlacementAfterClose(
+  taskId: string,
+  initialPosition: { left: number; top: number },
+): void {
+  if (!taskMotionAllowed()) return;
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      const taskRow = document.querySelector<HTMLElement>(
+        `[data-task-row-focus-target][data-task-row-id="${CSS.escape(taskId)}"]`,
+      );
+      if (taskRow === null || typeof taskRow.animate !== 'function') return;
+      const finalRect = taskRow.getBoundingClientRect();
+      const deltaX = initialPosition.left - finalRect.left;
+      const deltaY = initialPosition.top - finalRect.top;
+      if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
+      taskRow.animate([
+        { transform: `translate(${deltaX}px, ${deltaY}px)` },
+        { transform: 'translate(0, 0)' },
+      ], {
+        duration: TASK_PLACEMENT_ANIMATION_DURATION_MS,
+        easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+      });
+    });
+  });
+}
+
 function isTaskEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   const editable = target.closest<HTMLElement>(
@@ -237,6 +299,16 @@ function isTaskEditableTarget(target: EventTarget | null): boolean {
   }
   if (editable instanceof HTMLSelectElement) return !editable.disabled;
   return editable !== null;
+}
+
+function isTaskInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return target.closest(
+    'button, a[href], input, textarea, select, summary, '
+      + '[contenteditable]:not([contenteditable="false"]), '
+      + '[role="button"], [role="checkbox"], [role="combobox"], [role="link"], '
+      + '[role="menuitem"], [role="option"], [role="switch"], [role="tab"]',
+  ) !== null;
 }
 
 function taskNestedSurfaceOwnsEscape(target: EventTarget | null): boolean {
@@ -285,8 +357,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     prepareForSignOut,
   } = useTasksRuntime();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [closingTaskId, setClosingTaskId] = useState<string | null>(null);
+  const retainedTaskId = selectedTaskId ?? closingTaskId;
   const hierarchy = useTaskHierarchy(userId);
   const deletedHierarchyRoots = useTaskDeletedHierarchyRoots(userId);
+  const {
+    pending: taskUndoPending,
+    undoWhenAvailable: undoLastTaskChange,
+    redoWhenAvailable: redoLastTaskChange,
+    reserveForwardMutation,
+    registerForwardMutation,
+  } = useTaskUndo(userId);
   const {
     tasks: projectedTasks,
     loading,
@@ -295,18 +376,23 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     updateTask,
     moveTask,
     moveTasks,
-    reorderTask,
     reorderTaskTo,
     transitionTask,
     planningDate,
-  } = useTaskList(userId, taskListView, selectedTaskId);
-  const {
-    available: taskUndoAvailable,
-    redoAvailable: taskRedoAvailable,
-    pending: taskUndoPending,
-    undo: undoLastTaskChange,
-    redo: redoLastTaskChange,
-  } = useTaskUndo(userId);
+    retainedTaskPlacement,
+  } = useTaskList(
+    userId,
+    taskListView,
+    retainedTaskId,
+    registerForwardMutation,
+    reserveForwardMutation,
+  );
+  const projectedTasksRef = useRef(projectedTasks);
+  const retainedTaskPlacementRef = useRef(retainedTaskPlacement);
+  const transitionTaskRef = useRef(transitionTask);
+  projectedTasksRef.current = projectedTasks;
+  retainedTaskPlacementRef.current = retainedTaskPlacement;
+  transitionTaskRef.current = transitionTask;
   const planningProjects = useMemo(() => deriveTaskViewProjects(
     hierarchy.projects,
     userId,
@@ -346,6 +432,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<Set<string>>(() => new Set());
   const [bulkSelectionAnchorId, setBulkSelectionAnchorId] = useState<string | null>(null);
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [bulkWhenOpen, setBulkWhenOpen] = useState(false);
   const [bulkCommandMode, setBulkCommandMode] = useState<TaskBulkCommandMode | null>(null);
   const [bulkPending, setBulkPending] = useState(false);
@@ -364,6 +451,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const commandReturnFocusRef = useRef<HTMLElement | null>(null);
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
   const selectedTaskIdRef = useRef<string | null>(null);
+  const openTaskSequenceRef = useRef(0);
+  const focusedTaskIdRef = useRef<string | null>(null);
+  const visibleTaskIdsRef = useRef<string[]>([]);
   const creationDraftRef = useRef<TaskCreationDraft | null>(null);
   const deferredCompletionTaskIdsRef = useRef<Set<string>>(new Set());
   const taskEditorAutosaveRef = useRef<{
@@ -389,17 +479,27 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   const runTaskUndo = useCallback(async () => {
     try {
-      await undoLastTaskChange();
+      const task = await undoLastTaskChange();
+      if (task === null) showTaskHistoryBoundaryToast('undo');
     } catch (undoError) {
-      showTaskError('Task Change Could Not Be Undone', undoError);
+      if (undoError instanceof UnsafeTaskUndoError) {
+        showTaskHistoryBoundaryToast('undo');
+      } else {
+        showTaskError('Task Change Could Not Be Undone', undoError);
+      }
     }
   }, [undoLastTaskChange]);
 
   const runTaskRedo = useCallback(async () => {
     try {
-      await redoLastTaskChange();
+      const task = await redoLastTaskChange();
+      if (task === null) showTaskHistoryBoundaryToast('redo');
     } catch (redoError) {
-      showTaskError('Task Change Could Not Be Redone', redoError);
+      if (redoError instanceof UnsafeTaskRedoError) {
+        showTaskHistoryBoundaryToast('redo');
+      } else {
+        showTaskError('Task Change Could Not Be Redone', redoError);
+      }
     }
   }, [redoLastTaskChange]);
 
@@ -512,10 +612,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       ? creationDraftRef.current?.persistedTaskId ?? null
       : taskId;
     if (persistedTaskId === null) return;
-    void transitionTask(persistedTaskId, 'complete').catch((completeError) => {
+    void transitionTaskRef.current(persistedTaskId, 'complete').catch((completeError) => {
       showTaskError('Task Could Not Be Completed', completeError);
     });
-  }, [setDeferredCompletions, transitionTask]);
+  }, [setDeferredCompletions]);
 
   const registerTaskEditorAutosave = useCallback((
     taskId: string,
@@ -528,6 +628,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     taskId: string | null,
     clearPageFocus = false,
   ): Promise<boolean> => {
+    const sequence = ++openTaskSequenceRef.current;
     const currentTaskId = selectedTaskIdRef.current;
     if (currentTaskId === taskId) return true;
     const autosave = currentTaskId !== null
@@ -543,40 +644,160 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     if (selectedTaskIdRef.current !== currentTaskId) return false;
     if (taskEditorAutosaveRef.current === autosave) taskEditorAutosaveRef.current = null;
+    const closingTaskRect = currentTaskId !== null && currentTaskId !== NEW_TASK_DRAFT_ID
+      ? document.querySelector<HTMLElement>(
+          `[data-task-row-focus-target][data-task-row-id="${CSS.escape(currentTaskId)}"]`,
+        )?.getBoundingClientRect() ?? null
+      : null;
     if (clearPageFocus && document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
     const closingCreationDraft = currentTaskId === NEW_TASK_DRAFT_ID;
     const completingCreationDraft = closingCreationDraft
       && deferredCompletionTaskIdsRef.current.has(NEW_TASK_DRAFT_ID);
+    const completingCurrentTask = currentTaskId !== null
+      && deferredCompletionTaskIdsRef.current.has(currentTaskId);
+    const currentTask = currentTaskId === null || closingCreationDraft
+      ? undefined
+      : projectedTasksRef.current.find((task) => task.id === currentTaskId);
+    const shouldSettleBeforeProjection = currentTaskId !== null && (
+      closingCreationDraft
+      || completingCurrentTask
+      || taskPlacementChanged(currentTask, retainedTaskPlacementRef.current)
+    );
+    if (taskId !== null) {
+      focusedTaskIdRef.current = null;
+      setFocusedTaskId(null);
+      setBulkSelection(new Set());
+      setBulkSelectionAnchorId(null);
+      setBulkMode(false);
+    }
+    selectedTaskIdRef.current = null;
+    setSelectedTaskId(null);
+    setClosingTaskId(
+      shouldSettleBeforeProjection && !closingCreationDraft ? currentTaskId : null,
+    );
+    if (currentTaskId !== null) finalizeDeferredCompletion(currentTaskId);
+    if (shouldSettleBeforeProjection) {
+      await waitForTaskMotion(
+        TASK_EDITOR_EXPANSION_DURATION_MS + TASK_POST_CLOSE_SETTLE_DELAY_MS,
+      );
+      if (openTaskSequenceRef.current !== sequence) return false;
+    }
+    setClosingTaskId(null);
+    if (closingCreationDraft) finishCreationDraft(completingCreationDraft);
+    if (shouldSettleBeforeProjection && currentTaskId !== null && closingTaskRect !== null) {
+      animateTaskPlacementAfterClose(currentTaskId, {
+        left: closingTaskRect.left,
+        top: closingTaskRect.top,
+      });
+    }
     selectedTaskIdRef.current = taskId;
     setSelectedTaskId(taskId);
-    if (currentTaskId !== null) finalizeDeferredCompletion(currentTaskId);
-    if (closingCreationDraft) finishCreationDraft(completingCreationDraft);
     return true;
-  }, [finalizeDeferredCompletion, finishCreationDraft]);
-
-  const openRelativeTask = useCallback((direction: -1 | 1) => {
-    const controls = Array.from(document.querySelectorAll<HTMLElement>(
-      '[data-task-title-control][data-task-id]',
-    ));
-    if (controls.length === 0) return;
-    const currentTaskId = selectedTaskIdRef.current;
-    const currentIndex = currentTaskId === null
-      ? -1
-      : controls.findIndex((control) => control.dataset.taskId === currentTaskId);
-    const targetIndex = currentTaskId === null
-      ? direction === 1 ? 0 : controls.length - 1
-      : currentIndex + direction;
-    const targetTaskId = controls[targetIndex]?.dataset.taskId ?? null;
-    void setOpenTask(targetTaskId);
-  }, [setOpenTask]);
+  }, [
+    finalizeDeferredCompletion,
+    finishCreationDraft,
+  ]);
 
   const clearTaskSelection = useCallback(() => {
+    if (
+      document.activeElement instanceof HTMLElement
+      && document.activeElement.matches('[data-task-row-focus-target]')
+    ) {
+      document.activeElement.blur();
+    }
+    focusedTaskIdRef.current = null;
+    setFocusedTaskId(null);
     setBulkSelection(new Set());
     setBulkSelectionAnchorId(null);
     setBulkMode(false);
   }, []);
+
+  const clearWholeTaskFocusPreservingDomFocus = useCallback(() => {
+    focusedTaskIdRef.current = null;
+    setFocusedTaskId(null);
+    setBulkSelectionAnchorId(null);
+  }, []);
+
+  const focusTaskRow = useCallback((
+    taskId: string | null,
+    forceDomFocus = false,
+  ) => {
+    focusedTaskIdRef.current = taskId;
+    setFocusedTaskId(taskId);
+    setBulkSelection((current) => current.size === 0 ? current : new Set());
+    setBulkSelectionAnchorId(taskId);
+    setBulkMode((current) => current ? false : current);
+    if (taskId === null) return;
+    window.setTimeout(() => {
+      if (focusedTaskIdRef.current !== taskId) return;
+      const activeElement = document.activeElement;
+      if (
+        !forceDomFocus
+        &&
+        activeElement !== document.body
+        && activeElement instanceof Element
+        && !activeElement.closest('[data-task-row-id]')
+      ) return;
+      const target = Array.from(document.querySelectorAll<HTMLElement>(
+        '[data-task-row-focus-target][data-task-row-id]',
+      )).find((row) => row.dataset.taskRowId === taskId);
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView?.({ block: 'nearest' });
+    }, 0);
+  }, []);
+
+  const moveTaskRowFocus = useCallback((
+    taskId: string,
+    direction: -1 | 1,
+    wrap: boolean,
+  ) => {
+    const rows = Array.from(document.querySelectorAll<HTMLElement>(
+      '[data-task-row-focus-target][data-task-row-id]',
+    ));
+    const currentIndex = rows.findIndex((row) => row.dataset.taskRowId === taskId);
+    if (currentIndex < 0 || rows.length === 0) return;
+    let targetIndex = currentIndex + direction;
+    if (wrap) {
+      targetIndex = (targetIndex + rows.length) % rows.length;
+    } else {
+      targetIndex = Math.max(0, Math.min(rows.length - 1, targetIndex));
+    }
+    const targetTaskId = rows[targetIndex]?.dataset.taskRowId ?? null;
+    if (targetTaskId !== null) focusTaskRow(targetTaskId);
+  }, [focusTaskRow]);
+
+  const closeOpenTaskToFocus = useCallback(async (): Promise<boolean> => {
+    const currentTaskId = selectedTaskIdRef.current;
+    const closed = await setOpenTask(null);
+    if (!closed) return false;
+    if (currentTaskId !== null && currentTaskId !== NEW_TASK_DRAFT_ID) {
+      focusTaskRow(currentTaskId);
+    }
+    return true;
+  }, [focusTaskRow, setOpenTask]);
+
+  const openRelativeTask = useCallback((direction: -1 | 1) => {
+    const rows = Array.from(document.querySelectorAll<HTMLElement>(
+      '[data-task-row-focus-target][data-task-row-id]',
+    ));
+    if (rows.length === 0) return;
+    const openTaskId = selectedTaskIdRef.current;
+    const currentTaskId = openTaskId ?? focusedTaskIdRef.current;
+    const currentIndex = currentTaskId === null
+      ? -1
+      : rows.findIndex((row) => row.dataset.taskRowId === currentTaskId);
+    const targetIndex = currentTaskId === null
+      ? direction === 1 ? 0 : rows.length - 1
+      : currentIndex + direction;
+    const targetTaskId = rows[targetIndex]?.dataset.taskRowId ?? null;
+    if (targetTaskId !== null) {
+      void setOpenTask(targetTaskId);
+      return;
+    }
+    if (openTaskId !== null) void closeOpenTaskToFocus();
+  }, [closeOpenTaskToFocus, setOpenTask]);
 
   const beginTaskCreation = useCallback(async () => {
     if (selectedTaskIdRef.current === NEW_TASK_DRAFT_ID) {
@@ -612,7 +833,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   ]);
 
   useEffect(() => {
-    if (!bulkMode) return undefined;
+    if (!bulkMode && focusedTaskId === null) return undefined;
 
     const handleOutsideTaskPointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -631,7 +852,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     return () => {
       document.removeEventListener('pointerdown', handleOutsideTaskPointerDown, true);
     };
-  }, [bulkCommandMode, bulkMode, bulkWhenOpen, clearTaskSelection]);
+  }, [
+    bulkCommandMode,
+    bulkMode,
+    bulkWhenOpen,
+    clearTaskSelection,
+    focusedTaskId,
+  ]);
 
   useEffect(() => {
     const previousMotionScope = document.body.getAttribute('data-tasks-motion-scope');
@@ -651,6 +878,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const handleOutsidePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+
+      // Radix can retarget a pointer that dismisses an editor-owned Select through
+      // its outside layer. Let that interaction close the nested Select only.
+      if (document.querySelector(
+        '[data-task-editor-owned-surface="true"][data-state="open"]',
+      )) return;
 
       const taskRow = target.closest<HTMLElement>('[data-task-row-id]');
       if (taskRow?.dataset.taskRowId === selectedTaskId) return;
@@ -682,17 +915,64 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [clearTaskSelection, setOpenTask, view]);
 
   useEffect(() => {
+    const previousVisibleIds = visibleTaskIdsRef.current;
+    const nextVisibleIds = selectableTasks.map(({ id }) => id);
     const visibleIds = new Set(selectableTasks.map(({ id }) => id));
-    setBulkSelection((current) => {
-      const next = new Set(Array.from(current).filter((taskId) => visibleIds.has(taskId)));
-      return next.size === current.size ? current : next;
-    });
+    const remainingSelection = new Set(
+      Array.from(bulkSelection).filter((taskId) => visibleIds.has(taskId)),
+    );
+    if (remainingSelection.size !== bulkSelection.size) {
+      setBulkSelection(remainingSelection);
+    }
     setBulkSelectionAnchorId((current) => (
       current === null || visibleIds.has(current)
         ? current
         : Array.from(bulkSelection).find((taskId) => visibleIds.has(taskId)) ?? null
     ));
-  }, [bulkSelection, selectableTasks]);
+    if (bulkMode && remainingSelection.size < 2) {
+      const remainingId = remainingSelection.size === 1
+        ? [...remainingSelection][0]
+        : null;
+      if (remainingId !== null) focusTaskRow(remainingId);
+      else clearTaskSelection();
+    } else {
+      const currentFocusedId = focusedTaskIdRef.current;
+      if (currentFocusedId !== null && !visibleIds.has(currentFocusedId)) {
+        const previousIndex = previousVisibleIds.indexOf(currentFocusedId);
+        const fallbackId = nextVisibleIds[previousIndex]
+          ?? nextVisibleIds[previousIndex - 1]
+          ?? null;
+        focusTaskRow(fallbackId);
+      }
+    }
+    visibleTaskIdsRef.current = nextVisibleIds;
+  }, [
+    bulkMode,
+    bulkSelection,
+    clearTaskSelection,
+    focusTaskRow,
+    selectableTasks,
+  ]);
+
+  useEffect(() => {
+    if (focusedTaskId === null) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (focusedTaskIdRef.current !== focusedTaskId) return;
+      const activeElement = document.activeElement;
+      if (
+        activeElement !== document.body
+        && activeElement instanceof Element
+        && !activeElement.closest('[data-task-row-id]')
+      ) return;
+      const target = Array.from(document.querySelectorAll<HTMLElement>(
+        '[data-task-row-focus-target][data-task-row-id]',
+      )).find((row) => row.dataset.taskRowId === focusedTaskId);
+      if (!target || document.activeElement === target) return;
+      target.focus({ preventScroll: true });
+      target.scrollIntoView?.({ block: 'nearest' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedTaskId, selectableTasks]);
 
   useEffect(() => {
     const parameters = new URLSearchParams(location.search);
@@ -728,10 +1008,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [searchTargetTaskId, setOpenTask, tasks]);
 
   const getTaskCommandTargets = useCallback((): TaskTodo[] => {
-    if (bulkMode && bulkSelection.size > 0) {
+    if (bulkMode && bulkSelection.size >= 2) {
       return selectableTasks.filter((task) => bulkSelection.has(task.id));
     }
-    const taskId = selectedTaskIdRef.current;
+    const taskId = selectedTaskIdRef.current ?? focusedTaskIdRef.current;
     if (taskId === null) return [];
     if (taskId === NEW_TASK_DRAFT_ID && creationDraftRef.current !== null) {
       return [creationDraftRef.current.task];
@@ -761,22 +1041,55 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
   }, [reminders]);
 
+  const runDirectStartShortcut = useCallback(async (
+    destination: 'anytime' | 'someday',
+  ) => {
+    const targets = getTaskCommandTargets();
+    if (targets.length === 0) return;
+    try {
+      const includesDraft = targets.some((task) => task.id === NEW_TASK_DRAFT_ID);
+      if (includesDraft) {
+        await saveCreationDraftPatch({
+          destination,
+          today_section: null,
+          start_date: null,
+        });
+        await cancelCreationDraftReminder();
+      }
+      const persistedTargets = targets.filter((task) => task.id !== NEW_TASK_DRAFT_ID);
+      if (persistedTargets.length > 0) {
+        await moveTasks(persistedTargets.map(({ id }) => id), {
+          destination,
+          todaySection: null,
+          startDate: null,
+        });
+        await cancelTaskReminders(persistedTargets);
+      }
+    } catch (shortcutError) {
+      showTaskError('Task Start Could Not Be Changed', shortcutError);
+    }
+  }, [
+    cancelCreationDraftReminder,
+    cancelTaskReminders,
+    getTaskCommandTargets,
+    moveTasks,
+    saveCreationDraftPatch,
+  ]);
+
   const runHorizonShortcut = useCallback(async () => {
     const targets = getTaskCommandTargets();
     if (targets.length === 0) return;
     try {
       const groups = new Map<string, {
         todaySection: TaskTodaySection;
-        startDate: string | null;
         tasks: TaskTodo[];
       }>();
       for (const task of targets) {
-        const horizon = cycleTaskShortcutHorizon(task.today_section);
-        const startDate = task.start_date;
-        const key = `${horizon}:${startDate ?? ''}`;
+        const horizon = getTaskTodayShortcutHorizon(task, planningDate);
+        const key = horizon;
         const group = groups.get(key);
         if (group) group.tasks.push(task);
-        else groups.set(key, { todaySection: horizon, startDate, tasks: [task] });
+        else groups.set(key, { todaySection: horizon, tasks: [task] });
       }
       for (const group of groups.values()) {
         const draftInGroup = group.tasks.some((task) => task.id === NEW_TASK_DRAFT_ID);
@@ -784,7 +1097,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           await saveCreationDraftPatch({
             destination: 'anytime',
             today_section: group.todaySection,
-            start_date: group.startDate,
+            start_date: null,
           });
         }
         const persistedIds = group.tasks
@@ -794,7 +1107,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           await moveTasks(persistedIds, {
             destination: 'anytime',
             todaySection: group.todaySection,
-            startDate: group.startDate,
+            startDate: null,
           });
         }
       }
@@ -804,6 +1117,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [
     getTaskCommandTargets,
     moveTasks,
+    planningDate,
     saveCreationDraftPatch,
   ]);
 
@@ -818,9 +1132,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       });
       if (snapshotTargets.length === 0) return;
       const openTaskId = selectedTaskIdRef.current;
+      const focusedClosedTaskId = focusedTaskIdRef.current;
       const duplicatesOpenTask = targets.length === 1
         && openTaskId !== null
         && targets[0].id === openTaskId;
+      const duplicatesFocusedTask = targets.length === 1
+        && openTaskId === null
+        && focusedClosedTaskId !== null
+        && targets[0].id === focusedClosedTaskId;
       if (duplicatesOpenTask) {
         const closed = await setOpenTask(null);
         if (!closed) return;
@@ -835,6 +1154,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       });
       if (bulkMode) clearTaskSelection();
       if (duplicatesOpenTask && duplicated[0]) await setOpenTask(duplicated[0].id);
+      if (duplicatesFocusedTask && duplicated[0]) focusTaskRow(duplicated[0].id);
       toast({
         title: duplicated.length === 1 ? 'Task Duplicated' : 'Tasks Duplicated',
         description: `${duplicated.length} ${duplicated.length === 1 ? 'task' : 'tasks'} created.`,
@@ -845,6 +1165,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [
     bulkMode,
     clearTaskSelection,
+    focusTaskRow,
     getTaskCommandTargets,
     mode,
     planningDate,
@@ -874,8 +1195,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     operation: 'copy' | 'cut',
     event: ClipboardEvent,
   ) => {
-    if (!bulkMode || bulkSelection.size === 0) return;
-    const targets = selectableTasks.filter((task) => bulkSelection.has(task.id));
+    const targets = getTaskCommandTargets();
     if (targets.length === 0) return;
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -897,7 +1217,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         setBulkPending(true);
         try {
           for (const task of targets) await transitionTask(task.id, 'delete');
-          clearTaskSelection();
+          if (bulkMode) clearTaskSelection();
         } finally {
           setBulkPending(false);
         }
@@ -911,9 +1231,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
   }, [
     bulkMode,
-    bulkSelection,
     clearTaskSelection,
-    selectableTasks,
+    getTaskCommandTargets,
     taskClipboardService,
     transitionTask,
   ]);
@@ -972,14 +1291,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const runCycleActionabilityShortcut = useCallback(async () => {
     const targets = getTaskCommandTargets();
     if (targets.length === 0) return;
-    const nextActionability = {
-      actionable: 'waiting',
-      waiting: 'rechecking',
-      rechecking: 'actionable',
-    } as const;
+    const actionability = getNextTaskActionability(
+      targets.map((task) => task.actionability),
+    );
+    if (actionability === null) return;
     try {
       for (const task of targets) {
-        const actionability = nextActionability[task.actionability];
         if (task.id === NEW_TASK_DRAFT_ID) {
           await saveCreationDraftPatch({ actionability });
         } else if (task.lifecycle === 'open' && task.disposition === 'present') {
@@ -991,11 +1308,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
   }, [getTaskCommandTargets, saveCreationDraftPatch, updateTask]);
 
-  const openTaskCommandField = useCallback((
+  const openTaskCommandField = useCallback(async (
     mode: TaskBulkCommandMode,
   ) => {
     const targets = getTaskCommandTargets();
-    if (bulkMode && bulkSelection.size > 0) {
+    if (bulkMode && bulkSelection.size >= 2) {
       const eligibleTargets = mode === 'reminder'
         ? targets.filter((task) => task.start_date !== null || task.today_section !== null)
         : targets;
@@ -1008,6 +1325,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     const task = targets[0];
     if (!task) return;
+    if (
+      selectedTaskIdRef.current === null
+      && focusedTaskIdRef.current === task.id
+    ) {
+      const opened = await setOpenTask(task.id);
+      if (!opened) return;
+    }
     const controlId = mode === 'start' || mode === 'reminder'
       ? `task-start-${task.id}`
       : mode === 'deadline'
@@ -1037,18 +1361,29 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         }
       }
     }, 0);
-  }, [bulkMode, bulkSelection.size, getTaskCommandTargets]);
+  }, [bulkMode, bulkSelection.size, getTaskCommandTargets, setOpenTask]);
 
   const runToggleCompletionShortcut = useCallback(async () => {
-    if (bulkMode && bulkSelection.size > 0) {
+    if (bulkMode && bulkSelection.size >= 2) {
       const targets = selectableTasks.filter((task) => bulkSelection.has(task.id));
+      const reservations = new Map(targets.map((task) => [
+        task.id,
+        reserveForwardMutation(task),
+      ]));
       setBulkPending(true);
       try {
+        if (targets.some((task) => task.lifecycle === 'open')) {
+          await waitForTaskMotion(TASK_TERMINAL_SETTLE_DELAY_MS);
+        }
         for (const task of targets) {
-          await transitionTask(task.id, task.lifecycle === 'open' ? 'complete' : 'reopen');
+          const transition = task.lifecycle === 'open' ? 'complete' : 'reopen';
+          const reservation = reservations.get(task.id);
+          if (reservation) await transitionTask(task.id, transition, reservation);
+          else await transitionTask(task.id, transition);
         }
         clearTaskSelection();
       } catch (completeError) {
+        for (const reservation of reservations.values()) reservation.cancel();
         showTaskError('Selected Tasks Could Not Be Toggled', completeError);
       } finally {
         setBulkPending(false);
@@ -1057,10 +1392,34 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     const taskId = selectedTaskIdRef.current;
     if (taskId !== null) toggleDeferredCompletion(taskId);
+    const focusedId = focusedTaskIdRef.current;
+    if (taskId === null && focusedId !== null) {
+      const task = selectableTasks.find((candidate) => candidate.id === focusedId);
+      if (!task) return;
+      if (task.lifecycle === 'open') {
+        const completionControl = document.querySelector<HTMLButtonElement>(
+          `[data-task-row-focus-target][data-task-row-id="${CSS.escape(focusedId)}"] `
+          + '[data-task-completion-control]',
+        );
+        if (completionControl !== null) {
+          completionControl.click();
+          return;
+        }
+      }
+      try {
+        await transitionTask(
+          focusedId,
+          task.lifecycle === 'open' ? 'complete' : 'reopen',
+        );
+      } catch (completeError) {
+        showTaskError('Task Could Not Be Toggled', completeError);
+      }
+    }
   }, [
     bulkMode,
     bulkSelection,
     clearTaskSelection,
+    reserveForwardMutation,
     selectableTasks,
     toggleDeferredCompletion,
     transitionTask,
@@ -1098,6 +1457,21 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       if (event.key === 'Escape' && taskNestedSurfaceOwnsEscape(event.target)) return;
       if (
         event.key === 'Escape'
+        && !bulkMode
+        && selectedTaskIdRef.current === null
+        && event.target instanceof HTMLElement
+        && event.target.closest('[data-task-row-focus-target]')
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+        clearTaskSelection();
+        return;
+      }
+      if (
+        event.key === 'Escape'
         && bulkMode
         && !bulkWhenOpen
         && bulkCommandMode === null
@@ -1108,17 +1482,60 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       ) {
         event.preventDefault();
         event.stopImmediatePropagation();
+        if (
+          document.activeElement instanceof HTMLElement
+          && document.activeElement.closest('[data-task-row-focus-target]')
+        ) {
+          document.activeElement.blur();
+        }
         clearTaskSelection();
+        return;
+      }
+      if (
+        event.key === ' '
+        && !event.shiftKey
+        && !event.metaKey
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.isComposing
+      ) {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest('[data-task-row-focus-target]')) return;
+        if (
+          event.repeat
+          || selectedTaskIdRef.current !== null
+          || focusedTaskIdRef.current !== null
+          || bulkMode
+          || taskNestedSurfaceOwnsEscape(event.target)
+          || isTaskInteractiveTarget(event.target)
+        ) return;
+        const ownsEligibleSurface = event.target === document.body
+          || event.target === document.documentElement
+          || (target !== null && target.closest('[data-task-space-entry-surface]') !== null);
+        if (!ownsEligibleSurface) return;
+        const firstTaskRow = document.querySelector<HTMLElement>(
+          '[data-task-row-focus-target][data-task-row-id]',
+        );
+        const firstTaskId = firstTaskRow?.dataset.taskRowId ?? null;
+        if (firstTaskId === null) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        focusTaskRow(firstTaskId, true);
         return;
       }
       const command = getTaskKeyboardCommand(event, macLikePlatform);
       if (command === null) return;
+      if (command === 'keyboard-help' && event.isComposing) return;
       if (
         (command === 'copy' || command === 'cut' || command === 'paste')
         && isTaskEditableTarget(event.target)
       ) return;
       if (command === 'copy' || command === 'cut' || command === 'paste') return;
-      if (command === 'close-task' && selectedTaskIdRef.current === null) return;
+      if (
+        command === 'close-task'
+        && selectedTaskIdRef.current === null
+        && focusedTaskIdRef.current === null
+      ) return;
       if (command === 'duplicate' && getTaskCommandTargets().length === 0) return;
       if (command === 'select-all') {
         if (
@@ -1132,9 +1549,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         const visibleTaskIds = selectableTasks.map(({ id }) => id);
         void setOpenTask(null).then((closed) => {
           if (!closed) return;
+          if (visibleTaskIds.length === 1) {
+            focusTaskRow(visibleTaskIds[0]);
+            return;
+          }
+          focusedTaskIdRef.current = null;
+          setFocusedTaskId(null);
           setBulkMode(true);
           setBulkSelection(new Set(visibleTaskIds));
-          setBulkSelectionAnchorId(visibleTaskIds[0] ?? null);
+          setBulkSelectionAnchorId(visibleTaskIds[0]);
         });
         return;
       }
@@ -1142,29 +1565,31 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       event.stopImmediatePropagation();
       if (event.isComposing) return;
 
-      if (command === 'undo') {
-        if (taskUndoAvailable && !taskUndoPending) void runTaskUndo();
-        return;
-      }
-      if (command === 'redo') {
-        if (taskRedoAvailable && !taskUndoPending) void runTaskRedo();
-        return;
-      }
-      if (command === 'capture') {
-        void beginTaskCreation();
-        return;
-      }
-      if (command === 'help') {
+      if (command === 'keyboard-help') {
         commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
           ? document.activeElement
           : null;
         setKeyboardHelpOpen(true);
         return;
       }
+      if (command === 'undo') {
+        if (!taskUndoPending) void runTaskUndo();
+        return;
+      }
+      if (command === 'redo') {
+        if (!taskUndoPending) void runTaskRedo();
+        return;
+      }
+      if (command === 'capture') {
+        void beginTaskCreation();
+        return;
+      }
       const path = taskCommandPaths[command];
       if (path) {
         void setOpenTask(null).then((closed) => {
-          if (closed) navigate(`${basePath}${path}`);
+          if (!closed) return;
+          clearTaskSelection();
+          navigate(`${basePath}${path}`);
         });
         return;
       }
@@ -1185,19 +1610,27 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         return;
       }
       if (command === 'open-start-date') {
-        openTaskCommandField('start');
+        void openTaskCommandField('start');
+        return;
+      }
+      if (command === 'clear-start') {
+        void runDirectStartShortcut('anytime');
+        return;
+      }
+      if (command === 'set-someday') {
+        void runDirectStartShortcut('someday');
         return;
       }
       if (command === 'open-deadline') {
-        openTaskCommandField('deadline');
+        void openTaskCommandField('deadline');
         return;
       }
       if (command === 'open-organization') {
-        openTaskCommandField('organization');
+        void openTaskCommandField('organization');
         return;
       }
       if (command === 'focus-reminder') {
-        openTaskCommandField('reminder');
+        void openTaskCommandField('reminder');
         return;
       }
       if (command === 'open-next') {
@@ -1209,7 +1642,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         return;
       }
       if (command === 'open-checklist') return;
-      if (command === 'close-task') void setOpenTask(null, true);
+      if (command === 'close-task') {
+        if (selectedTaskIdRef.current !== null) {
+          void closeOpenTaskToFocus();
+        } else if (focusedTaskIdRef.current !== null) {
+          void setOpenTask(focusedTaskIdRef.current);
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
@@ -1224,6 +1663,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     bulkMode,
     bulkWhenOpen,
     clearTaskSelection,
+    focusTaskRow,
+    closeOpenTaskToFocus,
     getTaskCommandTargets,
     keyboardHelpOpen,
     macLikePlatform,
@@ -1232,13 +1673,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     openRelativeTask,
     runDuplicateShortcut,
     runCycleActionabilityShortcut,
+    runDirectStartShortcut,
     runHorizonShortcut,
     runToggleCompletionShortcut,
     runTaskRedo,
     runTaskUndo,
     setOpenTask,
-    taskRedoAvailable,
-    taskUndoAvailable,
     taskUndoPending,
     selectableTasks,
     searchOpen,
@@ -1356,7 +1796,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     actions.push(
       action('Move to Tomorrow', {
         destination: 'anytime',
-        todaySection: section,
+        todaySection: null,
         startDate: addTaskCalendarDays(planningDate, 1),
       }),
       action('Remove from Today', {
@@ -1420,16 +1860,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         if (selectedTasks.length === 0) return;
         setBulkPending(true);
         try {
-          const groups = new Map<TodayTaskSection, string[]>();
-          for (const task of selectedTasks) {
-            const section = getTodayTaskSection(task, planningDate);
-            groups.set(section, [...(groups.get(section) ?? []), task.id]);
-          }
-          await Promise.all(Array.from(groups, ([todaySection, taskIds]) => moveTasks(taskIds, {
+          await moveTasks(selectedTasks.map(({ id }) => id), {
             destination: 'anytime',
-            todaySection,
+            todaySection: null,
             startDate: addTaskCalendarDays(planningDate, 1),
-          })));
+          });
           await rescheduleTaskReminders(selectedTasks);
           clearTaskSelection();
           focusTaskListFallback();
@@ -1450,39 +1885,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   ];
 
   const handleTaskPointerSelection = (
-    event: MouseEvent<HTMLButtonElement>,
+    event: MouseEvent<HTMLElement>,
     taskId: string,
   ) => {
     const next = applyTaskSelectionGesture({
       active: bulkMode,
       anchorId: bulkSelectionAnchorId,
-      selectedIds: bulkSelection,
-    }, {
-      taskId,
-      visibleTaskIds: tasks.map(({ id }) => id),
-      metaKey: event.metaKey,
-      ctrlKey: event.ctrlKey,
-      shiftKey: event.shiftKey,
-      macLikePlatform,
-    });
-    if (!bulkEligible || next === null) {
-      void setOpenTask(selectedTaskIdRef.current === taskId ? null : taskId);
-      return;
-    }
-    event.preventDefault();
-    void setOpenTask(null);
-    setBulkMode(next.active);
-    setBulkSelectionAnchorId(next.anchorId);
-    setBulkSelection(next.selectedIds);
-  };
-
-  const handleDoneTaskPointerSelection = (
-    event: MouseEvent<HTMLButtonElement>,
-    taskId: string,
-  ) => {
-    const next = applyTaskSelectionGesture({
-      active: bulkMode,
-      anchorId: bulkSelectionAnchorId,
+      focusedId: focusedTaskId,
       selectedIds: bulkSelection,
     }, {
       taskId,
@@ -1492,15 +1901,84 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       shiftKey: event.shiftKey,
       macLikePlatform,
     });
-    if (next === null) return;
+    if (!bulkEligible || next === null) {
+      if (selectedTaskIdRef.current === taskId) {
+        void closeOpenTaskToFocus();
+      } else {
+        void setOpenTask(taskId);
+      }
+      return;
+    }
     event.preventDefault();
+    void setOpenTask(null).then((closed) => {
+      if (!closed) return;
+      focusedTaskIdRef.current = next.focusedId;
+      setFocusedTaskId(next.focusedId);
+      setBulkMode(next.active);
+      setBulkSelectionAnchorId(next.anchorId);
+      setBulkSelection(next.selectedIds);
+      if (next.focusedId !== null) focusTaskRow(next.focusedId);
+    });
+  };
+
+  const handleDoneTaskPointerSelection = (
+    event: MouseEvent<HTMLElement>,
+    taskId: string,
+  ) => {
+    const next = applyTaskSelectionGesture({
+      active: bulkMode,
+      anchorId: bulkSelectionAnchorId,
+      focusedId: focusedTaskId,
+      selectedIds: bulkSelection,
+    }, {
+      taskId,
+      visibleTaskIds: selectableTasks.map(({ id }) => id),
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      macLikePlatform,
+    });
+    if (next === null) {
+      focusTaskRow(taskId);
+      return;
+    }
+    event.preventDefault();
+    focusedTaskIdRef.current = next.focusedId;
+    setFocusedTaskId(next.focusedId);
     setBulkMode(next.active);
     setBulkSelectionAnchorId(next.anchorId);
     setBulkSelection(next.selectedIds);
+    if (next.focusedId !== null) focusTaskRow(next.focusedId);
+  };
+
+  const toggleTaskFromKeyboard = (taskId: string) => {
+    if (!bulkMode) {
+      void setOpenTask(taskId);
+      return;
+    }
+    const next = applyTaskSelectionGesture({
+      active: bulkMode,
+      anchorId: bulkSelectionAnchorId,
+      focusedId: focusedTaskId,
+      selectedIds: bulkSelection,
+    }, {
+      taskId,
+      visibleTaskIds: selectableTasks.map(({ id }) => id),
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: false,
+      macLikePlatform,
+    });
+    if (next === null) return;
+    focusedTaskIdRef.current = next.focusedId;
+    setFocusedTaskId(next.focusedId);
+    setBulkMode(next.active);
+    setBulkSelectionAnchorId(next.anchorId);
+    setBulkSelection(next.selectedIds);
+    if (next.focusedId !== null) focusTaskRow(next.focusedId);
   };
 
   const renderActiveTask = (task: TaskTodo, sectionTasks: TaskTodo[]) => {
-    const index = sectionTasks.findIndex((candidate) => candidate.id === task.id);
     const isCreationDraft = task.id === NEW_TASK_DRAFT_ID;
     const persistedDraftTaskId = isCreationDraft
       ? creationDraftRef.current?.persistedTaskId ?? null
@@ -1511,19 +1989,26 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         task={task}
         hierarchy={hierarchy}
         selected={selectedTaskId === task.id}
+        focused={focusedTaskId === task.id}
         onSelect={(event) => handleTaskPointerSelection(event, task.id)}
-        onCloseEditor={() => void setOpenTask(null)}
+        onActivate={() => toggleTaskFromKeyboard(task.id)}
+        onCloseEditor={() => void closeOpenTaskToFocus()}
+        onFocusTask={() => {
+          if (!bulkMode) focusTaskRow(task.id);
+        }}
+        onRestoreTaskFocus={(taskId) => focusTaskRow(taskId, true)}
+        onClearTaskFocus={clearWholeTaskFocusPreservingDomFocus}
+        onMoveFocus={(direction, wrap) => moveTaskRowFocus(task.id, direction, wrap)}
         onRegisterAutosave={registerTaskEditorAutosave}
         completionRequested={deferredCompletionTaskIds.has(task.id)}
         onToggleDeferredCompletion={() => toggleDeferredCompletion(task.id)}
+        reserveTerminalMutation={() => (
+          isCreationDraft ? undefined : reserveForwardMutation(task)
+        )}
         bulkSelection={bulkMode && !isCreationDraft ? {
           selected: bulkSelection.has(task.id),
-          onToggle: () => setBulkSelection((current) => {
-            const next = new Set(current);
-            if (next.has(task.id)) next.delete(task.id);
-            else next.add(task.id);
-            return next;
-          }),
+          onKeyboardToggle: () => toggleTaskFromKeyboard(task.id),
+          onToggle: (event) => handleTaskPointerSelection(event, task.id),
         } : undefined}
         onUpdate={async (patch) => {
           try {
@@ -1542,7 +2027,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             throw updateError;
           }
         }}
-        onComplete={async () => {
+        onComplete={async (reservation) => {
           try {
             if (isCreationDraft) {
               if (persistedDraftTaskId) {
@@ -1550,7 +2035,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               }
               await setOpenTask(null);
             } else {
-              await transitionTask(task.id, 'complete');
+              if (reservation) await transitionTask(task.id, 'complete', reservation);
+              else await transitionTask(task.id, 'complete');
             }
           } catch (completeError) {
             showTaskError('Task Could Not Be Completed', completeError);
@@ -1558,27 +2044,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           }
         }}
         planningActions={planningActionsForTask(task)}
-        onMoveUp={!isCreationDraft
-          && (view === 'today' || view === 'anytime' || view === 'someday')
-          && index > 0 ? async () => {
-          try {
-            await reorderTask(task.id, 'up');
-          } catch (reorderError) {
-            showTaskError('Task Could Not Be Reordered', reorderError);
-            throw reorderError;
-          }
-        } : undefined}
-        onMoveDown={!isCreationDraft
-          && (view === 'today' || view === 'anytime' || view === 'someday')
-          && index >= 0
-          && index < sectionTasks.length - 1 ? async () => {
-          try {
-            await reorderTask(task.id, 'down');
-          } catch (reorderError) {
-            showTaskError('Task Could Not Be Reordered', reorderError);
-            throw reorderError;
-          }
-        } : undefined}
         draggableTask={!isCreationDraft
           && !bulkMode
           && (view === 'today' || view === 'anytime' || view === 'someday')
@@ -1633,7 +2098,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             throw reminderError;
           }
         }}
-        onDelete={async () => {
+        onDelete={async (reservation) => {
           try {
             if (isCreationDraft) {
               if (persistedDraftTaskId) {
@@ -1641,7 +2106,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               }
               await setOpenTask(null);
             } else {
-              await transitionTask(task.id, 'delete');
+              if (reservation) await transitionTask(task.id, 'delete', reservation);
+              else await transitionTask(task.id, 'delete');
             }
           } catch (deleteError) {
             showTaskError('Task Could Not Be Deleted', deleteError);
@@ -1663,18 +2129,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setBulkPending(true);
     try {
       if (mode === 'start') {
-        const groups = new Map<TaskTodaySection, string[]>();
-        for (const task of targets) {
-          const todaySection = task.today_section ?? 'next';
-          groups.set(todaySection, [...(groups.get(todaySection) ?? []), task.id]);
-        }
-        for (const [todaySection, taskIds] of groups) {
-          await moveTasks(taskIds, {
-            destination: 'anytime',
-            todaySection,
-            startDate: value,
-          });
-        }
+        await moveTasks(targets.map(({ id }) => id), {
+          destination: 'anytime',
+          todaySection: null,
+          startDate: value,
+        });
         await rescheduleTaskReminders(targets);
       } else if (mode === 'deadline') {
         for (const task of targets) await updateTask(task.id, { deadline: value });
@@ -1733,7 +2192,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         showAppSwitcher
       />
 
-      <main className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${bulkMode ? 'pb-44 md:pb-36' : CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
+      <main
+        data-task-space-entry-surface
+        className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${bulkMode ? 'pb-44 md:pb-36' : CARD_PAGE_BOTTOM_PADDING_CLASS}`}
+      >
         <div className="space-y-7">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <h2
@@ -1749,7 +2211,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 variant="clear"
                 size="icon"
                 aria-label="New Task"
-                aria-keyshortcuts="Control+N Control+Shift+N"
+                aria-keyshortcuts="Control+A Control+Shift+A"
                 onClick={() => void beginTaskCreation()}
                 className="h-9 w-9 text-muted-foreground"
               >
@@ -1764,17 +2226,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 className="h-9 w-9 text-muted-foreground"
               >
                 <Search className="h-4 w-4" aria-hidden="true" />
-              </Button>
-              <Button
-                type="button"
-                variant="clear"
-                size="icon"
-                aria-label="Keyboard Commands"
-                aria-keyshortcuts="Meta+/ Control+/"
-                onClick={() => openCommandSurface(setKeyboardHelpOpen)}
-                className="h-9 w-9 text-muted-foreground"
-              >
-                <CircleHelp className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
           </div>
@@ -1847,6 +2298,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               planningDate={planningDate}
               reminder={reminders.byRootId.get(projectId) ?? null}
               reminderMode={reminderAvailability}
+              onTaskMutation={registerForwardMutation}
+              reserveTaskMutation={reserveForwardMutation}
               onSaveReminder={async (input) => {
                 try {
                   await reminders.save({
@@ -1875,6 +2328,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             : view === 'templates' ? <TaskTemplatesView ownerId={userId} hierarchy={hierarchy} />
               : view === 'config' ? (
                 <TaskConfigView
+                  keyboardHelpShortcut={macLikePlatform ? '⌘/' : '⌃/'}
                   webPush={reminders.webPush}
                   connected={reminders.mode === 'connected'}
                   onEnableBrowserReminders={async () => {
@@ -1922,7 +2376,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                       Deleted
                       <TaskCountBadge count={doneRoots.length} label="Deleted Items" />
                     </h3>
-                  <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+                  <div className={TASK_PLANNING_LIST_CLASS}>
                     {doneRoots.map((root) => (
                       <DeletedHierarchyRow
                         key={`${root.root_type}:${root.id}`}
@@ -1962,14 +2416,32 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                       id="task-done-todos-heading"
                       className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground"
                     >
-                      To-Dos
-                      <TaskCountBadge count={tasks.length} label="To-Dos" />
+                      Tasks
+                      <TaskCountBadge count={tasks.length} label="Tasks" />
                     </h3>
-                    <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
+                    <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
                       {tasks.map((task) => task.disposition === 'deleted' ? (
                         <DeletedTaskRow
                           key={task.id}
                           task={task}
+                          focused={focusedTaskId === task.id}
+                          onFocusTask={() => {
+                            if (!bulkMode) focusTaskRow(task.id);
+                          }}
+                          onRestoreTaskFocus={(taskId) => focusTaskRow(taskId, true)}
+                          onClearTaskFocus={clearWholeTaskFocusPreservingDomFocus}
+                          onMoveFocus={(direction, wrap) => (
+                            moveTaskRowFocus(task.id, direction, wrap)
+                          )}
+                          bulkSelection={bulkMode ? {
+                            active: true,
+                            selected: bulkSelection.has(task.id),
+                            onSelect: (event) => handleDoneTaskPointerSelection(event, task.id),
+                          } : {
+                            active: false,
+                            selected: false,
+                            onSelect: (event) => handleDoneTaskPointerSelection(event, task.id),
+                          }}
                           onRestore={async () => {
                             try {
                               await transitionTask(task.id, 'restore');
@@ -1982,10 +2454,21 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         <DoneTaskRow
                           key={task.id}
                           task={task}
+                          focused={focusedTaskId === task.id}
+                          onFocusTask={() => {
+                            if (!bulkMode) focusTaskRow(task.id);
+                          }}
+                          onRestoreTaskFocus={(taskId) => focusTaskRow(taskId, true)}
+                          onClearTaskFocus={clearWholeTaskFocusPreservingDomFocus}
+                          onMoveFocus={(direction, wrap) => (
+                            moveTaskRowFocus(task.id, direction, wrap)
+                          )}
                           bulkSelection={bulkMode ? {
+                            active: true,
                             selected: bulkSelection.has(task.id),
                             onSelect: (event) => handleDoneTaskPointerSelection(event, task.id),
                           } : {
+                            active: false,
                             selected: false,
                             onSelect: (event) => handleDoneTaskPointerSelection(event, task.id),
                           }}
@@ -2039,6 +2522,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 <TodayTaskSections
                   tasks={tasks}
                   planningDate={planningDate}
+                  retainedTaskId={retainedTaskId}
+                  retainedTaskPlacement={retainedTaskPlacement}
                   renderTask={renderActiveTask}
                 />
               </div>
@@ -2049,6 +2534,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                     projects={planningProjects}
                     tasks={tasks}
                     planningDate={planningDate}
+                    retainedTaskId={retainedTaskId}
+                    retainedTaskPlacement={retainedTaskPlacement}
                     renderProject={(project) => (
                       <TaskPlanningProjectItem
                         key={project.id}
@@ -2154,8 +2641,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           totalCount={selectableTasks.length}
           pending={bulkPending}
           planningAvailable={view !== 'done'}
-          onSelectAll={() => setBulkSelection(new Set(selectableTasks.map(({ id }) => id)))}
-          onClear={() => setBulkSelection(new Set())}
+          onSelectAll={() => {
+            const ids = selectableTasks.map(({ id }) => id);
+            if (ids.length === 1) focusTaskRow(ids[0]);
+            else setBulkSelection(new Set(ids));
+          }}
+          onClear={clearTaskSelection}
           onPlan={() => openCommandSurface(setBulkWhenOpen)}
           onDone={() => {
             clearTaskSelection();
@@ -2496,6 +2987,7 @@ function TaskDesktopNavigation({
 }
 
 function TaskConfigView({
+  keyboardHelpShortcut,
   webPush,
   connected,
   onEnableBrowserReminders,
@@ -2504,6 +2996,7 @@ function TaskConfigView({
   replaceAvailable,
   replaceUnavailableReason,
 }: {
+  keyboardHelpShortcut: string;
   webPush: TaskWebPushModel | null;
   connected: boolean;
   onEnableBrowserReminders: () => Promise<void>;
@@ -2514,6 +3007,15 @@ function TaskConfigView({
 }) {
   return (
     <div className="space-y-4">
+      <p
+        data-task-keyboard-help-cue
+        className="text-xs text-muted-foreground"
+      >
+        Press{' '}
+        <kbd className="font-mono text-foreground">{keyboardHelpShortcut}</kbd>
+        {' '}to view all keyboard commands.
+      </p>
+
       <TaskConfigSection title="Browser Reminders" icon={Bell}>
         {webPush ? (
           <TaskWebPushCapability
@@ -2638,20 +3140,56 @@ function TaskWebPushCapability({
 
 function DoneTaskRow({
   task,
+  focused,
+  onFocusTask,
+  onRestoreTaskFocus,
+  onClearTaskFocus,
+  onMoveFocus,
   bulkSelection,
   onReopen,
 }: {
   task: TaskTodo;
+  focused: boolean;
+  onFocusTask: () => void;
+  onRestoreTaskFocus: (taskId: string | null) => void;
+  onClearTaskFocus: () => void;
+  onMoveFocus: (direction: -1 | 1, wrap: boolean) => void;
   bulkSelection: {
+    active: boolean;
     selected: boolean;
-    onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
+    onSelect: (event: MouseEvent<HTMLElement>) => void;
   };
   onReopen: () => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
+  const articleRef = useRef<HTMLElement>(null);
   const completed = task.lifecycle === 'completed';
-  const Icon = completed ? CheckCircle2 : CircleSlash2;
   const terminalAt = completed ? task.completed_at : task.canceled_at;
+  const restoreWholeTaskFocus = (preferCurrent: boolean) => {
+    const article = articleRef.current;
+    const main = article?.closest('main') ?? null;
+    const rows = Array.from(main?.querySelectorAll<HTMLElement>(
+      '[data-task-row-focus-target][data-task-row-id]',
+    ) ?? []);
+    const currentIndex = rows.indexOf(article!);
+    window.setTimeout(() => {
+      if (preferCurrent && articleRef.current?.isConnected) {
+        onRestoreTaskFocus(task.id);
+        return;
+      }
+      const remaining = Array.from(main?.querySelectorAll<HTMLElement>(
+        '[data-task-row-focus-target][data-task-row-id]',
+      ) ?? []).filter((row) => row.dataset.taskRowId !== task.id);
+      const target = remaining[currentIndex] ?? remaining[currentIndex - 1] ?? null;
+      const targetTaskId = target?.dataset.taskRowId ?? null;
+      if (targetTaskId !== null) {
+        onRestoreTaskFocus(targetTaskId);
+        return;
+      }
+      onRestoreTaskFocus(null);
+      main?.querySelector<HTMLElement>('[data-task-view-heading]')?.focus();
+    }, 0);
+  };
   const run = async (operation: () => Promise<void>) => {
     if (pending) {
       return;
@@ -2659,6 +3197,9 @@ function DoneTaskRow({
     setPending(true);
     try {
       await operation();
+      restoreWholeTaskFocus(false);
+    } catch {
+      restoreWholeTaskFocus(true);
     } finally {
       setPending(false);
     }
@@ -2666,29 +3207,76 @@ function DoneTaskRow({
 
   return (
     <article
-      tabIndex={-1}
+      ref={articleRef}
+      tabIndex={0}
+      role="group"
+      aria-label={task.title}
+      aria-current={focused ? 'true' : undefined}
+      aria-keyshortcuts="Space Shift+Space ArrowUp ArrowDown"
       data-task-row-id={task.id}
+      data-task-row-focus-target
       data-task-search-id={task.id}
+      onClick={(event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest('button, a, input, textarea, select, [role="button"]')) return;
+        bulkSelection.onSelect(event);
+      }}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === 'Tab' && focused) {
+          onClearTaskFocus();
+          return;
+        }
+        if (event.target !== event.currentTarget) return;
+        if (event.key === ' ' && !bulkSelection.active) {
+          if (event.metaKey || event.ctrlKey || event.altKey) return;
+          event.preventDefault();
+          if (event.repeat) return;
+          if (!focused) {
+            onFocusTask();
+            return;
+          }
+          onMoveFocus(event.shiftKey ? -1 : 1, true);
+          return;
+        }
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+          if (!focused) return;
+          event.preventDefault();
+          onMoveFocus(event.key === 'ArrowUp' ? -1 : 1, true);
+        }
+      }}
       className={[
-        'flex min-h-16 items-center gap-3 px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4',
+        `flex h-14 items-center gap-2 px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-3 ${TASK_PLANNING_ITEM_FRAME_CLASS}`,
+        focused ? 'ring-2 ring-inset ring-ring' : '',
         bulkSelection.selected ? 'bg-info/10 ring-1 ring-inset ring-info/40' : '',
+        !bulkSelection.selected ? TASK_PLANNING_ITEM_BACKGROUND_CLASS : '',
       ].filter(Boolean).join(' ')}
     >
       <button
         type="button"
+        role={completed ? 'checkbox' : undefined}
+        aria-checked={completed ? true : undefined}
+        aria-label={completed
+          ? `Mark Incomplete ${task.title}`
+          : `Reopen Canceled ${task.title}`}
+        disabled={pending}
+        data-task-completion-control={completed ? true : undefined}
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-success transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        onClick={() => void run(onReopen)}
+      >
+        {completed ? (
+          <SquareCheckBig className="h-6 w-6" aria-hidden="true" />
+        ) : (
+          <CircleSlash2 className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+        )}
+      </button>
+      <button
+        type="button"
         aria-pressed={bulkSelection.selected}
         aria-label={`${bulkSelection.selected ? 'Deselect' : 'Select'} ${task.title}`}
-        className="flex min-w-0 flex-1 items-center gap-3 py-3 text-left"
+        className="flex h-full min-w-0 flex-1 items-center text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={bulkSelection.onSelect}
       >
-        {bulkSelection.selected ? (
-          <SquareCheckBig className="h-5 w-5 shrink-0 text-info" aria-hidden="true" />
-        ) : (
-          <Icon
-            className={`h-5 w-5 shrink-0 ${completed ? 'text-success' : 'text-muted-foreground'}`}
-            aria-hidden="true"
-          />
-        )}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-medium leading-5 text-foreground">
             {task.title}
@@ -2705,18 +3293,6 @@ function DoneTaskRow({
         </span>
       </button>
       <TaskSourceIndicator task={task} />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={pending}
-        aria-label={`Reopen ${task.title}`}
-        className="gap-1.5"
-        onClick={() => void run(onReopen)}
-      >
-        <RotateCcw className="h-4 w-4" aria-hidden="true" />
-        Reopen
-      </Button>
     </article>
   );
 }
@@ -2751,17 +3327,125 @@ function DeletedHierarchyRow({
 
 function DeletedTaskRow({
   task,
+  focused,
+  onFocusTask,
+  onRestoreTaskFocus,
+  onClearTaskFocus,
+  onMoveFocus,
+  bulkSelection,
   onRestore,
 }: {
   task: TaskTodo;
+  focused: boolean;
+  onFocusTask: () => void;
+  onRestoreTaskFocus: (taskId: string | null) => void;
+  onClearTaskFocus: () => void;
+  onMoveFocus: (direction: -1 | 1, wrap: boolean) => void;
+  bulkSelection: {
+    active: boolean;
+    selected: boolean;
+    onSelect: (event: MouseEvent<HTMLElement>) => void;
+  };
   onRestore: () => Promise<void>;
 }) {
   const [restoring, setRestoring] = useState(false);
+  const articleRef = useRef<HTMLElement>(null);
+  const restoreWholeTaskFocus = (preferCurrent: boolean) => {
+    const article = articleRef.current;
+    const main = article?.closest('main') ?? null;
+    const rows = Array.from(main?.querySelectorAll<HTMLElement>(
+      '[data-task-row-focus-target][data-task-row-id]',
+    ) ?? []);
+    const currentIndex = rows.indexOf(article!);
+    window.setTimeout(() => {
+      if (preferCurrent && articleRef.current?.isConnected) {
+        onRestoreTaskFocus(task.id);
+        return;
+      }
+      const remaining = Array.from(main?.querySelectorAll<HTMLElement>(
+        '[data-task-row-focus-target][data-task-row-id]',
+      ) ?? []).filter((row) => row.dataset.taskRowId !== task.id);
+      const target = remaining[currentIndex] ?? remaining[currentIndex - 1] ?? null;
+      const targetTaskId = target?.dataset.taskRowId ?? null;
+      if (targetTaskId !== null) {
+        onRestoreTaskFocus(targetTaskId);
+        return;
+      }
+      onRestoreTaskFocus(null);
+      main?.querySelector<HTMLElement>('[data-task-view-heading]')?.focus();
+    }, 0);
+  };
 
   return (
-    <article className="flex min-h-16 items-center gap-3 px-2 sm:px-4">
-      <Trash2 className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <div className="min-w-0 flex-1 py-3">
+    <article
+      ref={articleRef}
+      tabIndex={0}
+      role="group"
+      aria-label={task.title}
+      aria-current={focused ? 'true' : undefined}
+      aria-keyshortcuts="Space Shift+Space ArrowUp ArrowDown"
+      data-task-row-id={task.id}
+      data-task-row-focus-target
+      data-task-search-id={task.id}
+      onClick={(event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest('button, a, input, textarea, select, [role="button"]')) return;
+        bulkSelection.onSelect(event);
+      }}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === 'Tab' && focused) {
+          onClearTaskFocus();
+          return;
+        }
+        if (event.target !== event.currentTarget) return;
+        if (event.key === ' ' && !bulkSelection.active) {
+          if (event.metaKey || event.ctrlKey || event.altKey) return;
+          event.preventDefault();
+          if (event.repeat) return;
+          if (!focused) {
+            onFocusTask();
+            return;
+          }
+          onMoveFocus(event.shiftKey ? -1 : 1, true);
+          return;
+        }
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+          if (!focused) return;
+          event.preventDefault();
+          onMoveFocus(event.key === 'ArrowUp' ? -1 : 1, true);
+        }
+      }}
+      className={[
+        `flex h-14 items-center gap-2 px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-3 ${TASK_PLANNING_ITEM_FRAME_CLASS}`,
+        focused ? 'ring-2 ring-inset ring-ring' : '',
+        bulkSelection.selected ? 'bg-info/10 ring-1 ring-inset ring-info/40' : '',
+        !bulkSelection.selected ? TASK_PLANNING_ITEM_BACKGROUND_CLASS : '',
+      ].filter(Boolean).join(' ')}
+    >
+      <button
+        type="button"
+        disabled={restoring}
+        aria-label={`Restore ${task.title}`}
+        className="group/restore inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        onClick={() => {
+          setRestoring(true);
+          void onRestore()
+            .then(() => restoreWholeTaskFocus(false))
+            .catch(() => restoreWholeTaskFocus(true))
+            .finally(() => setRestoring(false));
+        }}
+      >
+        <Trash2
+          className="h-5 w-5 group-hover/restore:hidden group-focus-visible/restore:hidden"
+          aria-hidden="true"
+        />
+        <RotateCcw
+          className="hidden h-5 w-5 group-hover/restore:block group-focus-visible/restore:block"
+          aria-hidden="true"
+        />
+      </button>
+      <div className="min-w-0 flex-1">
         <p className="truncate text-[15px] font-medium leading-5 text-foreground">{task.title}</p>
         <p className="text-xs text-muted-foreground">
           {task.lifecycle === 'open' ? 'Open' : task.lifecycle === 'completed' ? 'Completed' : 'Canceled'}
@@ -2769,23 +3453,7 @@ function DeletedTaskRow({
           {task.deleted_at ? formatTaskTerminalDate(task.deleted_at) : getTaskViewLabel(task.destination)}
         </p>
       </div>
-      <div className="flex shrink-0 flex-wrap justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={restoring}
-          aria-label={`Restore ${task.title}`}
-          className="gap-1.5"
-          onClick={() => {
-            setRestoring(true);
-            void onRestore().finally(() => setRestoring(false));
-          }}
-        >
-          <RotateCcw className="h-4 w-4" aria-hidden="true" />
-          Restore
-        </Button>
-      </div>
+      <TaskSourceIndicator task={task} />
     </article>
   );
 }
@@ -2793,10 +3461,14 @@ function DeletedTaskRow({
 function TodayTaskSections({
   tasks,
   planningDate,
+  retainedTaskId,
+  retainedTaskPlacement,
   renderTask,
 }: {
   tasks: TaskTodo[];
   planningDate: string;
+  retainedTaskId: string | null;
+  retainedTaskPlacement: RetainedTaskViewPlacement | null;
   renderTask: (task: TaskTodo, sectionTasks: TaskTodo[]) => ReactNode;
 }) {
   const sections: Array<{
@@ -2813,7 +3485,10 @@ function TodayTaskSections({
   return (
     <div className="space-y-7">
       {sections.map(({ id, label, icon: Icon }) => {
-        const sectionTasks = tasks.filter((task) => getTodayTaskSection(task, planningDate) === id);
+        const sectionTasks = tasks.filter((task) => getTodayTaskSection(
+          taskWithRetainedViewPlacement(task, retainedTaskId, retainedTaskPlacement),
+          planningDate,
+        ) === id);
         if (sectionTasks.length === 0) {
           return null;
         }
@@ -2825,7 +3500,7 @@ function TodayTaskSections({
             >
               <Icon className="h-4 w-4" aria-hidden="true" />
               {label}
-              <TaskCountBadge count={sectionTasks.length} label="To-Dos" />
+              <TaskCountBadge count={sectionTasks.length} label="Tasks" />
             </h3>
             <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
               {sectionTasks.map((task) => renderTask(task, sectionTasks))}
@@ -2841,23 +3516,35 @@ function UpcomingTaskSections({
   projects,
   tasks,
   planningDate,
+  retainedTaskId,
+  retainedTaskPlacement,
   renderProject,
   renderTask,
 }: {
   projects: TaskProject[];
   tasks: TaskTodo[];
   planningDate: string;
+  retainedTaskId: string | null;
+  retainedTaskPlacement: RetainedTaskViewPlacement | null;
   renderProject: (project: TaskProject) => ReactNode;
   renderTask: (task: TaskTodo, sectionTasks: TaskTodo[]) => ReactNode;
 }) {
-  const sections = getTaskUpcomingSections(projects, tasks, planningDate);
+  const currentTaskById = new Map(tasks.map((task) => [task.id, task]));
+  const placementTasks = tasks.map((task) => taskWithRetainedViewPlacement(
+    task,
+    retainedTaskId,
+    retainedTaskPlacement,
+  ));
+  const sections = getTaskUpcomingSections(projects, placementTasks, planningDate);
   if (sections.length === 0) return null;
 
   return (
     <div className="space-y-7" aria-label="Upcoming Tasks">
       {sections.map((section) => {
         const sectionTasks = section.entries.flatMap((entry) => (
-          entry.kind === 'task' ? [entry.item] : []
+          entry.kind === 'task'
+            ? [currentTaskById.get(entry.item.id) ?? entry.item]
+            : []
         ));
         return (
           <section
@@ -2874,7 +3561,10 @@ function UpcomingTaskSections({
             <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
               {section.entries.map((entry) => entry.kind === 'project'
                 ? renderProject(entry.item)
-                : renderTask(entry.item, sectionTasks))}
+                : renderTask(
+                  currentTaskById.get(entry.item.id) ?? entry.item,
+                  sectionTasks,
+                ))}
             </div>
           </section>
         );
@@ -2887,17 +3577,22 @@ function TaskRow({
   task,
   hierarchy,
   selected,
+  focused,
   onSelect,
+  onActivate,
   onCloseEditor,
+  onFocusTask,
+  onRestoreTaskFocus,
+  onClearTaskFocus,
+  onMoveFocus,
   onRegisterAutosave,
   completionRequested,
   onToggleDeferredCompletion,
+  reserveTerminalMutation,
   bulkSelection,
   onUpdate,
   onComplete,
   planningActions,
-  onMoveUp,
-  onMoveDown,
   draggableTask,
   onDropTask,
   planningLabel,
@@ -2914,20 +3609,26 @@ function TaskRow({
   task: TaskTodo;
   hierarchy: TaskHierarchyModel;
   selected: boolean;
-  onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
+  focused: boolean;
+  onSelect: (event: MouseEvent<HTMLElement>) => void;
+  onActivate: () => void;
   onCloseEditor: () => void;
+  onFocusTask: () => void;
+  onRestoreTaskFocus: (taskId: string | null) => void;
+  onClearTaskFocus: () => void;
+  onMoveFocus: (direction: -1 | 1, wrap: boolean) => void;
   onRegisterAutosave: (taskId: string, flush: () => Promise<void>) => void;
   completionRequested: boolean;
   onToggleDeferredCompletion: () => void;
+  reserveTerminalMutation: () => TaskForwardMutationReservation | undefined;
   bulkSelection?: {
     selected: boolean;
-    onToggle: () => void;
+    onKeyboardToggle: () => void;
+    onToggle: (event: MouseEvent<HTMLElement>) => void;
   };
   onUpdate: (patch: EditableTaskPatch) => Promise<void>;
-  onComplete: () => Promise<void>;
+  onComplete: (reservation?: TaskForwardMutationReservation) => Promise<void>;
   planningActions: TaskTemporalAction[];
-  onMoveUp?: () => Promise<void>;
-  onMoveDown?: () => Promise<void>;
   draggableTask: boolean;
   onDropTask: (draggedTaskId: string, placement: 'before' | 'after') => Promise<void>;
   planningLabel?: string | null;
@@ -2942,13 +3643,14 @@ function TaskRow({
     ambiguityChoice: 'earlier' | 'later';
   }) => Promise<void>;
   onCancelReminder: () => Promise<void>;
-  onDelete: () => Promise<void>;
+  onDelete: (reservation?: TaskForwardMutationReservation) => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [doOpen, setDoOpen] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
   const [dragPlacement, setDragPlacement] = useState<'before' | 'after' | null>(null);
+  const [terminalSettling, setTerminalSettling] = useState(false);
   const [terminalExiting, setTerminalExiting] = useState(false);
   const [editorMounted, setEditorMounted] = useState(selected);
   const [editorExpanded, setEditorExpanded] = useState(selected);
@@ -3058,16 +3760,16 @@ function TaskRow({
   };
 
   const getTaskTitleControls = () => Array.from(
-    titleButtonRef.current?.closest('main')?.querySelectorAll<HTMLButtonElement>(
-      '[data-task-title-control]',
+    articleRef.current?.closest('main')?.querySelectorAll<HTMLElement>(
+      '[data-task-row-focus-target][data-task-row-id]',
     ) ?? [],
   );
 
   const captureTaskFocus = () => {
     const controls = getTaskTitleControls();
     return {
-      currentIndex: controls.indexOf(titleButtonRef.current!),
-      main: titleButtonRef.current?.closest('main') ?? null,
+      currentIndex: controls.indexOf(articleRef.current!),
+      main: articleRef.current?.closest('main') ?? null,
     };
   };
 
@@ -3077,42 +3779,57 @@ function TaskRow({
     delay = 0,
   ) => {
     window.setTimeout(() => {
-      if (preferCurrentTask && titleButtonRef.current?.isConnected) {
-        titleButtonRef.current.focus();
+      if (preferCurrentTask && articleRef.current?.isConnected) {
+        onRestoreTaskFocus(task.id);
         return;
       }
-      const remaining = Array.from(main?.querySelectorAll<HTMLButtonElement>(
-        '[data-task-title-control]',
+      const remaining = Array.from(main?.querySelectorAll<HTMLElement>(
+        '[data-task-row-focus-target][data-task-row-id]',
       ) ?? []).filter(
-        (control) => control.dataset.taskId !== task.id,
+        (control) => control.dataset.taskRowId !== task.id,
       );
       const fallback = main?.querySelector<HTMLElement>('[data-task-view-heading]');
-      (remaining[currentIndex] ?? remaining[currentIndex - 1] ?? fallback)?.focus();
+      const target = remaining[currentIndex] ?? remaining[currentIndex - 1] ?? null;
+      const targetTaskId = target?.dataset.taskRowId ?? null;
+      if (targetTaskId !== null) {
+        onRestoreTaskFocus(targetTaskId);
+        return;
+      }
+      onRestoreTaskFocus(null);
+      fallback?.focus();
     }, delay);
   };
 
+  const restoreCurrentTaskFocus = () => {
+    if (articleRef.current?.isConnected) onRestoreTaskFocus(task.id);
+  };
+
   const runTerminalAction = async (
-    operation: () => Promise<void>,
+    operation: (reservation?: TaskForwardMutationReservation) => Promise<void>,
     animate = true,
     focusDelay = 0,
   ) => {
     if (pendingRef.current) return;
     suppressActionMenuAutoFocusRef.current = true;
     const focus = captureTaskFocus();
+    const reservation = reserveTerminalMutation();
     pendingRef.current = true;
     setPending(true);
     if (animate) {
+      setTerminalSettling(true);
+      await waitForTaskMotion(TASK_TERMINAL_SETTLE_DELAY_MS);
+      setTerminalSettling(false);
       setTerminalExiting(true);
-      if (!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 160));
-      }
+      await waitForTaskMotion(TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS);
     }
     try {
-      await operation();
+      await operation(reservation);
       restoreTaskFocus(focus, false, focusDelay);
     } catch {
+      reservation?.cancel();
+      setTerminalSettling(false);
       setTerminalExiting(false);
-      window.setTimeout(() => titleButtonRef.current?.focus(), 0);
+      window.setTimeout(restoreCurrentTaskFocus, 0);
     } finally {
       pendingRef.current = false;
       setPending(false);
@@ -3132,14 +3849,19 @@ function TaskRow({
   }));
   const reminderTime = reminder?.local_time.slice(0, 5) ?? '';
   const applyStartPlanning = async ({
+    destination,
     startDate,
     todaySection,
   }: {
+    destination: TaskTodo['destination'];
     startDate: string | null;
     todaySection: TaskTodaySection | null;
   }) => {
+    if (destination === 'someday' && (reminder || reminderTime)) {
+      await onCancelReminder();
+    }
     await onUpdate({
-      destination: 'anytime',
+      destination,
       start_date: startDate,
       today_section: todaySection,
     });
@@ -3173,7 +3895,52 @@ function TaskRow({
   return (
     <article
       ref={articleRef}
+      tabIndex={selected ? -1 : 0}
+      role="group"
+      aria-label={taskLabel}
+      aria-current={focused ? 'true' : undefined}
+      aria-keyshortcuts="Enter Space Shift+Space ArrowUp ArrowDown"
       data-task-row-id={task.id}
+      data-task-row-focus-target
+      onClick={(event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (
+          target?.closest(
+            'button, a, input, textarea, select, [role="button"], [data-task-editor-region]',
+          )
+        ) return;
+        onSelect(event);
+      }}
+      onKeyDown={(event: ReactKeyboardEvent<HTMLElement>) => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === 'Tab' && focused) {
+          onClearTaskFocus();
+          return;
+        }
+        if (event.target !== event.currentTarget) return;
+        if (event.key === ' ' && !bulkSelection) {
+          if (event.metaKey || event.ctrlKey || event.altKey) return;
+          event.preventDefault();
+          if (event.repeat) return;
+          if (!focused) {
+            onFocusTask();
+            return;
+          }
+          onMoveFocus(event.shiftKey ? -1 : 1, true);
+          return;
+        }
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+          if (!focused) return;
+          event.preventDefault();
+          onMoveFocus(event.key === 'ArrowUp' ? -1 : 1, true);
+          return;
+        }
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          if (bulkSelection) bulkSelection.onKeyboardToggle();
+          else onActivate();
+        }
+      }}
       draggable={draggableTask && !pending}
       data-task-draggable={draggableTask ? 'true' : undefined}
       data-drag-placement={dragPlacement ?? undefined}
@@ -3215,13 +3982,16 @@ function TaskRow({
         suppressClickUntilRef.current = Date.now() + 250;
       }}
       className={[
-        `relative grid ${TASK_PLANNING_ITEM_FRAME_CLASS} transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none`,
+        `relative grid ${TASK_PLANNING_ITEM_FRAME_CLASS} transition-[grid-template-rows,opacity] ease-out focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none`,
         terminalExiting ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100',
+        focused ? 'ring-2 ring-inset ring-ring' : '',
         selected || bulkSelection?.selected
           ? 'bg-foreground/[0.05]'
           : TASK_PLANNING_ITEM_BACKGROUND_CLASS,
       ].filter(Boolean).join(' ') || undefined}
+      style={{ transitionDuration: `${TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS}ms` }}
       data-task-planning-card
+      data-terminal-settling={terminalSettling ? 'true' : undefined}
       data-terminal-exiting={terminalExiting ? 'true' : undefined}
     >
       {dragPlacement ? (
@@ -3265,7 +4035,7 @@ function TaskRow({
             }}
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
-            {completionRequested ? (
+            {completionRequested || terminalSettling ? (
               <SquareCheckBig className="h-6 w-6 text-success" aria-hidden="true" />
             ) : (
               <Square className="h-6 w-6" aria-hidden="true" />
@@ -3286,23 +4056,6 @@ function TaskRow({
             if (event.nativeEvent.isComposing) {
               return;
             }
-            if (
-              !bulkSelection
-              && event.altKey
-              && !event.metaKey
-              && !event.ctrlKey
-              && !event.shiftKey
-              && (event.key === 'ArrowUp' || event.key === 'ArrowDown')
-            ) {
-              const reorder = event.key === 'ArrowUp' ? onMoveUp : onMoveDown;
-              if (reorder) {
-                event.preventDefault();
-                void run(reorder).then(() => {
-                  window.setTimeout(() => titleButtonRef.current?.focus(), 0);
-                });
-              }
-              return;
-            }
             if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
               return;
             }
@@ -3312,7 +4065,7 @@ function TaskRow({
           aria-pressed={bulkSelection ? bulkSelection.selected : undefined}
           aria-keyshortcuts={bulkSelection
             ? 'Enter'
-            : 'Enter Alt+ArrowUp Alt+ArrowDown'}
+            : 'Enter'}
           data-task-title-control
           data-task-id={task.id}
           className={`flex h-full min-w-0 flex-1 flex-col justify-center overflow-hidden text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draggableTask ? 'cursor-grab active:cursor-grabbing' : ''}`}
@@ -3370,7 +4123,7 @@ function TaskRow({
                   className={`inline-flex shrink-0 items-center gap-1 ${
                     deadlineIsUrgent ? 'text-destructive' : ''
                   }`}
-                  aria-label={`Due ${formatTaskRelativeCalendarDate(task.deadline, planningDate)}`}
+                  aria-label={`Deadline ${formatTaskRelativeCalendarDate(task.deadline, planningDate)}`}
                 >
                   <FlagTriangleRight className="h-3.5 w-3.5" aria-hidden="true" />
                   {formatTaskRelativeCalendarDate(task.deadline, planningDate)}
@@ -3379,10 +4132,10 @@ function TaskRow({
               {reminder && (task.start_date || task.today_section) ? (
                 <span
                   className="inline-flex shrink-0 items-center gap-1 text-info"
-                  aria-label={`Reminder ${formatReminderIntent(reminder, planningDate)}`}
+                  aria-label={`Reminder ${formatReminderRowTime(reminder)}`}
                 >
                   <Bell className="h-3.5 w-3.5" aria-hidden="true" />
-                  {formatReminderIntent(reminder, planningDate)}
+                  {formatReminderRowTime(reminder)}
                 </span>
               ) : null}
             </span>
@@ -3405,8 +4158,11 @@ function TaskRow({
           <DropdownMenuContent
             align="end"
             onCloseAutoFocus={(event) => {
-              if (!suppressActionMenuAutoFocusRef.current) return;
               event.preventDefault();
+              if (!suppressActionMenuAutoFocusRef.current) {
+                restoreCurrentTaskFocus();
+                return;
+              }
               suppressActionMenuAutoFocusRef.current = false;
             }}
           >
@@ -3429,9 +4185,24 @@ function TaskRow({
               Mark as Rechecking
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => setMoveOpen(true)}>Move...</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setDoOpen(true)}>Do...</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setStartOpen(true)}>Start...</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => {
+              suppressActionMenuAutoFocusRef.current = true;
+              setMoveOpen(true);
+            }}>
+              Move...
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => {
+              suppressActionMenuAutoFocusRef.current = true;
+              setDoOpen(true);
+            }}>
+              Do...
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => {
+              suppressActionMenuAutoFocusRef.current = true;
+              setStartOpen(true);
+            }}>
+              Start...
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
@@ -3450,10 +4221,11 @@ function TaskRow({
           data-state={selected ? (editorExpanded ? 'open' : 'opening') : 'closing'}
           aria-hidden={selected ? undefined : true}
           className={[
-            'grid overflow-hidden transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none',
+            'grid overflow-hidden transition-[grid-template-rows,opacity] ease-out motion-reduce:transition-none',
             editorExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
             selected ? '' : 'pointer-events-none',
           ].filter(Boolean).join(' ')}
+          style={{ transitionDuration: `${TASK_EDITOR_EXPANSION_DURATION_MS}ms` }}
         >
           <div className="min-h-0 overflow-hidden">
             <TaskEditor
@@ -3475,7 +4247,7 @@ function TaskRow({
               className="sr-only"
               onClick={onCloseEditor}
             >
-              Close To-Do
+              Close Task
             </button>
             <button
               type="button"
@@ -3484,7 +4256,7 @@ function TaskRow({
               className="sr-only"
               onClick={onCloseEditor}
             >
-              Close To-Do
+              Close Task
             </button>
           </div>
         </div>
@@ -3496,7 +4268,7 @@ function TaskRow({
         onOpenChange={(nextOpen) => {
           setMoveOpen(nextOpen);
         }}
-        onCloseAutoFocus={() => titleButtonRef.current?.focus()}
+        onCloseAutoFocus={restoreCurrentTaskFocus}
         onMove={(patch) => runMovementAction(() => onUpdate(patch))}
       /> : null}
       {!bulkSelection ? <TaskDoDialog
@@ -3506,12 +4278,12 @@ function TaskRow({
         onOpenChange={(nextOpen) => {
           setDoOpen(nextOpen);
         }}
-        onCloseAutoFocus={() => titleButtonRef.current?.focus()}
+        onCloseAutoFocus={restoreCurrentTaskFocus}
       /> : null}
       {!bulkSelection ? <TaskStartDialog
         open={startOpen}
         onOpenChange={setStartOpen}
-        onCloseAutoFocus={() => titleButtonRef.current?.focus()}
+        onCloseAutoFocus={restoreCurrentTaskFocus}
         task={task}
         reminder={reminder}
         reminderTime={reminderTime}
@@ -3560,11 +4332,13 @@ function TaskEditor({
   const [notes, setNotes] = useState(task.notes);
   const [primaryLink, setPrimaryLink] = useState(task.primary_link ?? '');
   const [actionability, setActionability] = useState(task.actionability);
+  const [destination, setDestination] = useState(task.destination);
   const [startDate, setStartDate] = useState(task.start_date ?? '');
   const [todaySection, setTodaySection] = useState<TaskTodaySection | null>(task.today_section);
   const [deadline, setDeadline] = useState(task.deadline ?? '');
   const [reminderTime, setReminderTime] = useState(reminder?.local_time.slice(0, 5) ?? '');
-  const [organization, setOrganization] = useState(taskOrganizationValue(task));
+  const acceptedOrganization = taskOrganizationValue(task);
+  const [organization, setOrganization] = useState(acceptedOrganization);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const operationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const lastOperationRef = useRef<Promise<void>>(Promise.resolve());
@@ -3577,6 +4351,20 @@ function TaskEditor({
   onSaveRef.current = onSave;
   onSaveReminderRef.current = onSaveReminder;
   onCancelReminderRef.current = onCancelReminder;
+
+  useEffect(() => {
+    setActionability(task.actionability);
+  }, [task.actionability]);
+
+  useEffect(() => {
+    setOrganization(acceptedOrganization);
+  }, [acceptedOrganization]);
+
+  useEffect(() => {
+    setDestination(task.destination);
+    setStartDate(task.start_date ?? '');
+    setTodaySection(task.today_section);
+  }, [task.destination, task.start_date, task.today_section]);
 
   useLayoutEffect(() => {
     const input = titleInputRef.current;
@@ -3683,18 +4471,26 @@ function TaskEditor({
   }, [enqueueOperation, enqueueTaskPatch, takePendingTextPatch]);
 
   const changeStartPlanning = async ({
+    destination: nextDestination,
     startDate: nextStartDate,
     todaySection: nextTodaySection,
   }: {
+    destination: TaskTodo['destination'];
     startDate: string | null;
     todaySection: TaskTodaySection | null;
   }) => {
+    const canonicalTodaySection = nextStartDate === null ? nextTodaySection : null;
+    setDestination(nextDestination);
     setStartDate(nextStartDate ?? '');
-    setTodaySection(nextTodaySection);
+    setTodaySection(canonicalTodaySection);
+    if (nextDestination === 'someday') {
+      setReminderTime('');
+      if (reminder !== null || reminderTime) await cancelReminder();
+    }
     await persistImmediateTaskPatch({
-      destination: 'anytime',
+      destination: nextDestination,
       start_date: nextStartDate,
-      today_section: nextTodaySection,
+      today_section: canonicalTodaySection,
     });
   };
 
@@ -3703,6 +4499,7 @@ function TaskEditor({
     if (nextReminderTime) {
       if (!startDate && todaySection === null) {
         setTodaySection('inbox');
+        setDestination('anytime');
         await persistImmediateTaskPatch({
           destination: 'anytime',
           start_date: null,
@@ -3716,6 +4513,7 @@ function TaskEditor({
   };
 
   const clearStartPlanning = async () => {
+    setDestination('anytime');
     setStartDate('');
     setTodaySection(null);
     setReminderTime('');
@@ -3744,7 +4542,7 @@ function TaskEditor({
         ref={titleInputRef}
         id={`task-title-${task.id}`}
         data-task-editor-title
-        aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Z Control+Shift+Z"
+        aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Q Control+Shift+Q"
         value={title}
         onChange={(event) => {
           const nextTitle = event.target.value;
@@ -3815,6 +4613,7 @@ function TaskEditor({
           <TaskStartPickerField
             task={{
               ...task,
+              destination,
               start_date: startDate || null,
               today_section: todaySection,
             }}
@@ -3869,7 +4668,7 @@ function TaskEditor({
             <SelectTrigger id={`task-actionability-${task.id}`} aria-label="Actionability">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent data-task-editor-owned-surface="true">
               <SelectItem value="actionable">Actionable</SelectItem>
               <SelectItem value="waiting">Waiting</SelectItem>
               <SelectItem value="rechecking">Rechecking</SelectItem>
@@ -3891,7 +4690,7 @@ function TaskEditor({
             <SelectTrigger id={`task-organization-${task.id}`} aria-label="Organization">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent data-task-editor-owned-surface="true">
               <SelectItem value="none">No Area or Project</SelectItem>
               {hierarchy.areas.length > 0 ? (
                 <SelectGroup>
@@ -3971,6 +4770,12 @@ function showTaskError(title: string, error: unknown): void {
   });
 }
 
+function showTaskHistoryBoundaryToast(direction: 'undo' | 'redo'): void {
+  toast({
+    title: direction === 'undo' ? 'Nothing to Undo' : 'Nothing to Redo',
+  });
+}
+
 function showBrowserReminderError(title: string): void {
   toast({
     title,
@@ -3987,9 +4792,11 @@ function showReminderDeliveryError(title: string): void {
   });
 }
 
-function formatReminderIntent(reminder: TaskReminder, planningDate: string): string {
-  const localTime = reminder.local_time.slice(0, 5);
-  return `Remind ${formatTaskRelativeCalendarDate(reminder.local_date, planningDate)} at ${localTime}`;
+function formatReminderRowTime(reminder: TaskReminder): string {
+  return (
+    formatTaskReminderTimeDisplay(reminder.local_time)?.toUpperCase()
+    ?? reminder.local_time.slice(0, 5)
+  );
 }
 
 function formatTaskStartDateLabel(startDate: string, planningDate: string): string {

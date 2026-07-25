@@ -298,10 +298,10 @@ export async function createTaskProjectData(
   const startDate = input.start_date ?? null;
   const deadline = input.deadline ?? null;
   if (input.destination === 'someday' && (input.today_section != null || startDate !== null)) {
-    throw new Error('Someday projects cannot retain a start date or day horizon.');
+    throw new Error('Someday projects cannot retain a Start or day horizon.');
   }
   if (startDate !== null && !isTaskCalendarDate(startDate)) {
-    throw new Error('Start date must be a valid ISO calendar date.');
+    throw new Error('Start must be a valid ISO calendar date.');
   }
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error('Deadline must be a valid ISO calendar date.');
@@ -320,12 +320,12 @@ export async function createTaskProjectData(
       throw new Error('Task planning settings are not initialized. Open the Tasks module once.');
     }
     if (startDate <= planningDateInTimeZone(settings.planning_timezone)) {
-      throw new Error('Start date must be later than today in the owner planning time zone.');
+      throw new Error('Start must be later than today in the owner planning time zone.');
     }
   }
   const todaySection = input.destination === 'someday'
     ? null
-    : startDate === null ? input.today_section ?? null : input.today_section ?? 'next';
+    : startDate === null ? input.today_section ?? null : null;
   const expected = {
     title,
     notes: input.notes,

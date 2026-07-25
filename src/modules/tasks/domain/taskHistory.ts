@@ -206,7 +206,7 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
           taskTodaySections,
           'Today section',
         ) as TaskTodaySection;
-  const todaySection = startDate ? mappedTodaySection ?? 'next' : mappedTodaySection;
+  const todaySection = startDate ? null : mappedTodaySection;
 
   return {
     title: requireText(parsed.title, 'title'),
@@ -312,10 +312,10 @@ function snapshotsEqual(left: TaskHistorySnapshot, right: TaskHistorySnapshot): 
     && left.actionability === right.actionability
     && left.notes === right.notes
     && left.lifecycle === right.lifecycle
-    && left.completed_at === right.completed_at
-    && left.canceled_at === right.canceled_at
+    && taskTimestampsEqual(left.completed_at, right.completed_at)
+    && taskTimestampsEqual(left.canceled_at, right.canceled_at)
     && left.disposition === right.disposition
-    && left.deleted_at === right.deleted_at
+    && taskTimestampsEqual(left.deleted_at, right.deleted_at)
     && left.deletion_root_id === right.deletion_root_id
     && left.destination === right.destination
     && left.today_section === right.today_section
@@ -330,4 +330,56 @@ function snapshotsEqual(left: TaskHistorySnapshot, right: TaskHistorySnapshot): 
     && left.source_url === right.source_url
     && left.source_title === right.source_title
     && left.source_external_id === right.source_external_id;
+}
+
+function taskTimestampsEqual(left: string | null, right: string | null): boolean {
+  if (left === right) return true;
+  if (left === null || right === null) return false;
+
+  const leftInstant = parseTaskTimestamp(left);
+  const rightInstant = parseTaskTimestamp(right);
+  return leftInstant !== null
+    && rightInstant !== null
+    && leftInstant === rightInstant;
+}
+
+function parseTaskTimestamp(value: string): bigint | null {
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}(?::?\d{2})?)$/,
+  );
+  if (match === null) return null;
+
+  const [, year, month, day, hour, minute, second, fraction = '', zone] = match;
+  const microseconds = fraction.padEnd(6, '0');
+  const milliseconds = Number(microseconds.slice(0, 3));
+  const remainingMicroseconds = Number(microseconds.slice(3));
+  const utcMilliseconds = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+    milliseconds,
+  );
+  if (!Number.isFinite(utcMilliseconds)) return null;
+
+  const offsetMinutes = zone === 'Z'
+    ? 0
+    : parseTimestampOffsetMinutes(zone);
+  if (offsetMinutes === null) return null;
+
+  return BigInt(utcMilliseconds - offsetMinutes * 60_000) * 1_000n
+    + BigInt(remainingMicroseconds);
+}
+
+function parseTimestampOffsetMinutes(zone: string): number | null {
+  const match = zone.match(/^([+-])(\d{2})(?::?(\d{2}))?$/);
+  if (match === null) return null;
+  const [, sign, hours, minutes = '00'] = match;
+  const hourValue = Number(hours);
+  const minuteValue = Number(minutes);
+  if (hourValue > 23 || minuteValue > 59) return null;
+  const total = hourValue * 60 + minuteValue;
+  return sign === '+' ? total : -total;
 }

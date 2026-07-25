@@ -75,7 +75,7 @@ The BathOS MCP server SHALL reject unsupported resources, unsupported operations
 - **THEN** the server rejects the request without issuing a database mutation
 
 ### Requirement: Personal Tasks MCP Resource Actions
-The BathOS MCP server SHALL let an authenticated user read and mutate their heading-free task hierarchy, templates, to-dos, checklists, future-only Start Dates, independent day horizons, reminder time, Done recovery state, and supported structured workflow fields under the current Tasks domain rules.
+The BathOS MCP server SHALL let an authenticated user read and mutate their heading-free task hierarchy, templates, to-dos, checklists, future-only Starts, mutually exclusive Today horizons, reminder time, Done recovery state, and supported structured workflow fields under the current Tasks domain rules.
 
 #### Scenario: Read task data
 - **WHEN** an authenticated MCP client requests task data or a defined task view
@@ -91,7 +91,7 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their head
 
 #### Scenario: Read a defined planning view
 - **WHEN** an authenticated MCP client requests Today, Upcoming, Anytime, Someday, or Done
-- **THEN** the server applies lifecycle, disposition, future-only Start Date, independent day-horizon, planning-date, time-zone, and ordering rules and returns separately typed project, to-do, or Done-root results
+- **THEN** the server applies lifecycle, disposition, future-only Start, mutually exclusive Today-horizon, planning-date, time-zone, and ordering rules and returns separately typed project, to-do, or Done-root results
 
 #### Scenario: Read native templates
 - **WHEN** an authenticated MCP client requests active or explicitly archived native templates
@@ -111,7 +111,7 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their head
 
 #### Scenario: Create a Mail task atomically
 - **WHEN** a verified integration calls `create_mail_task` with complete structured Mail identity, retirement destination, AI-processed content, optional accessible area, and a new idempotency key
-- **THEN** the server atomically creates one undated Anytime to-do with Today Next horizon, `mail_automation` provenance, one editable Primary Link initialized from the deep link, and one retained Mail source, then returns the creation receipt and owner-safe records
+- **THEN** the server atomically creates one undated Anytime task with Today Inbox horizon, `mail_automation` provenance, one editable Primary Link initialized from the deep link, and one retained Mail source, then returns the creation receipt and owner-safe records
 
 #### Scenario: Deduplicate Mail capture by request and source identity
 - **WHEN** a verified integration retries the same Mail request UUID or later presents the same owner, account, and message identity with a different request UUID
@@ -179,7 +179,7 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their head
 
 #### Scenario: Schedule a project through an explicit tool
 - **WHEN** an authenticated MCP client calls `schedule_task_project` with the current project revision and a start-date or deadline change
-- **THEN** the server validates date-only calendar values, allows the start date on either side of the deadline, activates scheduled Someday work into Anytime, enforces the future-schedule horizon and Start-Date-anchored reminder, and never exposes lifecycle or arbitrary project fields through the scheduling operation
+- **THEN** the server validates date-only calendar values, allows the start date on either side of the deadline, activates scheduled Someday work into Anytime, clears the Today horizon for a future Start, preserves the Start-anchored reminder, and never exposes lifecycle or arbitrary project fields through the scheduling operation
 
 #### Scenario: Retry an accepted project movement or schedule
 - **WHEN** an MCP client retries the exact accepted project movement or scheduling request with the same mutation UUID after the current project has changed
@@ -258,8 +258,8 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their head
 - **THEN** the server creates one owner-scoped present record with validated optional parents, deterministic append ordering, and append-only history
 
 #### Scenario: Move day horizon explicitly
-- **WHEN** a client moves active or future Anytime work to Inbox, Now, Next, or Later
-- **THEN** the server keeps destination Anytime, changes the supported day horizon without inventing a start date, updates relevant ordering, and returns a revision-checked receipt
+- **WHEN** a client moves Anytime work to Inbox, Now, Next, or Later
+- **THEN** the server keeps destination Anytime, clears any future Start, changes the supported Today horizon, updates relevant ordering, and returns a revision-checked receipt
 
 #### Scenario: Clear a start date explicitly
 - **WHEN** a client clears an Anytime item's start date
@@ -270,8 +270,8 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their head
 - **THEN** the server validates placement, clears start date, day horizon, and reminder for Someday, generates the destination order, and does not accept a standalone Inbox or Today destination
 
 #### Scenario: Schedule future work
-- **WHEN** a client assigns a future start date and optional Inbox, Now, Next, or Later horizon
-- **THEN** the server places the work in Anytime, stores the selected horizon or Next by default, includes it in Upcoming until the owner-local date, and preserves valid container and deadline state even when the deadline is earlier
+- **WHEN** a client assigns a future Start
+- **THEN** the server places the work in Anytime, clears its Today horizon, includes it in Upcoming until the owner-local date, and preserves valid container and deadline state even when the deadline is earlier
 
 #### Scenario: Reject a nonfuture Start Date
 - **WHEN** a client assigns today or an earlier date as Start Date
@@ -302,7 +302,7 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their head
 - **THEN** no MCP tool can defer the purge, resurrect purged content, or enumerate another owner's terminal records
 
 ### Requirement: Structured Task Automation Contract
-The BathOS MCP server SHALL expose explicit task fields for three-state actionability, source/origin, templates, future-only scheduling with independent day horizons and reminders, recurrence, and completion without requiring clients to encode meaning in generic tags or task titles.
+The BathOS MCP server SHALL expose explicit task fields for three-state actionability, source/origin, templates, future-only scheduling, mutually exclusive Today horizons, reminders, recurrence, and completion without requiring clients to encode meaning in generic tags or task titles.
 
 #### Scenario: Set structured origin
 - **WHEN** an MCP client creates a task from a supported external source or collection integration
@@ -314,7 +314,7 @@ The BathOS MCP server SHALL expose explicit task fields for three-state actionab
 
 #### Scenario: Set a structured day horizon
 - **WHEN** an MCP client creates, moves, or schedules Anytime work with `inbox`, `now`, `next`, or `later`
-- **THEN** the server stores the active or deferred horizon without inventing a date, defaults future-dated work to `next` when omitted, and returns it in owner-safe planning state
+- **THEN** the server stores the active Today horizon, clears any future Start, and returns it in owner-safe planning state
 
 #### Scenario: Set a reminder time
 - **WHEN** an MCP client assigns a reminder time to a to-do or project

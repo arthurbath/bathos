@@ -85,9 +85,9 @@ export function TaskBulkCommandDialog({
     return () => window.clearTimeout(timer);
   }, [mode]);
   const title = mode === 'start'
-    ? 'Set Start Date'
+    ? "Set Start"
     : mode === 'deadline'
-      ? 'Set Due Date'
+      ? 'Set Deadline'
       : mode === 'organization'
         ? 'Move Selected To'
         : 'Set Reminder Time';
@@ -95,6 +95,7 @@ export function TaskBulkCommandDialog({
   return (
     <Dialog open={mode !== null} onOpenChange={onOpenChange}>
       <DialogContent
+        footerless
         className="shadow-none sm:max-w-sm"
         aria-describedby={undefined}
         data-task-bulk-selection-surface
@@ -109,8 +110,8 @@ export function TaskBulkCommandDialog({
               ref={dateRef}
               value=""
               onValueChange={(value) => void onApplyDate(value)}
-              placeholder={mode === 'start' ? 'Select Start Date' : 'Select Due Date'}
-              aria-label={mode === 'start' ? 'Start Date' : 'Due Date'}
+              placeholder={mode === 'start' ? "Select Start" : 'Select Deadline'}
+              aria-label={mode === 'start' ? "Start" : 'Deadline'}
               disabled={pending}
               minDate={mode === 'start' ? addTaskCalendarDays(planningDate, 1) : undefined}
               popoverAlign="center"
@@ -284,6 +285,7 @@ export function TaskSearchDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        footerless
         className="shadow-none sm:max-w-xl"
         aria-describedby={undefined}
         onCloseAutoFocus={(event) => {
@@ -436,7 +438,6 @@ export function TaskSearchDialog({
             ) : null}
           </section>
         </DialogBody>
-        <div className="text-xs text-muted-foreground">Escape Closes</div>
       </DialogContent>
     </Dialog>
   );
@@ -488,48 +489,56 @@ export function TaskKeyboardHelpDialog({
     {
       label: 'Standard Actions',
       commands: [
-        ['Show Keyboard Help', 'Command+/', 'Control+/'],
-        ['Undo a Task Change', 'Command+Z', 'Control+Z'],
-        ['Redo a Task Change', 'Command+Shift+Z or Command+Y', 'Control+Y'],
-        ['Select All Visible To-Dos', 'Command+A', 'Control+A'],
-        ['Duplicate Open or Selected To-Dos', 'Command+D', 'Control+D'],
-        ['Cut Selected To-Dos', 'Command+X', 'Control+X'],
-        ['Copy Selected To-Dos', 'Command+C', 'Control+C'],
-        ['Paste To-Dos or Text', 'Command+V', 'Control+V'],
-        ['Close Open To-Do', 'Command+Return or Command+Escape', 'Control+Return'],
+        ['Undo a Task Change', '⌘Z or ⌃Z', '⌃Z'],
+        ['Redo a Task Change', '⌘Y / ⌘⇧Z', '⌃Y / ⌃⇧Z'],
+        ['Select All Visible Tasks', '⌘A', '⌃A'],
+        ['Duplicate Focused, Open, or Selected Tasks', '⌘D', '⌃D'],
+        ['Cut Focused or Selected Tasks', '⌘X', '⌃X'],
+        ['Copy Focused or Selected Tasks', '⌘C', '⌃C'],
+        ['Paste Tasks or Text', '⌘V', '⌃V'],
+        ['Close Open Task', '⌘Return or ⌘Escape', '⌃Return'],
+        ['Show Keyboard Commands', '⌘/', '⌃/'],
+      ],
+    },
+    {
+      label: 'View Navigation',
+      commands: [
+        ['Open Today', '⌘1', '⌃1'],
+        ['Open Upcoming', '⌘2', '⌃2'],
+        ['Open Anytime', '⌘3', '⌃3'],
+        ['Open Someday', '⌘4', '⌃4'],
+        ['Open Done', '⌘5', '⌃5'],
+        ['Open Config', '⌘6', '⌃6'],
       ],
     },
     {
       label: 'Tasks-Specific Actions',
       commands: [
-        ['New Task', 'Control+N', 'Control+Shift+N'],
-        ['Open Today', 'Control+W', 'Control+Shift+W'],
-        ['Open Upcoming', 'Control+E', 'Control+Shift+E'],
-        ['Open Anytime', 'Control+R', 'Control+Shift+R'],
-        ['Open Someday', 'Control+T', 'Control+Shift+T'],
-        ['Open Done', 'Control+Y', 'Control+Shift+Y'],
-        ['Open Config', 'Control+U', 'Control+Shift+U'],
-        ['Toggle Done', 'Control+A', 'Control+Shift+A'],
-        ['Open Previous To-Do', 'Control+S', 'Control+Shift+S'],
-        ['Choose Start', 'Control+D', 'Control+Shift+D'],
-        ['Cycle Day Horizon', 'Control+F', 'Control+Shift+F'],
-        ['Cycle Actionability', 'Control+G', 'Control+Shift+G'],
-        ['Edit Reminder Time', 'Control+H', 'Control+Shift+H'],
-        ['Close Open To-Do', 'Control+Z', 'Control+Shift+Z'],
-        ['Open Next To-Do', 'Control+X', 'Control+Shift+X'],
-        ['Choose Deadline', 'Control+C', 'Control+Shift+C'],
-        ['Choose Area or Project', 'Control+V', 'Control+Shift+V'],
-        ['Checklist Editing (Reserved)', 'Control+B', 'Control+Shift+B'],
+        ['Open/Close Task', '⌃Q', '⌃⇧Q'],
+        ['Open Previous Task', '⌃W', '⌃⇧W'],
+        ['Choose Start', '⌃E', '⌃⇧E'],
+        ['Cycle Day Horizon', '⌃R', '⌃⇧R'],
+        ['Clear Start', '⌃T', '⌃⇧T'],
+        ['New Task', '⌃A', '⌃⇧A'],
+        ['Open Next Task', '⌃S', '⌃⇧S'],
+        ['Choose Deadline', '⌃D', '⌃⇧D'],
+        ['Cycle Actionability', '⌃F', '⌃⇧F'],
+        ['Set Start to Someday', '⌃G', '⌃⇧G'],
+        ['Toggle Done', '⌃X', '⌃⇧X'],
+        ['Edit Checklist', '⌃C', '⌃⇧C'],
+        ['Choose Area or Project', '⌃V', '⌃⇧V'],
+        ['Edit Reminder Time', '⌃B', '⌃⇧B'],
       ],
     },
     {
       label: 'Pointer and Navigation',
       commands: [
-        ['Reorder by Keyboard', 'Option+Up/Down', 'Alt+Up/Down'],
-        ['Add or Remove Selection', 'Command-click', 'Control-click'],
-        ['Replace Anchored Range', 'Shift-click', 'Shift-click'],
-        ['Toggle After Selection Starts', 'Click', 'Click'],
-        ['Reorder Directly', 'Drag', 'Drag'],
+        ['Focus or Advance Through Tasks', 'Space', 'Space'],
+        ['Move Back Through Tasks', '⇧Space', '⇧Space'],
+        ['Move Task Focus', '▲ or ▼', '▲ or ▼'],
+        ['Traverse Page Controls', 'Tab or ⇧Tab', 'Tab or ⇧Tab'],
+        ['Select Multiple', '⌘Click', '⌃Click'],
+        ['Select Range', '⇧Click', '⇧Click'],
       ],
     },
   ];
@@ -537,7 +546,8 @@ export function TaskKeyboardHelpDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="shadow-none"
+        footerless
+        className="shadow-none focus:outline-none focus:ring-0 focus:shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none"
         aria-describedby={undefined}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -576,10 +586,10 @@ export function TaskKeyboardHelpDialog({
                             {description}
                           </th>
                           <td className="px-2 py-2">
-                            <kbd className="font-mono text-xs text-muted-foreground">{macKeys}</kbd>
+                            <kbd className="font-sans text-muted-foreground">{macKeys}</kbd>
                           </td>
                           <td className="py-2 pl-2">
-                            <kbd className="font-mono text-xs text-muted-foreground">{windowsKeys}</kbd>
+                            <kbd className="font-sans text-muted-foreground">{windowsKeys}</kbd>
                           </td>
                         </tr>
                       ))}
@@ -590,7 +600,6 @@ export function TaskKeyboardHelpDialog({
             );
           })}
         </DialogBody>
-        <div className="text-xs text-muted-foreground">Escape Closes</div>
       </DialogContent>
     </Dialog>
   );
@@ -628,6 +637,7 @@ export function TaskMoveDialog({
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !pending && onOpenChange(nextOpen)}>
       <DialogContent
+        footerless
         className="shadow-none"
         aria-describedby={undefined}
         onCloseAutoFocus={(event) => {
@@ -680,7 +690,6 @@ export function TaskMoveDialog({
             </TaskCommandGroup>
           ) : null}
         </DialogBody>
-        <div className="text-xs text-muted-foreground">Escape Closes</div>
       </DialogContent>
     </Dialog>
   );
@@ -716,6 +725,7 @@ export function TaskDoDialog({
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !pending && onOpenChange(nextOpen)}>
       <DialogContent
+        footerless
         className="shadow-none"
         aria-describedby={undefined}
         onCloseAutoFocus={(event) => {
@@ -737,7 +747,6 @@ export function TaskDoDialog({
             ))}
           </div>
         </DialogBody>
-        <div className="text-xs text-muted-foreground">Escape Closes</div>
       </DialogContent>
     </Dialog>
   );
@@ -773,6 +782,7 @@ export function TaskBulkWhenDialog({
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !pending && onOpenChange(nextOpen)}>
       <DialogContent
+        footerless
         data-task-bulk-selection-surface
         className="shadow-none"
         aria-describedby={undefined}
@@ -797,7 +807,6 @@ export function TaskBulkWhenDialog({
             ))}
           </div>
         </DialogBody>
-        <div className="text-xs text-muted-foreground">Escape Closes</div>
       </DialogContent>
     </Dialog>
   );
