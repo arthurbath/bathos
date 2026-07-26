@@ -2574,6 +2574,7 @@ export type Database = {
       }
       tasks_user_settings: {
         Row: {
+          automatic_list_sorting: boolean
           client_mutation_id: string
           created_at: string
           id: string
@@ -2583,6 +2584,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          automatic_list_sorting?: boolean
           client_mutation_id: string
           created_at?: string
           id: string
@@ -2592,6 +2594,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          automatic_list_sorting?: boolean
           client_mutation_id?: string
           created_at?: string
           id?: string

@@ -56,7 +56,6 @@ export const TASK_ICONS = {
   Task: SquareCheckBig,
   Project: CopyCheck,
   Area: Layers3,
-  AreasAndProjects: Layers3,
   TaskChecklist: ListTree,
   Attachment: Paperclip,
 
@@ -117,7 +116,6 @@ export const TASK_ICON_NAMES = {
   Task: 'SquareCheckBig',
   Project: 'CopyCheck',
   Area: 'Layers3',
-  AreasAndProjects: 'Layers3',
   TaskChecklist: 'ListTree',
   Attachment: 'Paperclip',
 

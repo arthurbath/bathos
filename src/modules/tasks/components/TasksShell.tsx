@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -99,6 +100,7 @@ import {
 import { useTaskHierarchy, type TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import { useTaskSearch } from '@/modules/tasks/hooks/useTaskSearch';
 import { useTaskQuickFilterPreference } from '@/modules/tasks/hooks/useTaskQuickFilterPreference';
+import { useTaskAutomaticListSorting } from '@/modules/tasks/hooks/useTaskAutomaticListSorting';
 import {
   UnsafeTaskRedoError,
   UnsafeTaskUndoError,
@@ -127,6 +129,7 @@ import {
 } from '@/modules/tasks/domain/taskPrimaryLink';
 import { TaskProjectDetailView } from '@/modules/tasks/components/TaskProjectDetailView';
 import { TaskAreaDetailView } from '@/modules/tasks/components/TaskAreaDetailView';
+import { TaskAreaSettings } from '@/modules/tasks/components/TaskAreaSettings';
 import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
 import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView';
 import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
@@ -147,9 +150,12 @@ import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import { deriveTaskViewProjects } from '@/modules/tasks/domain/taskProjectViews';
 import {
-  deriveTaskAnytimeAreaSections,
+  deriveTaskAreaSections,
   getTaskEffectiveAreaId,
 } from '@/modules/tasks/domain/taskAreaViews';
+import {
+  getAutomaticTaskDropTarget,
+} from '@/modules/tasks/domain/taskAutomaticOrder';
 import {
   getTaskUpcomingSections,
 } from '@/modules/tasks/domain/taskUpcoming';
@@ -196,6 +202,13 @@ type TasksShellProps = {
   onSignOut: () => Promise<void> | void;
 };
 
+type TaskDropIndicator = {
+  draggedTaskId: string;
+  targetTaskId: string;
+  placement: 'before' | 'after';
+  targetAreaId?: string | null;
+};
+
 const TaskMarkdownNotes = lazy(async () => {
   const module = await import('@/modules/tasks/components/TaskMarkdownNotes');
   return { default: module.TaskMarkdownNotes };
@@ -219,7 +232,7 @@ const primaryTaskViews = [
 ] as const;
 
 const secondaryTaskViews = [
-  { path: '/projects', label: 'Areas & Projects', icon: TASK_ICONS.AreasAndProjects },
+  { path: '/projects', label: 'Projects', icon: TASK_ICONS.Project },
   { path: '/templates', label: 'Templates', icon: TASK_ICONS.Templates },
   { path: '/done', label: 'Done', icon: TASK_ICONS.Done },
   { path: '/config', label: 'Config', icon: TASK_ICONS.Config },
@@ -245,6 +258,23 @@ function taskMotionAllowed(): boolean {
 function waitForTaskMotion(milliseconds: number): Promise<void> {
   if (!taskMotionAllowed()) return Promise.resolve();
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function alignOpenedTaskToVisibleContent(
+  taskRow: HTMLElement | null,
+  behavior: ScrollBehavior,
+): void {
+  const summaryRow = taskRow?.querySelector<HTMLElement>('[data-task-row-header]');
+  if (summaryRow === undefined || summaryRow === null) return;
+  const stickyBoundary = document.querySelector<HTMLElement>('[data-topline-header]')
+    ?.getBoundingClientRect().bottom ?? 0;
+  const scrollDelta = summaryRow.getBoundingClientRect().top - Math.max(0, stickyBoundary);
+  if (!Number.isFinite(scrollDelta) || Math.abs(scrollDelta) < 1) return;
+  window.scrollBy({
+    top: scrollDelta,
+    left: 0,
+    behavior,
+  });
 }
 
 function taskPlacementChanged(
@@ -375,6 +405,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     filter: taskQuickFilter,
     setFilter: setTaskQuickFilter,
   } = useTaskQuickFilterPreference(userId);
+  const automaticListSorting = useTaskAutomaticListSorting(userId);
+  const [taskDropIndicator, setTaskDropIndicator] = useState<TaskDropIndicator | null>(null);
+  const taskDropIndicatorRef = useRef<TaskDropIndicator | null>(null);
+  taskDropIndicatorRef.current = taskDropIndicator;
+  const updateTaskDropIndicator = useCallback((indicator: TaskDropIndicator | null) => {
+    taskDropIndicatorRef.current = indicator;
+    setTaskDropIndicator(indicator);
+  }, []);
+  useEffect(() => {
+    updateTaskDropIndicator(null);
+  }, [updateTaskDropIndicator, view]);
   const deletedHierarchyRoots = useTaskDeletedHierarchyRoots(userId);
   const {
     pending: taskUndoPending,
@@ -2088,6 +2129,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const persistedDraftTaskId = isCreationDraft
       ? creationDraftRef.current?.persistedTaskId ?? null
       : null;
+    const automaticSortActive = automaticListSorting.enabled
+      && (view === 'anytime' || view === 'someday');
+    const taskDragPlacement = taskDropIndicator?.targetTaskId === task.id
+      ? taskDropIndicator.placement
+      : null;
     return (
       <TaskRow
         key={task.id}
@@ -2155,11 +2201,69 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           && (
             view === 'today'
               ? tasks.length > 1
-              : view === 'anytime'
+              : view === 'anytime' || view === 'someday'
                 ? tasks.length > 0
                 : sectionTasks.length > 1
           )}
-        onDropTask={async (draggedTaskId, placement) => {
+        dragPlacement={taskDragPlacement}
+        onTaskDragStart={() => {
+          updateTaskDropIndicator(automaticSortActive ? {
+            draggedTaskId: task.id,
+            targetTaskId: task.id,
+            placement: 'before',
+            targetAreaId,
+          } : null);
+        }}
+        onTaskDragOver={(draggedTaskId, pointerPlacement) => {
+          if (draggedTaskId === task.id) return;
+          if (!automaticSortActive) {
+            updateTaskDropIndicator({
+              draggedTaskId,
+              targetTaskId: task.id,
+              placement: pointerPlacement,
+              targetAreaId,
+            });
+            return;
+          }
+          const draggedTask = tasks.find(({ id }) => id === draggedTaskId);
+          if (!draggedTask) return;
+          const retainedDraggedTask = taskWithRetainedViewPlacement(
+            draggedTask,
+            retainedTaskId,
+            retainedTaskPlacement,
+          );
+          const retainedTargetTask = taskWithRetainedViewPlacement(
+            task,
+            retainedTaskId,
+            retainedTaskPlacement,
+          );
+          const sourceAreaId = getTaskEffectiveAreaId(
+            retainedDraggedTask,
+            hierarchy.projects,
+          );
+          const effectiveTargetAreaId = targetAreaId ?? null;
+          const target = getAutomaticTaskDropTarget(
+            retainedDraggedTask,
+            retainedTargetTask,
+            sectionTasks.map((candidate) => taskWithRetainedViewPlacement(
+              candidate,
+              retainedTaskId,
+              retainedTaskPlacement,
+            )),
+            pointerPlacement,
+            sourceAreaId !== effectiveTargetAreaId,
+          );
+          if (target === null) return;
+          updateTaskDropIndicator({
+            draggedTaskId,
+            ...target,
+            targetAreaId: effectiveTargetAreaId,
+          });
+        }}
+        onTaskDragEnd={() => updateTaskDropIndicator(null)}
+        onDropTask={async (draggedTaskId) => {
+          const indicator = taskDropIndicatorRef.current;
+          if (indicator === null || indicator.draggedTaskId !== draggedTaskId) return;
           try {
             const draggedTask = tasks.find(({ id }) => id === draggedTaskId);
             const sourceAreaId = draggedTask
@@ -2172,23 +2276,29 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 hierarchy.projects,
               )
               : null;
-            const organizationPatch = targetAreaId !== undefined
-              && sourceAreaId !== targetAreaId
-              ? { area_id: targetAreaId, project_id: null }
+            const organizationPatch = indicator.targetAreaId !== undefined
+              && sourceAreaId !== indicator.targetAreaId
+              ? { area_id: indicator.targetAreaId, project_id: null }
               : undefined;
             if (organizationPatch === undefined) {
-              await reorderTaskTo(draggedTaskId, task.id, placement);
+              await reorderTaskTo(
+                draggedTaskId,
+                indicator.targetTaskId,
+                indicator.placement,
+              );
             } else {
               await reorderTaskTo(
                 draggedTaskId,
-                task.id,
-                placement,
+                indicator.targetTaskId,
+                indicator.placement,
                 organizationPatch,
               );
             }
           } catch (reorderError) {
             showTaskError('Task Could Not Be Reordered', reorderError);
             throw reorderError;
+          } finally {
+            updateTaskDropIndicator(null);
           }
         }}
         planningDate={planningDate}
@@ -2460,6 +2570,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               : view === 'config' ? (
                 <TaskConfigView
                   keyboardHelpShortcut={macLikePlatform ? '⌘/' : '⌃/'}
+                  hierarchy={hierarchy}
+                  automaticListSorting={automaticListSorting}
                   webPush={reminders.webPush}
                   connected={reminders.mode === 'connected'}
                   inAppReminderStatus={reminders.claimError ? 'delayed' : 'available'}
@@ -2750,7 +2862,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         }
                       }}
                     />
-                    <AnytimeTaskSections
+                    <TaskAreaSections
+                      view="anytime"
+                      automaticSort={automaticListSorting.enabled}
                       tasks={renderedPlanningTasks}
                       areas={hierarchy.areas}
                       projects={hierarchy.projects}
@@ -2823,15 +2937,42 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         }
                       }}
                     />
-                    {renderedPlanningTasks.length > 0 ? (
-                      <section aria-label="Tasks">
-                        <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
-                          {renderedPlanningTasks.map((task) => (
-                            renderActiveTask(task, renderedPlanningTasks)
-                          ))}
-                        </div>
-                      </section>
-                    ) : null}
+                    <TaskAreaSections
+                      view="someday"
+                      automaticSort={automaticListSorting.enabled}
+                      tasks={renderedPlanningTasks}
+                      areas={hierarchy.areas}
+                      projects={hierarchy.projects}
+                      retainedTaskId={retainedTaskId}
+                      retainedTaskPlacement={retainedTaskPlacement}
+                      onCreate={(areaId) => {
+                        void beginTaskCreation({ areaId });
+                      }}
+                      onDropIntoUnassigned={async (draggedTaskId) => {
+                        const draggedTask = tasks.find(({ id }) => id === draggedTaskId);
+                        if (
+                          draggedTask
+                          && getTaskEffectiveAreaId(
+                            taskWithRetainedViewPlacement(
+                              draggedTask,
+                              retainedTaskId,
+                              retainedTaskPlacement,
+                            ),
+                            hierarchy.projects,
+                          ) === null
+                        ) return;
+                        try {
+                          await updateTask(draggedTaskId, {
+                            area_id: null,
+                            project_id: null,
+                          });
+                        } catch (moveError) {
+                          showTaskError('Task Could Not Be Moved', moveError);
+                          throw moveError;
+                        }
+                      }}
+                      renderTask={renderActiveTask}
+                    />
                   </>
                 )}
                 {quickFilterHasNoMatches ? <TaskQuickFilterEmptyState /> : null}
@@ -3229,6 +3370,8 @@ function TaskDesktopNavigation({
 
 function TaskConfigView({
   keyboardHelpShortcut,
+  hierarchy,
+  automaticListSorting,
   webPush,
   connected,
   inAppReminderStatus,
@@ -3239,6 +3382,8 @@ function TaskConfigView({
   replaceUnavailableReason,
 }: {
   keyboardHelpShortcut: string;
+  hierarchy: TaskHierarchyModel;
+  automaticListSorting: ReturnType<typeof useTaskAutomaticListSorting>;
   webPush: TaskWebPushModel | null;
   connected: boolean;
   inAppReminderStatus: 'available' | 'delayed';
@@ -3258,6 +3403,29 @@ function TaskConfigView({
         <kbd className="font-mono text-foreground">{keyboardHelpShortcut}</kbd>
         {' '}to view all keyboard commands.
       </p>
+
+      <TaskAreaSettings hierarchy={hierarchy} />
+
+      <TaskConfigSection title="List Sorting" icon={TASK_ICONS.Anytime}>
+        <div className="flex items-center gap-3">
+          <label
+            htmlFor="tasks-automatic-list-sorting"
+            className="text-sm text-foreground"
+          >
+            Automatically Sort Anytime and Someday
+          </label>
+          <Switch
+            id="tasks-automatic-list-sorting"
+            checked={automaticListSorting.enabled}
+            disabled={automaticListSorting.loading || automaticListSorting.pending}
+            onCheckedChange={(enabled) => {
+              void automaticListSorting.setEnabled(enabled).catch((updateError) => {
+                showTaskError('List Sorting Could Not Be Updated', updateError);
+              });
+            }}
+          />
+        </div>
+      </TaskConfigSection>
 
       <TaskConfigSection title="Browser Reminders" icon={TASK_ICONS.Reminder}>
         {webPush ? (
@@ -3776,7 +3944,9 @@ function TodayTaskSections({
   );
 }
 
-function AnytimeTaskSections({
+function TaskAreaSections({
+  view,
+  automaticSort,
   tasks,
   areas,
   projects,
@@ -3786,6 +3956,8 @@ function AnytimeTaskSections({
   onDropIntoUnassigned,
   renderTask,
 }: {
+  view: 'anytime' | 'someday';
+  automaticSort: boolean;
   tasks: TaskTodo[];
   areas: TaskHierarchyModel['areas'];
   projects: TaskProject[];
@@ -3805,7 +3977,12 @@ function AnytimeTaskSections({
     retainedTaskId,
     retainedTaskPlacement,
   ));
-  const sections = deriveTaskAnytimeAreaSections(placementTasks, areas, projects);
+  const sections = deriveTaskAreaSections(
+    placementTasks,
+    areas,
+    projects,
+    automaticSort,
+  );
   const unassigned = sections[0];
   const areaSections = sections.slice(1);
   if (placementTasks.length === 0) return null;
@@ -3828,7 +4005,10 @@ function AnytimeTaskSections({
   };
 
   return (
-    <div className="space-y-7" aria-label="Anytime Tasks by Area">
+    <div
+      className="space-y-7"
+      aria-label={`${view === 'anytime' ? 'Anytime' : 'Someday'} Tasks by Area`}
+    >
       <section aria-label="Unassigned Tasks">
         {unassigned.tasks.length > 0 ? (
           <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
@@ -3987,6 +4167,10 @@ function TaskRow({
   onComplete,
   planningActions,
   draggableTask,
+  dragPlacement,
+  onTaskDragStart,
+  onTaskDragOver,
+  onTaskDragEnd,
   onDropTask,
   planningDate,
   todayMarker,
@@ -4022,7 +4206,14 @@ function TaskRow({
   onComplete: (reservation?: TaskForwardMutationReservation) => Promise<void>;
   planningActions: TaskTemporalAction[];
   draggableTask: boolean;
-  onDropTask: (draggedTaskId: string, placement: 'before' | 'after') => Promise<void>;
+  dragPlacement: 'before' | 'after' | null;
+  onTaskDragStart: () => void;
+  onTaskDragOver: (
+    draggedTaskId: string,
+    placement: 'before' | 'after',
+  ) => void;
+  onTaskDragEnd: () => void;
+  onDropTask: (draggedTaskId: string) => Promise<void>;
   planningDate: string;
   todayMarker?: TodayTaskSection;
   todayMarkerContext: 'Today' | 'Day Horizon';
@@ -4040,7 +4231,6 @@ function TaskRow({
   const [moveOpen, setMoveOpen] = useState(false);
   const [doOpen, setDoOpen] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
-  const [dragPlacement, setDragPlacement] = useState<'before' | 'after' | null>(null);
   const [terminalSettling, setTerminalSettling] = useState(false);
   const [terminalExiting, setTerminalExiting] = useState(false);
   const [editorMounted, setEditorMounted] = useState(selected);
@@ -4048,6 +4238,7 @@ function TaskRow({
   const articleRef = useRef<HTMLElement>(null);
   const editorRegionRef = useRef<HTMLDivElement>(null);
   const editorAnimationFrameRef = useRef<number | null>(null);
+  const editorRevealTimerRef = useRef<number | null>(null);
   const editorScrollFrameRef = useRef<number | null>(null);
   const editorUnmountTimerRef = useRef<number | null>(null);
   const titleButtonRef = useRef<HTMLButtonElement>(null);
@@ -4070,6 +4261,10 @@ function TaskRow({
         window.cancelAnimationFrame(editorAnimationFrameRef.current);
         editorAnimationFrameRef.current = null;
       }
+      if (editorRevealTimerRef.current !== null) {
+        window.clearTimeout(editorRevealTimerRef.current);
+        editorRevealTimerRef.current = null;
+      }
       if (editorScrollFrameRef.current !== null) {
         window.cancelAnimationFrame(editorScrollFrameRef.current);
         editorScrollFrameRef.current = null;
@@ -4089,8 +4284,7 @@ function TaskRow({
         setEditorExpanded(true);
         editorScrollFrameRef.current = window.requestAnimationFrame(() => {
           editorScrollFrameRef.current = null;
-          articleRef.current?.querySelector<HTMLElement>('[data-task-editor-title]')
-            ?.scrollIntoView?.({ block: 'nearest' });
+          alignOpenedTaskToVisibleContent(articleRef.current, 'auto');
         });
         return cancelScheduledMotion;
       }
@@ -4100,11 +4294,13 @@ function TaskRow({
         editorAnimationFrameRef.current = window.requestAnimationFrame(() => {
           editorAnimationFrameRef.current = null;
           setEditorExpanded(true);
-          editorScrollFrameRef.current = window.requestAnimationFrame(() => {
-            editorScrollFrameRef.current = null;
-            articleRef.current?.querySelector<HTMLElement>('[data-task-editor-title]')
-              ?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
-          });
+          editorRevealTimerRef.current = window.setTimeout(() => {
+            editorRevealTimerRef.current = null;
+            editorScrollFrameRef.current = window.requestAnimationFrame(() => {
+              editorScrollFrameRef.current = null;
+              alignOpenedTaskToVisibleContent(articleRef.current, 'smooth');
+            });
+          }, TASK_EDITOR_EXPANSION_DURATION_MS);
         });
       });
       return cancelScheduledMotion;
@@ -4344,32 +4540,32 @@ function TaskRow({
         event.dataTransfer.setData('application/x-bathos-task-id', task.id);
         event.dataTransfer.setData('text/plain', task.id);
         suppressClickUntilRef.current = Date.now() + 1_000;
+        onTaskDragStart();
       }}
       onDragOver={(event) => {
         if (!draggableTask || pending) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
+        const draggedTaskId = event.dataTransfer.getData('application/x-bathos-task-id')
+          || event.dataTransfer.getData('text/plain');
+        if (!draggedTaskId) return;
         const bounds = event.currentTarget.getBoundingClientRect();
-        setDragPlacement(event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after');
-      }}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          setDragPlacement(null);
-        }
+        onTaskDragOver(
+          draggedTaskId,
+          event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after',
+        );
       }}
       onDrop={(event) => {
         event.preventDefault();
         const draggedTaskId = event.dataTransfer.getData('application/x-bathos-task-id')
           || event.dataTransfer.getData('text/plain');
-        const placement = dragPlacement;
-        setDragPlacement(null);
-        if (!draggableTask || !draggedTaskId || draggedTaskId === task.id || placement === null) {
+        if (!draggableTask || !draggedTaskId || draggedTaskId === task.id) {
           return;
         }
-        void run(() => onDropTask(draggedTaskId, placement));
+        void run(() => onDropTask(draggedTaskId));
       }}
       onDragEnd={() => {
-        setDragPlacement(null);
+        onTaskDragEnd();
         suppressClickUntilRef.current = Date.now() + 250;
       }}
       className={[
@@ -4605,16 +4801,16 @@ function TaskRow({
               Mark as Ready
             </DropdownMenuItem>
             <DropdownMenuItem
-              disabled={task.actionability === 'waiting'}
-              onSelect={() => void run(() => onUpdate({ actionability: 'waiting' }))}
-            >
-              Mark as Waiting
-            </DropdownMenuItem>
-            <DropdownMenuItem
               disabled={task.actionability === 'rechecking'}
               onSelect={() => void run(() => onUpdate({ actionability: 'rechecking' }))}
             >
               Mark as Rechecking
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={task.actionability === 'waiting'}
+              onSelect={() => void run(() => onUpdate({ actionability: 'waiting' }))}
+            >
+              Mark as Waiting
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => {
@@ -5094,8 +5290,8 @@ function TaskEditor({
             </SelectTrigger>
             <SelectContent data-task-editor-owned-surface="true">
               <SelectItem value="actionable">Ready</SelectItem>
-              <SelectItem value="waiting">Waiting</SelectItem>
               <SelectItem value="rechecking">Rechecking</SelectItem>
+              <SelectItem value="waiting">Waiting</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -5225,7 +5421,7 @@ function getTaskViewLabel(view: TaskShellView): string {
   if (view === 'someday') return 'Someday';
   if (view === 'done') return 'Done';
   if (view === 'upcoming') return 'Upcoming';
-  if (view === 'projects') return 'Areas & Projects';
+  if (view === 'projects') return 'Projects';
   if (view === 'project') return 'Project';
   if (view === 'area') return 'Area';
   if (view === 'templates') return 'Templates';
@@ -5236,7 +5432,8 @@ function getTaskViewLabel(view: TaskShellView): string {
 
 function isTaskNavigationActive(view: TaskShellView, path: string): boolean {
   return view === path.slice(1)
-    || (path === '/projects' && (view === 'project' || view === 'area'));
+    || (path === '/projects' && view === 'project')
+    || (path === '/config' && view === 'area');
 }
 
 function getTaskViewFromPath(pathname: string): TaskShellView {

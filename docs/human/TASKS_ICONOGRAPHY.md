@@ -9,9 +9,8 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 | Registry Concept | Lucide Icon | Product Meaning |
 |---|---|---|
 | Task | `SquareCheckBig` | A task and the Tasks module launcher |
-| Project | `CopyCheck` | A Tasks project |
-| Area | `Layers3` | An area; this is the three-layer Stack glyph |
-| AreasAndProjects | `Layers3` | The combined Areas & Projects destination; this is the three-layer Stack glyph |
+| Project | `CopyCheck` | A Tasks project and the Projects destination |
+| Area | `Layers3` | An area and the Areas section in Config; this is the three-layer Stack glyph |
 | TaskChecklist | `ListTree` | A task's checklist |
 | Attachment | `Paperclip` | A task attachment |
 

@@ -173,6 +173,7 @@ describe('ToplineHeader module title', () => {
     );
 
     try {
+      expect(container.querySelector('header')).toHaveAttribute('data-topline-header');
       const title = Array.from(container.querySelectorAll('h1 span'))
         .find((element) => element.textContent === 'Budget');
 

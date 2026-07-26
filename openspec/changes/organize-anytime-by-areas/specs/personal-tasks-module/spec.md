@@ -25,11 +25,15 @@ The Tasks module SHALL use name-only Areas to organize ongoing responsibilities,
 
 #### Scenario: Order Area buckets manually
 - **WHEN** multiple Area buckets contain visible Anytime tasks
-- **THEN** the interface orders the buckets by the manual Area order maintained in Areas & Projects, after the unlabelled unassigned region
+- **THEN** the interface orders the buckets by the manual Area order maintained in Config, after the unlabelled unassigned region
 
 #### Scenario: Omit an empty Area bucket
 - **WHEN** an Area has no task visible under ordinary Anytime membership and the active Quick Filter
 - **THEN** Anytime omits that Area's heading and does not render an empty bucket
+
+#### Scenario: Group Someday work by effective Area
+- **WHEN** Someday contains unassigned work and work associated directly or through a Project with an Area
+- **THEN** it presents unassigned work first without a heading, followed by nonempty Area buckets in the manual Area order maintained in Config
 
 #### Scenario: Reorder inside one effective Area
 - **WHEN** a user drags an Anytime task before or after another task in the same effective Area bucket
@@ -44,13 +48,54 @@ The Tasks module SHALL use name-only Areas to organize ongoing responsibilities,
 - **THEN** Tasks clears direct Area and Project membership, preserves planning metadata and identity, and saves the requested visible order as one undoable mutation
 
 #### Scenario: Create inside an Area bucket
-- **WHEN** a user activates an Anytime Area bucket heading
-- **THEN** Tasks opens one new Anytime task assigned directly to that Area at the top of the bucket
+- **WHEN** a user activates an Area bucket heading in Anytime or Someday
+- **THEN** Tasks opens one new task in that view assigned directly to that Area at the top of the bucket
 
 #### Scenario: Create generic Anytime work
 - **WHEN** a user activates the floating New Task action in Anytime
 - **THEN** Tasks opens one unassigned Anytime task at the top of the unlabelled region
 
-#### Scenario: Name the hierarchy destination
-- **WHEN** Tasks presents the hierarchy management destination, page title, or Area-detail return breadcrumb
-- **THEN** the user-facing name is Areas & Projects while existing `/tasks/projects` links remain valid
+#### Scenario: Manage Areas in Config
+- **WHEN** a user opens Tasks Config
+- **THEN** one Areas section allows the user to add, rename, reorder, or recoverably delete Areas
+
+#### Scenario: Keep Area administration out of Projects
+- **WHEN** a user opens the Projects destination
+- **THEN** the page presents Project creation and management without controls that add, rename, reorder, delete, or open an Area-administration surface
+
+#### Scenario: Preserve Area context for Projects
+- **WHEN** a user creates or edits a Project
+- **THEN** the Projects surface may assign the Project to an existing Area without offering Area administration
+
+#### Scenario: Name the Projects destination
+- **WHEN** Tasks presents the `/tasks/projects` navigation destination, page title, error copy, or Project-detail return breadcrumb
+- **THEN** the user-facing name is Projects and the destination uses the canonical Project icon
+
+#### Scenario: Return from an Area detail
+- **WHEN** an Area detail presents a return breadcrumb
+- **THEN** the breadcrumb returns to Config and Area renaming remains available only in Config
+
+## MODIFIED Requirements
+
+### Requirement: Canonical Tasks Iconography
+The Tasks module SHALL maintain and consistently reuse a documented Lucide icon for every established Tasks product concept, while preserving accessible text or programmatic names independently from the icon.
+
+#### Scenario: Use canonical entity icons
+- **WHEN** Tasks represents a Task, Project, Area, Task Checklist, or Attachment concept with an icon
+- **THEN** it uses Lucide `SquareCheckBig`, `CopyCheck`, `Layers3` (the Stack glyph), `ListTree`, or `Paperclip`, respectively
+
+#### Scenario: Use canonical lifecycle view icons
+- **WHEN** Tasks represents Someday or Done with an icon
+- **THEN** it uses Lucide `SquareDashed` or `ListChecks`, respectively
+
+#### Scenario: Use canonical creation icons
+- **WHEN** Tasks presents an icon for Add Task, Add Project, or Add Area
+- **THEN** it uses Lucide `SquarePlus`, `Layers3` (the Stack glyph), or `SquarePlus`, respectively
+
+#### Scenario: Preserve approved existing concepts
+- **WHEN** Tasks renders an established concept that is not explicitly overridden
+- **THEN** it uses the canonical Lucide component recorded in the Tasks iconography reference rather than choosing a new icon independently at the rendering site
+
+#### Scenario: Reuse one concept across surfaces
+- **WHEN** one established Tasks concept appears in navigation, search, a list, a picker, a dialog, or another module surface
+- **THEN** every occurrence uses the same canonical icon unless the iconography reference explicitly defines a distinct action concept

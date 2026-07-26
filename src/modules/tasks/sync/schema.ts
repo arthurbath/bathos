@@ -247,6 +247,7 @@ const taskUserSettings = new Table(
   {
     owner_id: column.text,
     planning_timezone: column.text,
+    automatic_list_sorting: column.integer,
     revision: column.integer,
     client_mutation_id: column.text,
     created_at: column.text,

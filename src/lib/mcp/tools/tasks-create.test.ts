@@ -196,6 +196,7 @@ function settings(ownerId = ownerA): Tables['tasks_user_settings']['Row'] {
     id: ownerId,
     owner_id: ownerId,
     planning_timezone: 'America/Los_Angeles',
+    automatic_list_sorting: false,
     revision: 1,
     client_mutation_id: crypto.randomUUID(),
     created_at: '2026-07-20T08:00:00.000Z',

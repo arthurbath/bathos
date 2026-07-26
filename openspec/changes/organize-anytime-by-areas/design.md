@@ -49,15 +49,19 @@ Alternative considered: move the containing Project. Rejected because dragging o
 
 ### Render only meaningful Area headings
 
-The top unassigned region has no heading. An Area heading appears only when at least one task remains visible after ordinary Anytime membership and the active Quick Filter are applied. Buckets follow `tasks_areas.order_key`, regardless of the earliest task order in each bucket.
+The top unassigned region has no heading. An Area heading appears only when at least one task remains visible after ordinary Anytime or Someday membership and the active Quick Filter are applied. Buckets follow `tasks_areas.order_key`, regardless of the earliest task order in each bucket.
 
 ### Extend contextual creation placement
 
-The existing creation placement gains an optional `areaId`. Activating an Area bucket heading creates and opens an Anytime task assigned directly to that Area. The floating New Task action remains unassigned and appears at the top of the unlabelled region.
+The existing creation placement gains an optional `areaId`. Activating an Area bucket heading creates and opens a task in the current Anytime or Someday view assigned directly to that Area. The floating New Task action remains unassigned and appears at the top of the unlabelled region.
 
-### Preserve the Projects route while changing its language
+### Put Area administration in Config
 
-Navigation, page titles, empty/error copy, and Area-detail breadcrumbs use Areas & Projects. Keeping `/tasks/projects` avoids route churn, stale links, and unnecessary deployment compatibility work.
+Config owns the infrequent Area lifecycle: add, inline rename, manual prominence ordering, and recoverable cascade delete with explicit confirmation. The manual `tasks_areas.order_key` remains the authority for Anytime and Someday bucket prominence. Area detail remains a content view, not an administration surface, so it presents a static Area title and returns to Config.
+
+### Keep Projects focused on Projects
+
+Navigation, page titles, empty/error copy, and Project-detail breadcrumbs use Projects with the canonical Project icon. The page retains Project creation, rename, order, detail navigation, and assignment to an existing Area because those operations manage Projects. It removes Area creation, rename, reorder, delete, and Area-detail navigation. Keeping `/tasks/projects` avoids route churn, stale links, and unnecessary deployment compatibility work.
 
 ## Risks / Trade-offs
 
@@ -66,10 +70,11 @@ Navigation, page titles, empty/error copy, and Area-detail breadcrumbs use Areas
 - [The unlabelled region has no visible drop target when empty] → Keep an unlabelled drop region with sufficient hit area while presenting no text heading; the floating New Task action also creates unassigned work.
 - [Area membership and order could update in separate writes] → Send one task patch containing organization and `order_key`, using the existing transactional repository and mutation history path.
 - [A retained open task can temporarily no longer match its bucket] → Reuse the editor-retention contract and apply grouping movement only after the task closes.
+- [Deleting an Area affects its contained hierarchy] → Use the existing recoverable cascade-delete contract and require an explicit confirmation that the Area and its contents will move to Done.
 
 ## Migration Plan
 
-1. Ship the client-only Area grouping and language update.
+1. Ship the client-only Area grouping, Config administration, Projects simplification, and language update.
 2. Existing synchronized Area, Project, and task rows immediately derive the new presentation; no data rewrite is required.
 3. Rollback restores the flat Anytime renderer and old labels without changing stored data.
 

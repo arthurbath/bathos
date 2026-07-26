@@ -29,10 +29,17 @@ if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.scrollInt
   });
 }
 
+Object.defineProperty(window, 'scrollBy', {
+  configurable: true,
+  writable: true,
+  value: vi.fn(),
+});
+
 const { mockToast } = vi.hoisted(() => ({ mockToast: vi.fn() }));
 const mockTaskList = vi.fn();
 const mockTaskSearch = vi.fn();
 const mockTaskQuickFilterPreference = vi.fn();
+const mockTaskAutomaticListSorting = vi.fn();
 const mockTaskHierarchy = vi.fn();
 const mockTaskDeletedHierarchyRoots = vi.fn();
 const mockTaskReminders = vi.fn();
@@ -108,6 +115,12 @@ vi.mock('@/modules/tasks/hooks/useTaskQuickFilterPreference', () => ({
   ),
 }));
 
+vi.mock('@/modules/tasks/hooks/useTaskAutomaticListSorting', () => ({
+  useTaskAutomaticListSorting: (...args: unknown[]) => (
+    mockTaskAutomaticListSorting(...args)
+  ),
+}));
+
 vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({
   useTaskHierarchy: (...args: unknown[]) => mockTaskHierarchy(...args),
 }));
@@ -175,7 +188,7 @@ describe('getTasksStorageStatusLabel', () => {
 
 vi.mock('./TaskProjectsView', () => ({
   TaskProjectsView: () => (
-    <section data-testid="projects-view">Areas &amp; Projects</section>
+    <section data-testid="projects-view">Projects</section>
   ),
 }));
 
@@ -249,7 +262,7 @@ vi.mock('./TaskDataPortabilityDialog', () => ({
 
 vi.mock('@/platform/components/ToplineHeader', () => ({
   ToplineHeader: ({ title, onSignOut }: { title: string; onSignOut: () => void }) => (
-    <header>
+    <header data-topline-header>
       <span>{title}</span>
       <button type="button" onClick={onSignOut}>Sign Out</button>
     </header>
@@ -526,6 +539,13 @@ describe('TasksShell', () => {
         'all' | 'actionable' | 'non_actionable' | 'rechecking' | 'waiting'
       >('all');
       return { filter, setFilter };
+    });
+    mockTaskAutomaticListSorting.mockReset().mockReturnValue({
+      enabled: false,
+      loading: false,
+      error: null,
+      pending: false,
+      setEnabled: vi.fn().mockResolvedValue(undefined),
     });
     mockTaskUndo.mockReset().mockReturnValue({
       available: false,
@@ -2823,7 +2843,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('keeps Areas & Projects in the real-link More hierarchy without duplicate toolbar shortcuts', () => {
+  it('keeps Projects in the real-link More hierarchy without duplicate toolbar shortcuts', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const today = renderShell('/tasks/today');
 
@@ -2841,13 +2861,13 @@ describe('TasksShell', () => {
     const projects = renderShell('/tasks/projects');
     try {
       expect(projects.container.querySelector('[data-testid="projects-view"]')?.textContent)
-        .toBe('Areas & Projects');
+        .toBe('Projects');
       const todayLink = projects.container.querySelector<HTMLAnchorElement>(
         '[data-testid="mobile-nav"] a[href="/tasks/today"]',
       );
       expect(todayLink?.getAttribute('href')).toBe('/tasks/today');
       expect(projects.container.querySelector('[data-task-view-heading]')?.textContent)
-        .toBe('Areas & Projects');
+        .toBe('Projects');
     } finally {
       cleanup(projects.root, projects.container);
     }
@@ -2865,7 +2885,7 @@ describe('TasksShell', () => {
         'Today', 'Upcoming', 'Anytime', 'Someday',
       ]);
       expect(mobileLinks.slice(4).map((link) => link.textContent)).toEqual([
-        'Areas & Projects', 'Templates', 'Done', 'Config',
+        'Projects', 'Templates', 'Done', 'Config',
       ]);
     } finally {
       cleanup(today.root, today.container);
@@ -2887,9 +2907,17 @@ describe('TasksShell', () => {
     const config = renderShell('/tasks/config');
     try {
       expect(config.container.querySelector('[data-task-view-heading]')?.textContent).toBe('Config');
-      for (const title of ['Browser Reminders', 'Synchronization', 'Backup and Restore']) {
+      for (const title of [
+        'Areas',
+        'List Sorting',
+        'Browser Reminders',
+        'Synchronization',
+        'Backup and Restore',
+      ]) {
         expect(config.container.textContent).toContain(title);
       }
+      expect(config.container.querySelector('#tasks-automatic-list-sorting'))
+        .toHaveAttribute('data-state', 'unchecked');
       expect(config.container.querySelectorAll('[data-trigger-variant="config"]')).toHaveLength(2);
       expect(config.container.querySelector('[aria-label="Add a Task"]')).toBeNull();
       expect(config.container.querySelector('[aria-label="Keyboard Commands"]')).toBeNull();
@@ -2900,6 +2928,32 @@ describe('TasksShell', () => {
       )?.getAttribute('aria-current')).toBe('page');
     } finally {
       cleanup(config.root, config.container);
+    }
+  });
+
+  it('persists the single automatic sorting preference from Config', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const setEnabled = vi.fn().mockResolvedValue(undefined);
+    mockTaskAutomaticListSorting.mockReturnValue({
+      enabled: false,
+      loading: false,
+      error: null,
+      pending: false,
+      setEnabled,
+    });
+    const { container, root } = renderShell('/tasks/config');
+
+    try {
+      const toggle = container.querySelector<HTMLButtonElement>(
+        '#tasks-automatic-list-sorting',
+      );
+      await act(async () => {
+        toggle?.click();
+        await Promise.resolve();
+      });
+      expect(setEnabled).toHaveBeenCalledWith(true);
+    } finally {
+      cleanup(root, container);
     }
   });
 
@@ -2988,7 +3042,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('routes an area detail path as part of Projects without exposing task capture', () => {
+  it('routes an Area detail path as part of Config without exposing task capture', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const area = renderShell('/tasks/areas/area-work');
     try {
@@ -2996,7 +3050,7 @@ describe('TasksShell', () => {
         .toBe('Area area-work');
       expect(area.container.querySelector('[aria-label="Add a Task"]')).toBeNull();
       expect(area.container.querySelector<HTMLAnchorElement>(
-        '[data-testid="mobile-nav"] a[href="/tasks/projects"]',
+        '[data-testid="mobile-nav"] a[href="/tasks/config"]',
       )?.getAttribute('aria-current')).toBe('page');
     } finally {
       cleanup(area.root, area.container);
@@ -3741,11 +3795,39 @@ describe('TasksShell', () => {
   });
 
   it('animates an opened editor into view and flushes autosave when the pointer moves outside', async () => {
-    const scrollIntoView = vi.fn();
-    const previousScrollIntoView = HTMLElement.prototype.scrollIntoView;
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    const scrollBy = vi.spyOn(window, 'scrollBy').mockImplementation(() => undefined);
+    const previousGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
       configurable: true,
-      value: scrollIntoView,
+      value(this: HTMLElement) {
+        if (this.hasAttribute('data-topline-header')) {
+          return {
+            x: 0,
+            y: 0,
+            top: 0,
+            right: 768,
+            bottom: 64,
+            left: 0,
+            width: 768,
+            height: 64,
+            toJSON: () => ({}),
+          };
+        }
+        if (this.hasAttribute('data-task-row-header')) {
+          return {
+            x: 0,
+            y: 412,
+            top: 412,
+            right: 768,
+            bottom: 456,
+            left: 0,
+            width: 768,
+            height: 44,
+            toJSON: () => ({}),
+          };
+        }
+        return previousGetBoundingClientRect.call(this);
+      },
     });
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
@@ -3770,8 +3852,15 @@ describe('TasksShell', () => {
       const editorContent = region.querySelector<HTMLElement>('[data-task-editor-content]')!;
       expect(editorContent).toHaveClass('min-h-0');
       expect(editorContent).not.toHaveClass('overflow-hidden');
-      expect(scrollIntoView).toHaveBeenCalledWith({
-        block: 'nearest',
+      expect(scrollBy).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 225));
+      });
+
+      expect(scrollBy).toHaveBeenCalledWith({
+        top: 348,
+        left: 0,
         behavior: 'smooth',
       });
 
@@ -3791,14 +3880,86 @@ describe('TasksShell', () => {
       expect(region).toHaveClass('grid-rows-[0fr]', 'pt-0', 'opacity-0');
       await waitForTaskEditorExit(container);
     } finally {
-      if (previousScrollIntoView) {
-        Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-          configurable: true,
-          value: previousScrollIntoView,
-        });
-      } else {
-        delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
-      }
+      scrollBy.mockRestore();
+      Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+        configurable: true,
+        value: previousGetBoundingClientRect,
+      });
+      cleanup(root, container);
+    }
+  });
+
+  it('aligns an opened task immediately when reduced motion is requested', async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+    const scrollBy = vi.spyOn(window, 'scrollBy').mockImplementation(() => undefined);
+    const previousGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value(this: HTMLElement) {
+        if (this.hasAttribute('data-topline-header')) {
+          return {
+            x: 0,
+            y: 0,
+            top: 0,
+            right: 768,
+            bottom: 72,
+            left: 0,
+            width: 768,
+            height: 72,
+            toJSON: () => ({}),
+          };
+        }
+        if (this.hasAttribute('data-task-row-header')) {
+          return {
+            x: 0,
+            y: 252,
+            top: 252,
+            right: 768,
+            bottom: 296,
+            left: 0,
+            width: 768,
+            height: 44,
+            toJSON: () => ({}),
+          };
+        }
+        return previousGetBoundingClientRect.call(this);
+      },
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 20));
+      });
+
+      expect(scrollBy).toHaveBeenCalledWith({
+        top: 180,
+        left: 0,
+        behavior: 'auto',
+      });
+      expect(container.querySelector('[data-task-editor-region]'))
+        .toHaveAttribute('data-state', 'open');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+      scrollBy.mockRestore();
+      Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+        configurable: true,
+        value: previousGetBoundingClientRect,
+      });
       cleanup(root, container);
     }
   });
@@ -6110,6 +6271,91 @@ describe('TasksShell', () => {
     }
   });
 
+  it('automatically sorts inside an Area but retains an edited task until close', async () => {
+    mockTaskAutomaticListSorting.mockReturnValue({
+      enabled: true,
+      loading: false,
+      error: null,
+      pending: false,
+      setEnabled: vi.fn(),
+    });
+    const initiallyReady = taskTodoFixture({
+      ...task,
+      id: 'task-ready',
+      title: 'Initially Ready',
+      area_id: null,
+      deadline: '2026-07-26',
+      today_section: 'now',
+      actionability: 'actionable',
+      order_key: 'a1',
+    });
+    const rechecking = taskTodoFixture({
+      ...task,
+      id: 'task-rechecking',
+      title: 'Rechecking',
+      area_id: null,
+      deadline: '2026-07-26',
+      today_section: 'now',
+      actionability: 'rechecking',
+      order_key: 'a0',
+    });
+    let acceptedTasks = [initiallyReady, rechecking];
+    const taskList = defaultTaskList();
+    mockTaskList.mockImplementation((
+      _ownerId: string,
+      _view: string,
+      retainedTaskId: string | null,
+    ) => ({
+      ...taskList,
+      tasks: acceptedTasks,
+      retainedTaskPlacement: retainedTaskId === initiallyReady.id
+        ? {
+          destination: initiallyReady.destination,
+          today_section: initiallyReady.today_section,
+          start_date: initiallyReady.start_date,
+          deadline: initiallyReady.deadline,
+          actionability: initiallyReady.actionability,
+          order_key: initiallyReady.order_key,
+          area_id: initiallyReady.area_id,
+          project_id: initiallyReady.project_id,
+        }
+        : null,
+    }));
+    const { container, root, rerender } = renderShell('/tasks/anytime');
+    const visibleTitles = () => Array.from(
+      container.querySelectorAll<HTMLElement>('[data-task-row-title]'),
+    ).map((title) => title.textContent?.trim());
+
+    try {
+      expect(visibleTitles()).toEqual(['Initially Ready', 'Rechecking']);
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(
+          '[data-task-id="task-ready"]',
+        )?.click();
+      });
+
+      acceptedTasks = [
+        { ...initiallyReady, actionability: 'waiting' },
+        rechecking,
+      ];
+      await act(async () => {
+        rerender();
+        await Promise.resolve();
+      });
+      expect(visibleTitles()).toEqual(['Initially Ready', 'Rechecking']);
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(
+          '[data-task-id="task-ready"]',
+        )?.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 450));
+      });
+      expect(visibleTitles()).toEqual(['Rechecking', 'Initially Ready']);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('creates a new Anytime task directly inside an Area bucket', async () => {
     const workTask = taskTodoFixture({
       ...task,
@@ -6274,6 +6520,118 @@ describe('TasksShell', () => {
     }
   });
 
+  it('keeps the automatic-sort drop line at the last legal peer position', async () => {
+    mockTaskAutomaticListSorting.mockReturnValue({
+      enabled: true,
+      loading: false,
+      error: null,
+      pending: false,
+      setEnabled: vi.fn(),
+    });
+    const dragged = taskTodoFixture({
+      ...task,
+      id: 'task-dragged',
+      title: 'Dragged',
+      area_id: null,
+      deadline: '2026-07-26',
+      today_section: 'now',
+      actionability: 'rechecking',
+      order_key: 'a0',
+    });
+    const peer = taskTodoFixture({
+      ...task,
+      id: 'task-peer',
+      title: 'Peer',
+      area_id: null,
+      deadline: '2026-07-26',
+      today_section: 'now',
+      actionability: 'rechecking',
+      order_key: 'a1',
+    });
+    const illegal = taskTodoFixture({
+      ...task,
+      id: 'task-illegal',
+      title: 'Different Deadline',
+      area_id: null,
+      deadline: '2026-07-27',
+      today_section: 'now',
+      actionability: 'rechecking',
+      order_key: 'a2',
+    });
+    const taskList = {
+      ...defaultTaskList(),
+      tasks: [dragged, peer, illegal],
+    };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/anytime');
+
+    const row = (id: string) => container.querySelector(
+      `[data-task-id="${id}"]`,
+    )?.closest<HTMLElement>('article') ?? null;
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: 'none',
+      dropEffect: 'none',
+      setData: (type: string, value: string) => data.set(type, value),
+      getData: (type: string) => data.get(type) ?? '',
+    } as unknown as DataTransfer;
+    const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+    const dragOver = (clientY: number) => {
+      const event = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperties(event, {
+        dataTransfer: { value: dataTransfer },
+        clientY: { value: clientY },
+      });
+      return event;
+    };
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+
+    try {
+      const source = row('task-dragged');
+      const peerRow = row('task-peer');
+      const illegalRow = row('task-illegal');
+      if (!source || !peerRow || !illegalRow) throw new Error('Expected automatic-sort rows');
+      for (const target of [peerRow, illegalRow]) {
+        vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({
+          top: 0,
+          bottom: 100,
+          height: 100,
+          left: 0,
+          right: 100,
+          width: 100,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        });
+      }
+      await act(async () => {
+        source.dispatchEvent(dragStart);
+        peerRow.dispatchEvent(dragOver(75));
+      });
+      expect(peerRow).toHaveAttribute('data-drag-placement', 'after');
+
+      await act(async () => {
+        illegalRow.dispatchEvent(dragOver(25));
+      });
+      expect(peerRow).toHaveAttribute('data-drag-placement', 'after');
+      expect(illegalRow).not.toHaveAttribute('data-drag-placement');
+
+      await act(async () => {
+        illegalRow.dispatchEvent(drop);
+        await Promise.resolve();
+      });
+      expect(taskList.reorderTaskTo).toHaveBeenCalledWith(
+        'task-dragged',
+        'task-peer',
+        'after',
+      );
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('drops Area work into an empty unassigned Anytime region', async () => {
     const workTask = taskTodoFixture({
       ...task,
@@ -6344,7 +6702,8 @@ describe('TasksShell', () => {
       );
       expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
       expect(container.querySelector('section[aria-label="Someday Tasks"]')).toBeTruthy();
-      expect(container.querySelector('section[aria-label="Tasks"]')).toBeTruthy();
+      expect(container.querySelector('[aria-label="Someday Tasks by Area"]')).toBeTruthy();
+      expect(container.querySelector('section[aria-label="Unassigned Tasks"]')).toBeTruthy();
       expect(Array.from(container.querySelectorAll('h3')).some(
         (heading) => heading.textContent?.trim() === 'Tasks',
       )).toBe(false);
@@ -6365,6 +6724,63 @@ describe('TasksShell', () => {
         start_date: '2026-07-24',
         today_section: null,
       });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('groups Someday tasks in the manual Area order maintained in Config', () => {
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [
+        taskTodoFixture({
+          id: 'task-home',
+          title: 'Home Someday',
+          destination: 'someday',
+          area_id: 'area-home',
+          order_key: 'a0',
+        }),
+        taskTodoFixture({
+          id: 'task-unassigned',
+          title: 'Loose Someday',
+          destination: 'someday',
+          area_id: null,
+          order_key: 'a1',
+        }),
+        taskTodoFixture({
+          id: 'task-work',
+          title: 'Work Someday',
+          destination: 'someday',
+          area_id: 'area-work',
+          order_key: 'a2',
+        }),
+      ],
+    });
+    mockTaskHierarchy.mockReturnValue({
+      areas: [
+        taskAreaFixture({ id: 'area-home', title: 'Home', order_key: 'a1' }),
+        taskAreaFixture({ id: 'area-work', title: 'Work', order_key: 'a0' }),
+      ],
+      projects: [],
+      loading: false,
+      error: null,
+      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
+      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
+      transitionProject: vi.fn().mockResolvedValue(undefined),
+    });
+    const { container, root } = renderShell('/tasks/someday');
+
+    try {
+      const unassigned = container.querySelector('section[aria-label="Unassigned Tasks"]');
+      const work = container.querySelector('section[aria-labelledby="tasks-area-area-work-heading"]');
+      const home = container.querySelector('section[aria-labelledby="tasks-area-area-home-heading"]');
+      expect(unassigned?.textContent).toContain('Loose Someday');
+      expect(work?.textContent).toContain('Work Someday');
+      expect(home?.textContent).toContain('Home Someday');
+      expect(unassigned?.compareDocumentPosition(work!) & Node.DOCUMENT_POSITION_FOLLOWING)
+        .toBeTruthy();
+      expect(work?.compareDocumentPosition(home!) & Node.DOCUMENT_POSITION_FOLLOWING)
+        .toBeTruthy();
     } finally {
       cleanup(root, container);
     }

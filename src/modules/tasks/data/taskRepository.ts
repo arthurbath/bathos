@@ -1,5 +1,7 @@
 import type { AbstractPowerSyncDatabase, Transaction } from '@powersync/web';
 
+import { deriveTaskAreaSections } from '@/modules/tasks/domain/taskAreaViews';
+import { assignMaterializedTaskOrderKeys } from '@/modules/tasks/domain/taskAutomaticOrder';
 import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
 import { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHierarchyOperationsRepository';
 import {
@@ -24,8 +26,10 @@ import {
 import type {
   TaskActorType,
   TaskActionability,
+  TaskArea,
   TaskDestination,
   TaskEntryChannel,
+  TaskProject,
   TaskSourceKind,
   TaskTodaySection,
   TaskTodo,
@@ -305,6 +309,7 @@ export class TaskRepository {
         id: ownerId,
         owner_id: ownerId,
         planning_timezone: planningTimeZone,
+        automatic_list_sorting: false,
         revision: 1,
         client_mutation_id: this.createId(),
         created_at: timestamp,
@@ -312,12 +317,14 @@ export class TaskRepository {
       };
       await transaction.execute(
         `INSERT INTO tasks_user_settings
-          (id, owner_id, planning_timezone, revision, client_mutation_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          (id, owner_id, planning_timezone, automatic_list_sorting, revision,
+           client_mutation_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           setting.id,
           setting.owner_id,
           setting.planning_timezone,
+          setting.automatic_list_sorting ? 1 : 0,
           setting.revision,
           setting.client_mutation_id,
           setting.created_at,
@@ -325,6 +332,91 @@ export class TaskRepository {
         ],
       );
       return setting;
+    });
+  }
+
+  async setAutomaticListSorting(
+    ownerId: string,
+    enabled: boolean,
+  ): Promise<TaskUserSettings> {
+    assertOwner(ownerId);
+    return this.database.writeTransaction(async (transaction) => {
+      const settings = await transaction.getOptional<TaskUserSettings>(
+        'SELECT * FROM tasks_user_settings WHERE owner_id = ?',
+        [ownerId],
+      );
+      if (settings === null) {
+        throw new InvalidTaskMutationError('Task settings are unavailable');
+      }
+
+      if (!enabled && Boolean(settings.automatic_list_sorting)) {
+        const tasks = await transaction.getAll<TaskTodo>(
+          `SELECT * FROM tasks_todos
+           WHERE owner_id = ?
+             AND lifecycle = 'open'
+             AND disposition = 'present'
+             AND destination IN ('anytime', 'someday')`,
+          [ownerId],
+        );
+        const areas = await transaction.getAll<TaskArea>(
+          `SELECT * FROM tasks_areas
+           WHERE owner_id = ? AND disposition = 'present'`,
+          [ownerId],
+        );
+        const projects = await transaction.getAll<TaskProject>(
+          `SELECT * FROM tasks_projects
+           WHERE owner_id = ? AND disposition = 'present'`,
+          [ownerId],
+        );
+        const orderedGroups = (['anytime', 'someday'] as const).flatMap((destination) => (
+          deriveTaskAreaSections(
+            tasks.filter((task) => task.destination === destination),
+            areas,
+            projects,
+            true,
+          ).map((section) => section.tasks)
+        ));
+        const materializedKeys = assignMaterializedTaskOrderKeys(orderedGroups);
+        const timestamp = this.now();
+        for (const task of tasks) {
+          const orderKey = materializedKeys.get(task.id);
+          if (orderKey === undefined || orderKey === task.order_key) continue;
+          await transaction.execute(
+            `UPDATE tasks_todos
+             SET order_key = ?,
+                 revision = revision + 1,
+                 client_mutation_id = ?,
+                 updated_at = ?
+             WHERE id = ? AND owner_id = ?`,
+            [orderKey, this.createId(), timestamp, task.id, ownerId],
+          );
+        }
+      }
+
+      const updated: TaskUserSettings = {
+        ...settings,
+        automatic_list_sorting: enabled,
+        revision: settings.revision + 1,
+        client_mutation_id: this.createId(),
+        updated_at: this.now(),
+      };
+      await transaction.execute(
+        `UPDATE tasks_user_settings
+         SET automatic_list_sorting = ?,
+             revision = ?,
+             client_mutation_id = ?,
+             updated_at = ?
+         WHERE id = ? AND owner_id = ?`,
+        [
+          enabled ? 1 : 0,
+          updated.revision,
+          updated.client_mutation_id,
+          updated.updated_at,
+          settings.id,
+          ownerId,
+        ],
+      );
+      return updated;
     });
   }
 

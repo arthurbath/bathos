@@ -624,6 +624,7 @@ function parseSettingsInsert(entry: CrudEntry): TaskSettingsInsert {
     id: entry.id,
     owner_id: requireText(data.owner_id, 'owner_id'),
     planning_timezone: requireText(data.planning_timezone, 'planning_timezone'),
+    automatic_list_sorting: booleanOrDefault(data.automatic_list_sorting, false),
     revision: requirePositiveInteger(data.revision, 'revision'),
     client_mutation_id: requireText(data.client_mutation_id, 'client_mutation_id'),
     created_at: requireText(data.created_at, 'created_at'),
@@ -635,6 +636,7 @@ function parseSettingsUpdate(entry: CrudEntry): TaskSettingsUpdate {
   const data = entry.opData ?? {};
   const allowedColumns = new Set([
     'planning_timezone',
+    'automatic_list_sorting',
     'revision',
     'client_mutation_id',
     'updated_at',
@@ -644,7 +646,12 @@ function parseSettingsUpdate(entry: CrudEntry): TaskSettingsUpdate {
       'The task settings update contains an immutable or unknown field',
     );
   }
-  requireText(data.planning_timezone, 'planning_timezone');
+  if (data.planning_timezone !== undefined) {
+    requireText(data.planning_timezone, 'planning_timezone');
+  }
+  if (data.automatic_list_sorting !== undefined) {
+    booleanOrDefault(data.automatic_list_sorting, false);
+  }
   requirePositiveInteger(data.revision, 'revision');
   requireText(data.client_mutation_id, 'client_mutation_id');
   requireText(data.updated_at, 'updated_at');

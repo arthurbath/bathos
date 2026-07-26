@@ -106,7 +106,9 @@ describe('TaskAreaDetailView', () => {
 
       expect(container.querySelector<HTMLAnchorElement>('a[href="/projects/project-open"]'))
         .not.toBeNull();
-      expect(container.querySelector<HTMLAnchorElement>('a[href="/projects"]')).not.toBeNull();
+      expect(container.querySelector<HTMLAnchorElement>('a[href="/config"]')?.textContent)
+        .toContain('Config');
+      expect(container.querySelector('[aria-label="Rename Work"]')).toBeNull();
     } finally {
       cleanup(root, container);
     }

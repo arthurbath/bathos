@@ -116,6 +116,7 @@ function settings(): Tables['tasks_user_settings']['Row'] {
     id: ownerA,
     owner_id: ownerA,
     planning_timezone: 'America/Los_Angeles',
+    automatic_list_sorting: false,
     revision: 1,
     client_mutation_id: '80000000-0000-4000-8000-000000000001',
     created_at: '2026-07-20T08:00:00.000Z',

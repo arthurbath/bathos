@@ -30,7 +30,6 @@ describe('Tasks iconography', () => {
     expect(TASK_ICONS.Task).toBe(SquareCheckBig);
     expect(TASK_ICONS.Project).toBe(CopyCheck);
     expect(TASK_ICONS.Area).toBe(Layers3);
-    expect(TASK_ICONS.AreasAndProjects).toBe(Layers3);
     expect(TASK_ICONS.TaskChecklist).toBe(ListTree);
     expect(TASK_ICONS.Attachment).toBe(Paperclip);
     expect(TASK_ICONS.Someday).toBe(SquareDashed);

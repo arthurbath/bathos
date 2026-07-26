@@ -162,7 +162,7 @@ export function TaskProjectDetailView({
           className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-          Areas &amp; Projects
+          Projects
         </a>
         <div className="flex flex-wrap items-start gap-3">
           <div className="w-full min-w-0 sm:flex-1">
@@ -571,8 +571,8 @@ function ProjectTaskRow({
           className="h-9 min-w-32 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <option value="actionable">Ready</option>
-          <option value="waiting">Waiting</option>
           <option value="rechecking">Rechecking</option>
+          <option value="waiting">Waiting</option>
         </select>
         <details className="group min-w-0 flex-1">
           <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-sm text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">

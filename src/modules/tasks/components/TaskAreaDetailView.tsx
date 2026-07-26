@@ -6,7 +6,6 @@ import { useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { shouldHandleWithBrowser, handleClientSideLinkNavigation } from '@/lib/navigation';
 import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
-import { TaskHierarchyEditableTitle } from '@/modules/tasks/components/TaskProjectsView';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
 import { getTaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
@@ -57,25 +56,24 @@ export function TaskAreaDetailView({
   const activeProjects = hierarchy.projects.filter((project) => (
     project.area_id === areaId && project.lifecycle === 'open'
   ));
-  const projectsHref = `${basePath}/projects`;
+  const configHref = `${basePath}/config`;
 
   return (
     <div className="space-y-7">
       <a
-        href={projectsHref}
-        onClick={(event) => handleClientSideLinkNavigation(event, navigate, projectsHref)}
+        href={configHref}
+        onClick={(event) => handleClientSideLinkNavigation(event, navigate, configHref)}
         className="inline-flex min-h-9 items-center gap-1.5 rounded-sm text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-        Areas &amp; Projects
+        Config
       </a>
 
       <div className="flex min-h-10 items-center gap-2">
         <TASK_ICONS.Area className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
-        <TaskHierarchyEditableTitle
-          value={area.title}
-          onSave={(title) => hierarchy.updateArea(area.id, { title })}
-        />
+        <h3 className="min-w-0 flex-1 truncate text-2xl font-semibold leading-tight text-foreground">
+          {area.title}
+        </h3>
       </div>
 
       <AreaWorkSection

@@ -1,7 +1,8 @@
 import { compareTaskOrder } from '@/modules/tasks/domain/taskOrder';
+import { compareTaskAutomaticOrder } from '@/modules/tasks/domain/taskAutomaticOrder';
 import type { TaskArea, TaskProject, TaskTodo } from '@/modules/tasks/types/tasks';
 
-export type TaskAnytimeAreaSection = {
+export type TaskAreaSection = {
   area: TaskArea | null;
   areaId: string | null;
   tasks: TaskTodo[];
@@ -16,15 +17,18 @@ export function getTaskEffectiveAreaId(
   return projects.find((project) => project.id === task.project_id)?.area_id ?? null;
 }
 
-export function deriveTaskAnytimeAreaSections(
+export function deriveTaskAreaSections(
   tasks: readonly TaskTodo[],
   areas: readonly TaskArea[],
   projects: readonly TaskProject[],
-): TaskAnytimeAreaSection[] {
-  const orderedTasks = [...tasks].sort((left, right) => compareTaskOrder(
-    { id: left.id, orderKey: left.order_key },
-    { id: right.id, orderKey: right.order_key },
-  ));
+  automaticSort = false,
+): TaskAreaSection[] {
+  const orderedTasks = [...tasks].sort(automaticSort
+    ? compareTaskAutomaticOrder
+    : (left, right) => compareTaskOrder(
+      { id: left.id, orderKey: left.order_key },
+      { id: right.id, orderKey: right.order_key },
+    ));
   const presentAreaIds = new Set(areas.map(({ id }) => id));
   const tasksByArea = new Map<string | null, TaskTodo[]>([[null, []]]);
 

@@ -200,6 +200,13 @@ RESET ROLE;
 RESET request.jwt.claim.sub;
 RESET request.jwt.claim.role;
 
+UPDATE tasks_private.today_rollover_state
+SET planning_date = DATE '2099-01-02'
+WHERE owner_id NOT IN (
+  'd4000000-0000-4000-8000-000000000001',
+  'd4000000-0000-4000-8000-000000000002'
+);
+
 SELECT set_config(
   'test.tasks_rollover_result',
   tasks_private.activate_due_roots(

@@ -55,6 +55,7 @@ describe('task repository', () => {
       id: 'owner-a',
       owner_id: 'owner-a',
       planning_timezone: 'America/Los_Angeles',
+      automatic_list_sorting: false,
       revision: 1,
       client_mutation_id: 'task-new',
     });
@@ -81,6 +82,84 @@ describe('task repository', () => {
     await expect(
       create.repository.ensurePlanningSettings('owner-a', 'Not/A_Time_Zone'),
     ).rejects.toThrow('A recognized IANA planning time zone is required');
+  });
+
+  it('materializes the visible automatic order when sorting is disabled', async () => {
+    const settings = {
+      id: 'owner-a',
+      owner_id: 'owner-a',
+      planning_timezone: 'America/Los_Angeles',
+      automatic_list_sorting: true,
+      revision: 2,
+      client_mutation_id: 'mutation-settings',
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    const { repository, transaction } = createHarness(settings);
+    vi.mocked(transaction.getAll)
+      .mockResolvedValueOnce([
+        taskTodoFixture({
+          id: 'later-manually-first',
+          destination: 'anytime',
+          deadline: null,
+          order_key: 'a0',
+        }),
+        taskTodoFixture({
+          id: 'deadline-manually-second',
+          destination: 'anytime',
+          deadline: '2026-07-20',
+          order_key: 'a1',
+        }),
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    await expect(
+      repository.setAutomaticListSorting('owner-a', false),
+    ).resolves.toMatchObject({
+      automatic_list_sorting: false,
+      revision: 3,
+    });
+
+    const taskUpdates = vi.mocked(transaction.execute).mock.calls.filter(
+      ([statement]) => String(statement).includes('UPDATE tasks_todos'),
+    );
+    expect(taskUpdates).toHaveLength(2);
+    expect(taskUpdates[0][1]).toEqual(expect.arrayContaining([
+      'later-manually-first',
+      'owner-a',
+    ]));
+    expect(taskUpdates[1][1]).toEqual(expect.arrayContaining([
+      'deadline-manually-second',
+      'owner-a',
+    ]));
+    expect(transaction.execute).toHaveBeenLastCalledWith(
+      expect.stringContaining('UPDATE tasks_user_settings'),
+      expect.arrayContaining([0, 3, 'owner-a', 'owner-a']),
+    );
+  });
+
+  it('does not rewrite task order when automatic sorting is enabled', async () => {
+    const settings = {
+      id: 'owner-a',
+      owner_id: 'owner-a',
+      planning_timezone: 'America/Los_Angeles',
+      automatic_list_sorting: false,
+      revision: 1,
+      client_mutation_id: 'mutation-settings',
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    const { repository, transaction } = createHarness(settings);
+
+    await repository.setAutomaticListSorting('owner-a', true);
+
+    expect(transaction.getAll).not.toHaveBeenCalled();
+    expect(transaction.execute).toHaveBeenCalledTimes(1);
+    expect(transaction.execute).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE tasks_user_settings'),
+      expect.arrayContaining([1, 2, 'owner-a', 'owner-a']),
+    );
   });
 
   it('activates reached local start dates into Today Inbox', async () => {

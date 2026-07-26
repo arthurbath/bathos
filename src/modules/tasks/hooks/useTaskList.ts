@@ -33,6 +33,7 @@ export type RetainedTaskViewPlacement = Pick<
   | 'today_section'
   | 'start_date'
   | 'deadline'
+  | 'actionability'
   | 'order_key'
   | 'area_id'
   | 'project_id'
@@ -600,6 +601,7 @@ export function taskWithRetainedViewPlacement(
     today_section: retainedPlacement.today_section,
     start_date: retainedPlacement.start_date,
     deadline: retainedPlacement.deadline,
+    actionability: retainedPlacement.actionability,
     order_key: retainedPlacement.order_key,
     area_id: retainedPlacement.area_id,
     project_id: retainedPlacement.project_id,

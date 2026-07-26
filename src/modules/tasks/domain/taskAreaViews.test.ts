@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  deriveTaskAnytimeAreaSections,
+  deriveTaskAreaSections,
   getTaskEffectiveAreaId,
 } from '@/modules/tasks/domain/taskAreaViews';
 import {
@@ -74,7 +74,7 @@ describe('task Area planning views', () => {
       }),
     ];
 
-    const sections = deriveTaskAnytimeAreaSections(tasks, areas, projects);
+    const sections = deriveTaskAreaSections(tasks, areas, projects);
 
     expect(sections.map(({ areaId }) => areaId)).toEqual([
       null,
@@ -98,6 +98,45 @@ describe('task Area planning views', () => {
       project_id: null,
     });
 
-    expect(deriveTaskAnytimeAreaSections([task], [], [])[0].tasks).toEqual([task]);
+    expect(deriveTaskAreaSections([task], [], [])[0].tasks).toEqual([task]);
+  });
+
+  it('automatically sorts only inside each Area section', () => {
+    const areas = [
+      taskAreaFixture({ id: 'area-work', order_key: 'a0' }),
+      taskAreaFixture({ id: 'area-home', order_key: 'a1' }),
+    ];
+    const tasks = [
+      taskTodoFixture({
+        id: 'work-no-deadline',
+        area_id: 'area-work',
+        deadline: null,
+        order_key: 'a0',
+      }),
+      taskTodoFixture({
+        id: 'home-old-deadline',
+        area_id: 'area-home',
+        deadline: '2026-07-20',
+        order_key: 'a0',
+      }),
+      taskTodoFixture({
+        id: 'work-old-deadline',
+        area_id: 'area-work',
+        deadline: '2026-07-20',
+        order_key: 'a1',
+      }),
+    ];
+
+    const sections = deriveTaskAreaSections(tasks, areas, [], true);
+
+    expect(sections.map(({ areaId }) => areaId)).toEqual([
+      null,
+      'area-work',
+      'area-home',
+    ]);
+    expect(sections[1].tasks.map(({ id }) => id)).toEqual([
+      'work-old-deadline',
+      'work-no-deadline',
+    ]);
   });
 });

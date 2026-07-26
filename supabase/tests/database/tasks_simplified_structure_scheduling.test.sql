@@ -397,8 +397,8 @@ SELECT is(
     ),
     DATE '2099-07-22'
   ) ->> 'today_section',
-  'next',
-  'normalizes a reached legacy future horizon to Today Next'
+  'inbox',
+  'normalizes a reached legacy future horizon to Today Inbox'
 );
 SELECT is(
   tasks_private.resolve_template_planning(

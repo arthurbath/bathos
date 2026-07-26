@@ -37,30 +37,11 @@ import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel }) {
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
-  const [newAreaTitle, setNewAreaTitle] = useState('');
   const [newProjectTitle, setNewProjectTitle] = useState('');
   const [newProjectAreaId, setNewProjectAreaId] = useState('');
-  const [creatingArea, setCreatingArea] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
-  const [areaDialogOpen, setAreaDialogOpen] = useState(false);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
-  const addAreaButtonRef = useRef<HTMLButtonElement>(null);
   const addProjectButtonRef = useRef<HTMLButtonElement>(null);
-
-  const createArea = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!newAreaTitle.trim() || creatingArea) return;
-    setCreatingArea(true);
-    try {
-      await hierarchy.createArea(newAreaTitle);
-      setNewAreaTitle('');
-      setAreaDialogOpen(false);
-    } catch (error) {
-      showError('Area Could Not Be Added', error);
-    } finally {
-      setCreatingArea(false);
-    }
-  };
 
   const createProject = async (event: FormEvent) => {
     event.preventDefault();
@@ -88,28 +69,19 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
   if (hierarchy.error) {
     return (
       <p role="alert" className="py-12 text-center text-sm text-destructive">
-        Areas &amp; Projects Could Not Be Loaded
+        Projects Could Not Be Loaded
       </p>
     );
   }
 
   const unassigned = hierarchy.projects.filter((project) => project.area_id === null);
+  const populatedAreas = hierarchy.areas.filter((area) => (
+    hierarchy.projects.some((project) => project.area_id === area.id)
+  ));
 
   return (
     <div className="space-y-8">
       <div className="flex justify-end gap-2">
-        <Button
-          ref={addAreaButtonRef}
-          type="button"
-          variant="outline-success"
-          size="sm"
-          className="h-8 w-8 p-0"
-          aria-label="Add Area"
-          title="Add Area"
-          onClick={() => setAreaDialogOpen(true)}
-        >
-          <TASK_ICONS.AddArea className="h-4 w-4" aria-hidden="true" />
-        </Button>
         <Button
           ref={addProjectButtonRef}
           type="button"
@@ -123,48 +95,6 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
           <TASK_ICONS.AddProject className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
-
-      <Dialog
-        open={areaDialogOpen}
-        onOpenChange={(open) => {
-          if (!open && creatingArea) return;
-          setAreaDialogOpen(open);
-          if (!open) setNewAreaTitle('');
-        }}
-      >
-        <DialogContent
-          aria-describedby={undefined}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            addAreaButtonRef.current?.focus();
-          }}
-        >
-          <DialogHeader><DialogTitle>Add Area</DialogTitle></DialogHeader>
-          <form data-bathos-return-submits="true" className="contents" onSubmit={createArea}>
-            <DialogBody className="space-y-2 pt-4">
-              <label htmlFor="new-task-area-title" className="text-sm font-medium text-foreground">
-                Name <span className="text-destructive" aria-hidden="true">*</span>
-              </label>
-              <Input
-                id="new-task-area-title"
-                autoFocus
-                value={newAreaTitle}
-                onChange={(event) => setNewAreaTitle(event.target.value)}
-                disabled={creatingArea}
-                autoComplete="off"
-              />
-            </DialogBody>
-            <DialogFooter>
-              <Button type="button" variant="outline" disabled={creatingArea} onClick={() => setAreaDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={creatingArea || !newAreaTitle.trim()}>
-                Save
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={projectDialogOpen}
@@ -233,27 +163,21 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
         </DialogContent>
       </Dialog>
 
-      {hierarchy.areas.length === 0 && unassigned.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">No areas or projects</p>
+      {hierarchy.projects.length === 0 ? (
+        <p className="py-12 text-center text-sm text-muted-foreground">No projects</p>
       ) : (
         <div className="space-y-7">
-          {hierarchy.areas.map((area, index) => (
+          {populatedAreas.map((area) => (
             <AreaSection
               key={area.id}
               area={area}
               areas={hierarchy.areas}
               projects={hierarchy.projects.filter((project) => project.area_id === area.id)}
-              onRename={(title) => hierarchy.updateArea(area.id, { title })}
-              onMoveUp={index > 0 ? () => hierarchy.reorderArea(area.id, 'up') : undefined}
-              onMoveDown={index < hierarchy.areas.length - 1
-                ? () => hierarchy.reorderArea(area.id, 'down')
-                : undefined}
               onRenameProject={(project, title) => hierarchy.updateProject(project.id, { title })}
               onMoveProject={(project, areaId) => hierarchy.moveProjectToArea(project.id, areaId)}
               onReorderProject={(project, direction) => (
                 hierarchy.reorderProject(project.id, direction)
               )}
-              areaHref={`${basePath}/areas/${area.id}`}
               projectHref={(project) => `${basePath}/projects/${project.id}`}
               onNavigate={navigate}
             />
@@ -282,26 +206,18 @@ function AreaSection({
   area,
   areas,
   projects,
-  onRename,
-  onMoveUp,
-  onMoveDown,
   onRenameProject,
   onMoveProject,
   onReorderProject,
-  areaHref,
   projectHref,
   onNavigate,
 }: {
   area: TaskArea | null;
   areas: TaskArea[];
   projects: TaskProject[];
-  onRename?: (title: string) => Promise<unknown>;
-  onMoveUp?: () => Promise<unknown>;
-  onMoveDown?: () => Promise<unknown>;
   onRenameProject: (project: TaskProject, title: string) => Promise<unknown>;
   onMoveProject: (project: TaskProject, areaId: string | null) => Promise<unknown>;
   onReorderProject: (project: TaskProject, direction: 'up' | 'down') => Promise<unknown>;
-  areaHref?: string;
   projectHref: (project: TaskProject) => string;
   onNavigate: ReturnType<typeof useNavigate>;
 }) {
@@ -310,33 +226,9 @@ function AreaSection({
     <section aria-labelledby={sectionId}>
       <div className="mb-2 flex min-h-9 items-center gap-2">
         <TASK_ICONS.Area className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        {area ? (
-          <TaskHierarchyEditableTitle id={sectionId} value={area.title} onSave={onRename!} />
-        ) : (
-          <h3 id={sectionId} className="text-sm font-semibold text-muted-foreground">
-            <span className="flex items-center gap-2">
-              No Area
-            </span>
-          </h3>
-        )}
-        {area ? (
-          <div className="ml-auto flex gap-1">
-            <a
-              href={areaHref}
-              aria-label={`Open ${area.title} Area`}
-              onClick={(event) => handleClientSideLinkNavigation(
-                event,
-                onNavigate,
-                areaHref!,
-              )}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </a>
-            <TaskHierarchyOrderButton label={`Move ${area.title} Up`} icon={ArrowUp} action={onMoveUp} />
-            <TaskHierarchyOrderButton label={`Move ${area.title} Down`} icon={ArrowDown} action={onMoveDown} />
-          </div>
-        ) : null}
+        <h3 id={sectionId} className="text-sm font-semibold text-muted-foreground">
+          {area?.title ?? 'No Area'}
+        </h3>
       </div>
       <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
         {projects.length === 0 ? (

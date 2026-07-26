@@ -17,12 +17,12 @@ BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/ta
 | Today | Eligible Anytime work grouped into Inbox, Now, Next, and Later |
 | Upcoming | Work controlled by a future Start or, when no future start exists, a future Deadline |
 | Anytime | All active work available now, including every Today task |
-| Someday | Inactive work kept for possible future attention |
+| Someday | Inactive work kept for possible future attention, grouped by Area |
 | Done | Completed, canceled, and recoverably deleted tasks retained for 30 full owner-local days |
-| Areas & Projects | Areas, projects, project tasks, and checklists |
+| Projects | Project creation, organization, project tasks, and checklists |
 | Templates | Reusable task and project structures |
 
-Today, Upcoming, Anytime, and Someday remain directly available in the primary navigation. Open More for Areas & Projects, Templates, Done, and Config.
+Today, Upcoming, Anytime, and Someday remain directly available in the primary navigation. Open More for Projects, Templates, Done, and Config. Config contains the Areas section for adding, renaming, reordering, and recoverably deleting Areas. Moving an Area higher or lower there controls the order of its buckets in Anytime and Someday.
 
 Use the magnifying-glass action in the page header to open Quick Find for tasks, projects, and areas. You can also begin typing any printable character from the background or a focused task on any Tasks page, including Config, to open Quick Find with that character already entered. Shifted letters and punctuation are preserved. Typing inside a field, menu, popover, or dialog remains with that control and does not invoke search. Quick Find shows up to three best matches. Choose Continue Search to open the complete live task-results page for the current query.
 
@@ -50,7 +50,7 @@ Press `⌘/` on Mac or `⌃/` on Windows to open the current keyboard and pointe
 | Close an Open Task | `⌘Return` / `⌘Escape` | `⌃Return` |
 | Show Keyboard Commands | `⌘/` | `⌃/` |
 
-Cut, Copy, Paste, and Select All remain native when an editable text control owns the command. Outside text editing, task Cut and Copy target either the single focused task or every task in multiple selection. Paste reconstructs a structured BathOS Tasks payload when available. Other nonblank clipboard text becomes one new task whose Title contains the clipboard text. Today paste produces Today Inbox work. Anytime paste produces unplanned Anytime work. Someday paste produces undated Someday work. Area and project detail views apply their visible organization. Upcoming, Done, Config, Areas & Projects, Templates, and Search reject task paste.
+Cut, Copy, Paste, and Select All remain native when an editable text control owns the command. Outside text editing, task Cut and Copy target either the single focused task or every task in multiple selection. Paste reconstructs a structured BathOS Tasks payload when available. Other nonblank clipboard text becomes one new task whose Title contains the clipboard text. Today paste produces Today Inbox work. Anytime paste produces unplanned Anytime work. Someday paste produces undated Someday work. Area and project detail views apply their visible organization. Upcoming, Done, Config, Projects, Templates, and Search reject task paste.
 
 | View navigation | Mac | Windows |
 | --- | --- | --- |
@@ -88,7 +88,7 @@ Tasks retains up to 100 safe forward changes for keyboard undo and redo. Every e
 
 The first Command-click on Mac, Control-click on Windows, or Shift-click focuses one closed task and establishes the range anchor without showing the multiple-selection toolbar. A second modified click or a Shift-click away from the anchor selects at least two tasks and reveals the toolbar. Once multiple selection is active, an ordinary click also toggles a task. Reducing the set to one task dismisses the toolbar and retains that task as the single focused task. Reducing it to zero clears task focus. Clicking outside every task or switching views clears task focus and multiple selection. Modified clicks on task links retain native link behavior, and direct clicks on completion or action controls perform only their own actions. Done rows support focus and selection for Copy and Duplicate. Cut is unavailable there because Done represents retained terminal task states rather than active work.
 
-Drag a Today task before or after a task in another visible Today section to change its day horizon and order together. Empty Today sections remain hidden and do not act as drop zones. Anytime shows unassigned tasks first without a heading, then groups Area work in the manual Area order maintained in Areas & Projects. Dragging inside one Anytime Area region changes order. Dragging across Area regions assigns the destination Area, or removes organization when dropped into the unassigned region, and clears an incompatible Project assignment. Dragging within Someday changes order only. Keyboard task reordering is not currently supported.
+Drag a Today task before or after a task in another visible Today section to change its day horizon and order together. Empty Today sections remain hidden and do not act as drop zones. Anytime and Someday show unassigned tasks first without a heading, then group Area work in the manual Area order maintained in Config. Dragging inside one Area region changes order. Dragging across Area regions assigns the destination Area, or removes organization when dropped into the unassigned region, and clears an incompatible Project assignment. Keyboard task reordering is not currently supported.
 
 ## Capture from Raycast
 
