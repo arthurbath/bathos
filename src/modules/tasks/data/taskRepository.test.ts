@@ -111,6 +111,92 @@ describe('task repository', () => {
     );
   });
 
+  it('establishes a local rollover baseline without rewriting ambiguous tasks', async () => {
+    const { repository, transaction } = createHarness({
+      owner_id: 'owner-a',
+      planning_date: null,
+    });
+
+    await expect(
+      repository.rolloverTodayTasks(
+        'owner-a',
+        '2026-07-20',
+        'America/Los_Angeles',
+      ),
+    ).resolves.toEqual([]);
+    expect(transaction.getAll).not.toHaveBeenCalled();
+    expect(transaction.execute).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE tasks_owner_binding SET planning_date'),
+      ['2026-07-20', 'current-owner', 'owner-a'],
+    );
+  });
+
+  it('rolls prior-day Today tasks into Inbox without changing new-day planning', async () => {
+    const { repository, transaction } = createHarness({
+      owner_id: 'owner-a',
+      planning_date: '2026-07-19',
+    });
+    vi.mocked(transaction.getAll).mockResolvedValueOnce([
+      {
+        ...existingTask,
+        id: 'prior-day',
+        today_section: 'later',
+        updated_at: '2026-07-20T04:30:00.000Z',
+      },
+      {
+        ...existingTask,
+        id: 'new-day',
+        today_section: 'now',
+        updated_at: '2026-07-20T18:00:00.000Z',
+      },
+    ]);
+
+    await expect(
+      repository.rolloverTodayTasks(
+        'owner-a',
+        '2026-07-20',
+        'America/Los_Angeles',
+      ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: 'prior-day',
+        today_section: 'inbox',
+        last_mutation_channel: 'native',
+        last_actor_type: 'system',
+        revision: 2,
+      }),
+    ]);
+    expect(transaction.getAll).toHaveBeenCalledWith(
+      expect.stringContaining("today_section <> 'inbox'"),
+      ['owner-a'],
+    );
+    expect(transaction.execute).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE tasks_owner_binding SET planning_date'),
+      ['2026-07-20', 'current-owner', 'owner-a'],
+    );
+    expect(
+      vi.mocked(transaction.execute).mock.calls.filter(([query]) =>
+        String(query).includes('UPDATE tasks_todos')),
+    ).toHaveLength(1);
+  });
+
+  it('makes repeated local rollover checks no-ops', async () => {
+    const { repository, transaction } = createHarness({
+      owner_id: 'owner-a',
+      planning_date: '2026-07-20',
+    });
+
+    await expect(
+      repository.rolloverTodayTasks(
+        'owner-a',
+        '2026-07-20',
+        'America/Los_Angeles',
+      ),
+    ).resolves.toEqual([]);
+    expect(transaction.getAll).not.toHaveBeenCalled();
+    expect(transaction.execute).not.toHaveBeenCalled();
+  });
+
   it('creates a complete offline row after the current destination tail', async () => {
     const { repository, transaction } = createHarness({ order_key: 'a0' });
 

@@ -803,7 +803,7 @@ The system SHALL model lifecycle, record disposition, planning destination, Toda
 - **THEN** the system restores valid prior hierarchy and active state, falling back to Anytime with no Today membership when the prior placement is no longer valid
 
 ### Requirement: Temporal Planning Semantics
-The system SHALL store Start Date as a future-only deferral calendar fact, store Deadline independently, retain day horizons for active Today work, derive activation and Today from the owner's IANA planning time zone, and store reminder times as unambiguous instants resolved on the current Start intent.
+The system SHALL store Start Date as a future-only deferral calendar fact, store Deadline independently, retain day horizons for active Today work, reset unfinished Today tasks for owner-local daily re-planning, derive activation and Today from the owner's IANA planning time zone, and store reminder times as unambiguous instants resolved on the current Start intent.
 
 #### Scenario: Start date and deadline coexist in either order
 - **WHEN** a to-do has both a start date and a deadline
@@ -824,6 +824,30 @@ The system SHALL store Start Date as a future-only deferral calendar fact, store
 #### Scenario: Activate a reached Start Date
 - **WHEN** time advances to a stored Start Date in the owner's planning time zone
 - **THEN** local and server activation converge on a null start date, Today Next, one accepted revision transition, defensive Today visibility while synchronization catches up, and preservation of an already-resolved same-day reminder
+
+#### Scenario: Reset unfinished Today tasks after midnight
+- **WHEN** the owner's planning date advances while one or more open, present tasks remain in Inbox, Now, Next, or Later
+- **THEN** local and server activation converge on Today Inbox for every such task with one accepted system-authored revision transition per task
+
+#### Scenario: Activate newly reached Starts after rollover
+- **WHEN** the owner-local planning date advances while prior-day Today tasks and future Starts reaching the new date both exist
+- **THEN** the system resets the prior-day Today tasks to Inbox before activating the newly reached Starts into Today Next
+
+#### Scenario: Preserve deliberate planning after midnight
+- **WHEN** a task is created or its Today planning is changed after the new owner-local date begins but before the next automatic rollover check
+- **THEN** the rollover retains that new-day horizon because the task has already been deliberately planned for the current date
+
+#### Scenario: Exclude inactive and deferred work from rollover
+- **WHEN** the owner-local planning date advances
+- **THEN** completed, canceled, deleted, Someday, future-starting, and horizon-free Anytime tasks retain their existing planning and lifecycle state
+
+#### Scenario: Preserve reminders through daily rollover
+- **WHEN** an unfinished Today task with a reminder rolls into the new day's Inbox
+- **THEN** the reminder retains its original local date, resolved instant, occurrence, and delivery state rather than being repeated or rescheduled
+
+#### Scenario: Retry or catch up daily rollover
+- **WHEN** repeated clients or jobs evaluate the same planning date, or evaluation resumes after one or more missed days
+- **THEN** the system performs at most one effective rollover for the latest owner-local date and does not append no-op task revisions
 
 #### Scenario: Place work in a day horizon
 - **WHEN** a user selects Inbox, Now, Next, or Later for Anytime work

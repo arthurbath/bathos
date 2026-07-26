@@ -59,6 +59,9 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_sync_issues.local_only).toBe(true);
     expect(tables.tasks_sync_health_events.local_only).toBe(true);
     expect(tables.tasks_owner_binding.local_only).toBe(true);
+    expect(tables.tasks_owner_binding.columns.map(({ name }) => name)).toContain(
+      'planning_date',
+    );
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('client_mutation_id');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('undo_source_event_id');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('start_date');

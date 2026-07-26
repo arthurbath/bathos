@@ -43,6 +43,7 @@ import {
   prepareTasksOfflineLaunch,
   type TasksOfflineLaunchState,
 } from '@/modules/tasks/pwa/taskServiceWorker';
+import { activateTaskPlanningDate } from '@/modules/tasks/runtime/taskPlanningDate';
 
 export function TasksRuntimeProvider({
   ownerId,
@@ -138,8 +139,13 @@ export function TasksRuntimeProvider({
             settings.planning_timezone,
             new Date(),
           );
-          await repository.activateDueStartDates(ownerId, planningDate);
-          await hierarchyRepository.activateDueProjectStartDates(ownerId, planningDate);
+          await activateTaskPlanningDate({
+            ownerId,
+            planningDate,
+            planningTimeZone: settings.planning_timezone,
+            repository,
+            hierarchyRepository,
+          });
         };
         await activateReachedDates();
         activationPoll = setInterval(() => {

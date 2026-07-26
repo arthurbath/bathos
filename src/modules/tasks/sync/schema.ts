@@ -553,6 +553,7 @@ const taskOwnerBinding = new Table(
   {
     owner_id: column.text,
     bound_at: column.text,
+    planning_date: column.text,
   },
   { localOnly: true },
 );

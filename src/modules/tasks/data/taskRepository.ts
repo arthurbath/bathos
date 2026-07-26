@@ -363,6 +363,89 @@ export class TaskRepository {
     });
   }
 
+  async rolloverTodayTasks(
+    ownerId: string,
+    planningDate: string,
+    planningTimeZone: string,
+  ): Promise<TaskTodo[]> {
+    assertOwner(ownerId);
+    const reachedDate = normalizeTaskCalendarDate(planningDate, 'Planning date');
+    if (reachedDate === null) {
+      throw new InvalidTaskMutationError('A planning date is required for rollover');
+    }
+    if (!isTaskPlanningTimeZone(planningTimeZone)) {
+      throw new InvalidTaskMutationError('A recognized IANA planning time zone is required');
+    }
+
+    return this.database.writeTransaction(async (transaction) => {
+      const binding = await transaction.getOptional<{
+        owner_id: string;
+        planning_date: string | null;
+      }>(
+        'SELECT owner_id, planning_date FROM tasks_owner_binding WHERE id = ?',
+        ['current-owner'],
+      );
+      if (binding === null || binding.owner_id !== ownerId) {
+        throw new InvalidTaskMutationError(
+          'Task data must be bound to its owner before daily rollover',
+        );
+      }
+
+      const previousDate = normalizeTaskCalendarDate(
+        binding.planning_date,
+        'Prior planning date',
+      );
+      if (previousDate === null) {
+        await transaction.execute(
+          'UPDATE tasks_owner_binding SET planning_date = ? WHERE id = ? AND owner_id = ?',
+          [reachedDate, 'current-owner', ownerId],
+        );
+        return [];
+      }
+      if (previousDate >= reachedDate) {
+        return [];
+      }
+
+      const candidates = await transaction.getAll<TaskTodo>(
+        `SELECT * FROM tasks_todos
+         WHERE owner_id = ?
+           AND destination = 'anytime'
+           AND lifecycle = 'open'
+           AND disposition = 'present'
+           AND start_date IS NULL
+           AND today_section IS NOT NULL
+           AND today_section <> 'inbox'
+         ORDER BY order_key, id`,
+        [ownerId],
+      );
+      const occurredAt = this.now();
+      const rolledOver: TaskTodo[] = [];
+      for (const current of candidates) {
+        const lastChangedDate = taskCalendarDateInTimeZone(
+          planningTimeZone,
+          new Date(current.updated_at),
+        );
+        if (lastChangedDate >= reachedDate) {
+          continue;
+        }
+        rolledOver.push(await updateOwnedTask(
+          transaction,
+          current,
+          { today_section: 'inbox' },
+          this.createId(),
+          occurredAt,
+          { channel: 'native', actorType: 'system' },
+        ));
+      }
+
+      await transaction.execute(
+        'UPDATE tasks_owner_binding SET planning_date = ? WHERE id = ? AND owner_id = ?',
+        [reachedDate, 'current-owner', ownerId],
+      );
+      return rolledOver;
+    });
+  }
+
   async updateTask(
     ownerId: string,
     taskId: string,
