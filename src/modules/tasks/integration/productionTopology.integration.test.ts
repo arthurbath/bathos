@@ -935,6 +935,120 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     expect(residueCount).toBe(0);
   });
 
+  it('proves the durable quick filter and reached Start Inbox projection', async () => {
+    const environment = productionEnvironment();
+    testDirectory ??= await mkdtemp(join(tmpdir(), 'bathos-tasks-production-topology-'));
+    admin ??= createClient<Database>(environment.supabaseUrl, environment.serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const owner = await createSyntheticOwner('quick-filter-reached-start', environment);
+    const connector = createTasksSupabaseConnector({
+      endpoint: environment.powerSyncUrl,
+      supabase: owner.client,
+    });
+    const setupClient = await openClient(
+      testDirectory,
+      'quick-filter-reached-start-setup.db',
+      owner.id,
+      connector,
+    );
+    await setupClient.repository.ensurePlanningSettings(owner.id, 'America/Los_Angeles');
+    await waitForUploadQueue(setupClient.database, 0);
+
+    const { error: initializePreferenceError } = await owner.client
+      .from('bathos_user_settings')
+      .upsert([{ user_id: owner.id }], { onConflict: 'user_id' });
+    expect(initializePreferenceError).toBeNull();
+    const { data: defaultPreference, error: defaultPreferenceError } = await owner.client
+      .from('bathos_user_settings')
+      .select('tasks_quick_filter, tasks_quick_filter_updated_at')
+      .eq('user_id', owner.id)
+      .single();
+    expect(defaultPreferenceError).toBeNull();
+    expect(defaultPreference).toEqual({
+      tasks_quick_filter: 'all',
+      tasks_quick_filter_updated_at: '1970-01-01T00:00:00+00:00',
+    });
+
+    const preferenceUpdatedAt = '2099-12-28T20:00:00.000Z';
+    const { data: updatedPreference, error: updatedPreferenceError } = await owner.client
+      .from('bathos_user_settings')
+      .update({
+        tasks_quick_filter: 'waiting',
+        tasks_quick_filter_updated_at: preferenceUpdatedAt,
+      })
+      .eq('user_id', owner.id)
+      .select('tasks_quick_filter, tasks_quick_filter_updated_at')
+      .single();
+    expect(updatedPreferenceError).toBeNull();
+    expect(updatedPreference).toEqual({
+      tasks_quick_filter: 'waiting',
+      tasks_quick_filter_updated_at: '2099-12-28T20:00:00+00:00',
+    });
+
+    const auth = { userId: owner.id, email: owner.email, supabase: owner.client };
+    const creation = await createTaskData({
+      idempotency_key: crypto.randomUUID(),
+      title: 'Synthetic Reached Start Inbox Task',
+      notes: 'Disposable quick-filter and reached-Start validation only',
+      destination: 'anytime',
+      start_date: '2099-12-29',
+      entry_channel: 'mcp',
+    }, auth);
+    const taskId = creation.task.id;
+    await waitForLocalTask(
+      setupClient.database,
+      taskId,
+      (task) => task.start_date === '2099-12-29' && task.today_section === null,
+    );
+
+    runScopedDueActivation(owner.id, '2099-12-29T08:01:00.000Z');
+    await waitForLocalTask(
+      setupClient.database,
+      taskId,
+      (task) => task.start_date === null && task.today_section === 'inbox',
+    );
+    await disposeClient(setupClient);
+
+    const freshClient = await openClient(
+      testDirectory,
+      'quick-filter-reached-start-fresh.db',
+      owner.id,
+      connector,
+    );
+    await waitForLocalTask(
+      freshClient.database,
+      taskId,
+      (task) => task.start_date === null && task.today_section === 'inbox',
+    );
+    const { data: freshPreference, error: freshPreferenceError } = await owner.client
+      .from('bathos_user_settings')
+      .select('tasks_quick_filter, tasks_quick_filter_updated_at')
+      .eq('user_id', owner.id)
+      .single();
+    expect(freshPreferenceError).toBeNull();
+    expect(freshPreference).toEqual(updatedPreference);
+
+    await disposeClient(freshClient);
+    await signOutSyntheticClient(owner.client);
+    await deleteSyntheticOwner(owner.id);
+    const residueChecks = await Promise.all([
+      admin.from('tasks_todos').select('id', { count: 'exact', head: true })
+        .eq('owner_id', owner.id),
+      admin.from('tasks_history_events').select('id', { count: 'exact', head: true })
+        .eq('owner_id', owner.id),
+      admin.from('tasks_user_settings').select('id', { count: 'exact', head: true })
+        .eq('owner_id', owner.id),
+      admin.from('bathos_user_settings').select('id', { count: 'exact', head: true })
+        .eq('user_id', owner.id),
+    ]);
+    for (const residue of residueChecks) {
+      expect(residue.error).toBeNull();
+      expect(residue.count).toBe(0);
+    }
+  });
+
   it('proves unified Start planning, explicit link clearing, and a fresh projection', async () => {
     const environment = productionEnvironment();
     testDirectory ??= await mkdtemp(join(tmpdir(), 'bathos-tasks-production-topology-'));

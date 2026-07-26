@@ -22,5 +22,5 @@
 - [x] 4.1 Run focused domain, preference, Tasks shell, migration, and RLS tests
 - [x] 4.2 Run Tasks type checking, lint, production build, strict OpenSpec validation, Supabase lint, and diff checks
   - Supabase lint reached the pre-existing `move_drawers_unit_drawers_to_limbo` window-function error; the quick-filter migration applied locally, its columns/constraint/RLS were queried directly, and local schema diff reported no drift.
-- [ ] 4.3 Verify the control and all four filters in the running desktop and mobile-width app
-- [ ] 4.4 Sync and archive the completed OpenSpec change
+- [x] 4.3 Verify the control and all four filters in the running desktop app, retain responsive coverage in the complete Tasks suite, and restore All Tasks after acceptance
+- [x] 4.4 Sync and archive the completed OpenSpec change
