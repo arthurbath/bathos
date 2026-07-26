@@ -1,5 +1,4 @@
 import { useState, type ChangeEvent } from 'react';
-import { DatabaseBackup, Download, Upload } from 'lucide-react';
 
 import {
   AlertDialog,
@@ -23,6 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import {
   getTaskExportFilename,
   parseTaskExport,
@@ -211,7 +211,7 @@ export function TaskDataPortabilityDialog({
           aria-label="Open Task Backup and Restore"
           onClick={() => setOpen(true)}
         >
-          <DatabaseBackup className="h-4 w-4" aria-hidden="true" />
+          <TASK_ICONS.DataPortability className="h-4 w-4" aria-hidden="true" />
           Manage Backups
         </Button>
       ) : (
@@ -223,7 +223,7 @@ export function TaskDataPortabilityDialog({
           aria-label="Task Backup and Restore"
           onClick={() => setOpen(true)}
         >
-          <DatabaseBackup className="h-4 w-4" aria-hidden="true" />
+          <TASK_ICONS.DataPortability className="h-4 w-4" aria-hidden="true" />
         </Button>
       )}
 
@@ -241,7 +241,7 @@ export function TaskDataPortabilityDialog({
                 </p>
               </div>
               <Button type="button" variant="outline" className="gap-2" disabled={busy} onClick={() => void createBackup()}>
-                <Download className="h-4 w-4" aria-hidden="true" />
+                <TASK_ICONS.Export className="h-4 w-4" aria-hidden="true" />
                 Download Backup
               </Button>
             </section>
@@ -350,7 +350,7 @@ export function TaskDataPortabilityDialog({
             ) : null}
             <div className="space-y-2">
               <Button type="button" variant="outline" className="gap-2" disabled={busy} onClick={downloadPreRestoreBackup}>
-                <Download className="h-4 w-4" aria-hidden="true" />
+                <TASK_ICONS.Export className="h-4 w-4" aria-hidden="true" />
                 {backupDownloaded ? 'Download Backup Again' : 'Download Required Backup'}
               </Button>
               <p className="text-xs text-muted-foreground">

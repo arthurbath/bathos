@@ -29,7 +29,13 @@ export type TaskListView = TaskDestination | 'today' | 'upcoming' | 'done';
 export type TodayTaskSection = 'inbox' | 'now' | 'next' | 'later';
 export type RetainedTaskViewPlacement = Pick<
   TaskTodo,
-  'destination' | 'today_section' | 'start_date' | 'deadline' | 'order_key'
+  | 'destination'
+  | 'today_section'
+  | 'start_date'
+  | 'deadline'
+  | 'order_key'
+  | 'area_id'
+  | 'project_id'
 >;
 export type TaskListCreateInput = Omit<
   CreateTaskInput,
@@ -493,7 +499,12 @@ export function useTaskList(
     [planningDate, tasks, updateTask, view],
   );
   const reorderTaskTo = useCallback(
-    async (taskId: string, targetTaskId: string, placement: 'before' | 'after') => {
+    async (
+      taskId: string,
+      targetTaskId: string,
+      placement: 'before' | 'after',
+      organizationPatch?: Pick<EditableTaskPatch, 'area_id' | 'project_id'>,
+    ) => {
       const currentTask = tasks.find((task) => task.id === taskId);
       const targetTask = tasks.find((task) => task.id === targetTaskId);
       if (!currentTask || !targetTask || currentTask.id === targetTask.id) {
@@ -517,7 +528,10 @@ export function useTaskList(
         targetTaskId,
         placement,
       );
-      const patch: EditableTaskPatch = { order_key: orderKey };
+      const patch: EditableTaskPatch = {
+        ...organizationPatch,
+        order_key: orderKey,
+      };
       if (isCrossHorizonTodayDrop) {
         patch.today_section = getTodayTaskSection(targetTask, planningDate);
       }
@@ -587,6 +601,8 @@ export function taskWithRetainedViewPlacement(
     start_date: retainedPlacement.start_date,
     deadline: retainedPlacement.deadline,
     order_key: retainedPlacement.order_key,
+    area_id: retainedPlacement.area_id,
+    project_id: retainedPlacement.project_id,
   };
 }
 

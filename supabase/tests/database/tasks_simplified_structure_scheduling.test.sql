@@ -246,8 +246,8 @@ SELECT is(
 SELECT is(
   (SELECT today_section FROM public.tasks_todos
     WHERE id = 'c2000000-0000-4000-8000-000000000035'),
-  'next',
-  'activates a reached Start into Today Next'
+  'inbox',
+  'activates a reached Start into Today Inbox'
 );
 SELECT is(
   (SELECT status FROM public.tasks_reminders

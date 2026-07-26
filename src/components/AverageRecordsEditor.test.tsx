@@ -71,7 +71,7 @@ describe('AverageRecordsEditor', () => {
     );
 
     try {
-      const addButton = container.querySelector('button[aria-label="Add month record"]');
+      const addButton = container.querySelector('button[aria-label="Add Month Record"]');
       expect(addButton).toBeTruthy();
       expect(addButton?.textContent?.trim()).toBe('');
     } finally {
@@ -91,7 +91,7 @@ describe('AverageRecordsEditor', () => {
 
     try {
       await flushUiTwice();
-      const addButton = container.querySelector('button[aria-label="Add month record"]');
+      const addButton = container.querySelector('button[aria-label="Add Month Record"]');
       expect(document.activeElement).toBe(addButton);
     } finally {
       unmount(root, container);
@@ -136,7 +136,7 @@ describe('AverageRecordsEditor', () => {
     const { container, root } = mount(<Harness />);
 
     try {
-      const clearButton = container.querySelector('button[aria-label="Clear month record"]') as HTMLButtonElement | null;
+      const clearButton = container.querySelector('button[aria-label="Clear Month Record"]') as HTMLButtonElement | null;
       act(() => {
         clearButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
@@ -176,7 +176,7 @@ describe('AverageRecordsEditor', () => {
     );
 
     try {
-      const addButton = container.querySelector('button[aria-label="Add year record"]') as HTMLButtonElement | null;
+      const addButton = container.querySelector('button[aria-label="Add Year Record"]') as HTMLButtonElement | null;
       act(() => {
         addButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
@@ -205,7 +205,7 @@ describe('AverageRecordsEditor', () => {
     const { container, root } = mount(<Harness />);
 
     try {
-      const addButton = container.querySelector('button[aria-label="Add year record"]') as HTMLButtonElement | null;
+      const addButton = container.querySelector('button[aria-label="Add Year Record"]') as HTMLButtonElement | null;
       act(() => {
         addButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
@@ -383,7 +383,7 @@ describe('AverageRecordsEditor', () => {
     );
 
     try {
-      expect(container.textContent).toContain('Count records from the current month toward average');
+      expect(container.textContent).toContain('Count Records from the Current Month Toward Average');
       const checkbox = container.querySelector('button[role="checkbox"]') as HTMLButtonElement | null;
       expect(checkbox?.getAttribute('aria-checked')).toBe('false');
       expect(container.textContent).toContain('Monthly average:');
@@ -410,7 +410,7 @@ describe('AverageRecordsEditor', () => {
       const checkbox = container.querySelector('button[role="checkbox"]') as HTMLButtonElement | null;
       expect(checkbox?.getAttribute('aria-checked')).toBe('true');
       const tooltipTrigger = Array.from(container.querySelectorAll('[role="button"]'))
-        .find((element) => element.textContent?.includes('Count records from the current year toward average')) as HTMLElement | undefined;
+        .find((element) => element.textContent?.includes('Count Records from the Current Year Toward Average')) as HTMLElement | undefined;
       expect(tooltipTrigger).toBeTruthy();
 
       act(() => {

@@ -353,7 +353,7 @@ export class TaskRepository {
         activated.push(await updateOwnedTask(
           transaction,
           current,
-          { start_date: null, today_section: 'next' },
+          { start_date: null, today_section: 'inbox' },
           this.createId(),
           occurredAt,
           { channel: 'native', actorType: 'system' },
@@ -974,10 +974,10 @@ function normalizeEditablePatch(patch: EditableTaskPatch): EditableTaskPatch {
 function normalizeTitle(title: string): string {
   const normalized = title.trim();
   if (!normalized) {
-    throw new InvalidTaskMutationError('A task title is required');
+    throw new InvalidTaskMutationError('A task summary is required');
   }
   if (Array.from(normalized).length > 500) {
-    throw new InvalidTaskMutationError('A task title cannot exceed 500 characters');
+    throw new InvalidTaskMutationError('A task summary cannot exceed 500 characters');
   }
   return normalized;
 }

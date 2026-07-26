@@ -1,12 +1,12 @@
-import { ChevronLeft, ChevronRight, FolderKanban, ListTodo } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { shouldHandleWithBrowser, handleClientSideLinkNavigation } from '@/lib/navigation';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import { TaskHierarchyEditableTitle } from '@/modules/tasks/components/TaskProjectsView';
-import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
 import { getTaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
@@ -67,11 +67,11 @@ export function TaskAreaDetailView({
         className="inline-flex min-h-9 items-center gap-1.5 rounded-sm text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-        Projects
+        Areas &amp; Projects
       </a>
 
       <div className="flex min-h-10 items-center gap-2">
-        <FolderKanban className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+        <TASK_ICONS.Area className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
         <TaskHierarchyEditableTitle
           value={area.title}
           onSave={(title) => hierarchy.updateArea(area.id, { title })}
@@ -80,11 +80,10 @@ export function TaskAreaDetailView({
 
       <AreaWorkSection
         title="Loose Tasks"
-        icon={ListTodo}
-        count={detail.tasks.length}
+        icon={TASK_ICONS.Task}
       >
         {detail.tasks.length === 0 ? (
-          <p className="px-4 py-5 text-sm text-muted-foreground">No Loose Tasks</p>
+          <p className="px-4 py-5 text-sm text-muted-foreground">No loose tasks</p>
         ) : detail.tasks.map((task) => {
           const route = getTaskPlanningRoute(task, planningDate);
           const href = `${basePath}/${route}`;
@@ -119,11 +118,10 @@ export function TaskAreaDetailView({
 
       <AreaWorkSection
         title="Projects"
-        icon={FolderKanban}
-        count={activeProjects.length}
+        icon={TASK_ICONS.Project}
       >
         {activeProjects.length === 0 ? (
-          <p className="px-4 py-5 text-sm text-muted-foreground">No Active Projects</p>
+          <p className="px-4 py-5 text-sm text-muted-foreground">No active projects</p>
         ) : activeProjects.map((project) => {
           const href = `${basePath}/projects/${project.id}`;
           return (
@@ -146,12 +144,10 @@ export function TaskAreaDetailView({
 function AreaWorkSection({
   title,
   icon: Icon,
-  count,
   children,
 }: {
   title: string;
   icon: LucideIcon;
-  count: number;
   children: ReactNode;
 }) {
   const headingId = `task-area-${title.toLocaleLowerCase().replaceAll(' ', '-')}`;
@@ -161,7 +157,6 @@ function AreaWorkSection({
         <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         <h3 id={headingId} className="flex items-center gap-2 text-sm font-semibold text-foreground">
           {title}
-          <TaskCountBadge count={count} label="Items" />
         </h3>
       </div>
       <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">

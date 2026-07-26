@@ -78,10 +78,15 @@ export function getTaskKeyboardCommand(
   const applicationModifier = macLikePlatform
     ? gesture.metaKey && !gesture.ctrlKey
     : gesture.ctrlKey && !gesture.metaKey;
-  const taskControlModifier = gesture.ctrlKey
-    && !gesture.metaKey
-    && !gesture.altKey
-    && gesture.shiftKey === !macLikePlatform;
+  const taskControlModifier = macLikePlatform
+    ? gesture.ctrlKey
+      && !gesture.metaKey
+      && !gesture.altKey
+      && !gesture.shiftKey
+    : gesture.altKey
+      && gesture.shiftKey
+      && !gesture.metaKey
+      && !gesture.ctrlKey;
 
   if (applicationModifier && !gesture.altKey && gesture.shiftKey && key === 'z') {
     return 'redo';

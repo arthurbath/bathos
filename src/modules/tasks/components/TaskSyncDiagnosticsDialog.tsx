@@ -1,5 +1,3 @@
-import { Cloud, HardDrive } from 'lucide-react';
-
 import {
   Dialog,
   DialogBody,
@@ -10,6 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import {
   getTasksStorageStatusLabel,
   type TaskSyncActivityState,
@@ -27,12 +26,16 @@ import {
 
 export function TaskSyncDiagnosticsDialog({
   triggerVariant = 'status',
+  inAppReminderStatus,
 }: {
   triggerVariant?: 'status' | 'config';
+  inAppReminderStatus?: 'available' | 'delayed';
 }) {
   const diagnostics = useTaskSyncDiagnostics();
   const label = getTasksStorageStatusLabel(diagnostics);
-  const Icon = diagnostics.mode === 'connected' ? Cloud : HardDrive;
+  const Icon = diagnostics.mode === 'connected'
+    ? TASK_ICONS.CloudSync
+    : TASK_ICONS.LocalStorage;
   const hasError = diagnostics.uploadState === 'error'
     || diagnostics.downloadState === 'error'
     || isTaskSyncDegradationState(diagnostics.healthState)
@@ -82,6 +85,13 @@ export function TaskSyncDiagnosticsDialog({
 
           <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 pt-2 text-sm">
             <DiagnosticRow label="Connection" value={formatConnection(diagnostics.syncState)} />
+            {inAppReminderStatus ? (
+              <DiagnosticRow
+                label="In-App Reminders"
+                value={inAppReminderStatus === 'delayed' ? 'Delayed' : 'Available'}
+                valueClassName={inAppReminderStatus === 'delayed' ? 'text-warning' : undefined}
+              />
+            ) : null}
             <DiagnosticRow
               label="Offline Launch"
               value={formatOfflineLaunch(diagnostics.offlineLaunchState)}
@@ -171,11 +181,19 @@ function HealthEvents({
   );
 }
 
-function DiagnosticRow({ label, value }: { label: string; value: string }) {
+function DiagnosticRow({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
   return (
     <>
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right font-medium text-foreground">{value}</dd>
+      <dd className={cn('text-right font-medium text-foreground', valueClassName)}>{value}</dd>
     </>
   );
 }

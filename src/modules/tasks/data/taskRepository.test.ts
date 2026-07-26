@@ -83,7 +83,7 @@ describe('task repository', () => {
     ).rejects.toThrow('A recognized IANA planning time zone is required');
   });
 
-  it('activates reached local start dates into Today Next', async () => {
+  it('activates reached local start dates into Today Inbox', async () => {
     const { repository, transaction } = createHarness(null);
     vi.mocked(transaction.getAll).mockResolvedValueOnce([
       { ...existingTask, start_date: '2026-07-20' },
@@ -95,7 +95,7 @@ describe('task repository', () => {
       expect.objectContaining({
         id: 'task-a',
         start_date: null,
-        today_section: 'next',
+        today_section: 'inbox',
         last_mutation_channel: 'native',
         last_actor_type: 'system',
         revision: 2,

@@ -54,12 +54,12 @@ export function FeedbackDialog({ userId, trigger }: FeedbackDialogProps) {
     const f = e.target.files?.[0];
     if (!f) return;
     if (!ACCEPTED_TYPES.includes(f.type)) {
-      toast({ title: 'Unsupported file type', variant: 'destructive' });
+      toast({ title: 'Unsupported File Type', variant: 'destructive' });
       e.target.value = '';
       return;
     }
     if (f.size > MAX_FILE_SIZE) {
-      toast({ title: 'File must be under 5 MB', variant: 'destructive' });
+      toast({ title: 'File Must Be Under 5 MB', variant: 'destructive' });
       e.target.value = '';
       return;
     }
@@ -111,12 +111,12 @@ export function FeedbackDialog({ userId, trigger }: FeedbackDialogProps) {
       });
       if (invokeError) throw invokeError;
 
-      toast({ title: 'Feedback sent' });
+      toast({ title: 'Feedback Sent' });
       reset();
       setOpen(false);
     } catch (err: unknown) {
       toast({
-        title: 'Failed to send feedback',
+        title: 'Failed to Send Feedback',
         description: err instanceof Error ? err.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -129,7 +129,7 @@ export function FeedbackDialog({ userId, trigger }: FeedbackDialogProps) {
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
       <DialogTrigger asChild>
         {trigger ?? (
-          <Button variant="clear" size="sm" className="h-9 w-9 p-0" title="Send feedback">
+          <Button variant="clear" size="sm" className="h-9 w-9 p-0" title="Send Feedback">
             <Megaphone className="h-4 w-4" />
           </Button>
         )}
@@ -147,7 +147,7 @@ export function FeedbackDialog({ userId, trigger }: FeedbackDialogProps) {
         <DialogBody className="space-y-4 pt-5">
           <div>
             <Textarea
-              placeholder="Tell me something"
+              placeholder="Tell Me Something"
               value={message}
               onChange={(e) => setMessage(e.target.value.slice(0, MAX_MESSAGE))}
               rows={5}

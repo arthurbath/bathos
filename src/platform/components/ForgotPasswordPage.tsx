@@ -21,14 +21,14 @@ export default function ForgotPasswordPage() {
 
     const rl = await checkAuthRateLimit('forgot_password');
     if (rl.rateLimited) {
-      toast({ title: 'Too many attempts', description: `Please wait ${formatRetryAfter(rl.retryAfterSeconds)} before trying again.`, variant: 'destructive' });
+      toast({ title: 'Too Many Attempts', description: `Please wait ${formatRetryAfter(rl.retryAfterSeconds)} before trying again.`, variant: 'destructive' });
       setLoading(false);
       return;
     }
 
     const { error } = await resetPassword(email.trim().toLowerCase());
     if (error) {
-      toast({ title: 'Failed to send reset email', description: error.message, variant: 'destructive' });
+      toast({ title: 'Failed to Send Reset Email', description: error.message, variant: 'destructive' });
     } else {
       setSent(true);
     }
@@ -65,7 +65,7 @@ export default function ForgotPasswordPage() {
           <form data-bathos-return-submits="true" onSubmit={handleSubmit} className="space-y-4">
             <Input
               type="email"
-              placeholder="Enter your email"
+              placeholder="Enter Your Email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required

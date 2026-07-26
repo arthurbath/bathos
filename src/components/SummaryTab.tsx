@@ -575,7 +575,7 @@ export function SummaryTab({
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Per-expense Breakdown</CardTitle>
+            <CardTitle>Per-Expense Breakdown</CardTitle>
             {hasFullSplitExpenses && (
               <div className="flex items-center gap-2">
                 <Switch id="hide-full-splits" checked={hideFullSplits} onCheckedChange={setHideFullSplits} />

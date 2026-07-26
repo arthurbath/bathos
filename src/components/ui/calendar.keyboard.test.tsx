@@ -264,7 +264,7 @@ describe('Calendar keyboard navigation', () => {
 
     try {
       const firstEnabledDay = container.querySelector<HTMLButtonElement>(
-        'button[name="day"][aria-current="date"]',
+        'button[name="day"][aria-selected="true"]',
       );
       expect(firstEnabledDay).not.toBeDisabled();
 

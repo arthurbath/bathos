@@ -1,127 +1,121 @@
-# Tasks Start Picker Design QA
+# Design QA: Compact Flat Task Rows
 
-**Date**: 2026 Jul 23
+## Comparison Target
 
-**Status**: Passed after one responsive correction
-**Scope**: Unified to-do Start picker in the open editor and to-do action menu
+- Source visual truth: `/Users/Art/.codex/generated_images/019f7ceb-0996-77b2-89b6-068de9908343/call_kgudnwRfGjNxgjSk8VyhVicT.png`
+- Rendered implementation: `/private/tmp/bathos-tasks-compact-expanded-fire-boze-top.jpg`
+- Combined comparison: `/private/tmp/bathos-tasks-design-comparison.png`
+- Route: `http://localhost:8080/tasks/anytime`
+- State: Dark-mode Anytime list with compact collapsed rows and the `Fire Boze` task expanded
 
-## Visual Truth and Evidence
+## Viewport and Normalization
 
-**Source visual truth**: `/Users/Art/.codex/attachments/19b64303-4535-432d-a94c-d484c3ab3cdc/image-1.png`
+- Source pixels: 923 x 1704. The generated source has no reliable CSS viewport or density metadata.
+- Implementation pixels: 432 x 862 from a 432 x 862 CSS viewport at device pixel ratio 2. The in-app browser screenshot API returned one output pixel per CSS pixel.
+- Comparison normalization: The source was aspect-preservingly fitted to 432 pixels wide, yielding 432 x 798 pixels, and top-aligned beside the unscaled 432 x 862 implementation. The different source aspect ratio remains visible rather than being stretched or hidden.
+- The comparison judges the requested task-row density and state treatment, not false pixel precision across the source's unknown density.
 
-The Things screenshot is the structural interaction reference. BathOS intentionally retains its own dark-only visual language, Inter typography, semantic tokens, shared controls, and Lucide icons.
+## Full-View Comparison Evidence
 
-**Desktop implementation**:
+- Collapsed tasks form a gapless, borderless, background-free stack in both source and implementation.
+- Checkbox, title, metadata, source-link, and actions columns remain aligned, so adjacent content remains clearly associated without card boundaries.
+- The implementation's collapsed task header measures exactly 44 CSS pixels.
+- The expanded task uses one quiet rounded background that contains its summary row and editor, with zero-pixel borders and no shadow.
+- Existing editor control heights differ from the generated source. This is an expected retained product constraint and was explicitly outside this row-presentation change.
 
-- Full view: `/private/tmp/bathos-tasks-start-picker-desktop-final-full.png`
-- Picker region: `/private/tmp/bathos-tasks-start-picker-desktop-final.png`
-- Combined comparison: `/private/tmp/bathos-tasks-start-picker-comparison-desktop-final.png`
-- Browser viewport: 1,280 by 900 CSS px
-- Implementation screenshot: 1,280 by 900 px
-- Picker region: 320 by 575 CSS px and 320 by 575 screenshot px
+## Focused Region Evidence
 
-**Mobile implementation**:
+A separate crop was not required because task-row typography, spacing, and the expanded boundary are readable in the combined full-view comparison. Keyboard focus was additionally verified in `/private/tmp/bathos-tasks-compact-focused.jpg`:
 
-- Full view after correction: `/private/tmp/bathos-tasks-start-picker-mobile-dialog-revised.png`
-- Picker region after correction: `/private/tmp/bathos-tasks-start-picker-mobile-panel-revised.png`
-- Combined comparison: `/private/tmp/bathos-tasks-start-picker-comparison-mobile-revised.png`
-- Browser viewport: 390 by 844 CSS px
-- Implementation screenshot: 390 by 844 px
-- Picker region: 320 by 575 CSS px and 320 by 575 screenshot px
+- whole-task focus uses `rgba(235, 235, 235, 0.05)` background
+- row height remains 44 CSS pixels
+- box shadow is `none`
+- no task focus-ring classes are present
+- the row retains a subtle 6-pixel radius only while highlighted
 
-**Source normalization**:
+## Required Fidelity Surfaces
 
-- Source screenshot: 566 by 692 px
-- Source picker crop: 470 by 575 px
-- The combined comparisons align the 575 px picker heights without rescaling either crop
-- The source and implementation widths remain different because BathOS uses its established compact popover width
-
-## Compared State
-
-The compared state is an open to-do planned for Today Later with no reminder time. The picker displays Inbox, Now, Next, and Later, the current month, disabled dates through the owner planning date, enabled future dates, the visible Reminder control, and Clear. Later is selected.
+- Fonts and typography: Existing BathOS Inter/system typography, weights, line heights, truncation, and metadata hierarchy are preserved.
+- Spacing and layout rhythm: The requested 44-pixel rows, compact spacing, no resting gaps, and expanded containment match the selected direction.
+- Colors and visual tokens: Resting rows use the page background. Focus, selection, and expansion use the existing quiet semantic foreground surface at 5% opacity.
+- Image quality and asset fidelity: No raster assets were introduced into the product. Existing Lucide icons remain sharp and consistent.
+- Copy and content: Existing task labels and realistic production-like content are unchanged.
 
 ## Findings
 
-No actionable P0, P1, or P2 finding remains.
-
-### Fonts and Typography
-
-The implementation uses BathOS Inter typography with the established UI sizes and weights. The source uses Apple's platform typography at a larger scale. This is an intentional visual-system difference rather than drift. Labels, month title, dates, and selected-horizon text remain readable at both tested widths.
-
-### Spacing and Layout Rhythm
-
-The desktop popover is compact, evenly sectioned, and aligned with the Start trigger. The corrected mobile dialog centers the 320 px picker inside the 390 px viewport with 35 px side clearance. The calendar, Reminder control, and Clear action remain fully visible without horizontal clipping or persistent-control overlap.
-
-### Colors and Visual Tokens
-
-The implementation uses BathOS background, foreground, muted, accent, input, border, warning, and info tokens. The source's blue selected fill is intentionally replaced by the established BathOS selected-control treatment. Contrast and hierarchy remain clear in the reviewed states.
-
-### Image Quality, Icons, and Assets
-
-The reference contains no raster content that the Tasks picker needs to reproduce. The implementation uses Lucide Inbox, clock, Bell, Calendar, and X icons according to the BathOS icon policy. No placeholder imagery, CSS artwork, handcrafted SVG, emoji, or approximate image asset was introduced.
-
-### Copy and Content
-
-The visible app-specific text is concise and self-contained: Today, Inbox, Now, Next, Later, Reminder, Clear, and Start. The menu uses Move, Do, Start, and Delete. Cancel, Move Up, Move Down, and When are absent.
-
-### Interaction and Accessibility
-
-- Opening Start from the editor focuses the selected Today horizon
-- Command+E opens the same picker and focuses the enabled Reminder Time input
-- Escape closes the picker and restores focus to its Start trigger
-- Today and earlier calendar dates are disabled, while future dates are enabled
-- The picker exposes tabbable horizon, month, navigation, calendar, Reminder, and Clear controls in DOM order
-- The action-menu Start command opens the same complete picker in a named dialog
-- The 390 by 844 mobile dialog exposes a named Close control and does not clip picker content
-- The reviewed browser console contained no errors or warnings
-
-## Full-view and Focused-region Evidence
-
-The desktop and mobile full views establish the picker in the real authenticated Tasks layout, including the open to-do editor, surrounding rows, navigation, and mobile safe area. Focused picker crops were also required because the calendar, disabled dates, selected horizon, reminder field, icon alignment, dividers, and Clear action were too small to judge reliably from full-view evidence alone.
+No actionable P0, P1, or P2 differences remain for the requested task-row redesign.
 
 ## Comparison History
 
-### Pass 1
+- Pass 1: Compared the selected reference with the rendered expanded `Fire Boze` state. The flat density, alignment, focus surface, and expanded containment matched the selected direction. The implementation retained the existing editor control dimensions by design. No visual fix was required after this comparison.
 
-**Finding**: P1 mobile horizontal clipping in the action-menu Start dialog
+## Interactions and Console
 
-**Evidence**: The first 390 by 844 capture placed the Tasks-specific picker at a negative left offset. The task title lost its first character, and the Today label, Reminder icon, and Clear icon were clipped.
-
-**Cause**: The shared `DialogBody` supplies a negative horizontal margin for ordinary padded dialogs. The Start dialog removed its padding without neutralizing that margin.
-
-**Fix**: The Start dialog now overrides the shared negative margin with `mx-0`, and the Tasks picker centers itself with `mx-auto`.
-
-### Pass 2
-
-**Post-fix evidence**: `/private/tmp/bathos-tasks-start-picker-mobile-dialog-revised.png`
-
-The picker now begins at x 35 and ends at x 355 in the 390 px viewport. The title, Today label, Reminder icon, and Clear icon are complete. The corrected mobile combined comparison contains no remaining P0, P1, or P2 mismatch.
-
-## Primary Interactions Tested
-
-1. Open a to-do and activate the inline Start field
-2. Open the to-do ellipsis menu and confirm its exact action structure
-3. Open Start from the action menu
-4. Invoke Command+E on the selected to-do and confirm Reminder Time receives focus
-5. Press Escape and confirm focus returns to Start
-6. Inspect calendar enablement across today, past dates, and future dates
-7. Render and inspect desktop and mobile picker states
-8. Check the browser console for errors and warnings
-
-No task values were changed during rendered QA.
-
-## Implementation Checklist
-
-- [x] Correct the mobile Start dialog offset
-- [x] Re-render the same mobile state
-- [x] Recreate the focused combined comparison
-- [x] Confirm desktop alignment after the correction
-- [x] Confirm keyboard shortcut focus and focus restoration
-- [x] Confirm menu labels and omitted actions
-- [x] Confirm the browser console is clean
+- Verified collapsed rendering, whole-task keyboard focus, opening a focused task, expanded editor containment, and scroll alignment.
+- Browser console contained only Vite connection and React development-tool informational messages. No application errors were present.
 
 ## Follow-up Polish
 
-No P3 follow-up is required for the reviewed scope.
+None required for this change.
+
+final result: passed
+
+# Design QA: Task Metadata Chips And Markdown Source Treatment
+
+## Comparison Target
+
+- Source visual truth: `/Users/Art/Desktop/Screenshot 2026-07-25 at 9.14.32 AM.png`
+- Rendered implementation: `/private/tmp/bathos-tasks-markdown-link-treatment.png`
+- Combined comparison: `/private/tmp/bathos-tasks-markdown-comparison.png`
+- Mobile task-row evidence: `/private/tmp/bathos-tasks-mobile-metadata-chips.png`
+- Route: `http://localhost:8080/tasks/anytime`
+- State: Dark-mode Anytime list at mobile width, with an existing Mail-created task expanded to expose live Markdown source
+
+## Viewport And Normalization
+
+- Source pixels: 888 x 86.
+- Implementation viewport: 390 x 844 CSS pixels.
+- Combined comparison: 1080 x 926 pixels. The source remains aspect-preserving at the top. A focused implementation crop is enlarged beneath it so link-label, destination, and delimiter colors can be judged in one comparison input.
+- Desktop responsive behavior was separately verified at 1280 x 720 CSS pixels.
+
+## Full-View Comparison Evidence
+
+- Mobile actionability and Deadline metadata use quiet compact chips without changing the 44-pixel collapsed task-row height.
+- Compact Deadline offsets use the full `days` unit, including `0 days`, `4 days`, `6 days`, and `-4 days`.
+- The expanded task editor uses 8-pixel horizontal padding at mobile width and 14-pixel horizontal padding at the desktop breakpoint.
+- Desktop metadata retains its unchipped presentation.
+
+## Focused Region Evidence
+
+- Markdown markers render in the existing monospace stack at `rgb(140, 140, 140)`.
+- Markdown link labels render in the standard BathOS foreground at `rgb(235, 235, 235)`.
+- Markdown destinations render in semantic info blue at `rgb(66, 140, 215)`.
+- The complete Markdown source remains one safe clickable link, and the stored source text is unchanged.
+- Inline-code backticks use the same muted marker treatment while code contents retain their existing fixed-width presentation.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: Content retains BathOS Inter/system typography; syntax markers alone use the established monospace stack.
+- Spacing and layout rhythm: Chips remain small enough to preserve row density, and the editor receives only the requested slight horizontal inset increase.
+- Colors and visual tokens: All treatments use existing semantic BathOS tokens rather than new raw UI colors.
+- Image quality and asset fidelity: No product image assets were introduced.
+- Copy and content: Existing task content is unchanged; only compact Deadline unit copy changes from `d` to `days`.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain for the requested metadata-chip, drawer-padding, or Markdown-source treatment.
+
+## Comparison History
+
+- Pass 1: Compared the Things Markdown reference and the live BathOS editor in one combined image. The implementation matched the requested hierarchy: muted fixed-width markers, ordinary white label text, and blue destination text. No follow-up visual correction was required.
+
+## Interactions And Console
+
+- Verified task open and close behavior, responsive metadata treatment, existing safe link behavior, and unchanged task-row height.
+- Browser console contained no warnings or errors during the mobile and desktop checks.
+
+## Follow-Up Polish
+
+None required for this change.
 
 final result: passed

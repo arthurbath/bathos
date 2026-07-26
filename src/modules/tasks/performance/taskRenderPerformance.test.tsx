@@ -10,14 +10,18 @@ import type { TaskTodo } from '@/modules/tasks/types/tasks';
 const mockTaskList = vi.fn();
 const mockTaskSearch = vi.fn();
 
-vi.mock('@/modules/tasks/hooks/useTaskList', () => ({
+vi.mock('@/modules/tasks/hooks/useTaskList', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/modules/tasks/hooks/useTaskList')>(),
   useTaskList: (...args: unknown[]) => mockTaskList(...args),
-  getTodayTaskSection: (task: TaskTodo, planningDate: string) => (
-    task.start_date !== null && task.start_date < planningDate ? 'unfinished' : task.today_section
-  ),
 }));
 vi.mock('@/modules/tasks/hooks/useTaskSearch', () => ({
   useTaskSearch: (...args: unknown[]) => mockTaskSearch(...args),
+}));
+vi.mock('@/modules/tasks/hooks/useTaskQuickFilterPreference', () => ({
+  useTaskQuickFilterPreference: () => ({
+    filter: 'all',
+    setFilter: vi.fn(),
+  }),
 }));
 vi.mock('@/modules/tasks/hooks/useTaskUndo', () => ({
   useTaskUndo: () => ({
@@ -125,13 +129,15 @@ describePerformance('Tasks rendered-view performance', () => {
       container.querySelector<HTMLElement>('[data-task-title-control]')?.focus();
       const searchStartedAt = performance.now();
       act(() => {
-        container.querySelector<HTMLButtonElement>('[aria-label="Search Tasks and Views"]')?.click();
+        container.querySelector<HTMLButtonElement>(
+          '[aria-label="Quick Find Tasks, Projects, and Areas"]',
+        )?.click();
       });
       const searchOpenMs = performance.now() - searchStartedAt;
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
-      expect(dialog).toHaveAccessibleName('Search Tasks');
-      expect(dialog?.textContent).toContain('Tasks (10000)');
-      expect(dialog?.querySelectorAll('a[href^="/tasks/"]')).toHaveLength(28);
+      expect(dialog).toHaveAccessibleName('Quick Find');
+      expect(dialog?.querySelector('[aria-label="Find Tasks, Projects, and Areas"]')).toBeTruthy();
+      expect(dialog?.querySelectorAll('select')).toHaveLength(0);
       expect(searchOpenMs).toBeLessThan(1_000);
 
       console.info(

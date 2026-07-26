@@ -255,7 +255,7 @@ describe('GarageServicingsGrid servicing dialog', () => {
     const { container, root } = mount(<GarageServicingsGrid {...buildProps()} />);
 
     try {
-      const addButton = document.body.querySelector('button[aria-label="Add servicing"]') as HTMLButtonElement | null;
+      const addButton = document.body.querySelector('button[aria-label="Add Servicing"]') as HTMLButtonElement | null;
       expect(addButton).toBeTruthy();
 
       click(addButton!);
@@ -284,7 +284,7 @@ describe('GarageServicingsGrid servicing dialog', () => {
     );
 
     try {
-      const addButton = document.body.querySelector('button[aria-label="Add servicing"]') as HTMLButtonElement | null;
+      const addButton = document.body.querySelector('button[aria-label="Add Servicing"]') as HTMLButtonElement | null;
       expect(addButton).toBeTruthy();
       click(addButton!);
 
@@ -300,11 +300,11 @@ describe('GarageServicingsGrid servicing dialog', () => {
       setFileInputFiles(receiptInput!, [fileA, fileB]);
 
       await waitForCondition(() => {
-        expect((document.body.querySelector('input[aria-label="Receipt name for invoice-a.pdf"]') as HTMLInputElement | null)?.value).toBe('invoice-a');
-        expect((document.body.querySelector('input[aria-label="Receipt name for invoice-b.jpg"]') as HTMLInputElement | null)?.value).toBe('invoice-b');
+        expect((document.body.querySelector('input[aria-label="Receipt Name for invoice-a.pdf"]') as HTMLInputElement | null)?.value).toBe('invoice-a');
+        expect((document.body.querySelector('input[aria-label="Receipt Name for invoice-b.jpg"]') as HTMLInputElement | null)?.value).toBe('invoice-b');
       });
 
-      const receiptNameInput = document.body.querySelector('input[aria-label="Receipt name for invoice-b.jpg"]') as HTMLInputElement;
+      const receiptNameInput = document.body.querySelector('input[aria-label="Receipt Name for invoice-b.jpg"]') as HTMLInputElement;
       setInputValue(receiptNameInput, 'Warranty Photo');
 
       const removeButton = document.body.querySelector('button[aria-label="Remove invoice-a.pdf"]') as HTMLButtonElement | null;
@@ -312,8 +312,8 @@ describe('GarageServicingsGrid servicing dialog', () => {
       click(removeButton!);
 
       await waitForCondition(() => {
-        expect(document.body.querySelector('input[aria-label="Receipt name for invoice-a.pdf"]')).toBeNull();
-        expect((document.body.querySelector('input[aria-label="Receipt name for invoice-b.jpg"]') as HTMLInputElement | null)?.value).toBe('Warranty Photo');
+        expect(document.body.querySelector('input[aria-label="Receipt Name for invoice-a.pdf"]')).toBeNull();
+        expect((document.body.querySelector('input[aria-label="Receipt Name for invoice-b.jpg"]') as HTMLInputElement | null)?.value).toBe('Warranty Photo');
       });
 
       const saveButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Save') as HTMLButtonElement | undefined;
@@ -338,7 +338,7 @@ describe('GarageServicingsGrid servicing dialog', () => {
     const { container, root } = mount(<GarageServicingsGrid {...buildProps()} />);
 
     try {
-      const addButton = document.body.querySelector('button[aria-label="Add servicing"]') as HTMLButtonElement | null;
+      const addButton = document.body.querySelector('button[aria-label="Add Servicing"]') as HTMLButtonElement | null;
       expect(addButton).toBeTruthy();
       click(addButton!);
 
@@ -392,14 +392,14 @@ describe('GarageServicingsGrid servicing dialog', () => {
     );
 
     try {
-      const outcomesButton = Array.from(document.body.querySelectorAll('button[aria-label="Open servicing detail for 2026-03-02"]'))
+      const outcomesButton = Array.from(document.body.querySelectorAll('button[aria-label="Open Servicing Detail for 2026-03-02"]'))
         .find((button) => button.textContent?.trim() === '100') as HTMLButtonElement | undefined;
       expect(outcomesButton).toBeTruthy();
 
       click(outcomesButton!);
 
       await waitForCondition(() => {
-        const addOutcomeButton = document.body.querySelector('button[aria-label="Add service outcome"]') as HTMLButtonElement | null;
+        const addOutcomeButton = document.body.querySelector('button[aria-label="Add Service Outcome"]') as HTMLButtonElement | null;
         expect(addOutcomeButton).toBeTruthy();
         expect(document.activeElement).toBe(addOutcomeButton);
       });
@@ -428,14 +428,14 @@ describe('GarageServicingsGrid servicing dialog', () => {
     );
 
     try {
-      const receiptButton = Array.from(document.body.querySelectorAll('button[aria-label="Open servicing detail for 2026-03-02"]'))
+      const receiptButton = Array.from(document.body.querySelectorAll('button[aria-label="Open Servicing Detail for 2026-03-02"]'))
         .find((button) => button.textContent?.trim() === 'Receipt') as HTMLButtonElement | undefined;
       expect(receiptButton).toBeTruthy();
 
       click(receiptButton!);
 
       await waitForCondition(() => {
-        const receiptAddButton = document.body.querySelector('button[aria-label="Add receipts"]') as HTMLButtonElement | null;
+        const receiptAddButton = document.body.querySelector('button[aria-label="Add Receipts"]') as HTMLButtonElement | null;
         expect(receiptAddButton).toBeTruthy();
         expect(document.activeElement).toBe(receiptAddButton);
       });
@@ -465,16 +465,16 @@ describe('GarageServicingsGrid servicing dialog', () => {
     );
 
     try {
-      const receiptButton = Array.from(document.body.querySelectorAll('button[aria-label="Open servicing detail for 2026-03-02"]'))
+      const receiptButton = Array.from(document.body.querySelectorAll('button[aria-label="Open Servicing Detail for 2026-03-02"]'))
         .find((button) => button.textContent?.trim() === 'Receipt') as HTMLButtonElement | undefined;
       click(receiptButton!);
 
       await waitForCondition(() => {
-        expect(document.body.querySelector('input[aria-label="Receipt name for receipt.pdf"]')).toBeTruthy();
+        expect(document.body.querySelector('input[aria-label="Receipt Name for receipt.pdf"]')).toBeTruthy();
       });
 
       setInputValue(
-        document.body.querySelector('input[aria-label="Receipt name for receipt.pdf"]') as HTMLInputElement,
+        document.body.querySelector('input[aria-label="Receipt Name for receipt.pdf"]') as HTMLInputElement,
         'Paid Invoice',
       );
       const saveButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Save') as HTMLButtonElement;
@@ -511,7 +511,7 @@ describe('GarageServicingsGrid servicing dialog', () => {
     );
 
     try {
-      const receiptButton = Array.from(document.body.querySelectorAll('button[aria-label="Open servicing detail for 2026-03-02"]'))
+      const receiptButton = Array.from(document.body.querySelectorAll('button[aria-label="Open Servicing Detail for 2026-03-02"]'))
         .find((button) => button.textContent?.trim() === 'Inspection, Parts, Payment');
       expect(receiptButton).toBeTruthy();
       expect(receiptButton?.getAttribute('title')).toBe('Inspection, Parts, Payment');

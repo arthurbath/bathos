@@ -73,7 +73,7 @@ The Tasks module SHALL represent no task target, one whole-task-focused closed t
 
 #### Scenario: Open a focused task
 - **WHEN** Return or the platform Open/Close Task command is invoked on one focused closed task
-- **THEN** Tasks clears closed focus, opens that task, focuses its Title at the insertion point end, and keeps multi-selection inactive
+- **THEN** Tasks clears closed focus, opens that task, focuses its Summary at the insertion point end, and keeps multi-selection inactive
 
 #### Scenario: Close to whole-row focus
 - **WHEN** the Open/Close Task command closes an open task
@@ -84,12 +84,12 @@ The Tasks module SHALL represent no task target, one whole-task-focused closed t
 - **THEN** Tasks applies the same eligible single-target behavior available to an open task or multi-selection without showing bulk controls
 
 #### Scenario: Converge bulk actionability before advancing
-- **WHEN** the user cycles actionability for multiple selected tasks whose actionability states are mixed or uniformly Actionable
+- **WHEN** the user cycles actionability for multiple selected tasks whose actionability states are mixed or uniformly Ready
 - **THEN** Tasks sets every selected task to Waiting
 - **WHEN** every selected task is already Waiting
 - **THEN** Tasks sets every selected task to Rechecking
 - **WHEN** every selected task is already Rechecking
-- **THEN** Tasks sets every selected task to Actionable
+- **THEN** Tasks sets every selected task to Ready
 
 #### Scenario: Open inline metadata from closed focus
 - **WHEN** a focused closed task receives a command whose interaction surface exists only inside the expanded editor
@@ -104,7 +104,7 @@ The Tasks module SHALL represent no task target, one whole-task-focused closed t
 - **THEN** Tasks creates one closed duplicate at the documented destination and transfers whole-row focus to the duplicate without opening it
 
 #### Scenario: Traverse while opening
-- **WHEN** Control+S or Control+W on Mac, or the corresponding Control+Shift chord on Windows, is invoked with no open task
+- **WHEN** Control+S or Control+W on Mac, or the corresponding Alt+Shift chord on Windows, is invoked with no open task
 - **THEN** Tasks uses the focused closed task as the current position, opens the next or previous visible task, opens the first or last task when no task is focused, and does not wrap at list boundaries
 
 #### Scenario: Focus after a task leaves the view

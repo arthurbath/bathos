@@ -172,5 +172,7 @@ export { supabaseRequest as supabaseRpc };
  * Re-exported from networkErrors for convenience so callers don't need two imports.
  */
 export function showMutationError(error: unknown): void {
-  toast.error(toUserFacingErrorMessage(error));
+  toast.error('Operation Failed', {
+    description: toUserFacingErrorMessage(error),
+  });
 }

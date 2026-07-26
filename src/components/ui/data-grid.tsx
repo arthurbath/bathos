@@ -13,6 +13,7 @@ import { SelectValue } from '@/components/ui/select';
 import { ArrowUp, ArrowDown, ExternalLink, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GRID_ACTIONS_COLUMN_ID } from '@/lib/gridColumnWidths';
+import { toBathosTitleCase } from '@/lib/uiTextCase';
 import { useDataGridHistory } from '@/components/ui/data-grid-history';
 
 // ─── Column Meta Augmentation ───
@@ -1169,7 +1170,7 @@ export function DataGrid<TData>({
                     {canResize && (
                       <button
                         type="button"
-                        aria-label={`Resize ${header.column.id} column`}
+                        aria-label={`Resize ${toBathosTitleCase(header.column.id.replaceAll('_', ' '))} Column`}
                         className={cn(
                           'data-grid-resize-handle group absolute top-1/2 z-30 h-6 w-[10px] -translate-y-1/2 !cursor-col-resize touch-none select-none',
                         )}

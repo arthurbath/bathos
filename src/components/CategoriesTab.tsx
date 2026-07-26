@@ -40,7 +40,7 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
       await onAdd(name.trim());
       setName('');
     } catch (error: unknown) {
-      toast({ title: 'Error adding category', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Adding Category', description: getErrorMessage(error), variant: 'destructive' });
     }
     setAdding(false);
   };
@@ -56,7 +56,7 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
       try {
         await onUpdate(editingId, editValue.trim());
       } catch (error: unknown) {
-        toast({ title: 'Error renaming', description: getErrorMessage(error), variant: 'destructive' });
+        toast({ title: 'Error Renaming', description: getErrorMessage(error), variant: 'destructive' });
       }
     }
     setEditingId(null);
@@ -76,7 +76,7 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
     try {
       await onRemove(id);
     } catch (error: unknown) {
-      toast({ title: 'Error removing category', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Removing Category', description: getErrorMessage(error), variant: 'destructive' });
     }
   };
 
@@ -104,7 +104,7 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
           <CardContent>
             <div className="flex gap-2">
               <Input
-                placeholder="e.g. Housing, Food, Transport"
+                placeholder="eg: Housing, Food, Transport"
                 value={name}
                 onChange={e => setName(e.target.value)}
               />
@@ -181,7 +181,7 @@ export function CategoriesTab({ categories, expenses, onAdd, onUpdate, onRemove,
             <Select value={reassignTo} onValueChange={setReassignTo}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="_none">No category</SelectItem>
+                <SelectItem value="_none">No Category</SelectItem>
                 {categories.filter(c => c.id !== deleteTarget?.id).map(c => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}

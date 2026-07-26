@@ -24,9 +24,9 @@ export function HouseholdSetup({ userId, displayName, onSignOut, onComplete, onJ
       createButtonLabel="Create household"
       joinButtonLabel="Join Household"
       joinInputLabel="Invite Code"
-      joinInputPlaceholder="Enter invite code from your partner"
-      createErrorTitle="Failed to create household"
-      joinErrorTitle="Failed to join household"
+      joinInputPlaceholder="Enter Invite Code from Your Partner"
+      createErrorTitle="Failed to Create Household"
+      joinErrorTitle="Failed to Join Household"
       icon={Users}
     />
   );

@@ -1,15 +1,12 @@
 import { useState } from 'react';
 import {
   CheckCircle2,
-  CircleSlash2,
-  FolderKanban,
   MoreHorizontal,
-  RotateCcw,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
-import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,9 +27,10 @@ import type { TaskProjectPlanningMoveInput } from '@/modules/tasks/hooks/useTask
 import type { TaskListView } from '@/modules/tasks/hooks/useTaskList';
 import type { TaskArea, TaskProject } from '@/modules/tasks/types/tasks';
 
-export const TASK_PLANNING_LIST_CLASS = 'space-y-1';
-export const TASK_PLANNING_ITEM_FRAME_CLASS = 'overflow-hidden rounded-md border border-foreground/10';
-export const TASK_PLANNING_ITEM_BACKGROUND_CLASS = 'bg-foreground/[0.02]';
+export const TASK_PLANNING_LIST_CLASS = 'space-y-0';
+const TASK_PLANNING_PROJECT_LIST_CLASS = 'space-y-1';
+const TASK_PLANNING_PROJECT_FRAME_CLASS = 'overflow-hidden rounded-md border border-foreground/10';
+const TASK_PLANNING_PROJECT_BACKGROUND_CLASS = 'bg-foreground/[0.02]';
 
 export type TaskPlanningProjectsProps = {
   projects: TaskProject[];
@@ -67,11 +65,10 @@ export function TaskPlanningProjects({
         id="task-planning-projects-heading"
         className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground"
       >
-        <FolderKanban className="h-4 w-4" aria-hidden="true" />
+        <TASK_ICONS.Project className="h-4 w-4" aria-hidden="true" />
         Projects
-        <TaskCountBadge count={projects.length} label="Projects" />
       </h3>
-      <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
+      <div className={TASK_PLANNING_PROJECT_LIST_CLASS} data-task-planning-list>
         {projects.map((project) => (
           <TaskPlanningProjectItem
             key={project.id}
@@ -156,7 +153,7 @@ function TaskPlanningProjectRow({
   const [pending, setPending] = useState(false);
   const terminal = view === 'done';
   const completed = project.lifecycle === 'completed';
-  const TerminalIcon = completed ? CheckCircle2 : CircleSlash2;
+  const TerminalIcon = completed ? CheckCircle2 : TASK_ICONS.Canceled;
 
   const run = async (operation: () => Promise<unknown>) => {
     if (pending) return;
@@ -174,7 +171,7 @@ function TaskPlanningProjectRow({
 
   return (
     <article
-      className={`flex min-h-16 items-center gap-3 px-2 sm:px-4 ${TASK_PLANNING_ITEM_FRAME_CLASS} ${TASK_PLANNING_ITEM_BACKGROUND_CLASS}`}
+      className={`flex min-h-16 items-center gap-3 px-2 sm:px-4 ${TASK_PLANNING_PROJECT_FRAME_CLASS} ${TASK_PLANNING_PROJECT_BACKGROUND_CLASS}`}
       data-task-planning-card
     >
       {terminal ? (
@@ -183,7 +180,7 @@ function TaskPlanningProjectRow({
           aria-hidden="true"
         />
       ) : (
-        <FolderKanban className="h-5 w-5 shrink-0 text-info" aria-hidden="true" />
+        <TASK_ICONS.Project className="h-5 w-5 shrink-0 text-info" aria-hidden="true" />
       )}
       <div className="min-w-0 flex-1 py-3">
         <a
@@ -207,7 +204,7 @@ function TaskPlanningProjectRow({
           className="gap-1.5"
           onClick={() => void run(onReopen)}
         >
-          <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          <TASK_ICONS.Reopen className="h-4 w-4" aria-hidden="true" />
           Reopen
         </Button>
       ) : (
@@ -218,7 +215,7 @@ function TaskPlanningProjectRow({
               variant="clear"
               size="icon"
               disabled={pending}
-              aria-label={`Planning actions for ${project.title}`}
+              aria-label={`Planning Actions for ${project.title}`}
               className="h-10 w-10 text-muted-foreground"
             >
               <MoreHorizontal className="h-4 w-4" />

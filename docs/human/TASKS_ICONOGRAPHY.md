@@ -1,0 +1,86 @@
+# Tasks Iconography
+
+This document is the canonical Lucide icon reference for durable concepts in the BathOS Tasks module. New Tasks functionality must reuse these mappings rather than select a different glyph for an established concept.
+
+The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons supplement visible text and accessible names; they do not replace them. Generic interaction chrome such as Back, Next, Close, Confirm, ellipsis menus, and ordering arrows follows ordinary BathOS conventions and is intentionally outside this module vocabulary.
+
+## Entities
+
+| Registry Concept | Lucide Icon | Product Meaning |
+|---|---|---|
+| Task | `SquareCheckBig` | A task and the Tasks module launcher |
+| Project | `CopyCheck` | A Tasks project |
+| Area | `Layers3` | An area; this is the three-layer Stack glyph |
+| AreasAndProjects | `Layers3` | The combined Areas & Projects destination; this is the three-layer Stack glyph |
+| TaskChecklist | `ListTree` | A task's checklist |
+| Attachment | `Paperclip` | A task attachment |
+
+## Views and Planning
+
+| Registry Concept | Lucide Icon | Product Meaning |
+|---|---|---|
+| Today | `CalendarDays` | The Today view |
+| Upcoming | `CalendarRange` | The Upcoming view |
+| Anytime | `ListTodo` | The Anytime view |
+| Someday | `SquareDashed` | The Someday planning state and view |
+| Done | `ListChecks` | The Done view |
+| Templates | `LayoutTemplate` | Task and project templates |
+| Config | `Settings` | Tasks configuration |
+| Inbox | `Inbox` | Today's Inbox horizon |
+| Now | `Clock2` | Today's Now horizon |
+| Next | `Clock5` | Today's Next horizon |
+| Later | `Clock8` | Today's Later horizon |
+
+## Metadata and State
+
+| Registry Concept | Lucide Icon | Product Meaning |
+|---|---|---|
+| Reminder | `Bell` | A scheduled task reminder |
+| DueReminder | `BellRing` | A reminder that is ready for acknowledgement |
+| Deadline | `FlagTriangleRight` | A task deadline |
+| PrimaryLink | `ExternalLink` | A task's Primary Link |
+| Ready | `CircleCheckBig` | Ready actionability |
+| Waiting | `Hourglass` | Waiting actionability |
+| Rechecking | `RotateCcw` | Rechecking actionability |
+| Canceled | `CircleSlash2` | A canceled task or project |
+
+## Creation and Task Actions
+
+| Registry Concept | Lucide Icon | Product Meaning |
+|---|---|---|
+| AddTask | `SquarePlus` | Add a task |
+| AddProject | `Layers3` | Add a project; this uses the Stack glyph |
+| AddArea | `SquarePlus` | Add an area |
+| Search | `Search` | Search Tasks and views |
+| QuickFilters | `Filter` | Apply a predefined quick filter |
+| Delete | `Trash2` | Recoverably delete task content |
+| Reopen | `RotateCcw` | Reopen terminal task content |
+
+## Sources
+
+Source icons describe provenance. A File source is distinct from a task Attachment.
+
+| Registry Concept | Lucide Icon | Product Meaning |
+|---|---|---|
+| WebpageSource | `Globe2` | Captured webpage |
+| MailSource | `Mail` | Captured Mail message |
+| FileSource | `File` | Captured file source |
+| SelectedTextSource | `TextQuote` | Captured selected text |
+| ReadingItemSource | `BookOpen` | Captured reading item |
+| TemplateSource | `LayoutTemplate` | Content created from a template |
+| OtherSource | `Link2` | Another structured source |
+
+## Recurrence, Portability, and Synchronization
+
+| Registry Concept | Lucide Icon | Product Meaning |
+|---|---|---|
+| Recurrence | `Repeat2` | Task recurrence |
+| PauseRecurrence | `Pause` | Pause recurrence |
+| ResumeRecurrence | `Play` | Resume recurrence |
+| RegenerateRecurrence | `RefreshCw` | Regenerate recurrence |
+| Archive | `Archive` | Archive a template or recurrence definition |
+| DataPortability | `DatabaseBackup` | Backup and restore task data |
+| Export | `Download` | Export task data |
+| Import | `Upload` | Import task data |
+| CloudSync | `Cloud` | Remote synchronization state |
+| LocalStorage | `HardDrive` | Local task storage state |

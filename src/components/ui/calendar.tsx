@@ -353,7 +353,7 @@ function MonthPicker({
               ref={prevYearButtonRef}
               type="button"
               name="previous-year"
-              aria-label="Go to previous year"
+              aria-label="Go to Previous Year"
               disabled={firstSelectableMonthIndex(year - 1, minimumDate) === null}
               className={cn(
                 "rdp-button_reset rdp-button",
@@ -370,7 +370,7 @@ function MonthPicker({
               ref={nextYearButtonRef}
               type="button"
               name="next-year"
-              aria-label="Go to next year"
+              aria-label="Go to Next Year"
               className={cn(
                 "rdp-button_reset rdp-button",
                 buttonVariants({ variant: "clear" }),
@@ -591,7 +591,7 @@ function Calendar({
                 type="button"
                 id={id}
                 name="caption-month-year"
-                aria-label={`Choose month and year, currently ${format(captionMonth, "MMMM yyyy")}`}
+                aria-label={`Choose Month and Year, Currently ${format(captionMonth, "MMMM yyyy")}`}
                 className={CALENDAR_HEADER_BUTTON_CLASS}
                 onClick={() => {
                   setMonthPickerYear(displayMonth.getFullYear());

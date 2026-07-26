@@ -30,9 +30,9 @@ export function DrawersHouseholdSetup({
       createButtonLabel="Create Drawer Household"
       joinButtonLabel="Join Household"
       joinInputLabel="Invite Code"
-      joinInputPlaceholder="Enter invite code"
-      createErrorTitle="Failed to create drawer household"
-      joinErrorTitle="Failed to join drawer household"
+      joinInputPlaceholder="Enter Invite Code"
+      createErrorTitle="Failed to Create Drawer Household"
+      joinErrorTitle="Failed to Join Drawer Household"
       icon={Boxes}
       showAppSwitcher
     />

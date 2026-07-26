@@ -39,7 +39,7 @@ export function DeleteAccountDialog({ isOpen, onOpenChange }: DeleteAccountDialo
       window.location.href = '/';
     } catch (error) {
       toast({
-        title: 'Deletion failed',
+        title: 'Deletion Failed',
         description: error instanceof Error ? error.message : 'There was an error deleting your account.',
         variant: 'destructive',
       });

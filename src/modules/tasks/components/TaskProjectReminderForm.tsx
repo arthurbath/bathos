@@ -1,8 +1,9 @@
-import { Bell, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import {
   getTaskReminderUnavailableMessage,
   type TaskReminderAvailability,
@@ -56,7 +57,7 @@ export function TaskProjectReminderForm({
       className="space-y-4 rounded-md border border-[hsl(var(--grid-sticky-line))] p-4"
     >
       <div className="flex items-center gap-2">
-        <Bell className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <TASK_ICONS.Reminder className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         <h4 className="text-sm font-semibold text-foreground">Reminder</h4>
       </div>
       <div className="space-y-1.5">

@@ -18,7 +18,7 @@ Tasks currently splits keyboard focus across the completion control, title body,
 - Let Escape relinquish either granular or whole-task focus from a collapsed task without opening, selecting, or mutating it.
 - Normalize action-driven return focus through the complete task row so completion, menu, dialog, and lifecycle actions never strand focus on a nested checkbox, title, source, or actions control.
 - Transfer closed-row focus to a newly duplicated task when duplication starts from one focused closed task.
-- Make bulk actionability changes converge mixed selections to Waiting before advancing a uniformly Waiting selection to Rechecking and a uniformly Rechecking selection to Actionable.
+- Make bulk actionability changes converge mixed selections to Waiting before advancing a uniformly Waiting selection to Rechecking and a uniformly Rechecking selection to Ready.
 
 ## Capabilities
 

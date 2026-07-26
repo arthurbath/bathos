@@ -1,13 +1,6 @@
 import {
-  Bell,
   CalendarIcon,
-  CircleDashed,
-  Clock2,
-  Clock5,
-  Clock8,
-  Inbox,
   X,
-  type LucideIcon,
 } from 'lucide-react';
 import {
   useEffect,
@@ -18,6 +11,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import {
   parseDatePickerFieldValue,
   toDatePickerFieldValue,
@@ -51,6 +45,9 @@ import {
   TASK_START_PICKER_OPEN_EVENT,
   type TaskStartPickerFocusTarget,
 } from './taskStartPickerEvents';
+import {
+  taskHorizonPresentations,
+} from './taskHorizonPresentation';
 
 type PlanningSelection = {
   destination: TaskTodo['destination'];
@@ -70,17 +67,6 @@ type TaskStartPickerProps = {
   onReminderChange: (localTime: string) => Promise<void>;
   onClear: () => Promise<void>;
 };
-
-const todayChoices: Array<{
-  value: TaskTodaySection;
-  label: string;
-  Icon: LucideIcon;
-}> = [
-  { value: 'inbox', label: 'Inbox', Icon: Inbox },
-  { value: 'now', label: 'Now', Icon: Clock2 },
-  { value: 'next', label: 'Next', Icon: Clock5 },
-  { value: 'later', label: 'Later', Icon: Clock8 },
-];
 
 function TaskStartPickerPanel({
   task,
@@ -305,7 +291,7 @@ function TaskStartPickerPanel({
         setReminderInput(committedReminderDisplay);
         reminderInputConfirmedRef.current = true;
         toast({
-          title: 'Not allowed.',
+          title: 'Not Allowed.',
           duration: 1_800,
         });
         return false;
@@ -342,16 +328,21 @@ function TaskStartPickerPanel({
           Today
         </div>
         <div className="grid grid-cols-4 gap-1">
-          {todayChoices.map(({ value, label, Icon }, index) => {
-            const selected = task.start_date === null && task.today_section === value;
+          {taskHorizonPresentations.map(({
+            id,
+            label,
+            icon: Icon,
+            colorClass,
+          }, index) => {
+            const selected = task.start_date === null && task.today_section === id;
             return (
               <Button
-                key={value}
+                key={id}
                 ref={index === 0 ? firstHorizonRef : undefined}
                 type="button"
                 variant="clear"
                 aria-pressed={selected}
-                data-task-start-horizon={value}
+                data-task-start-horizon={id}
                 className={cn(
                   'h-auto min-w-0 flex-col gap-1 px-1.5 py-2 text-xs',
                   selected && 'bg-accent text-accent-foreground',
@@ -359,10 +350,15 @@ function TaskStartPickerPanel({
                 onClick={() => void onPlanningChange({
                   destination: 'anytime',
                   startDate: null,
-                  todaySection: value,
+                  todaySection: id,
                 }).then(onRequestClose)}
               >
-                <Icon className="h-4 w-4" aria-hidden />
+                <Icon
+                  className={cn('h-4 w-4', colorClass)}
+                  data-task-horizon-symbol={id}
+                  data-task-horizon-surface="picker"
+                  aria-hidden
+                />
                 <span className="truncate">{label}</span>
               </Button>
             );
@@ -400,7 +396,7 @@ function TaskStartPickerPanel({
       <div className="space-y-3 border-t border-[hsl(var(--grid-sticky-line))] p-3">
         <div className="flex items-center gap-2">
           <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
-            <Bell className="h-4 w-4 shrink-0" aria-hidden />
+            <TASK_ICONS.Reminder className="h-4 w-4 shrink-0" aria-hidden />
             <label htmlFor={`task-start-reminder-${task.id}`}>Reminder</label>
           </div>
           <Input
@@ -430,9 +426,7 @@ function TaskStartPickerPanel({
                 onRequestClose();
                 return;
               }
-              void commitReminderInput().then((accepted) => {
-                if (accepted) onRequestClose();
-              });
+              void commitReminderInput();
             }}
           />
         </div>
@@ -484,7 +478,7 @@ function TaskStartPickerPanel({
             }).then(onRequestClose);
           }}
         >
-          <CircleDashed className="h-4 w-4" aria-hidden />
+          <TASK_ICONS.Someday className="h-4 w-4" aria-hidden />
           Someday
         </Button>
       </div>
@@ -502,7 +496,7 @@ function getStartSummary(
     return formatTaskDateControlLabel(startDate, planningDate);
   }
   if (todaySection) {
-    const label = todayChoices.find((choice) => choice.value === todaySection)?.label;
+    const label = taskHorizonPresentations.find(({ id }) => id === todaySection)?.label;
     return `Today · ${label ?? todaySection}`;
   }
   if (destination === 'someday') return 'Someday';
@@ -566,7 +560,7 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
         >
           <span className="truncate">{summary}</span>
           {props.reminderTime ? (
-            <Bell
+            <TASK_ICONS.Reminder
               className="ml-auto h-4 w-4 shrink-0 text-info"
               aria-label={`Reminder ${props.reminderTime}`}
             />

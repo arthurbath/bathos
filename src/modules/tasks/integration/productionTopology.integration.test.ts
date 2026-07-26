@@ -505,7 +505,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
         activationTask.task.id,
         (task) => task.revision === 2
           && task.start_date === null
-          && task.today_section === 'next',
+          && task.today_section === 'inbox',
       ),
       waitForLocalProject(
         setupClient.database,
@@ -549,7 +549,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
         activationTask.task.id,
         (task) => task.revision === 2
           && task.start_date === null
-          && task.today_section === 'next',
+          && task.today_section === 'inbox',
       ),
       waitForLocalProject(
         freshClient.database,
@@ -881,7 +881,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       waitForLocalTask(
         setupClient.database,
         activationTaskId,
-        (task) => task.start_date === null && task.today_section === 'next',
+        (task) => task.start_date === null && task.today_section === 'inbox',
       ),
       waitForLocalReminder(
         setupClient.database,
@@ -912,7 +912,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       waitForLocalTask(
         freshClient.database,
         activationTaskId,
-        (task) => task.start_date === null && task.today_section === 'next',
+        (task) => task.start_date === null && task.today_section === 'inbox',
       ),
       waitForLocalReminder(
         freshClient.database,

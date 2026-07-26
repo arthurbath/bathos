@@ -88,7 +88,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
       setFeedbackSent(true);
       setShowFeedbackModal(false);
       setFeedbackMessage('');
-      toast({ title: 'Feedback submitted', description: "Your message has been sent to the webmaster. They'll respond shortly." });
+      toast({ title: 'Feedback Submitted', description: "Your message has been sent to the webmaster. They'll respond shortly." });
     } catch {
       toast({ title: 'Error', description: 'Could not send feedback. Please try again.', variant: 'destructive' });
     } finally {
@@ -129,7 +129,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
                   value={feedbackMessage}
                   autoFocus
                   onChange={(e) => setFeedbackMessage(e.target.value)}
-                  placeholder="Type your message…"
+                  placeholder="Type Your Message…"
                   className="min-h-[140px] resize-none pr-3 pb-8"
                   maxLength={MAX_CHARS}
                   disabled={isSendingFeedback}
@@ -244,7 +244,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
                 Close Account
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleLogOut}>
-                {isLoggingOut ? 'Logging out…' : 'Log Out'}
+                {isLoggingOut ? 'Logging Out…' : 'Log Out'}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

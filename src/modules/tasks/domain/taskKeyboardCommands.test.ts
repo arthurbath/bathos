@@ -77,7 +77,7 @@ describe('getTaskKeyboardCommand', () => {
       .toBe('view-config');
   });
 
-  it('maps every Tasks-specific chord on Mac and Windows', () => {
+  it('maps every Tasks-specific chord from Mac Control to Windows Alt+Shift', () => {
     const bindings: Record<string, string> = {
       q: 'close-task',
       w: 'open-previous',
@@ -97,19 +97,32 @@ describe('getTaskKeyboardCommand', () => {
     for (const [key, command] of Object.entries(bindings)) {
       expect(getTaskKeyboardCommand(gesture({ key, ctrlKey: true }), true)).toBe(command);
       expect(getTaskKeyboardCommand(
-        gesture({ key, ctrlKey: true, shiftKey: true }),
+        gesture({ key, altKey: true, shiftKey: true }),
         false,
       )).toBe(command);
     }
   });
 
-  it('adds the Mac Control Undo alias without shadowing Windows Redo', () => {
+  it('maps the Tasks Undo alias without shadowing Windows Redo', () => {
     expect(getTaskKeyboardCommand(gesture({ key: 'z', ctrlKey: true }), true)).toBe('undo');
     expect(getTaskKeyboardCommand(gesture({ key: 'z', ctrlKey: true }), false)).toBe('undo');
+    expect(getTaskKeyboardCommand(
+      gesture({ key: 'z', altKey: true, shiftKey: true }),
+      false,
+    )).toBe('undo');
     expect(getTaskKeyboardCommand(
       gesture({ key: 'z', ctrlKey: true, shiftKey: true }),
       false,
     )).toBe('redo');
+  });
+
+  it('leaves former Windows Control+Shift task chords unbound', () => {
+    for (const key of ['q', 'w', 'e', 'r', 't', 'a', 's', 'd', 'f', 'g', 'x', 'c', 'v', 'b']) {
+      expect(getTaskKeyboardCommand(
+        gesture({ key, ctrlKey: true, shiftKey: true }),
+        false,
+      )).toBeNull();
+    }
   });
 
   it('rejects single characters and incomplete or extra modifiers', () => {
@@ -129,7 +142,7 @@ describe('getTaskKeyboardCommand', () => {
     expect(getTaskKeyboardCommand(gesture({ key: 'w', ctrlKey: true }), false))
       .toBeNull();
     expect(getTaskKeyboardCommand(
-      gesture({ key: 'n', ctrlKey: true, shiftKey: true }),
+      gesture({ key: 'n', altKey: true, shiftKey: true }),
       false,
     )).toBeNull();
     expect(getTaskKeyboardCommand(

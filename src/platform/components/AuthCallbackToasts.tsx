@@ -24,38 +24,38 @@ function getErrorToast(errorCode: string, errorDescription: string): { title: st
   switch (errorCode) {
     case 'otp_expired':
       return {
-        title: 'Link expired',
+        title: 'Link Expired',
         description: 'This link is no longer valid. It may have already been used or has expired. Please request a new one.',
       };
     case 'otp_disabled':
       return {
-        title: 'Link disabled',
+        title: 'Link Disabled',
         description: 'This type of link is not currently enabled. Please contact support.',
       };
     case 'validation_failed':
       return {
-        title: 'Validation failed',
+        title: 'Validation Failed',
         description: desc || 'The request could not be validated. Please try again.',
       };
     case 'user_not_found':
       return {
-        title: 'Account not found',
+        title: 'Account Not Found',
         description: 'No account was found for this link. It may have been deleted.',
       };
     case 'user_banned':
       return {
-        title: 'Account suspended',
+        title: 'Account Suspended',
         description: 'This account has been suspended. Please contact support.',
       };
     case 'flow_state_not_found':
     case 'flow_state_expired':
       return {
-        title: 'Session expired',
+        title: 'Session Expired',
         description: 'The authentication session for this link has expired. Please start over.',
       };
     case 'provider_disabled':
       return {
-        title: 'Sign-in method unavailable',
+        title: 'Sign-In Method Unavailable',
         description: 'This sign-in method is not currently available.',
       };
     default:
@@ -65,7 +65,7 @@ function getErrorToast(errorCode: string, errorDescription: string): { title: st
   // Fallback: match on error (e.g. "access_denied") or use the raw description
   if (desc) {
     return {
-      title: 'Authentication error',
+      title: 'Authentication Error',
       description: desc,
     };
   }
@@ -117,14 +117,14 @@ export default function AuthCallbackToasts() {
 
     if (isEmailChangeStepOne) {
       toast({
-        title: 'Email change step 1 complete',
+        title: 'Email Change Step 1 Complete',
         description: 'First confirmation received. Confirm the link sent to the other email to finish.',
       });
       return;
     }
 
     toast({
-      title: 'Email address changed',
+      title: 'Email Address Changed',
       description: 'Step 2 complete. Your new email is now active.',
     });
   }, [location.hash, location.pathname, location.search, toast]);

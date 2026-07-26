@@ -2,11 +2,20 @@ import type {
   CreateTaskInput,
   EditableTaskPatch,
 } from '@/modules/tasks/data/taskRepository';
-import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
+import type {
+  TaskDestination,
+  TaskTodaySection,
+  TaskTodo,
+} from '@/modules/tasks/types/tasks';
+import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 
 export const NEW_TASK_DRAFT_ID = 'task-draft:new';
 
 export type TaskCreationView = TaskDestination | 'today' | 'upcoming';
+export type TaskCreationPlacement =
+  | { todaySection: TaskTodaySection; startDate?: never }
+  | { startDate: string; todaySection?: never }
+  | { areaId: string; startDate?: never; todaySection?: never };
 export type TaskCreationInput = Omit<CreateTaskInput, 'ownerId' | 'orderKey'> & {
   atTop: true;
 };
@@ -25,9 +34,18 @@ export function createTaskCreationDraft(
   ownerId: string,
   view: TaskCreationView,
   timestamp = new Date().toISOString(),
+  placement?: TaskCreationPlacement,
 ): TaskCreationDraft {
   const destination = view === 'someday' ? 'someday' : 'anytime';
-  const todaySection = view === 'today' ? 'now' : null;
+  const todaySection = placement && 'todaySection' in placement
+    ? placement.todaySection
+    : view === 'today' ? 'now' : null;
+  const startDate = placement && 'startDate' in placement
+    ? placement.startDate
+    : null;
+  const areaId = placement && 'areaId' in placement
+    ? placement.areaId
+    : null;
   return {
     view,
     persistedTaskId: null,
@@ -35,7 +53,7 @@ export function createTaskCreationDraft(
     task: {
       id: NEW_TASK_DRAFT_ID,
       owner_id: ownerId,
-      area_id: null,
+      area_id: areaId,
       project_id: null,
       title: '',
       notes: '',
@@ -50,7 +68,7 @@ export function createTaskCreationDraft(
       actionability: 'actionable',
       order_key: 'draft',
       hierarchy_order_key: null,
-      start_date: null,
+      start_date: startDate,
       deadline: null,
       primary_link: null,
       source_kind: null,
@@ -74,6 +92,21 @@ export function createTaskCreationDraft(
       created_at: timestamp,
       updated_at: timestamp,
     },
+  };
+}
+
+export function getFirstTodayTaskCreationPlacement(
+  visibleSections: readonly TaskTodaySection[],
+): TaskCreationPlacement {
+  return { todaySection: visibleSections[0] ?? 'now' };
+}
+
+export function getFirstUpcomingTaskCreationPlacement(
+  firstSectionDate: string | null | undefined,
+  planningDate: string,
+): TaskCreationPlacement {
+  return {
+    startDate: firstSectionDate ?? addTaskCalendarDays(planningDate, 1),
   };
 }
 

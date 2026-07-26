@@ -74,27 +74,27 @@ export default function AuthPage() {
 
     const rl = await checkAuthRateLimit('sign_in');
     if (rl.rateLimited) {
-      toast({ title: 'Too many attempts', description: `Please wait ${formatRetryAfter(rl.retryAfterSeconds)} before trying again.`, variant: 'destructive' });
+      toast({ title: 'Too Many Attempts', description: `Please wait ${formatRetryAfter(rl.retryAfterSeconds)} before trying again.`, variant: 'destructive' });
       setLoading(false);
       return;
     }
 
     const { error } = await signIn(loginEmail, loginPassword);
-    if (error) toast({ title: 'Sign in failed', description: error.message, variant: 'destructive' });
+    if (error) toast({ title: 'Sign in Failed', description: error.message, variant: 'destructive' });
     setLoading(false);
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!termsAccepted) {
-      toast({ title: 'Please agree to the Terms of Service and Privacy Policy', variant: 'destructive' });
+      toast({ title: 'Please Agree to the Terms of Service and Privacy Policy', variant: 'destructive' });
       return;
     }
     setLoading(true);
 
     const rl = await checkAuthRateLimit('sign_up');
     if (rl.rateLimited) {
-      toast({ title: 'Too many attempts', description: `Please wait ${formatRetryAfter(rl.retryAfterSeconds)} before trying again.`, variant: 'destructive' });
+      toast({ title: 'Too Many Attempts', description: `Please wait ${formatRetryAfter(rl.retryAfterSeconds)} before trying again.`, variant: 'destructive' });
       setLoading(false);
       return;
     }
@@ -102,12 +102,12 @@ export default function AuthPage() {
     const { error, session: signupSession } = await signUp(signupEmail, signupPassword, signupName, latestTermsVersion);
     if (error) {
       toast({
-        title: 'Sign up failed',
+        title: 'Sign Up Failed',
         description: isWeakOrLeakedPasswordError(error) ? WEAK_PASSWORD_MESSAGE : error.message,
         variant: 'destructive',
       });
     } else {
-      toast({ title: 'Check your email', description: 'We sent you a confirmation link.' });
+      toast({ title: 'Check Your Email', description: 'We sent you a confirmation link.' });
       if (signupSession) {
         supabase.functions.invoke('notify-new-signup', {
           body: { displayName: signupName },
@@ -146,7 +146,7 @@ export default function AuthPage() {
 
             <TabsContent value="signup">
               <form data-bathos-return-submits="true" onSubmit={handleSignup} className="space-y-4 pt-2">
-                <Input placeholder="Display name" value={signupName} onChange={e => setSignupName(e.target.value)} required />
+                <Input placeholder="Display Name" value={signupName} onChange={e => setSignupName(e.target.value)} required />
                 <Input placeholder="Email" type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} required />
                 <Input placeholder="Password" type="password" value={signupPassword} onChange={e => setSignupPassword(e.target.value)} required minLength={8} />
                 <PasswordRequirements password={signupPassword} />
@@ -158,7 +158,7 @@ export default function AuthPage() {
                   />
                   <div className="text-sm leading-relaxed">
                     <Label htmlFor="terms" className="cursor-pointer">
-                      I agree to the{' '}
+                      I Agree to the{' '}
                     </Label>
                     <Link to="/terms" className="underline hover:text-primary transition-colors">
                       Terms of Service and Privacy Policy

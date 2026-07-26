@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Archive, Copy, FolderKanban, ListTodo, Plus } from 'lucide-react';
+import { Copy, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -15,6 +15,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import { DatePickerField } from '@/components/ui/date-picker-field';
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
@@ -225,12 +226,12 @@ export function TaskTemplatesView({
       </form>
 
       {model.templates.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">No Templates</p>
+        <p className="py-12 text-center text-sm text-muted-foreground">No templates</p>
       ) : (
         <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
           {model.templates.map((template) => {
             const revision = model.revisions.get(template.id);
-            const Icon = template.kind === 'project' ? FolderKanban : ListTodo;
+            const Icon = template.kind === 'project' ? TASK_ICONS.Project : TASK_ICONS.Task;
             const nodeCount = revision ? countTemplateNodes(revision.snapshot) : null;
             return (
               <article key={template.id} className="space-y-4 px-2 py-5 sm:px-4">
@@ -338,7 +339,7 @@ function ArchiveTemplateButton({
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button type="button" variant="clear" size="icon" disabled={disabled} aria-label={`Archive ${template.name}`}>
-          <Archive className="h-4 w-4" aria-hidden="true" />
+          <TASK_ICONS.Archive className="h-4 w-4" aria-hidden="true" />
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent className="shadow-none">

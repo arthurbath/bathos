@@ -34,14 +34,15 @@ describe('TaskMarkdownNotes', () => {
 
     const heading = container.querySelector('[data-task-markdown-indicator="heading"]');
     expect(heading?.textContent).toBe('# ');
-    expect(heading).toHaveClass('font-mono');
+    expect(heading).toHaveClass('font-mono', 'text-muted-foreground');
     expect(heading?.parentElement).toHaveClass('text-lg');
 
     expect(container.querySelector('em')?.textContent).toBe('*italic*');
     expect(container.querySelector('strong')?.textContent).toBe('**bold**');
     expect(container.querySelectorAll('[data-task-markdown-indicator="italic"]')).toHaveLength(2);
     expect(container.querySelectorAll('[data-task-markdown-indicator="strong"]')).toHaveLength(2);
-    expect(container.querySelector('[data-task-markdown-indicator="bullet"]')).toHaveClass('font-mono');
+    expect(container.querySelector('[data-task-markdown-indicator="bullet"]'))
+      .toHaveClass('font-mono', 'text-muted-foreground');
     expect(container.querySelector('[data-task-markdown-indicator="bullet"]')?.parentElement)
       .toHaveClass('pl-[2ch]', '[text-indent:-2ch]');
 
@@ -49,10 +50,24 @@ describe('TaskMarkdownNotes', () => {
     expect(link).toHaveAttribute('href', 'https://example.com/reading');
     expect(link).toHaveAttribute('target', '_blank');
     expect(container.querySelectorAll('[data-task-markdown-indicator="link"]')).toHaveLength(3);
+    expect(container.querySelectorAll('[data-task-markdown-indicator="link"]')[0])
+      .toHaveClass('font-mono', 'text-muted-foreground');
+    expect(container.querySelector('[data-task-markdown-link-label]'))
+      .toHaveClass('text-foreground');
+    expect(container.querySelector('[data-task-markdown-link-label]'))
+      .toHaveTextContent('Link');
+    expect(container.querySelector('[data-task-markdown-link-destination]'))
+      .toHaveClass('text-info');
+    expect(container.querySelector('[data-task-markdown-link-destination]'))
+      .toHaveTextContent('https://example.com/reading');
+    expect(link).not.toHaveClass('text-info');
 
     const code = container.querySelector('code');
     expect(code).toHaveTextContent('`inline code`');
     expect(code).toHaveClass('font-mono', 'bg-foreground/[0.08]');
+    expect(code?.querySelectorAll('[data-task-markdown-indicator="code"]')).toHaveLength(2);
+    expect(code?.querySelector('[data-task-markdown-indicator="code"]'))
+      .toHaveClass('font-mono', 'text-muted-foreground');
   });
 
   it('applies Markdown styling as the user edits without changing the source', () => {
@@ -169,6 +184,7 @@ describe('TaskMarkdownNotes', () => {
     const links = Array.from(container.querySelectorAll<HTMLAnchorElement>('a'));
     expect(links).toHaveLength(2);
     expect(links[0]).toHaveClass('cursor-pointer');
+    expect(links[0]).toHaveClass('text-info');
     expect(links[0].className).not.toContain('hover:underline');
 
     fireEvent.click(links[0]);
@@ -184,6 +200,28 @@ describe('TaskMarkdownNotes', () => {
       'noopener,noreferrer',
     );
     open.mockRestore();
+  });
+
+  it('styles a live Markdown link as white label, muted syntax, and blue destination', () => {
+    const { container } = render(
+      <TaskMarkdownNotes
+        id="notes-markdown-link"
+        notes="[Take the survey](https://example.test/survey)"
+        disabled={false}
+        onChange={vi.fn()}
+      />,
+    );
+
+    const link = screen.getByRole('link');
+    expect(link).not.toHaveClass('text-info');
+    expect(link.textContent).toBe('[Take the survey](https://example.test/survey)');
+    expect(container.querySelector('[data-task-markdown-link-label]'))
+      .toHaveClass('text-foreground');
+    expect(container.querySelector('[data-task-markdown-link-destination]'))
+      .toHaveClass('text-info');
+    for (const indicator of container.querySelectorAll('[data-task-markdown-indicator="link"]')) {
+      expect(indicator).toHaveClass('font-mono', 'text-muted-foreground');
+    }
   });
 
   it('uses the same live editor for empty and disabled notes', () => {

@@ -88,7 +88,7 @@ describe('AccountPage', () => {
       expect(container.textContent).not.toContain('Change Email');
       expect(container.textContent).toContain('art@example.com');
 
-      const changeEmailButton = container.querySelector('button[aria-label="Change email"]') as HTMLButtonElement | null;
+      const changeEmailButton = container.querySelector('button[aria-label="Change Email"]') as HTMLButtonElement | null;
       expect(changeEmailButton).toBeTruthy();
 
       act(() => {

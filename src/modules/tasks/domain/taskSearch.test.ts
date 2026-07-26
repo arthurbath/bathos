@@ -3,18 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   createTaskSearchDocuments,
   filterTaskSearchDocuments,
-  getTaskSearchSourceKinds,
-  type TaskSearchFilters,
 } from './taskSearch';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import { taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
-
-const allFilters: TaskSearchFilters = {
-  destination: 'all',
-  lifecycle: 'all',
-  actionability: 'all',
-  sourceKind: 'all',
-};
 
 describe('task search documents', () => {
   it('indexes structured hierarchy once and searches normalized task context', () => {
@@ -29,34 +20,27 @@ describe('task search documents', () => {
     });
 
     expect(documents[0].hierarchyLabel).toBe('House');
-    expect(filterTaskSearchDocuments(documents, 'house', allFilters))
+    expect(filterTaskSearchDocuments(documents, 'house'))
       .toHaveLength(1);
-    expect(filterTaskSearchDocuments(documents, 'SINK VALVE'.toLocaleLowerCase(), allFilters))
+    expect(filterTaskSearchDocuments(documents, 'SINK VALVE'.toLocaleLowerCase()))
       .toHaveLength(1);
   });
 
-  it('combines typed filters and reports only available structured source kinds', () => {
+  it('matches structured source context without exposing advanced filters', () => {
     const documents = createTaskSearchDocuments([
-      task({ id: 'mail', actionability: 'waiting', source_kind: 'mail_message' }),
-      task({ id: 'retry', actionability: 'rechecking', source_kind: null }),
-      task({ id: 'web', destination: 'anytime', source_kind: 'webpage' }),
+      task({
+        id: 'mail',
+        source_kind: 'mail_message',
+        source_title: 'Architect response',
+        source_url: 'message://architect-response',
+      }),
       task({ id: 'plain', source_kind: null }),
     ], { areas: [], projects: [] });
 
-    expect(filterTaskSearchDocuments(documents, '', {
-      ...allFilters,
-      actionability: 'waiting',
-      sourceKind: 'mail_message',
-    }).map(({ task: value }) => value.id)).toEqual(['mail']);
-    expect(filterTaskSearchDocuments(documents, '', {
-      ...allFilters,
-      actionability: 'rechecking',
-    }).map(({ task: value }) => value.id)).toEqual(['retry']);
-    expect(filterTaskSearchDocuments(documents, '', {
-      ...allFilters,
-      sourceKind: 'none',
-    }).map(({ task: value }) => value.id)).toEqual(['retry', 'plain']);
-    expect(getTaskSearchSourceKinds(documents)).toEqual(['mail_message', 'webpage']);
+    expect(filterTaskSearchDocuments(documents, 'architect response')
+      .map(({ task: value }) => value.id)).toEqual(['mail']);
+    expect(filterTaskSearchDocuments(documents, 'message://architect')
+      .map(({ task: value }) => value.id)).toEqual(['mail']);
   });
 });
 

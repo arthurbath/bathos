@@ -38,7 +38,7 @@ The Tasks expanded to-do editor SHALL act as an autosaving form scope under the 
 
 #### Scenario: Present the revised close commands
 - **WHEN** the user opens Keyboard Commands
-- **THEN** the close action shows `⌘Return`, `⌘Escape`, or `⌃Q` on Mac and `⌃Return` or `⌃⇧Q` on Windows, and it does not promise that Windows Control+Escape can override the operating system
+- **THEN** the close action shows `⌘Return`, `⌘Escape`, or `⌃Q` on Mac and `⌃Return` or `⌥⇧Q` on Windows, and it does not promise that Windows Control+Escape can override the operating system
 
 ### Requirement: Cross-Platform Task Interaction Reference
 The system SHALL present a visible interaction reference that documents the complete supported Tasks keyboard and pointer-selection contract for both Mac and Windows using compact, platform-recognizable key notation without plus signs between modifiers and keys.

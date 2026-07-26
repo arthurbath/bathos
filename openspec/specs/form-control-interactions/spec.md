@@ -156,7 +156,15 @@ Arbitrary non-DataGrid forms SHALL use Tab and Shift+Tab as their only shared in
 - **THEN** the field commits its current accepted or staged state, closes, and moves to the next or previous containing-form control
 
 ### Requirement: Date pickers are arrow-navigable and Tab-exiting
-Shared date pickers SHALL use Space, Return, pointer input, and arrow navigation internally. Space, Return, and pointer activation SHALL be equivalent when they activate a final selection, including when the activated legal date is already the committed value, and internal controls SHALL NOT become a multi-stop segment of the containing form's Tab order.
+Shared date pickers SHALL use Space, Return, pointer input, and arrow navigation internally. Space, Return, and pointer activation SHALL be equivalent when they activate a final selection, including when the activated legal date is already the committed value, internal controls SHALL NOT become a multi-stop segment of the containing form's Tab order, and hovering an empty closed field SHALL NOT change its placeholder text color.
+
+#### Scenario: Present an empty date placeholder
+- **WHEN** a closed date field has no committed value
+- **THEN** its consumer-provided placeholder identifies the absent value using the shared muted placeholder treatment
+
+#### Scenario: Keep an empty date placeholder stable on hover
+- **WHEN** a pointer hovers a closed date field with no committed value
+- **THEN** the placeholder retains the same text color it had before hover
 
 #### Scenario: Open a date picker
 - **WHEN** a focused date-picker trigger receives Space, Return, or pointer activation

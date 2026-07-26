@@ -68,7 +68,7 @@ export default function AdminPage() {
         console.error('Failed to load default grid width setting:', error);
         if (isMissingDefaultGridWidthsOnlyColumnError(error)) {
           toast({
-            title: 'Grid Width Review unavailable',
+            title: 'Grid Width Review Unavailable',
             description: getDefaultGridWidthsOnlyColumnErrorMessage(),
             variant: 'destructive',
           });
@@ -88,7 +88,7 @@ export default function AdminPage() {
   const handleSentryTest = async () => {
     if (!hasSentryDsn) {
       toast({
-        title: 'Sentry DSN not configured',
+        title: 'Sentry DSN Not Configured',
         description: 'Set VITE_SENTRY_DSN to send test errors.',
         variant: 'destructive',
       });
@@ -97,7 +97,7 @@ export default function AdminPage() {
 
     if (!Sentry.getClient()) {
       toast({
-        title: 'Sentry SDK not initialized',
+        title: 'Sentry SDK Not Initialized',
         description: 'Restart the app after updating VITE_SENTRY_DSN.',
         variant: 'destructive',
       });
@@ -107,7 +107,7 @@ export default function AdminPage() {
     const eventId = Sentry.captureException(new Error('Sentry test error from admin panel'));
     const sent = await Sentry.flush(2000);
     toast({
-      title: sent ? 'Sentry test sent' : 'Sentry send not confirmed',
+      title: sent ? 'Sentry Test Sent' : 'Sentry Send Not Confirmed',
       description: sent
         ? `Event ID: ${eventId}`
         : `Event ID: ${eventId}. Check network blocking (ad blocker/privacy mode) and retry.`,
@@ -118,7 +118,7 @@ export default function AdminPage() {
   const openDeleteDialog = () => {
     const normalized = targetEmail.trim().toLowerCase();
     if (!normalized) {
-      toast({ title: 'Email required', description: 'Enter a user email to delete.', variant: 'destructive' });
+      toast({ title: 'Email Required', description: 'Enter a user email to delete.', variant: 'destructive' });
       return;
     }
     setConfirmEmail('');
@@ -141,7 +141,7 @@ export default function AdminPage() {
       if (!result) throw new Error('No deletion result was returned');
 
       if (result.status === 'deleted') {
-        toast({ title: 'User deleted', description: `${emailPendingDelete} and associated data were removed.` });
+        toast({ title: 'User Deleted', description: `${emailPendingDelete} and associated data were removed.` });
         if (targetEmail.trim().toLowerCase() === emailPendingDelete) {
           setTargetEmail('');
         }
@@ -151,14 +151,14 @@ export default function AdminPage() {
       }
 
       if (result.status === 'not_found') {
-        toast({ title: 'User not found', description: emailPendingDelete, variant: 'destructive' });
+        toast({ title: 'User Not Found', description: emailPendingDelete, variant: 'destructive' });
       } else if (result.status === 'forbidden') {
-        toast({ title: 'Action not allowed', description: result.detail || 'Cannot delete this user.', variant: 'destructive' });
+        toast({ title: 'Action Not Allowed', description: result.detail || 'Cannot delete this user.', variant: 'destructive' });
       } else {
-        toast({ title: 'Deletion failed', description: result.detail || 'Unknown error', variant: 'destructive' });
+        toast({ title: 'Deletion Failed', description: result.detail || 'Unknown error', variant: 'destructive' });
       }
     } catch (e: unknown) {
-      toast({ title: 'Deletion failed', description: e instanceof Error ? e.message : 'Unknown error', variant: 'destructive' });
+      toast({ title: 'Deletion Failed', description: e instanceof Error ? e.message : 'Unknown error', variant: 'destructive' });
     } finally {
       setIsDeletingUser(false);
     }
@@ -193,7 +193,7 @@ export default function AdminPage() {
           ? error.message
           : 'Unknown error';
       toast({
-        title: 'Failed to save setting',
+        title: 'Failed to Save Setting',
         description,
         variant: 'destructive',
       });
@@ -234,7 +234,7 @@ export default function AdminPage() {
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-1">
-                <Label htmlFor="default-grid-widths-only">Show default data grid column widths only</Label>
+                <Label htmlFor="default-grid-widths-only">Show Default Data Grid Column Widths Only</Label>
                 <p className="text-xs text-muted-foreground">
                   Disables grid column resizing for your current admin account and ignores saved width preferences.
                 </p>
@@ -352,7 +352,7 @@ export default function AdminPage() {
       >
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Delete user account</AlertDialogTitle>
+            <AlertDialogTitle className="text-destructive">Delete User Account</AlertDialogTitle>
           </AlertDialogHeader>
           <AlertDialogBody className="space-y-4">
             <AlertDialogDescription>

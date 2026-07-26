@@ -4,16 +4,13 @@ import {
   ArrowUp,
   CheckCircle2,
   ChevronLeft,
-  CircleSlash2,
-  ListChecks,
   Plus,
-  RotateCcw,
-  Trash2,
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import { DatePickerField } from '@/components/ui/date-picker-field';
 import {
   AlertDialog,
@@ -35,7 +32,6 @@ import {
   TaskHierarchyOrderButton,
 } from '@/modules/tasks/components/TaskProjectsView';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
-import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import {
   TaskProjectReminderForm,
@@ -166,7 +162,7 @@ export function TaskProjectDetailView({
           className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-          Projects
+          Areas &amp; Projects
         </a>
         <div className="flex flex-wrap items-start gap-3">
           <div className="w-full min-w-0 sm:flex-1">
@@ -183,7 +179,7 @@ export function TaskProjectDetailView({
                   Complete
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => setProjectAction('cancel')}>
-                  <CircleSlash2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  <TASK_ICONS.Canceled className="mr-1.5 h-4 w-4" aria-hidden="true" />
                   Cancel
                 </Button>
               </>
@@ -196,12 +192,12 @@ export function TaskProjectDetailView({
                   showError('Project Could Not Be Reopened', error);
                 })}
               >
-                <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                <TASK_ICONS.Reopen className="mr-1.5 h-4 w-4" aria-hidden="true" />
                 Reopen
               </Button>
             )}
             <Button type="button" variant="outline-destructive" size="sm" onClick={() => setProjectAction('delete')}>
-              <Trash2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              <TASK_ICONS.Delete className="mr-1.5 h-4 w-4" aria-hidden="true" />
               Delete
             </Button>
           </div>
@@ -243,13 +239,13 @@ export function TaskProjectDetailView({
             disabled={creatingTask || !newTaskTitle.trim()}
             aria-label="Add Project Task"
           >
-            <Plus className="h-4 w-4" />
+            <TASK_ICONS.AddTask className="h-4 w-4" />
           </Button>
         </form>
       </div> : null}
 
       {detail.tasks.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">No Project Tasks</p>
+        <p className="py-12 text-center text-sm text-muted-foreground">No project tasks</p>
       ) : (
         <ProjectTaskSection tasks={detail.tasks} detail={detail} />
       )}
@@ -485,7 +481,7 @@ function ProjectTaskSection({
     <section aria-label="Project Tasks">
       <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
         {tasks.length === 0 ? (
-          <p className="px-4 py-5 text-sm text-muted-foreground">No Tasks</p>
+          <p className="px-4 py-5 text-sm text-muted-foreground">No tasks</p>
         ) : tasks.map((task, index) => (
           <ProjectTaskRow
             key={task.id}
@@ -574,15 +570,14 @@ function ProjectTaskRow({
           aria-label={`Actionability for ${task.title}`}
           className="h-9 min-w-32 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <option value="actionable">Actionable</option>
+          <option value="actionable">Ready</option>
           <option value="waiting">Waiting</option>
           <option value="rechecking">Rechecking</option>
         </select>
         <details className="group min-w-0 flex-1">
           <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-sm text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <ListChecks className="h-4 w-4" aria-hidden="true" />
+            <TASK_ICONS.TaskChecklist className="h-4 w-4" aria-hidden="true" />
             Checklist
-            <TaskCountBadge count={checklistItems.length} label="Checklist Items" />
           </summary>
           <ChecklistEditor
             task={task}
@@ -676,7 +671,7 @@ function ChecklistEditor({
               });
             }}
           >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            <TASK_ICONS.Delete className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
       ))}

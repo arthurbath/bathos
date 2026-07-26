@@ -37,7 +37,7 @@ No `DialogFooter` or `AlertDialogFooter` containing buttons or other meaningful 
 
 ### Store compact notation as display strings
 
-The Keyboard Commands data will concatenate modifier symbols and keys directly, such as `⌘Z`, `⌃⇧Q`, and `⌘Click`. This changes presentation only. Keyboard event matching remains untouched.
+The Keyboard Commands data will concatenate modifier symbols and keys directly, such as `⌘Z`, `⌥⇧Q`, and `⌘Click`. This changes presentation only. Keyboard event matching remains untouched.
 
 ### Make the slash chord the only keyboard-help binding
 

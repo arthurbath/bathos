@@ -145,7 +145,7 @@ export function SnakeShell({
       await Promise.all(updates);
     } catch (error) {
       toast({
-        title: 'Failed to update active snake',
+        title: 'Failed to Update Active Snake',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -178,8 +178,8 @@ export function SnakeShell({
                   void handleSetActiveSnake(value);
                 }}
               >
-                <SelectTrigger aria-label="Active snake" className="h-8 w-full min-w-[100px]">
-                  <SelectValue placeholder="Select snake" />
+                <SelectTrigger aria-label="Active Snake" className="h-8 w-full min-w-[100px]">
+                  <SelectValue placeholder="Select Snake" />
                 </SelectTrigger>
                 <SelectContent>
                   {snakes

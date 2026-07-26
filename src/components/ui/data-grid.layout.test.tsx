@@ -276,7 +276,7 @@ describe("DataGrid layout affordances", () => {
       const amountHeaderCell = container.querySelector("thead th:nth-child(2)") as HTMLElement;
       const spacerHeaderCell = container.querySelector("thead th:last-child") as HTMLElement;
       const lastHeaderRule = amountHeaderCell.querySelector("[data-grid-sticky-right-rule='true']");
-      const resizeHandle = amountHeaderCell.querySelector("button[aria-label='Resize amount column']") as HTMLButtonElement | null;
+      const resizeHandle = amountHeaderCell.querySelector("button[aria-label='Resize Amount Column']") as HTMLButtonElement | null;
       const spacerBodyCell = container.querySelector("tbody tr:first-child td:last-child") as HTMLElement;
       const tfoot = container.querySelector("tfoot") as HTMLElement;
 

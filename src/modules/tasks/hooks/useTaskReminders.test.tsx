@@ -119,7 +119,7 @@ describe('useTaskReminders', () => {
     expect(result.current.byRootId.get('task-b')).toEqual(saved);
   });
 
-  it('exposes a content-free due-claim failure until an explicit retry succeeds', async () => {
+  it('clears a due-claim failure when the next automatic visibility check succeeds', async () => {
     const reminderService = {
       claimDue: vi.fn()
         .mockRejectedValueOnce(new Error('provider detail'))
@@ -146,7 +146,9 @@ describe('useTaskReminders', () => {
     expect(result.current.claimError).toBeInstanceOf(Error);
 
     await act(async () => {
-      await result.current.claimDue();
+      document.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+      await Promise.resolve();
     });
     expect(reminderService.claimDue).toHaveBeenCalledTimes(2);
     expect(result.current.claimError).toBeNull();

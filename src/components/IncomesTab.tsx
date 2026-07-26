@@ -276,7 +276,7 @@ function AveragedAmountCell({
         className={`h-7 w-full rounded-md border border-transparent bg-transparent pl-4 pr-2 text-right tabular-nums text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 hover:border-[hsl(var(--grid-sticky-line))] ${GRID_CONTROL_FOCUS_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}
         onClick={onEdit}
         {...gridNavProps(ctx, 2)}
-        aria-label={`Edit averaged records for ${income.name}`}
+        aria-label={`Edit Averaged Records for ${income.name}`}
       >
         {Math.round(income.amount)}
       </button>
@@ -338,7 +338,7 @@ function IncomeActionsCell({
       </DropdownMenu>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete income</AlertDialogTitle>
+          <AlertDialogTitle>Delete Income</AlertDialogTitle>
         </AlertDialogHeader>
         <AlertDialogBody>
           <AlertDialogDescription>Are you sure you want to delete &ldquo;{income.name}&rdquo;? This action cannot be undone.</AlertDialogDescription>
@@ -495,14 +495,14 @@ export function IncomesTab({
     else if (field === 'frequency_param') updates.frequency_param = value ? Number(value) : null;
     else updates[field] = value;
     return onUpdate(id, updates as Partial<Omit<Income, 'id' | 'household_id'>>).catch((error: unknown) => {
-      toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Saving', description: getErrorMessage(error), variant: 'destructive' });
       throw error;
     });
   }, [onUpdate]);
 
   const handleToggleEstimate = useCallback((id: string, next: boolean) => {
     return onUpdate(id, { is_estimate: next }).catch((error: unknown) => {
-      toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Saving', description: getErrorMessage(error), variant: 'destructive' });
       throw error;
     });
   }, [onUpdate]);
@@ -586,7 +586,7 @@ export function IncomesTab({
       await onUpdate(averageEditorState.income.id, payload);
       setAverageEditorState(null);
     } catch (error: unknown) {
-      toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Saving', description: getErrorMessage(error), variant: 'destructive' });
     }
 
     setSavingAverageEditor(false);
@@ -608,7 +608,7 @@ export function IncomesTab({
       });
       setConvertToSimpleState(null);
     } catch (error: unknown) {
-      toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Saving', description: getErrorMessage(error), variant: 'destructive' });
     }
 
     setSavingConvertToSimple(false);
@@ -750,7 +750,7 @@ export function IncomesTab({
                 variant="outline-success"
                 size="sm"
                 className="h-8 w-8 p-0"
-                aria-label="Add income"
+                aria-label="Add Income"
               >
                 <Plus className="h-4 w-4" />
               </Button>
@@ -992,7 +992,7 @@ export function IncomesTab({
       <AlertDialog open={convertToSimpleState !== null} onOpenChange={(open) => { if (!open && !savingConvertToSimple) setConvertToSimpleState(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Convert to simple income?</AlertDialogTitle>
+            <AlertDialogTitle>Convert to Simple Income?</AlertDialogTitle>
           </AlertDialogHeader>
           <AlertDialogBody>
             <AlertDialogDescription>

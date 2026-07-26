@@ -219,7 +219,7 @@ export function planTaskClipboardPaste(
 
 function parseSnapshot(value: unknown): TaskClipboardSnapshot {
   const row = requireRecord(value, 'Task snapshot is invalid');
-  const title = requireText(row.title, 'Task Title', 500);
+  const title = requireText(row.title, 'Task Summary', 500);
   const notes = requireString(row.notes, 'Task Notes', 100_000);
   const primaryLink = requireNullableString(row.primaryLink, 'Task Primary Link', 10_000);
   const destination = requireEnum(row.destination, taskDestinations, 'Task destination');

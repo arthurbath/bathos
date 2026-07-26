@@ -1,14 +1,6 @@
-import {
-  BookOpen,
-  File,
-  Globe2,
-  LayoutTemplate,
-  Link2,
-  Mail,
-  TextQuote,
-  type LucideIcon,
-} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import type { TaskSourceKind, TaskTodo } from '@/modules/tasks/types/tasks';
 import {
   getTaskPrimaryLinkHref,
@@ -21,25 +13,29 @@ type SourcePresentation = {
 };
 
 const sourcePresentations: Record<TaskSourceKind, SourcePresentation> = {
-  webpage: { icon: Globe2, label: 'Webpage' },
-  mail_message: { icon: Mail, label: 'Mail Message' },
-  file: { icon: File, label: 'File' },
-  selected_text: { icon: TextQuote, label: 'Selected Text' },
-  reading_item: { icon: BookOpen, label: 'Reading Item' },
-  template: { icon: LayoutTemplate, label: 'Template' },
-  other: { icon: Link2, label: 'Source' },
+  webpage: { icon: TASK_ICONS.WebpageSource, label: 'Webpage' },
+  mail_message: { icon: TASK_ICONS.MailSource, label: 'Mail Message' },
+  file: { icon: TASK_ICONS.FileSource, label: 'File' },
+  selected_text: { icon: TASK_ICONS.SelectedTextSource, label: 'Selected Text' },
+  reading_item: { icon: TASK_ICONS.ReadingItemSource, label: 'Reading Item' },
+  template: { icon: TASK_ICONS.TemplateSource, label: 'Template' },
+  other: { icon: TASK_ICONS.OtherSource, label: 'Source' },
 };
 
 export function TaskSourceIndicator({
   task,
+  compact = false,
 }: {
   task: TaskTodo;
+  compact?: boolean;
 }) {
   const primaryLinkKind = getTaskPrimaryLinkKind(task.primary_link);
   const href = getTaskPrimaryLinkHref(task.primary_link);
-  const className = 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+  const className = `inline-flex ${compact ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`;
   if (primaryLinkKind !== null && href !== null) {
-    const Icon = primaryLinkKind === 'mail' ? Mail : Link2;
+    const Icon = primaryLinkKind === 'mail'
+      ? TASK_ICONS.MailSource
+      : TASK_ICONS.OtherSource;
     const label = primaryLinkKind === 'mail'
       ? `Open Mail Link for ${task.title}`
       : `Open Primary Link for ${task.title}`;

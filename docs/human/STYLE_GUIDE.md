@@ -35,20 +35,35 @@ Never use colors purely for decoration. Every color must carry meaning.
 - Helper text is used sparingly — prefer self-evident UI
 - Do not add subtext beneath page, section, card, or modal headings unless explicitly requested in the task.
 
-## Label Casing
+## UI Phrase Casing
 
 Use Title Case for:
 
-- Buttons
-- Card Titles
-- Input Labels
-- Dropdown Menu Options
-- Modal Titles
-- Section Titles
+- Toast titles
+- Button labels
+- Input labels
+- Input placeholders
+- Module names
+- Page titles
+- Modal titles
+- Card titles
+- Dropdown menu options
+- Section headings, including everything rendered as `h1` through `h6`
 - Form modal headers should normally contain only the title. Do not add subtext beneath a modal heading unless the task explicitly calls for it.
+
+Use sentence case for:
+
+- Empty-state "No data" messages, including empty DataGrids, lists, searches, and collection buckets
+- Toast message bodies
 
 Use lowercase for these words when they appear in the middle of a label:
 `a`, `an`, `and`, `as`, `at`, `by`, `for`, `from`, `if`, `in`, `n` (for "and"), `o` (for "of"), `of`, `on`, `or`, `tha` (for "the"), `the`, `to`, `wit` (for "with"), `with`.
+
+Capitalize the first and last lexical words in a title-case phrase even when either word appears in the lowercase list. Capitalize major words and each major part of a hyphenated compound. Preserve proper nouns, acronyms, and canonical product spellings such as `BathOS`, `macOS`, `iOS`, `PowerSync`, `DataGrid`, `CSV`, and `URL`.
+
+Apply casing only to system-authored framing. Never change the capitalization of a user-authored task, project, area, household, vehicle, wardrobe item, drawer, snake, budget value, or other stored value merely because it appears inside a governed UI phrase.
+
+A system-authored accessible name or tooltip title that labels a button or input follows the title-case control-label rule. Descriptive accessibility prose that communicates state or instructions uses sentence case.
 
 ## Icons
 
@@ -157,6 +172,16 @@ DataGrid text-entry cells intentionally use a spreadsheet interaction model:
 - Delete and Backspace reset a focused non-editing cell only when the caller declares a legal reset target. Never infer a select reset from its first option.
 
 This is the standing standard for all new and updated BathOS controls.
+
+## Content Selection and Native Dragging
+
+- Ordinary BathOS application chrome, controls, headings, labels, static values, and read-only user content are not text-selectable.
+- Inputs, textareas, and active contenteditable editors preserve native text selection.
+- A DataGrid cell's displayed value is not selectable while the cell is focused but not being edited. Its text becomes selectable when the cell enters edit mode.
+- Legal documents and other deliberately document-like surfaces opt into selection with `data-bathos-text-selection="allow"`.
+- Links and images do not use browser-native dragging unless a surface deliberately opts in with `data-bathos-native-drag="allow"`.
+- Application-owned drag interactions, including Tasks task dragging, DataGrid column resizing, and file drop targets, remain available.
+- The selection policy must not interfere with keyboard focus, screen readers, browser Find, link activation, or modified-click behavior.
 
 ## Tooltip Interaction
 

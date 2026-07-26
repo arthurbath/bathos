@@ -157,7 +157,7 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
       await Promise.all(updates);
     } catch (error) {
       toast({
-        title: 'Failed to update active vehicle',
+        title: 'Failed to Update Active Vehicle',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -204,8 +204,8 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
                   void handleSetActiveVehicle(value);
                 }}
               >
-                <SelectTrigger aria-label="Active vehicle" className="h-8 w-full min-w-[100px]">
-                  <SelectValue placeholder="Select vehicle" />
+                <SelectTrigger aria-label="Active Vehicle" className="h-8 w-full min-w-[100px]">
+                  <SelectValue placeholder="Select Vehicle" />
                 </SelectTrigger>
                 <SelectContent>
                   {vehicles

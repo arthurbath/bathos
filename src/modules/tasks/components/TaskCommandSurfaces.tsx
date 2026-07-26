@@ -1,25 +1,13 @@
 import {
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type MouseEvent,
   type ReactNode,
 } from 'react';
-import {
-  CalendarDays,
-  CalendarRange,
-  CircleDashed,
-  FolderKanban,
-  LayoutTemplate,
-  ListTodo,
-  Search,
-  Settings,
-  SquareCheckBig,
-} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import { DatePickerField } from '@/components/ui/date-picker-field';
 import {
   Dialog,
@@ -29,24 +17,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { shouldHandleWithBrowser } from '@/lib/navigation';
-import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
+import { toast } from '@/hooks/use-toast';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
+import { resolveTaskReminderTimeInput } from '@/modules/tasks/domain/taskReminderTimeInput';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
-import {
-  createTaskSearchDocuments,
-  filterTaskSearchDocuments,
-  getTaskSearchSourceKinds,
-  type TaskSearchFilters,
-} from '@/modules/tasks/domain/taskSearch';
-import { getTaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
 import { isMacLikeTaskPlatform } from '@/modules/tasks/domain/taskSelection';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
-import type {
-  TaskSourceKind,
-  TaskTodo,
-} from '@/modules/tasks/types/tasks';
+import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
 export type TaskBulkCommandMode = 'start' | 'deadline' | 'organization' | 'reminder';
 
@@ -56,6 +33,8 @@ export function TaskBulkCommandDialog({
   pending,
   hierarchy,
   planningDate,
+  reminderTimeZone,
+  reminderIncludesToday,
   onOpenChange,
   onApplyDate,
   onApplyOrganization,
@@ -66,12 +45,15 @@ export function TaskBulkCommandDialog({
   pending: boolean;
   hierarchy: TaskHierarchyModel;
   planningDate: string;
+  reminderTimeZone: string;
+  reminderIncludesToday: boolean;
   onOpenChange: (open: boolean) => void;
   onApplyDate: (value: string) => Promise<void>;
   onApplyOrganization: (patch: EditableTaskPatch) => Promise<void>;
   onApplyReminder: (localTime: string) => Promise<void>;
 }) {
   const [reminderTime, setReminderTime] = useState('');
+  const [confirmedReminderTime, setConfirmedReminderTime] = useState<string | null>(null);
   const dateRef = useRef<HTMLButtonElement>(null);
   const organizationRef = useRef<HTMLSelectElement>(null);
   const reminderRef = useRef<HTMLInputElement>(null);
@@ -84,6 +66,35 @@ export function TaskBulkCommandDialog({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [mode]);
+  useEffect(() => {
+    if (mode !== 'reminder') {
+      setReminderTime('');
+      setConfirmedReminderTime(null);
+    }
+  }, [mode]);
+  const resolveBulkReminderTime = () => {
+    const resolved = resolveTaskReminderTimeInput(reminderTime, {
+      today: reminderIncludesToday,
+      timeZone: reminderTimeZone,
+    });
+    if (!resolved) {
+      setReminderTime('');
+      setConfirmedReminderTime(null);
+      toast({
+        title: 'Not Allowed.',
+        duration: 1_800,
+      });
+      return null;
+    }
+    setReminderTime(resolved.displayTime);
+    setConfirmedReminderTime(resolved.localTime);
+    return resolved.localTime;
+  };
+  const submitBulkReminder = () => {
+    const localTime = confirmedReminderTime ?? resolveBulkReminderTime();
+    if (!localTime) return;
+    void onApplyReminder(localTime);
+  };
   const title = mode === 'start'
     ? "Set Start"
     : mode === 'deadline'
@@ -152,20 +163,40 @@ export function TaskBulkCommandDialog({
               ) : null}
             </select>
           ) : mode === 'reminder' ? (
-            <div className="flex gap-2">
+            <div
+              className="flex items-center gap-2"
+            >
               <Input
                 ref={reminderRef}
-                type="time"
+                type="text"
+                inputMode="text"
+                autoComplete="off"
                 value={reminderTime}
+                placeholder="No Reminder"
                 aria-label="Reminder Time"
+                data-bathos-field-return-owned="true"
                 disabled={pending}
-                onChange={(event) => setReminderTime(event.target.value)}
+                className="w-32 shrink-0"
+                onChange={(event) => {
+                  setReminderTime(event.target.value);
+                  setConfirmedReminderTime(null);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (confirmedReminderTime !== null) {
+                    void onApplyReminder(confirmedReminderTime);
+                    return;
+                  }
+                  resolveBulkReminderTime();
+                }}
               />
               <Button
                 type="button"
                 variant="outline"
-                disabled={!reminderTime || pending}
-                onClick={() => void onApplyReminder(reminderTime)}
+                disabled={!reminderTime.trim() || pending}
+                onClick={submitBulkReminder}
               >
                 Apply
               </Button>
@@ -181,294 +212,6 @@ export type TaskTemporalAction = {
   label: string;
   run: () => Promise<void>;
 };
-
-const taskSearchViews = [
-  { path: '/today', label: 'Today', icon: CalendarDays },
-  { path: '/upcoming', label: 'Upcoming', icon: CalendarRange },
-  { path: '/anytime', label: 'Anytime', icon: ListTodo },
-  { path: '/someday', label: 'Someday', icon: CircleDashed },
-  { path: '/projects', label: 'Projects', icon: FolderKanban },
-  { path: '/templates', label: 'Templates', icon: LayoutTemplate },
-  { path: '/done', label: 'Done', icon: SquareCheckBig },
-  { path: '/config', label: 'Config', icon: Settings },
-] as const;
-
-const sourceKindLabels: Record<TaskSourceKind, string> = {
-  webpage: 'Webpage',
-  mail_message: 'Mail Message',
-  file: 'File',
-  selected_text: 'Selected Text',
-  reading_item: 'Reading Item',
-  template: 'Template',
-  other: 'Other',
-};
-
-export function TaskSearchDialog({
-  open,
-  basePath,
-  tasks,
-  hierarchy,
-  planningDate,
-  loading,
-  error,
-  onOpenChange,
-  onCloseAutoFocus,
-  onNavigate,
-  onSelectTask,
-}: {
-  open: boolean;
-  basePath: string;
-  tasks: TaskTodo[];
-  hierarchy: TaskHierarchyModel;
-  planningDate: string;
-  loading: boolean;
-  error: unknown;
-  onOpenChange: (open: boolean) => void;
-  onCloseAutoFocus: () => void;
-  onNavigate: (path: string) => void;
-  onSelectTask: (task: TaskTodo, path: string) => void;
-}) {
-  const [query, setQuery] = useState('');
-  const [filters, setFilters] = useState<TaskSearchFilters>({
-    destination: 'all',
-    lifecycle: 'all',
-    actionability: 'all',
-    sourceKind: 'all',
-  });
-  useEffect(() => {
-    if (open) return;
-    setQuery('');
-    setFilters({
-      destination: 'all',
-      lifecycle: 'all',
-      actionability: 'all',
-      sourceKind: 'all',
-    });
-  }, [open]);
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const deferredQuery = useDeferredValue(normalizedQuery);
-  const { areas, projects } = hierarchy;
-  const documents = useMemo(
-    () => createTaskSearchDocuments(tasks, { areas, projects }),
-    [areas, projects, tasks],
-  );
-  const filteredDocuments = useMemo(
-    () => filterTaskSearchDocuments(documents, deferredQuery, filters),
-    [deferredQuery, documents, filters],
-  );
-  const filtersActive = filters.destination !== 'all'
-    || filters.lifecycle !== 'all'
-    || filters.actionability !== 'all'
-    || filters.sourceKind !== 'all';
-  const resultLimit = normalizedQuery || filtersActive ? 100 : 20;
-  const displayedDocuments = filteredDocuments.slice(0, resultLimit);
-  const availableSourceKinds = useMemo(
-    () => getTaskSearchSourceKinds(documents),
-    [documents],
-  );
-
-  const handleViewClick = (event: MouseEvent<HTMLAnchorElement>, path: string) => {
-    if (shouldHandleWithBrowser(event)) return;
-    event.preventDefault();
-    onNavigate(path);
-  };
-  const handleTaskClick = (
-    event: MouseEvent<HTMLAnchorElement>,
-    task: TaskTodo,
-    path: string,
-  ) => {
-    if (shouldHandleWithBrowser(event)) return;
-    event.preventDefault();
-    onSelectTask(task, path);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        footerless
-        className="shadow-none sm:max-w-xl"
-        aria-describedby={undefined}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          onCloseAutoFocus();
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>Search Tasks</DialogTitle>
-        </DialogHeader>
-        <DialogBody className="space-y-4 pt-4">
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              autoFocus
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              aria-label="Search Tasks and Views"
-              placeholder="Search Tasks and Views"
-              className="pl-9"
-            />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2" aria-label="Task Search Filters">
-            <SearchFilter
-              label="Placement"
-              value={filters.destination}
-              onChange={(destination) => setFilters((current) => ({
-                ...current,
-                destination: destination as TaskSearchFilters['destination'],
-              }))}
-              options={[
-                ['all', 'All Placements'],
-                ['anytime', 'Anytime'],
-                ['someday', 'Someday'],
-              ]}
-            />
-            <SearchFilter
-              label="Status"
-              value={filters.lifecycle}
-              onChange={(lifecycle) => setFilters((current) => ({
-                ...current,
-                lifecycle: lifecycle as TaskSearchFilters['lifecycle'],
-              }))}
-              options={[
-                ['all', 'All Statuses'],
-                ['open', 'Open'],
-                ['completed', 'Completed'],
-                ['canceled', 'Canceled'],
-              ]}
-            />
-            <SearchFilter
-              label="Actionability"
-              value={filters.actionability}
-              onChange={(actionability) => setFilters((current) => ({
-                ...current,
-                actionability: actionability as TaskSearchFilters['actionability'],
-              }))}
-              options={[
-                ['all', 'All Actionability'],
-                ['actionable', 'Actionable'],
-                ['waiting', 'Waiting'],
-                ['rechecking', 'Rechecking'],
-              ]}
-            />
-            <SearchFilter
-              label="Source"
-              value={filters.sourceKind}
-              onChange={(sourceKind) => setFilters((current) => ({
-                ...current,
-                sourceKind: sourceKind as TaskSearchFilters['sourceKind'],
-              }))}
-              options={[
-                ['all', 'All Sources'],
-                ['none', 'No Source'],
-                ...availableSourceKinds.map((sourceKind) => [
-                  sourceKind,
-                  sourceKindLabels[sourceKind],
-                ] as const),
-              ]}
-            />
-          </div>
-
-          {!normalizedQuery ? (
-            <section aria-labelledby="task-search-views-heading">
-              <h3 id="task-search-views-heading" className="mb-2 text-xs font-semibold text-muted-foreground">
-                Views
-              </h3>
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
-                {taskSearchViews.map(({ path, label, icon: Icon }) => {
-                  const href = `${basePath}${path}`;
-                  return (
-                    <a
-                      key={path}
-                      href={href}
-                      onClick={(event) => handleViewClick(event, href)}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-md px-2 text-sm font-medium text-foreground hover:bg-foreground/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                      {label}
-                    </a>
-                  );
-                })}
-              </div>
-            </section>
-          ) : null}
-
-          <section aria-labelledby="task-search-results-heading">
-            <h3 id="task-search-results-heading" className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-              Tasks
-              <TaskCountBadge count={filteredDocuments.length} label="Tasks" />
-            </h3>
-            {loading ? (
-              <div className="flex min-h-24 items-center justify-center"><LoadingSpinner /></div>
-            ) : error ? (
-              <p role="alert" className="py-6 text-center text-sm text-destructive">
-                Tasks Could Not Be Searched
-              </p>
-            ) : filteredDocuments.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">No Matching Tasks</p>
-            ) : (
-              <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-                {displayedDocuments.map(({ task, hierarchyLabel }) => {
-                  const route = getTaskPlanningRoute(task, planningDate);
-                  const href = `${basePath}/${route}`;
-                  return (
-                    <a
-                      key={task.id}
-                      href={href}
-                      onClick={(event) => handleTaskClick(event, task, href)}
-                      className="flex h-16 flex-col justify-center overflow-hidden px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                      data-task-compact-row
-                    >
-                      <span className="block truncate text-sm font-medium text-foreground">{task.title}</span>
-                      <span className="mt-1 block truncate text-xs text-muted-foreground">
-                        {getTaskSearchMetadata(task, hierarchyLabel)}
-                      </span>
-                    </a>
-                  );
-                })}
-              </div>
-            )}
-            {filteredDocuments.length > displayedDocuments.length ? (
-              <p className="pt-3 text-center text-xs text-muted-foreground">
-                Showing {displayedDocuments.length} of {filteredDocuments.length}. Refine the search to narrow results.
-              </p>
-            ) : null}
-          </section>
-        </DialogBody>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function SearchFilter({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: ReadonlyArray<readonly [string, string]>;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="space-y-1 text-xs font-medium text-muted-foreground">
-      <span>{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {options.map(([optionValue, optionLabel]) => (
-          <option key={optionValue} value={optionValue}>{optionLabel}</option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 export function TaskKeyboardHelpDialog({
   open,
@@ -489,14 +232,14 @@ export function TaskKeyboardHelpDialog({
     {
       label: 'Standard Actions',
       commands: [
-        ['Undo a Task Change', '⌘Z or ⌃Z', '⌃Z'],
+        ['Undo a Task Change', '⌘Z / ⌃Z', '⌃Z / ⌥⇧Z'],
         ['Redo a Task Change', '⌘Y / ⌘⇧Z', '⌃Y / ⌃⇧Z'],
         ['Select All Visible Tasks', '⌘A', '⌃A'],
         ['Duplicate Focused, Open, or Selected Tasks', '⌘D', '⌃D'],
         ['Cut Focused or Selected Tasks', '⌘X', '⌃X'],
         ['Copy Focused or Selected Tasks', '⌘C', '⌃C'],
         ['Paste Tasks or Text', '⌘V', '⌃V'],
-        ['Close Open Task', '⌘Return or ⌘Escape', '⌃Return'],
+        ['Close Open Task', '⌘Return / ⌘Escape', '⌃Return'],
         ['Show Keyboard Commands', '⌘/', '⌃/'],
       ],
     },
@@ -514,20 +257,20 @@ export function TaskKeyboardHelpDialog({
     {
       label: 'Tasks-Specific Actions',
       commands: [
-        ['Open/Close Task', '⌃Q', '⌃⇧Q'],
-        ['Open Previous Task', '⌃W', '⌃⇧W'],
-        ['Choose Start', '⌃E', '⌃⇧E'],
-        ['Cycle Day Horizon', '⌃R', '⌃⇧R'],
-        ['Clear Start', '⌃T', '⌃⇧T'],
-        ['New Task', '⌃A', '⌃⇧A'],
-        ['Open Next Task', '⌃S', '⌃⇧S'],
-        ['Choose Deadline', '⌃D', '⌃⇧D'],
-        ['Cycle Actionability', '⌃F', '⌃⇧F'],
-        ['Set Start to Someday', '⌃G', '⌃⇧G'],
-        ['Toggle Done', '⌃X', '⌃⇧X'],
-        ['Edit Checklist', '⌃C', '⌃⇧C'],
-        ['Choose Area or Project', '⌃V', '⌃⇧V'],
-        ['Edit Reminder Time', '⌃B', '⌃⇧B'],
+        ['Open/Close Task', '⌃Q', '⌥⇧Q'],
+        ['Open Previous Task', '⌃W', '⌥⇧W'],
+        ['Choose Start', '⌃E', '⌥⇧E'],
+        ['Cycle Day Horizon', '⌃R', '⌥⇧R'],
+        ['Clear Start', '⌃T', '⌥⇧T'],
+        ['New Task', '⌃A', '⌥⇧A'],
+        ['Open Next Task', '⌃S', '⌥⇧S'],
+        ['Choose Deadline', '⌃D', '⌥⇧D'],
+        ['Cycle Actionability', '⌃F', '⌥⇧F'],
+        ['Set Start to Someday', '⌃G', '⌥⇧G'],
+        ['Toggle Done', '⌃X', '⌥⇧X'],
+        ['Edit Checklist', '⌃C', '⌥⇧C'],
+        ['Choose Area or Project', '⌃V', '⌥⇧V'],
+        ['Edit Reminder Time', '⌃B', '⌥⇧B'],
       ],
     },
     {
@@ -853,16 +596,4 @@ function TaskCommandButton({
       {label}{current ? ' (Current)' : ''}
     </Button>
   );
-}
-
-function getTaskSearchMetadata(task: TaskTodo, hierarchyLabel: string | null): string {
-  const metadata = [
-    task.lifecycle === 'open' ? task.destination : task.lifecycle,
-    task.actionability === 'waiting'
-      ? 'waiting'
-      : task.actionability === 'rechecking' ? 'rechecking' : null,
-    hierarchyLabel,
-    task.source_kind ? sourceKindLabels[task.source_kind] : null,
-  ].filter(Boolean);
-  return metadata.map((value) => value![0].toUpperCase() + value!.slice(1)).join(' / ');
 }

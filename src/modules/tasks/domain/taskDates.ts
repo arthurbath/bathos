@@ -114,6 +114,18 @@ export function formatTaskRelativeCalendarDate(
   return formatTaskCalendarDate(value, locale, false);
 }
 
+export function formatTaskCompactCalendarDayOffset(
+  value: string,
+  planningDate: string,
+): string {
+  if (!isTaskCalendarDate(value) || !isTaskCalendarDate(planningDate)) return value;
+  const offset = calendarEpochDay(value) - calendarEpochDay(planningDate);
+
+  if (offset === 0) return 'Today';
+
+  return `${offset} ${Math.abs(offset) === 1 ? 'day' : 'days'}`;
+}
+
 export function formatTaskDateControlLabel(
   value: string,
   planningDate: string,

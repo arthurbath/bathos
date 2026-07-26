@@ -70,7 +70,7 @@ function parseWeightGrams(value: string): number | null {
 function normalizeWeightInput(value: string, fallback: number): string {
   const parsed = parseWeightGrams(value);
   if (parsed === null) {
-    toast({ title: 'Weight must be greater than 0', variant: 'destructive' });
+    toast({ title: 'Weight Must Be Greater Than 0', variant: 'destructive' });
     return String(fallback);
   }
   return String(parsed);
@@ -511,10 +511,10 @@ export function SnakeWeightRecordsGrid({
       });
       await onAddWeightRecord(input, recordId);
       setDialogOpen(false);
-      toast({ title: 'Weight record added' });
+      toast({ title: 'Weight Record Added' });
     } catch (error) {
       toast({
-        title: 'Failed to add weight record',
+        title: 'Failed to Add Weight Record',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -541,10 +541,10 @@ export function SnakeWeightRecordsGrid({
       });
       await onDeleteWeightRecord(deleteTarget.id);
       setDeleteTarget(null);
-      toast({ title: 'Weight record deleted' });
+      toast({ title: 'Weight Record Deleted' });
     } catch (error) {
       toast({
-        title: 'Failed to delete weight record',
+        title: 'Failed to Delete Weight Record',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -565,7 +565,7 @@ export function SnakeWeightRecordsGrid({
             variant="outline-success"
             size="sm"
             className="h-8 w-8 p-0"
-            aria-label="Add weight record"
+            aria-label="Add Weight Record"
             onClick={openAddDialog}
           >
             <Plus className="h-4 w-4" />

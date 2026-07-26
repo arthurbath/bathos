@@ -7,11 +7,11 @@ import { taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import { TaskSourceIndicator } from './TaskSourceIndicator';
 
-function renderIndicator(task: TaskTodo) {
+function renderIndicator(task: TaskTodo, compact = false) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
-  act(() => root.render(<TaskSourceIndicator task={task} />));
+  act(() => root.render(<TaskSourceIndicator task={task} compact={compact} />));
   return { container, root };
 }
 
@@ -39,6 +39,24 @@ describe('TaskSourceIndicator', () => {
       expect(link?.title).toBe('https://example.test/brief');
     } finally {
       cleanup(root, container);
+    }
+  });
+
+  it('offers a compact task-row footprint without changing the default presentation', () => {
+    const taskWithLink = taskTodoFixture({
+      title: 'Read the brief',
+      primary_link: 'https://example.test/brief',
+    });
+    const regular = renderIndicator(taskWithLink);
+    const compact = renderIndicator(taskWithLink, true);
+
+    try {
+      expect(regular.container.querySelector('a')).toHaveClass('h-10', 'w-10');
+      expect(compact.container.querySelector('a')).toHaveClass('h-8', 'w-8');
+      expect(compact.container.querySelector('a')).not.toHaveClass('h-10', 'w-10');
+    } finally {
+      cleanup(regular.root, regular.container);
+      cleanup(compact.root, compact.container);
     }
   });
 

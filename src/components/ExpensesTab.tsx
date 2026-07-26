@@ -438,7 +438,7 @@ function AveragedAmountCell({
         className={`h-7 w-full rounded-md border border-transparent bg-transparent pl-4 pr-2 text-right tabular-nums text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 hover:border-[hsl(var(--grid-sticky-line))] ${GRID_CONTROL_FOCUS_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}
         onClick={onEdit}
         {...gridNavProps(ctx, 2)}
-        aria-label={`Edit averaged records for ${expense.name}`}
+        aria-label={`Edit Averaged Records for ${expense.name}`}
       >
         {Math.round(expense.amount)}
       </button>
@@ -500,7 +500,7 @@ function ExpenseActionsCell({
       </DropdownMenu>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete expense</AlertDialogTitle>
+          <AlertDialogTitle>Delete Expense</AlertDialogTitle>
         </AlertDialogHeader>
         <AlertDialogBody>
           <AlertDialogDescription>Are you sure you want to delete &ldquo;{expense.name}&rdquo;? This action cannot be undone.</AlertDialogDescription>
@@ -783,7 +783,7 @@ export function ExpensesTab({
       setNewExpense(createDefaultExpenseDraft());
       if (!isVisibleInGrid) {
         toast({
-          title: 'Expense added but hidden by filters',
+          title: 'Expense Added But Hidden by Filters',
           description: 'The expense was added, but it is not visible because of the current filters.',
         });
       }
@@ -811,7 +811,7 @@ export function ExpensesTab({
 
     if (shouldNotifyHiddenByFilters) {
       toast({
-        title: 'Expense updated but hidden by filters',
+        title: 'Expense Updated But Hidden by Filters',
         description: 'The expense was updated, and it is no longer visible because of the current filters.',
       });
     }
@@ -828,14 +828,14 @@ export function ExpensesTab({
       updates.linked_account_id = value === '_none' ? null : value;
     } else updates[field] = value;
     return updateExpenseAndNotifyIfHidden(id, updates as Partial<Omit<Expense, 'id' | 'household_id'>>).catch((error: unknown) => {
-      toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Saving', description: getErrorMessage(error), variant: 'destructive' });
       throw error;
     });
   }, [updateExpenseAndNotifyIfHidden]);
 
   const handleToggleEstimate = useCallback((id: string, checked: boolean) => {
     return onUpdate(id, { is_estimate: checked }).catch((error: unknown) => {
-      toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Saving', description: getErrorMessage(error), variant: 'destructive' });
       throw error;
     });
   }, [onUpdate]);
@@ -925,7 +925,7 @@ export function ExpensesTab({
       await onUpdate(averageEditorState.expense.id, payload);
       setAverageEditorState(null);
     } catch (error: unknown) {
-      toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Saving', description: getErrorMessage(error), variant: 'destructive' });
     }
 
     setSavingAverageEditor(false);
@@ -947,7 +947,7 @@ export function ExpensesTab({
       });
       setConvertToSimpleState(null);
     } catch (error: unknown) {
-      toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Saving', description: getErrorMessage(error), variant: 'destructive' });
     }
 
     setSavingConvertToSimple(false);
@@ -1452,7 +1452,7 @@ export function ExpensesTab({
                     size="sm"
                     className="h-8 w-8 p-0"
                     onClick={clearViewControls}
-                    aria-label="Clear filters and groupings"
+                    aria-label="Clear Filters and Groupings"
                   >
                     <FilterX className="h-4 w-4" />
                   </Button>
@@ -1475,16 +1475,16 @@ export function ExpensesTab({
                 <Select value={filterPayer} onValueChange={v => setFilterPayer(v as PayerFilter)}>
                   <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All partners</SelectItem>
+                    <SelectItem value="all">All Partners</SelectItem>
                     <SelectItem value="X">{partnerX} only</SelectItem>
                     <SelectItem value="Y">{partnerY} only</SelectItem>
-                    <SelectItem value="unassigned">Unassigned only</SelectItem>
+                    <SelectItem value="unassigned">Unassigned Only</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={groupBy} onValueChange={v => setGroupBy(v as GroupByOption)}>
-                  <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Group by…" /></SelectTrigger>
+                  <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Group By…" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No grouping</SelectItem>
+                    <SelectItem value="none">No Grouping</SelectItem>
                     <SelectItem value="category">Group by Category</SelectItem>
                     <SelectItem value="estimated">Group by Estimated</SelectItem>
                     <SelectItem value="payer">Group by Payer</SelectItem>
@@ -1497,14 +1497,14 @@ export function ExpensesTab({
                   size="sm"
                   className="h-8 w-8 p-0"
                   onClick={clearViewControls}
-                  aria-label="Clear filters and groupings"
+                  aria-label="Clear Filters and Groupings"
                   disabled={!hasActiveViewControls}
                 >
                   <FilterX className="h-4 w-4" />
                 </Button>
               </>
             )}
-            <Button onClick={openAddExpenseModal} disabled={savingExpense} variant="outline-success" size="sm" className="h-8 w-8 p-0" aria-label="Add expense">
+            <Button onClick={openAddExpenseModal} disabled={savingExpense} variant="outline-success" size="sm" className="h-8 w-8 p-0" aria-label="Add Expense">
               <Plus className="h-4 w-4" />
             </Button>
           </div>
@@ -1823,7 +1823,7 @@ export function ExpensesTab({
       <AlertDialog open={convertToSimpleState !== null} onOpenChange={open => { if (!open && !savingConvertToSimple) setConvertToSimpleState(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Convert to simple expense?</AlertDialogTitle>
+            <AlertDialogTitle>Convert to Simple Expense?</AlertDialogTitle>
           </AlertDialogHeader>
           <AlertDialogBody>
             <AlertDialogDescription>
@@ -1870,19 +1870,19 @@ export function ExpensesTab({
               <Select value={draftFilterPayer} onValueChange={v => setDraftFilterPayer(v as PayerFilter)}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All partners</SelectItem>
+                  <SelectItem value="all">All Partners</SelectItem>
                   <SelectItem value="X">{partnerX} only</SelectItem>
                   <SelectItem value="Y">{partnerY} only</SelectItem>
-                  <SelectItem value="unassigned">Unassigned only</SelectItem>
+                  <SelectItem value="unassigned">Unassigned Only</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Group By</Label>
               <Select value={draftGroupBy} onValueChange={v => setDraftGroupBy(v as GroupByOption)}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Group by…" /></SelectTrigger>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Group By…" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No grouping</SelectItem>
+                  <SelectItem value="none">No Grouping</SelectItem>
                   <SelectItem value="category">Group by Category</SelectItem>
                   <SelectItem value="estimated">Group by Estimated</SelectItem>
                   <SelectItem value="payer">Group by Payer</SelectItem>

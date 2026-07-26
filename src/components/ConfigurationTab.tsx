@@ -147,7 +147,7 @@ function PartnersCard({ partnerX, partnerY, wageGapAdjustmentEnabled, partnerXWa
     if (!normalizedNameX || !normalizedNameY) return;
     if (Number.isNaN(parsedXCents) || Number.isNaN(parsedYCents)) {
       toast({
-        title: 'Invalid wage-gap value',
+        title: 'Invalid Wage-Gap Value',
         description: 'Use a value greater than 0 and at most 100 cents on the dollar.',
         variant: 'destructive',
       });
@@ -155,7 +155,7 @@ function PartnersCard({ partnerX, partnerY, wageGapAdjustmentEnabled, partnerXWa
     }
     if (wageGapEnabled && !hasAtLeastOneWageGapValue) {
       toast({
-        title: 'Wage-gap value required',
+        title: 'Wage-Gap Value Required',
         description: 'Enter a valid wage-gap value for at least one partner when wage-gap adjustment is enabled.',
         variant: 'destructive',
       });
@@ -171,9 +171,9 @@ function PartnersCard({ partnerX, partnerY, wageGapAdjustmentEnabled, partnerXWa
         partnerXWageCentsPerDollar: parsedXCents,
         partnerYWageCentsPerDollar: parsedYCents,
       });
-      toast({ title: 'Partners updated' });
+      toast({ title: 'Partners Updated' });
     } catch (error: unknown) {
-      toast({ title: 'Failed to update', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Failed to Update', description: getErrorMessage(error), variant: 'destructive' });
     }
     setSaving(false);
   };
@@ -187,11 +187,11 @@ function PartnersCard({ partnerX, partnerY, wageGapAdjustmentEnabled, partnerXWa
         <div className="flex items-end gap-3">
           <div className="flex-1 space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Partner A</label>
-            <Input value={nameX} onChange={e => setNameX(e.target.value)} placeholder="e.g. Alex" className="flex-1" />
+            <Input value={nameX} onChange={e => setNameX(e.target.value)} placeholder="eg: Alex" className="flex-1" />
           </div>
           <div className="flex-1 space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Partner B</label>
-            <Input value={nameY} onChange={e => setNameY(e.target.value)} placeholder="e.g. Blair" className="flex-1" />
+            <Input value={nameY} onChange={e => setNameY(e.target.value)} placeholder="eg: Blair" className="flex-1" />
           </div>
         </div>
         <div className="space-y-3 border-t pt-4">
@@ -446,7 +446,7 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
       setOwnerPartner('X');
       setAddDialogOpen(false);
     } catch (error: unknown) {
-      toast({ title: 'Error adding payment method', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Adding Payment Method', description: getErrorMessage(error), variant: 'destructive' });
     }
     setAdding(false);
   };
@@ -458,7 +458,7 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
     try {
       await onUpdate(id, { name: nextName });
     } catch (error: unknown) {
-      toast({ title: 'Error renaming', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Renaming', description: getErrorMessage(error), variant: 'destructive' });
     }
   }, [linkedAccounts, onUpdate]);
 
@@ -466,7 +466,7 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
     try {
       await onUpdate(id, { owner_partner: newOwner });
     } catch (error: unknown) {
-      toast({ title: 'Error updating owner', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Updating Owner', description: getErrorMessage(error), variant: 'destructive' });
     }
   }, [onUpdate]);
 
@@ -654,7 +654,7 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
               variant="outline-success"
               size="sm"
               className="h-8 w-8 p-0"
-              aria-label="Add payment method"
+              aria-label="Add Payment Method"
             >
               <Plus className="h-4 w-4" />
             </Button>
@@ -694,7 +694,7 @@ function PaymentMethodsSection({ userId, linkedAccounts, expenses, partnerX, par
                 value={name}
                 autoFocus
                 disabled={adding}
-                placeholder="New payment method name"
+                placeholder="New Payment Method Name"
                 onChange={(event) => setName(event.target.value)}
               />
             </div>

@@ -422,7 +422,7 @@ describe('ExpensesTab empty message', () => {
     const { container, root } = renderExpensesTab({ expenses: [expense] });
     try {
       expect(container.textContent).toContain('Monthly Avg');
-      const amountButton = container.querySelector('button[aria-label="Edit averaged records for Groceries"]');
+      const amountButton = container.querySelector('button[aria-label="Edit Averaged Records for Groceries"]');
       expect(amountButton).toBeTruthy();
 
       act(() => {
@@ -513,7 +513,7 @@ describe('ExpensesTab empty message', () => {
       await waitForCondition(() => {
         expect(getVisibleExpenseNames(container)).toEqual([]);
         expect(toastMock).toHaveBeenCalledWith({
-          title: 'Expense updated but hidden by filters',
+          title: 'Expense Updated But Hidden by Filters',
           description: 'The expense was updated, and it is no longer visible because of the current filters.',
         });
       });

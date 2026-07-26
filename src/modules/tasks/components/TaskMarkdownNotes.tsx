@@ -45,8 +45,9 @@ const blockedTaskNoteSchemes = new Set(['javascript', 'data', 'vbscript']);
 const noteLineClass = 'block min-h-6 whitespace-pre-wrap';
 const headingLineClass = `${noteLineClass} text-lg font-semibold leading-7`;
 const bulletLineClass = `${noteLineClass} pl-[2ch] [text-indent:-2ch]`;
-const indicatorClass = 'font-mono';
-const linkClass = 'cursor-pointer text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const indicatorClass = 'font-mono text-muted-foreground';
+const linkClass = 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const bareLinkClass = `${linkClass} text-info`;
 const codeClass = 'rounded bg-foreground/[0.08] px-1 py-0.5 font-mono text-[0.92em] text-foreground';
 
 export function TaskMarkdownNotes({
@@ -348,7 +349,13 @@ function renderTaskNoteToken(token: TaskNoteSourceToken, index: number): ReactNo
     );
   }
   if (token.kind === 'code') {
-    return <code key={key} className={codeClass}>{token.text}</code>;
+    return (
+      <code key={key} className={codeClass}>
+        <span className={indicatorClass} data-task-markdown-indicator="code">`</span>
+        {token.text.slice(1, -1)}
+        <span className={indicatorClass} data-task-markdown-indicator="code">`</span>
+      </code>
+    );
   }
   if (token.kind === 'link' && token.href !== undefined) {
     const markdownLink = token.label !== undefined;
@@ -360,14 +367,14 @@ function renderTaskNoteToken(token: TaskNoteSourceToken, index: number): ReactNo
         aria-label={token.text}
         target={opensWebTab ? '_blank' : undefined}
         rel="noopener noreferrer"
-        className={linkClass}
+        className={markdownLink ? linkClass : bareLinkClass}
       >
         {markdownLink ? (
           <>
             <span className={indicatorClass} data-task-markdown-indicator="link">[</span>
-            {token.label}
+            <span className="text-foreground" data-task-markdown-link-label>{token.label}</span>
             <span className={indicatorClass} data-task-markdown-indicator="link">](</span>
-            {token.href}
+            <span className="text-info" data-task-markdown-link-destination>{token.href}</span>
             <span className={indicatorClass} data-task-markdown-indicator="link">)</span>
           </>
         ) : token.text}
@@ -450,7 +457,11 @@ function createTaskNoteToken(token: TaskNoteSourceToken): Node {
   if (token.kind === 'code') {
     const code = document.createElement('code');
     code.className = codeClass;
-    code.textContent = token.text;
+    code.append(
+      createIndicator('`', 'code'),
+      document.createTextNode(token.text.slice(1, -1)),
+      createIndicator('`', 'code'),
+    );
     return code;
   }
   if (token.kind === 'strong' || token.kind === 'emphasis') {
@@ -469,14 +480,22 @@ function createTaskNoteToken(token: TaskNoteSourceToken): Node {
     anchor.href = token.href;
     anchor.ariaLabel = token.text;
     anchor.rel = 'noopener noreferrer';
-    anchor.className = linkClass;
+    anchor.className = token.label !== undefined ? linkClass : bareLinkClass;
     if (/^https?:\/\//i.test(token.href)) anchor.target = '_blank';
     if (token.label !== undefined) {
+      const label = document.createElement('span');
+      label.className = 'text-foreground';
+      label.dataset.taskMarkdownLinkLabel = '';
+      label.textContent = token.label;
+      const destination = document.createElement('span');
+      destination.className = 'text-info';
+      destination.dataset.taskMarkdownLinkDestination = '';
+      destination.textContent = token.href;
       anchor.append(
         createIndicator('[', 'link'),
-        document.createTextNode(token.label),
+        label,
         createIndicator('](', 'link'),
-        document.createTextNode(token.href),
+        destination,
         createIndicator(')', 'link'),
       );
     } else {

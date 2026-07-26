@@ -314,7 +314,7 @@ describe('GarageServicesGrid focus scrolling', () => {
     );
 
     try {
-      const addButton = document.body.querySelector('button[aria-label="Add service"]') as HTMLButtonElement | null;
+      const addButton = document.body.querySelector('button[aria-label="Add Service"]') as HTMLButtonElement | null;
       expect(addButton).toBeTruthy();
 
       await act(async () => {
@@ -602,7 +602,7 @@ describe('GarageServicesGrid focus scrolling', () => {
       await waitForCondition(() => {
         expect(getVisibleServiceNames(container)).toEqual([]);
         expect(toastMock).toHaveBeenCalledWith({
-          title: 'Service updated but hidden by filters',
+          title: 'Service Updated But Hidden by Filters',
           description: 'The service was updated, and it is no longer visible because of the current filters.',
         });
       });
@@ -645,7 +645,7 @@ describe('GarageServicesGrid focus scrolling', () => {
     );
 
     try {
-      const addButton = document.body.querySelector('button[aria-label="Add service"]') as HTMLButtonElement | null;
+      const addButton = document.body.querySelector('button[aria-label="Add Service"]') as HTMLButtonElement | null;
       expect(addButton).toBeTruthy();
 
       await act(async () => {
@@ -773,7 +773,7 @@ describe('GarageServicesGrid focus scrolling', () => {
     );
 
     try {
-      const menuButton = document.body.querySelector('button[aria-label="Services menu"]') as HTMLButtonElement | null;
+      const menuButton = document.body.querySelector('button[aria-label="Services Menu"]') as HTMLButtonElement | null;
       expect(menuButton).toBeTruthy();
 
       await openButtonMenu(menuButton!);
@@ -890,7 +890,7 @@ describe('GarageServicesGrid focus scrolling', () => {
     );
 
     try {
-      const menuButton = document.body.querySelector('button[aria-label="Services menu"]') as HTMLButtonElement | null;
+      const menuButton = document.body.querySelector('button[aria-label="Services Menu"]') as HTMLButtonElement | null;
       expect(menuButton).toBeTruthy();
 
       await openButtonMenu(menuButton!);

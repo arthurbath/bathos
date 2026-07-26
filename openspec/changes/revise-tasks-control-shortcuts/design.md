@@ -2,7 +2,7 @@
 
 BathOS Tasks routes keyboard events through one domain mapper before the shell dispatches commands. The current Tasks-specific Control layout is documented in the Keyboard Commands dialog, the human Tasks guide, durable OpenSpec requirements, and automated tests. The revised infographic replaces that layout and adds a Control-based Undo chord so the primary task workflow can remain on one modifier.
 
-The Mac Tasks layer uses Control without Shift. Windows uses Control+Shift for Tasks-specific commands because unshifted Control combinations carry standard application meanings. Undo and Redo are the exception because Windows already reserves Control+Z and Control+Shift+Z for those standard operations.
+The Mac Tasks layer uses Control without Shift. Windows uses Alt+Shift for Tasks-specific commands so unshifted Control combinations retain standard application meanings and Control+Shift+Z remains available for Redo. Standard Windows Control+Z remains Undo, while Alt+Shift+Z mirrors the Mac Tasks-layer Control+Z alias.
 
 ## Goals / Non-Goals
 
@@ -27,19 +27,19 @@ The existing task-command lookup will be replaced with the exact Q/W/E/R/T, A/S/
 
 Keeping old aliases was considered, but rejected because the user explicitly described the new layout as a complete relayout. Retained aliases would make the reference incomplete and could trigger unintended metadata changes from obsolete muscle memory.
 
-### Resolve undo and redo before the shifted Windows task layer
+### Separate the Windows task layer from Control-based history
 
-On Mac, Control+Z will map through the Tasks-specific layer to Undo, while Command+Z remains Undo. On Windows, Control+Z remains Undo and Control+Shift+Z remains Redo. The mapper will continue resolving shifted application Redo before the Windows Control+Shift task layer, so the new Mac alias does not turn Windows Redo into a second Undo chord.
+On Mac, Control+Z maps through the Tasks-specific layer to Undo, while Command+Z remains Undo. On Windows, Control+Z remains Undo, Control+Shift+Z remains Redo, and Alt+Shift+Z maps through the Tasks-specific layer to Undo. The distinct Alt+Shift task modifier removes the historical collision by construction.
 
-Assigning Windows Control+Shift+Z to the shifted task layer was considered, but rejected because it would violate the established platform convention and remove a required Redo chord.
+Keeping Windows Tasks commands on Control+Shift was considered, but rejected because the layer overlaps the standard Redo chord and makes the Z assignment exceptional or unreachable.
 
 ### Keep documentation generated from explicit platform rows
 
-The Keyboard Commands dialog and human guide will describe Mac and Windows chords explicitly. Undo will show both Command+Z and Control+Z on Mac, while Windows will show Control+Z once. This avoids implying that every Tasks-specific chord follows an identical modifier transformation.
+The Keyboard Commands dialog and human guide will describe Mac and Windows chords explicitly. Undo will show both Command+Z and Control+Z on Mac, while Windows will show Control+Z and Alt+Shift+Z. Alternate chords use a slash consistently rather than the word `or`.
 
 ## Risks / Trade-offs
 
-- **Risk: Event-order changes could shadow Redo on Windows.** → Retain the existing application-level shifted-Z precedence and add direct platform tests for every Undo and Redo chord.
+- **Risk: Event-order changes could shadow Redo on Windows.** → Keep Control+Shift+Z in the application-history layer, move Tasks commands to Alt+Shift, and add direct platform tests for every Undo and Redo chord.
 - **Risk: Old shortcuts remain in prose or regression fixtures.** → Search the module, durable specs, active changes, and human documentation for every displaced chord, then validate the exact current map.
 - **Risk: Users with prior muscle memory trigger a different task mutation.** → Remove obsolete aliases and make the Keyboard Commands dialog the definitive visible reference.
 

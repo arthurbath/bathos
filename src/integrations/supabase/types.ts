@@ -151,6 +151,8 @@ export type Database = {
           grid_column_widths: Json
           grid_view_preferences: Json
           id: string
+          tasks_quick_filter: string
+          tasks_quick_filter_updated_at: string
           theme: string
           updated_at: string
           use_default_grid_column_widths: boolean
@@ -161,6 +163,8 @@ export type Database = {
           grid_column_widths?: Json
           grid_view_preferences?: Json
           id?: string
+          tasks_quick_filter?: string
+          tasks_quick_filter_updated_at?: string
           theme?: string
           updated_at?: string
           use_default_grid_column_widths?: boolean
@@ -171,6 +175,8 @@ export type Database = {
           grid_column_widths?: Json
           grid_view_preferences?: Json
           id?: string
+          tasks_quick_filter?: string
+          tasks_quick_filter_updated_at?: string
           theme?: string
           updated_at?: string
           use_default_grid_column_widths?: boolean

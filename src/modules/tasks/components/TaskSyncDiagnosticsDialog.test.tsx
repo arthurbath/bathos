@@ -51,6 +51,33 @@ describe('TaskSyncDiagnosticsDialog', () => {
     expect(screen.getByText('No conflict receipts.')).toBeVisible();
   });
 
+  it('shows the latest in-app reminder condition only in Config diagnostics', async () => {
+    const { rerender } = render(
+      <TaskSyncDiagnosticsDialog
+        triggerVariant="config"
+        inAppReminderStatus="available"
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', {
+      name: 'Task Sync Status: Local. Open Synchronization Details',
+    }));
+
+    expect(screen.getByText('In-App Reminders').nextElementSibling)
+      .toHaveTextContent('Available');
+
+    rerender(
+      <TaskSyncDiagnosticsDialog
+        triggerVariant="config"
+        inAppReminderStatus="delayed"
+      />,
+    );
+
+    expect(screen.getByText('In-App Reminders').nextElementSibling)
+      .toHaveTextContent('Delayed');
+    expect(screen.getByText('Delayed')).toHaveClass('text-warning');
+  });
+
   it('shows transfer failures separately and renders recent content-free conflict receipts', async () => {
     mocks.useTaskSyncDiagnostics.mockReturnValue({
       mode: 'connected',

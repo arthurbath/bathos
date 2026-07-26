@@ -4,16 +4,13 @@ import {
   ArrowUp,
   Check,
   ChevronRight,
-  FolderKanban,
-  FolderPlus,
-  ListPlus,
   Pencil,
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
-import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import {
   Dialog,
   DialogBody,
@@ -91,7 +88,7 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
   if (hierarchy.error) {
     return (
       <p role="alert" className="py-12 text-center text-sm text-destructive">
-        Projects Could Not Be Loaded
+        Areas &amp; Projects Could Not Be Loaded
       </p>
     );
   }
@@ -111,7 +108,7 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
           title="Add Area"
           onClick={() => setAreaDialogOpen(true)}
         >
-          <FolderPlus className="h-4 w-4" aria-hidden="true" />
+          <TASK_ICONS.AddArea className="h-4 w-4" aria-hidden="true" />
         </Button>
         <Button
           ref={addProjectButtonRef}
@@ -123,7 +120,7 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
           title="Add Project"
           onClick={() => setProjectDialogOpen(true)}
         >
-          <ListPlus className="h-4 w-4" aria-hidden="true" />
+          <TASK_ICONS.AddProject className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
 
@@ -237,7 +234,7 @@ export function TaskProjectsView({ hierarchy }: { hierarchy: TaskHierarchyModel 
       </Dialog>
 
       {hierarchy.areas.length === 0 && unassigned.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">No Areas or Projects</p>
+        <p className="py-12 text-center text-sm text-muted-foreground">No areas or projects</p>
       ) : (
         <div className="space-y-7">
           {hierarchy.areas.map((area, index) => (
@@ -312,20 +309,18 @@ function AreaSection({
   return (
     <section aria-labelledby={sectionId}>
       <div className="mb-2 flex min-h-9 items-center gap-2">
-        <FolderKanban className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <TASK_ICONS.Area className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         {area ? (
           <TaskHierarchyEditableTitle id={sectionId} value={area.title} onSave={onRename!} />
         ) : (
           <h3 id={sectionId} className="text-sm font-semibold text-muted-foreground">
             <span className="flex items-center gap-2">
               No Area
-              <TaskCountBadge count={projects.length} label="Projects" />
             </span>
           </h3>
         )}
         {area ? (
           <div className="ml-auto flex gap-1">
-            <TaskCountBadge count={projects.length} label="Projects" />
             <a
               href={areaHref}
               aria-label={`Open ${area.title} Area`}
@@ -345,7 +340,7 @@ function AreaSection({
       </div>
       <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
         {projects.length === 0 ? (
-          <p className="px-4 py-5 text-sm text-muted-foreground">No Projects</p>
+          <p className="px-4 py-5 text-sm text-muted-foreground">No projects</p>
         ) : projects.map((project, index) => (
           <div key={project.id} className="flex min-h-14 items-center gap-2 px-2 sm:px-4">
             <TaskHierarchyEditableTitle

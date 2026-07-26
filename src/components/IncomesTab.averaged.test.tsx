@@ -135,7 +135,7 @@ describe('IncomesTab averaged rows', () => {
 
     try {
       expect(container.textContent).toContain('Yearly Avg');
-      const amountButton = container.querySelector('button[aria-label="Edit averaged records for Contract"]');
+      const amountButton = container.querySelector('button[aria-label="Edit Averaged Records for Contract"]');
       expect(amountButton).toBeTruthy();
 
       act(() => {
@@ -199,7 +199,7 @@ describe('IncomesTab averaged rows', () => {
     );
 
     try {
-      const amountButton = container.querySelector('button[aria-label="Edit averaged records for Contract"]');
+      const amountButton = container.querySelector('button[aria-label="Edit Averaged Records for Contract"]');
       act(() => {
         amountButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });

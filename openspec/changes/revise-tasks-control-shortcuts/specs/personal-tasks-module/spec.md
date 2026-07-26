@@ -14,9 +14,9 @@ BathOS Tasks SHALL expose the revised Control-based task-command layout, SHALL r
 - **AND** Control+X SHALL toggle Done
 - **AND** Control+C, Control+V, and Control+B SHALL edit the checklist, choose Area or Project, and edit the reminder
 
-#### Scenario: Windows task commands use shifted Control
+#### Scenario: Windows task commands use shifted Alt
 - **WHEN** a user operates Tasks on Windows
-- **THEN** every revised Tasks-specific command other than Undo SHALL use Control+Shift with the same letter assigned on Mac
+- **THEN** every revised Tasks-specific command SHALL use Alt+Shift with the same letter assigned to Control on Mac
 - **AND** unshifted Windows Control combinations SHALL retain their standard application meanings
 
 #### Scenario: Undo and Redo preserve platform conventions
@@ -25,6 +25,8 @@ BathOS Tasks SHALL expose the revised Control-based task-command layout, SHALL r
 - **WHEN** a Mac user presses Command+Y or Command+Shift+Z
 - **THEN** Tasks SHALL invoke Redo
 - **WHEN** a Windows user presses Control+Z
+- **THEN** Tasks SHALL invoke Undo
+- **WHEN** a Windows user presses Alt+Shift+Z
 - **THEN** Tasks SHALL invoke Undo
 - **WHEN** a Windows user presses Control+Y or Control+Shift+Z
 - **THEN** Tasks SHALL invoke Redo
@@ -36,3 +38,7 @@ BathOS Tasks SHALL expose the revised Control-based task-command layout, SHALL r
 #### Scenario: Keyboard reference matches executable behavior
 - **WHEN** a user opens the Keyboard Commands dialog or reads the Tasks guide
 - **THEN** the displayed Control commands SHALL match the executable platform-specific layout
+
+#### Scenario: Alternate command notation uses slashes
+- **WHEN** the Keyboard Commands dialog presents alternate Undo or Close Open Task chords
+- **THEN** it separates those chords with `/` rather than the word `or`, matching the Redo row

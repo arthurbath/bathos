@@ -538,10 +538,10 @@ export function SnakeConfigView({
       });
       await onAddSnake(payload, snakeId);
       setDialogOpen(false);
-      toast({ title: 'Snake added' });
+      toast({ title: 'Snake Added' });
     } catch (error) {
       toast({
-        title: 'Failed to add snake',
+        title: 'Failed to Add Snake',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -568,10 +568,10 @@ export function SnakeConfigView({
       });
       await onRemoveSnake(deleteTarget.id);
       setDeleteTarget(null);
-      toast({ title: 'Snake deleted' });
+      toast({ title: 'Snake Deleted' });
     } catch (error) {
       toast({
-        title: 'Failed to delete snake',
+        title: 'Failed to Delete Snake',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -590,7 +590,7 @@ export function SnakeConfigView({
             variant="outline-success"
             size="sm"
             className="h-8 w-8 p-0"
-            aria-label="Add snake"
+            aria-label="Add Snake"
             onClick={openAddDialog}
           >
             <Plus className="h-4 w-4" />

@@ -15,3 +15,11 @@
 - [x] 3.1 Run focused keyboard mapper and Tasks shell tests
 - [x] 3.2 Run lint, type checking, production build, full tests, and OpenSpec validation
 - [x] 3.3 Verify the rendered Keyboard Commands dialog and representative non-mutating shortcuts in the browser
+
+## 4. Alt+Shift Windows Amendment
+
+- [x] 4.1 Replace the Windows Tasks-specific Control+Shift layer with Alt+Shift while preserving standard Control-based commands
+- [x] 4.2 Use slash-separated alternate chords for Undo and Close Open Task in the visible reference
+- [x] 4.3 Update the human guide, durable Tasks specification, and active shortcut specifications
+- [x] 4.4 Add mapper and shell regressions for Alt+Shift, removed Control+Shift task bindings, and Windows Undo/Redo precedence
+- [x] 4.5 Run focused tests, lint, build, full tests, and strict OpenSpec validation

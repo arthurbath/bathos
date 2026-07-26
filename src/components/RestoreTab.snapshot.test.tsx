@@ -165,7 +165,7 @@ describe('RestoreTab snapshot payload', () => {
     );
 
     try {
-      const createBackupButton = container.querySelector('button[aria-label="Create backup"]');
+      const createBackupButton = container.querySelector('button[aria-label="Create Backup"]');
       expect(createBackupButton).toBeTruthy();
       act(() => {
         createBackupButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -217,7 +217,7 @@ describe('RestoreTab snapshot payload', () => {
     );
 
     try {
-      const trigger = container.querySelector('button[aria-label="Backup actions"]') as HTMLButtonElement | null;
+      const trigger = container.querySelector('button[aria-label="Backup Actions"]') as HTMLButtonElement | null;
       expect(trigger).toBeTruthy();
 
       await act(async () => {
@@ -304,7 +304,7 @@ describe('RestoreTab snapshot payload', () => {
       expect(finishUpdate).toBeTypeOf('function');
 
       const liveInput = container.querySelector<HTMLInputElement>('input[data-row-id="restore-1"][data-col="1"]');
-      const actionsTrigger = container.querySelector<HTMLButtonElement>('button[aria-label="Backup actions"]');
+      const actionsTrigger = container.querySelector<HTMLButtonElement>('button[aria-label="Backup Actions"]');
       expect(liveInput?.value).toBe('Updated note');
       expect(liveInput?.disabled).toBe(true);
       expect(actionsTrigger?.disabled).toBe(true);
@@ -315,7 +315,7 @@ describe('RestoreTab snapshot payload', () => {
       });
 
       expect(container.querySelector<HTMLInputElement>('input[data-row-id="restore-1"][data-col="1"]')?.disabled).toBe(false);
-      expect(container.querySelector<HTMLButtonElement>('button[aria-label="Backup actions"]')?.disabled).toBe(false);
+      expect(container.querySelector<HTMLButtonElement>('button[aria-label="Backup Actions"]')?.disabled).toBe(false);
     } finally {
       unmount(root, container);
     }

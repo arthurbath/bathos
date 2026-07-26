@@ -26,23 +26,23 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     if (submitting || !newPassword) return;
     if (newPassword !== confirmPassword) {
-      toast({ title: 'Passwords do not match', variant: 'destructive' });
+      toast({ title: 'Passwords Do Not Match', variant: 'destructive' });
       return;
     }
     if (!isPasswordValid(newPassword)) {
-      toast({ title: 'Password does not meet requirements', variant: 'destructive' });
+      toast({ title: 'Password Does Not Meet Requirements', variant: 'destructive' });
       return;
     }
     setSubmitting(true);
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) {
       toast({
-        title: 'Failed to reset password',
+        title: 'Failed to Reset Password',
         description: isWeakOrLeakedPasswordError(error) ? WEAK_PASSWORD_MESSAGE : error.message,
         variant: 'destructive',
       });
     } else {
-      toast({ title: 'Password updated' });
+      toast({ title: 'Password Updated' });
       setTimeout(() => { window.location.href = '/'; }, 1500);
     }
     setSubmitting(false);
@@ -53,11 +53,11 @@ export default function ResetPasswordPage() {
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md text-center">
           <CardHeader>
-            <CardTitle>Invalid reset link</CardTitle>
+            <CardTitle>Invalid Reset Link</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">This password reset link is invalid or has expired.</p>
-            <Button className="w-full" onClick={() => window.location.href = '/'}>Back to sign in</Button>
+            <Button className="w-full" onClick={() => window.location.href = '/'}>Back to Sign In</Button>
           </CardContent>
         </Card>
       </div>
@@ -68,21 +68,21 @@ export default function ResetPasswordPage() {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle>Set new password</CardTitle>
+          <CardTitle>Set New Password</CardTitle>
         </CardHeader>
         <CardContent>
           <form data-bathos-return-submits="true" onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-sm font-medium mb-1 block">New password</label>
+              <label className="text-sm font-medium mb-1 block">New Password</label>
               <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} minLength={8} autoComplete="new-password" autoFocus />
               <PasswordRequirements password={newPassword} />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Confirm password</label>
+              <label className="text-sm font-medium mb-1 block">Confirm Password</label>
               <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} minLength={8} autoComplete="new-password" />
             </div>
             <Button type="submit" className="w-full" disabled={submitting || !isPasswordValid(newPassword) || !confirmPassword}>
-              {submitting ? 'Updating...' : 'Update password'}
+              {submitting ? 'Updating...' : 'Update Password'}
             </Button>
           </form>
         </CardContent>

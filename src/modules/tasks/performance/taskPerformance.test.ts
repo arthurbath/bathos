@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest';
 import {
   createTaskSearchDocuments,
   filterTaskSearchDocuments,
-  type TaskSearchFilters,
 } from '@/modules/tasks/domain/taskSearch';
 import { deriveTaskViewTasks } from '@/modules/tasks/hooks/useTaskList';
 import { taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
@@ -15,13 +14,6 @@ const describePerformance = process.env.RUN_TASKS_PERFORMANCE === '1' ? describe
 const taskCount = 10_000;
 const planningDate = '2026-07-20';
 const ownerId = 'synthetic-owner';
-const allFilters: TaskSearchFilters = {
-  destination: 'all',
-  lifecycle: 'all',
-  actionability: 'all',
-  sourceKind: 'all',
-};
-
 describePerformance('Tasks large-library performance', () => {
   const hierarchy = {
     areas: Array.from({ length: 100 }, (_, index) => ({
@@ -59,23 +51,13 @@ describePerformance('Tasks large-library performance', () => {
     expect(result.p95Ms).toBeLessThan(100);
   });
 
-  it('searches text and structured filters within budget', () => {
+  it('searches indexed task text within budget', () => {
     const textResult = measure('text query', 50, () => (
-      filterTaskSearchDocuments(documents, 'needle saturn 9999', allFilters).length
-    ));
-    const filterResult = measure('structured filter', 50, () => (
-      filterTaskSearchDocuments(documents, '', {
-        ...allFilters,
-        destination: 'anytime',
-        actionability: 'waiting',
-        sourceKind: 'mail_message',
-      }).length
+      filterTaskSearchDocuments(documents, 'needle saturn 9999').length
     ));
 
     expect(textResult.lastValue).toBe(1);
-    expect(filterResult.lastValue).toBeGreaterThan(0);
     expect(textResult.p95Ms).toBeLessThan(50);
-    expect(filterResult.p95Ms).toBeLessThan(50);
   });
 });
 

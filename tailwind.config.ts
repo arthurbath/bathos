@@ -73,6 +73,12 @@ export default {
           DEFAULT: "hsl(var(--admin))",
           foreground: "hsl(var(--admin-foreground))",
         },
+        "task-horizon": {
+          inbox: "hsl(var(--task-horizon-inbox))",
+          now: "hsl(var(--task-horizon-now))",
+          next: "hsl(var(--task-horizon-next))",
+          later: "hsl(var(--task-horizon-later))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

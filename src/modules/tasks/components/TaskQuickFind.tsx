@@ -1,7 +1,7 @@
-import { useDeferredValue, useMemo, useState, type MouseEvent } from 'react';
-import { FolderKanban, Layers3, ListTodo, Search } from 'lucide-react';
+import { useDeferredValue, useEffect, useMemo, useState, type MouseEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import {
   Dialog,
   DialogBody,
@@ -12,7 +12,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { shouldHandleWithBrowser } from '@/lib/navigation';
-import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
 import {
   createTaskSearchDocuments,
   filterTaskSearchDocuments,
@@ -25,13 +24,6 @@ type QuickFindResult =
   | { kind: 'todo'; id: string; title: string; detail: string; href: string; task: TaskTodo }
   | { kind: 'project'; id: string; title: string; detail: string; href: string }
   | { kind: 'area'; id: string; title: string; detail: string; href: string };
-
-const allTaskFilters = {
-  destination: 'all',
-  lifecycle: 'all',
-  actionability: 'all',
-  sourceKind: 'all',
-} as const;
 
 function normalize(value: string): string {
   return value.trim().toLocaleLowerCase();
@@ -52,8 +44,10 @@ function createQuickFindResults(
 ): QuickFindResult[] {
   const normalizedQuery = normalize(query);
   if (!normalizedQuery) return [];
-  const taskResults: QuickFindResult[] = createTaskSearchDocuments(tasks, hierarchy)
-    .filter(({ normalizedText }) => normalizedText.includes(normalizedQuery))
+  const taskResults: QuickFindResult[] = filterTaskSearchDocuments(
+    createTaskSearchDocuments(tasks, hierarchy),
+    normalizedQuery,
+  )
     .map(({ task, hierarchyLabel }) => ({
       kind: 'todo',
       id: task.id,
@@ -90,13 +84,14 @@ function createQuickFindResults(
 }
 
 const resultIcons = {
-  todo: ListTodo,
-  project: FolderKanban,
-  area: Layers3,
+  todo: TASK_ICONS.Task,
+  project: TASK_ICONS.Project,
+  area: TASK_ICONS.Area,
 } as const;
 
 export function TaskQuickFindDialog({
   open,
+  initialQuery,
   basePath,
   tasks,
   hierarchy,
@@ -109,6 +104,7 @@ export function TaskQuickFindDialog({
   onSelectTask,
 }: {
   open: boolean;
+  initialQuery: string;
   basePath: string;
   tasks: TaskTodo[];
   hierarchy: TaskHierarchyModel;
@@ -121,6 +117,9 @@ export function TaskQuickFindDialog({
   onSelectTask: (task: TaskTodo, path: string) => void;
 }) {
   const [query, setQuery] = useState('');
+  useEffect(() => {
+    if (open) setQuery(initialQuery);
+  }, [initialQuery, open]);
   const deferredQuery = useDeferredValue(query);
   const results = useMemo(
     () => createQuickFindResults(deferredQuery, basePath, tasks, hierarchy, planningDate),
@@ -152,7 +151,7 @@ export function TaskQuickFindDialog({
         <DialogHeader><DialogTitle>Quick Find</DialogTitle></DialogHeader>
         <DialogBody className="space-y-4 pt-4">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <TASK_ICONS.Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
               autoFocus
               value={query}
@@ -167,7 +166,7 @@ export function TaskQuickFindDialog({
           ) : error ? (
             <p role="alert" className="py-6 text-center text-sm text-destructive">Tasks Could Not Be Searched</p>
           ) : normalize(query) && results.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No Matches</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">No matches</p>
           ) : results.length > 0 ? (
             <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
               {results.map((result) => {
@@ -240,13 +239,13 @@ export function TaskSearchResultsView({
     [hierarchy, tasks],
   );
   const results = useMemo(
-    () => filterTaskSearchDocuments(documents, deferredQuery, allTaskFilters),
+    () => filterTaskSearchDocuments(documents, deferredQuery),
     [deferredQuery, documents],
   );
   return (
     <div className="space-y-5">
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <TASK_ICONS.Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <Input
           autoFocus
           value={query}
@@ -259,7 +258,6 @@ export function TaskSearchResultsView({
       <section aria-label="Task Search Results">
         <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
           Tasks
-          <TaskCountBadge count={results.length} label="Tasks" />
         </h3>
         {loading ? (
           <div className="flex min-h-24 items-center justify-center"><LoadingSpinner /></div>
@@ -268,7 +266,7 @@ export function TaskSearchResultsView({
         ) : !deferredQuery ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Enter a Search Term</p>
         ) : results.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">No Matching Tasks</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">No matching tasks</p>
         ) : (
           <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
             {results.map(({ task, hierarchyLabel }) => {

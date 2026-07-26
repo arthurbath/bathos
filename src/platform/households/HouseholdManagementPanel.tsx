@@ -124,17 +124,17 @@ export function HouseholdManagementPanel({
 
     await navigator.clipboard.writeText(inviteCode);
     setCopied(true);
-    toast({ title: 'Invite code copied' });
+    toast({ title: 'Invite Code Copied' });
     window.setTimeout(() => setCopied(false), 2000);
   };
 
   const handleRotateInviteCode = async () => {
     try {
       await onRotateInviteCode();
-      toast({ title: 'Invite code rotated' });
+      toast({ title: 'Invite Code Rotated' });
     } catch (error: unknown) {
       toast({
-        title: 'Failed to rotate invite code',
+        title: 'Failed to Rotate Invite Code',
         description: getErrorMessage(error, 'Please try again.'),
         variant: 'destructive',
       });
@@ -146,11 +146,11 @@ export function HouseholdManagementPanel({
 
     try {
       await onRemoveMember(removeTarget.userId);
-      toast({ title: 'Member removed' });
+      toast({ title: 'Member Removed' });
       setRemoveTarget(null);
     } catch (error: unknown) {
       toast({
-        title: 'Failed to remove member',
+        title: 'Failed to Remove Member',
         description: getErrorMessage(error, 'Please try again.'),
         variant: 'destructive',
       });
@@ -163,7 +163,7 @@ export function HouseholdManagementPanel({
       setLeaveOpen(false);
     } catch (error: unknown) {
       toast({
-        title: 'Failed to leave household',
+        title: 'Failed to Leave Household',
         description: getErrorMessage(error, 'Please try again.'),
         variant: 'destructive',
       });
@@ -179,7 +179,7 @@ export function HouseholdManagementPanel({
       setDeleteConfirmText('');
     } catch (error: unknown) {
       toast({
-        title: 'Failed to delete household',
+        title: 'Failed to Delete Household',
         description: getErrorMessage(error, 'Please try again.'),
         variant: 'destructive',
       });

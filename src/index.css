@@ -53,6 +53,10 @@
     --admin: 270 45% 60%;
     --admin-foreground: 0 0% 100%;
     --destructive-text: 0 72% 60%;
+    --task-horizon-inbox: 145 55% 45%;
+    --task-horizon-now: 48 90% 58%;
+    --task-horizon-next: 18 86% 60%;
+    --task-horizon-later: 326 62% 64%;
     --switch-off: 0 0% 38%;
     --drawer-wicker: 30 45% 42%;
     --drawer-wicker-foreground: 0 0% 100%;
@@ -75,6 +79,22 @@
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  input:not([readonly]):not(:disabled),
+  textarea:not([readonly]):not(:disabled),
+  [contenteditable]:not([contenteditable='false']),
+  [data-bathos-text-selection='allow'],
+  [data-bathos-text-selection='allow'] * {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  a:not([data-bathos-native-drag='allow']),
+  img:not([data-bathos-native-drag='allow']) {
+    -webkit-user-drag: none;
   }
 
   button:not(:disabled) {

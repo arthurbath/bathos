@@ -2506,7 +2506,7 @@ describe("DataGrid escape cancellation", () => {
   it("closes the color palette via Escape and returns focus to the swatch trigger", async () => {
     const { container, root } = mount(<ColorPickerHarness />);
     try {
-      const trigger = container.querySelector<HTMLElement>('button[data-row-id="row-a"][data-col="0"][title="Pick color"]');
+      const trigger = container.querySelector<HTMLElement>('button[data-row-id="row-a"][data-col="0"][title="Pick Color"]');
       expect(trigger).not.toBeNull();
 
       await act(async () => {
@@ -2534,7 +2534,7 @@ describe("DataGrid escape cancellation", () => {
   it("closes the color palette via Tab and advances to the adjacent form control", async () => {
     const { container, root } = mount(<ColorPickerFormHarness />);
     try {
-      const trigger = container.querySelector<HTMLButtonElement>('button[title="Pick color"]')!;
+      const trigger = container.querySelector<HTMLButtonElement>('button[title="Pick Color"]')!;
       await act(async () => {
         trigger.focus();
       });

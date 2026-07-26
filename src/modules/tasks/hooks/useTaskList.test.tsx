@@ -678,6 +678,8 @@ describe('useTaskList optimistic display', () => {
     });
     const retainedTask = {
       ...originalTask,
+      area_id: null,
+      project_id: 'project-original',
       today_section: 'next' as const,
       start_date: null,
       order_key: 'a1',
@@ -693,6 +695,8 @@ describe('useTaskList optimistic display', () => {
     const replannedTask = {
       ...retainedTask,
       actionability: 'waiting' as const,
+      area_id: 'area-new',
+      project_id: null,
       today_section: 'now' as const,
       order_key: 'z9',
       revision: 2,
@@ -711,6 +715,8 @@ describe('useTaskList optimistic display', () => {
       await act(async () => {
         await latest.updateTask('task-a', {
           actionability: 'waiting',
+          area_id: 'area-new',
+          project_id: null,
           today_section: 'now',
         });
       });
@@ -722,11 +728,15 @@ describe('useTaskList optimistic display', () => {
       expect(latest.tasks[1]).toMatchObject({
         id: 'task-a',
         actionability: 'waiting',
+        area_id: 'area-new',
+        project_id: null,
         today_section: 'now',
         order_key: 'z9',
       });
       expect(latest.retainedTaskPlacement).toMatchObject({
         id: 'task-a',
+        area_id: null,
+        project_id: 'project-original',
         today_section: 'next',
         order_key: 'a1',
       });
@@ -891,6 +901,24 @@ describe('useTaskList optimistic display', () => {
         'task-next-second',
         'task-later',
       ]);
+
+      await act(async () => {
+        await latest.reorderTaskTo(
+          'task-next-second',
+          'task-next-first',
+          'after',
+          { area_id: 'area-work', project_id: null },
+        );
+      });
+      expect(repository.updateTask).toHaveBeenLastCalledWith(
+        'owner-a',
+        'task-next-second',
+        {
+          area_id: 'area-work',
+          project_id: null,
+          order_key: expect.any(String),
+        },
+      );
 
       await act(async () => {
         await latest.reorderTaskTo('task-next-second', 'task-later', 'before');

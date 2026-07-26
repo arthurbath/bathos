@@ -63,7 +63,7 @@ export function ToplineHeader({
               </a>
             </Button>
           ) : showAppSwitcher && (
-            <Button asChild variant="clear" size="sm" className="h-9 w-9 p-0" title="All apps">
+            <Button asChild variant="clear" size="sm" className="h-9 w-9 p-0" title="All Apps">
               <a href="/" onClick={(event) => handleClientSideLinkNavigation(event, navigate, '/')}>
                 <Menu className="h-4 w-4" aria-hidden="true" />
               </a>

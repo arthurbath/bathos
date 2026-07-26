@@ -80,7 +80,7 @@ function DateRecordPicker({
       disabled={disabled}
       data-average-record-primary-input="true"
       data-average-record-row={rowIndex}
-      aria-label={`${valueType === 'monthly_averaged' ? 'Month' : 'Year'} record date`}
+      aria-label={`${valueType === 'monthly_averaged' ? 'Month' : 'Year'} Record Date`}
       className="h-9 text-sm"
     />
   );
@@ -97,11 +97,11 @@ export function AverageRecordsEditor({
   autoFocusAddButton = false,
   currentDate = new Date(),
 }: AverageRecordsEditorProps) {
-  const modeLabel = valueType === 'monthly_averaged' ? 'month' : 'year';
+  const modeTitle = valueType === 'monthly_averaged' ? 'Month' : 'Year';
   const defaultAverageLabel = valueType === 'monthly_averaged' ? 'Monthly average' : 'Yearly average';
   const periodLabel = valueType === 'monthly_averaged' ? 'month' : 'year';
   const periodLabelPlural = `${periodLabel}s`;
-  const currentPeriodCheckboxLabel = `Count records from the current ${periodLabel} toward average`;
+  const currentPeriodCheckboxLabel = `Count Records from the Current ${modeTitle} Toward Average`;
   const currentPeriodTooltip = `If you plan to track multiple records per ${periodLabel} and track them as they happen rather than at the end of the ${periodLabel}, including the records from the in-progress ${periodLabel} in the average will artificially deflate the average. Excluding the records from the in-progress ${periodLabel} prevents that deflation.`;
   const {
     amount: computedAverage,
@@ -222,7 +222,7 @@ export function AverageRecordsEditor({
           className="w-9"
           onClick={handleAddRecord}
           disabled={disabled}
-          aria-label={`Add ${modeLabel} record`}
+          aria-label={`Add ${modeTitle} Record`}
         >
           <Plus className="h-4 w-4" />
         </Button>
@@ -258,7 +258,7 @@ export function AverageRecordsEditor({
                 className="w-9 p-0 self-end"
                 onClick={() => handleRemoveRecord(index)}
                 disabled={disabled}
-                aria-label={records.length === 1 ? `Clear ${modeLabel} record` : `Remove ${modeLabel} record ${index + 1}`}
+                aria-label={records.length === 1 ? `Clear ${modeTitle} Record` : `Remove ${modeTitle} Record ${index + 1}`}
               >
                 <Minus className="h-4 w-4" />
               </Button>

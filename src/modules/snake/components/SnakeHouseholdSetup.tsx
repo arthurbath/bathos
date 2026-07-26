@@ -30,9 +30,9 @@ export function SnakeHouseholdSetup({
       createButtonLabel="Create Snake Household"
       joinButtonLabel="Join Household"
       joinInputLabel="Invite Code"
-      joinInputPlaceholder="Enter invite code"
-      createErrorTitle="Failed to create snake household"
-      joinErrorTitle="Failed to join snake household"
+      joinInputPlaceholder="Enter Invite Code"
+      createErrorTitle="Failed to Create Snake Household"
+      joinErrorTitle="Failed to Join Snake Household"
       icon={SnakeIcon}
       showAppSwitcher
     />

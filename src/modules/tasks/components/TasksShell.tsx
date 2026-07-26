@@ -14,37 +14,12 @@ import {
   type RefObject,
 } from 'react';
 import {
-  Bell,
-  BellRing,
-  CalendarDays,
-  CalendarRange,
   CheckCircle2,
   Circle,
-  CircleCheckBig,
-  CircleDashed,
-  CircleSlash2,
-  Cloud,
-  Clock2,
-  Clock5,
-  Clock8,
-  DatabaseBackup,
-  ExternalLink,
-  Hourglass,
-  Inbox,
-  ListTodo,
-  LayoutTemplate,
   MoreHorizontal,
-  FlagTriangleRight,
-  Play,
-  Plus,
-  RotateCcw,
-  Search,
-  Settings,
   Square,
-  SquareCheckBig,
-  Trash2,
-  FolderKanban,
   X,
+  type LucideIcon,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -54,6 +29,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -70,15 +47,16 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
-import { CARD_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
 import type {
   EditableTaskPatch,
   TaskPlanningMoveInput,
 } from '@/modules/tasks/data/taskRepository';
 import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import { TaskClipboardService } from '@/modules/tasks/data/taskClipboardService';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import {
   addTaskCalendarDays,
+  formatTaskCompactCalendarDayOffset,
   formatTaskDateControlLabel,
   formatTaskRelativeCalendarDate,
   isTaskCalendarDate,
@@ -89,7 +67,6 @@ import {
   TaskBulkWhenDialog,
   TaskDoDialog,
   TaskMoveDialog,
-  TaskSearchDialog,
   type TaskTemporalAction,
   type TaskBulkCommandMode,
 } from '@/modules/tasks/components/TaskCommandSurfaces';
@@ -98,6 +75,10 @@ import {
   TaskStartPickerField,
 } from '@/modules/tasks/components/TaskStartPicker';
 import {
+  getTaskHorizonPresentation,
+  taskHorizonPresentations,
+} from '@/modules/tasks/components/taskHorizonPresentation';
+import {
   requestTaskStartPickerOpen,
   type TaskStartPickerFocusTarget,
 } from '@/modules/tasks/components/taskStartPickerEvents';
@@ -105,7 +86,6 @@ import {
   TaskQuickFindDialog,
   TaskSearchResultsView,
 } from '@/modules/tasks/components/TaskQuickFind';
-import { TaskCountBadge } from '@/modules/tasks/components/TaskCountBadge';
 import {
   getTaskTodayMembershipSection,
   getTodayTaskSection,
@@ -118,6 +98,7 @@ import {
 } from '@/modules/tasks/hooks/useTaskList';
 import { useTaskHierarchy, type TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import { useTaskSearch } from '@/modules/tasks/hooks/useTaskSearch';
+import { useTaskQuickFilterPreference } from '@/modules/tasks/hooks/useTaskQuickFilterPreference';
 import {
   UnsafeTaskRedoError,
   UnsafeTaskUndoError,
@@ -150,8 +131,6 @@ import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
 import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView';
 import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
 import {
-  TASK_PLANNING_ITEM_BACKGROUND_CLASS,
-  TASK_PLANNING_ITEM_FRAME_CLASS,
   TASK_PLANNING_LIST_CLASS,
   TaskPlanningProjectItem,
   TaskPlanningProjects,
@@ -167,6 +146,10 @@ import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import { deriveTaskViewProjects } from '@/modules/tasks/domain/taskProjectViews';
+import {
+  deriveTaskAnytimeAreaSections,
+  getTaskEffectiveAreaId,
+} from '@/modules/tasks/domain/taskAreaViews';
 import {
   getTaskUpcomingSections,
 } from '@/modules/tasks/domain/taskUpcoming';
@@ -190,11 +173,21 @@ import {
 import { getNextTaskActionability } from '@/modules/tasks/domain/taskActionability';
 import { formatTaskReminderTimeDisplay } from '@/modules/tasks/domain/taskReminderTimeInput';
 import {
+  sanitizeTaskQuickFilter,
+  taskMatchesQuickFilter,
+  taskQuickFilterLabels,
+  taskQuickFilters,
+  type TaskQuickFilter,
+} from '@/modules/tasks/domain/taskQuickFilters';
+import {
   NEW_TASK_DRAFT_ID,
   applyTaskCreationDraftPatch,
   createTaskCreationDraft,
+  getFirstTodayTaskCreationPlacement,
+  getFirstUpcomingTaskCreationPlacement,
   getTaskCreationInput,
   type TaskCreationDraft,
+  type TaskCreationPlacement,
 } from '@/modules/tasks/domain/taskCreationDraft';
 
 type TasksShellProps = {
@@ -214,19 +207,22 @@ const TASK_POST_CLOSE_SETTLE_DELAY_MS = 180;
 const TASK_PLACEMENT_ANIMATION_DURATION_MS = 240;
 const TASK_TERMINAL_SETTLE_DELAY_MS = 180;
 const TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS = 220;
+const TASK_LIST_BOTTOM_CLEARANCE_CLASS = 'pb-[calc(env(safe-area-inset-bottom)+11rem)] md:pb-36';
+
+const todayTaskSectionDefinitions = taskHorizonPresentations;
 
 const primaryTaskViews = [
-  { path: '/today', label: 'Today', icon: CalendarDays },
-  { path: '/upcoming', label: 'Upcoming', icon: CalendarRange },
-  { path: '/anytime', label: 'Anytime', icon: ListTodo },
-  { path: '/someday', label: 'Someday', icon: CircleDashed },
+  { path: '/today', label: 'Today', icon: TASK_ICONS.Today },
+  { path: '/upcoming', label: 'Upcoming', icon: TASK_ICONS.Upcoming },
+  { path: '/anytime', label: 'Anytime', icon: TASK_ICONS.Anytime },
+  { path: '/someday', label: 'Someday', icon: TASK_ICONS.Someday },
 ] as const;
 
 const secondaryTaskViews = [
-  { path: '/projects', label: 'Projects', icon: FolderKanban },
-  { path: '/templates', label: 'Templates', icon: LayoutTemplate },
-  { path: '/done', label: 'Done', icon: SquareCheckBig },
-  { path: '/config', label: 'Config', icon: Settings },
+  { path: '/projects', label: 'Areas & Projects', icon: TASK_ICONS.AreasAndProjects },
+  { path: '/templates', label: 'Templates', icon: TASK_ICONS.Templates },
+  { path: '/done', label: 'Done', icon: TASK_ICONS.Done },
+  { path: '/config', label: 'Config', icon: TASK_ICONS.Config },
 ] as const;
 
 const taskViews = [...primaryTaskViews, ...secondaryTaskViews] as const;
@@ -260,7 +256,9 @@ function taskPlacementChanged(
     || task.today_section !== retainedPlacement.today_section
     || task.start_date !== retainedPlacement.start_date
     || task.deadline !== retainedPlacement.deadline
-    || task.order_key !== retainedPlacement.order_key;
+    || task.order_key !== retainedPlacement.order_key
+    || task.area_id !== retainedPlacement.area_id
+    || task.project_id !== retainedPlacement.project_id;
 }
 
 function animateTaskPlacementAfterClose(
@@ -323,6 +321,19 @@ function taskNestedSurfaceOwnsEscape(target: EventTarget | null): boolean {
   ) !== null;
 }
 
+function taskNestedSurfaceOwnsTypeToSearch(target: EventTarget | null): boolean {
+  if (isTaskEditableTarget(target)) return true;
+  if (target instanceof Element && target.closest(
+    '[data-radix-popper-content-wrapper], [role="dialog"], [role="menu"], '
+      + '[role="listbox"], [role="option"], [role="combobox"]',
+  )) return true;
+  return document.querySelector(
+    '[data-radix-popper-content-wrapper] [data-state="open"], '
+      + '[role="dialog"][data-state="open"], [role="menu"][data-state="open"], '
+      + '[role="listbox"][data-state="open"]',
+  ) !== null;
+}
+
 export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -360,6 +371,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [closingTaskId, setClosingTaskId] = useState<string | null>(null);
   const retainedTaskId = selectedTaskId ?? closingTaskId;
   const hierarchy = useTaskHierarchy(userId);
+  const {
+    filter: taskQuickFilter,
+    setFilter: setTaskQuickFilter,
+  } = useTaskQuickFilterPreference(userId);
   const deletedHierarchyRoots = useTaskDeletedHierarchyRoots(userId);
   const {
     pending: taskUndoPending,
@@ -406,10 +421,30 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       : projectedTasks,
     [creationDraft?.persistedTaskId, projectedTasks],
   );
+  const filteredTasks = useMemo(
+    () => !bulkEligible || taskQuickFilter === 'all'
+      ? tasks
+      : tasks.filter((task) => (
+        task.id === retainedTaskId
+        || taskMatchesQuickFilter(task.actionability, taskQuickFilter)
+      )),
+    [bulkEligible, retainedTaskId, taskQuickFilter, tasks],
+  );
+  const renderedPlanningTasks = useMemo(
+    () => creationDraft?.view === taskListView
+      ? [creationDraft.task, ...filteredTasks]
+      : filteredTasks,
+    [creationDraft, filteredTasks, taskListView],
+  );
+  const detachedCreationDraft = creationDraft?.view === 'upcoming'
+    && creationDraft.task.start_date === null
+    && creationDraft.task.deadline === null
+    ? creationDraft
+    : null;
   const selectableTasks = useMemo(
-    () => tasks.filter((task) => task.disposition === 'present'
+    () => filteredTasks.filter((task) => task.disposition === 'present'
       && (view === 'done' ? task.lifecycle !== 'open' : task.lifecycle === 'open')),
-    [tasks, view],
+    [filteredTasks, view],
   );
   const taskClipboardService = useMemo(() => new TaskClipboardService(
     database,
@@ -436,11 +471,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [bulkWhenOpen, setBulkWhenOpen] = useState(false);
   const [bulkCommandMode, setBulkCommandMode] = useState<TaskBulkCommandMode | null>(null);
   const [bulkPending, setBulkPending] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [quickFindOpen, setQuickFindOpen] = useState(false);
+  const [quickFindInitialQuery, setQuickFindInitialQuery] = useState('');
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
   const [searchTargetTaskId, setSearchTargetTaskId] = useState<string | null>(null);
-  const taskSearch = useTaskSearch(userId, searchOpen || quickFindOpen || view === 'search');
+  const taskSearch = useTaskSearch(userId, quickFindOpen || view === 'search');
   const reminders = useTaskReminders(userId);
   const reminderAvailability = getTaskReminderAvailability(
     reminders.mode,
@@ -465,9 +500,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     [],
   );
   const doneRoots = deletedHierarchyRoots.roots;
+  const quickFilterHasNoMatches = bulkEligible
+    && taskQuickFilter !== 'all'
+    && filteredTasks.length === 0;
   const taskViewIsEmpty = creationDraft === null && (view === 'done'
-    ? tasks.length === 0 && doneRoots.length === 0 && planningProjects.length === 0
-    : tasks.length === 0 && planningProjects.length === 0);
+    ? filteredTasks.length === 0 && doneRoots.length === 0 && planningProjects.length === 0
+    : filteredTasks.length === 0 && planningProjects.length === 0);
   const serverReplacementAvailable = mode === 'connected'
     && syncState === 'connected'
     && pendingUploadCount === 0;
@@ -476,6 +514,38 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     : syncState !== 'connected'
       ? 'Reconnect to preview the current server deletion scope'
       : undefined;
+  const floatingTaskCreationPlacement = useMemo<TaskCreationPlacement | undefined>(() => {
+    if (view === 'today') {
+      const visibleSections = todayTaskSectionDefinitions
+        .map(({ id }) => id)
+        .filter((section) => filteredTasks.some((task) => getTodayTaskSection(
+          taskWithRetainedViewPlacement(task, retainedTaskId, retainedTaskPlacement),
+          planningDate,
+        ) === section));
+      return getFirstTodayTaskCreationPlacement(visibleSections);
+    }
+    if (view === 'upcoming') {
+      const placementTasks = filteredTasks.map((task) => taskWithRetainedViewPlacement(
+        task,
+        retainedTaskId,
+        retainedTaskPlacement,
+      ));
+      const firstSection = getTaskUpcomingSections(
+        planningProjects,
+        placementTasks,
+        planningDate,
+      )[0];
+      return getFirstUpcomingTaskCreationPlacement(firstSection?.date, planningDate);
+    }
+    return undefined;
+  }, [
+    filteredTasks,
+    planningDate,
+    planningProjects,
+    retainedTaskId,
+    retainedTaskPlacement,
+    view,
+  ]);
 
   const runTaskUndo = useCallback(async () => {
     try {
@@ -714,6 +784,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setBulkMode(false);
   }, []);
 
+  const applyTaskQuickFilter = useCallback(async (nextFilter: TaskQuickFilter) => {
+    if (nextFilter === taskQuickFilter) return;
+    const closed = await setOpenTask(null);
+    if (!closed) return;
+    clearTaskSelection();
+    setTaskQuickFilter(nextFilter);
+  }, [
+    clearTaskSelection,
+    setOpenTask,
+    setTaskQuickFilter,
+    taskQuickFilter,
+  ]);
+
   const clearWholeTaskFocusPreservingDomFocus = useCallback(() => {
     focusedTaskIdRef.current = null;
     setFocusedTaskId(null);
@@ -799,7 +882,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (openTaskId !== null) void closeOpenTaskToFocus();
   }, [closeOpenTaskToFocus, setOpenTask]);
 
-  const beginTaskCreation = useCallback(async () => {
+  const beginTaskCreation = useCallback(async (placement?: TaskCreationPlacement) => {
     if (selectedTaskIdRef.current === NEW_TASK_DRAFT_ID) {
       document.querySelector<HTMLInputElement>(
         `[data-task-editor-title][id="task-title-${NEW_TASK_DRAFT_ID}"]`,
@@ -817,7 +900,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     clearTaskSelection();
     setBulkWhenOpen(false);
     setBulkCommandMode(null);
-    const draft = createTaskCreationDraft(userId, targetView);
+    const draft = createTaskCreationDraft(userId, targetView, undefined, placement);
     replaceCreationDraft(draft);
     selectedTaskIdRef.current = NEW_TASK_DRAFT_ID;
     setSelectedTaskId(NEW_TASK_DRAFT_ID);
@@ -1475,7 +1558,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         && bulkMode
         && !bulkWhenOpen
         && bulkCommandMode === null
-        && !searchOpen
         && !quickFindOpen
         && !keyboardHelpOpen
         && !(event.target instanceof Element && event.target.closest('[role="dialog"]'))
@@ -1521,6 +1603,26 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         event.preventDefault();
         event.stopImmediatePropagation();
         focusTaskRow(firstTaskId, true);
+        return;
+      }
+      if (
+        event.key.length === 1
+        && event.key !== ' '
+        && !event.metaKey
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.isComposing
+        && !event.repeat
+        && !quickFindOpen
+        && !taskNestedSurfaceOwnsTypeToSearch(event.target)
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+        setQuickFindInitialQuery(event.key);
+        setQuickFindOpen(true);
         return;
       }
       const command = getTaskKeyboardCommand(event, macLikePlatform);
@@ -1681,7 +1783,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setOpenTask,
     taskUndoPending,
     selectableTasks,
-    searchOpen,
     quickFindOpen,
   ]);
 
@@ -1978,7 +2079,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (next.focusedId !== null) focusTaskRow(next.focusedId);
   };
 
-  const renderActiveTask = (task: TaskTodo, sectionTasks: TaskTodo[]) => {
+  const renderActiveTask = (
+    task: TaskTodo,
+    sectionTasks: TaskTodo[],
+    targetAreaId?: string | null,
+  ) => {
     const isCreationDraft = task.id === NEW_TASK_DRAFT_ID;
     const persistedDraftTaskId = isCreationDraft
       ? creationDraftRef.current?.persistedTaskId ?? null
@@ -1992,7 +2097,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         focused={focusedTaskId === task.id}
         onSelect={(event) => handleTaskPointerSelection(event, task.id)}
         onActivate={() => toggleTaskFromKeyboard(task.id)}
-        onCloseEditor={() => void closeOpenTaskToFocus()}
+        onCloseEditor={closeOpenTaskToFocus}
         onFocusTask={() => {
           if (!bulkMode) focusTaskRow(task.id);
         }}
@@ -2047,16 +2152,45 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         draggableTask={!isCreationDraft
           && !bulkMode
           && (view === 'today' || view === 'anytime' || view === 'someday')
-          && (view === 'today' ? tasks.length > 1 : sectionTasks.length > 1)}
+          && (
+            view === 'today'
+              ? tasks.length > 1
+              : view === 'anytime'
+                ? tasks.length > 0
+                : sectionTasks.length > 1
+          )}
         onDropTask={async (draggedTaskId, placement) => {
           try {
-            await reorderTaskTo(draggedTaskId, task.id, placement);
+            const draggedTask = tasks.find(({ id }) => id === draggedTaskId);
+            const sourceAreaId = draggedTask
+              ? getTaskEffectiveAreaId(
+                taskWithRetainedViewPlacement(
+                  draggedTask,
+                  retainedTaskId,
+                  retainedTaskPlacement,
+                ),
+                hierarchy.projects,
+              )
+              : null;
+            const organizationPatch = targetAreaId !== undefined
+              && sourceAreaId !== targetAreaId
+              ? { area_id: targetAreaId, project_id: null }
+              : undefined;
+            if (organizationPatch === undefined) {
+              await reorderTaskTo(draggedTaskId, task.id, placement);
+            } else {
+              await reorderTaskTo(
+                draggedTaskId,
+                task.id,
+                placement,
+                organizationPatch,
+              );
+            }
           } catch (reorderError) {
             showTaskError('Task Could Not Be Reordered', reorderError);
             throw reorderError;
           }
         }}
-        planningLabel={view === 'today' ? null : undefined}
         planningDate={planningDate}
         todayMarker={view === 'anytime'
           ? getTaskTodayMembershipSection(task, planningDate) ?? undefined
@@ -2194,7 +2328,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
       <main
         data-task-space-entry-surface
-        className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${bulkMode ? 'pb-44 md:pb-36' : CARD_PAGE_BOTTOM_PADDING_CLASS}`}
+        data-task-list-bottom-clearance
+        className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${TASK_LIST_BOTTOM_CLEARANCE_CLASS}`}
       >
         <div className="space-y-7">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -2206,26 +2341,26 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               {getTaskViewLabel(view)}
             </h2>
             <div className="flex items-center gap-1">
+              {bulkEligible ? (
+                <TaskQuickFilterControl
+                  value={taskQuickFilter}
+                  onChange={(nextFilter) => {
+                    void applyTaskQuickFilter(nextFilter);
+                  }}
+                />
+              ) : null}
               <Button
                 type="button"
                 variant="clear"
                 size="icon"
-                aria-label="New Task"
-                aria-keyshortcuts="Control+A Control+Shift+A"
-                onClick={() => void beginTaskCreation()}
+                aria-label="Quick Find Tasks, Projects, and Areas"
+                onClick={() => {
+                  setQuickFindInitialQuery('');
+                  openCommandSurface(setQuickFindOpen);
+                }}
                 className="h-9 w-9 text-muted-foreground"
               >
-                <Plus className="h-4 w-4" aria-hidden="true" />
-              </Button>
-              <Button
-                type="button"
-                variant="clear"
-                size="icon"
-                aria-label="Search Tasks and Views"
-                onClick={() => openCommandSurface(setSearchOpen)}
-                className="h-9 w-9 text-muted-foreground"
-              >
-                <Search className="h-4 w-4" aria-hidden="true" />
+                <TASK_ICONS.Search className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
           </div>
@@ -2243,18 +2378,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             />
           ) : null}
 
-          {reminders.claimError ? (
-            <TaskReminderClaimFailure onRetry={reminders.claimDue} />
-          ) : null}
-
           {reminders.projectionError ? <TaskReminderProjectionFailure /> : null}
 
           <TaskDesktopNavigation view={view} basePath={basePath} navigate={navigate} />
 
-          {creationDraft ? (
+          {detachedCreationDraft ? (
             <section aria-label="New Task">
               <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
-                {renderActiveTask(creationDraft.task, [creationDraft.task])}
+                {renderActiveTask(detachedCreationDraft.task, [detachedCreationDraft.task])}
               </div>
             </section>
           ) : null}
@@ -2331,6 +2462,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   keyboardHelpShortcut={macLikePlatform ? '⌘/' : '⌃/'}
                   webPush={reminders.webPush}
                   connected={reminders.mode === 'connected'}
+                  inAppReminderStatus={reminders.claimError ? 'delayed' : 'available'}
                   onEnableBrowserReminders={async () => {
                     if (!reminders.webPush) return;
                     try {
@@ -2363,7 +2495,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               </p>
             ) : taskViewIsEmpty ? (
               <p className="py-12 text-center text-sm text-muted-foreground">
-                {view === 'done' ? 'Done Is Empty' : 'No Tasks'}
+                {quickFilterHasNoMatches
+                  ? 'No Tasks Match This Filter'
+                  : view === 'done' ? 'Done Is Empty' : 'No Tasks'}
               </p>
             ) : view === 'done' ? (
               <div className="space-y-7">
@@ -2374,7 +2508,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                       className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground"
                     >
                       Deleted
-                      <TaskCountBadge count={doneRoots.length} label="Deleted Items" />
                     </h3>
                   <div className={TASK_PLANNING_LIST_CLASS}>
                     {doneRoots.map((root) => (
@@ -2410,17 +2543,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                     }
                   }}
                 />
-                {tasks.length > 0 ? (
-                  <section aria-labelledby="task-done-todos-heading">
-                    <h3
-                      id="task-done-todos-heading"
-                      className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground"
-                    >
-                      Tasks
-                      <TaskCountBadge count={tasks.length} label="Tasks" />
-                    </h3>
+                {quickFilterHasNoMatches ? <TaskQuickFilterEmptyState /> : null}
+                {filteredTasks.length > 0 ? (
+                  <section aria-label="Tasks">
                     <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
-                      {tasks.map((task) => task.disposition === 'deleted' ? (
+                      {filteredTasks.map((task) => task.disposition === 'deleted' ? (
                         <DeletedTaskRow
                           key={task.id}
                           task={task}
@@ -2520,22 +2647,29 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   )}
                 />
                 <TodayTaskSections
-                  tasks={tasks}
+                  tasks={renderedPlanningTasks}
                   planningDate={planningDate}
                   retainedTaskId={retainedTaskId}
                   retainedTaskPlacement={retainedTaskPlacement}
+                  onCreate={(todaySection) => {
+                    void beginTaskCreation({ todaySection });
+                  }}
                   renderTask={renderActiveTask}
                 />
+                {quickFilterHasNoMatches ? <TaskQuickFilterEmptyState /> : null}
               </div>
             ) : (
               <div className="space-y-7">
                 {view === 'upcoming' ? (
                   <UpcomingTaskSections
                     projects={planningProjects}
-                    tasks={tasks}
+                    tasks={renderedPlanningTasks}
                     planningDate={planningDate}
                     retainedTaskId={retainedTaskId}
                     retainedTaskPlacement={retainedTaskPlacement}
+                    onCreate={(startDate) => {
+                      void beginTaskCreation({ startDate });
+                    }}
                     renderProject={(project) => (
                       <TaskPlanningProjectItem
                         key={project.id}
@@ -2578,6 +2712,79 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                     )}
                     renderTask={renderActiveTask}
                   />
+                ) : view === 'anytime' ? (
+                  <>
+                    <TaskPlanningProjects
+                      projects={planningProjects}
+                      areas={hierarchy.areas}
+                      basePath={basePath}
+                      view={taskListView}
+                      planningDate={planningDate}
+                      onMove={async (project, input) => {
+                        try {
+                          await hierarchy.moveProjectInPlanning(project.id, input);
+                        } catch (moveError) {
+                          showTaskError('Project Could Not Be Moved', moveError);
+                          throw moveError;
+                        }
+                      }}
+                      onReorder={async (project, direction) => {
+                        try {
+                          await hierarchy.reorderProjectInPlanning(
+                            project.id,
+                            direction,
+                            taskListView,
+                            planningDate,
+                          );
+                        } catch (reorderError) {
+                          showTaskError('Project Could Not Be Reordered', reorderError);
+                          throw reorderError;
+                        }
+                      }}
+                      onReopen={async (project) => {
+                        try {
+                          await hierarchy.transitionProject(project.id, 'reopen_project');
+                        } catch (reopenError) {
+                          showTaskError('Project Could Not Be Reopened', reopenError);
+                          throw reopenError;
+                        }
+                      }}
+                    />
+                    <AnytimeTaskSections
+                      tasks={renderedPlanningTasks}
+                      areas={hierarchy.areas}
+                      projects={hierarchy.projects}
+                      retainedTaskId={retainedTaskId}
+                      retainedTaskPlacement={retainedTaskPlacement}
+                      onCreate={(areaId) => {
+                        void beginTaskCreation({ areaId });
+                      }}
+                      onDropIntoUnassigned={async (draggedTaskId) => {
+                        const draggedTask = tasks.find(({ id }) => id === draggedTaskId);
+                        if (
+                          draggedTask
+                          && getTaskEffectiveAreaId(
+                            taskWithRetainedViewPlacement(
+                              draggedTask,
+                              retainedTaskId,
+                              retainedTaskPlacement,
+                            ),
+                            hierarchy.projects,
+                          ) === null
+                        ) return;
+                        try {
+                          await updateTask(draggedTaskId, {
+                            area_id: null,
+                            project_id: null,
+                          });
+                        } catch (moveError) {
+                          showTaskError('Task Could Not Be Moved', moveError);
+                          throw moveError;
+                        }
+                      }}
+                      renderTask={renderActiveTask}
+                    />
+                  </>
                 ) : (
                   <>
                     <TaskPlanningProjects
@@ -2616,24 +2823,44 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         }
                       }}
                     />
-                    {tasks.length > 0 ? (
+                    {renderedPlanningTasks.length > 0 ? (
                       <section aria-label="Tasks">
-                        <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-                          Tasks
-                          <TaskCountBadge count={tasks.length} label="Tasks" />
-                        </h3>
                         <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
-                          {tasks.map((task) => renderActiveTask(task, tasks))}
+                          {renderedPlanningTasks.map((task) => (
+                            renderActiveTask(task, renderedPlanningTasks)
+                          ))}
                         </div>
                       </section>
                     ) : null}
                   </>
                 )}
+                {quickFilterHasNoMatches ? <TaskQuickFilterEmptyState /> : null}
               </div>
             )}
           </section>}
         </div>
       </main>
+
+      {(view === 'today'
+        || view === 'upcoming'
+        || view === 'anytime'
+        || view === 'someday') && !bulkMode ? (
+          <div
+            data-task-floating-create-boundary
+            className="pointer-events-none fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 mx-auto flex w-full max-w-3xl justify-end px-4 md:bottom-6"
+          >
+            <Button
+              type="button"
+              variant="outline-success"
+              aria-label="New Task"
+              data-task-floating-create
+              onClick={() => void beginTaskCreation(floatingTaskCreationPlacement)}
+              className="pointer-events-auto h-14 w-14 rounded-full border-2 p-0 enabled:hover:!bg-accent [&_svg]:size-6"
+            >
+              <TASK_ICONS.AddTask aria-hidden="true" />
+            </Button>
+          </div>
+        ) : null}
 
       {bulkMode ? (
         <TaskBulkToolbar
@@ -2662,46 +2889,30 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onNavigate={(path) => navigate(`${basePath}${path}`)}
         hrefForPath={(path) => `${basePath}${path}`}
       />
-      <TaskSearchDialog
-        open={searchOpen}
-        basePath={basePath}
-        tasks={taskSearch.tasks}
-        hierarchy={hierarchy}
-        planningDate={planningDate}
-        loading={taskSearch.loading}
-        error={taskSearch.error}
-        onOpenChange={setSearchOpen}
-        onCloseAutoFocus={restoreCommandFocus}
-        onNavigate={(path) => {
-          commandReturnFocusRef.current = null;
-          setSearchOpen(false);
-          navigate(path);
-        }}
-        onSelectTask={(task, path) => {
-          commandReturnFocusRef.current = null;
-          setSearchOpen(false);
-          setSearchTargetTaskId(task.id);
-          navigate(path);
-        }}
-      />
       <TaskQuickFindDialog
         open={quickFindOpen}
+        initialQuery={quickFindInitialQuery}
         basePath={basePath}
         tasks={taskSearch.tasks}
         hierarchy={hierarchy}
         planningDate={planningDate}
         loading={taskSearch.loading}
         error={taskSearch.error}
-        onOpenChange={setQuickFindOpen}
+        onOpenChange={(nextOpen) => {
+          setQuickFindOpen(nextOpen);
+          if (!nextOpen) setQuickFindInitialQuery('');
+        }}
         onCloseAutoFocus={restoreCommandFocus}
         onNavigate={(path) => {
           commandReturnFocusRef.current = null;
           setQuickFindOpen(false);
+          setQuickFindInitialQuery('');
           navigate(path);
         }}
         onSelectTask={(task, path) => {
           commandReturnFocusRef.current = null;
           setQuickFindOpen(false);
+          setQuickFindInitialQuery('');
           setSearchTargetTaskId(task.id);
           navigate(path);
         }}
@@ -2729,6 +2940,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           : bulkSelection.size}
         hierarchy={hierarchy}
         planningDate={planningDate}
+        reminderTimeZone={reminders.planningTimeZone}
+        reminderIncludesToday={tasks.some((task) => (
+          bulkSelection.has(task.id)
+          && task.start_date === null
+          && task.today_section !== null
+        ))}
         onOpenChange={(open) => {
           if (!open) setBulkCommandMode(null);
         }}
@@ -2737,6 +2954,68 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onApplyReminder={applyBulkReminder}
       />
     </div>
+  );
+}
+
+function TaskQuickFilterControl({
+  value,
+  onChange,
+}: {
+  value: TaskQuickFilter;
+  onChange: (value: TaskQuickFilter) => void;
+}) {
+  const active = value !== 'all';
+  const activeLabel = taskQuickFilterLabels[value];
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant={active ? 'outline' : 'clear'}
+          size={active ? 'sm' : 'icon'}
+          aria-label={active ? `Quick Filters: ${activeLabel}` : 'Quick Filters'}
+          className={active
+            ? 'h-9 gap-1.5 px-2.5 text-foreground'
+            : 'h-9 w-9 text-muted-foreground'}
+          data-task-quick-filter-trigger
+        >
+          <TASK_ICONS.QuickFilters className="h-4 w-4" aria-hidden="true" />
+          {active ? <span>{activeLabel}</span> : null}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        aria-label="Quick Filters"
+        data-task-quick-filter-menu
+      >
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(nextValue) => onChange(sanitizeTaskQuickFilter(nextValue))}
+        >
+          <DropdownMenuRadioItem value="all">
+            {taskQuickFilterLabels.all}
+          </DropdownMenuRadioItem>
+          <DropdownMenuSeparator />
+          {taskQuickFilters.slice(1).map((filter) => (
+            <DropdownMenuRadioItem key={filter} value={filter}>
+              {taskQuickFilterLabels[filter]}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function TaskQuickFilterEmptyState() {
+  return (
+    <p
+      className="py-8 text-center text-sm text-muted-foreground"
+      data-task-quick-filter-empty
+    >
+      No tasks match this filter
+    </p>
   );
 }
 
@@ -2821,7 +3100,7 @@ function TaskDueReminders({
       className="rounded-md border border-info/40 bg-info/5 p-4"
     >
       <h3 className="flex items-center gap-2 text-sm font-semibold text-info">
-        <BellRing className="h-4 w-4" aria-hidden="true" />
+        <TASK_ICONS.DueReminder className="h-4 w-4" aria-hidden="true" />
         Due Reminders
       </h3>
       <div className="mt-3 divide-y divide-info/20">
@@ -2851,44 +3130,6 @@ function TaskDueReminders({
   );
 }
 
-function TaskReminderClaimFailure({
-  onRetry,
-}: {
-  onRetry: () => Promise<void>;
-}) {
-  const [retrying, setRetrying] = useState(false);
-
-  return (
-    <section
-      aria-label="Reminder Delivery Check"
-      aria-live="polite"
-      className="flex flex-col gap-3 rounded-md border border-warning/40 bg-warning/5 p-4 sm:flex-row sm:items-center"
-    >
-      <div className="flex min-w-0 flex-1 gap-3">
-        <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-foreground">Reminder Check Failed</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Due reminders could not be checked. Scheduled reminders remain unchanged.
-          </p>
-        </div>
-      </div>
-      <Button
-        type="button"
-        variant="outline-warning"
-        size="sm"
-        disabled={retrying}
-        onClick={() => {
-          setRetrying(true);
-          void onRetry().finally(() => setRetrying(false));
-        }}
-      >
-        Retry
-      </Button>
-    </section>
-  );
-}
-
 function TaskReminderProjectionFailure() {
   return (
     <section
@@ -2896,7 +3137,7 @@ function TaskReminderProjectionFailure() {
       aria-live="polite"
       className="flex gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-4"
     >
-      <Bell className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+      <TASK_ICONS.Reminder className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
       <div className="min-w-0">
         <h3 className="text-sm font-semibold text-foreground">Reminder Data Unavailable</h3>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -2990,6 +3231,7 @@ function TaskConfigView({
   keyboardHelpShortcut,
   webPush,
   connected,
+  inAppReminderStatus,
   onEnableBrowserReminders,
   onDisableBrowserReminders,
   portabilityService,
@@ -2999,6 +3241,7 @@ function TaskConfigView({
   keyboardHelpShortcut: string;
   webPush: TaskWebPushModel | null;
   connected: boolean;
+  inAppReminderStatus: 'available' | 'delayed';
   onEnableBrowserReminders: () => Promise<void>;
   onDisableBrowserReminders: () => Promise<void>;
   portabilityService: TaskPortabilityService;
@@ -3016,7 +3259,7 @@ function TaskConfigView({
         {' '}to view all keyboard commands.
       </p>
 
-      <TaskConfigSection title="Browser Reminders" icon={Bell}>
+      <TaskConfigSection title="Browser Reminders" icon={TASK_ICONS.Reminder}>
         {webPush ? (
           <TaskWebPushCapability
             model={webPush}
@@ -3029,11 +3272,14 @@ function TaskConfigView({
         )}
       </TaskConfigSection>
 
-      <TaskConfigSection title="Synchronization" icon={Cloud}>
-        <TaskSyncDiagnosticsDialog triggerVariant="config" />
+      <TaskConfigSection title="Synchronization" icon={TASK_ICONS.CloudSync}>
+        <TaskSyncDiagnosticsDialog
+          triggerVariant="config"
+          inAppReminderStatus={inAppReminderStatus}
+        />
       </TaskConfigSection>
 
-      <TaskConfigSection title="Backup and Restore" icon={DatabaseBackup}>
+      <TaskConfigSection title="Backup and Restore" icon={TASK_ICONS.DataPortability}>
         <TaskDataPortabilityDialog
           service={portabilityService}
           replaceAvailable={replaceAvailable}
@@ -3051,7 +3297,7 @@ function TaskConfigSection({
   children,
 }: {
   title: string;
-  icon: typeof Bell;
+  icon: LucideIcon;
   children: ReactNode;
 }) {
   const headingId = `task-config-${title.toLowerCase().replaceAll(' ', '-')}`;
@@ -3099,7 +3345,7 @@ function TaskWebPushCapability({
     if (!connected) return 'Background reminders require connected task storage.';
     switch (model.status) {
       case 'active':
-        return 'This browser can receive reminders while Tasks is closed. Notifications show task titles.';
+      return 'This browser can receive reminders while Tasks is closed. Notifications show task summaries.';
       case 'available':
         return 'Enable notifications on this browser to receive reminders while Tasks is closed.';
       case 'denied':
@@ -3246,11 +3492,10 @@ function DoneTaskRow({
         }
       }}
       className={[
-        `flex h-14 items-center gap-2 px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-3 ${TASK_PLANNING_ITEM_FRAME_CLASS}`,
-        focused ? 'ring-2 ring-inset ring-ring' : '',
-        bulkSelection.selected ? 'bg-info/10 ring-1 ring-inset ring-info/40' : '',
-        !bulkSelection.selected ? TASK_PLANNING_ITEM_BACKGROUND_CLASS : '',
+        'flex h-11 items-center gap-2 overflow-hidden pl-1 pr-1.5 focus-visible:rounded-md focus-visible:bg-foreground/[0.05] focus-visible:outline-none',
+        focused || bulkSelection.selected ? 'rounded-md bg-foreground/[0.05]' : '',
       ].filter(Boolean).join(' ')}
+      data-task-row-header
     >
       <button
         type="button"
@@ -3265,9 +3510,9 @@ function DoneTaskRow({
         onClick={() => void run(onReopen)}
       >
         {completed ? (
-          <SquareCheckBig className="h-6 w-6" aria-hidden="true" />
+          <TASK_ICONS.Task className="h-6 w-6" aria-hidden="true" />
         ) : (
-          <CircleSlash2 className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+          <TASK_ICONS.Canceled className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
         )}
       </button>
       <button
@@ -3278,7 +3523,10 @@ function DoneTaskRow({
         onClick={bulkSelection.onSelect}
       >
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-medium leading-5 text-foreground">
+          <span
+            className="block truncate text-[15px] font-normal leading-5 text-foreground"
+            data-task-row-title
+          >
             {task.title}
           </span>
           <span className="block text-xs text-muted-foreground">
@@ -3292,7 +3540,7 @@ function DoneTaskRow({
           </span>
         </span>
       </button>
-      <TaskSourceIndicator task={task} />
+      <TaskSourceIndicator task={task} compact />
     </article>
   );
 }
@@ -3317,7 +3565,7 @@ function DeletedHierarchyRow({
       </div>
       <div className="flex shrink-0 flex-wrap justify-end gap-2">
         <Button type="button" variant="outline" size="sm" onClick={() => void onRestore()}>
-          <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          <TASK_ICONS.Reopen className="mr-1.5 h-4 w-4" aria-hidden="true" />
           Restore
         </Button>
       </div>
@@ -3417,11 +3665,10 @@ function DeletedTaskRow({
         }
       }}
       className={[
-        `flex h-14 items-center gap-2 px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-3 ${TASK_PLANNING_ITEM_FRAME_CLASS}`,
-        focused ? 'ring-2 ring-inset ring-ring' : '',
-        bulkSelection.selected ? 'bg-info/10 ring-1 ring-inset ring-info/40' : '',
-        !bulkSelection.selected ? TASK_PLANNING_ITEM_BACKGROUND_CLASS : '',
+        'flex h-11 items-center gap-2 overflow-hidden pl-1 pr-1.5 focus-visible:rounded-md focus-visible:bg-foreground/[0.05] focus-visible:outline-none',
+        focused || bulkSelection.selected ? 'rounded-md bg-foreground/[0.05]' : '',
       ].filter(Boolean).join(' ')}
+      data-task-row-header
     >
       <button
         type="button"
@@ -3436,24 +3683,29 @@ function DeletedTaskRow({
             .finally(() => setRestoring(false));
         }}
       >
-        <Trash2
+        <TASK_ICONS.Delete
           className="h-5 w-5 group-hover/restore:hidden group-focus-visible/restore:hidden"
           aria-hidden="true"
         />
-        <RotateCcw
+        <TASK_ICONS.Reopen
           className="hidden h-5 w-5 group-hover/restore:block group-focus-visible/restore:block"
           aria-hidden="true"
         />
       </button>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-medium leading-5 text-foreground">{task.title}</p>
+        <p
+          className="truncate text-[15px] font-normal leading-5 text-foreground"
+          data-task-row-title
+        >
+          {task.title}
+        </p>
         <p className="text-xs text-muted-foreground">
           {task.lifecycle === 'open' ? 'Open' : task.lifecycle === 'completed' ? 'Completed' : 'Canceled'}
           {' · '}
           {task.deleted_at ? formatTaskTerminalDate(task.deleted_at) : getTaskViewLabel(task.destination)}
         </p>
       </div>
-      <TaskSourceIndicator task={task} />
+      <TaskSourceIndicator task={task} compact />
     </article>
   );
 }
@@ -3463,28 +3715,24 @@ function TodayTaskSections({
   planningDate,
   retainedTaskId,
   retainedTaskPlacement,
+  onCreate,
   renderTask,
 }: {
   tasks: TaskTodo[];
   planningDate: string;
   retainedTaskId: string | null;
   retainedTaskPlacement: RetainedTaskViewPlacement | null;
+  onCreate: (todaySection: TodayTaskSection) => void;
   renderTask: (task: TaskTodo, sectionTasks: TaskTodo[]) => ReactNode;
 }) {
-  const sections: Array<{
-    id: TodayTaskSection;
-    label: string;
-    icon: typeof Clock2;
-  }> = [
-    { id: 'inbox', label: 'Inbox', icon: Inbox },
-    { id: 'now', label: 'Now', icon: Clock2 },
-    { id: 'next', label: 'Next', icon: Clock5 },
-    { id: 'later', label: 'Later', icon: Clock8 },
-  ];
-
   return (
     <div className="space-y-7">
-      {sections.map(({ id, label, icon: Icon }) => {
+      {todayTaskSectionDefinitions.map(({
+        id,
+        label,
+        icon: Icon,
+        colorClass,
+      }) => {
         const sectionTasks = tasks.filter((task) => getTodayTaskSection(
           taskWithRetainedViewPlacement(task, retainedTaskId, retainedTaskPlacement),
           planningDate,
@@ -3496,14 +3744,138 @@ function TodayTaskSections({
           <section key={id} aria-labelledby={`tasks-${id}-heading`}>
             <h3
               id={`tasks-${id}-heading`}
-              className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground"
+              aria-label={label}
+              className="mb-2 text-sm font-semibold text-muted-foreground"
             >
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              {label}
-              <TaskCountBadge count={sectionTasks.length} label="Tasks" />
+              <button
+                type="button"
+                aria-label={`Add Task to ${label}`}
+                onClick={() => onCreate(id)}
+                className="group inline-flex cursor-pointer items-center gap-2 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/65"
+              >
+                <Icon
+                  className={`h-4 w-4 ${colorClass}`}
+                  data-task-horizon-symbol={id}
+                  data-task-horizon-surface="heading"
+                  aria-hidden="true"
+                />
+                <span>{label}</span>
+                <TASK_ICONS.AddTask
+                  className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                  aria-hidden="true"
+                />
+              </button>
             </h3>
             <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
               {sectionTasks.map((task) => renderTask(task, sectionTasks))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function AnytimeTaskSections({
+  tasks,
+  areas,
+  projects,
+  retainedTaskId,
+  retainedTaskPlacement,
+  onCreate,
+  onDropIntoUnassigned,
+  renderTask,
+}: {
+  tasks: TaskTodo[];
+  areas: TaskHierarchyModel['areas'];
+  projects: TaskProject[];
+  retainedTaskId: string | null;
+  retainedTaskPlacement: RetainedTaskViewPlacement | null;
+  onCreate: (areaId: string) => void;
+  onDropIntoUnassigned: (draggedTaskId: string) => Promise<void>;
+  renderTask: (
+    task: TaskTodo,
+    sectionTasks: TaskTodo[],
+    targetAreaId?: string | null,
+  ) => ReactNode;
+}) {
+  const currentTaskById = new Map(tasks.map((task) => [task.id, task]));
+  const placementTasks = tasks.map((task) => taskWithRetainedViewPlacement(
+    task,
+    retainedTaskId,
+    retainedTaskPlacement,
+  ));
+  const sections = deriveTaskAnytimeAreaSections(placementTasks, areas, projects);
+  const unassigned = sections[0];
+  const areaSections = sections.slice(1);
+  if (placementTasks.length === 0) return null;
+
+  const currentTasks = (sectionTasks: TaskTodo[]) => {
+    const resolved = sectionTasks.map((task) => currentTaskById.get(task.id) ?? task);
+    return [
+      ...resolved.filter(({ id }) => id === NEW_TASK_DRAFT_ID),
+      ...resolved.filter(({ id }) => id !== NEW_TASK_DRAFT_ID),
+    ];
+  };
+  const renderedUnassignedTasks = currentTasks(unassigned.tasks);
+  const handleUnassignedDrop = async (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const draggedTaskId = event.dataTransfer.getData('application/x-bathos-task-id')
+      || event.dataTransfer.getData('text/plain');
+    if (!draggedTaskId) return;
+    await onDropIntoUnassigned(draggedTaskId);
+  };
+
+  return (
+    <div className="space-y-7" aria-label="Anytime Tasks by Area">
+      <section aria-label="Unassigned Tasks">
+        {unassigned.tasks.length > 0 ? (
+          <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
+            {renderedUnassignedTasks.map((task) => (
+              renderTask(task, renderedUnassignedTasks, null)
+            ))}
+          </div>
+        ) : (
+          <div
+            className="min-h-10"
+            data-task-unassigned-drop-target
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+            }}
+            onDrop={(event) => {
+              void handleUnassignedDrop(event);
+            }}
+          />
+        )}
+      </section>
+      {areaSections.map(({ area, areaId, tasks: sectionTasks }) => {
+        if (area === null || areaId === null) return null;
+        const renderedTasks = currentTasks(sectionTasks);
+        return (
+          <section key={areaId} aria-labelledby={`tasks-area-${areaId}-heading`}>
+            <h3
+              id={`tasks-area-${areaId}-heading`}
+              aria-label={area.title}
+              className="mb-2 text-sm font-semibold text-muted-foreground"
+            >
+              <button
+                type="button"
+                aria-label={`Add Task to ${area.title}`}
+                onClick={() => onCreate(areaId)}
+                className="group inline-flex cursor-pointer items-center gap-2 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/65"
+              >
+                <TASK_ICONS.Area className="h-4 w-4" aria-hidden="true" />
+                <span>{area.title}</span>
+                <TASK_ICONS.AddTask
+                  className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                  aria-hidden="true"
+                />
+              </button>
+            </h3>
+            <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
+              {renderedTasks.map((task) => renderTask(task, renderedTasks, areaId))}
             </div>
           </section>
         );
@@ -3518,6 +3890,7 @@ function UpcomingTaskSections({
   planningDate,
   retainedTaskId,
   retainedTaskPlacement,
+  onCreate,
   renderProject,
   renderTask,
 }: {
@@ -3526,6 +3899,7 @@ function UpcomingTaskSections({
   planningDate: string;
   retainedTaskId: string | null;
   retainedTaskPlacement: RetainedTaskViewPlacement | null;
+  onCreate: (startDate: string) => void;
   renderProject: (project: TaskProject) => ReactNode;
   renderTask: (task: TaskTodo, sectionTasks: TaskTodo[]) => ReactNode;
 }) {
@@ -3541,7 +3915,15 @@ function UpcomingTaskSections({
   return (
     <div className="space-y-7" aria-label="Upcoming Tasks">
       {sections.map((section) => {
-        const sectionTasks = section.entries.flatMap((entry) => (
+        const orderedEntries = [
+          ...section.entries.filter((entry) => (
+            entry.kind === 'task' && entry.item.id === NEW_TASK_DRAFT_ID
+          )),
+          ...section.entries.filter((entry) => (
+            entry.kind !== 'task' || entry.item.id !== NEW_TASK_DRAFT_ID
+          )),
+        ];
+        const sectionTasks = orderedEntries.flatMap((entry) => (
           entry.kind === 'task'
             ? [currentTaskById.get(entry.item.id) ?? entry.item]
             : []
@@ -3553,13 +3935,24 @@ function UpcomingTaskSections({
           >
             <h3
               id={`tasks-${section.key.replace(':', '-')}-heading`}
-              className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground"
+              aria-label={section.label}
+              className="mb-2 text-sm font-semibold text-muted-foreground"
             >
-              {section.label}
-              <TaskCountBadge count={section.entries.length} label="Items" />
+              <button
+                type="button"
+                aria-label={`Add Task to ${section.label}`}
+                onClick={() => onCreate(section.date)}
+                className="group inline-flex cursor-pointer items-center gap-2 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/65"
+              >
+                <span>{section.label}</span>
+                <TASK_ICONS.AddTask
+                  className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                  aria-hidden="true"
+                />
+              </button>
             </h3>
             <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
-              {section.entries.map((entry) => entry.kind === 'project'
+              {orderedEntries.map((entry) => entry.kind === 'project'
                 ? renderProject(entry.item)
                 : renderTask(
                   currentTaskById.get(entry.item.id) ?? entry.item,
@@ -3595,7 +3988,6 @@ function TaskRow({
   planningActions,
   draggableTask,
   onDropTask,
-  planningLabel,
   planningDate,
   todayMarker,
   todayMarkerContext,
@@ -3612,7 +4004,7 @@ function TaskRow({
   focused: boolean;
   onSelect: (event: MouseEvent<HTMLElement>) => void;
   onActivate: () => void;
-  onCloseEditor: () => void;
+  onCloseEditor: () => Promise<boolean>;
   onFocusTask: () => void;
   onRestoreTaskFocus: (taskId: string | null) => void;
   onClearTaskFocus: () => void;
@@ -3631,7 +4023,6 @@ function TaskRow({
   planningActions: TaskTemporalAction[];
   draggableTask: boolean;
   onDropTask: (draggedTaskId: string, placement: 'before' | 'after') => Promise<void>;
-  planningLabel?: string | null;
   planningDate: string;
   todayMarker?: TodayTaskSection;
   todayMarkerContext: 'Today' | 'Day Horizon';
@@ -3659,19 +4050,15 @@ function TaskRow({
   const editorAnimationFrameRef = useRef<number | null>(null);
   const editorScrollFrameRef = useRef<number | null>(null);
   const editorUnmountTimerRef = useRef<number | null>(null);
-  const suppressActionMenuAutoFocusRef = useRef(false);
   const titleButtonRef = useRef<HTMLButtonElement>(null);
   const suppressClickUntilRef = useRef(0);
   const pendingRef = useRef(false);
-  const hierarchyLabel = getTaskHierarchyLabel(task, hierarchy);
+  const { areaLabel, projectLabel } = getTaskHierarchyLabels(task, hierarchy);
   const taskLabel = task.title || 'New Task';
-  const TodayMarkerIcon = todayMarker === 'now'
-    ? Clock2
-    : todayMarker === 'next'
-      ? Clock5
-      : todayMarker === 'later'
-        ? Clock8
-        : Inbox;
+  const todayMarkerPresentation = todayMarker
+    ? getTaskHorizonPresentation(todayMarker)
+    : null;
+  const TodayMarkerIcon = todayMarkerPresentation?.icon;
   const deadlineIsUrgent = task.deadline !== null
     && isTaskCalendarDate(task.deadline)
     && isTaskCalendarDate(planningDate)
@@ -3808,10 +4195,11 @@ function TaskRow({
     operation: (reservation?: TaskForwardMutationReservation) => Promise<void>,
     animate = true,
     focusDelay = 0,
+    restoreFocusAfterAction = true,
   ) => {
     if (pendingRef.current) return;
-    suppressActionMenuAutoFocusRef.current = true;
-    const focus = captureTaskFocus();
+    const focus = restoreFocusAfterAction ? captureTaskFocus() : null;
+    if (!restoreFocusAfterAction) onClearTaskFocus();
     const reservation = reserveTerminalMutation();
     pendingRef.current = true;
     setPending(true);
@@ -3824,12 +4212,16 @@ function TaskRow({
     }
     try {
       await operation(reservation);
-      restoreTaskFocus(focus, false, focusDelay);
+      if (focus !== null) restoreTaskFocus(focus, false, focusDelay);
     } catch {
       reservation?.cancel();
       setTerminalSettling(false);
       setTerminalExiting(false);
-      window.setTimeout(restoreCurrentTaskFocus, 0);
+      if (restoreFocusAfterAction) {
+        window.setTimeout(restoreCurrentTaskFocus, 0);
+      } else {
+        onClearTaskFocus();
+      }
     } finally {
       pendingRef.current = false;
       setPending(false);
@@ -3837,10 +4229,9 @@ function TaskRow({
   };
 
   const runMovementAction = async (operation: () => Promise<void>) => {
-    const focus = captureTaskFocus();
     await operation();
-    onCloseEditor();
-    restoreTaskFocus(focus, true);
+    await onCloseEditor();
+    onClearTaskFocus();
   };
 
   const movementPlanningActions = planningActions.map((action) => ({
@@ -3982,12 +4373,11 @@ function TaskRow({
         suppressClickUntilRef.current = Date.now() + 250;
       }}
       className={[
-        `relative grid ${TASK_PLANNING_ITEM_FRAME_CLASS} transition-[grid-template-rows,opacity] ease-out focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none`,
+        'relative grid overflow-hidden transition-[grid-template-rows,opacity,background-color,border-radius] ease-out focus:outline-none focus-visible:rounded-md focus-visible:bg-foreground/[0.05] focus-visible:outline-none motion-reduce:transition-none',
         terminalExiting ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100',
-        focused ? 'ring-2 ring-inset ring-ring' : '',
-        selected || bulkSelection?.selected
-          ? 'bg-foreground/[0.05]'
-          : TASK_PLANNING_ITEM_BACKGROUND_CLASS,
+        focused || selected || bulkSelection?.selected
+          ? 'rounded-md bg-foreground/[0.05]'
+          : '',
       ].filter(Boolean).join(' ') || undefined}
       style={{ transitionDuration: `${TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS}ms` }}
       data-task-planning-card
@@ -4003,7 +4393,7 @@ function TaskRow({
         />
       ) : null}
       <div className="min-h-0 overflow-hidden">
-      <div className="flex h-14 items-center gap-2 overflow-hidden px-1.5 sm:px-3" data-task-row-header>
+      <div className="flex h-11 items-center gap-2 overflow-hidden pl-1 pr-1.5" data-task-row-header>
         {bulkSelection ? (
           <button
             type="button"
@@ -4014,7 +4404,7 @@ function TaskRow({
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-info transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {bulkSelection.selected ? (
-              <CircleCheckBig className="h-5 w-5" aria-hidden="true" />
+              <TASK_ICONS.Ready className="h-5 w-5" aria-hidden="true" />
             ) : (
               <Circle className="h-5 w-5" aria-hidden="true" />
             )}
@@ -4036,7 +4426,7 @@ function TaskRow({
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
             {completionRequested || terminalSettling ? (
-              <SquareCheckBig className="h-6 w-6 text-success" aria-hidden="true" />
+              <TASK_ICONS.Task className="h-6 w-6 text-success" aria-hidden="true" />
             ) : (
               <Square className="h-6 w-6" aria-hidden="true" />
             )}
@@ -4068,24 +4458,29 @@ function TaskRow({
             : 'Enter'}
           data-task-title-control
           data-task-id={task.id}
-          className={`flex h-full min-w-0 flex-1 flex-col justify-center overflow-hidden text-left text-[15px] font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draggableTask ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          className={`flex h-full min-w-0 flex-1 flex-col justify-center overflow-hidden text-left text-[15px] font-normal leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draggableTask ? 'cursor-grab active:cursor-grabbing' : ''}`}
         >
           <span className="flex min-w-0 items-center gap-2">
-            {todayMarker ? (
+            {todayMarker && TodayMarkerIcon && todayMarkerPresentation ? (
               <span
-                className="inline-flex shrink-0 text-warning"
+                className={`inline-flex shrink-0 ${todayMarkerPresentation.colorClass}`}
                 aria-label={`${todayMarkerContext} ${todayMarker[0].toUpperCase()}${todayMarker.slice(1)}`}
                 title={`${todayMarkerContext} ${todayMarker[0].toUpperCase()}${todayMarker.slice(1)}`}
               >
-                <TodayMarkerIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                <TodayMarkerIcon
+                  className="h-3.5 w-3.5"
+                  data-task-horizon-symbol={todayMarker}
+                  data-task-horizon-surface="row"
+                  aria-hidden="true"
+                />
               </span>
             ) : null}
-            <span className="truncate">{task.title}</span>
+            <span className="truncate" data-task-row-title>{task.title}</span>
           </span>
           {(
-            hierarchyLabel
+            areaLabel
+            || projectLabel
             || task.actionability !== 'actionable'
-            || (planningLabel !== null && (planningLabel || task.start_date))
             || task.deadline
             || (reminder && (task.start_date || task.today_section))
           ) ? (
@@ -4093,29 +4488,32 @@ function TaskRow({
               className="mt-0.5 flex min-w-0 items-center gap-x-2.5 overflow-hidden whitespace-nowrap text-xs font-normal leading-4 text-muted-foreground"
               data-task-row-metadata
             >
-              {hierarchyLabel ? (
-                <span className="min-w-0 shrink truncate text-info" title={hierarchyLabel}>
-                  {hierarchyLabel}
-                </span>
-              ) : null}
-              {task.actionability === 'waiting' ? (
-                <span className="inline-flex shrink-0 items-center gap-1" aria-label="Waiting">
-                  <Hourglass className="h-3.5 w-3.5" aria-hidden="true" />
-                  Waiting
-                </span>
-              ) : task.actionability === 'rechecking' ? (
-                <span className="inline-flex shrink-0 items-center gap-1" aria-label="Rechecking">
-                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                  Rechecking
-                </span>
-              ) : null}
-              {planningLabel !== null && (planningLabel || task.start_date) ? (
+              {areaLabel ? (
                 <span
-                  className="inline-flex shrink-0 items-center gap-1"
-                  aria-label={`Starts ${planningLabel ?? formatTaskStartDateLabel(task.start_date!, planningDate)}`}
+                  className="min-w-0 shrink truncate text-info"
+                  title={areaLabel}
+                  data-task-metadata-kind="area"
                 >
-                  <Play className="h-3.5 w-3.5" aria-hidden="true" />
-                  {planningLabel ?? formatTaskStartDateLabel(task.start_date!, planningDate)}
+                  {areaLabel}
+                </span>
+              ) : null}
+              {projectLabel ? (
+                <span
+                  className="min-w-0 shrink truncate text-info"
+                  title={projectLabel}
+                  data-task-metadata-kind="project"
+                >
+                  {projectLabel}
+                </span>
+              ) : null}
+              {reminder && (task.start_date || task.today_section) ? (
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 text-info"
+                  aria-label={`Reminder ${formatReminderRowTime(reminder)}`}
+                  data-task-metadata-kind="reminder"
+                >
+                  <TASK_ICONS.Reminder className="h-3.5 w-3.5" aria-hidden="true" />
+                  {formatReminderRowTime(reminder)}
                 </span>
               ) : null}
               {task.deadline ? (
@@ -4124,53 +4522,87 @@ function TaskRow({
                     deadlineIsUrgent ? 'text-destructive' : ''
                   }`}
                   aria-label={`Deadline ${formatTaskRelativeCalendarDate(task.deadline, planningDate)}`}
+                  data-task-metadata-kind="deadline"
                 >
-                  <FlagTriangleRight className="h-3.5 w-3.5" aria-hidden="true" />
-                  {formatTaskRelativeCalendarDate(task.deadline, planningDate)}
+                  <TASK_ICONS.Deadline className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span
+                    className="sm:hidden"
+                    aria-hidden="true"
+                    data-task-deadline-compact
+                  >
+                    {formatTaskCompactCalendarDayOffset(task.deadline, planningDate)}
+                  </span>
+                  <span
+                    className="hidden sm:inline"
+                    aria-hidden="true"
+                    data-task-deadline-full
+                  >
+                    {formatTaskRelativeCalendarDate(task.deadline, planningDate)}
+                  </span>
                 </span>
               ) : null}
-              {reminder && (task.start_date || task.today_section) ? (
+              {task.actionability === 'waiting' ? (
                 <span
-                  className="inline-flex shrink-0 items-center gap-1 text-info"
-                  aria-label={`Reminder ${formatReminderRowTime(reminder)}`}
+                  className="inline-flex shrink-0 items-center sm:gap-1"
+                  aria-label="Waiting"
+                  data-task-metadata-kind="actionability"
                 >
-                  <Bell className="h-3.5 w-3.5" aria-hidden="true" />
-                  {formatReminderRowTime(reminder)}
+                  <TASK_ICONS.Waiting className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span
+                    className="hidden sm:inline"
+                    aria-hidden="true"
+                    data-task-actionability-label
+                  >
+                    Waiting
+                  </span>
+                </span>
+              ) : task.actionability === 'rechecking' ? (
+                <span
+                  className="inline-flex shrink-0 items-center sm:gap-1"
+                  aria-label="Rechecking"
+                  data-task-metadata-kind="actionability"
+                >
+                  <TASK_ICONS.Rechecking className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span
+                    className="hidden sm:inline"
+                    aria-hidden="true"
+                    data-task-actionability-label
+                  >
+                    Rechecking
+                  </span>
                 </span>
               ) : null}
             </span>
           ) : null}
         </button>
-        {!bulkSelection ? <TaskSourceIndicator task={task} /> : null}
-        {!bulkSelection ? <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="clear"
-              size="icon"
-              disabled={pending}
-              aria-label={`Actions for ${taskLabel}`}
-              className="h-10 w-10 text-muted-foreground"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            onCloseAutoFocus={(event) => {
-              event.preventDefault();
-              if (!suppressActionMenuAutoFocusRef.current) {
-                restoreCurrentTaskFocus();
-                return;
-              }
-              suppressActionMenuAutoFocusRef.current = false;
-            }}
-          >
+        {!bulkSelection ? (
+          <div className="flex shrink-0 items-center gap-0.5" data-task-row-trailing-controls>
+            <TaskSourceIndicator task={task} compact />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="clear"
+                  size="icon"
+                  disabled={pending}
+                  aria-label={`Actions for ${taskLabel}`}
+                  className="h-8 w-8 text-muted-foreground"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                onCloseAutoFocus={(event) => {
+                  event.preventDefault();
+                  onClearTaskFocus();
+                }}
+              >
             <DropdownMenuItem
               disabled={task.actionability === 'actionable'}
               onSelect={() => void run(() => onUpdate({ actionability: 'actionable' }))}
             >
-              Mark as Actionable
+              Mark as Ready
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={task.actionability === 'waiting'}
@@ -4186,19 +4618,16 @@ function TaskRow({
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => {
-              suppressActionMenuAutoFocusRef.current = true;
               setMoveOpen(true);
             }}>
               Move...
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => {
-              suppressActionMenuAutoFocusRef.current = true;
               setDoOpen(true);
             }}>
               Do...
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => {
-              suppressActionMenuAutoFocusRef.current = true;
               setStartOpen(true);
             }}>
               Start...
@@ -4206,12 +4635,14 @@ function TaskRow({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              onSelect={() => void runTerminalAction(onDelete, false, 50)}
+              onSelect={() => void runTerminalAction(onDelete, false, 50, false)}
             >
               Delete
             </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu> : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : null}
       </div>
       {editorMounted && !bulkSelection ? (
         <div
@@ -4221,13 +4652,15 @@ function TaskRow({
           data-state={selected ? (editorExpanded ? 'open' : 'opening') : 'closing'}
           aria-hidden={selected ? undefined : true}
           className={[
-            'grid overflow-hidden transition-[grid-template-rows,opacity] ease-out motion-reduce:transition-none',
-            editorExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+            'grid overflow-hidden transition-[grid-template-rows,opacity,padding-top] ease-out motion-reduce:transition-none',
+            editorExpanded
+              ? 'grid-rows-[1fr] pt-[6px] opacity-100'
+              : 'grid-rows-[0fr] pt-0 opacity-0',
             selected ? '' : 'pointer-events-none',
           ].filter(Boolean).join(' ')}
           style={{ transitionDuration: `${TASK_EDITOR_EXPANSION_DURATION_MS}ms` }}
         >
-          <div className="min-h-0 overflow-hidden">
+          <div className="min-h-0" data-task-editor-content>
             <TaskEditor
               task={task}
               hierarchy={hierarchy}
@@ -4245,7 +4678,7 @@ function TaskRow({
               tabIndex={-1}
               data-bathos-form-submit="true"
               className="sr-only"
-              onClick={onCloseEditor}
+              onClick={() => void onCloseEditor()}
             >
               Close Task
             </button>
@@ -4254,7 +4687,7 @@ function TaskRow({
               tabIndex={-1}
               data-bathos-form-cancel="true"
               className="sr-only"
-              onClick={onCloseEditor}
+              onClick={() => void onCloseEditor()}
             >
               Close Task
             </button>
@@ -4268,7 +4701,7 @@ function TaskRow({
         onOpenChange={(nextOpen) => {
           setMoveOpen(nextOpen);
         }}
-        onCloseAutoFocus={restoreCurrentTaskFocus}
+        onCloseAutoFocus={onClearTaskFocus}
         onMove={(patch) => runMovementAction(() => onUpdate(patch))}
       /> : null}
       {!bulkSelection ? <TaskDoDialog
@@ -4278,12 +4711,12 @@ function TaskRow({
         onOpenChange={(nextOpen) => {
           setDoOpen(nextOpen);
         }}
-        onCloseAutoFocus={restoreCurrentTaskFocus}
+        onCloseAutoFocus={onClearTaskFocus}
       /> : null}
       {!bulkSelection ? <TaskStartDialog
         open={startOpen}
         onOpenChange={setStartOpen}
-        onCloseAutoFocus={restoreCurrentTaskFocus}
+        onCloseAutoFocus={onClearTaskFocus}
         task={task}
         reminder={reminder}
         reminderTime={reminderTime}
@@ -4532,17 +4965,16 @@ function TaskEditor({
 
   return (
     <div
-      className="space-y-3 px-1.5 pb-3 pt-1 sm:px-3"
+      className="flex flex-col gap-3 px-2 pb-3 sm:px-3.5"
       data-task-editor-form
     >
-      <label className="sr-only" htmlFor={`task-title-${task.id}`}>
-        Task Title
-      </label>
       <Input
         ref={titleInputRef}
         id={`task-title-${task.id}`}
         data-task-editor-title
-        aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Q Control+Shift+Q"
+        aria-label="Summary"
+        placeholder="Summary"
+        aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Q Alt+Shift+Q"
         value={title}
         onChange={(event) => {
           const nextTitle = event.target.value;
@@ -4563,16 +4995,14 @@ function TaskEditor({
           disabled={false}
         />
       </Suspense>
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground" htmlFor={`task-primary-link-${task.id}`}>
-          Primary Link
-        </label>
+      <div>
         <div className="flex gap-2">
           <Input
             id={`task-primary-link-${task.id}`}
             type="url"
             value={primaryLink}
-            placeholder="No Primary Link"
+            aria-label="Primary Link"
+            placeholder="Primary Link"
             inputMode="url"
             onChange={(event) => {
               const nextPrimaryLink = event.target.value;
@@ -4585,31 +5015,30 @@ function TaskEditor({
               void persistImmediateTaskPatch({ primary_link: null });
             }}
           />
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-10 w-10 shrink-0 border-[hsl(var(--grid-sticky-line))] bg-background"
-            aria-label="Open Primary Link"
-            disabled={primaryLinkHref === null}
-            onClick={() => {
-              if (primaryLinkHref === null) return;
-              window.open(
-                primaryLinkHref,
-                primaryLinkOpensBrowserTab ? '_blank' : '_self',
-                'noopener,noreferrer',
-              );
-            }}
-          >
-            <ExternalLink className="h-4 w-4" aria-hidden="true" />
-          </Button>
+          {primaryLink.length > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 shrink-0 border-[hsl(var(--grid-sticky-line))] bg-background"
+              aria-label="Open Primary Link"
+              disabled={primaryLinkHref === null}
+              onClick={() => {
+                if (primaryLinkHref === null) return;
+                window.open(
+                  primaryLinkHref,
+                  primaryLinkOpensBrowserTab ? '_blank' : '_self',
+                  'noopener,noreferrer',
+                );
+              }}
+            >
+              <TASK_ICONS.PrimaryLink className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          ) : null}
         </div>
       </div>
-      <div data-task-editor-temporal-grid className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor={`task-start-${task.id}`}>
-            Start
-          </label>
+      <div data-task-editor-temporal-grid className="grid grid-cols-2 gap-3">
+        <div className="min-w-0">
           <TaskStartPickerField
             task={{
               ...task,
@@ -4630,10 +5059,7 @@ function TaskEditor({
             onClear={clearStartPlanning}
           />
         </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor={`task-deadline-${task.id}`}>
-            Deadline
-          </label>
+        <div className="min-w-0">
           <DatePickerField
             id={`task-deadline-${task.id}`}
             value={deadline}
@@ -4644,19 +5070,17 @@ function TaskEditor({
               setDeadline(value);
               void persistImmediateTaskPatch({ deadline: value || null });
             }}
-            placeholder="No Deadline"
+            placeholder="Deadline"
             aria-label="Deadline"
+            className="text-sm"
             todayDate={planningDate}
             clearable
             clearLabel="Clear"
           />
         </div>
       </div>
-      <div data-task-editor-identity-grid className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor={`task-actionability-${task.id}`}>
-            Actionability
-          </label>
+      <div data-task-editor-identity-grid className="grid grid-cols-2 gap-3">
+        <div className="min-w-0">
           <Select
             value={actionability}
             onValueChange={(value) => {
@@ -4669,16 +5093,13 @@ function TaskEditor({
               <SelectValue />
             </SelectTrigger>
             <SelectContent data-task-editor-owned-surface="true">
-              <SelectItem value="actionable">Actionable</SelectItem>
+              <SelectItem value="actionable">Ready</SelectItem>
               <SelectItem value="waiting">Waiting</SelectItem>
               <SelectItem value="rechecking">Rechecking</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor={`task-organization-${task.id}`}>
-            Organization
-          </label>
+        <div className="min-w-0">
           <Select
             value={organization}
             onValueChange={(nextOrganization) => {
@@ -4799,18 +5220,12 @@ function formatReminderRowTime(reminder: TaskReminder): string {
   );
 }
 
-function formatTaskStartDateLabel(startDate: string, planningDate: string): string {
-  const relative = formatTaskRelativeCalendarDate(startDate, planningDate);
-  const remainingMatch = relative.match(/^(\d+) days left$/);
-  return remainingMatch ? `In ${remainingMatch[1]} days` : relative;
-}
-
 function getTaskViewLabel(view: TaskShellView): string {
   if (view === 'anytime') return 'Anytime';
   if (view === 'someday') return 'Someday';
   if (view === 'done') return 'Done';
   if (view === 'upcoming') return 'Upcoming';
-  if (view === 'projects') return 'Projects';
+  if (view === 'projects') return 'Areas & Projects';
   if (view === 'project') return 'Project';
   if (view === 'area') return 'Area';
   if (view === 'templates') return 'Templates';
@@ -4856,16 +5271,39 @@ function getTaskSectionLabel(view: TaskListView): string {
   return 'Today Tasks';
 }
 
-function getTaskHierarchyLabel(task: TaskTodo, hierarchy: TaskHierarchyModel): string | null {
+function getTaskHierarchyLabels(
+  task: TaskTodo,
+  hierarchy: TaskHierarchyModel,
+): { areaLabel: string | null; projectLabel: string | null } {
   if (task.project_id) {
     const project = hierarchy.projects.find(({ id }) => id === task.project_id);
-    if (!project) return 'Unavailable Project';
-    return project.title;
+    if (!project) {
+      return {
+        areaLabel: null,
+        projectLabel: 'Unavailable Project',
+      };
+    }
+    const areaLabel = project.area_id
+      ? hierarchy.areas.find(({ id }) => id === project.area_id)?.title ?? null
+      : task.area_id
+        ? hierarchy.areas.find(({ id }) => id === task.area_id)?.title ?? 'Unavailable Area'
+        : null;
+    return {
+      areaLabel,
+      projectLabel: project.title,
+    };
   }
   if (task.area_id) {
-    return hierarchy.areas.find(({ id }) => id === task.area_id)?.title ?? 'Unavailable Area';
+    return {
+      areaLabel: hierarchy.areas.find(({ id }) => id === task.area_id)?.title
+        ?? 'Unavailable Area',
+      projectLabel: null,
+    };
   }
-  return null;
+  return {
+    areaLabel: null,
+    projectLabel: null,
+  };
 }
 
 function taskOrganizationValue(task: TaskTodo): string {

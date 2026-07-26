@@ -10,7 +10,7 @@ export default function TermsGate() {
 
   const handleTermsAgree = async () => {
     await acceptTerms();
-    toast({ title: 'Terms accepted' });
+    toast({ title: 'Terms Accepted' });
   };
 
   return (

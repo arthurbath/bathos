@@ -46,7 +46,7 @@ export default function HelpPage() {
     const rl = await checkAuthRateLimit('help_request');
     if (rl.rateLimited) {
       toast({
-        title: 'Too many requests',
+        title: 'Too Many Requests',
         description: `Please wait ${formatRetryAfter(rl.retryAfterSeconds)} before submitting again.`,
         variant: 'destructive',
       });
@@ -64,12 +64,12 @@ export default function HelpPage() {
 
       setEmail('');
       setMessage('');
-      toast({ title: 'Message sent', description: "We'll get back to you soon." });
+      toast({ title: 'Message Sent', description: "We'll get back to you soon." });
       handleBack();
     } catch (err) {
       console.error('Help submission error:', err);
       toast({
-        title: 'Submission failed',
+        title: 'Submission Failed',
         description: 'Unable to send your message. Please try again later.',
         variant: 'destructive',
       });
@@ -125,7 +125,7 @@ export default function HelpPage() {
                   id="help-message"
                   value={message}
                   onChange={handleMessageChange}
-                  placeholder="What's up?"
+                  placeholder="What's Up?"
                   className="min-h-[120px] resize-none"
                   disabled={submitting}
                 />

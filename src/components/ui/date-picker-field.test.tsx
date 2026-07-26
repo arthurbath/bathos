@@ -159,6 +159,38 @@ describe('DatePickerField', () => {
     }
   });
 
+  it('keeps empty placeholder styling stable on hover without changing populated values', () => {
+    const { container, root } = mount(
+      <div>
+        <DatePickerField
+          id="empty-date"
+          value=""
+          placeholder="No Date"
+          onValueChange={vi.fn()}
+        />
+        <DatePickerField
+          id="populated-date"
+          value="2026-03-02"
+          onValueChange={vi.fn()}
+        />
+      </div>,
+    );
+
+    try {
+      const empty = container.querySelector('#empty-date');
+      const populated = container.querySelector('#populated-date');
+
+      expect(empty).toHaveTextContent('No Date');
+      expect(empty).toHaveClass('text-muted-foreground', 'enabled:hover:bg-background');
+      expect(empty).not.toHaveClass('enabled:hover:text-foreground');
+      expect(populated).toHaveTextContent('Mar 2, 2026');
+      expect(populated).toHaveClass('text-foreground', 'enabled:hover:bg-background');
+      expect(populated).not.toHaveClass('enabled:hover:text-foreground');
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it.each([
     ['Space', ' '],
     ['Return', 'Enter'],

@@ -274,7 +274,7 @@ function ServicingActionsCell({
       </DropdownMenu>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete servicing</AlertDialogTitle>
+          <AlertDialogTitle>Delete Servicing</AlertDialogTitle>
         </AlertDialogHeader>
         <AlertDialogBody>
           <AlertDialogDescription>
@@ -596,7 +596,7 @@ export function GarageServicingsGrid({
   const submitAddService = useCallback(async () => {
     const name = addServiceName.trim();
     if (addServiceNameError) {
-      toast({ title: 'Invalid service name', description: addServiceNameError, variant: 'destructive' });
+      toast({ title: 'Invalid Service Name', description: addServiceNameError, variant: 'destructive' });
       return;
     }
 
@@ -621,10 +621,10 @@ export function GarageServicingsGrid({
       window.requestAnimationFrame(() => {
         serviceOutcomeAddButtonRef.current?.focus();
       });
-      toast({ title: 'Service added' });
+      toast({ title: 'Service Added' });
     } catch (error) {
       toast({
-        title: 'Failed to add service',
+        title: 'Failed to Add Service',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -727,7 +727,7 @@ export function GarageServicingsGrid({
 
   const submit = async () => {
     if (!formState.service_date) {
-      toast({ title: 'Service date required', variant: 'destructive' });
+      toast({ title: 'Service Date Required', variant: 'destructive' });
       return;
     }
 
@@ -736,7 +736,7 @@ export function GarageServicingsGrid({
         (formState.receiptNames[receipt.id] ?? receipt.name).trim().length > 0
       ));
     if (!receiptNamesAreValid) {
-      toast({ title: 'Receipt name required', variant: 'destructive' });
+      toast({ title: 'Receipt Name Required', variant: 'destructive' });
       return;
     }
 
@@ -784,10 +784,10 @@ export function GarageServicingsGrid({
 
       setDialogOpen(false);
       resetForm();
-      toast({ title: formState.id ? 'Servicing updated' : 'Servicing added' });
+      toast({ title: formState.id ? 'Servicing Updated' : 'Servicing Added' });
     } catch (error) {
       toast({
-        title: 'Failed to save servicing',
+        title: 'Failed to Save Servicing',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -881,7 +881,7 @@ export function GarageServicingsGrid({
               type="button"
               className="flex h-full w-full items-center gap-1.5 text-left"
               onClick={() => openEditDialog(row.original, 'outcomes')}
-              aria-label={`Open servicing detail for ${row.original.service_date}`}
+              aria-label={`Open Servicing Detail for ${row.original.service_date}`}
             >
               <span className={getOutcomeBadgeClass(performed, 'success')} title="Performed services">{performed}</span>
               <span className={getOutcomeBadgeClass(notNeeded, 'warning')} title="Services not needed">{notNeeded}</span>
@@ -902,7 +902,7 @@ export function GarageServicingsGrid({
               type="button"
               className="block h-full w-full truncate text-left text-xs text-foreground"
               onClick={() => openEditDialog(row.original, 'receipts')}
-              aria-label={`Open servicing detail for ${row.original.service_date}`}
+              aria-label={`Open Servicing Detail for ${row.original.service_date}`}
               title={receiptNames || undefined}
             >
               {receiptNames}
@@ -1001,7 +1001,7 @@ export function GarageServicingsGrid({
           variant="outline-success"
           size="sm"
           className="h-8 w-8 p-0"
-          aria-label="Add servicing"
+          aria-label="Add Servicing"
           onClick={openCreateDialog}
         >
           <Plus className="h-4 w-4" />
@@ -1162,7 +1162,7 @@ export function GarageServicingsGrid({
                       variant="outline-success"
                       className="h-8 w-8 p-0"
                       disabled={addableServices.length === 0}
-                      aria-label="Add service outcome"
+                      aria-label="Add Service Outcome"
                     >
                       <Plus className="h-4 w-4" />
                     </Button>
@@ -1201,7 +1201,7 @@ export function GarageServicingsGrid({
                           autoFocus
                           value={servicePickerQuery}
                           onChange={(event) => setServicePickerQuery(event.target.value)}
-                          placeholder="Type to find a service..."
+                          placeholder="Type to Find a Service..."
                           autoCorrect="off"
                           autoCapitalize="off"
                           spellCheck={false}
@@ -1331,7 +1331,7 @@ export function GarageServicingsGrid({
                           variant="outline-warning"
                           className="ml-auto h-7 w-7 p-0"
                           onClick={() => removeServiceOutcome(row.serviceId)}
-                          aria-label={`Remove ${row.service.name} outcome`}
+                          aria-label={`Remove ${row.service.name} Outcome`}
                         >
                           <CircleMinus className="h-4 w-4" />
                         </Button>
@@ -1370,7 +1370,7 @@ export function GarageServicingsGrid({
                             receiptNames: { ...prev.receiptNames, [receipt.id]: name },
                           }));
                         }}
-                        aria-label={`Receipt name for ${receipt.filename}`}
+                        aria-label={`Receipt Name for ${receipt.filename}`}
                         required
                       />
                       <Button
@@ -1421,7 +1421,7 @@ export function GarageServicingsGrid({
                             )),
                           }));
                         }}
-                        aria-label={`Receipt name for ${receipt.file.name}`}
+                        aria-label={`Receipt Name for ${receipt.file.name}`}
                         required
                       />
                       <Button
@@ -1466,7 +1466,7 @@ export function GarageServicingsGrid({
                   const files = Array.from(event.dataTransfer.files ?? []);
                   addReceiptFiles(files);
                 }}
-                aria-label="Add receipts"
+                aria-label="Add Receipts"
               >
                 <Plus className="h-4 w-4" />
                 <span className="font-medium">Add</span>

@@ -19,7 +19,7 @@ export function InvitePartner({ householdId, inviteCode }: InvitePartnerProps) {
     if (!inviteCode) return;
     await navigator.clipboard.writeText(inviteCode);
     setCopied(true);
-    toast({ title: 'Invite code copied!' });
+    toast({ title: 'Invite Code Copied!' });
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -70,7 +70,7 @@ export function JoinHouseholdSetup({ onJoin }: JoinHouseholdProps) {
     try {
       await onJoin(code.trim());
     } catch (error: unknown) {
-      toast({ title: 'Failed to join', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Failed to Join', description: getErrorMessage(error), variant: 'destructive' });
     }
     setLoading(false);
   };

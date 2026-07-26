@@ -27,7 +27,7 @@ Split shared expenses fairly between two partners. Combines per-expense benefit 
 - **Typography**: Inter with system-ui fallback. No custom display fonts.
 - **Icons**: Lucide React only. Inline SVGs, no image files, no emoji. Use sparingly.
 - **Voice**: Pragmatic and neutral. No exclamation points. No marketing language. Prefer self-evident UI over helper text.
-- **Label casing**: Buttons, card titles, modal titles, input labels, and section titles use Title Case.
+- **UI phrase casing**: Use Title Case for toast titles, button labels, input labels, input placeholders, module names, page titles, modal titles, card titles, dropdown options, and section headings (`h1` through `h6`). Use sentence case for empty-state "No data" messages and toast message bodies. Preserve user-authored casing, proper nouns, acronyms, and canonical product spellings.
 - **Modal headers**: Form-style modals use a title-only header by default. Do not add modal header subtext unless the task explicitly asks for it.
 - **Required field treatment**: In form-style modals, indicate required fields with a red asterisk immediately to the right of the field label. Do not show required-field validation text underneath a field on initial modal open when the Save action is already disabled until required fields are complete. Reserve inline validation messages for actionable input problems such as duplicate values, invalid formats, or failed submit attempts.
 - **Layout**: Mobile-first. `max-w-5xl` for data views, `max-w-lg` for forms.

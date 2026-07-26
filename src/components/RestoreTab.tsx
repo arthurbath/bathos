@@ -78,7 +78,7 @@ const BackupActionsTrigger = forwardRef<HTMLButtonElement, ComponentPropsWithout
       size="icon"
       type="button"
       className={`float-right mr-[5px] h-7 w-7 ${GRID_CONTROL_FOCUS_CLASS}`}
-      aria-label="Backup actions"
+      aria-label="Backup Actions"
       {...props}
       {...navProps}
       onKeyDown={handleKeyDown}
@@ -212,9 +212,9 @@ export function RestoreTab({
       await onSave(normalizedNotes, snapshot, restorePointId);
       setNotes('');
       setAddDialogOpen(false);
-      toast({ title: 'Snapshot saved' });
+      toast({ title: 'Snapshot Saved' });
     } catch (error: unknown) {
-      toast({ title: 'Error saving', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Saving', description: getErrorMessage(error), variant: 'destructive' });
     }
     setSaving(false);
   };
@@ -225,7 +225,7 @@ export function RestoreTab({
       await onRestore(restoreTarget.data);
       toast({ title: 'Restored', description: `Restored from ${formatTimestamp(restoreTarget.created_at)}` });
     } catch (error: unknown) {
-      toast({ title: 'Error restoring', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Restoring', description: getErrorMessage(error), variant: 'destructive' });
     }
     setRestoreTarget(null);
   };
@@ -279,7 +279,7 @@ export function RestoreTab({
                 try {
                   await onUpdateNotes(point.id, nextValue);
                 } catch (error: unknown) {
-                  toast({ title: 'Error updating notes', description: getErrorMessage(error), variant: 'destructive' });
+                  toast({ title: 'Error Updating Notes', description: getErrorMessage(error), variant: 'destructive' });
                   throw error;
                 }
               }}
@@ -353,7 +353,7 @@ export function RestoreTab({
               variant="outline-success"
               size="sm"
               className="h-8 w-8 p-0"
-              aria-label="Create backup"
+              aria-label="Create Backup"
             >
               <Plus className="h-4 w-4" />
             </Button>
@@ -388,7 +388,7 @@ export function RestoreTab({
             <Label htmlFor="backup-notes">Notes</Label>
             <Input
               id="backup-notes"
-              placeholder="Backup notes (optional)"
+              placeholder="Backup Notes (Optional)"
               value={notes}
               autoFocus
               disabled={saving}

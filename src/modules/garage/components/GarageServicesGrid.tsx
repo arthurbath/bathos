@@ -194,7 +194,7 @@ function ServiceActionsCell({
       </DropdownMenu>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete service</AlertDialogTitle>
+          <AlertDialogTitle>Delete Service</AlertDialogTitle>
         </AlertDialogHeader>
         <AlertDialogBody>
           <AlertDialogDescription>
@@ -493,7 +493,7 @@ export function GarageServicesGrid({
       setImportOpen(false);
       resetImportState();
       toast({
-        title: 'Services imported',
+        title: 'Services Imported',
         description: `Added ${importPreview.additions.length} and updated ${importPreview.updates.length} service${importPreview.rowsToImport.length === 1 ? '' : 's'}.`,
       });
     } catch (error) {
@@ -532,7 +532,7 @@ export function GarageServicesGrid({
 
     if (shouldNotifyHiddenByFilters) {
       toast({
-        title: 'Service updated but hidden by filters',
+        title: 'Service Updated But Hidden by Filters',
         description: 'The service was updated, and it is no longer visible because of the current filters.',
       });
     }
@@ -738,7 +738,7 @@ export function GarageServicesGrid({
   const submitAdd = async () => {
     const name = addName.trim();
     if (addNameError) {
-      toast({ title: 'Invalid service name', description: addNameError, variant: 'destructive' });
+      toast({ title: 'Invalid Service Name', description: addNameError, variant: 'destructive' });
       return;
     }
 
@@ -767,15 +767,15 @@ export function GarageServicesGrid({
       setAddOpen(false);
       if (!matchesNameFilter(name, nameFilter)) {
         toast({
-          title: 'Service added but hidden by filters',
+          title: 'Service Added But Hidden by Filters',
           description: 'The service was added, but it is not visible because of the current filters.',
         });
       } else {
-        toast({ title: 'Service added' });
+        toast({ title: 'Service Added' });
       }
     } catch (error) {
       toast({
-        title: 'Failed to add service',
+        title: 'Failed to Add Service',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -827,7 +827,7 @@ export function GarageServicesGrid({
                   size="sm"
                   className="h-8 w-8 p-0"
                   onClick={clearViewControls}
-                  aria-label="Clear filters and groupings"
+                  aria-label="Clear Filters and Groupings"
                 >
                   <FilterX className="h-4 w-4" />
                 </Button>
@@ -852,13 +852,13 @@ export function GarageServicesGrid({
                 <SelectContent>
                   <SelectItem value="all">All Services</SelectItem>
                   <SelectItem value="recurring">Recurring</SelectItem>
-                  <SelectItem value="one_off">One-off</SelectItem>
+                  <SelectItem value="one_off">One-Off</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={groupBy} onValueChange={(value) => setGroupBy(value as GroupByOption)}>
-                <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Group by…" /></SelectTrigger>
+                <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Group By…" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No grouping</SelectItem>
+                  <SelectItem value="none">No Grouping</SelectItem>
                   <SelectItem value="type">Service Type</SelectItem>
                 </SelectContent>
               </Select>
@@ -871,7 +871,7 @@ export function GarageServicesGrid({
               size="sm"
               className="h-8 w-8 p-0"
               onClick={clearViewControls}
-              aria-label="Clear filters and groupings"
+              aria-label="Clear Filters and Groupings"
               disabled={!hasActiveViewControls}
             >
               <FilterX className="h-4 w-4" />
@@ -882,7 +882,7 @@ export function GarageServicesGrid({
             variant="outline-success"
             size="sm"
             className="h-8 w-8 p-0"
-            aria-label="Add service"
+            aria-label="Add Service"
             onClick={() => setAddOpen(true)}
             disabled={loading || deleteBusy}
           >
@@ -895,7 +895,7 @@ export function GarageServicesGrid({
                 variant="outline"
                 size="icon"
                 className="h-8 w-8 p-0"
-                aria-label="Services menu"
+                aria-label="Services Menu"
                 disabled={loading || deleteBusy}
               >
                 <MoreHorizontal className="h-4 w-4" />
@@ -956,7 +956,7 @@ export function GarageServicesGrid({
                 <SelectContent>
                   <SelectItem value="all">All Services</SelectItem>
                   <SelectItem value="recurring">Recurring</SelectItem>
-                  <SelectItem value="one_off">One-off</SelectItem>
+                  <SelectItem value="one_off">One-Off</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -965,7 +965,7 @@ export function GarageServicesGrid({
               <Select value={draftGroupBy} onValueChange={(value) => setDraftGroupBy(value as GroupByOption)}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No grouping</SelectItem>
+                  <SelectItem value="none">No Grouping</SelectItem>
                   <SelectItem value="type">Service Type</SelectItem>
                 </SelectContent>
               </Select>

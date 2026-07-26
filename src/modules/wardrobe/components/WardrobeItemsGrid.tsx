@@ -407,7 +407,7 @@ export function WardrobeItemsGrid({
     const updated = await onUpdateItem(id, updates);
     if (shouldNotifyHiddenByFilters) {
       toast({
-        title: 'Wardrobe item updated but hidden by filters',
+        title: 'Wardrobe Item Updated But Hidden by Filters',
         description: 'The item was updated, and it is no longer visible because of the current filters.',
       });
     }
@@ -696,7 +696,7 @@ export function WardrobeItemsGrid({
       setAddOpen(false);
       if (!isVisibleWithCurrentFilters({ ...payload, status: payload.status ?? null })) {
         toast({
-          title: 'Wardrobe item added but hidden by filters',
+          title: 'Wardrobe Item Added But Hidden by Filters',
           description: 'The item was added, but it is not visible because of the current filters.',
         });
       }
@@ -735,7 +735,7 @@ export function WardrobeItemsGrid({
                   size="sm"
                   className="h-8 w-8 p-0"
                   onClick={clearViewControls}
-                  aria-label="Clear filters and groupings"
+                  aria-label="Clear Filters and Groupings"
                 >
                   <FilterX className="h-4 w-4" />
                 </Button>
@@ -779,7 +779,7 @@ export function WardrobeItemsGrid({
                 size="sm"
                 className="h-8 w-8 p-0"
                 onClick={clearViewControls}
-                aria-label="Clear filters and groupings"
+                aria-label="Clear Filters and Groupings"
                 disabled={!hasActiveViewControls}
               >
                 <FilterX className="h-4 w-4" />
@@ -791,7 +791,7 @@ export function WardrobeItemsGrid({
             variant="outline-success"
             size="sm"
             className="h-8 w-8 p-0"
-            aria-label="Add wardrobe item"
+            aria-label="Add Wardrobe Item"
             onClick={() => setAddOpen(true)}
             disabled={loading || rowActionBusy}
           >

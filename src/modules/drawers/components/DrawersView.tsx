@@ -283,7 +283,7 @@ export function DrawersView({
         errorMessage.includes('frame_color') &&
         errorMessage.toLowerCase().includes('does not exist');
       toast({
-        title: 'Failed to save unit',
+        title: 'Failed to Save Unit',
         description: colorMigrationMissing
           ? 'Unit color requires the latest Drawers migration. Apply migrations, then try again.'
           : errorMessage,
@@ -350,7 +350,7 @@ export function DrawersView({
       const occupied = cubbyMap.get(cubbyKey(addDrawerTarget.unitId, addDrawerTarget.cubbyX, addDrawerTarget.cubbyY));
       if (occupied) {
         toast({
-          title: 'Cubby is no longer empty',
+          title: 'Cubby Is No Longer Empty',
           description: 'Choose another cubby and try again.',
           variant: 'destructive',
         });
@@ -366,7 +366,7 @@ export function DrawersView({
     } catch (error: unknown) {
       setAddDrawerBusy(false);
       toast({
-        title: 'Failed to add drawer',
+        title: 'Failed to Add Drawer',
         description: getErrorMessage(error, 'Please try again.'),
         variant: 'destructive',
       });
@@ -396,7 +396,7 @@ export function DrawersView({
       setHeldDrawerId(null);
     } catch (error: unknown) {
       toast({
-        title: 'Move failed',
+        title: 'Move Failed',
         description: getErrorMessage(error, 'Unable to place drawer.'),
         variant: 'destructive',
       });
@@ -412,7 +412,7 @@ export function DrawersView({
       setHeldDrawerId(null);
     } catch (error: unknown) {
       toast({
-        title: 'Move failed',
+        title: 'Move Failed',
         description: getErrorMessage(error, 'Unable to move drawer to limbo.'),
         variant: 'destructive',
       });
@@ -468,7 +468,7 @@ export function DrawersView({
       await removeUnit(targetUnit.id);
     } catch (error: unknown) {
       toast({
-        title: 'Failed to delete unit',
+        title: 'Failed to Delete Unit',
         description: getErrorMessage(error, 'Please try again.'),
         variant: 'destructive',
       });

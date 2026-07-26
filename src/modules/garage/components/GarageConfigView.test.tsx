@@ -191,7 +191,7 @@ describe('GarageConfigView vehicles grid', () => {
     );
 
     try {
-      const addButton = container.querySelector('button[aria-label="Add vehicle"]') as HTMLButtonElement | null;
+      const addButton = container.querySelector('button[aria-label="Add Vehicle"]') as HTMLButtonElement | null;
       expect(addButton).toBeTruthy();
 
       await act(async () => {
@@ -219,7 +219,7 @@ describe('GarageConfigView vehicles grid', () => {
       });
 
       expect(addVehicle).not.toHaveBeenCalled();
-      expect(toastMock).toHaveBeenCalledWith({ title: 'Model year required', variant: 'destructive' });
+      expect(toastMock).toHaveBeenCalledWith({ title: 'Model Year Required', variant: 'destructive' });
     } finally {
       unmount(root, container);
     }
@@ -237,7 +237,7 @@ describe('GarageConfigView vehicles grid', () => {
     );
 
     try {
-      const addButton = container.querySelector('button[aria-label="Add vehicle"]') as HTMLButtonElement | null;
+      const addButton = container.querySelector('button[aria-label="Add Vehicle"]') as HTMLButtonElement | null;
       await act(async () => {
         addButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
@@ -313,7 +313,7 @@ describe('GarageConfigView vehicles grid', () => {
         expect(nameInput.value).toBe('Daily Driver');
       });
       expect(updateVehicle).not.toHaveBeenCalled();
-      expect(toastMock).toHaveBeenCalledWith({ title: 'Name is required', variant: 'destructive' });
+      expect(toastMock).toHaveBeenCalledWith({ title: 'Name Is Required', variant: 'destructive' });
     } finally {
       unmount(root, container);
     }
@@ -362,7 +362,7 @@ describe('GarageConfigView vehicles grid', () => {
         expect(yearInput.value).toBe('2020');
       });
       expect(updateVehicle).not.toHaveBeenCalled();
-      expect(toastMock).toHaveBeenCalledWith({ title: 'Model year is required', variant: 'destructive' });
+      expect(toastMock).toHaveBeenCalledWith({ title: 'Model Year Is Required', variant: 'destructive' });
     } finally {
       unmount(root, container);
     }
@@ -412,7 +412,7 @@ describe('GarageConfigView vehicles grid', () => {
       });
       expect(updateVehicle).not.toHaveBeenCalled();
       expect(toastMock).toHaveBeenCalledWith({
-        title: 'Invalid model year',
+        title: 'Invalid Model Year',
         description: 'Model year must be between 1900 and 2200.',
         variant: 'destructive',
       });

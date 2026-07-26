@@ -154,7 +154,7 @@ function normalizeVehicleModelYearInput(value: string, fallback: number | null):
 
 function showVehicleModelYearRangeToast() {
   toast({
-    title: 'Invalid model year',
+    title: 'Invalid Model Year',
     description: `Model year must be between ${VEHICLE_MODEL_YEAR_MIN} and ${VEHICLE_MODEL_YEAR_MAX}.`,
     variant: 'destructive',
   });
@@ -383,13 +383,13 @@ export function GarageConfigView({
     const isAddingVehicle = !vehicleForm.id;
     const name = vehicleForm.name.trim();
     if (!name) {
-      toast({ title: 'Vehicle name required', variant: 'destructive' });
+      toast({ title: 'Vehicle Name Required', variant: 'destructive' });
       return;
     }
 
     const parsedModelYear = parseVehicleModelYear(vehicleForm.model_year);
     if (isAddingVehicle && parsedModelYear.status === 'empty') {
-      toast({ title: 'Model year required', variant: 'destructive' });
+      toast({ title: 'Model Year Required', variant: 'destructive' });
       return;
     }
     if (parsedModelYear.status === 'invalid') {
@@ -434,10 +434,10 @@ export function GarageConfigView({
       }
 
       setFormOpen(false);
-      toast({ title: vehicleForm.id ? 'Vehicle updated' : 'Vehicle added' });
+      toast({ title: vehicleForm.id ? 'Vehicle Updated' : 'Vehicle Added' });
     } catch (error) {
       toast({
-        title: 'Failed to save vehicle',
+        title: 'Failed to Save Vehicle',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -476,7 +476,7 @@ export function GarageConfigView({
             normalizeOnCommit={(value) => {
               const normalized = normalizeVehicleName(value, row.original.name);
               if (!value.trim()) {
-                toast({ title: 'Name is required', variant: 'destructive' });
+                toast({ title: 'Name Is Required', variant: 'destructive' });
               }
               return normalized;
             }}
@@ -534,7 +534,7 @@ export function GarageConfigView({
               }
               const normalized = normalizeVehicleModelYearInput(value, row.original.model_year);
               if (parsed.status === 'empty') {
-                toast({ title: 'Model year is required', variant: 'destructive' });
+                toast({ title: 'Model Year Is Required', variant: 'destructive' });
               }
               return normalized;
             }}
@@ -645,7 +645,7 @@ export function GarageConfigView({
       <Card className="min-w-0">
         <CardHeader className="flex flex-row items-center justify-between gap-4">
           <CardTitle>Vehicles</CardTitle>
-          <Button type="button" variant="outline-success" size="sm" className="h-8 w-8 p-0" aria-label="Add vehicle" onClick={openAddVehicle}>
+          <Button type="button" variant="outline-success" size="sm" className="h-8 w-8 p-0" aria-label="Add Vehicle" onClick={openAddVehicle}>
             <Plus className="h-4 w-4" />
           </Button>
         </CardHeader>
@@ -693,7 +693,7 @@ export function GarageConfigView({
                 <Input id="garage-vehicle-year" type="number" inputMode="numeric" required={!vehicleForm.id} value={vehicleForm.model_year} onChange={(event) => setVehicleForm((prev) => ({ ...prev, model_year: event.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="garage-vehicle-date">In-service Date</Label>
+                <Label htmlFor="garage-vehicle-date">In-Service Date</Label>
                 <DatePickerField
                   id="garage-vehicle-date"
                   value={vehicleForm.in_service_date}
@@ -784,12 +784,12 @@ export function GarageConfigView({
                 });
                 void onRemoveVehicle(deleteTarget.id)
                   .then(() => {
-                    toast({ title: 'Vehicle deleted' });
+                    toast({ title: 'Vehicle Deleted' });
                     setDeleteTarget(null);
                   })
                   .catch((error) => {
                     toast({
-                      title: 'Failed to delete vehicle',
+                      title: 'Failed to Delete Vehicle',
                       description: error instanceof Error ? error.message : 'Unknown error',
                       variant: 'destructive',
                     });

@@ -80,11 +80,11 @@ export default function AccountPage() {
       .update({ display_name: nextDisplayName })
       .eq('id', user.id);
     if (error) {
-      toast({ title: 'Failed to update name', description: error.message, variant: 'destructive' });
+      toast({ title: 'Failed to Update Name', description: error.message, variant: 'destructive' });
     } else {
       setAuthDisplayName(nextDisplayName);
       setDisplayName(nextDisplayName);
-      toast({ title: 'Display name updated' });
+      toast({ title: 'Display Name Updated' });
       setEditingName(false);
     }
     setSavingName(false);
@@ -95,7 +95,7 @@ export default function AccountPage() {
     const normalizedNew = newEmail.toLowerCase().trim();
     if (emailSubmitting || !normalizedNew || !emailPassword) return;
     if (normalizedNew === userEmail.toLowerCase()) {
-      toast({ title: 'New email must be different from your current email', variant: 'destructive' });
+      toast({ title: 'New Email Must Be Different from Your Current Email', variant: 'destructive' });
       return;
     }
     setEmailSubmitting(true);
@@ -107,16 +107,16 @@ export default function AccountPage() {
       password: emailPassword,
     });
     if (signInErr) {
-      toast({ title: 'Incorrect password', variant: 'destructive' });
+      toast({ title: 'Incorrect Password', variant: 'destructive' });
       setEmailSubmitting(false);
       return;
     }
 
     const { error } = await supabase.auth.updateUser({ email: newEmail.toLowerCase().trim() });
     if (error) {
-      toast({ title: 'Failed to change email', description: error.message, variant: 'destructive' });
+      toast({ title: 'Failed to Change Email', description: error.message, variant: 'destructive' });
     } else {
-      toast({ title: 'Confirmation emails sent', description: 'Check both your current and new email addresses.' });
+      toast({ title: 'Confirmation Emails Sent', description: 'Check both your current and new email addresses.' });
       setShowChangeEmail(false);
       setNewEmail('');
       setEmailPassword('');
@@ -133,12 +133,12 @@ export default function AccountPage() {
     });
 
     if (error) {
-      toast({ title: 'Failed to send password change link', description: error.message, variant: 'destructive' });
+      toast({ title: 'Failed to Send Password Change Link', description: error.message, variant: 'destructive' });
       setSendingPasswordLink(false);
       return;
     }
 
-    toast({ title: 'Password change link sent', description: 'Check your email, then sign back in via the link.' });
+    toast({ title: 'Password Change Link Sent', description: 'Check your email, then sign back in via the link.' });
 
     // Brief delay so user sees the toast before sign-out redirects
     setTimeout(() => {
@@ -150,23 +150,23 @@ export default function AccountPage() {
     e.preventDefault();
     if (passwordSubmitting || !newPassword) return;
     if (newPassword !== confirmPassword) {
-      toast({ title: 'Passwords do not match', variant: 'destructive' });
+      toast({ title: 'Passwords Do Not Match', variant: 'destructive' });
       return;
     }
     if (!isPasswordValid(newPassword)) {
-      toast({ title: 'Password does not meet requirements', variant: 'destructive' });
+      toast({ title: 'Password Does Not Meet Requirements', variant: 'destructive' });
       return;
     }
     setPasswordSubmitting(true);
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) {
       toast({
-        title: 'Failed to change password',
+        title: 'Failed to Change Password',
         description: isWeakOrLeakedPasswordError(error) ? WEAK_PASSWORD_MESSAGE : error.message,
         variant: 'destructive',
       });
     } else {
-      toast({ title: 'Password updated' });
+      toast({ title: 'Password Updated' });
       clearPasswordRecovery();
       setNewPassword('');
       setConfirmPassword('');
@@ -185,7 +185,7 @@ export default function AccountPage() {
       window.location.href = '/';
     } catch (error) {
       toast({
-        title: 'Deletion failed',
+        title: 'Deletion Failed',
         description: error instanceof Error ? error.message : 'There was an error deleting your account.',
         variant: 'destructive',
       });
@@ -256,7 +256,7 @@ export default function AccountPage() {
                   <span>{displayName}</span>
                   <button
                     type="button"
-                    aria-label="Edit display name"
+                    aria-label="Edit Display Name"
                     onClick={() => setEditingName(true)}
                     className="text-muted-foreground transition-colors hover:text-foreground"
                   >
@@ -272,7 +272,7 @@ export default function AccountPage() {
                 <span>{userEmail}</span>
                 <button
                   type="button"
-                  aria-label="Change email"
+                  aria-label="Change Email"
                   onClick={() => setShowChangeEmail(true)}
                   className="text-muted-foreground transition-colors hover:text-foreground"
                 >

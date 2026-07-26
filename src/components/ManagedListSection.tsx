@@ -146,7 +146,7 @@ function ColorPicker({
           type="button"
           className={`relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[hsl(var(--grid-sticky-line))] bg-transparent p-0 transition-[filter,border-color,background-color,box-shadow] ${normalizedColor ? 'hover:brightness-125 hover:border-foreground/40 hover:shadow-[inset_0_0_0_1px_hsl(var(--foreground)/0.16)]' : 'hover:bg-muted hover:border-foreground/40 hover:shadow-[inset_0_0_0_1px_hsl(var(--foreground)/0.12)]'} focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50`}
           style={normalizedColor ? { backgroundColor: normalizedColor } : undefined}
-          title="Pick color"
+          title="Pick Color"
           disabled={disabled}
           data-grid-focus-only="true"
           {...(typeof navCol === 'number' ? gridNavProps(ctx, navCol) : {})}
@@ -224,7 +224,7 @@ function ColorPicker({
             className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
             onClick={() => handleChange(null)}
           >
-            <X className="h-3 w-3" /> Remove color
+            <X className="h-3 w-3" /> Remove Color
           </button>
         )}
       </PopoverContent>
@@ -383,7 +383,7 @@ export function ManagedListSection({
       setName('');
       setAddDialogOpen(false);
     } catch (error: unknown) {
-      toast({ title: `Error adding ${singularLabel}`, description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: `Error Adding ${singularLabel}`, description: getErrorMessage(error), variant: 'destructive' });
     }
     setAdding(false);
   };
@@ -395,7 +395,7 @@ export function ManagedListSection({
     try {
       await onUpdate(id, nextName);
     } catch (error: unknown) {
-      toast({ title: 'Error renaming', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Renaming', description: getErrorMessage(error), variant: 'destructive' });
     }
   }, [items, onUpdate]);
 
@@ -416,7 +416,7 @@ export function ManagedListSection({
       }
       await onRemove(id);
     } catch (error: unknown) {
-      toast({ title: 'Error removing', description: getErrorMessage(error), variant: 'destructive' });
+      toast({ title: 'Error Removing', description: getErrorMessage(error), variant: 'destructive' });
     }
   }, [dataGridHistory, historyKey, items, onRemove, onRestoreItem]);
 
@@ -619,7 +619,7 @@ export function ManagedListSection({
             <DataGridAddFormLabel htmlFor={`${title.toLowerCase().replace(/\s+/g, '-')}-name`} required>Name</DataGridAddFormLabel>
             <Input
               id={`${title.toLowerCase().replace(/\s+/g, '-')}-name`}
-              placeholder={`New ${singularLabel} name`}
+              placeholder={`New ${singularLabel} Name`}
               value={name}
               autoFocus
               disabled={adding}

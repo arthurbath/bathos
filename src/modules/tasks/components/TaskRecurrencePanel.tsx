@@ -1,4 +1,3 @@
-import { Archive, Pause, Play, RefreshCw, Repeat2 } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 
 import {
@@ -18,6 +17,7 @@ import { DatePickerField } from '@/components/ui/date-picker-field';
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { toast } from '@/hooks/use-toast';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import { useTaskRecurrences } from '@/modules/tasks/hooks/useTaskRecurrences';
 import type {
   TaskArea,
@@ -172,7 +172,7 @@ export function TaskRecurrencePanel({
     <section className="space-y-4 border-t border-[hsl(var(--grid-sticky-line))] pt-8">
       <div className="space-y-1">
         <div className="flex items-center gap-2">
-          <Repeat2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <TASK_ICONS.Recurrence className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <h2 className="text-base font-semibold">Repeats</h2>
         </div>
         <p className="text-sm text-muted-foreground">
@@ -295,7 +295,7 @@ export function TaskRecurrencePanel({
       </form>
 
       {model.loading || model.error ? null : model.definitions.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">No Repeats</p>
+        <p className="py-8 text-center text-sm text-muted-foreground">No repeats</p>
       ) : (
         <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
           {model.definitions.map((definition) => {
@@ -304,7 +304,7 @@ export function TaskRecurrencePanel({
             const evaluationFailed = model.evaluationFailures.has(definition.id);
             return (
               <article key={definition.id} className="flex flex-wrap items-center gap-3 px-2 py-4 sm:px-4">
-                <Repeat2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <TASK_ICONS.Recurrence className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
                   <h3 className="truncate text-sm font-semibold">{definition.name}</h3>
                   <p className="text-xs text-muted-foreground">
@@ -318,10 +318,12 @@ export function TaskRecurrencePanel({
                   Revise
                 </Button>
                 <Button type="button" variant={evaluationFailed ? 'outline-warning' : 'outline'} size="icon" disabled={!connected || definition.status !== 'active' || pendingAction !== null} onClick={() => void evaluate(definition)} aria-label={`${evaluationFailed ? 'Retry catch-up for' : 'Catch up'} ${definition.name}`}>
-                  <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                  <TASK_ICONS.RegenerateRecurrence className="h-4 w-4" aria-hidden="true" />
                 </Button>
                 <Button type="button" variant="outline" size="icon" disabled={!connected || pendingAction !== null} onClick={() => void changeStatus(definition, definition.status === 'active' ? 'paused' : 'active')} aria-label={`${definition.status === 'active' ? 'Pause' : 'Resume'} ${definition.name}`}>
-                  {definition.status === 'active' ? <Pause className="h-4 w-4" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
+                  {definition.status === 'active'
+                    ? <TASK_ICONS.PauseRecurrence className="h-4 w-4" aria-hidden="true" />
+                    : <TASK_ICONS.ResumeRecurrence className="h-4 w-4" aria-hidden="true" />}
                 </Button>
                 <ArchiveRepeatButton
                   definition={definition}
@@ -367,7 +369,7 @@ function ArchiveRepeatButton({
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button type="button" variant="clear" size="icon" disabled={disabled} aria-label={`Archive ${definition.name}`}>
-          <Archive className="h-4 w-4" aria-hidden="true" />
+          <TASK_ICONS.Archive className="h-4 w-4" aria-hidden="true" />
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent className="shadow-none">

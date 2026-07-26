@@ -1,17 +1,4 @@
-import type { TaskLifecycle } from '@/modules/tasks/domain/taskState';
-import type {
-  TaskActionability,
-  TaskDestination,
-  TaskSourceKind,
-  TaskTodo,
-} from '@/modules/tasks/types/tasks';
-
-export type TaskSearchFilters = {
-  destination: 'all' | TaskDestination;
-  lifecycle: 'all' | TaskLifecycle;
-  actionability: 'all' | TaskActionability;
-  sourceKind: 'all' | 'none' | TaskSourceKind;
-};
+import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
 export type TaskSearchHierarchy = {
   areas: ReadonlyArray<{ id: string; title: string }>;
@@ -54,28 +41,10 @@ export function createTaskSearchDocuments(
 export function filterTaskSearchDocuments(
   documents: readonly TaskSearchDocument[],
   normalizedQuery: string,
-  filters: TaskSearchFilters,
 ): TaskSearchDocument[] {
-  return documents.filter(({ task, normalizedText }) => {
-    if (filters.destination !== 'all' && task.destination !== filters.destination) return false;
-    if (filters.lifecycle !== 'all' && task.lifecycle !== filters.lifecycle) return false;
-    if (filters.actionability !== 'all' && task.actionability !== filters.actionability) return false;
-    if (filters.sourceKind === 'none' && task.source_kind !== null) return false;
-    if (
-      filters.sourceKind !== 'all'
-      && filters.sourceKind !== 'none'
-      && task.source_kind !== filters.sourceKind
-    ) return false;
-    return !normalizedQuery || normalizedText.includes(normalizedQuery);
-  });
-}
-
-export function getTaskSearchSourceKinds(
-  documents: readonly TaskSearchDocument[],
-): TaskSourceKind[] {
-  return Array.from(new Set(documents.flatMap(({ task }) => (
-    task.source_kind ? [task.source_kind] : []
-  )))).sort();
+  return documents.filter(({ normalizedText }) => (
+    !normalizedQuery || normalizedText.includes(normalizedQuery)
+  ));
 }
 
 function getIndexedTaskHierarchyLabel(

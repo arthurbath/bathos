@@ -71,5 +71,7 @@ export async function retryOnLikelyNetworkError<T>(
 }
 
 export function showMutationError(error: unknown): void {
-  toast.error(toUserFacingErrorMessage(error));
+  toast.error('Operation Failed', {
+    description: toUserFacingErrorMessage(error),
+  });
 }

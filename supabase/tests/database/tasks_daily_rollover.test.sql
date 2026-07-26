@@ -272,8 +272,8 @@ SELECT is(
 SELECT is(
   (SELECT today_section FROM public.tasks_todos
     WHERE id = 'd4000000-0000-4000-8000-000000000032'),
-  'next',
-  'activates newly reached work into Next rather than Inbox'
+  'inbox',
+  'activates newly reached work into Inbox after rollover'
 );
 SELECT is(
   (SELECT today_section FROM public.tasks_projects
@@ -381,8 +381,8 @@ SELECT set_config(
 SELECT is(
   (current_setting('test.tasks_rollover_catch_up')::jsonb
     ->> 'rolled_over_todos')::integer,
-  2,
-  'catches up every current-horizon task left active across missed days'
+  1,
+  'catches up the remaining non-Inbox task left active across missed days'
 );
 SELECT is(
   (SELECT today_section FROM public.tasks_todos

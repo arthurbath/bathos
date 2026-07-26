@@ -39,7 +39,7 @@ The shell will retain the existing open-task identifier and add a distinct close
 
 Command target precedence will be multi-selection, open task, then focused closed task. Commands that require inline controls will first open a focused closed task and then open the requested Start, Deadline, Organization, Reminder, or Checklist surface. Immediate commands such as completion, actionability, Start clearing, horizon cycling, Copy, and Cut can operate directly.
 
-Actionability cycling will remain per-task for a single target. For multiple targets, the shell will derive one group-level destination before writing any task: all Waiting advances to Rechecking, all Rechecking advances to Actionable, and every other combination converges to Waiting. This prevents independent cycling from preserving or creating a mixed bulk state.
+Actionability cycling will remain per-task for a single target. For multiple targets, the shell will derive one group-level destination before writing any task: all Waiting advances to Rechecking, all Rechecking advances to Ready, and every other combination converges to Waiting. This prevents independent cycling from preserving or creating a mixed bulk state.
 
 The task card and every available interactive control in its collapsed summary will participate in the native sequential Tab order. The row remains a named focus target whose Return handling opens the task, but Tasks will not prevent Tab or Shift+Tab. Beginning granular Tab traversal clears logical whole-task focus without blurring the current DOM target, allowing the browser to proceed to the next or previous task sub-control and eventually leave the list.
 

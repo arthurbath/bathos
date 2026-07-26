@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertTaskCalendarRange,
   addTaskCalendarDays,
+  formatTaskCompactCalendarDayOffset,
   formatTaskDateControlLabel,
   formatTaskRelativeCalendarDate,
   isTaskCalendarDate,
@@ -72,6 +73,16 @@ describe('task calendar dates', () => {
   it('uses short month and day outside the 10-day relative window', () => {
     expect(formatTaskRelativeCalendarDate('2026-08-27', '2026-07-22', 'en-US')).toBe('Aug 27');
     expect(formatTaskRelativeCalendarDate('2026-07-11', '2026-07-22', 'en-US')).toBe('Jul 11');
+  });
+
+  it('formats compact signed calendar-day offsets at any distance', () => {
+    const planningDate = '2026-07-22';
+    expect(formatTaskCompactCalendarDayOffset('2026-07-22', planningDate)).toBe('Today');
+    expect(formatTaskCompactCalendarDayOffset('2026-07-23', planningDate)).toBe('1 day');
+    expect(formatTaskCompactCalendarDayOffset('2026-07-21', planningDate)).toBe('-1 day');
+    expect(formatTaskCompactCalendarDayOffset('2026-07-26', planningDate)).toBe('4 days');
+    expect(formatTaskCompactCalendarDayOffset('2026-07-18', planningDate)).toBe('-4 days');
+    expect(formatTaskCompactCalendarDayOffset('2026-08-27', planningDate)).toBe('36 days');
   });
 
   it('masks only yesterday, today, and tomorrow in date-control labels', () => {
