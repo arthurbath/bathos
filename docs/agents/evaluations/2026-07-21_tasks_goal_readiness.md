@@ -6,6 +6,10 @@
 
 ## Outcome
 
+### Accepted Daily Rollover Release
+
+The daily rollover release is accepted in production. At the first activation run after each owner's local midnight, unfinished prior-day Today tasks reset to Inbox before reached future Starts activate into Today Next. The existing once-per-minute activation job remains the only scheduler. The verified private backup, zero-rewrite migration, private owner cursor, exact 21-table PowerSync boundary, owner-scoped fixture, cleanup audit, Lovable deployment, and production invariants passed.
+
 ### Accepted Exclusive Start and Permanent Mail Release
 
 The exclusive-Start release is accepted in production. Future work now stores a future Start without a horizon, Today work stores a horizon without a Start, and reached future work enters Today Next. Terminal historical Starts remain preserved. The private backup, migration, MCP function, exact 21-table PowerSync projection, cron jobs, owner-scoped fixture, cleanup audit, Lovable deployment, and production invariants passed.
@@ -54,6 +58,7 @@ The planning and notes refinement is accepted in production. Upcoming now select
 | Native Templates | Template definition, revision, instantiation, MCP, and synchronized-projection coverage in the archived module change | Accepted |
 | Orthogonal Task State | Independent planning, lifecycle, disposition, and actionability coverage in domain, repository, and rendered tests | Accepted |
 | Temporal Planning Semantics | Independent Start Date and Day Horizon behavior plus deadline, planning-time-zone, and daylight-saving coverage in the archived module change | Accepted |
+| Owner-Local Daily Rollover | Private owner cursor, prior-day Today reset to Inbox, rollover-before-activation ordering, reminder preservation, once-per-minute production scheduling, and cleanup-backed production fixture | Accepted |
 | Unified Task Start Picker | Production migration, one Tasks-owned picker, future-only calendar, Today horizons, reminder focus command, live browser acceptance, and disposable production fixture | Accepted |
 | Explicit Primary Link Clearing | INSERT-only source initialization, explicit-null export behavior, immutable Mail-source comparison, fresh PowerSync projection, and zero-residue production fixture | Accepted |
 | Recurrence Integrity | `2026-07-20_tasks_offline_workflow_validation.md`, preservation recovery, and recurrence database/MCP tests | Accepted |
@@ -76,6 +81,8 @@ The planning and notes refinement is accepted in production. Upcoming now select
 
 ## Current Production Evidence
 
+- Migration `20260726013335_roll_over_unfinished_today_tasks.sql` is recorded locally and remotely. It rewrote zero tasks, initialized one private owner cursor, and preserved the existing `tasks-activate-due-roots` once-per-minute job. The exact 21-table PowerSync boundary is unchanged, and the private cursor is not published.
+- The owner-scoped production fixture reset one synthetic prior-day Later task to Inbox before activating one reached future Start into Next. Cleanup left zero synthetic users, settings, tasks, history rows, or private cursors. Commit `f8836e0` is published through Lovable deployment `56e3289f-8257-4e25-9207-ba5c53ecadb0`; the exact commit passed 966 application tests, 30 database checks, lint, build, and strict OpenSpec validation.
 - Migration `20260723175454_unify_task_start_planning.sql` is recorded locally and remotely. It changes Primary Link fallback to INSERT-only, preserves explicit null during schema-12 normalization, derives reminders from a future Start Date or Today planning date, and rebinds reminders when Start intent changes. It rewrote zero existing task records and changed no table or publication membership.
 - The fresh owner-only predeployment dump contains all 24 public Tasks and 7 private recovery COPY sections with a PostgreSQL completion footer and stable second-read digest. The post-migration server-validated schema-12 logical export contains all 20 portable collections and passed the same private permission and digest boundary.
 - A disposable unified-Start fixture proved explicit Primary Link null through MCP, schema-12 export, and a fresh PowerSync database while retaining immutable Mail provenance. It also proved Today reminder resolution, future and Today rebinding, complete Start clearing, reminder cancellation, and cleanup. The accepted run and an independent cleanup query left zero synthetic users, to-dos, Mail sources, history rows, or reminders.

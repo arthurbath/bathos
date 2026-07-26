@@ -14,6 +14,7 @@ This folder contains dated agent-facing security, performance, and technology ev
 
 | Date | File | Topic |
 |---|---|---|
+| 2026-07-25 | `2026-07-25_tasks_daily_rollover_release.md` | Owner-local midnight reset of unfinished Today tasks, preserved activation job, and production acceptance |
 | 2026-07-25 | `2026-07-25_tasks_exclusive_start_and_permanent_mail_release.md` | Exclusive Start production migration, permanent dual Mail delivery, and cross-system acceptance |
 | 2026-07-23 | `2026-07-23_tasks_unified_start_release.md` | Unified task Start picker, explicit Primary Link clearing, private backup, and production acceptance |
 | 2026-07-22 | `2026-07-22_tasks_structure_simplification_preflight.md` | Heading-free Tasks scheduling migration, private backup, content-free production preflight, and bounded release acceptance |
