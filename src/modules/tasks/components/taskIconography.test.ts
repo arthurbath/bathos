@@ -3,9 +3,12 @@ import {
   ListChecks,
   ListTree,
   Paperclip,
+  Plus,
+  Square,
+  SquareCheck,
   SquareCheckBig,
   SquareDashed,
-  SquarePlus,
+  Star,
 } from 'lucide-react';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -27,13 +30,17 @@ import {
 describe('Tasks iconography', () => {
   it('uses the approved concept overrides', () => {
     expect(TASK_ICONS.Task).toBe(SquareCheckBig);
+    expect(TASK_ICONS.OpenTask).toBe(Square);
+    expect(TASK_ICONS.SomedayTask).toBe(SquareDashed);
+    expect(TASK_ICONS.CompletedTask).toBe(SquareCheck);
     expect(TASK_ICONS.Area).toBe(Layers3);
     expect(TASK_ICONS.TaskChecklist).toBe(ListTree);
     expect(TASK_ICONS.Attachment).toBe(Paperclip);
     expect(TASK_ICONS.Someday).toBe(SquareDashed);
     expect(TASK_ICONS.Done).toBe(ListChecks);
-    expect(TASK_ICONS.AddTask).toBe(SquarePlus);
-    expect(TASK_ICONS.AddArea).toBe(SquarePlus);
+    expect(TASK_ICONS.Today).toBe(Star);
+    expect(TASK_ICONS.AddTask).toBe(Plus);
+    expect(TASK_ICONS.AddArea).toBe(Plus);
   });
 
   it('records every registered concept in the human iconography reference', () => {

@@ -8,7 +8,10 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 
 | Registry Concept | Lucide Icon | Product Meaning |
 |---|---|---|
-| Task | `SquareCheckBig` | A task and the Tasks module launcher |
+| Task | `SquareCheckBig` | The Tasks module launcher |
+| OpenTask | `Square` | An ordinary open task checkbox |
+| SomedayTask | `SquareDashed` | A Someday task checkbox |
+| CompletedTask | `SquareCheck` | A completed task checkbox |
 | Area | `Layers3` | An area and the Areas section in Config; this is the three-layer Stack glyph |
 | TaskChecklist | `ListTree` | A task's checklist |
 | Attachment | `Paperclip` | A task attachment |
@@ -17,7 +20,7 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 
 | Registry Concept | Lucide Icon | Product Meaning |
 |---|---|---|
-| Today | `CalendarDays` | The Today view |
+| Today | `Star` | The Today view and current date |
 | Upcoming | `CalendarRange` | The Upcoming view |
 | Anytime | `ListTodo` | The Anytime view |
 | Someday | `SquareDashed` | The Someday planning state and view |
@@ -46,8 +49,8 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 
 | Registry Concept | Lucide Icon | Product Meaning |
 |---|---|---|
-| AddTask | `SquarePlus` | Add a task |
-| AddArea | `SquarePlus` | Add an area |
+| AddTask | `Plus` | Add a task |
+| AddArea | `Plus` | Add an area |
 | Search | `Search` | Search Tasks and views |
 | QuickFilters | `Filter` | Apply a predefined quick filter |
 | Delete | `Trash2` | Recoverably delete task content |

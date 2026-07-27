@@ -159,9 +159,10 @@ export function cancelNearestFormScope(target: HTMLElement): boolean {
 
 export function scopeAllowsReturnSubmit(target: HTMLElement): boolean {
   const form = target.closest<HTMLFormElement>("form");
-  if (form?.getAttribute(BATHOS_RETURN_SUBMITS_ATTRIBUTE) === "true") return true;
+  if (form?.getAttribute(BATHOS_RETURN_SUBMITS_ATTRIBUTE) === "false") return false;
+  if (form) return true;
   return getNearestExplicitFormScope(target)
-    ?.getAttribute(BATHOS_RETURN_SUBMITS_ATTRIBUTE) === "true";
+    ?.getAttribute(BATHOS_RETURN_SUBMITS_ATTRIBUTE) !== "false";
 }
 
 export function fieldOwnsReturn(target: HTMLElement): boolean {

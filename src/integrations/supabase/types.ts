@@ -1686,6 +1686,7 @@ export type Database = {
           generated_at: string
           id: string
           logical_key: string
+          origin: string
           owner_id: string
           predecessor_occurrence_id: string | null
           recurrence_id: string
@@ -1693,13 +1694,14 @@ export type Database = {
           root_id: string
           root_type: string
           scheduled_date: string
-          template_instantiation_id: string
+          template_instantiation_id: string | null
         }
         Insert: {
           client_mutation_id: string
           generated_at?: string
           id?: string
           logical_key: string
+          origin?: string
           owner_id: string
           predecessor_occurrence_id?: string | null
           recurrence_id: string
@@ -1707,13 +1709,14 @@ export type Database = {
           root_id: string
           root_type: string
           scheduled_date: string
-          template_instantiation_id: string
+          template_instantiation_id?: string | null
         }
         Update: {
           client_mutation_id?: string
           generated_at?: string
           id?: string
           logical_key?: string
+          origin?: string
           owner_id?: string
           predecessor_occurrence_id?: string | null
           recurrence_id?: string
@@ -1721,7 +1724,7 @@ export type Database = {
           root_id?: string
           root_type?: string
           scheduled_date?: string
-          template_instantiation_id?: string
+          template_instantiation_id?: string | null
         }
         Relationships: [
           {
@@ -1752,6 +1755,10 @@ export type Database = {
           catch_up_limit: number
           client_mutation_id: string
           created_at: string
+          deadline_offset_days: number | null
+          end_after_count: number | null
+          end_mode: string
+          end_on_date: string | null
           frequency: string
           id: string
           interval_count: number
@@ -1759,9 +1766,11 @@ export type Database = {
           name: string
           owner_id: string
           planning_timezone: string
+          reminder_local_time: string | null
           recurrence_id: string
           revision: number
           rule_mode: string
+          rule_config: Json
           start_date: string
           target_area_id: string | null
           template_id: string
@@ -1771,6 +1780,10 @@ export type Database = {
           catch_up_limit?: number
           client_mutation_id: string
           created_at?: string
+          deadline_offset_days?: number | null
+          end_after_count?: number | null
+          end_mode?: string
+          end_on_date?: string | null
           frequency: string
           id?: string
           interval_count?: number
@@ -1778,9 +1791,11 @@ export type Database = {
           name: string
           owner_id: string
           planning_timezone: string
+          reminder_local_time?: string | null
           recurrence_id: string
           revision: number
           rule_mode: string
+          rule_config?: Json
           start_date: string
           target_area_id?: string | null
           template_id: string
@@ -1790,6 +1805,10 @@ export type Database = {
           catch_up_limit?: number
           client_mutation_id?: string
           created_at?: string
+          deadline_offset_days?: number | null
+          end_after_count?: number | null
+          end_mode?: string
+          end_on_date?: string | null
           frequency?: string
           id?: string
           interval_count?: number
@@ -1797,9 +1816,11 @@ export type Database = {
           name?: string
           owner_id?: string
           planning_timezone?: string
+          reminder_local_time?: string | null
           recurrence_id?: string
           revision?: number
           rule_mode?: string
+          rule_config?: Json
           start_date?: string
           target_area_id?: string | null
           template_id?: string
@@ -2821,6 +2842,26 @@ export type Database = {
           _recurrence_id: string
           _request_id: string
           _through_date: string
+        }
+        Returns: Json
+      }
+      tasks_create_recurrence_from_task: {
+        Args: {
+          _actor_type?: string
+          _deadline_offset_days: number | null
+          _end_after_count: number | null
+          _end_mode: string
+          _end_on_date: string | null
+          _frequency: string
+          _interval_count: number
+          _mutation_channel?: string
+          _mutation_id: string
+          _name: string
+          _reminder_local_time: string | null
+          _rule_config: Json
+          _rule_mode: string
+          _schedule_date: string
+          _task_id: string
         }
         Returns: Json
       }

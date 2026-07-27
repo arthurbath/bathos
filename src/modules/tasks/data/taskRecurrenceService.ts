@@ -6,16 +6,20 @@ import {
   taskActorTypes,
   taskEntryChannels,
   taskRecurrenceFrequencies,
+  taskRecurrenceEndModes,
   taskRecurrenceMissedPolicies,
+  taskRecurrenceOccurrenceOrigins,
   taskRecurrenceRuleModes,
   taskRecurrenceStatuses,
   taskTemplateKinds,
   type TaskRecurrenceDefinition,
+  type TaskRecurrenceEndMode,
   type TaskRecurrenceFrequency,
   type TaskRecurrenceMissedPolicy,
   type TaskRecurrenceOccurrence,
   type TaskRecurrenceRevision,
   type TaskRecurrenceRuleMode,
+  type TaskRecurrenceRuleConfig,
   type TaskRecurrenceStatus,
 } from '@/modules/tasks/types/tasks';
 
@@ -56,6 +60,26 @@ export type TaskRecurrenceEvaluationResult = {
   generated_count: number;
   occurrence_ids: string[];
   definition: TaskRecurrenceDefinition;
+};
+
+export type TaskRecurrenceCreateFromTaskInput = {
+  taskId: string;
+  name: string;
+  ruleMode: TaskRecurrenceRuleMode;
+  frequency: TaskRecurrenceFrequency;
+  intervalCount: number;
+  scheduleDate: string;
+  ruleConfig: TaskRecurrenceRuleConfig;
+  endMode: TaskRecurrenceEndMode;
+  endAfterCount?: number | null;
+  endOnDate?: string | null;
+  reminderLocalTime?: string | null;
+  deadlineOffsetDays?: number | null;
+  mutationId?: string;
+};
+
+export type TaskRecurrenceCreateFromTaskResult = TaskRecurrenceSaveResult & {
+  occurrence: TaskRecurrenceOccurrence;
 };
 
 export class InvalidTaskRecurrenceError extends Error {
@@ -119,6 +143,56 @@ export class TaskRecurrenceService {
       ...(outcome === 'conflict'
         ? {}
         : { revision: parseTaskRecurrenceRevision(result.revision, this.ownerId) }),
+    };
+  }
+
+  async createFromTask(
+    input: TaskRecurrenceCreateFromTaskInput,
+  ): Promise<TaskRecurrenceCreateFromTaskResult> {
+    const name = input.name.trim();
+    if (
+      !name
+      || !isTaskCalendarDate(input.scheduleDate)
+      || input.intervalCount < 1
+      || (
+        input.endMode === 'after'
+        && (!Number.isInteger(input.endAfterCount) || Number(input.endAfterCount) < 1)
+      )
+      || (
+        input.endMode === 'on_date'
+        && !isTaskCalendarDate(input.endOnDate ?? '')
+      )
+    ) {
+      throw new InvalidTaskRecurrenceError('A valid recurrence definition is required');
+    }
+    const { data, error } = await this.client.rpc('tasks_create_recurrence_from_task', {
+      _task_id: input.taskId,
+      _name: name,
+      _rule_mode: input.ruleMode,
+      _frequency: input.frequency,
+      _interval_count: input.intervalCount,
+      _schedule_date: input.scheduleDate,
+      _rule_config: input.ruleConfig as unknown as Database['public']['Functions']['tasks_create_recurrence_from_task']['Args']['_rule_config'],
+      _end_mode: input.endMode,
+      _end_after_count: input.endMode === 'after' ? input.endAfterCount ?? null : null,
+      _end_on_date: input.endMode === 'on_date' ? input.endOnDate ?? null : null,
+      _reminder_local_time: input.reminderLocalTime ?? null,
+      _deadline_offset_days: input.deadlineOffsetDays ?? null,
+      _mutation_id: input.mutationId ?? crypto.randomUUID(),
+      _mutation_channel: 'web',
+      _actor_type: 'user',
+    });
+    if (error) throw error;
+    const result = requireRecord(data, 'Recurrence creation returned an invalid result');
+    return {
+      outcome: requireEnum(
+        result.outcome,
+        ['accepted', 'already_applied'] as const,
+        'recurrence creation outcome',
+      ),
+      definition: parseTaskRecurrenceDefinition(result.definition, this.ownerId),
+      revision: parseTaskRecurrenceRevision(result.revision, this.ownerId),
+      occurrence: parseTaskRecurrenceOccurrence(result.occurrence, this.ownerId),
     };
   }
 
@@ -240,6 +314,12 @@ export function parseTaskRecurrenceRevision(
       taskRecurrenceMissedPolicies,
       'recurrence missed policy',
     ),
+    end_mode: requireEnum(
+      record.end_mode ?? 'never',
+      taskRecurrenceEndModes,
+      'recurrence end mode',
+    ),
+    rule_config: parseRuleConfig(record.rule_config ?? {}),
   } as TaskRecurrenceRevision;
 }
 
@@ -259,7 +339,39 @@ export function parseTaskRecurrenceOccurrence(
     ...record,
     owner_id: resolvedOwnerId,
     root_type: requireEnum(record.root_type, taskTemplateKinds, 'occurrence root type'),
+    origin: requireEnum(
+      record.origin ?? 'generated',
+      taskRecurrenceOccurrenceOrigins,
+      'occurrence origin',
+    ),
   } as TaskRecurrenceOccurrence;
+}
+
+function parseRuleConfig(value: unknown): TaskRecurrenceRuleConfig {
+  const record = value === null || value === undefined
+    ? {}
+    : requireRecord(value, 'Recurrence rule configuration is invalid');
+  const weekdays = record.weekdays;
+  if (
+    weekdays !== undefined
+    && (
+      !Array.isArray(weekdays)
+      || weekdays.some((day) => !Number.isInteger(day) || Number(day) < 1 || Number(day) > 7)
+    )
+  ) {
+    throw new InvalidTaskRecurrenceError('Recurrence weekdays are invalid');
+  }
+  return {
+    ...(Array.isArray(weekdays) ? { weekdays: weekdays.map(Number) } : {}),
+    ...(record.monthly_kind === 'day_of_month' || record.monthly_kind === 'ordinal_weekday'
+      ? { monthly_kind: record.monthly_kind }
+      : {}),
+    ...(Number.isInteger(record.month_day) ? { month_day: Number(record.month_day) } : {}),
+    ...(Number.isInteger(record.ordinal)
+      ? { ordinal: Number(record.ordinal) as -1 | 1 | 2 | 3 | 4 | 5 }
+      : {}),
+    ...(Number.isInteger(record.weekday) ? { weekday: Number(record.weekday) } : {}),
+  };
 }
 
 function resolveOwner(value: unknown, ownerId: string | undefined, field: string): string {

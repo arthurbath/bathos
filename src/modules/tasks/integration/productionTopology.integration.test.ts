@@ -20,6 +20,7 @@ import {
 } from '@/lib/mcp/tools/tasks-mutate';
 import { getTaskViewData, planningDateInTimeZone } from '@/lib/mcp/tools/tasks-read';
 import { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
+import { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
@@ -301,6 +302,213 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       .eq('id', taskId);
     expect(residueError).toBeNull();
     expect(residueCount).toBe(0);
+  });
+
+  it('proves checklist, recurrence, terminal editing, deletion, and Done behavior', async () => {
+    const environment = productionEnvironment();
+    testDirectory ??= await mkdtemp(join(tmpdir(), 'bathos-tasks-production-topology-'));
+    admin ??= createClient<Database>(environment.supabaseUrl, environment.serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const owner = await createSyntheticOwner('rich-task-behavior', environment);
+    const connector = createTasksSupabaseConnector({
+      endpoint: environment.powerSyncUrl,
+      supabase: owner.client,
+    });
+    const primary = await openClient(
+      testDirectory,
+      'rich-task-behavior-primary.db',
+      owner.id,
+      connector,
+    );
+    await primary.repository.ensurePlanningSettings(owner.id, 'America/Los_Angeles');
+    await waitForUploadQueue(primary.database, 0);
+
+    const auth = { userId: owner.id, email: owner.email, supabase: owner.client };
+    const recurrenceTask = await createTaskData({
+      idempotency_key: crypto.randomUUID(),
+      title: 'Synthetic Rich Recurrence Task',
+      notes: 'Disposable production acceptance only',
+      destination: 'anytime',
+      entry_channel: 'web',
+    }, auth);
+    const completedTask = await createTaskData({
+      idempotency_key: crypto.randomUUID(),
+      title: 'Synthetic Done Editing Task',
+      notes: 'Disposable production acceptance only',
+      destination: 'anytime',
+      entry_channel: 'web',
+    }, auth);
+    const deletedTask = await createTaskData({
+      idempotency_key: crypto.randomUUID(),
+      title: 'Synthetic Deleted Editing Task',
+      notes: 'Disposable production acceptance only',
+      destination: 'anytime',
+      entry_channel: 'web',
+    }, auth);
+    await Promise.all([
+      waitForLocalTask(primary.database, recurrenceTask.task.id, (task) => task.revision === 1),
+      waitForLocalTask(primary.database, completedTask.task.id, (task) => task.revision === 1),
+      waitForLocalTask(primary.database, deletedTask.task.id, (task) => task.revision === 1),
+    ]);
+
+    const hierarchy = new TaskHierarchyRepository(primary.database);
+    const checklistItem = await hierarchy.createChecklistItem({
+      ownerId: owner.id,
+      taskId: recurrenceTask.task.id,
+      title: 'Synthetic Checklist Item',
+    });
+    await hierarchy.completeChecklistItem(owner.id, checklistItem.id, true);
+    await waitForUploadQueue(primary.database, 0);
+    expect(await primary.database.getOptional<{
+      title: string;
+      completed: number;
+    }>(
+      `SELECT title, completed
+       FROM tasks_checklist_items
+       WHERE id = ? AND owner_id = ?`,
+      [checklistItem.id, owner.id],
+    )).toEqual({
+      title: 'Synthetic Checklist Item',
+      completed: 1,
+    });
+
+    const recurrence = await new TaskRecurrenceService(
+      owner.client,
+      owner.id,
+    ).createFromTask({
+      taskId: recurrenceTask.task.id,
+      name: 'Synthetic Rich Recurrence',
+      ruleMode: 'calendar',
+      frequency: 'daily',
+      intervalCount: 1,
+      scheduleDate: '2030-01-01',
+      ruleConfig: {},
+      endMode: 'after',
+      endAfterCount: 2,
+      reminderLocalTime: '09:30',
+      deadlineOffsetDays: 2,
+    });
+    expect(recurrence.outcome).toBe('accepted');
+    expect(recurrence.occurrence.origin).toBe('adopted');
+    const evaluation = await new TaskRecurrenceService(
+      owner.client,
+      owner.id,
+    ).evaluate(recurrence.definition.id, '2030-01-02');
+    expect(evaluation.generated_count).toBe(1);
+
+    const completed = await primary.repository.transitionTask(
+      owner.id,
+      completedTask.task.id,
+      'complete',
+    );
+    const editedCompleted = await primary.repository.updateTask(
+      owner.id,
+      completedTask.task.id,
+      {
+        title: 'Synthetic Edited While Done',
+        deadline: '2030-02-01',
+        actionability: 'waiting',
+      },
+    );
+    expect(completed.lifecycle).toBe('completed');
+    expect(editedCompleted).toMatchObject({
+      lifecycle: 'completed',
+      title: 'Synthetic Edited While Done',
+      deadline: '2030-02-01',
+      actionability: 'waiting',
+    });
+
+    const deleted = await primary.repository.transitionTask(
+      owner.id,
+      deletedTask.task.id,
+      'delete',
+    );
+    const editedDeleted = await primary.repository.updateTask(
+      owner.id,
+      deletedTask.task.id,
+      { title: 'Synthetic Edited While Deleted' },
+    );
+    expect(deleted.disposition).toBe('deleted');
+    expect(editedDeleted).toMatchObject({
+      disposition: 'deleted',
+      title: 'Synthetic Edited While Deleted',
+    });
+    await waitForUploadQueue(primary.database, 0);
+
+    const fresh = await openClient(
+      testDirectory,
+      'rich-task-behavior-fresh.db',
+      owner.id,
+      connector,
+    );
+    await Promise.all([
+      waitForLocalTask(
+        fresh.database,
+        completedTask.task.id,
+        (task) => task.lifecycle === 'completed'
+          && task.title === 'Synthetic Edited While Done'
+          && task.completed_at !== null,
+      ),
+      waitForLocalTask(
+        fresh.database,
+        deletedTask.task.id,
+        (task) => task.disposition === 'deleted'
+          && task.title === 'Synthetic Edited While Deleted'
+          && task.deleted_at !== null,
+      ),
+      waitForLocalTableCount(fresh.database, 'tasks_recurrence_occurrences', 2),
+    ]);
+    expect(await fresh.database.getOptional<{ completed: number }>(
+      'SELECT completed FROM tasks_checklist_items WHERE id = ?',
+      [checklistItem.id],
+    )).toEqual({ completed: 1 });
+    expect(await fresh.database.getOptional<{
+      origin: string;
+      template_instantiation_id: string | null;
+    }>(
+      `SELECT origin, template_instantiation_id
+       FROM tasks_recurrence_occurrences
+       WHERE recurrence_id = ? AND root_id = ?`,
+      [recurrence.definition.id, recurrenceTask.task.id],
+    )).toEqual({
+      origin: 'adopted',
+      template_instantiation_id: null,
+    });
+
+    const reopened = await fresh.repository.transitionTask(
+      owner.id,
+      completedTask.task.id,
+      'reopen',
+    );
+    const restored = await fresh.repository.transitionTask(
+      owner.id,
+      deletedTask.task.id,
+      'restore',
+    );
+    expect(reopened.lifecycle).toBe('open');
+    expect(restored.disposition).toBe('present');
+    await waitForUploadQueue(fresh.database, 0);
+
+    await disposeClient(primary);
+    await disposeClient(fresh);
+    await signOutSyntheticClient(owner.client);
+    await deleteSyntheticOwner(owner.id);
+    for (const table of [
+      'tasks_todos',
+      'tasks_checklist_items',
+      'tasks_recurrence_definitions',
+      'tasks_recurrence_revisions',
+      'tasks_recurrence_occurrences',
+    ] as const) {
+      const { count, error } = await admin
+        .from(table)
+        .select('id', { count: 'exact', head: true })
+        .eq('owner_id', owner.id);
+      expect(error).toBeNull();
+      expect(count).toBe(0);
+    }
   });
 
 

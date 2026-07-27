@@ -17,7 +17,6 @@ import {
   CheckCircle2,
   Circle,
   MoreHorizontal,
-  Square,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -61,6 +60,7 @@ import {
   formatTaskDateControlLabel,
   formatTaskRelativeCalendarDate,
   isTaskCalendarDate,
+  taskCalendarDateInTimeZone,
 } from '@/modules/tasks/domain/taskDates';
 import {
   TaskKeyboardHelpDialog,
@@ -109,7 +109,9 @@ import {
   useTaskUndo,
   type TaskForwardMutationReservation,
 } from '@/modules/tasks/hooks/useTaskUndo';
+import { useTaskChecklistUndo } from '@/modules/tasks/hooks/useTaskChecklistUndo';
 import { useTaskReminders } from '@/modules/tasks/hooks/useTaskReminders';
+import { useTaskRecurrences } from '@/modules/tasks/hooks/useTaskRecurrences';
 import type { TaskWebPushModel } from '@/modules/tasks/hooks/useTaskWebPush';
 import {
   useTaskDeletedHierarchyRoots,
@@ -133,6 +135,8 @@ import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPo
 import { TASK_PLANNING_LIST_CLASS } from '@/modules/tasks/components/taskPlanningStyles';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
 import { TaskSyncDiagnosticsDialog } from '@/modules/tasks/components/TaskSyncDiagnosticsDialog';
+import { TaskChecklistEditor } from '@/modules/tasks/components/TaskChecklistEditor';
+import { TaskRepeatDialog } from '@/modules/tasks/components/TaskRepeatDialog';
 import {
   getTaskReminderAvailability,
   getTaskReminderUnavailableMessage,
@@ -420,11 +424,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const deletedHierarchyRoots = useTaskDeletedHierarchyRoots(userId);
   const {
     pending: taskUndoPending,
+    event: taskUndoEvent,
+    redoEvent: taskRedoEvent,
     undoWhenAvailable: undoLastTaskChange,
     redoWhenAvailable: redoLastTaskChange,
     reserveForwardMutation,
     registerForwardMutation,
   } = useTaskUndo(userId);
+  const checklistUndo = useTaskChecklistUndo(userId);
+  const historyRouteRef = useRef<Array<'task' | 'checklist'>>([]);
   const {
     tasks: projectedTasks,
     loading,
@@ -479,8 +487,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     ? creationDraft
     : null;
   const selectableTasks = useMemo(
-    () => filteredTasks.filter((task) => task.disposition === 'present'
-      && (view === 'done' ? task.lifecycle !== 'open' : task.lifecycle === 'open')),
+    () => filteredTasks.filter((task) => view === 'done'
+      ? task.disposition === 'deleted' || task.lifecycle !== 'open'
+      : task.disposition === 'present' && task.lifecycle === 'open'),
     [filteredTasks, view],
   );
   const taskClipboardService = useMemo(() => new TaskClipboardService(
@@ -514,6 +523,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [searchTargetTaskId, setSearchTargetTaskId] = useState<string | null>(null);
   const taskSearch = useTaskSearch(userId, quickFindOpen || view === 'search');
   const reminders = useTaskReminders(userId);
+  const recurrences = useTaskRecurrences(userId);
+  const waitingRecurrences = useMemo(() => recurrences.definitions.filter(
+    (definition) => (
+      definition.status === 'active'
+      && recurrences.revisions.get(definition.id)?.rule_mode === 'after_completion'
+      && recurrences.openOccurrenceDefinitionIds.has(definition.id)
+    ),
+  ), [
+    recurrences.definitions,
+    recurrences.openOccurrenceDefinitionIds,
+    recurrences.revisions,
+  ]);
   const reminderAvailability = getTaskReminderAvailability(
     reminders.mode,
     reminders.loading,
@@ -537,11 +558,31 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     [],
   );
   const doneRoots = deletedHierarchyRoots.roots;
+  const doneTaskGroups = useMemo(() => {
+    const groups = new Map<string, TaskTodo[]>();
+    for (const task of filteredTasks) {
+      const terminalAt = task.deleted_at
+        ?? task.completed_at
+        ?? task.canceled_at
+        ?? task.updated_at;
+      const day = taskCalendarDateInTimeZone(
+        planningTimeZone,
+        new Date(terminalAt),
+      );
+      groups.set(day, [...(groups.get(day) ?? []), task]);
+    }
+    return Array.from(groups, ([day, groupTasks]) => ({
+      day,
+      tasks: groupTasks,
+    }));
+  }, [filteredTasks, planningTimeZone]);
   const quickFilterHasNoMatches = bulkEligible
     && taskQuickFilter !== 'all'
     && filteredTasks.length === 0;
   const taskViewIsEmpty = creationDraft === null && (view === 'done'
     ? filteredTasks.length === 0 && doneRoots.length === 0
+    : view === 'upcoming'
+      ? filteredTasks.length === 0 && waitingRecurrences.length === 0
     : filteredTasks.length === 0);
   const serverReplacementAvailable = mode === 'connected'
     && syncState === 'connected'
@@ -584,8 +625,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   const runTaskUndo = useCallback(async () => {
     try {
+      const taskEventTime = taskUndoEvent?.occurred_at ?? '';
+      const checklistEventTime = checklistUndo.event?.occurred_at ?? '';
+      if (checklistEventTime > taskEventTime) {
+        const event = await checklistUndo.undo();
+        if (event === null) showTaskHistoryBoundaryToast('undo');
+        else historyRouteRef.current.push('checklist');
+        return;
+      }
       const task = await undoLastTaskChange();
       if (task === null) showTaskHistoryBoundaryToast('undo');
+      else historyRouteRef.current.push('task');
     } catch (undoError) {
       if (undoError instanceof UnsafeTaskUndoError) {
         showTaskHistoryBoundaryToast('undo');
@@ -593,10 +643,30 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         showTaskError('Task Change Could Not Be Undone', undoError);
       }
     }
-  }, [undoLastTaskChange]);
+  }, [checklistUndo, taskUndoEvent?.occurred_at, undoLastTaskChange]);
 
   const runTaskRedo = useCallback(async () => {
     try {
+      const routed = historyRouteRef.current.at(-1) ?? null;
+      if (routed === 'checklist') {
+        const event = await checklistUndo.redo();
+        if (event === null) showTaskHistoryBoundaryToast('redo');
+        else historyRouteRef.current.pop();
+        return;
+      }
+      if (routed === 'task') {
+        const task = await redoLastTaskChange();
+        if (task === null) showTaskHistoryBoundaryToast('redo');
+        else historyRouteRef.current.pop();
+        return;
+      }
+      const taskEventTime = taskRedoEvent?.occurred_at ?? '';
+      const checklistEventTime = checklistUndo.redoEvent?.occurred_at ?? '';
+      if (checklistEventTime > taskEventTime) {
+        const event = await checklistUndo.redo();
+        if (event === null) showTaskHistoryBoundaryToast('redo');
+        return;
+      }
       const task = await redoLastTaskChange();
       if (task === null) showTaskHistoryBoundaryToast('redo');
     } catch (redoError) {
@@ -606,7 +676,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         showTaskError('Task Change Could Not Be Redone', redoError);
       }
     }
-  }, [redoLastTaskChange]);
+  }, [
+    checklistUndo,
+    redoLastTaskChange,
+    taskRedoEvent?.occurred_at,
+  ]);
 
   const replaceCreationDraft = useCallback((next: TaskCreationDraft | null) => {
     creationDraftRef.current = next;
@@ -1481,7 +1555,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           await waitForTaskMotion(TASK_TERMINAL_SETTLE_DELAY_MS);
         }
         for (const task of targets) {
-          const transition = task.lifecycle === 'open' ? 'complete' : 'reopen';
+          const transition = task.disposition === 'deleted'
+            ? 'restore'
+            : task.lifecycle === 'open'
+              ? 'complete'
+              : 'reopen';
           const reservation = reservations.get(task.id);
           if (reservation) await transitionTask(task.id, transition, reservation);
           else await transitionTask(task.id, transition);
@@ -1501,7 +1579,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (taskId === null && focusedId !== null) {
       const task = selectableTasks.find((candidate) => candidate.id === focusedId);
       if (!task) return;
-      if (task.lifecycle === 'open') {
+      if (task.lifecycle === 'open' && task.disposition === 'present') {
         const completionControl = document.querySelector<HTMLButtonElement>(
           `[data-task-row-focus-target][data-task-row-id="${CSS.escape(focusedId)}"] `
           + '[data-task-completion-control]',
@@ -1514,7 +1592,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       try {
         await transitionTask(
           focusedId,
-          task.lifecycle === 'open' ? 'complete' : 'reopen',
+          task.disposition === 'deleted'
+            ? 'restore'
+            : task.lifecycle === 'open'
+              ? 'complete'
+              : 'reopen',
         );
       } catch (completeError) {
         showTaskError('Task Could Not Be Toggled', completeError);
@@ -1527,6 +1609,38 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     reserveForwardMutation,
     selectableTasks,
     toggleDeferredCompletion,
+    transitionTask,
+  ]);
+
+  const runDeleteShortcut = useCallback(async () => {
+    const targets = getTaskCommandTargets().filter((task) => (
+      task.id !== NEW_TASK_DRAFT_ID
+      && task.lifecycle === 'open'
+      && task.disposition === 'present'
+    ));
+    if (targets.length === 0 || bulkPending) return;
+    setBulkPending(true);
+    try {
+      for (const task of targets) {
+        await transitionTask(task.id, 'delete');
+      }
+      if (selectedTaskIdRef.current !== null) await setOpenTask(null);
+      clearTaskSelection();
+    } catch (deleteError) {
+      showTaskError(
+        targets.length === 1
+          ? 'Task Could Not Be Deleted'
+          : 'Tasks Could Not Be Deleted',
+        deleteError,
+      );
+    } finally {
+      setBulkPending(false);
+    }
+  }, [
+    bulkPending,
+    clearTaskSelection,
+    getTaskCommandTargets,
+    setOpenTask,
     transitionTask,
   ]);
 
@@ -1656,6 +1770,21 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         setQuickFindOpen(true);
         return;
       }
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        const commandDelete = macLikePlatform ? event.metaKey : event.ctrlKey;
+        const openTask = selectedTaskIdRef.current !== null;
+        const closedTaskSelection = !openTask
+          && (focusedTaskIdRef.current !== null || bulkMode);
+        if (
+          (openTask && !commandDelete)
+          || (!openTask && !closedTaskSelection)
+          || (isTaskEditableTarget(event.target) && !commandDelete)
+        ) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (!event.isComposing && !event.repeat) void runDeleteShortcut();
+        return;
+      }
       const command = getTaskKeyboardCommand(event, macLikePlatform);
       if (command === null) return;
       if (command === 'keyboard-help' && event.isComposing) return;
@@ -1774,7 +1903,29 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         openRelativeTask(-1);
         return;
       }
-      if (command === 'open-checklist') return;
+      if (command === 'open-checklist') {
+        const target = getTaskCommandTargets()[0];
+        if (!target) return;
+        void (async () => {
+          if (selectedTaskIdRef.current !== target.id) {
+            const opened = await setOpenTask(target.id);
+            if (!opened) return;
+          }
+          if (
+            target.id === NEW_TASK_DRAFT_ID
+            && taskEditorAutosaveRef.current?.taskId === NEW_TASK_DRAFT_ID
+          ) {
+            await taskEditorAutosaveRef.current.flush();
+            if (creationDraftRef.current?.persistedTaskId === null) return;
+          }
+          window.setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('bathos:task-checklist-focus', {
+              detail: { taskId: target.id },
+            }));
+          }, 0);
+        })();
+        return;
+      }
       if (command === 'close-task') {
         if (selectedTaskIdRef.current !== null) {
           void closeOpenTaskToFocus();
@@ -1806,6 +1957,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     openRelativeTask,
     runDuplicateShortcut,
     runCycleActionabilityShortcut,
+    runDeleteShortcut,
     runDirectStartShortcut,
     runHorizonShortcut,
     runToggleCompletionShortcut,
@@ -2086,7 +2238,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       macLikePlatform,
     });
     if (next === null) {
-      focusTaskRow(taskId);
+      if (selectedTaskIdRef.current === taskId) {
+        void closeOpenTaskToFocus();
+      } else {
+        void setOpenTask(taskId);
+      }
       return;
     }
     event.preventDefault();
@@ -2298,6 +2454,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <TaskRow
         key={task.id}
         task={task}
+        checklistTaskId={persistedDraftTaskId ?? (
+          task.id === NEW_TASK_DRAFT_ID ? null : task.id
+        )}
         hierarchy={hierarchy}
         selected={selectedTaskId === task.id}
         focused={focusedTaskId === task.id}
@@ -2499,6 +2658,83 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             throw deleteError;
           }
         }}
+      />
+    );
+  };
+
+  const renderDoneTask = (task: TaskTodo) => {
+    const terminalState = task.disposition === 'deleted'
+      ? 'deleted' as const
+      : task.lifecycle === 'completed'
+        ? 'completed' as const
+        : 'canceled' as const;
+    const restoreTransition = terminalState === 'deleted' ? 'restore' : 'reopen';
+    return (
+      <TaskRow
+        key={task.id}
+        task={task}
+        checklistTaskId={task.id}
+        hierarchy={hierarchy}
+        selected={selectedTaskId === task.id}
+        focused={focusedTaskId === task.id}
+        onSelect={(event) => handleDoneTaskPointerSelection(event, task.id)}
+        onActivate={() => toggleTaskFromKeyboard(task.id)}
+        onCloseEditor={closeOpenTaskToFocus}
+        onFocusTask={() => {
+          if (!bulkMode) focusTaskRow(task.id);
+        }}
+        onRestoreTaskFocus={(taskId) => focusTaskRow(taskId, true)}
+        onClearTaskFocus={clearWholeTaskFocusPreservingDomFocus}
+        onMoveFocus={(direction, wrap) => moveTaskRowFocus(task.id, direction, wrap)}
+        onRegisterAutosave={registerTaskEditorAutosave}
+        completionRequested={terminalState === 'completed'}
+        onToggleDeferredCompletion={() => undefined}
+        reserveTerminalMutation={() => reserveForwardMutation(task)}
+        bulkSelection={bulkMode ? {
+          selected: bulkSelection.has(task.id),
+          onKeyboardToggle: () => toggleTaskFromKeyboard(task.id),
+          onToggle: (event) => handleDoneTaskPointerSelection(event, task.id),
+        } : undefined}
+        onUpdate={async (patch) => {
+          try {
+            await updateTask(task.id, normalizeTaskEditorPlanningPatch(
+              task,
+              patch,
+              planningDate,
+            ));
+          } catch (updateError) {
+            showTaskError('Task Could Not Be Updated', updateError);
+            throw updateError;
+          }
+        }}
+        onComplete={async (reservation) => {
+          try {
+            await transitionTask(task.id, restoreTransition, reservation);
+          } catch (restoreError) {
+            showTaskError(
+              terminalState === 'deleted'
+                ? 'Task Could Not Be Restored'
+                : 'Task Could Not Be Reopened',
+              restoreError,
+            );
+            throw restoreError;
+          }
+        }}
+        planningActions={[]}
+        draggableTask={false}
+        dragPlacement={null}
+        onTaskDragStart={() => undefined}
+        onTaskDragOver={() => undefined}
+        onTaskDragEnd={() => undefined}
+        planningDate={planningDate}
+        todayMarkerContext="Today"
+        reminder={null}
+        reminderMode="unavailable"
+        reminderTimeZone={reminders.planningTimeZone}
+        onSaveReminder={async () => undefined}
+        onCancelReminder={async () => undefined}
+        onDelete={async () => undefined}
+        terminalState={terminalState}
       />
     );
   };
@@ -2764,69 +3000,21 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   </section>
                 ) : null}
                 {quickFilterHasNoMatches ? <TaskQuickFilterEmptyState /> : null}
-                {filteredTasks.length > 0 ? (
+                {doneTaskGroups.length > 0 ? (
                   <section aria-label="Tasks">
-                    <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
-                      {filteredTasks.map((task) => task.disposition === 'deleted' ? (
-                        <DeletedTaskRow
-                          key={task.id}
-                          task={task}
-                          focused={focusedTaskId === task.id}
-                          onFocusTask={() => {
-                            if (!bulkMode) focusTaskRow(task.id);
-                          }}
-                          onRestoreTaskFocus={(taskId) => focusTaskRow(taskId, true)}
-                          onClearTaskFocus={clearWholeTaskFocusPreservingDomFocus}
-                          onMoveFocus={(direction, wrap) => (
-                            moveTaskRowFocus(task.id, direction, wrap)
-                          )}
-                          bulkSelection={bulkMode ? {
-                            active: true,
-                            selected: bulkSelection.has(task.id),
-                            onSelect: (event) => handleDoneTaskPointerSelection(event, task.id),
-                          } : {
-                            active: false,
-                            selected: false,
-                            onSelect: (event) => handleDoneTaskPointerSelection(event, task.id),
-                          }}
-                          onRestore={async () => {
-                            try {
-                              await transitionTask(task.id, 'restore');
-                            } catch (restoreError) {
-                              showTaskError('Task Could Not Be Restored', restoreError);
-                            }
-                          }}
-                        />
-                      ) : (
-                        <DoneTaskRow
-                          key={task.id}
-                          task={task}
-                          focused={focusedTaskId === task.id}
-                          onFocusTask={() => {
-                            if (!bulkMode) focusTaskRow(task.id);
-                          }}
-                          onRestoreTaskFocus={(taskId) => focusTaskRow(taskId, true)}
-                          onClearTaskFocus={clearWholeTaskFocusPreservingDomFocus}
-                          onMoveFocus={(direction, wrap) => (
-                            moveTaskRowFocus(task.id, direction, wrap)
-                          )}
-                          bulkSelection={bulkMode ? {
-                            active: true,
-                            selected: bulkSelection.has(task.id),
-                            onSelect: (event) => handleDoneTaskPointerSelection(event, task.id),
-                          } : {
-                            active: false,
-                            selected: false,
-                            onSelect: (event) => handleDoneTaskPointerSelection(event, task.id),
-                          }}
-                          onReopen={async () => {
-                            try {
-                              await transitionTask(task.id, 'reopen');
-                            } catch (reopenError) {
-                              showTaskError('Task Could Not Be Reopened', reopenError);
-                            }
-                          }}
-                        />
+                    <div className="space-y-7">
+                      {doneTaskGroups.map((group) => (
+                        <section key={group.day} aria-label={formatTaskDateControlLabel(
+                          group.day,
+                          planningDate,
+                        )}>
+                          <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
+                            {formatTaskDateControlLabel(group.day, planningDate)}
+                          </h3>
+                          <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
+                            {group.tasks.map(renderDoneTask)}
+                          </div>
+                        </section>
                       ))}
                     </div>
                   </section>
@@ -2849,33 +3037,63 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             ) : (
               <div className="space-y-7">
                 {view === 'upcoming' ? (
-                  <UpcomingTaskSections
-                    tasks={renderedPlanningTasks}
-                    planningDate={planningDate}
-                    retainedTaskId={retainedTaskId}
-                    retainedTaskPlacement={retainedTaskPlacement}
-                    dropIndicator={taskDropIndicator}
-                    onCreate={(startDate) => {
-                      void beginTaskCreation({ startDate });
-                    }}
-                    onSectionDragOver={(section, sectionTasks, placement) => {
-                      const draggedTaskId = activeDraggedTaskIdRef.current;
-                      if (draggedTaskId === null) return;
-                      const draggedIds = new Set(activeDraggedTaskIdsRef.current);
-                      const candidates = sectionTasks.filter(({ id }) => !draggedIds.has(id));
-                      const targetTask = placement === 'before'
-                        ? candidates[0] ?? null
-                        : candidates.at(-1) ?? null;
-                      updateTaskDropIndicator({
-                        draggedTaskId,
-                        targetTaskId: targetTask?.id ?? null,
-                        placement,
-                        targetUpcomingSectionKey: section.key,
-                        targetUpcomingStartDate: section.date,
-                      });
-                    }}
-                    renderTask={renderActiveTask}
-                  />
+                  <>
+                    <UpcomingTaskSections
+                      tasks={renderedPlanningTasks}
+                      planningDate={planningDate}
+                      retainedTaskId={retainedTaskId}
+                      retainedTaskPlacement={retainedTaskPlacement}
+                      dropIndicator={taskDropIndicator}
+                      onCreate={(startDate) => {
+                        void beginTaskCreation({ startDate });
+                      }}
+                      onSectionDragOver={(section, sectionTasks, placement) => {
+                        const draggedTaskId = activeDraggedTaskIdRef.current;
+                        if (draggedTaskId === null) return;
+                        const draggedIds = new Set(activeDraggedTaskIdsRef.current);
+                        const candidates = sectionTasks.filter(({ id }) => !draggedIds.has(id));
+                        const targetTask = placement === 'before'
+                          ? candidates[0] ?? null
+                          : candidates.at(-1) ?? null;
+                        updateTaskDropIndicator({
+                          draggedTaskId,
+                          targetTaskId: targetTask?.id ?? null,
+                          placement,
+                          targetUpcomingSectionKey: section.key,
+                          targetUpcomingStartDate: section.date,
+                        });
+                      }}
+                      renderTask={renderActiveTask}
+                    />
+                    {waitingRecurrences.length > 0 ? (
+                      <section aria-labelledby="tasks-waiting-recurrences-heading">
+                        <h3
+                          id="tasks-waiting-recurrences-heading"
+                          className="mb-2 text-sm font-semibold text-muted-foreground"
+                        >
+                          Repeating Tasks
+                        </h3>
+                        <div className={TASK_PLANNING_LIST_CLASS}>
+                          {waitingRecurrences.map((definition) => (
+                            <article
+                              key={definition.id}
+                              className="flex h-11 items-center gap-2 px-2 text-[15px] text-foreground"
+                              data-task-waiting-recurrence
+                            >
+                              <TASK_ICONS.Recurrence
+                                className="h-5 w-5 shrink-0 text-muted-foreground"
+                                aria-hidden="true"
+                              />
+                              <span className="rounded bg-foreground/[0.08] px-1.5 py-0.5 text-xs text-muted-foreground">
+                                Waiting
+                              </span>
+                              <span className="truncate">{definition.name}</span>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    ) : null}
+                  </>
                 ) : view === 'anytime' ? (
                   <>
                     <TaskAreaSections
@@ -4141,6 +4359,7 @@ function UpcomingTaskSections({
 
 function TaskRow({
   task,
+  checklistTaskId,
   hierarchy,
   selected,
   focused,
@@ -4173,8 +4392,10 @@ function TaskRow({
   onSaveReminder,
   onCancelReminder,
   onDelete,
+  terminalState,
 }: {
   task: TaskTodo;
+  checklistTaskId: string | null;
   hierarchy: TaskHierarchyModel;
   selected: boolean;
   focused: boolean;
@@ -4214,11 +4435,13 @@ function TaskRow({
   }) => Promise<void>;
   onCancelReminder: () => Promise<void>;
   onDelete: (reservation?: TaskForwardMutationReservation) => Promise<void>;
+  terminalState?: 'completed' | 'canceled' | 'deleted';
 }) {
   const [pending, setPending] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [doOpen, setDoOpen] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
+  const [repeatOpen, setRepeatOpen] = useState(false);
   const [terminalSettling, setTerminalSettling] = useState(false);
   const [terminalExiting, setTerminalExiting] = useState(false);
   const [editorMounted, setEditorMounted] = useState(selected);
@@ -4591,22 +4814,53 @@ function TaskRow({
           <button
             type="button"
             disabled={pending}
-            aria-label={`${completionRequested ? 'Mark Incomplete' : 'Complete'} ${taskLabel}`}
-            aria-pressed={selected ? completionRequested : undefined}
+            role={terminalState === 'completed' ? 'checkbox' : undefined}
+            aria-checked={terminalState === 'completed' ? true : undefined}
+            aria-label={`${terminalState === 'deleted'
+              ? 'Restore'
+              : terminalState === 'completed'
+                ? 'Mark Incomplete'
+                : terminalState === 'canceled'
+                  ? 'Reopen Canceled'
+                : completionRequested
+                  ? 'Mark Incomplete'
+                  : 'Complete'} ${taskLabel}`}
+            aria-pressed={selected && !terminalState ? completionRequested : undefined}
             data-task-completion-control
             onClick={() => {
+              if (terminalState) {
+                void runTerminalAction(onComplete);
+                return;
+              }
               if (selected) {
                 onToggleDeferredCompletion();
                 return;
               }
               void runTerminalAction(onComplete);
             }}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className="group/restore inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
-            {completionRequested || terminalSettling ? (
-              <TASK_ICONS.Task className="h-6 w-6 text-success" aria-hidden="true" />
+            {terminalState === 'deleted' ? (
+              <>
+                <TASK_ICONS.Delete
+                  className="h-5 w-5 group-hover/restore:hidden group-focus-visible/restore:hidden"
+                  aria-hidden="true"
+                />
+                <TASK_ICONS.Reopen
+                  className="hidden h-5 w-5 group-hover/restore:block group-focus-visible/restore:block"
+                  aria-hidden="true"
+                />
+              </>
+            ) : terminalState === 'canceled' ? (
+              <TASK_ICONS.Canceled className="h-5 w-5" aria-hidden="true" />
+            ) : terminalState === 'completed' || completionRequested || terminalSettling ? (
+              <TASK_ICONS.CompletedTask className="h-6 w-6 text-success" aria-hidden="true" />
             ) : (
-              <Square className="h-6 w-6" aria-hidden="true" />
+              task.destination === 'someday' ? (
+                <TASK_ICONS.SomedayTask className="h-6 w-6" aria-hidden="true" />
+              ) : (
+                <TASK_ICONS.OpenTask className="h-6 w-6" aria-hidden="true" />
+              )
             )}
           </button>
         )}
@@ -4800,13 +5054,27 @@ function TaskRow({
             }}>
               Start...
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onSelect={() => void runTerminalAction(onDelete, false, 50, false)}
+              disabled={task.recurrence_definition_id !== null}
+              onSelect={() => setRepeatOpen(true)}
             >
-              Delete
+              Repeat...
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {terminalState ? (
+              <DropdownMenuItem
+                onSelect={() => void runTerminalAction(onComplete, false, 50, false)}
+              >
+                {terminalState === 'deleted' ? 'Restore' : 'Reopen'}
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onSelect={() => void runTerminalAction(onDelete, false, 50, false)}
+              >
+                Delete
+              </DropdownMenuItem>
+            )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -4831,6 +5099,7 @@ function TaskRow({
           <div className="min-h-0" data-task-editor-content>
             <TaskEditor
               task={task}
+              checklistTaskId={checklistTaskId}
               hierarchy={hierarchy}
               onSave={onUpdate}
               reminder={reminder}
@@ -4898,6 +5167,14 @@ function TaskRow({
         onReminderChange={applyStartReminder}
         onClear={clearStart}
       /> : null}
+      {!bulkSelection ? (
+        <TaskRepeatDialog
+          task={task}
+          planningDate={planningDate}
+          open={repeatOpen}
+          onOpenChange={setRepeatOpen}
+        />
+      ) : null}
       </div>
     </article>
   );
@@ -4905,6 +5182,7 @@ function TaskRow({
 
 function TaskEditor({
   task,
+  checklistTaskId,
   hierarchy,
   onSave,
   reminder,
@@ -4916,6 +5194,7 @@ function TaskEditor({
   onRegisterAutosave,
 }: {
   task: TaskTodo;
+  checklistTaskId: string | null;
   hierarchy: TaskHierarchyModel;
   onSave: (patch: EditableTaskPatch) => Promise<void>;
   reminder: TaskReminder | null;
@@ -5163,6 +5442,13 @@ function TaskEditor({
           disabled={false}
         />
       </Suspense>
+      {checklistTaskId !== null ? (
+        <TaskChecklistEditor
+          ownerId={task.owner_id}
+          taskId={checklistTaskId}
+          focusRequestTaskId={task.id}
+        />
+      ) : null}
       <div>
         <div className="flex gap-2">
           <Input

@@ -30,6 +30,7 @@ const planningTimeZone = 'America/Los_Angeles';
 let definitionRows: TaskRecurrenceDefinition[];
 let revisionRows: TaskRecurrenceRevision[];
 let occurrenceRows: TaskRecurrenceOccurrence[];
+let openOccurrenceRows: Array<{ recurrence_id: string }>;
 
 describe('useTaskRecurrences', () => {
   beforeEach(() => {
@@ -38,8 +39,11 @@ describe('useTaskRecurrences', () => {
     definitionRows = [];
     revisionRows = [];
     occurrenceRows = [];
+    openOccurrenceRows = [];
     mocks.useQuery.mockReset().mockImplementation((query: string) => ({
-      data: query.includes('tasks_recurrence_revisions')
+      data: query.includes('SELECT DISTINCT occurrence.recurrence_id')
+        ? openOccurrenceRows
+        : query.includes('tasks_recurrence_revisions')
         ? revisionRows
         : query.includes('tasks_recurrence_definitions') ? definitionRows : occurrenceRows,
       isLoading: false,
@@ -240,5 +244,28 @@ describe('useTaskRecurrences', () => {
       'Recurrence evaluation requires connected task storage',
     );
     expect(recurrenceService.evaluate).not.toHaveBeenCalled();
+  });
+
+  it('projects which definitions still have an outstanding open occurrence', () => {
+    const outstanding = taskRecurrenceDefinitionFixture({ id: 'recurrence-open' });
+    definitionRows = [outstanding];
+    revisionRows = [taskRecurrenceRevisionFixture({
+      recurrence_id: outstanding.id,
+      rule_mode: 'after_completion',
+    })];
+    openOccurrenceRows = [{ recurrence_id: outstanding.id }];
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'local',
+      planningTimeZone,
+      recurrenceService: {
+        save: vi.fn(),
+        evaluate: vi.fn(),
+        setStatus: vi.fn(),
+      },
+    });
+
+    const { result } = renderHook(() => useTaskRecurrences('owner-a'));
+
+    expect(result.current.openOccurrenceDefinitionIds).toEqual(new Set([outstanding.id]));
   });
 });

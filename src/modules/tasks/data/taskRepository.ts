@@ -947,16 +947,6 @@ export class TaskRepository {
         return current;
       }
 
-      if (
-        patch.actionability !== undefined
-        && patch.actionability !== current.actionability
-        && (current.lifecycle !== 'open' || current.disposition !== 'present')
-      ) {
-        throw new InvalidTaskMutationError(
-          'Actionability can be changed only on open, present tasks',
-        );
-      }
-
       assertSource(
         patch.source_kind === undefined ? current.source_kind : patch.source_kind,
         patch.source_url === undefined ? current.source_url : patch.source_url,

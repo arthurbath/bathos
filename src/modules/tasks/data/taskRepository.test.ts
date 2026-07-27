@@ -380,7 +380,7 @@ describe('task repository', () => {
     });
   });
 
-  it('rejects actionability changes on terminal or deleted tasks', async () => {
+  it('allows metadata changes on retained terminal or deleted tasks', async () => {
     for (const current of [
       { ...existingTask, lifecycle: 'completed' as const, completed_at: timestamp },
       { ...existingTask, disposition: 'deleted' as const, deleted_at: timestamp },
@@ -388,8 +388,12 @@ describe('task repository', () => {
       const { repository, transaction } = createHarness(current);
       await expect(repository.updateTask('owner-a', 'task-a', {
         actionability: 'waiting',
-      })).rejects.toThrow('Actionability can be changed only on open, present tasks');
-      expect(transaction.execute).not.toHaveBeenCalled();
+      })).resolves.toMatchObject({
+        actionability: 'waiting',
+        lifecycle: current.lifecycle,
+        disposition: current.disposition,
+      });
+      expect(transaction.execute).toHaveBeenCalledOnce();
     }
   });
 

@@ -102,6 +102,78 @@ describe('TaskRecurrenceService', () => {
     }));
   });
 
+  it('adopts an existing task through the rich recurrence RPC', async () => {
+    const adoptedOccurrence = {
+      id: '60000000-0000-4000-8000-000000000001',
+      owner_id: definition.owner_id,
+      recurrence_id: definition.id,
+      recurrence_revision: 1,
+      logical_key: 'calendar:2026-07-27',
+      scheduled_date: '2026-07-27',
+      predecessor_occurrence_id: null,
+      template_instantiation_id: null,
+      root_type: 'todo',
+      root_id: '80000000-0000-4000-8000-000000000001',
+      origin: 'adopted',
+      client_mutation_id: '60000000-0000-4000-8000-000000000001',
+      generated_at: '2026-07-20T00:00:00Z',
+    };
+    const rpc = vi.fn().mockResolvedValue({
+      data: {
+        outcome: 'accepted',
+        definition,
+        revision: {
+          ...revision,
+          rule_config: { weekdays: [1, 3] },
+          end_mode: 'after',
+          end_after_count: 5,
+          end_on_date: null,
+          reminder_local_time: '09:30:00',
+          deadline_offset_days: 2,
+        },
+        occurrence: adoptedOccurrence,
+      },
+      error: null,
+    });
+    const service = new TaskRecurrenceService({ rpc } as never, definition.owner_id);
+
+    await expect(service.createFromTask({
+      taskId: adoptedOccurrence.root_id,
+      name: definition.name,
+      ruleMode: 'calendar',
+      frequency: 'weekly',
+      intervalCount: 1,
+      scheduleDate: '2026-07-27',
+      ruleConfig: { weekdays: [1, 3] },
+      endMode: 'after',
+      endAfterCount: 5,
+      reminderLocalTime: '09:30',
+      deadlineOffsetDays: 2,
+      mutationId: definition.client_mutation_id,
+    })).resolves.toMatchObject({
+      outcome: 'accepted',
+      occurrence: {
+        root_id: adoptedOccurrence.root_id,
+        origin: 'adopted',
+        template_instantiation_id: null,
+      },
+      revision: {
+        end_mode: 'after',
+        end_after_count: 5,
+        deadline_offset_days: 2,
+      },
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      'tasks_create_recurrence_from_task',
+      expect.objectContaining({
+        _task_id: adoptedOccurrence.root_id,
+        _rule_config: { weekdays: [1, 3] },
+        _reminder_local_time: '09:30',
+        _deadline_offset_days: 2,
+      }),
+    );
+  });
+
   it('evaluates with an explicit calendar date and parses the authoritative result', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: {

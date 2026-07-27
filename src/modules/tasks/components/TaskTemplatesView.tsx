@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Copy, Plus } from 'lucide-react';
+import { Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -196,7 +196,7 @@ export function TaskTemplatesView({
           disabled={!connected || !sourceId || !name.trim() || pendingAction !== null}
           className="gap-2"
         >
-          <Plus className="h-4 w-4" aria-hidden="true" />
+          <TASK_ICONS.AddTask className="h-4 w-4" aria-hidden="true" />
           {selectedTemplate ? 'Save Revision' : 'Save Template'}
         </Button>
       </form>

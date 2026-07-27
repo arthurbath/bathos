@@ -123,7 +123,8 @@ SELECT throws_ok(
       '94000000-0000-4000-8000-000000000022'
     )
   $$,
-  '23514', NULL,
+  '23514',
+  NULL,
   'rejects uncontracted actionability values'
 );
 SELECT lives_ok(
@@ -143,7 +144,7 @@ SELECT is(
   'waiting',
   'retains actionability on terminal work'
 );
-SELECT throws_ok(
+SELECT lives_ok(
   $$
     UPDATE public.tasks_todos
     SET actionability = 'actionable',
@@ -151,9 +152,7 @@ SELECT throws_ok(
         client_mutation_id = '94000000-0000-4000-8000-000000000024'
     WHERE id = '94000000-0000-4000-8000-000000000010'
   $$,
-  '23514',
-  'Actionability can be changed only on open, present tasks',
-  'rejects actionability changes on terminal work'
+  'allows actionability changes while inspecting terminal work'
 );
 SELECT lives_ok(
   $$
@@ -190,7 +189,7 @@ SELECT is(
   'waiting',
   'retains actionability in Trash'
 );
-SELECT throws_ok(
+SELECT lives_ok(
   $$
     UPDATE public.tasks_todos
     SET actionability = 'actionable',
@@ -198,9 +197,7 @@ SELECT throws_ok(
         client_mutation_id = '94000000-0000-4000-8000-000000000027'
     WHERE id = '94000000-0000-4000-8000-000000000012'
   $$,
-  '23514',
-  'Actionability can be changed only on open, present tasks',
-  'rejects actionability changes in Trash'
+  'allows actionability changes while inspecting Trash'
 );
 
 SELECT set_config('test.tasks_actionability_export', public.tasks_create_export_v13()::text, false);
@@ -217,7 +214,7 @@ SELECT is(
     ) AS task
     WHERE task ->> 'id' = '94000000-0000-4000-8000-000000000010'
   ),
-  'waiting',
+  'actionable',
   'exports current actionability'
 );
 SELECT is(

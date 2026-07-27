@@ -277,6 +277,7 @@ function runSyntheticTopology(powerSyncUrl, testScript = 'test:tasks:production-
     'test:tasks:production-structure-simplification': 'Synthetic production structure-simplification gate passed.\n',
     'test:tasks:production-unified-start': 'Synthetic production unified Start gate passed.\n',
     'test:tasks:production-quick-filter-reached-start': 'Synthetic production quick-filter and reached-Start gate passed.\n',
+    'test:tasks:production-rich-task-behavior': 'Synthetic production checklist, recurrence, terminal-editing, deletion, and Done gate passed.\n',
     'test:tasks:production-undo-redo': 'Synthetic production undo/redo gate passed.\n',
   };
   const successMessage = successMessages[testScript]
@@ -294,10 +295,11 @@ if (![
   'synthetic-structure-simplification',
   'synthetic-unified-start',
   'synthetic-quick-filter-reached-start',
+  'synthetic-rich-task-behavior',
   'synthetic-undo-redo',
   'synthetic-topology',
 ].includes(command)) {
-  fail('Usage: node scripts/provision-tasks-production.mjs <sync-database|verify-sync-database|reminders|verify-reminders|synthetic-exclusive-start|synthetic-structure-simplification|synthetic-unified-start|synthetic-quick-filter-reached-start|synthetic-undo-redo|synthetic-topology> [PowerSync URL]');
+  fail('Usage: node scripts/provision-tasks-production.mjs <sync-database|verify-sync-database|reminders|verify-reminders|synthetic-exclusive-start|synthetic-structure-simplification|synthetic-unified-start|synthetic-quick-filter-reached-start|synthetic-rich-task-behavior|synthetic-undo-redo|synthetic-topology> [PowerSync URL]');
 }
 
 const tempDirectory = mkdtempSync(join(tmpdir(), 'bathos-tasks-production-'));
@@ -317,6 +319,9 @@ try {
   }
   if (command === 'synthetic-quick-filter-reached-start') {
     runSyntheticTopology(process.argv[3], 'test:tasks:production-quick-filter-reached-start');
+  }
+  if (command === 'synthetic-rich-task-behavior') {
+    runSyntheticTopology(process.argv[3], 'test:tasks:production-rich-task-behavior');
   }
   if (command === 'synthetic-undo-redo') {
     runSyntheticTopology(process.argv[3], 'test:tasks:production-undo-redo');

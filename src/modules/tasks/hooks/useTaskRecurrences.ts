@@ -5,6 +5,7 @@ import {
   parseTaskRecurrenceDefinition,
   parseTaskRecurrenceOccurrence,
   parseTaskRecurrenceRevision,
+  type TaskRecurrenceCreateFromTaskInput,
   type TaskRecurrenceSaveInput,
 } from '@/modules/tasks/data/taskRecurrenceService';
 import { taskCalendarDateInTimeZone } from '@/modules/tasks/domain/taskDates';
@@ -40,6 +41,17 @@ export function useTaskRecurrences(ownerId: string) {
      ORDER BY scheduled_date DESC, generated_at DESC, id DESC`,
     [ownerId],
   );
+  const openOccurrencesQuery = useQuery<{ recurrence_id: string }>(
+    `SELECT DISTINCT occurrence.recurrence_id
+     FROM tasks_recurrence_occurrences occurrence
+     JOIN tasks_todos task
+       ON task.id = occurrence.root_id
+      AND task.owner_id = occurrence.owner_id
+     WHERE occurrence.owner_id = ?
+       AND task.lifecycle = 'open'
+       AND task.disposition = 'present'`,
+    [ownerId],
+  );
   const [optimisticDefinitions, setOptimisticDefinitions] = useState<
     Record<string, TaskRecurrenceDefinition | null>
   >({});
@@ -67,6 +79,10 @@ export function useTaskRecurrences(ownerId: string) {
       parseTaskRecurrenceOccurrence(occurrence)
     )),
     [occurrencesQuery.data],
+  );
+  const openOccurrenceDefinitionIds = useMemo(
+    () => new Set(openOccurrencesQuery.data.map(({ recurrence_id }) => recurrence_id)),
+    [openOccurrencesQuery.data],
   );
 
   useEffect(() => {
@@ -192,6 +208,27 @@ export function useTaskRecurrences(ownerId: string) {
     return result;
   }, [clearEvaluationFailure, mode, planningDate, planningTimeZone, recurrenceService, runEvaluation]);
 
+  const createFromTask = useCallback(async (
+    input: TaskRecurrenceCreateFromTaskInput,
+  ) => {
+    if (mode !== 'connected') {
+      throw new Error('Recurrence changes require connected task storage');
+    }
+    const result = await recurrenceService.createFromTask(input);
+    setOptimisticDefinitions((current) => ({
+      ...current,
+      [result.definition.id]: result.definition,
+    }));
+    if (result.revision) {
+      setOptimisticRevisions((current) => ({
+        ...current,
+        [result.definition.id]: result.revision!,
+      }));
+    }
+    clearEvaluationFailure(result.definition.id);
+    return result;
+  }, [clearEvaluationFailure, mode, recurrenceService]);
+
   const setStatus = useCallback(async (
     definition: TaskRecurrenceDefinition,
     status: 'active' | 'paused' | 'archived',
@@ -216,12 +253,20 @@ export function useTaskRecurrences(ownerId: string) {
     definitions,
     revisions,
     occurrences,
+    openOccurrenceDefinitionIds,
     evaluationFailures,
     planningDate,
     mode,
-    loading: definitionsQuery.isLoading || revisionsQuery.isLoading || occurrencesQuery.isLoading,
-    error: definitionsQuery.error ?? revisionsQuery.error ?? occurrencesQuery.error,
+    loading: definitionsQuery.isLoading
+      || revisionsQuery.isLoading
+      || occurrencesQuery.isLoading
+      || openOccurrencesQuery.isLoading,
+    error: definitionsQuery.error
+      ?? revisionsQuery.error
+      ?? occurrencesQuery.error
+      ?? openOccurrencesQuery.error,
     save,
+    createFromTask,
     setStatus,
     evaluate,
   };

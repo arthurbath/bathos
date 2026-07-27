@@ -142,14 +142,14 @@ All ordinary forms, in-page form scopes, and form-style modals follow one keyboa
 
 - Text, number, email, password, URL, and time fields edit natively whenever focused. They do not have separate focused and editing modes outside a DataGrid.
 - Tab moves to the next enabled visible control in DOM order. Shift+Tab moves backward. Modal traversal wraps inside the modal.
-- Unmodified Return in a single-line text field does not submit by default. A compact or gateway form that requires Return submission must opt in explicitly.
+- Unmodified Return in an ordinary single-line text field submits the nearest form by default. Textareas retain multiline Return, composite fields retain their owned Return behavior, and exceptional forms may explicitly opt out.
 - Textareas preserve native Return newline behavior.
 - Buttons, button-like composite triggers, and static links activate with Space or Return. Checkboxes and switches toggle with Space or Return and retain focus.
 - Mac form commands are Command+Return to submit and Command+Escape to cancel. Windows form commands are Control+Return to submit and Control+Shift+X to cancel.
 - Form commands act on the nearest form or declared form scope. Native forms submit through `requestSubmit()` so validation remains authoritative.
 - Plain Escape is field-local. It may close and revert the deepest open select, date picker, color picker, or similar field layer, but it does not cancel a form or close a modal.
 - A draft form's visible Cancel or Close action defines its cancel semantics. An autosaving form flushes accepted changes and closes without claiming to revert persisted work.
-- Gateway login, signup, password-recovery, password-reset, and household-entry forms opt into Return submission.
+- Gateway login, signup, password-recovery, password-reset, and household-entry forms use the default Return submission behavior.
 
 Composite controls follow these additional rules:
 

@@ -38,6 +38,8 @@ export const taskRecurrenceStatuses = ['active', 'paused', 'archived'] as const;
 export const taskRecurrenceRuleModes = ['calendar', 'after_completion'] as const;
 export const taskRecurrenceFrequencies = ['daily', 'weekly', 'monthly', 'yearly'] as const;
 export const taskRecurrenceMissedPolicies = ['skip', 'latest', 'all'] as const;
+export const taskRecurrenceEndModes = ['never', 'after', 'on_date'] as const;
+export const taskRecurrenceOccurrenceOrigins = ['adopted', 'generated'] as const;
 export const taskReminderStatuses = ['active', 'canceled'] as const;
 export const taskReminderAmbiguityChoices = ['earlier', 'later'] as const;
 export const taskReminderResolutionKinds = [
@@ -102,6 +104,9 @@ export type TaskRecurrenceStatus = (typeof taskRecurrenceStatuses)[number];
 export type TaskRecurrenceRuleMode = (typeof taskRecurrenceRuleModes)[number];
 export type TaskRecurrenceFrequency = (typeof taskRecurrenceFrequencies)[number];
 export type TaskRecurrenceMissedPolicy = (typeof taskRecurrenceMissedPolicies)[number];
+export type TaskRecurrenceEndMode = (typeof taskRecurrenceEndModes)[number];
+export type TaskRecurrenceOccurrenceOrigin =
+  (typeof taskRecurrenceOccurrenceOrigins)[number];
 export type TaskReminderStatus = (typeof taskReminderStatuses)[number];
 export type TaskReminderAmbiguityChoice = (typeof taskReminderAmbiguityChoices)[number];
 export type TaskReminderResolutionKind = (typeof taskReminderResolutionKinds)[number];
@@ -277,18 +282,29 @@ export type TaskRecurrenceDefinition = Omit<
 
 export type TaskRecurrenceRevision = Omit<
   TaskRecurrenceRevisionRow,
-  'rule_mode' | 'frequency' | 'missed_policy'
+  'rule_mode' | 'frequency' | 'missed_policy' | 'end_mode'
 > & {
   rule_mode: TaskRecurrenceRuleMode;
   frequency: TaskRecurrenceFrequency;
   missed_policy: TaskRecurrenceMissedPolicy;
+  end_mode: TaskRecurrenceEndMode;
+  rule_config: TaskRecurrenceRuleConfig;
 };
 
 export type TaskRecurrenceOccurrence = Omit<
   TaskRecurrenceOccurrenceRow,
-  'root_type'
+  'root_type' | 'origin'
 > & {
   root_type: TaskTemplateKind;
+  origin: TaskRecurrenceOccurrenceOrigin;
+};
+
+export type TaskRecurrenceRuleConfig = {
+  weekdays?: number[];
+  monthly_kind?: 'day_of_month' | 'ordinal_weekday';
+  month_day?: number;
+  ordinal?: -1 | 1 | 2 | 3 | 4 | 5;
+  weekday?: number;
 };
 
 export type TaskRecurrenceEvaluation = TaskRecurrenceEvaluationRow;

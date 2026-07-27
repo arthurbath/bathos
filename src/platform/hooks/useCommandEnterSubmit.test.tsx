@@ -49,9 +49,9 @@ function GlobalInteractionHarness({ children }: { children: React.ReactNode }) {
 }
 
 function FormHarness({
-  returnSubmits = false,
+  returnSubmits,
 }: {
-  returnSubmits?: boolean;
+  returnSubmits?: boolean | null;
 }) {
   const [submitCount, setSubmitCount] = React.useState(0);
 
@@ -59,7 +59,9 @@ function FormHarness({
     <GlobalInteractionHarness>
       <div data-testid="submit-count">{String(submitCount)}</div>
       <form
-        data-bathos-return-submits={returnSubmits ? "true" : undefined}
+        data-bathos-return-submits={returnSubmits == null
+          ? undefined
+          : String(returnSubmits)}
         onSubmit={(event) => {
           event.preventDefault();
           setSubmitCount((count) => count + 1);
@@ -278,26 +280,26 @@ describe("useBathosFormInteractions", () => {
     }
   });
 
-  it("suppresses unmodified Return in single-line fields by default", async () => {
+  it("submits unmodified Return in single-line fields by default", async () => {
     setPlatform("MacIntel");
     const { container, root } = mount(<FormHarness />);
     try {
       const input = container.querySelector<HTMLElement>('[data-testid="form-input"]')!;
       const event = await dispatchKey(input, { key: "Enter" });
       expect(event.defaultPrevented).toBe(true);
-      expect(container.querySelector('[data-testid="submit-count"]')?.textContent).toBe("0");
+      expect(container.querySelector('[data-testid="submit-count"]')?.textContent).toBe("1");
     } finally {
       unmount(root, container);
     }
   });
 
-  it("submits with unmodified Return only when the form opts in", async () => {
+  it("suppresses unmodified Return only when the form opts out", async () => {
     setPlatform("MacIntel");
-    const { container, root } = mount(<FormHarness returnSubmits />);
+    const { container, root } = mount(<FormHarness returnSubmits={false} />);
     try {
       const input = container.querySelector<HTMLElement>('[data-testid="form-input"]')!;
       await dispatchKey(input, { key: "Enter" });
-      expect(container.querySelector('[data-testid="submit-count"]')?.textContent).toBe("1");
+      expect(container.querySelector('[data-testid="submit-count"]')?.textContent).toBe("0");
     } finally {
       unmount(root, container);
     }

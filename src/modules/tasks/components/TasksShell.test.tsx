@@ -8,6 +8,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   taskAreaFixture,
+  taskRecurrenceDefinitionFixture,
+  taskRecurrenceRevisionFixture,
   taskReminderFixture,
   taskTodoFixture,
 } from '@/modules/tasks/testing/taskFixtures';
@@ -43,6 +45,7 @@ const mockTaskHierarchy = vi.fn();
 const mockTaskDeletedHierarchyRoots = vi.fn();
 const mockTaskReminders = vi.fn();
 const mockTaskUndo = vi.fn();
+const mockTaskRecurrences = vi.fn();
 const mockPrepareForSignOut = vi.fn();
 const mockTasksRuntime = vi.fn();
 
@@ -134,6 +137,10 @@ vi.mock('@/modules/tasks/hooks/useTaskReminders', () => ({
 
 vi.mock('@/modules/tasks/hooks/useTaskUndo', () => ({
   useTaskUndo: (...args: unknown[]) => mockTaskUndo(...args),
+}));
+
+vi.mock('@/modules/tasks/hooks/useTaskRecurrences', () => ({
+  useTaskRecurrences: (...args: unknown[]) => mockTaskRecurrences(...args),
 }));
 
 vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
@@ -544,6 +551,21 @@ describe('TasksShell', () => {
       acknowledge: vi.fn().mockResolvedValue(undefined),
       claimDue: vi.fn().mockResolvedValue(undefined),
     });
+    mockTaskRecurrences.mockReset().mockReturnValue({
+      definitions: [],
+      revisions: new Map(),
+      occurrences: [],
+      openOccurrenceDefinitionIds: new Set(),
+      evaluationFailures: new Set(),
+      planningDate: '2026-07-20',
+      mode: 'local',
+      loading: false,
+      error: null,
+      save: vi.fn(),
+      createFromTask: vi.fn(),
+      setStatus: vi.fn(),
+      evaluate: vi.fn(),
+    });
   });
 
   it('opens a blank complete editor with Alt+Shift+A and persists the first valid title', async () => {
@@ -582,6 +604,56 @@ describe('TasksShell', () => {
         atTop: true,
       }));
     } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('persists a new task before the checklist shortcut focuses its checklist', async () => {
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+    const focusRequests: string[] = [];
+    const recordFocusRequest = (event: Event) => {
+      if (event instanceof CustomEvent && typeof event.detail?.taskId === 'string') {
+        focusRequests.push(event.detail.taskId);
+      }
+    };
+    document.addEventListener('bathos:task-checklist-focus', recordFocusRequest);
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'a',
+          altKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      const title = container.querySelector<HTMLInputElement>(
+        '#task-title-task-draft\\:new',
+      )!;
+      await act(async () => {
+        setInputValue(title, 'Task with a checklist');
+      });
+
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'c',
+          altKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      expect(taskList.createTask).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Task with a checklist',
+      }));
+      expect(focusRequests).toEqual(['task-draft:new']);
+    } finally {
+      document.removeEventListener('bathos:task-checklist-focus', recordFocusRequest);
       cleanup(root, container);
     }
   });
@@ -3552,6 +3624,121 @@ describe('TasksShell', () => {
     }
   });
 
+  it('requires the platform command with Delete for an open task but accepts plain Delete on whole-task focus', async () => {
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    const openRender = renderShell();
+
+    try {
+      await act(async () => {
+        openRender.container.querySelector<HTMLButtonElement>(
+          '[data-task-id="task-a"]',
+        )?.click();
+      });
+      const title = openRender.container.querySelector<HTMLInputElement>(
+        '#task-title-task-a',
+      )!;
+      await act(async () => {
+        title.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Delete',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      expect(taskList.transitionTask).not.toHaveBeenCalledWith('task-a', 'delete');
+
+      await act(async () => {
+        title.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Delete',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'delete');
+    } finally {
+      cleanup(openRender.root, openRender.container);
+    }
+
+    taskList.transitionTask.mockClear();
+    const focusedRender = renderShell();
+    try {
+      const row = focusedRender.container.querySelector<HTMLElement>(
+        '[data-task-row-id="task-a"]',
+      )!;
+      row.focus();
+      await act(async () => {
+        row.dispatchEvent(new KeyboardEvent('keydown', {
+          key: ' ',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await act(async () => {
+        row.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Delete',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'delete');
+    } finally {
+      cleanup(focusedRender.root, focusedRender.container);
+    }
+  });
+
+  it('deletes every explicitly selected task through the guarded lifecycle path', async () => {
+    const secondTask = taskTodoFixture({
+      ...task,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    });
+    const taskList = { ...defaultTaskList(), tasks: [task, secondTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      const first = container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')!;
+      await act(async () => {
+        first.dispatchEvent(new MouseEvent('click', {
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      const second = container.querySelector<HTMLButtonElement>('[data-task-id="task-b"]')!;
+      await act(async () => {
+        second.dispatchEvent(new MouseEvent('click', {
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Delete',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(taskList.transitionTask.mock.calls).toEqual(
+        expect.arrayContaining([
+          ['task-a', 'delete'],
+          ['task-b', 'delete'],
+        ]),
+      );
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('clears whole-task focus after an actions-menu mutation', async () => {
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
@@ -3920,6 +4107,10 @@ describe('TasksShell', () => {
       expect(document.activeElement).toBe(editorTitle);
       await tab();
       expect(document.activeElement).toBe(notes);
+      await tab();
+      expect(document.activeElement).toBe(container.querySelector(
+        'button[aria-label="Add Checklist"]',
+      ));
       await tab();
       expect(document.activeElement).toBe(primaryLink);
       await tab();
@@ -6155,12 +6346,13 @@ describe('TasksShell', () => {
         'button[aria-label="Restore Existing task"]',
       );
       const row = restore?.closest<HTMLElement>('article') ?? null;
-      expect(row).toHaveClass('h-11');
-      expect(row).toHaveClass('pl-1', 'pr-1.5');
-      expect(row).not.toHaveClass('px-1.5');
+      const rowHeader = row?.querySelector<HTMLElement>('[data-task-row-header]') ?? null;
+      expect(rowHeader).toHaveClass('h-11');
+      expect(rowHeader).toHaveClass('pl-1', 'pr-1.5');
+      expect(rowHeader).not.toHaveClass('px-1.5');
       expect(row).not.toHaveClass('rounded-md', 'border', 'bg-foreground/[0.05]');
-      expect(row?.querySelector('[data-task-row-title]')).toHaveClass('font-normal');
-      expect(row?.querySelector('[data-task-row-title]')).not.toHaveClass('font-medium');
+      expect(row?.querySelector('[data-task-title-control]')).toHaveClass('font-normal');
+      expect(row?.querySelector('[data-task-title-control]')).not.toHaveClass('font-medium');
       expect(row).toHaveAttribute('tabindex', '0');
       expect(restore?.querySelector('.lucide-trash-2')).toHaveClass(
         'group-hover/restore:hidden',
@@ -6184,6 +6376,9 @@ describe('TasksShell', () => {
       await act(async () => {
         restore?.click();
       });
+      await waitFor(() => {
+        expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'restore', undefined);
+      });
 
       expect(mockTaskList).toHaveBeenCalledWith(
         'owner-a',
@@ -6192,7 +6387,6 @@ describe('TasksShell', () => {
         expect.any(Function),
         expect.any(Function),
       );
-      expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'restore');
       expect(container.querySelector('button[aria-label="Permanently Delete Existing task"]'))
         .toBeNull();
     } finally {
@@ -6328,6 +6522,50 @@ describe('TasksShell', () => {
         todaySection: 'later',
         startDate: null,
       });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('shows outstanding after-completion recurrence definitions below dated Upcoming work', () => {
+    const definition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-waiting',
+      name: 'Water Plants',
+      status: 'active',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [] });
+    mockTaskRecurrences.mockReturnValue({
+      definitions: [definition],
+      revisions: new Map([[
+        definition.id,
+        taskRecurrenceRevisionFixture({
+          recurrence_id: definition.id,
+          rule_mode: 'after_completion',
+        }),
+      ]]),
+      occurrences: [],
+      openOccurrenceDefinitionIds: new Set([definition.id]),
+      evaluationFailures: new Set(),
+      planningDate: '2026-07-20',
+      mode: 'connected',
+      loading: false,
+      error: null,
+      save: vi.fn(),
+      createFromTask: vi.fn(),
+      setStatus: vi.fn(),
+      evaluate: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      const waiting = container.querySelector<HTMLElement>(
+        '[data-task-waiting-recurrence]',
+      );
+      expect(container.textContent).toContain('Repeating Tasks');
+      expect(waiting).toHaveTextContent('Waiting');
+      expect(waiting).toHaveTextContent('Water Plants');
+      expect(waiting).not.toHaveAttribute('draggable');
+      expect(container.textContent).not.toContain('No upcoming tasks');
     } finally {
       cleanup(root, container);
     }
@@ -7021,12 +7259,14 @@ describe('TasksShell', () => {
       );
       expect(reopen).toHaveAttribute('role', 'checkbox');
       expect(reopen).toHaveAttribute('aria-checked', 'true');
-      expect(reopen?.closest('article')).toHaveClass('h-11');
-      expect(reopen?.closest('article')).toHaveClass('pl-1', 'pr-1.5');
-      expect(reopen?.closest('article')).not.toHaveClass('px-1.5');
-      expect(reopen?.closest('article')?.querySelector('[data-task-row-title]'))
+      const rowHeader = reopen?.closest('article')
+        ?.querySelector<HTMLElement>('[data-task-row-header]') ?? null;
+      expect(rowHeader).toHaveClass('h-11');
+      expect(rowHeader).toHaveClass('pl-1', 'pr-1.5');
+      expect(rowHeader).not.toHaveClass('px-1.5');
+      expect(reopen?.closest('article')?.querySelector('[data-task-title-control]'))
         .toHaveClass('font-normal');
-      expect(reopen?.closest('article')?.querySelector('[data-task-row-title]'))
+      expect(reopen?.closest('article')?.querySelector('[data-task-title-control]'))
         .not.toHaveClass('font-medium');
       expect(reopen?.closest('article')).not.toHaveClass(
         'rounded-md',
@@ -7036,6 +7276,9 @@ describe('TasksShell', () => {
       await act(async () => {
         reopen?.click();
       });
+      await waitFor(() => {
+        expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'reopen', undefined);
+      });
 
       expect(mockTaskList).toHaveBeenCalledWith(
         'owner-a',
@@ -7044,7 +7287,6 @@ describe('TasksShell', () => {
         expect.any(Function),
         expect.any(Function),
       );
-      expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'reopen');
     } finally {
       cleanup(root, container);
     }
@@ -7068,7 +7310,9 @@ describe('TasksShell', () => {
       await act(async () => {
         reopen?.click();
       });
-      expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'reopen');
+      await waitFor(() => {
+        expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'reopen', undefined);
+      });
     } finally {
       cleanup(root, container);
     }

@@ -374,7 +374,9 @@ describe('Calendar keyboard navigation', () => {
     );
 
     try {
-      const firstEnabledDay = getDayButton(container, '27');
+      const firstEnabledDay = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][aria-selected="true"]',
+      );
       act(() => {
         firstEnabledDay?.focus();
         firstEnabledDay?.dispatchEvent(new KeyboardEvent('keydown', {
