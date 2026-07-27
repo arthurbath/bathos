@@ -328,13 +328,15 @@ BEGIN
     END IF;
   END IF;
   INSERT INTO public.tasks_history_events (
-    owner_id, task_id, client_mutation_id, actor_type, mutation_channel,
-    affected_ids, base_revision, result_revision, transition, occurred_at,
-    outcome, code, before_state, after_state
+    owner_id, task_id, client_mutation_id, operation_id, actor_type,
+    mutation_channel, affected_ids, base_revision, result_revision,
+    transition, occurred_at, outcome, code, before_state, after_state
   ) VALUES (
-    NEW.owner_id, NEW.id, NEW.client_mutation_id, NEW.last_actor_type,
-    NEW.last_mutation_channel, ARRAY[NEW.id], _base_revision, NEW.revision,
-    _transition, NEW.updated_at, 'accepted', NULL, _before_state, _after_state
+    NEW.owner_id, NEW.id, NEW.client_mutation_id,
+    COALESCE(NEW.last_operation_id, NEW.client_mutation_id),
+    NEW.last_actor_type, NEW.last_mutation_channel, ARRAY[NEW.id],
+    _base_revision, NEW.revision, _transition, NEW.updated_at,
+    'accepted', NULL, _before_state, _after_state
   );
   RETURN NEW;
 END;

@@ -607,7 +607,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       (task) => task.revision === 1
         && task.primary_link === deepLink
         && task.source_url === deepLink
-        && task.today_section === 'next'
+        && task.today_section === 'inbox'
         && task.start_date === null,
     );
 

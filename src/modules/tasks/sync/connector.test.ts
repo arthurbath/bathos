@@ -36,6 +36,7 @@ function taskInsertEntry(
     entry_channel: 'web',
     last_mutation_channel: 'web',
     last_actor_type: 'user',
+    last_operation_id: 'mutation-a',
     undo_source_event_id: null,
     revision: 1,
     client_mutation_id: 'mutation-a',
@@ -233,6 +234,7 @@ describe('task sync connector', () => {
         source_kind: null,
         last_mutation_channel: 'web',
         last_actor_type: 'user',
+        last_operation_id: 'mutation-a',
         undo_source_event_id: null,
       }),
     );
@@ -311,6 +313,7 @@ describe('task sync connector', () => {
     const { connector, database, remoteStore } = createHarness(taskPatchEntry({
       last_mutation_channel: 'raycast',
       last_actor_type: 'user',
+      last_operation_id: 'operation-a',
       undo_source_event_id: 'event-a',
     }));
 
@@ -322,6 +325,7 @@ describe('task sync connector', () => {
       expect.objectContaining({
         last_mutation_channel: 'raycast',
         last_actor_type: 'user',
+        last_operation_id: 'operation-a',
         undo_source_event_id: 'event-a',
       }),
     );

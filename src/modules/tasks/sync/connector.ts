@@ -522,6 +522,8 @@ function parseTaskInsert(entry: CrudEntry): TaskInsert {
     entry_channel: entryChannel,
     last_mutation_channel: optionalText(data.last_mutation_channel) ?? entryChannel,
     last_actor_type: optionalText(data.last_actor_type) ?? 'user',
+    last_operation_id: optionalText(data.last_operation_id)
+      ?? requireText(data.client_mutation_id, 'client_mutation_id'),
     undo_source_event_id: optionalText(data.undo_source_event_id),
     source_kind: optionalText(data.source_kind),
     source_url: optionalText(data.source_url),
@@ -556,6 +558,7 @@ function parseTaskUpdate(entry: CrudEntry): TaskUpdate {
     'primary_link',
     'last_mutation_channel',
     'last_actor_type',
+    'last_operation_id',
     'undo_source_event_id',
     'source_kind',
     'source_url',
