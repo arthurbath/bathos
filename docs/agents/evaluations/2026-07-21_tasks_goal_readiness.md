@@ -6,6 +6,10 @@
 
 ## Outcome
 
+### Accepted Project-Free Tasks Release
+
+BathOS Tasks is project-free in production. Tasks belong directly to an optional Area and checklist items remain inside tasks. The verified private backup, fail-closed production migration, deletion of the one disposable test Project and its Project-only history, schema-13 portability, exact 20-table PowerSync topology, MCP version 14, matching web release, cleanup-backed five-gate production acceptance, offline workflow, advisors, cron, reminders, Mail capture, and rendered desktop and mobile behavior passed. The release evidence is recorded in `2026-07-26_tasks_project_removal_release.md`.
+
 ### Accepted Quick Filter and Reached Start Inbox Release
 
 The latest Tasks release supersedes the earlier reached-Start destination: newly reached task Starts now enter Today Inbox, after unfinished prior-day Today tasks reset to Inbox. The release also adds one durable owner-wide actionability quick filter across lists, sessions, and devices. The verified private backup, ordered migrations, zero task rewrite, live Lovable release, owner-scoped fixture, fresh PowerSync projection, cleanup audit, scheduler continuity, and production invariants passed.
@@ -40,9 +44,9 @@ The planning and notes refinement is accepted in production. Upcoming now select
 
 ## Accepted Product Surfaces
 
-- The dark, mobile-first Tasks module provides Today, Upcoming, Anytime, Someday, Done, areas, projects, checklist items, templates, recurrence, reminders, search, modifier-based bulk planning, guarded 100-step undo/redo, export, restore, and recoverable history without tags or headings.
+- The dark, mobile-first Tasks module provides Today, Upcoming, Anytime, Someday, Done, Areas, directly Area-assigned or unassigned tasks, checklist items, templates, recurrence, reminders, search, modifier-based bulk planning, guarded 100-step undo/redo, export, restore, and recoverable history without tags, headings, or Projects.
 - One stable `/tasks/*` runtime preserves synchronization, notification state, local history, and pending work across supported route changes while invalid Tasks routes render the ordinary 404 boundary.
-- PowerSync Cloud uses the exact approved 21-table owner-scoped projection. Production topology, restart, conflict, owner-isolation, cleanup, and cross-client convergence gates passed.
+- PowerSync Cloud uses the exact approved 20-table owner-scoped projection. Production topology, restart, conflict, owner-isolation, cleanup, and cross-client convergence gates passed.
 - Safari Web Push subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and scheduled reminder dispatch passed in production.
 - Raycast defaults ordinary, current-browser-page, Finder-item, and AI-refined reading capture to Anytime and Today Inbox through OAuth and the MCP function. Production creation and a fresh PowerSync projection passed. Unreliable selected-text capture remains outside the product contract.
 - Inbox Manager creates Things tasks first and persistently mirrors accepted new creations into BathOS Tasks. Existing tasks, edits, completions, historical Mail, Mail rules, and Mail retirement remain outside that handoff.
@@ -53,9 +57,9 @@ The planning and notes refinement is accepted in production. Upcoming now select
 | Requirement | Authoritative Evidence | Status |
 | --- | --- | --- |
 | Private-First Task Module | Production owner-isolation, RLS, and cleanup gates in `2026-07-20_tasks_production_sync_readiness.md` and `2026-07-21_tasks_production_topology_hardening.md` | Accepted |
-| Production Task Synchronization | Exact 21-table production topology, restart, convergence, and current synchronized clients | Accepted |
+| Production Task Synchronization | Exact 20-table production topology, restart, convergence, and current synchronized clients | Accepted |
 | Exclusive Task Start and Day Horizon | Database, domain, MCP, rendered, and production fixture evidence for future Start without a horizon, Today horizon without a Start, and owner-local activation into Inbox | Accepted |
-| Core Task Organization | Archived `add-personal-tasks-module` implementation evidence and `2026-07-20_tasks_live_browser_validation.md` | Accepted |
+| Core Task Organization | Archived `add-personal-tasks-module` implementation evidence, `2026-07-20_tasks_live_browser_validation.md`, and the accepted project-free contraction in `2026-07-26_tasks_project_removal_release.md` | Accepted |
 | Date-Based Planning Views | Production migration, MCP capture, future Start Date / Deadline fallback derivation, day/month/year boundary tests, browser acceptance, and fresh PowerSync proof for Inbox, Now, Next, Later, Upcoming, Anytime, Someday, and Done | Accepted |
 | Tagless Structured Semantics | Typed source, actionability, hierarchy, destination, lifecycle, and product-identity evidence without tags | Accepted |
 | Bulk Task Planning | Atomic movement coverage plus production-rendered Command-click, Control-click, ordinary toggle, and anchored Shift-click range behavior | Accepted |
@@ -85,6 +89,8 @@ The planning and notes refinement is accepted in production. Upcoming now select
 
 ## Current Production Evidence
 
+- The Project-free release removed `tasks_projects`, Project-only history, and active Project references after a verified private backup and exact zero-dependency preflight. Every non-Project record count was preserved. PowerSync Cloud Sync Streams version `cbe2` is healthy with exactly 20 approved Tasks tables, MCP version 14 is active, and Lovable published the matching web code at commit `43a4c3c`.
+- The five-gate owner-scoped production topology, focused live undo and redo, disposable offline PowerSync workflow, reminder delivery verification, three active once-per-minute jobs, advisor review, desktop and mobile rendering, legacy-route redirect, and cleanup audit passed. Zero synthetic users or Mail sources remain.
 - Migration `20260726013335_roll_over_unfinished_today_tasks.sql` is recorded locally and remotely. It rewrote zero tasks, initialized one private owner cursor, and preserved the existing `tasks-activate-due-roots` once-per-minute job. The exact 21-table PowerSync boundary is unchanged, and the private cursor is not published.
 - The original owner-scoped rollover fixture reset one synthetic prior-day Later task to Inbox before activating one reached future Start into Next. The later accepted reached-Start release supersedes that activation destination with Inbox and proves it through a new fresh PowerSync projection. Cleanup for both fixtures left zero synthetic users, settings, tasks, history rows, or private cursors.
 - Migration `20260723175454_unify_task_start_planning.sql` is recorded locally and remotely. It changes Primary Link fallback to INSERT-only, preserves explicit null during schema-12 normalization, derives reminders from a future Start Date or Today planning date, and rebinds reminders when Start intent changes. It rewrote zero existing task records and changed no table or publication membership.
@@ -197,8 +203,8 @@ The BathOS connector catalog attached to this long-running Codex task still expo
 
 ## Completion Status
 
-The Tasks V1 replacement goal is complete. Today is an Anytime projection with Inbox, Now, Next, and Later day horizons, including direct movement among visible horizons. Inbox remains retired as a standalone planning destination. Upcoming follows the future Start / Deadline controlling-date and day/month/year grouping contract. Future work stores a future Start without a horizon and enters Today Next when eligible. The hierarchy is Area to Project to task, with checklist items inside tasks and no heading layer. Primary Link, Rechecking, source-visible live Markdown editing, immediate autosave, modifier-only keyboard operation, legible completion and selection controls, recoverable terminal motion, and projection-safe undo/redo are active in production. Done replaces Logbook and Trash, owner-local day-31 retention is active, and companion capture surfaces resolve to Today Inbox. Inbox Manager persistently mirrors newly accepted Mail creations to both Things and BathOS without backfill or duplicate AI work. Things remains authoritative for personal work til the user chooses otherwise. Native Apple surfaces and Things migration remain deliberate future decisions.
+The Tasks V1 replacement goal is complete. Today is an Anytime projection with Inbox, Now, Next, and Later day horizons, including direct movement among visible horizons. Inbox remains retired as a standalone planning destination. Upcoming follows the future Start / Deadline controlling-date and day/month/year grouping contract. Future work stores a future Start without a horizon and enters Today Inbox when eligible. The hierarchy is optional Area to task, with checklist items inside tasks and no Project or heading layer. Primary Link, Rechecking, source-visible live Markdown editing, immediate autosave, modifier-only keyboard operation, legible completion and selection controls, recoverable terminal motion, and projection-safe undo/redo are active in production. Done replaces Logbook and Trash, owner-local day-31 retention is active, and companion capture surfaces resolve to Today Inbox. Inbox Manager persistently mirrors newly accepted Mail creations to both Things and BathOS without backfill or duplicate AI work. Things remains authoritative for personal work til the user chooses otherwise. Native Apple surfaces and Things migration remain deliberate future decisions.
 
 ## Specification Impact
 
-The `replace-task-inbox-logbook-trash-with-done`, `add-future-task-day-horizons`, `improve-tasks-list-interactions`, `refine-tasks-planning-and-notes`, `simplify-tasks-structure-and-scheduling`, and `unify-task-start-planning` deltas update the durable personal Tasks, MCP, and routing contracts. The Inbox Manager durable handoff contract delegates planning placement to the specialized BathOS service, which defaults unspecified capture to Anytime and Today Inbox without changing Mail classification or mailbox policy.
+The `replace-task-inbox-logbook-trash-with-done`, `add-future-task-day-horizons`, `improve-tasks-list-interactions`, `refine-tasks-planning-and-notes`, `simplify-tasks-structure-and-scheduling`, `unify-task-start-planning`, and `remove-task-projects` deltas update the durable personal Tasks, MCP, and routing contracts. The Inbox Manager durable handoff contract delegates planning placement to the specialized BathOS service, which defaults unspecified capture to Anytime and Today Inbox without changing Mail classification or mailbox policy.

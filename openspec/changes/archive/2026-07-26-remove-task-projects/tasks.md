@@ -23,13 +23,13 @@
 - [x] 4.1 Remove Project navigation, index, detail, cards, forms, search results, commands, and iconography
 - [x] 4.2 Replace Organization controls with Area-only controls and update all affected UI language
 - [x] 4.3 Redirect legacy `/tasks/projects` routes to Anytime without rendering Project UI
-- [ ] 4.4 Verify rendered desktop and mobile Tasks views, interactions, and offline behavior after Project removal
+- [x] 4.4 Verify rendered desktop and mobile Tasks views, interactions, and offline behavior after Project removal
 
 ## 5. MCP And Automation
 
 - [x] 5.1 Remove Project schemas, resources, mutations, planning roots, and fields from the source MCP registry
 - [x] 5.2 Regenerate and validate the deployed MCP Edge Function bundle without Project operations
-- [ ] 5.3 Verify Mail capture, task reminders, recurrence, and owner-scoped MCP task creation remain healthy
+- [x] 5.3 Verify Mail capture, task reminders, recurrence, and owner-scoped MCP task creation remain healthy
 
 ## 6. Documentation And Local Validation
 
@@ -42,10 +42,10 @@
 - [x] 7.1 Refresh and verify the private production backup and repeat the exact Project dependency preflight immediately before mutation
 - [x] 7.2 Apply the approved migration and prove every non-Project production record count is preserved
 - [x] 7.3 Normalize the PowerSync publication, grants, and Sync Streams to exactly 20 approved Tasks tables
-- [ ] 7.4 Deploy the project-free MCP Edge Function and matching BathOS Tasks web release
-- [ ] 7.5 Run and clean up an owner-scoped production acceptance fixture and verify PowerSync, cron, advisors, reminders, Mail capture, and production parity
+- [x] 7.4 Deploy the project-free MCP Edge Function and matching BathOS Tasks web release
+- [x] 7.5 Run and clean up an owner-scoped production acceptance fixture and verify PowerSync, cron, advisors, reminders, Mail capture, and production parity
 
 ## 8. Closeout
 
-- [ ] 8.1 Sync the completed delta specs into durable specifications and archive the OpenSpec change
-- [ ] 8.2 Commit and push `main`, then prove a clean synchronized repository and final cross-system parity
+- [x] 8.1 Sync the completed delta specs into durable specifications and archive the OpenSpec change
+- [x] 8.2 Commit and push `main`, then prove a clean synchronized repository and final cross-system parity
