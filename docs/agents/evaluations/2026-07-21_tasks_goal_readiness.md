@@ -6,6 +6,10 @@
 
 ## Outcome
 
+### Accepted Checklists, Recurrence, And Terminal Editing Release
+
+The expanded rich-task release is accepted in production. Tasks now provides directly editable and reorderable checklists, revisioned calendar and after-completion recurrence, Repeating Tasks presentation in Upcoming, recoverable deletion, editable terminal tasks, owner-local Done buckets, canonical task-state iconography, and ordinary single-line Return form submission. The verified private backup, production migration, owner-scoped fixture, exact 20-table PowerSync topology, three healthy once-per-minute jobs, cleanup audit, Lovable deployment, authenticated Safari rendering, and complete local validation passed. The release evidence is recorded in `2026-07-27_tasks_checklists_recurrence_terminal_release.md`.
+
 ### Accepted Project-Free Tasks Release
 
 BathOS Tasks is project-free in production. Tasks belong directly to an optional Area and checklist items remain inside tasks. The verified private backup, fail-closed production migration, deletion of the one disposable test Project and its Project-only history, schema-13 portability, exact 20-table PowerSync topology, MCP version 14, matching web release, cleanup-backed five-gate production acceptance, offline workflow, advisors, cron, reminders, Mail capture, and rendered desktop and mobile behavior passed. The release evidence is recorded in `2026-07-26_tasks_project_removal_release.md`.
@@ -59,7 +63,7 @@ The planning and notes refinement is accepted in production. Upcoming now select
 | Private-First Task Module | Production owner-isolation, RLS, and cleanup gates in `2026-07-20_tasks_production_sync_readiness.md` and `2026-07-21_tasks_production_topology_hardening.md` | Accepted |
 | Production Task Synchronization | Exact 20-table production topology, restart, convergence, and current synchronized clients | Accepted |
 | Exclusive Task Start and Day Horizon | Database, domain, MCP, rendered, and production fixture evidence for future Start without a horizon, Today horizon without a Start, and owner-local activation into Inbox | Accepted |
-| Core Task Organization | Archived `add-personal-tasks-module` implementation evidence, `2026-07-20_tasks_live_browser_validation.md`, and the accepted project-free contraction in `2026-07-26_tasks_project_removal_release.md` | Accepted |
+| Core Task Organization | Archived `add-personal-tasks-module` implementation evidence, `2026-07-20_tasks_live_browser_validation.md`, the accepted project-free contraction in `2026-07-26_tasks_project_removal_release.md`, and production checklist acceptance in `2026-07-27_tasks_checklists_recurrence_terminal_release.md` | Accepted |
 | Date-Based Planning Views | Production migration, MCP capture, future Start Date / Deadline fallback derivation, day/month/year boundary tests, browser acceptance, and fresh PowerSync proof for Inbox, Now, Next, Later, Upcoming, Anytime, Someday, and Done | Accepted |
 | Tagless Structured Semantics | Typed source, actionability, hierarchy, destination, lifecycle, and product-identity evidence without tags | Accepted |
 | Bulk Task Planning | Atomic movement coverage plus production-rendered Command-click, Control-click, ordinary toggle, and anchored Shift-click range behavior | Accepted |
@@ -69,12 +73,12 @@ The planning and notes refinement is accepted in production. Upcoming now select
 | Owner-Local Daily Rollover | Private owner cursor, prior-day Today reset to Inbox, rollover-before-activation ordering, reminder preservation, once-per-minute production scheduling, and cleanup-backed production fixture | Accepted |
 | Unified Task Start Picker | Production migration, one Tasks-owned picker, future-only calendar, Today horizons, reminder focus command, live browser acceptance, and disposable production fixture | Accepted |
 | Explicit Primary Link Clearing | INSERT-only source initialization, explicit-null export behavior, immutable Mail-source comparison, fresh PowerSync projection, and zero-residue production fixture | Accepted |
-| Recurrence Integrity | `2026-07-20_tasks_offline_workflow_validation.md`, preservation recovery, and recurrence database/MCP tests | Accepted |
+| Recurrence Integrity | `2026-07-20_tasks_offline_workflow_validation.md`, preservation recovery, revisioned recurrence database and application tests, owner-scoped production recurrence acceptance, fresh PowerSync projection, and authenticated Safari rendering in `2026-07-27_tasks_checklists_recurrence_terminal_release.md` | Accepted |
 | Stable Manual Ordering | Multi-client convergence, deterministic fractional-order tests, direct same-scope and cross-visible-horizon Today drag placement, hidden-empty-horizon coverage, and retained keyboard/menu alternatives | Accepted |
 | Offline Task Operation | Offline workflow acceptance plus archived `enable-tasks-offline-pwa-launch` production and iPhone evidence | Accepted |
 | Deterministic Task Reconciliation | Multi-client winner-order, stale-revision, conflict-receipt, and reconnection gates | Accepted |
 | Actionable Synchronization Diagnostics | `2026-07-21_tasks_sync_reliability.md`, the archived transient-event confirmation change, and current Safari, Chrome, and iPhone diagnostics | Accepted |
-| Recoverable History | Production schema-11 recovery, projection-rebuilt guarded 100-step undo/redo, out-of-order and skew convergence tests, exact snapshot traversal, exact owner-local day-31 purge, fresh PowerSync removal, dependency cleanup, private safety receipt, and rejected stale creation retry | Accepted |
+| Recoverable History | Production schema-11 recovery, projection-rebuilt guarded 100-step undo/redo, out-of-order and skew convergence tests, exact snapshot traversal, checklist history, editable terminal states, exact owner-local day-31 purge, fresh PowerSync removal, dependency cleanup, private safety receipt, and rejected stale creation retry | Accepted |
 | Readable Markdown Task Notes | Screenshot-shaped component coverage, source-visible live Markdown styling, fixed-width indicators, safe explicit link activation, caret preservation, and authenticated production Safari rendering | Accepted |
 | Legible Task Lifecycle Feedback | Square completion, circular bulk selection, reduced-motion-aware terminal collapse, duplicate prevention, mutation-failure restoration, and desktop/mobile rendered verification | Accepted |
 | Layered Reminder Delivery | `2026-07-20_tasks_reminder_delivery_readiness.md` plus Safari and iPhone Web Push delivery/open acceptance | Accepted |

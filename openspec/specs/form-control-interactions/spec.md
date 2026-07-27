@@ -71,24 +71,28 @@ Outside DataGrids, text, number, currency, percentage, URL, email, password, and
 - **WHEN** a specialized text-entry type receives input
 - **THEN** it retains its native accepted-character, parsing, masking, input-mode, and validation behavior
 
-### Requirement: Text-input Return submission is opt-in
-Unmodified Return in a single-line text-entry control SHALL NOT submit its owning form by default. A form MAY explicitly opt in to Return submission for its single-line text-entry descendants.
+### Requirement: Single-line Return submits ordinary forms
+Unmodified Return in an ordinary single-line text-entry control SHALL submit its nearest owning form by default outside active composition. Textareas and field-owned composite interactions SHALL retain Return for their native or declared field behavior, Command+Return SHALL remain available for form submission, and an exceptional form MAY explicitly opt out of unmodified Return submission.
 
-#### Scenario: Suppress default implicit submission
-- **WHEN** a user presses Return in a single-line text-entry control whose owning form has not opted in and no field-level control owns Return
-- **THEN** BathOS prevents implicit form submission and leaves the current text value and focus intact
+#### Scenario: Submit an ordinary form
+- **WHEN** a user presses unmodified Return in a single-line text-entry control whose field does not own Return and whose form has not opted out
+- **THEN** BathOS submits the nearest form through the same validation-aware path as its visible submit action
 
-#### Scenario: Submit an opted-in form
-- **WHEN** a user presses Return in a single-line text-entry control whose owning form has opted in outside active composition
-- **THEN** BathOS submits that form through the same validation-aware path as its visible submit action
+#### Scenario: Preserve multiline Return
+- **WHEN** a user presses Return in a textarea or another multiline text-entry surface
+- **THEN** the control retains its native newline behavior and does not submit the form
 
-#### Scenario: Submit every gateway form with Return
-- **WHEN** a user presses Return in a single-line text-entry control within login, signup, password-recovery, password-reset, or another gateway authentication form
-- **THEN** the gateway form submits through its ordinary visible action
+#### Scenario: Preserve composite Return
+- **WHEN** a user presses Return on or within a dropdown, date picker, time parser, or another control that explicitly owns Return
+- **THEN** the field performs its declared open, selection, parsing, or confirmation action without submitting the form
 
-#### Scenario: Preserve explicit compact-form exceptions
-- **WHEN** a module's durable contract explicitly declares a compact text-entry form to submit on Return
-- **THEN** that form opts in without changing the default for unrelated forms
+#### Scenario: Preserve explicit form command
+- **WHEN** a user invokes the platform form-submit command from within a declared form scope
+- **THEN** BathOS submits that form through the same validation-aware path regardless of which descendant control is focused
+
+#### Scenario: Opt out an exceptional form
+- **WHEN** a form explicitly declares that unmodified Return does not submit and a user presses Return in one of its single-line text-entry controls
+- **THEN** BathOS prevents implicit submission while preserving the input value and focus
 
 ### Requirement: Native activation semantics remain available
 Buttons, button-like composite controls, and static links SHALL activate with Space or Return. Checkboxes, toggle switches, and multi-select options SHALL toggle with Space or Return. Static links SHALL preserve browser link semantics.
