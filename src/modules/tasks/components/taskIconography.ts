@@ -11,7 +11,6 @@ import {
   Clock5,
   Clock8,
   Cloud,
-  CopyCheck,
   DatabaseBackup,
   Download,
   ExternalLink,
@@ -54,7 +53,6 @@ import {
  */
 export const TASK_ICONS = {
   Task: SquareCheckBig,
-  Project: CopyCheck,
   Area: Layers3,
   TaskChecklist: ListTree,
   Attachment: Paperclip,
@@ -82,7 +80,6 @@ export const TASK_ICONS = {
   Canceled: CircleSlash2,
 
   AddTask: SquarePlus,
-  AddProject: Layers3,
   AddArea: SquarePlus,
   Search: Search,
   QuickFilters: Filter,
@@ -114,7 +111,6 @@ export type TaskIconConcept = keyof typeof TASK_ICONS;
 
 export const TASK_ICON_NAMES = {
   Task: 'SquareCheckBig',
-  Project: 'CopyCheck',
   Area: 'Layers3',
   TaskChecklist: 'ListTree',
   Attachment: 'Paperclip',
@@ -142,7 +138,6 @@ export const TASK_ICON_NAMES = {
   Canceled: 'CircleSlash2',
 
   AddTask: 'SquarePlus',
-  AddProject: 'Layers3',
   AddArea: 'SquarePlus',
   Search: 'Search',
   QuickFilters: 'Filter',

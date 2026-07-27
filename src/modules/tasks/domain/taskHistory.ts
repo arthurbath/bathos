@@ -32,7 +32,6 @@ export type TaskHistorySnapshot = Pick<
   | 'today_section'
   | 'order_key'
   | 'area_id'
-  | 'project_id'
   | 'hierarchy_order_key'
   | 'start_date'
   | 'deadline'
@@ -48,6 +47,7 @@ export type TaskHistoryEvent = {
   owner_id: string;
   task_id: string;
   client_mutation_id: string;
+  operation_id: string;
   actor_type: TaskActorType;
   mutation_channel: TaskEntryChannel;
   affected_ids: string[];
@@ -59,17 +59,25 @@ export type TaskHistoryEvent = {
   code: string | null;
   before_state: TaskHistorySnapshot | null;
   after_state: TaskHistorySnapshot;
+  operation_events?: TaskHistoryEvent[];
 };
 
 export type TaskHistoryStorageRow = Omit<
   Tables<'tasks_history_events'>,
-  'actor_type' | 'affected_ids' | 'after_state' | 'before_state' | 'mutation_channel' | 'transition'
+  | 'actor_type'
+  | 'affected_ids'
+  | 'after_state'
+  | 'before_state'
+  | 'mutation_channel'
+  | 'operation_id'
+  | 'transition'
 > & {
   actor_type: unknown;
   affected_ids: unknown;
   after_state: unknown;
   before_state: unknown;
   mutation_channel: unknown;
+  operation_id?: unknown;
   transition: unknown;
 };
 
@@ -97,6 +105,9 @@ export class UnsafeTaskRedoError extends Error {
 export function parseTaskHistoryEvent(row: TaskHistoryStorageRow): TaskHistoryEvent {
   return {
     ...row,
+    operation_id: typeof row.operation_id === 'string'
+      ? row.operation_id
+      : row.client_mutation_id,
     actor_type: requireEnum(row.actor_type, taskActorTypes, 'actor type'),
     mutation_channel: requireEnum(row.mutation_channel, taskEntryChannels, 'mutation channel'),
     affected_ids: parseStringArray(row.affected_ids),
@@ -164,7 +175,6 @@ export function snapshotTask(task: TaskTodo): TaskHistorySnapshot {
     today_section: task.today_section,
     order_key: task.order_key,
     area_id: task.area_id ?? null,
-    project_id: task.project_id ?? null,
     hierarchy_order_key: task.hierarchy_order_key ?? null,
     start_date: task.start_date ?? null,
     deadline: task.deadline ?? null,
@@ -228,7 +238,6 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
     today_section: todaySection,
     order_key: requireText(parsed.order_key, 'order_key'),
     area_id: optionalTextOrMissing(parsed.area_id, 'area_id'),
-    project_id: optionalTextOrMissing(parsed.project_id, 'project_id'),
     hierarchy_order_key: optionalTextOrMissing(
       parsed.hierarchy_order_key,
       'hierarchy_order_key',
@@ -321,7 +330,6 @@ function snapshotsEqual(left: TaskHistorySnapshot, right: TaskHistorySnapshot): 
     && left.today_section === right.today_section
     && left.order_key === right.order_key
     && left.area_id === right.area_id
-    && left.project_id === right.project_id
     && left.hierarchy_order_key === right.hierarchy_order_key
     && left.start_date === right.start_date
     && left.deadline === right.deadline

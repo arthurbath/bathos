@@ -9,7 +9,6 @@ DECLARE
     'tasks_hierarchy_history_events',
     'tasks_hierarchy_operations',
     'tasks_history_events',
-    'tasks_projects',
     'tasks_recurrence_definitions',
     'tasks_recurrence_evaluations',
     'tasks_recurrence_occurrences',
@@ -323,6 +322,6 @@ $validation$;
 
 SELECT
   'ready' AS tasks_powersync_database_status,
-  21 AS synchronized_table_count,
+  20 AS synchronized_table_count,
   current_database() AS database_name,
   clock_timestamp() AS verified_at;

@@ -22,7 +22,6 @@ import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
 type QuickFindResult =
   | { kind: 'todo'; id: string; title: string; detail: string; href: string; task: TaskTodo }
-  | { kind: 'project'; id: string; title: string; detail: string; href: string }
   | { kind: 'area'; id: string; title: string; detail: string; href: string };
 
 function normalize(value: string): string {
@@ -56,15 +55,6 @@ function createQuickFindResults(
       href: `${basePath}/${getTaskPlanningRoute(task, planningDate)}`,
       task,
     }));
-  const projectResults: QuickFindResult[] = hierarchy.projects
-    .filter(({ title }) => title.toLocaleLowerCase().includes(normalizedQuery))
-    .map((project) => ({
-      kind: 'project',
-      id: project.id,
-      title: project.title,
-      detail: 'Project',
-      href: `${basePath}/projects/${encodeURIComponent(project.id)}`,
-    }));
   const areaResults: QuickFindResult[] = hierarchy.areas
     .filter(({ title }) => title.toLocaleLowerCase().includes(normalizedQuery))
     .map((area) => ({
@@ -74,7 +64,7 @@ function createQuickFindResults(
       detail: 'Area',
       href: `${basePath}/areas/${encodeURIComponent(area.id)}`,
     }));
-  return [...taskResults, ...projectResults, ...areaResults]
+  return [...taskResults, ...areaResults]
     .sort((left, right) => {
       const leftExact = left.title.toLocaleLowerCase() === normalizedQuery ? 0 : 1;
       const rightExact = right.title.toLocaleLowerCase() === normalizedQuery ? 0 : 1;
@@ -85,7 +75,6 @@ function createQuickFindResults(
 
 const resultIcons = {
   todo: TASK_ICONS.Task,
-  project: TASK_ICONS.Project,
   area: TASK_ICONS.Area,
 } as const;
 
@@ -156,8 +145,8 @@ export function TaskQuickFindDialog({
               autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              aria-label="Find Tasks, Projects, and Areas"
-              placeholder="Find Tasks, Projects, and Areas"
+              aria-label="Find Tasks and Areas"
+              placeholder="Find Tasks and Areas"
               className="pl-9"
             />
           </div>

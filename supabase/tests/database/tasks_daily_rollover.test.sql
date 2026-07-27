@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(30);
+SELECT plan(29);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -116,17 +116,6 @@ INSERT INTO public.tasks_todos (
     'd4000000-0000-4000-8000-000000000035',
     '2099-01-01 14:59:00+00'
   );
-
-INSERT INTO public.tasks_projects (
-  id, owner_id, title, destination, today_section, order_key,
-  planning_order_key, client_mutation_id, updated_at
-) VALUES (
-  'd4000000-0000-4000-8000-000000000040',
-  'd4000000-0000-4000-8000-000000000001',
-  'Today project remains Now', 'anytime', 'now', 'p0',
-  'p0', 'd4000000-0000-4000-8000-000000000041',
-  '2099-01-01 14:59:00+00'
-);
 
 SELECT has_table(
   'tasks_private',
@@ -281,12 +270,6 @@ SELECT is(
     WHERE id = 'd4000000-0000-4000-8000-000000000032'),
   'inbox',
   'activates newly reached work into Inbox after rollover'
-);
-SELECT is(
-  (SELECT today_section FROM public.tasks_projects
-    WHERE id = 'd4000000-0000-4000-8000-000000000040'),
-  'now',
-  'leaves project horizons outside task rollover'
 );
 SELECT is(
   (SELECT today_section FROM public.tasks_todos

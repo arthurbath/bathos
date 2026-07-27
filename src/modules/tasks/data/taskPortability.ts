@@ -12,7 +12,6 @@ import type {
   TaskHierarchyOperation,
   TaskMailSource,
   TaskMailSourceEvent,
-  TaskProject,
   TaskRecurrenceDefinition,
   TaskRecurrenceEvaluation,
   TaskRecurrenceOccurrence,
@@ -38,13 +37,47 @@ type RecurrenceProvenanceFields =
   | 'recurrence_occurrence_id'
   | 'recurrence_logical_key';
 type PreRecurrenceTaskTodo = Omit<TaskTodo, RecurrenceProvenanceFields> &
-  Partial<Pick<TaskTodo, RecurrenceProvenanceFields>>;
-type PreRecurrenceTaskProject = Omit<TaskProject, RecurrenceProvenanceFields> &
-  Partial<Pick<TaskProject, RecurrenceProvenanceFields>>;
+  Partial<Pick<TaskTodo, RecurrenceProvenanceFields>> & { project_id?: string | null };
+type LegacyTaskProject = {
+  id: string;
+  owner_id: string;
+  area_id: string | null;
+  title: string;
+  notes: string;
+  lifecycle: string;
+  completed_at: string | null;
+  canceled_at: string | null;
+  disposition: string;
+  deleted_at: string | null;
+  deletion_root_id: string | null;
+  destination: string;
+  today_section: string | null;
+  order_key: string;
+  planning_order_key: string;
+  start_date: string | null;
+  deadline: string | null;
+  entry_channel: string;
+  last_mutation_channel: string;
+  last_actor_type: string;
+  revision: number;
+  client_mutation_id: string;
+  created_at: string;
+  updated_at: string;
+  template_definition_id?: string | null;
+  template_revision?: number | null;
+  template_instantiation_id?: string | null;
+  template_node_id?: string | null;
+  recurrence_definition_id?: string | null;
+  recurrence_revision?: number | null;
+  recurrence_occurrence_id?: string | null;
+  recurrence_logical_key?: string | null;
+};
+type PreRecurrenceTaskProject = Omit<LegacyTaskProject, RecurrenceProvenanceFields> &
+  Partial<Pick<LegacyTaskProject, RecurrenceProvenanceFields>>;
 type PreTemplateTaskTodo = Omit<TaskTodo, TemplateProvenanceFields> &
   Partial<Pick<TaskTodo, TemplateProvenanceFields>>;
-type PreTemplateTaskProject = Omit<TaskProject, TemplateProvenanceFields> &
-  Partial<Pick<TaskProject, TemplateProvenanceFields>>;
+type PreTemplateTaskProject = Omit<LegacyTaskProject, TemplateProvenanceFields> &
+  Partial<Pick<LegacyTaskProject, TemplateProvenanceFields>>;
 type LegacyTaskHeading = {
   id: string;
   owner_id: string;
@@ -83,6 +116,7 @@ type LegacyTaskHistoryEvent = Omit<TaskHistoryEvent, 'before_state' | 'after_sta
 };
 type PreActionabilityTaskTodo = Omit<PreTemplateTaskTodo, 'actionability'> & {
   actionability?: TaskTodo['actionability'];
+  project_id?: string | null;
 };
 type PreActionabilityTaskHistorySnapshot = Omit<TaskHistorySnapshot, 'actionability'> & {
   actionability?: TaskHistorySnapshot['actionability'];
@@ -296,7 +330,7 @@ export type TaskExportV9 = {
     checksums: { algorithm: 'sha256' } & Record<TaskExportV9Collection, string>;
   };
   data: Omit<TaskExportV8['data'], 'tasks_projects' | 'tasks_todos'> & {
-    tasks_projects: Array<Omit<TaskProject, 'owner_id'>>;
+    tasks_projects: Array<Omit<LegacyTaskProject, 'owner_id'>>;
     tasks_todos: Array<Omit<TaskTodo, 'owner_id'>>;
     tasks_recurrence_definitions: Array<Omit<TaskRecurrenceDefinition, 'owner_id'>>;
     tasks_recurrence_revisions: Array<Omit<TaskRecurrenceRevision, 'owner_id'>>;
@@ -382,6 +416,45 @@ export type TaskExportV12 = {
   data: Omit<TaskExportV11['data'], 'tasks_headings'>;
 };
 
+export const taskExportV13Collections = [
+  'tasks_areas',
+  'tasks_todos',
+  'tasks_checklist_items',
+  'tasks_history_events',
+  'tasks_hierarchy_operations',
+  'tasks_hierarchy_history_events',
+  'tasks_user_settings',
+  'tasks_mail_sources',
+  'tasks_mail_source_events',
+  'tasks_templates',
+  'tasks_template_revisions',
+  'tasks_template_instantiations',
+  'tasks_recurrence_definitions',
+  'tasks_recurrence_revisions',
+  'tasks_recurrence_occurrences',
+  'tasks_recurrence_evaluations',
+  'tasks_recurrence_status_events',
+  'tasks_reminders',
+  'tasks_reminder_occurrences',
+] as const;
+
+export type TaskExportV13Collection = (typeof taskExportV13Collections)[number];
+
+export type TaskExportV13 = {
+  format: 'garden.bath.tasks.export';
+  schema_version: 13;
+  created_at: string;
+  manifest: {
+    collections: [...typeof taskExportV13Collections];
+    counts: Record<TaskExportV13Collection, number>;
+    checksums: { algorithm: 'sha256' } & Record<TaskExportV13Collection, string>;
+  };
+  data: Omit<TaskExportV12['data'], 'tasks_projects' | 'tasks_todos' | 'tasks_reminders'> & {
+    tasks_todos: Array<Omit<TaskTodo, 'owner_id'>>;
+    tasks_reminders: Array<Omit<TaskReminder, 'owner_id'>>;
+  };
+};
+
 export type TaskPortableExport =
   | TaskExportV1
   | TaskExportV2
@@ -394,7 +467,8 @@ export type TaskPortableExport =
   | TaskExportV9
   | TaskExportV10
   | TaskExportV11
-  | TaskExportV12;
+  | TaskExportV12
+  | TaskExportV13;
 
 export type TaskRestoreCollectionReport = {
   inserts: number;
@@ -407,7 +481,7 @@ export type TaskRestoreCollectionReport = {
 
 export type TaskRestoreReport = {
   dry_run: boolean;
-  schema_version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+  schema_version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
   applied?: boolean;
   code?: string | null;
   tasks_todos: TaskRestoreCollectionReport;
@@ -436,21 +510,21 @@ export type TaskRestoreReport = {
 export const TASK_REPLACE_RESTORE_CONFIRMATION = 'REPLACE TASK DATA';
 
 export type TaskReplaceRestorePreparation = {
-  schema_version: 12;
-  backup: TaskExportV12;
+  schema_version: 13;
+  backup: TaskExportV13;
   backup_digest: string;
-  current_counts: Record<TaskExportV12Collection, number>;
-  incoming_counts: Record<TaskExportV12Collection, number>;
+  current_counts: Record<TaskExportV13Collection, number>;
+  incoming_counts: Record<TaskExportV13Collection, number>;
   restore_preview: TaskRestoreReport;
 };
 
 export type TaskReplaceRestoreResult = {
   outcome: 'accepted';
-  schema_version: 12;
+  schema_version: 13;
   request_id: string;
   backup_digest: string;
   target_digest: string;
-  removed_counts: Record<TaskExportV12Collection, number>;
+  removed_counts: Record<TaskExportV13Collection, number>;
   restore_report: TaskRestoreReport;
 };
 
@@ -466,7 +540,7 @@ export class InvalidTaskExportError extends Error {
 export class TaskPortabilityService {
   constructor(private readonly client: TaskPortabilityClient) {}
 
-  createExport(): Promise<TaskExportV12> {
+  createExport(): Promise<TaskExportV13> {
     return createTaskExport(this.client);
   }
 
@@ -478,12 +552,12 @@ export class TaskPortabilityService {
     return mergeTaskRestore(this.client, taskExport);
   }
 
-  prepareReplace(taskExport: TaskExportV12): Promise<TaskReplaceRestorePreparation> {
+  prepareReplace(taskExport: TaskExportV13): Promise<TaskReplaceRestorePreparation> {
     return prepareTaskReplaceRestore(this.client, taskExport);
   }
 
   replace(input: {
-    taskExport: TaskExportV12;
+    taskExport: TaskExportV13;
     preparation: TaskReplaceRestorePreparation;
     confirmation: string;
     requestId?: string;
@@ -494,14 +568,14 @@ export class TaskPortabilityService {
 
 export async function createTaskExport(
   supabase: TaskPortabilityClient,
-): Promise<TaskExportV12> {
-  const { data, error } = await supabase.rpc('tasks_create_export_v12');
+): Promise<TaskExportV13> {
+  const { data, error } = await supabase.rpc('tasks_create_export_v13');
   if (error) {
     throw error;
   }
   const taskExport = parseTaskExport(data);
-  if (taskExport.schema_version !== 12) {
-    throw new InvalidTaskExportError('The current task export did not use schema version twelve');
+  if (taskExport.schema_version !== 13) {
+    throw new InvalidTaskExportError('The current task export did not use schema version thirteen');
   }
   return taskExport;
 }
@@ -522,10 +596,10 @@ export async function mergeTaskRestore(
 
 export async function prepareTaskReplaceRestore(
   supabase: TaskPortabilityClient,
-  taskExport: TaskExportV12,
+  taskExport: TaskExportV13,
 ): Promise<TaskReplaceRestorePreparation> {
   const validatedExport = requireCurrentTaskExport(taskExport);
-  const { data, error } = await supabase.rpc('tasks_prepare_replace_restore_v12', {
+  const { data, error } = await supabase.rpc('tasks_prepare_replace_restore_v13', {
     _envelope: validatedExport as unknown as Json,
   });
   if (error) throw error;
@@ -535,7 +609,7 @@ export async function prepareTaskReplaceRestore(
 export async function replaceTaskRestore(
   supabase: TaskPortabilityClient,
   input: {
-    taskExport: TaskExportV12;
+    taskExport: TaskExportV13;
     preparation: TaskReplaceRestorePreparation;
     confirmation: string;
     requestId?: string;
@@ -548,7 +622,7 @@ export async function replaceTaskRestore(
   if (!isSha256(input.preparation.backup_digest)) {
     throw new InvalidTaskExportError('A verified pre-restore backup is required');
   }
-  const { data, error } = await supabase.rpc('tasks_replace_restore_v12', {
+  const { data, error } = await supabase.rpc('tasks_replace_restore_v13', {
     _envelope: validatedExport as unknown as Json,
     _expected_backup_digest: input.preparation.backup_digest,
     _request_id: input.requestId ?? crypto.randomUUID(),
@@ -574,11 +648,12 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
   const record = requireRecord(value, 'Task export must be a JSON object');
   if (
     record.format !== 'garden.bath.tasks.export'
-    || ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(record.schema_version as number)
+    || ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(record.schema_version as number)
   ) {
     throw new InvalidTaskExportError('Task export format or schema version is unsupported');
   }
-  const schemaVersion = record.schema_version as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+  const schemaVersion = record.schema_version as
+    1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
 
   const manifest = requireRecord(record.manifest, 'Task export manifest is invalid');
   const counts = requireRecord(manifest.counts, 'Task export counts are invalid');
@@ -586,7 +661,9 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
   const data = requireRecord(record.data, 'Task export data is invalid');
   const collections = requireArray(manifest.collections, 'Task export collections are invalid');
   if (schemaVersion >= 4) {
-    const expectedCollections = schemaVersion === 12
+    const expectedCollections = schemaVersion === 13
+      ? taskExportV13Collections
+      : schemaVersion === 12
       ? taskExportV12Collections
       : schemaVersion === 11
       ? taskExportV11Collections
@@ -615,7 +692,9 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
         throw new InvalidTaskExportError('Task export manifest does not match its data');
       }
     }
-    return schemaVersion === 12
+    return schemaVersion === 13
+      ? value as TaskExportV13
+      : schemaVersion === 12
       ? value as TaskExportV12
       : schemaVersion === 11
       ? value as TaskExportV11
@@ -667,7 +746,7 @@ export function parseTaskExport(value: unknown): TaskPortableExport {
 
 function parseTaskRestoreReport(
   value: unknown,
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12,
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13,
 ): TaskRestoreReport {
   const report = requireRecord(value, 'Task restore report is invalid');
   if (typeof report.dry_run !== 'boolean' || report.schema_version !== schemaVersion) {
@@ -679,7 +758,9 @@ function parseTaskRestoreReport(
     parseCollectionReport(report.tasks_user_settings);
   }
   if (schemaVersion >= 4) {
-    const expectedCollections = schemaVersion === 12
+    const expectedCollections = schemaVersion === 13
+      ? taskExportV13Collections
+      : schemaVersion === 12
       ? taskExportV12Collections
       : schemaVersion === 11
       ? taskExportV11Collections
@@ -701,27 +782,27 @@ function parseTaskRestoreReport(
   return value as TaskRestoreReport;
 }
 
-function requireCurrentTaskExport(value: unknown): TaskExportV12 {
+function requireCurrentTaskExport(value: unknown): TaskExportV13 {
   const taskExport = parseTaskExport(value);
-  if (taskExport.schema_version !== 12) {
-    throw new InvalidTaskExportError('Replace restore requires a current schema version twelve export');
+  if (taskExport.schema_version !== 13) {
+    throw new InvalidTaskExportError('Replace restore requires a current schema version thirteen export');
   }
   return taskExport;
 }
 
 function parseReplacePreparation(value: unknown): TaskReplaceRestorePreparation {
   const preparation = requireRecord(value, 'Task replacement preparation is invalid');
-  if (preparation.schema_version !== 12 || !isSha256(preparation.backup_digest)) {
+  if (preparation.schema_version !== 13 || !isSha256(preparation.backup_digest)) {
     throw new InvalidTaskExportError('Task replacement preparation metadata is invalid');
   }
   const backup = requireCurrentTaskExport(preparation.backup);
   return {
-    schema_version: 12,
+    schema_version: 13,
     backup,
     backup_digest: preparation.backup_digest,
-    current_counts: parseV12Counts(preparation.current_counts),
-    incoming_counts: parseV12Counts(preparation.incoming_counts),
-    restore_preview: parseTaskRestoreReport(preparation.restore_preview, 12),
+    current_counts: parseV13Counts(preparation.current_counts),
+    incoming_counts: parseV13Counts(preparation.incoming_counts),
+    restore_preview: parseTaskRestoreReport(preparation.restore_preview, 13),
   };
 }
 
@@ -729,7 +810,7 @@ function parseReplaceResult(value: unknown): TaskReplaceRestoreResult {
   const result = requireRecord(value, 'Task replacement result is invalid');
   if (
     result.outcome !== 'accepted'
-    || result.schema_version !== 12
+    || result.schema_version !== 13
     || typeof result.request_id !== 'string'
     || !result.request_id
     || !isSha256(result.backup_digest)
@@ -739,23 +820,23 @@ function parseReplaceResult(value: unknown): TaskReplaceRestoreResult {
   }
   return {
     outcome: 'accepted',
-    schema_version: 12,
+    schema_version: 13,
     request_id: result.request_id,
     backup_digest: result.backup_digest,
     target_digest: result.target_digest,
-    removed_counts: parseV12Counts(result.removed_counts),
-    restore_report: parseTaskRestoreReport(result.restore_report, 12),
+    removed_counts: parseV13Counts(result.removed_counts),
+    restore_report: parseTaskRestoreReport(result.restore_report, 13),
   };
 }
 
-function parseV12Counts(value: unknown): Record<TaskExportV12Collection, number> {
+function parseV13Counts(value: unknown): Record<TaskExportV13Collection, number> {
   const counts = requireRecord(value, 'Task replacement collection counts are invalid');
-  for (const collection of taskExportV12Collections) {
+  for (const collection of taskExportV13Collections) {
     if (!Number.isInteger(counts[collection]) || (counts[collection] as number) < 0) {
       throw new InvalidTaskExportError('Task replacement collection counts are invalid');
     }
   }
-  return counts as Record<TaskExportV12Collection, number>;
+  return counts as Record<TaskExportV13Collection, number>;
 }
 
 async function restoreTaskExport(
@@ -771,7 +852,7 @@ async function restoreTaskExport(
   if (error) {
     throw error;
   }
-  return parseTaskRestoreReport(data, 12);
+  return parseTaskRestoreReport(data, 13);
 }
 
 function parseCollectionReport(value: unknown): TaskRestoreCollectionReport {

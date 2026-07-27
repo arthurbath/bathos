@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(59);
+SELECT plan(53);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -30,9 +30,9 @@ SELECT has_column(
   'public', 'tasks_todos', 'template_instantiation_id',
   'stores to-do template provenance'
 );
-SELECT has_column(
-  'public', 'tasks_projects', 'template_node_id',
-  'stores project template-node provenance'
+SELECT hasnt_table(
+  'public', 'tasks_projects',
+  'does not retain project template roots'
 );
 SELECT hasnt_table(
   'public', 'tasks_headings',
@@ -93,7 +93,7 @@ SELECT has_function(
   'archives template definitions explicitly'
 );
 SELECT has_function(
-  'public', 'tasks_create_export_v12', ARRAY[]::text[],
+  'public', 'tasks_create_export_v13', ARRAY[]::text[],
   'exports template definitions and provenance'
 );
 SELECT has_function(
@@ -368,115 +368,6 @@ SELECT is(
   'leaves an existing instance unchanged after revision'
 );
 
-INSERT INTO public.tasks_areas (
-  id, owner_id, title, order_key, client_mutation_id
-) VALUES (
-  '95000000-0000-4000-8000-000000000030',
-  '95000000-0000-4000-8000-000000000001',
-  'Synthetic area', 'a0',
-  '95000000-0000-4000-8000-000000000031'
-);
-INSERT INTO public.tasks_projects (
-  id, owner_id, title, notes, destination, order_key, planning_order_key,
-  client_mutation_id
-) VALUES (
-  '95000000-0000-4000-8000-000000000032',
-  '95000000-0000-4000-8000-000000000001',
-  'Synthetic project source', 'Project source notes', 'anytime', 'a0', 'a0',
-  '95000000-0000-4000-8000-000000000033'
-);
-INSERT INTO public.tasks_todos (
-  id, owner_id, project_id, title, destination, order_key,
-  hierarchy_order_key, client_mutation_id
-) VALUES (
-  '95000000-0000-4000-8000-000000000036',
-  '95000000-0000-4000-8000-000000000001',
-  '95000000-0000-4000-8000-000000000032',
-  'Synthetic project task', 'anytime', 'a1', 'a0',
-  '95000000-0000-4000-8000-000000000037'
-);
-
-SELECT lives_ok(
-  $$
-    SELECT set_config(
-      'test.project_template_capture',
-      public.tasks_capture_template(
-        NULL,
-        'project',
-        '95000000-0000-4000-8000-000000000032',
-        'Synthetic project template',
-        (now() AT TIME ZONE 'UTC')::date,
-        '95000000-0000-4000-8000-000000000038'
-      )::text,
-      false
-    )
-  $$,
-  'captures a project hierarchy as a template'
-);
-SELECT lives_ok(
-  $$
-    SELECT set_config(
-      'test.project_template_instance',
-      public.tasks_instantiate_template(
-        (
-          current_setting('test.project_template_capture')::jsonb
-            #>> '{template,id}'
-        )::uuid,
-        NULL,
-        (now() AT TIME ZONE 'UTC')::date,
-        '95000000-0000-4000-8000-000000000039',
-        'web', 'user',
-        '95000000-0000-4000-8000-000000000030'
-      )::text,
-      false
-    )
-  $$,
-  'instantiates a project template into a selected area'
-);
-SELECT is(
-  (
-    SELECT area_id FROM public.tasks_projects
-    WHERE id = (
-      current_setting('test.project_template_instance')::jsonb
-        #>> '{result,root_id}'
-    )::uuid
-  ),
-  '95000000-0000-4000-8000-000000000030'::uuid,
-  'places the generated project in the selected owner-safe area'
-);
-SELECT ok(
-  NOT (current_setting('test.project_template_instance')::jsonb
-    #> '{result}' ? 'heading_ids'),
-  'instantiates a flat project hierarchy'
-);
-SELECT is(
-  (
-    SELECT count(*) FROM public.tasks_todos
-    WHERE project_id = (
-      current_setting('test.project_template_instance')::jsonb
-        #>> '{result,root_id}'
-    )::uuid
-      AND template_instantiation_id = (
-        current_setting('test.project_template_instance')::jsonb
-          #>> '{instantiation,id}'
-      )::uuid
-  ),
-  1::bigint,
-  'assigns shared instance provenance to generated project work'
-);
-SELECT is(
-  (
-    SELECT count(DISTINCT template_node_id)
-    FROM public.tasks_todos
-    WHERE project_id = (
-      current_setting('test.project_template_instance')::jsonb
-        #>> '{result,root_id}'
-    )::uuid
-  ),
-  1::bigint,
-  'retains a stable template node on the generated task'
-);
-
 SELECT lives_ok(
   format(
     $$
@@ -529,7 +420,7 @@ SELECT lives_ok(
   $$
     SELECT set_config(
       'test.template_export',
-      public.tasks_create_export_v12()::text,
+      public.tasks_create_export_v13()::text,
       false
     )
   $$,
@@ -537,29 +428,29 @@ SELECT lives_ok(
 );
 SELECT is(
   (current_setting('test.template_export')::jsonb ->> 'schema_version')::integer,
-  12,
+  13,
   'uses the current portable format'
 );
 SELECT is(
   jsonb_array_length(
     current_setting('test.template_export')::jsonb #> '{manifest,collections}'
   ),
-  20,
+  19,
   'declares every current portable collection'
 );
 SELECT is(
   jsonb_array_length(
     current_setting('test.template_export')::jsonb #> '{data,tasks_templates}'
   ),
-  2,
-  'exports both template definitions'
+  1,
+  'exports the template definition'
 );
 SELECT is(
   jsonb_array_length(
     current_setting('test.template_export')::jsonb
       #> '{data,tasks_template_revisions}'
   ),
-  3,
+  2,
   'exports the complete immutable revision history'
 );
 SELECT ok(
@@ -585,7 +476,7 @@ SELECT throws_ok(
     )
   $$,
   '22023',
-  'Task export v12 collection tasks_templates is invalid',
+  'Task export collection tasks_templates is invalid',
   'rejects a template collection with a mismatched checksum'
 );
 
@@ -614,7 +505,7 @@ SELECT is(
       true
     ) #>> '{tasks_templates,inserts}'
   )::integer,
-  2,
+  1,
   'previews template definitions as owner-rebound inserts'
 );
 SELECT lives_ok(
@@ -637,12 +528,12 @@ SELECT is(
 );
 SELECT is(
   (SELECT count(*) FROM public.tasks_templates),
-  2::bigint,
+  1::bigint,
   'rebinds restored template definitions to the authenticated owner'
 );
 SELECT is(
   (SELECT count(*) FROM public.tasks_template_instantiations),
-  2::bigint,
+  1::bigint,
   'restores every instantiation receipt and generated hierarchy'
 );
 

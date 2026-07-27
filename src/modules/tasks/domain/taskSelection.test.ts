@@ -25,8 +25,8 @@ describe('task selection gestures', () => {
     })).toBeNull();
   });
 
-  it('establishes single-task focus without entering bulk mode', () => {
-    const focused = applyTaskSelectionGesture(inactive(), {
+  it('enters explicit selection mode for the first modified click', () => {
+    const selected = applyTaskSelectionGesture(inactive(), {
       taskId: 'b',
       visibleTaskIds: ['a', 'b', 'c'],
       metaKey: true,
@@ -34,14 +34,21 @@ describe('task selection gestures', () => {
       shiftKey: false,
       macLikePlatform: true,
     })!;
-    expect(focused).toEqual({
+    expect(selected).toEqual({
+      active: true,
+      anchorId: 'b',
+      focusedId: null,
+      selectedIds: new Set(['b']),
+    });
+  });
+
+  it('incorporates keyboard focus when a later modified click starts selection', () => {
+    const selected = applyTaskSelectionGesture({
       active: false,
       anchorId: 'b',
       focusedId: 'b',
       selectedIds: new Set(),
-    });
-
-    const selected = applyTaskSelectionGesture(focused, {
+    }, {
       taskId: 'c',
       visibleTaskIds: ['a', 'b', 'c'],
       metaKey: true,
@@ -70,7 +77,7 @@ describe('task selection gestures', () => {
     })).toBeNull();
   });
 
-  it('clears focus when the sole focused task receives the modifier gesture again', () => {
+  it('promotes the sole keyboard-focused task into explicit selection', () => {
     const focused: TaskSelectionState = {
       active: false,
       anchorId: 'b',
@@ -85,10 +92,15 @@ describe('task selection gestures', () => {
       ctrlKey: false,
       shiftKey: false,
       macLikePlatform: true,
-    })).toEqual(inactive());
+    })).toEqual({
+      active: true,
+      anchorId: 'b',
+      focusedId: null,
+      selectedIds: new Set(['b']),
+    });
   });
 
-  it('collapses multi-selection back to single-task focus and then clears it', () => {
+  it('retains selection mode with one remaining task and clears it at zero', () => {
     const selected: TaskSelectionState = {
       active: true,
       anchorId: 'b',
@@ -105,10 +117,10 @@ describe('task selection gestures', () => {
       macLikePlatform: true,
     })!;
     expect(collapsed).toEqual({
-      active: false,
+      active: true,
       anchorId: 'b',
-      focusedId: 'b',
-      selectedIds: new Set(),
+      focusedId: null,
+      selectedIds: new Set(['b']),
     });
 
     expect(applyTaskSelectionGesture(collapsed, {
@@ -153,7 +165,7 @@ describe('task selection gestures', () => {
     expect([...replacementRange.selectedIds]).toEqual(['a', 'b']);
   });
 
-  it('uses the first Shift-click as a single focus anchor', () => {
+  it('uses the first Shift-click as a one-task explicit selection anchor', () => {
     expect(applyTaskSelectionGesture(inactive(), {
       taskId: 'c',
       visibleTaskIds: ['a', 'b', 'c'],
@@ -162,10 +174,10 @@ describe('task selection gestures', () => {
       shiftKey: true,
       macLikePlatform: true,
     })).toEqual({
-      active: false,
+      active: true,
       anchorId: 'c',
-      focusedId: 'c',
-      selectedIds: new Set(),
+      focusedId: null,
+      selectedIds: new Set(['c']),
     });
   });
 

@@ -9,7 +9,6 @@ import {
 import { taskCalendarDateInTimeZone } from '@/modules/tasks/domain/taskDates';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type {
-  TaskProject,
   TaskTemplate,
   TaskTemplateRevision,
   TaskTodo,
@@ -36,12 +35,6 @@ export function useTaskTemplates(ownerId: string) {
   );
   const todosQuery = useQuery<TaskTodo>(
     `SELECT * FROM tasks_todos
-     WHERE owner_id = ? AND disposition = 'present' AND lifecycle = 'open'
-     ORDER BY title COLLATE NOCASE, id`,
-    [ownerId],
-  );
-  const projectsQuery = useQuery<TaskProject>(
-    `SELECT * FROM tasks_projects
      WHERE owner_id = ? AND disposition = 'present' AND lifecycle = 'open'
      ORDER BY title COLLATE NOCASE, id`,
     [ownerId],
@@ -130,17 +123,14 @@ export function useTaskTemplates(ownerId: string) {
     templates,
     revisions,
     todos: todosQuery.data,
-    projects: projectsQuery.data,
     mode,
     planningDate: taskCalendarDateInTimeZone(planningTimeZone),
     loading: templatesQuery.isLoading
       || revisionsQuery.isLoading
-      || todosQuery.isLoading
-      || projectsQuery.isLoading,
+      || todosQuery.isLoading,
     error: templatesQuery.error
       ?? revisionsQuery.error
-      ?? todosQuery.error
-      ?? projectsQuery.error,
+      ?? todosQuery.error,
     capture,
     archive,
     instantiate,

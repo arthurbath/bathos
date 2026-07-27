@@ -44,9 +44,9 @@ SELECT has_column(
   'public', 'tasks_todos', 'recurrence_occurrence_id',
   'stores to-do recurrence provenance'
 );
-SELECT has_column(
-  'public', 'tasks_projects', 'recurrence_logical_key',
-  'stores project recurrence provenance'
+SELECT hasnt_table(
+  'public', 'tasks_projects',
+  'does not retain project recurrence roots'
 );
 SELECT has_function(
   'public', 'tasks_save_recurrence',
@@ -67,7 +67,7 @@ SELECT has_function(
   'changes recurrence status explicitly'
 );
 SELECT has_function(
-  'public', 'tasks_create_export_v12', ARRAY[]::text[],
+  'public', 'tasks_create_export_v13', ARRAY[]::text[],
   'exports recurrence definitions and provenance'
 );
 SELECT has_function(
@@ -492,7 +492,7 @@ SELECT lives_ok(
   $$
     SELECT set_config(
       'test.recurrence_export',
-      public.tasks_create_export_v12()::text,
+      public.tasks_create_export_v13()::text,
       false
     )
   $$,
@@ -503,7 +503,7 @@ SELECT is(
     current_setting('test.recurrence_export')::jsonb
       ->> 'schema_version'
   )::integer,
-  12,
+  13,
   'uses the current task export schema'
 );
 SELECT ok(
@@ -525,7 +525,7 @@ SELECT throws_ok(
     )
   $$,
   '22023',
-  'Task export v12 collection tasks_recurrence_definitions is invalid',
+  'Task export collection tasks_recurrence_definitions is invalid',
   'rejects a recurrence collection with a mismatched checksum'
 );
 

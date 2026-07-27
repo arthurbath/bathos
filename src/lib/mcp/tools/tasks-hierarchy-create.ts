@@ -1,5 +1,4 @@
 import type { Database, Json } from '@/integrations/supabase/types';
-import { isTaskCalendarDate } from '../../../modules/tasks/domain/taskDates';
 import { generateTaskOrderKey } from '../../../modules/tasks/domain/taskOrder';
 
 import { defineTool, z } from '../mcp-core';
@@ -9,38 +8,16 @@ import {
   type AuthenticatedMcpContext,
 } from '../supabase';
 import { uuidSchema } from '../resource-utils';
-import { planningDateInTimeZone } from './tasks-read';
-
-const destinationSchema = z.enum(['anytime', 'someday']);
-const todaySectionSchema = z.enum(['inbox', 'now', 'next', 'later']);
-const calendarDateSchema = z.string().refine(isTaskCalendarDate, {
-  message: 'Expected a valid ISO calendar date.',
-});
-
 type Tables = Database['public']['Tables'];
 type TaskAreaRow = Tables['tasks_areas']['Row'];
-type TaskProjectRow = Tables['tasks_projects']['Row'];
 type TaskChecklistItemRow = Tables['tasks_checklist_items']['Row'];
 type TaskHierarchyHistoryRow = Tables['tasks_hierarchy_history_events']['Row'];
-type TaskDestination = z.infer<typeof destinationSchema>;
-type TaskTodaySection = z.infer<typeof todaySectionSchema>;
-type HierarchyRecordType = 'area' | 'project' | 'checklist_item';
-type HierarchyRow = TaskAreaRow | TaskProjectRow | TaskChecklistItemRow;
+type HierarchyRecordType = 'area' | 'checklist_item';
+type HierarchyRow = TaskAreaRow | TaskChecklistItemRow;
 
 export type CreateTaskAreaRequest = {
   idempotency_key: string;
   title: string;
-};
-
-export type CreateTaskProjectRequest = {
-  idempotency_key: string;
-  title: string;
-  notes: string;
-  area_id?: string;
-  destination: TaskDestination;
-  today_section?: TaskTodaySection | null;
-  start_date?: string | null;
-  deadline?: string | null;
 };
 
 export type CreateTaskChecklistItemRequest = {
@@ -90,10 +67,6 @@ async function readHierarchyRecord(
     return readOne<TaskAreaRow>(auth.supabase.from('tasks_areas')
       .select('*').eq('owner_id', auth.userId).eq('id', id).maybeSingle());
   }
-  if (recordType === 'project') {
-    return readOne<TaskProjectRow>(auth.supabase.from('tasks_projects')
-      .select('*').eq('owner_id', auth.userId).eq('id', id).maybeSingle());
-  }
   return readOne<TaskChecklistItemRow>(auth.supabase.from('tasks_checklist_items')
     .select('*').eq('owner_id', auth.userId).eq('id', id).maybeSingle());
 }
@@ -113,7 +86,7 @@ async function findExistingCreation(
     throw new Error('The idempotency key belongs to a different hierarchy mutation.');
   }
   const recordType = event.entity_type as HierarchyRecordType;
-  if (!['area', 'project', 'checklist_item'].includes(recordType)) {
+  if (!['area', 'checklist_item'].includes(recordType)) {
     throw new Error('The hierarchy creation receipt has an unsupported record type.');
   }
   const record = await readHierarchyRecord(auth, recordType, event.entity_id);
@@ -193,7 +166,7 @@ async function readCreated(
 
 async function insertWithReplay(
   auth: AuthenticatedMcpContext,
-  table: 'tasks_areas' | 'tasks_projects' | 'tasks_checklist_items',
+  table: 'tasks_areas' | 'tasks_checklist_items',
   row: Tables[typeof table]['Insert'],
   idempotencyKey: string,
   recordType: HierarchyRecordType,
@@ -217,37 +190,6 @@ async function nextAreaOrderKey(auth: AuthenticatedMcpContext): Promise<string> 
     .eq('disposition', 'present').order('order_key', { ascending: false })
     .order('id', { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.order_key ?? null, null);
-}
-
-async function nextProjectOrderKeys(
-  auth: AuthenticatedMcpContext,
-  areaId: string | null,
-  destination: TaskDestination,
-  todaySection: TaskTodaySection | null,
-): Promise<{ orderKey: string; planningOrderKey: string }> {
-  let structuralQuery = auth.supabase.from('tasks_projects').select('order_key')
-    .eq('owner_id', auth.userId).eq('disposition', 'present');
-  structuralQuery = areaId === null
-    ? structuralQuery.is('area_id', null)
-    : structuralQuery.eq('area_id', areaId);
-  let planningQuery = auth.supabase.from('tasks_projects').select('planning_order_key')
-    .eq('owner_id', auth.userId).eq('disposition', 'present').eq('lifecycle', 'open')
-    .eq('destination', destination);
-  planningQuery = todaySection === null
-    ? planningQuery.is('today_section', null)
-    : planningQuery.eq('today_section', todaySection);
-  const [structural, planning] = await Promise.all([
-    readOne<Pick<TaskProjectRow, 'order_key'>>(structuralQuery
-      .order('order_key', { ascending: false }).order('id', { ascending: false })
-      .limit(1).maybeSingle()),
-    readOne<Pick<TaskProjectRow, 'planning_order_key'>>(planningQuery
-      .order('planning_order_key', { ascending: false }).order('id', { ascending: false })
-      .limit(1).maybeSingle()),
-  ]);
-  return {
-    orderKey: generateTaskOrderKey(structural?.order_key ?? null, null),
-    planningOrderKey: generateTaskOrderKey(planning?.planning_order_key ?? null, null),
-  };
 }
 
 async function nextChecklistOrderKey(
@@ -287,86 +229,6 @@ export async function createTaskAreaData(
     created_at: timestamp,
     updated_at: timestamp,
   }, input.idempotency_key, 'area', expected);
-}
-
-export async function createTaskProjectData(
-  input: CreateTaskProjectRequest,
-  auth: AuthenticatedMcpContext,
-) {
-  const title = trimTitle(input.title);
-  const areaId = input.area_id ?? null;
-  const startDate = input.start_date ?? null;
-  const deadline = input.deadline ?? null;
-  if (input.destination === 'someday' && (input.today_section != null || startDate !== null)) {
-    throw new Error('Someday projects cannot retain a Start or day horizon.');
-  }
-  if (startDate !== null && !isTaskCalendarDate(startDate)) {
-    throw new Error('Start must be a valid ISO calendar date.');
-  }
-  if (deadline !== null && !isTaskCalendarDate(deadline)) {
-    throw new Error('Deadline must be a valid ISO calendar date.');
-  }
-  if (areaId !== null) {
-    const area = await readOne<Pick<TaskAreaRow, 'id'>>(auth.supabase.from('tasks_areas')
-      .select('id').eq('owner_id', auth.userId).eq('id', areaId)
-      .eq('disposition', 'present').maybeSingle());
-    if (area === null) throw new Error('The task area is unavailable.');
-  }
-  if (startDate !== null) {
-    const settings = await readOne<{ planning_timezone: string }>(auth.supabase
-      .from('tasks_user_settings').select('planning_timezone')
-      .eq('owner_id', auth.userId).maybeSingle());
-    if (!settings) {
-      throw new Error('Task planning settings are not initialized. Open the Tasks module once.');
-    }
-    if (startDate <= planningDateInTimeZone(settings.planning_timezone)) {
-      throw new Error('Start must be later than today in the owner planning time zone.');
-    }
-  }
-  const todaySection = input.destination === 'someday'
-    ? null
-    : startDate === null ? input.today_section ?? null : null;
-  const expected = {
-    title,
-    notes: input.notes,
-    area_id: areaId,
-    destination: input.destination,
-    today_section: todaySection,
-    start_date: startDate,
-    deadline,
-  };
-  const replay = await replayOrNull(auth, input.idempotency_key, 'project', expected);
-  if (replay !== null) return replay;
-  const { orderKey, planningOrderKey } = await nextProjectOrderKeys(
-    auth, areaId, input.destination, todaySection,
-  );
-  const timestamp = new Date().toISOString();
-  return insertWithReplay(auth, 'tasks_projects', {
-    id: crypto.randomUUID(),
-    owner_id: auth.userId,
-    area_id: areaId,
-    title,
-    notes: input.notes,
-    lifecycle: 'open',
-    completed_at: null,
-    canceled_at: null,
-    disposition: 'present',
-    deleted_at: null,
-    deletion_root_id: null,
-    destination: input.destination,
-    today_section: todaySection,
-    order_key: orderKey,
-    planning_order_key: planningOrderKey,
-    start_date: startDate,
-    deadline,
-    entry_channel: 'mcp',
-    last_mutation_channel: 'mcp',
-    last_actor_type: 'automation',
-    revision: 1,
-    client_mutation_id: input.idempotency_key,
-    created_at: timestamp,
-    updated_at: timestamp,
-  }, input.idempotency_key, 'project', expected);
 }
 
 export async function createTaskChecklistItemData(
@@ -423,23 +285,6 @@ export const createTaskArea = defineTool({
   inputSchema: idempotencyInput,
   annotations: mutationAnnotations,
   handler: (input, ctx) => toMcpResult(createTaskAreaData(input, requireAuthenticated(ctx))),
-});
-
-export const createTaskProject = defineTool({
-  name: 'create_task_project',
-  title: 'Create Task Project',
-  description: 'Create one owner-scoped open project with structured placement and planning fields.',
-  inputSchema: {
-    ...idempotencyInput,
-    notes: z.string().max(100_000).default(''),
-    area_id: uuidSchema.optional(),
-    destination: destinationSchema.default('anytime'),
-    today_section: todaySectionSchema.nullable().optional(),
-    start_date: calendarDateSchema.nullable().optional(),
-    deadline: calendarDateSchema.nullable().optional(),
-  },
-  annotations: mutationAnnotations,
-  handler: (input, ctx) => toMcpResult(createTaskProjectData(input, requireAuthenticated(ctx))),
 });
 
 export const createTaskChecklistItem = defineTool({

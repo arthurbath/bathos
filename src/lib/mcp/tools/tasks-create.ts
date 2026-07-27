@@ -57,7 +57,6 @@ export type CreateTaskRequest = {
   start_date?: string | null;
   deadline?: string | null;
   area_id?: string;
-  project_id?: string;
   source?: TaskSource;
   primary_link?: string | null;
 };
@@ -74,7 +73,6 @@ type NormalizedCreateTaskRequest = {
   placementWasImplicit: boolean;
   deadline: string | null;
   areaId: string | null;
-  projectId: string | null;
   sourceKind: TaskSource['kind'] | null;
   sourceUrl: string | null;
   sourceTitle: string | null;
@@ -132,10 +130,6 @@ function normalizeRequest(input: CreateTaskRequest): NormalizedCreateTaskRequest
   }
 
   const areaId = input.area_id ?? null;
-  const projectId = input.project_id ?? null;
-  if (areaId !== null && projectId !== null) {
-    throw new Error('A task cannot belong directly to both an area and a project.');
-  }
   const destination = input.destination ?? 'anytime';
   const requestedStartDate = input.start_date ?? null;
   if (requestedStartDate !== null && !isTaskCalendarDate(requestedStartDate)) {
@@ -163,7 +157,6 @@ function normalizeRequest(input: CreateTaskRequest): NormalizedCreateTaskRequest
       && input.today_section === undefined,
     deadline,
     areaId,
-    projectId,
     sourceKind,
     sourceUrl,
     sourceTitle,
@@ -223,7 +216,6 @@ function assertSameCreationRequest(
     [existing.event.mutation_channel, request.entryChannel],
     [state.deadline, request.deadline],
     [state.area_id, request.areaId],
-    [state.project_id, request.projectId],
     [state.source_kind, request.sourceKind],
     [state.source_url, request.sourceUrl],
     [state.source_title, request.sourceTitle],
@@ -269,25 +261,14 @@ async function validateContainer(
   request: NormalizedCreateTaskRequest,
   auth: AuthenticatedMcpContext,
 ): Promise<void> {
-  const [area, project] = await Promise.all([
-    request.areaId === null ? null : readOne<{ id: string }>(auth.supabase
-      .from('tasks_areas')
-      .select('id')
-      .eq('owner_id', auth.userId)
-      .eq('id', request.areaId)
-      .eq('disposition', 'present')
-      .maybeSingle()),
-    request.projectId === null ? null : readOne<{ id: string }>(auth.supabase
-      .from('tasks_projects')
-      .select('id')
-      .eq('owner_id', auth.userId)
-      .eq('id', request.projectId)
-      .eq('disposition', 'present')
-      .eq('lifecycle', 'open')
-      .maybeSingle()),
-  ]);
+  const area = request.areaId === null ? null : await readOne<{ id: string }>(auth.supabase
+    .from('tasks_areas')
+    .select('id')
+    .eq('owner_id', auth.userId)
+    .eq('id', request.areaId)
+    .eq('disposition', 'present')
+    .maybeSingle());
   if (request.areaId !== null && area === null) throw new Error('The task area is unavailable.');
-  if (request.projectId !== null && project === null) throw new Error('The task project is unavailable.');
 }
 
 async function nextPlanningOrderKey(
@@ -313,7 +294,7 @@ async function nextHierarchyOrderKey(
   request: NormalizedCreateTaskRequest,
   auth: AuthenticatedMcpContext,
 ): Promise<string | null> {
-  if (request.areaId === null && request.projectId === null) {
+  if (request.areaId === null) {
     return null;
   }
   let query = auth.supabase
@@ -323,7 +304,6 @@ async function nextHierarchyOrderKey(
     .eq('lifecycle', 'open')
     .eq('disposition', 'present');
   query = request.areaId === null ? query.is('area_id', null) : query.eq('area_id', request.areaId);
-  query = request.projectId === null ? query.is('project_id', null) : query.eq('project_id', request.projectId);
   const last = await readOne<{ hierarchy_order_key: string | null }>(query
     .not('hierarchy_order_key', 'is', null)
     .order('hierarchy_order_key', { ascending: false })
@@ -396,7 +376,6 @@ export async function createTaskData(
     id: crypto.randomUUID(),
     owner_id: auth.userId,
     area_id: request.areaId,
-    project_id: request.projectId,
     title: request.title,
     notes: request.notes,
     lifecycle: 'open',
@@ -456,7 +435,6 @@ export const createTask = defineTool({
     start_date: calendarDateSchema.nullable().optional(),
     deadline: calendarDateSchema.nullable().optional(),
     area_id: uuidSchema.optional(),
-    project_id: uuidSchema.optional(),
     source: sourceSchema.optional().describe('Optional typed source reference. Template provenance is reserved for template instantiation.'),
     primary_link: z.string().max(8_000).nullable().optional().describe('Optional editable shortcut, stored independently from typed source provenance.'),
   },

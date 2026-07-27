@@ -8,7 +8,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   taskAreaFixture,
-  taskProjectFixture,
   taskReminderFixture,
   taskTodoFixture,
 } from '@/modules/tasks/testing/taskFixtures';
@@ -186,47 +185,9 @@ describe('getTasksStorageStatusLabel', () => {
   });
 });
 
-vi.mock('./TaskProjectsView', () => ({
-  TaskProjectsView: () => (
-    <section data-testid="projects-view">Projects</section>
-  ),
-}));
-
 vi.mock('./TaskAreaDetailView', () => ({
   TaskAreaDetailView: ({ areaId }: { areaId: string }) => (
     <section data-testid="area-detail-view">Area {areaId}</section>
-  ),
-}));
-
-vi.mock('./TaskProjectDetailView', () => ({
-  TaskProjectDetailView: ({
-    projectId,
-    onSaveReminder,
-    onCancelReminder,
-  }: {
-    projectId: string;
-    onSaveReminder: (input: {
-      localTime: string;
-      ambiguityChoice: 'earlier' | 'later';
-    }) => Promise<void>;
-    onCancelReminder: () => Promise<void>;
-  }) => (
-    <section data-testid="project-detail-view">
-      Project {projectId}
-      <button
-        type="button"
-        aria-label="Save Project Reminder"
-        onClick={() => void onSaveReminder({
-          localTime: '10:30',
-          ambiguityChoice: 'later',
-        })}
-      />
-      <button
-        type="button"
-        aria-label="Cancel Project Reminder"
-        onClick={() => void onCancelReminder()}
-      />
-    </section>
   ),
 }));
 
@@ -308,15 +269,6 @@ const task = taskTodoFixture({
   start_date: '2026-07-20',
 });
 
-const planningProject = taskProjectFixture({
-  id: 'project-plan',
-  title: 'Plan the launch',
-  destination: 'anytime',
-  today_section: 'next',
-  start_date: '2026-07-20',
-  client_mutation_id: 'project-plan-mutation',
-});
-
 function defaultTaskList() {
   return {
     tasks: [task],
@@ -332,7 +284,6 @@ function defaultTaskList() {
       primaryLink?: string | null;
       actionability?: 'actionable' | 'waiting' | 'rechecking';
       areaId?: string | null;
-      projectId?: string | null;
     }) => taskTodoFixture({
       id: 'task-created',
       title: input.title,
@@ -344,7 +295,6 @@ function defaultTaskList() {
       primary_link: input.primaryLink ?? null,
       actionability: input.actionability ?? 'actionable',
       area_id: input.areaId ?? null,
-      project_id: input.projectId ?? null,
       client_mutation_id: 'mutation-created',
     })),
     updateTask: vi.fn().mockImplementation(async (taskId: string, patch: Partial<typeof task>) => ({
@@ -356,6 +306,7 @@ function defaultTaskList() {
     })),
     moveTask: vi.fn().mockResolvedValue(undefined),
     moveTasks: vi.fn().mockResolvedValue([]),
+    applyTaskPatches: vi.fn().mockResolvedValue([]),
     reorderTask: vi.fn().mockResolvedValue(undefined),
     reorderTaskTo: vi.fn().mockResolvedValue(undefined),
     transitionTask: vi.fn().mockResolvedValue(undefined),
@@ -569,12 +520,8 @@ describe('TasksShell', () => {
     });
     mockTaskHierarchy.mockReset().mockReturnValue({
       areas: [],
-      projects: [],
       loading: false,
       error: null,
-      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      transitionProject: vi.fn().mockResolvedValue(undefined),
     });
     mockTaskDeletedHierarchyRoots.mockReset().mockReturnValue({
       roots: [],
@@ -813,7 +760,7 @@ describe('TasksShell', () => {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', bubbles: true }));
       });
       expect(document.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks, Projects, and Areas"]',
+        '[aria-label="Find Tasks and Areas"]',
       )?.value).toBe('n');
     } finally {
       cleanup(root, container);
@@ -1115,14 +1062,14 @@ describe('TasksShell', () => {
     try {
       await act(async () => {
         container.querySelector<HTMLButtonElement>(
-          'button[aria-label="Quick Find Tasks, Projects, and Areas"]',
+          'button[aria-label="Quick Find Tasks and Areas"]',
         )?.click();
       });
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
       expect(dialog).toHaveAccessibleName('Quick Find');
       expect(dialog.querySelector('[aria-label="Task Search Filters"]')).toBeNull();
       const search = dialog.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks, Projects, and Areas"]',
+        '[aria-label="Find Tasks and Areas"]',
       )!;
       await act(async () => {
         setInputValue(search, 'architect');
@@ -1173,12 +1120,12 @@ describe('TasksShell', () => {
     try {
       await act(async () => {
         container.querySelector<HTMLButtonElement>(
-          'button[aria-label="Quick Find Tasks, Projects, and Areas"]',
+          'button[aria-label="Quick Find Tasks and Areas"]',
         )?.click();
       });
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
       const search = dialog.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks, Projects, and Areas"]',
+        '[aria-label="Find Tasks and Areas"]',
       )!;
       await act(async () => {
         setInputValue(search, 'inspection');
@@ -1217,7 +1164,7 @@ describe('TasksShell', () => {
       });
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
       const search = dialog.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks, Projects, and Areas"]',
+        '[aria-label="Find Tasks and Areas"]',
       )!;
       expect(dialog).toHaveAccessibleName('Quick Find');
       expect(search.value).toBe('e');
@@ -1242,7 +1189,7 @@ describe('TasksShell', () => {
         }));
       });
       expect(document.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks, Projects, and Areas"]',
+        '[aria-label="Find Tasks and Areas"]',
       )?.value).toBe('?');
     } finally {
       cleanup(root, container);
@@ -1262,7 +1209,7 @@ describe('TasksShell', () => {
         }));
       });
       expect(document.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks, Projects, and Areas"]',
+        '[aria-label="Find Tasks and Areas"]',
       )?.value).toBe('c');
       await act(async () => {
         document.querySelector<HTMLElement>('[data-modal-close="true"]')?.click();
@@ -1304,7 +1251,7 @@ describe('TasksShell', () => {
         }));
       });
       expect(document.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks, Projects, and Areas"]',
+        '[aria-label="Find Tasks and Areas"]',
       )?.value).toBe('?');
       await act(async () => {
         document.querySelector<HTMLButtonElement>('[data-modal-close="true"]')?.click();
@@ -1544,8 +1491,7 @@ describe('TasksShell', () => {
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
     mockTaskHierarchy.mockReturnValue({
-      areas: [],
-      projects: [{ id: 'project-a', title: 'House' }],
+      areas: [{ id: 'area-house', title: 'House' }],
       loading: false,
       error: null,
     });
@@ -1553,14 +1499,13 @@ describe('TasksShell', () => {
 
     try {
       await openTaskMenuSurface(container, 'Existing task', 'Move...');
-      const project = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+      const area = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
         .find((button) => button.textContent === 'House');
       await act(async () => {
-        project?.click();
+        area?.click();
       });
       expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
-        area_id: null,
-        project_id: 'project-a',
+        area_id: 'area-house',
       });
       await act(async () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
@@ -1693,7 +1638,7 @@ describe('TasksShell', () => {
       });
       expect(taskList.transitionTask).not.toHaveBeenCalled();
       expect(document.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks, Projects, and Areas"]',
+        '[aria-label="Find Tasks and Areas"]',
       )?.value).toBe('c');
     } finally {
       cleanup(root, container);
@@ -1860,9 +1805,11 @@ describe('TasksShell', () => {
           ctrlKey: true, bubbles: true, cancelable: true,
         }));
       });
-      expect(container.querySelector('section[aria-label="Task Selection"]')).toBeNull();
-      expect(container.querySelector('[data-task-row-id="task-a"]'))
-        .toHaveAttribute('aria-current', 'true');
+      expect(container.querySelector('section[aria-label="Task Selection"]')).toHaveTextContent(
+        '1 Task Selected',
+      );
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
       expect(container.querySelector('[aria-label="Add a Task"]')).toBeNull();
 
       await act(async () => {
@@ -1904,7 +1851,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('keeps one modified-click as task focus and collapses multiple selection back to focus', async () => {
+  it('enters selection mode on one modified click and retains it with one remaining task', async () => {
     const secondTask = taskTodoFixture({
       ...task,
       id: 'task-b',
@@ -1921,9 +1868,11 @@ describe('TasksShell', () => {
           new MouseEvent('click', { ctrlKey: true, bubbles: true, cancelable: true }),
         );
       });
-      expect(container.querySelector('[aria-label="Task Selection"]')).toBeNull();
-      expect(container.querySelector('[data-task-row-id="task-a"]'))
-        .toHaveAttribute('aria-current', 'true');
+      expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
+        '1 Task Selected',
+      );
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
 
       await act(async () => {
         container.querySelector<HTMLElement>('[data-task-id="task-b"]')?.dispatchEvent(
@@ -1939,20 +1888,107 @@ describe('TasksShell', () => {
           ?.click();
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
-      expect(container.querySelector('[aria-label="Task Selection"]')).toBeNull();
-      expect(container.querySelector('[data-task-row-id="task-a"]'))
-        .toHaveAttribute('aria-current', 'true');
-      expect(document.activeElement).toBe(
-        container.querySelector('[data-task-row-id="task-a"]'),
+      expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
+        '1 Task Selected',
       );
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
 
       await act(async () => {
         container.querySelector<HTMLElement>('[data-task-id="task-a"]')?.dispatchEvent(
           new MouseEvent('click', { ctrlKey: true, bubbles: true, cancelable: true }),
         );
       });
-      expect(container.querySelector('[data-task-row-id="task-a"]'))
-        .not.toHaveAttribute('aria-current');
+      expect(container.querySelector('[aria-label="Task Selection"]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('includes a keyboard-focused task when a modified click starts selection', async () => {
+    const secondTask = taskTodoFixture({
+      ...task,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [task, secondTask] });
+    const { container, root } = renderShell();
+    try {
+      const firstRow = container.querySelector<HTMLElement>('[data-task-row-id="task-a"]')!;
+      await act(async () => {
+        firstRow.focus();
+        firstRow.dispatchEvent(new KeyboardEvent('keydown', {
+          key: ' ', bubbles: true, cancelable: true,
+        }));
+      });
+      expect(firstRow).toHaveAttribute('aria-current', 'true');
+      expect(container.querySelector('[aria-label="Task Selection"]')).toBeNull();
+
+      await act(async () => {
+        container.querySelector<HTMLElement>('[data-task-id="task-b"]')?.dispatchEvent(
+          new MouseEvent('click', { ctrlKey: true, bubbles: true, cancelable: true }),
+        );
+      });
+      expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
+        '2 Tasks Selected',
+      );
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+      expect(container.querySelector('[aria-label="Deselect Second task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+      expect(firstRow).not.toHaveAttribute('aria-current');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('counts an open task as the first selection and keeps the remaining task closed', async () => {
+    const secondTask = taskTodoFixture({
+      ...task,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [task, secondTask] });
+    const { container, root } = renderShell();
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      expect(container.querySelector('#task-title-task-a')).toBeTruthy();
+
+      await act(async () => {
+        container.querySelector<HTMLElement>('[data-task-id="task-b"]')?.dispatchEvent(
+          new MouseEvent('click', { ctrlKey: true, bubbles: true, cancelable: true }),
+        );
+        await Promise.resolve();
+      });
+
+      expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
+        '2 Tasks Selected',
+      );
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+      expect(container.querySelector('[aria-label="Deselect Second task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+      await waitForTaskEditorExit(container);
+      expect(container.querySelector('#task-title-task-a')).toBeNull();
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[aria-label="Deselect Second task"]')
+          ?.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
+        '1 Task Selected',
+      );
+      expect(container.querySelector('#task-title-task-a')).toBeNull();
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
     } finally {
       cleanup(root, container);
     }
@@ -1991,10 +2027,12 @@ describe('TasksShell', () => {
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell();
     try {
+      const row = container.querySelector<HTMLElement>('[data-task-row-id="task-a"]')!;
       await act(async () => {
-        container.querySelector<HTMLElement>('[data-task-id="task-a"]')?.dispatchEvent(
-          new MouseEvent('click', { ctrlKey: true, bubbles: true, cancelable: true }),
-        );
+        row.focus();
+        row.dispatchEvent(new KeyboardEvent('keydown', {
+          key: ' ', bubbles: true, cancelable: true,
+        }));
       });
       const complete = new KeyboardEvent('keydown', {
         key: 'x', altKey: true, shiftKey: true, bubbles: true, cancelable: true,
@@ -2012,9 +2050,10 @@ describe('TasksShell', () => {
 
       taskList.transitionTask.mockClear();
       await act(async () => {
-        container.querySelector<HTMLElement>('[data-task-id="task-a"]')?.dispatchEvent(
-          new MouseEvent('click', { ctrlKey: true, bubbles: true, cancelable: true }),
-        );
+        row.focus();
+        row.dispatchEvent(new KeyboardEvent('keydown', {
+          key: ' ', bubbles: true, cancelable: true,
+        }));
       });
       const toggleOpen = () => window.dispatchEvent(new KeyboardEvent('keydown', {
         key: 'q', altKey: true, shiftKey: true, bubbles: true, cancelable: true,
@@ -2168,9 +2207,11 @@ describe('TasksShell', () => {
           'button[aria-label="Deselect Second task"]',
         )?.click();
       });
-      expect(container.querySelector('section[aria-label="Task Selection"]')).toBeNull();
-      expect(container.querySelector('[data-task-row-id="task-a"]'))
-        .toHaveAttribute('aria-current', 'true');
+      expect(container.querySelector('section[aria-label="Task Selection"]')).toHaveTextContent(
+        '1 Task Selected',
+      );
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
 
       const selectAllFromPartialSelection = new KeyboardEvent('keydown', {
         key: 'a', ctrlKey: true, bubbles: true, cancelable: true,
@@ -2448,10 +2489,12 @@ describe('TasksShell', () => {
     mockTaskList.mockReturnValue(taskList);
     const { container, root, rerender } = renderShell();
     try {
+      const row = container.querySelector<HTMLElement>('[data-task-row-id="task-a"]')!;
       await act(async () => {
-        container.querySelector<HTMLElement>('[data-task-id="task-a"]')?.dispatchEvent(
-          new MouseEvent('click', { ctrlKey: true, bubbles: true, cancelable: true }),
-        );
+        row.focus();
+        row.dispatchEvent(new KeyboardEvent('keydown', {
+          key: ' ', bubbles: true, cancelable: true,
+        }));
       });
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
@@ -2519,9 +2562,11 @@ describe('TasksShell', () => {
         title: 'Tasks Could Not Be Cut',
       })));
       expect(taskList.transitionTask).not.toHaveBeenCalled();
-      expect(container.querySelector('[aria-label="Task Selection"]')).toBeNull();
-      expect(container.querySelector('[data-task-row-id="task-a"]'))
-        .toHaveAttribute('aria-current', 'true');
+      expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
+        '1 Task Selected',
+      );
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
     } finally {
       cleanup(root, container);
     }
@@ -2815,6 +2860,304 @@ describe('TasksShell', () => {
     }
   });
 
+  it('drags a non-contiguous multi-selection as one atomic visual-order patch', async () => {
+    const secondTask = taskTodoFixture({
+      ...task,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+    });
+    const thirdTask = taskTodoFixture({
+      ...task,
+      id: 'task-c',
+      title: 'Third task',
+      order_key: 'a2',
+    });
+    const taskList = { ...defaultTaskList(), tasks: [task, secondTask, thirdTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      const firstTitle = container.querySelector<HTMLElement>('[data-task-id="task-a"]')!;
+      const thirdTitle = container.querySelector<HTMLElement>('[data-task-id="task-c"]')!;
+      await act(async () => {
+        firstTitle.dispatchEvent(new MouseEvent('click', {
+          ctrlKey: true, bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      await act(async () => {
+        thirdTitle.dispatchEvent(new MouseEvent('click', {
+          ctrlKey: true, bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      const source = container.querySelector('[data-task-id="task-a"]')!.closest('article')!;
+      const target = container.querySelector('[data-task-id="task-b"]')!.closest('article')!;
+      expect(source).toHaveAttribute('draggable', 'true');
+      const dataTransfer = {
+        effectAllowed: 'none',
+        dropEffect: 'none',
+        setData: vi.fn(),
+        getData: vi.fn(() => ''),
+      } as unknown as DataTransfer;
+      vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({
+        top: 0, bottom: 100, height: 100, left: 0, right: 100, width: 100,
+        x: 0, y: 0, toJSON: () => ({}),
+      });
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperties(dragOver, {
+        dataTransfer: { value: dataTransfer },
+        clientY: { value: 75 },
+      });
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+      await act(async () => {
+        source.dispatchEvent(dragStart);
+        target.dispatchEvent(dragOver);
+        target.dispatchEvent(drop);
+        await Promise.resolve();
+      });
+      expect(taskList.applyTaskPatches).toHaveBeenCalledTimes(1);
+      expect(taskList.applyTaskPatches.mock.calls[0][0]).toHaveLength(3);
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+      expect(container.querySelector('[aria-label="Deselect Third task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('cancels an active bulk drag without persistence when Escape reaches Tasks', async () => {
+    const secondTask = taskTodoFixture({ ...task, id: 'task-b', title: 'Second task' });
+    const taskList = { ...defaultTaskList(), tasks: [task, secondTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+    try {
+      const firstTitle = container.querySelector<HTMLElement>('[data-task-id="task-a"]')!;
+      const secondTitle = container.querySelector<HTMLElement>('[data-task-id="task-b"]')!;
+      await act(async () => {
+        firstTitle.dispatchEvent(new MouseEvent('click', {
+          ctrlKey: true, bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      await act(async () => {
+        secondTitle.dispatchEvent(new MouseEvent('click', {
+          ctrlKey: true, bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', {
+        value: { effectAllowed: 'none', setData: vi.fn() },
+      });
+      await act(async () => {
+        firstTitle.closest('article')!.dispatchEvent(dragStart);
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape', bubbles: true, cancelable: true,
+        }));
+      });
+      expect(taskList.applyTaskPatches).not.toHaveBeenCalled();
+      expect(container.querySelector('[aria-label^="Deselect"]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('manually reorders tasks inside one Upcoming date section', async () => {
+    const firstTask = taskTodoFixture({
+      id: 'task-upcoming-first',
+      title: 'Upcoming First',
+      start_date: '2026-07-21',
+      today_section: null,
+      order_key: 'a0',
+    });
+    const secondTask = taskTodoFixture({
+      id: 'task-upcoming-second',
+      title: 'Upcoming Second',
+      start_date: '2026-07-21',
+      today_section: null,
+      order_key: 'a1',
+    });
+    const taskList = {
+      ...defaultTaskList(),
+      tasks: [firstTask, secondTask],
+    };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      const source = container.querySelector(
+        '[data-task-id="task-upcoming-first"]',
+      )?.closest<HTMLElement>('article');
+      const target = container.querySelector(
+        '[data-task-id="task-upcoming-second"]',
+      )?.closest<HTMLElement>('article');
+      if (!source || !target) throw new Error('Expected Upcoming task rows');
+      expect(source).toHaveAttribute('draggable', 'true');
+      const dataTransfer = {
+        effectAllowed: 'none',
+        dropEffect: 'none',
+        setData: vi.fn(),
+        getData: vi.fn(() => ''),
+      } as unknown as DataTransfer;
+      vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({
+        top: 0,
+        bottom: 100,
+        height: 100,
+        left: 0,
+        right: 100,
+        width: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperties(dragOver, {
+        dataTransfer: { value: dataTransfer },
+        clientY: { value: 75 },
+      });
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+
+      await act(async () => {
+        source.dispatchEvent(dragStart);
+        target.dispatchEvent(dragOver);
+      });
+      expect(target).toHaveAttribute('data-drag-placement', 'after');
+      await act(async () => {
+        target.dispatchEvent(drop);
+        await Promise.resolve();
+      });
+      expect(taskList.reorderTaskTo).toHaveBeenCalledWith(
+        'task-upcoming-first',
+        'task-upcoming-second',
+        'after',
+      );
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('moves a deadline-only task to another Upcoming section by assigning Start', async () => {
+    const deadlineOnlyTask = taskTodoFixture({
+      id: 'task-deadline-only',
+      title: 'Deadline Only',
+      start_date: null,
+      deadline: '2026-07-21',
+      today_section: null,
+      order_key: 'a0',
+    });
+    const targetTask = taskTodoFixture({
+      id: 'task-target-date',
+      title: 'Target Date',
+      start_date: '2026-07-22',
+      deadline: null,
+      today_section: null,
+      order_key: 'a1',
+    });
+    const taskList = {
+      ...defaultTaskList(),
+      tasks: [deadlineOnlyTask, targetTask],
+    };
+    mockTaskList.mockReturnValue(taskList);
+    const reminder = taskReminderFixture({
+      id: 'reminder-deadline-only',
+      task_id: deadlineOnlyTask.id,
+      local_date: '2026-07-21',
+      local_time: '09:30:00',
+    });
+    const saveReminder = vi.fn().mockResolvedValue(undefined);
+    mockTaskReminders.mockReturnValue({
+      reminders: [reminder],
+      byRootId: new Map([[deadlineOnlyTask.id, reminder]]),
+      dueItems: [],
+      claimError: null,
+      projectionError: null,
+      mode: 'local',
+      planningTimeZone: 'America/Los_Angeles',
+      loading: false,
+      error: null,
+      save: saveReminder,
+      cancel: vi.fn().mockResolvedValue(undefined),
+      acknowledge: vi.fn().mockResolvedValue(undefined),
+      claimDue: vi.fn().mockResolvedValue(undefined),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      const source = container.querySelector(
+        '[data-task-id="task-deadline-only"]',
+      )?.closest<HTMLElement>('article');
+      const target = container.querySelector(
+        '[data-task-id="task-target-date"]',
+      )?.closest<HTMLElement>('article');
+      if (!source || !target) throw new Error('Expected cross-section Upcoming rows');
+      const dataTransfer = {
+        effectAllowed: 'none',
+        dropEffect: 'none',
+        setData: vi.fn(),
+        getData: vi.fn(() => ''),
+      } as unknown as DataTransfer;
+      vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({
+        top: 0,
+        bottom: 100,
+        height: 100,
+        left: 0,
+        right: 100,
+        width: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperties(dragOver, {
+        dataTransfer: { value: dataTransfer },
+        clientY: { value: 25 },
+      });
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+
+      await act(async () => {
+        source.dispatchEvent(dragStart);
+        target.dispatchEvent(dragOver);
+      });
+      await act(async () => {
+        target.dispatchEvent(drop);
+        await Promise.resolve();
+      });
+      expect(taskList.reorderTaskTo).toHaveBeenCalledWith(
+        'task-deadline-only',
+        'task-target-date',
+        'before',
+        {
+          destination: 'anytime',
+          start_date: '2026-07-22',
+          today_section: null,
+        },
+      );
+      expect(taskList.updateTask).not.toHaveBeenCalled();
+      expect(saveReminder).toHaveBeenCalledWith({
+        rootType: 'todo',
+        rootId: deadlineOnlyTask.id,
+        reminder,
+        localTime: '09:30',
+        ambiguityChoice: 'earlier',
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+
   it('marks a task waiting from its quick actions without changing placement', async () => {
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
@@ -2843,35 +3186,6 @@ describe('TasksShell', () => {
     }
   });
 
-  it('keeps Projects in the real-link More hierarchy without duplicate toolbar shortcuts', () => {
-    mockTaskList.mockReturnValue(defaultTaskList());
-    const today = renderShell('/tasks/today');
-
-    try {
-      const projectsLink = today.container.querySelector<HTMLAnchorElement>(
-        '[data-testid="mobile-nav"] a[href="/tasks/projects"]',
-      );
-      expect(projectsLink?.getAttribute('href')).toBe('/tasks/projects');
-      expect(today.container.querySelector('a[aria-label="Open Projects"]')).toBeNull();
-      expect(today.container.querySelector('a[aria-label="Open Templates"]')).toBeNull();
-    } finally {
-      cleanup(today.root, today.container);
-    }
-
-    const projects = renderShell('/tasks/projects');
-    try {
-      expect(projects.container.querySelector('[data-testid="projects-view"]')?.textContent)
-        .toBe('Projects');
-      const todayLink = projects.container.querySelector<HTMLAnchorElement>(
-        '[data-testid="mobile-nav"] a[href="/tasks/today"]',
-      );
-      expect(todayLink?.getAttribute('href')).toBe('/tasks/today');
-      expect(projects.container.querySelector('[data-task-view-heading]')?.textContent)
-        .toBe('Projects');
-    } finally {
-      cleanup(projects.root, projects.container);
-    }
-  });
 
   it('uses four direct mobile destinations plus four named overflow destinations', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
@@ -2885,7 +3199,7 @@ describe('TasksShell', () => {
         'Today', 'Upcoming', 'Anytime', 'Someday',
       ]);
       expect(mobileLinks.slice(4).map((link) => link.textContent)).toEqual([
-        'Projects', 'Templates', 'Done', 'Config',
+        'Templates', 'Done', 'Config',
       ]);
     } finally {
       cleanup(today.root, today.container);
@@ -2977,68 +3291,17 @@ describe('TasksShell', () => {
     }
   });
 
-  it('routes a project detail path without exposing task capture', () => {
+  it('redirects a retired Project detail path to Anytime', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
-    const project = renderShell('/tasks/projects/project-alpha');
+    const retired = renderShell('/tasks/projects/project-alpha');
     try {
-      expect(project.container.querySelector('[data-testid="project-detail-view"]')?.textContent)
-        .toBe('Project project-alpha');
-      expect(project.container.querySelector('[aria-label="Add a Task"]')).toBeNull();
-      expect(project.container.querySelector<HTMLAnchorElement>(
-        '[data-testid="mobile-nav"] a[href="/tasks/projects"]',
+      expect(retired.container.querySelector('[data-task-view-heading]')?.textContent)
+        .toBe('Anytime');
+      expect(retired.container.querySelector<HTMLAnchorElement>(
+        '[data-testid="mobile-nav"] a[href="/tasks/anytime"]',
       )?.getAttribute('aria-current')).toBe('page');
     } finally {
-      cleanup(project.root, project.container);
-    }
-  });
-
-  it('uses the project-root reminder contract from project detail', async () => {
-    mockTaskList.mockReturnValue(defaultTaskList());
-    const reminder = taskReminderFixture({
-      root_type: 'project',
-      task_id: null,
-      project_id: 'project-alpha',
-    });
-    const save = vi.fn().mockResolvedValue(undefined);
-    const cancel = vi.fn().mockResolvedValue(undefined);
-    mockTaskReminders.mockReturnValue({
-      reminders: [reminder],
-      byRootId: new Map([[reminder.project_id!, reminder]]),
-      dueItems: [],
-      mode: 'connected',
-      planningTimeZone: 'America/Los_Angeles',
-      loading: false,
-      error: null,
-      save,
-      cancel,
-      acknowledge: vi.fn().mockResolvedValue(undefined),
-      claimDue: vi.fn().mockResolvedValue(undefined),
-      webPush: null,
-    });
-    const project = renderShell('/tasks/projects/project-alpha');
-
-    try {
-      await act(async () => {
-        project.container.querySelector<HTMLButtonElement>(
-          '[aria-label="Save Project Reminder"]',
-        )?.click();
-      });
-      expect(save).toHaveBeenCalledWith({
-        rootType: 'project',
-        rootId: 'project-alpha',
-        reminder,
-        localTime: '10:30',
-        ambiguityChoice: 'later',
-      });
-
-      await act(async () => {
-        project.container.querySelector<HTMLButtonElement>(
-          '[aria-label="Cancel Project Reminder"]',
-        )?.click();
-      });
-      expect(cancel).toHaveBeenCalledWith(reminder);
-    } finally {
-      cleanup(project.root, project.container);
+      cleanup(retired.root, retired.container);
     }
   });
 
@@ -3723,7 +3986,7 @@ describe('TasksShell', () => {
 
     try {
       const searchButton = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Quick Find Tasks, Projects, and Areas"]',
+        'button[aria-label="Quick Find Tasks and Areas"]',
       )!;
       searchButton.focus();
       await act(async () => {
@@ -3732,7 +3995,7 @@ describe('TasksShell', () => {
 
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
       const searchInput = dialog.querySelector<HTMLInputElement>(
-        'input[aria-label="Find Tasks, Projects, and Areas"]',
+        'input[aria-label="Find Tasks and Areas"]',
       )!;
       expect(dialog).toHaveAccessibleName('Quick Find');
       expect(document.activeElement).toBe(searchInput);
@@ -3998,12 +4261,8 @@ describe('TasksShell', () => {
     }));
     mockTaskHierarchy.mockReturnValue({
       areas: [{ id: 'area-work', owner_id: 'owner-a', title: 'Work' }],
-      projects: [],
       loading: false,
       error: null,
-      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      transitionProject: vi.fn().mockResolvedValue(undefined),
     });
     const { container, root, rerender } = renderShell();
 
@@ -4013,7 +4272,7 @@ describe('TasksShell', () => {
       });
       expect(container.querySelector('#task-actionability-task-a')).toHaveTextContent('Ready');
       expect(container.querySelector('#task-organization-task-a'))
-        .toHaveTextContent('No Area or Project');
+        .toHaveTextContent('No Area');
 
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
@@ -4033,7 +4292,6 @@ describe('TasksShell', () => {
         ...acceptedTask,
         actionability: 'waiting',
         area_id: 'area-work',
-        project_id: null,
       };
       await act(async () => {
         rerender();
@@ -4221,23 +4479,24 @@ describe('TasksShell', () => {
   it('shows hierarchy context and moves a task structurally without changing planning state', async () => {
     const organizedTask = {
       ...task,
-      area_id: null,
-      project_id: 'project-launch',
+      area_id: 'area-work',
       hierarchy_order_key: 'a0',
       actionability: 'waiting' as const,
     };
     const taskList = { ...defaultTaskList(), tasks: [organizedTask] };
     mockTaskList.mockReturnValue(taskList);
     mockTaskHierarchy.mockReturnValue({
-      areas: [{ id: 'area-work', title: 'Work' }],
-      projects: [{ id: 'project-launch', title: 'Launch' }],
+      areas: [
+        { id: 'area-work', title: 'Work' },
+        { id: 'area-life', title: 'Life' },
+      ],
       loading: false,
       error: null,
     });
     const { container, root } = renderShell();
 
     try {
-      expect(container.textContent).toContain('Launch');
+      expect(container.textContent).toContain('Work');
       const rowHeader = container.querySelector('[data-task-row-header]');
       const metadata = rowHeader?.querySelector('[data-task-row-metadata]');
       const row = rowHeader?.closest('[data-task-planning-card]');
@@ -4294,12 +4553,11 @@ describe('TasksShell', () => {
       const organization = container.querySelector<HTMLButtonElement>(
         '#task-organization-task-a',
       )!;
-      expect(organization).toHaveTextContent('Launch');
-      await selectBathosOption(organization, 'Work');
+      expect(organization).toHaveTextContent('Work');
+      await selectBathosOption(organization, 'Life');
 
       expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
-        area_id: 'area-work',
-        project_id: null,
+        area_id: 'area-life',
       });
     } finally {
       cleanup(root, container);
@@ -4372,7 +4630,6 @@ describe('TasksShell', () => {
       id: 'task-complete-metadata',
       title: 'Complete metadata',
       area_id: null,
-      project_id: 'project-launch',
       start_date: '2026-07-22',
       today_section: null,
       deadline: '2026-07-25',
@@ -4383,7 +4640,6 @@ describe('TasksShell', () => {
       id: 'task-partial-metadata',
       title: 'Partial metadata',
       area_id: 'area-home',
-      project_id: null,
       start_date: '2026-07-23',
       today_section: null,
       deadline: null,
@@ -4402,13 +4658,6 @@ describe('TasksShell', () => {
       areas: [
         taskAreaFixture({ id: 'area-work', title: 'Work' }),
         taskAreaFixture({ id: 'area-home', title: 'Home' }),
-      ],
-      projects: [
-        taskProjectFixture({
-          id: 'project-launch',
-          area_id: 'area-work',
-          title: 'Launch',
-        }),
       ],
       loading: false,
       error: null,
@@ -4441,9 +4690,7 @@ describe('TasksShell', () => {
         Array.from(completeMetadata?.children ?? [], (item) => (
           item.getAttribute('data-task-metadata-kind')
         )),
-      ).toEqual(['area', 'project', 'reminder', 'deadline', 'actionability']);
-      expect(completeMetadata).toHaveTextContent('Work');
-      expect(completeMetadata).toHaveTextContent('Launch');
+      ).toEqual(['reminder', 'deadline', 'actionability']);
       expect(completeMetadata).toHaveTextContent('1:30 PM');
       expect(completeMetadata).toHaveTextContent('5 days left');
       expect(completeMetadata).toHaveTextContent('Waiting');
@@ -4580,7 +4827,7 @@ describe('TasksShell', () => {
     const saveReminder = vi.fn().mockResolvedValue(undefined);
     const reminder = {
       id: 'reminder-a', owner_id: 'owner-a', root_type: 'todo' as const,
-      task_id: 'task-a', project_id: null, local_date: '2026-07-20',
+      task_id: 'task-a', local_date: '2026-07-20',
       local_time: '09:00:00', time_zone: 'America/Los_Angeles',
       ambiguity_choice: 'earlier' as const, resolved_at: '2026-07-20T16:00:00Z',
       resolution_kind: 'exact' as const, status: 'active' as const,
@@ -5074,7 +5321,6 @@ describe('TasksShell', () => {
     const activeReminder = taskReminderFixture({
       root_type: 'todo',
       task_id: 'task-a',
-      project_id: null,
       local_time: '09:00:00',
     });
     mockTaskList.mockReturnValue(defaultTaskList());
@@ -5134,7 +5380,6 @@ describe('TasksShell', () => {
     const activeReminder = taskReminderFixture({
       root_type: 'todo',
       task_id: 'task-a',
-      project_id: null,
       local_time: '09:00:00',
     });
     const todayTask = taskTodoFixture({
@@ -5716,7 +5961,6 @@ describe('TasksShell', () => {
     const reminder = taskReminderFixture({
       id: 'reminder-a',
       task_id: 'task-a',
-      project_id: null,
     });
     const cancelReminder = vi.fn().mockResolvedValue(undefined);
     const taskList = { ...defaultTaskList(), tasks: [futureTask] };
@@ -6089,7 +6333,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('orders the complete Upcoming surface from nearest to latest across projects and to-dos', () => {
+  it('orders the complete Upcoming surface from nearest to latest', () => {
     const taskList = {
       ...defaultTaskList(),
       tasks: [
@@ -6113,23 +6357,8 @@ describe('TasksShell', () => {
     mockTaskList.mockReturnValue(taskList);
     mockTaskHierarchy.mockReturnValue({
       areas: [],
-      projects: [
-        taskProjectFixture({
-          id: 'project-september',
-          title: 'September project',
-          start_date: '2026-09-10',
-        }),
-        taskProjectFixture({
-          id: 'project-august-fifth',
-          title: 'August fifth project',
-          start_date: '2026-08-05',
-        }),
-      ],
       loading: false,
       error: null,
-      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      transitionProject: vi.fn().mockResolvedValue(undefined),
     });
     const { container, root } = renderShell('/tasks/upcoming');
 
@@ -6140,10 +6369,6 @@ describe('TasksShell', () => {
         .toBeLessThan(text.indexOf('July thirtieth task'));
       expect(text.indexOf('July thirtieth task'))
         .toBeLessThan(text.indexOf('August first task'));
-      expect(text.indexOf('August first task'))
-        .toBeLessThan(text.indexOf('August fifth project'));
-      expect(text.indexOf('August fifth project'))
-        .toBeLessThan(text.indexOf('September project'));
       expect(upcoming?.querySelector('#task-planning-projects-heading')).toBeNull();
     } finally {
       cleanup(root, container);
@@ -6196,7 +6421,6 @@ describe('TasksShell', () => {
       id: 'task-unassigned',
       title: 'Unassigned',
       area_id: null,
-      project_id: null,
       order_key: 'a3',
     });
     const workDirectTask = taskTodoFixture({
@@ -6204,15 +6428,13 @@ describe('TasksShell', () => {
       id: 'task-work-direct',
       title: 'Work Direct',
       area_id: 'area-work',
-      project_id: null,
       order_key: 'a2',
     });
-    const workProjectTask = taskTodoFixture({
+    const secondWorkTask = taskTodoFixture({
       ...task,
-      id: 'task-work-project',
-      title: 'Work Project',
-      area_id: null,
-      project_id: 'project-work',
+      id: 'task-work-second',
+      title: 'Work Second',
+      area_id: 'area-work',
       order_key: 'a0',
     });
     const homeTask = taskTodoFixture({
@@ -6220,12 +6442,11 @@ describe('TasksShell', () => {
       id: 'task-home',
       title: 'Home',
       area_id: 'area-home',
-      project_id: null,
       order_key: 'a1',
     });
     mockTaskList.mockReturnValue({
       ...defaultTaskList(),
-      tasks: [workDirectTask, unassignedTask, homeTask, workProjectTask],
+      tasks: [workDirectTask, unassignedTask, homeTask, secondWorkTask],
     });
     mockTaskHierarchy.mockReturnValue({
       areas: [
@@ -6233,18 +6454,8 @@ describe('TasksShell', () => {
         taskAreaFixture({ id: 'area-work', title: 'Work', order_key: 'a0' }),
         taskAreaFixture({ id: 'area-empty', title: 'Empty', order_key: 'a2' }),
       ],
-      projects: [
-        taskProjectFixture({
-          id: 'project-work',
-          title: 'Work Project',
-          area_id: 'area-work',
-        }),
-      ],
       loading: false,
       error: null,
-      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      transitionProject: vi.fn().mockResolvedValue(undefined),
     });
     const { container, root } = renderShell('/tasks/anytime');
 
@@ -6261,7 +6472,7 @@ describe('TasksShell', () => {
       expect(work?.compareDocumentPosition(home!) & Node.DOCUMENT_POSITION_FOLLOWING)
         .toBeTruthy();
       expect(work?.textContent).toContain('Work Direct');
-      expect(work?.textContent).toContain('Work Project');
+      expect(work?.textContent).toContain('Work Second');
       expect(home?.textContent).toContain('Home');
       expect(Array.from(container.querySelectorAll('h3')).some(
         (heading) => heading.textContent?.trim() === 'No Area',
@@ -6317,7 +6528,6 @@ describe('TasksShell', () => {
           actionability: initiallyReady.actionability,
           order_key: initiallyReady.order_key,
           area_id: initiallyReady.area_id,
-          project_id: initiallyReady.project_id,
         }
         : null,
     }));
@@ -6362,18 +6572,13 @@ describe('TasksShell', () => {
       id: 'task-work',
       title: 'Existing Work',
       area_id: 'area-work',
-      project_id: null,
     });
     const taskList = { ...defaultTaskList(), tasks: [workTask] };
     mockTaskList.mockReturnValue(taskList);
     mockTaskHierarchy.mockReturnValue({
       areas: [taskAreaFixture({ id: 'area-work', title: 'Work' })],
-      projects: [],
       loading: false,
       error: null,
-      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      transitionProject: vi.fn().mockResolvedValue(undefined),
     });
     const { container, root } = renderShell('/tasks/anytime');
 
@@ -6400,7 +6605,6 @@ describe('TasksShell', () => {
         title: 'New Work',
         destination: 'anytime',
         areaId: 'area-work',
-        projectId: null,
         atTop: true,
       }));
     } finally {
@@ -6409,12 +6613,11 @@ describe('TasksShell', () => {
   });
 
   it('changes exact organization only when an Anytime drag crosses Area regions', async () => {
-    const projectTask = taskTodoFixture({
+    const workPeerTask = taskTodoFixture({
       ...task,
-      id: 'task-project',
-      title: 'Project Task',
-      area_id: null,
-      project_id: 'project-work',
+      id: 'task-work-peer',
+      title: 'Work Peer',
+      area_id: 'area-work',
       order_key: 'a0',
     });
     const workTask = taskTodoFixture({
@@ -6422,7 +6625,6 @@ describe('TasksShell', () => {
       id: 'task-work',
       title: 'Work Task',
       area_id: 'area-work',
-      project_id: null,
       order_key: 'a1',
     });
     const homeTask = taskTodoFixture({
@@ -6430,12 +6632,11 @@ describe('TasksShell', () => {
       id: 'task-home',
       title: 'Home Task',
       area_id: 'area-home',
-      project_id: null,
       order_key: 'a2',
     });
     const taskList = {
       ...defaultTaskList(),
-      tasks: [projectTask, workTask, homeTask],
+      tasks: [workPeerTask, workTask, homeTask],
     };
     mockTaskList.mockReturnValue(taskList);
     mockTaskHierarchy.mockReturnValue({
@@ -6443,18 +6644,8 @@ describe('TasksShell', () => {
         taskAreaFixture({ id: 'area-work', title: 'Work', order_key: 'a0' }),
         taskAreaFixture({ id: 'area-home', title: 'Home', order_key: 'a1' }),
       ],
-      projects: [
-        taskProjectFixture({
-          id: 'project-work',
-          title: 'Project',
-          area_id: 'area-work',
-        }),
-      ],
       loading: false,
       error: null,
-      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      transitionProject: vi.fn().mockResolvedValue(undefined),
     });
     const { container, root } = renderShell('/tasks/anytime');
 
@@ -6500,27 +6691,27 @@ describe('TasksShell', () => {
     };
 
     try {
-      await drag('task-project', 'task-work');
+      await drag('task-work-peer', 'task-work');
       expect(taskList.reorderTaskTo).toHaveBeenLastCalledWith(
-        'task-project',
+        'task-work-peer',
         'task-work',
         'after',
       );
 
       taskList.reorderTaskTo.mockClear();
-      await drag('task-project', 'task-home');
+      await drag('task-work-peer', 'task-home');
       expect(taskList.reorderTaskTo).toHaveBeenLastCalledWith(
-        'task-project',
+        'task-work-peer',
         'task-home',
         'after',
-        { area_id: 'area-home', project_id: null },
+        { area_id: 'area-home' },
       );
     } finally {
       cleanup(root, container);
     }
   });
 
-  it('keeps the automatic-sort drop line at the last legal peer position', async () => {
+  it('commits the last legal exact-peer position when release occurs outside the list', async () => {
     mockTaskAutomaticListSorting.mockReturnValue({
       enabled: true,
       loading: false,
@@ -6538,15 +6729,25 @@ describe('TasksShell', () => {
       actionability: 'rechecking',
       order_key: 'a0',
     });
-    const peer = taskTodoFixture({
+    const firstPeer = taskTodoFixture({
       ...task,
-      id: 'task-peer',
-      title: 'Peer',
+      id: 'task-peer-first',
+      title: 'First Peer',
       area_id: null,
       deadline: '2026-07-26',
       today_section: 'now',
       actionability: 'rechecking',
       order_key: 'a1',
+    });
+    const lastPeer = taskTodoFixture({
+      ...task,
+      id: 'task-peer-last',
+      title: 'Last Peer',
+      area_id: null,
+      deadline: '2026-07-26',
+      today_section: 'now',
+      actionability: 'rechecking',
+      order_key: 'a2',
     });
     const illegal = taskTodoFixture({
       ...task,
@@ -6556,11 +6757,11 @@ describe('TasksShell', () => {
       deadline: '2026-07-27',
       today_section: 'now',
       actionability: 'rechecking',
-      order_key: 'a2',
+      order_key: 'a3',
     });
     const taskList = {
       ...defaultTaskList(),
-      tasks: [dragged, peer, illegal],
+      tasks: [dragged, firstPeer, lastPeer, illegal],
     };
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell('/tasks/anytime');
@@ -6573,7 +6774,7 @@ describe('TasksShell', () => {
       effectAllowed: 'none',
       dropEffect: 'none',
       setData: (type: string, value: string) => data.set(type, value),
-      getData: (type: string) => data.get(type) ?? '',
+      getData: () => '',
     } as unknown as DataTransfer;
     const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
     Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
@@ -6590,10 +6791,16 @@ describe('TasksShell', () => {
 
     try {
       const source = row('task-dragged');
-      const peerRow = row('task-peer');
+      const firstPeerRow = row('task-peer-first');
+      const lastPeerRow = row('task-peer-last');
       const illegalRow = row('task-illegal');
-      if (!source || !peerRow || !illegalRow) throw new Error('Expected automatic-sort rows');
-      for (const target of [peerRow, illegalRow]) {
+      const moduleDropSurface = container.querySelector<HTMLElement>(
+        '[data-task-module-drop-surface]',
+      );
+      if (!source || !firstPeerRow || !lastPeerRow || !illegalRow || !moduleDropSurface) {
+        throw new Error('Expected automatic-sort rows');
+      }
+      for (const target of [firstPeerRow, lastPeerRow, illegalRow]) {
         vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({
           top: 0,
           bottom: 100,
@@ -6608,23 +6815,30 @@ describe('TasksShell', () => {
       }
       await act(async () => {
         source.dispatchEvent(dragStart);
-        peerRow.dispatchEvent(dragOver(75));
+        firstPeerRow.dispatchEvent(dragOver(75));
       });
-      expect(peerRow).toHaveAttribute('data-drag-placement', 'after');
+      expect(firstPeerRow).toHaveAttribute('data-drag-placement', 'after');
+
+      await act(async () => {
+        lastPeerRow.dispatchEvent(dragOver(75));
+      });
+      expect(firstPeerRow).not.toHaveAttribute('data-drag-placement');
+      expect(lastPeerRow).toHaveAttribute('data-drag-placement', 'after');
 
       await act(async () => {
         illegalRow.dispatchEvent(dragOver(25));
       });
-      expect(peerRow).toHaveAttribute('data-drag-placement', 'after');
+      expect(lastPeerRow).toHaveAttribute('data-drag-placement', 'after');
       expect(illegalRow).not.toHaveAttribute('data-drag-placement');
 
       await act(async () => {
-        illegalRow.dispatchEvent(drop);
+        moduleDropSurface.dispatchEvent(drop);
         await Promise.resolve();
       });
+      expect(drop.defaultPrevented).toBe(true);
       expect(taskList.reorderTaskTo).toHaveBeenCalledWith(
         'task-dragged',
-        'task-peer',
+        'task-peer-last',
         'after',
       );
     } finally {
@@ -6638,18 +6852,13 @@ describe('TasksShell', () => {
       id: 'task-work',
       title: 'Work Task',
       area_id: 'area-work',
-      project_id: null,
     });
     const taskList = { ...defaultTaskList(), tasks: [workTask] };
     mockTaskList.mockReturnValue(taskList);
     mockTaskHierarchy.mockReturnValue({
       areas: [taskAreaFixture({ id: 'area-work', title: 'Work' })],
-      projects: [],
       loading: false,
       error: null,
-      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      transitionProject: vi.fn().mockResolvedValue(undefined),
     });
     const { container, root } = renderShell('/tasks/anytime');
 
@@ -6677,7 +6886,6 @@ describe('TasksShell', () => {
       });
       expect(taskList.updateTask).toHaveBeenCalledWith('task-work', {
         area_id: null,
-        project_id: null,
       });
     } finally {
       cleanup(root, container);
@@ -6761,12 +6969,8 @@ describe('TasksShell', () => {
         taskAreaFixture({ id: 'area-home', title: 'Home', order_key: 'a1' }),
         taskAreaFixture({ id: 'area-work', title: 'Work', order_key: 'a0' }),
       ],
-      projects: [],
       loading: false,
       error: null,
-      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      transitionProject: vi.fn().mockResolvedValue(undefined),
     });
     const { container, root } = renderShell('/tasks/someday');
 
@@ -6933,98 +7137,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('renders projects in Today and applies project-specific planning actions', async () => {
-    const taskList = { ...defaultTaskList(), tasks: [] };
-    const hierarchy = {
-      areas: [],
-      projects: [planningProject],
-      loading: false,
-      error: null,
-      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      transitionProject: vi.fn().mockResolvedValue(undefined),
-    };
-    mockTaskList.mockReturnValue(taskList);
-    mockTaskHierarchy.mockReturnValue(hierarchy);
-    const { container, root } = renderShell('/tasks/today');
 
-    try {
-      const projectsHeading = container.querySelector('#task-planning-projects-heading');
-      expect(projectsHeading).toHaveAccessibleName('Projects');
-      expect(projectsHeading?.querySelector('[data-task-count-badge]')).toBeNull();
-      const projectLink = container.querySelector<HTMLAnchorElement>(
-        'a[href="/tasks/projects/project-plan"]',
-      );
-      expect(projectLink?.textContent).toBe('Plan the launch');
-      const projectCard = projectLink?.closest('[data-task-planning-card]');
-      const projectList = projectCard?.closest('[data-task-planning-list]');
-      expect(projectCard).toHaveClass(
-        'overflow-hidden',
-        'rounded-md',
-        'border',
-        'border-foreground/10',
-        'bg-foreground/[0.02]',
-      );
-      expect(projectList).toHaveClass('space-y-1');
-      expect(projectList).not.toHaveClass('divide-y', 'border-y');
-
-      const actions = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Planning Actions for Plan the launch"]',
-      );
-      await act(async () => {
-        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
-        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      });
-      const tomorrow = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
-        .find((item) => item.textContent === 'Move to Tomorrow');
-      await act(async () => {
-        tomorrow?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      });
-      expect(hierarchy.moveProjectInPlanning).toHaveBeenCalledWith('project-plan', {
-        destination: 'anytime',
-        todaySection: null,
-        startDate: '2026-07-21',
-      });
-      expect(taskList.moveTask).not.toHaveBeenCalled();
-    } finally {
-      cleanup(root, container);
-    }
-  });
-
-  it('renders terminal projects in Done and reopens them through hierarchy operations', async () => {
-    const completedProject = {
-      ...planningProject,
-      lifecycle: 'completed' as const,
-      completed_at: '2026-07-20T05:00:00.000Z',
-    };
-    const taskList = { ...defaultTaskList(), tasks: [] };
-    const hierarchy = {
-      areas: [],
-      projects: [completedProject],
-      loading: false,
-      error: null,
-      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      transitionProject: vi.fn().mockResolvedValue(undefined),
-    };
-    mockTaskList.mockReturnValue(taskList);
-    mockTaskHierarchy.mockReturnValue(hierarchy);
-    const { container, root } = renderShell('/tasks/done');
-
-    try {
-      expect(container.textContent).toContain('Completed');
-      await act(async () => {
-        container.querySelector<HTMLButtonElement>('[aria-label="Reopen Plan the launch"]')?.click();
-      });
-      expect(hierarchy.transitionProject).toHaveBeenCalledWith(
-        'project-plan',
-        'reopen_project',
-      );
-      expect(taskList.transitionTask).not.toHaveBeenCalled();
-    } finally {
-      cleanup(root, container);
-    }
-  });
 
   it('omits menu and keyboard reorder actions', async () => {
     const secondTask = {
@@ -7144,7 +7257,6 @@ describe('TasksShell', () => {
     const reminder = taskReminderFixture({
       id: 'reminder-a',
       task_id: 'task-a',
-      project_id: null,
     });
     const cancelReminder = vi.fn().mockResolvedValue(undefined);
     const taskList = { ...defaultTaskList(), tasks: [futureTask] };
@@ -7276,12 +7388,8 @@ describe('TasksShell', () => {
     mockTaskSearch.mockReturnValue({ tasks: matchingTasks, loading: false, error: null });
     mockTaskHierarchy.mockReturnValue({
       areas: [{ id: 'area-plan', owner_id: 'owner-a', title: 'Plan Area' }],
-      projects: [{ id: 'project-plan', owner_id: 'owner-a', title: 'Plan Project' }],
       loading: false,
       error: null,
-      moveProjectInPlanning: vi.fn(),
-      reorderProjectInPlanning: vi.fn(),
-      transitionProject: vi.fn(),
     });
     const { container, root } = renderShell();
     try {
@@ -7318,10 +7426,12 @@ describe('TasksShell', () => {
     });
     const { container, root } = renderShell();
     try {
+      const row = container.querySelector<HTMLElement>('[data-task-row-id="task-a"]')!;
       await act(async () => {
-        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.dispatchEvent(
-          new MouseEvent('click', { ctrlKey: true, bubbles: true, cancelable: true }),
-        );
+        row.focus();
+        row.dispatchEvent(new KeyboardEvent('keydown', {
+          key: ' ', bubbles: true, cancelable: true,
+        }));
       });
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
@@ -7383,7 +7493,7 @@ describe('TasksShell', () => {
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
       expect(dialog).toHaveAccessibleName('Move Selected To');
       expect(dialog).toHaveAttribute('data-task-bulk-selection-surface');
-      expect(document.activeElement).toBe(dialog.querySelector('[aria-label="Area or Project"]'));
+      expect(document.activeElement).toBe(dialog.querySelector('[aria-label="Area"]'));
     } finally {
       cleanup(root, container);
     }
@@ -7886,43 +7996,6 @@ describe('TasksShell', () => {
     }
   });
 
-  it('keeps project cards while showing a filtered task empty state', async () => {
-    const user = userEvent.setup();
-    mockTaskList.mockReturnValue({
-      ...defaultTaskList(),
-      tasks: [taskTodoFixture({
-        ...task,
-        id: 'task-actionable',
-        title: 'Actionable task',
-        actionability: 'actionable',
-        client_mutation_id: 'mutation-actionable',
-      })],
-    });
-    mockTaskHierarchy.mockReturnValue({
-      areas: [],
-      projects: [planningProject],
-      loading: false,
-      error: null,
-      moveProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      reorderProjectInPlanning: vi.fn().mockResolvedValue(undefined),
-      transitionProject: vi.fn().mockResolvedValue(undefined),
-    });
-    const { container, root } = renderShell('/tasks/today');
-    try {
-      expect(container).toHaveTextContent('Plan the launch');
-      await user.click(container.querySelector('[aria-label="Quick Filters"]')!);
-      await user.click(Array.from(document.querySelectorAll('[role="menuitemradio"]'))
-        .find((item) => item.textContent === 'Only Waiting')!);
-      await waitFor(() => {
-        expect(container.querySelector('[data-task-quick-filter-empty]'))
-          .toHaveTextContent('No tasks match this filter');
-      });
-      expect(container).toHaveTextContent('Plan the launch');
-      expect(container.querySelector('[data-task-id="task-actionable"]')).toBeNull();
-    } finally {
-      cleanup(root, container);
-    }
-  });
 
   it('opens Config with the Windows application command', async () => {
     mockTaskList.mockReturnValue(defaultTaskList());

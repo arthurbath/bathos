@@ -6,10 +6,9 @@ type TaskPermanentDeletionClient = Pick<SupabaseClient<Database>, 'rpc'>;
 
 export const TASK_PERMANENT_DELETION_CONFIRMATION = 'PERMANENTLY DELETE';
 
-export type TaskPermanentDeletionRootType = 'todo' | 'project';
+export type TaskPermanentDeletionRootType = 'todo';
 
 export type TaskPermanentDeletionHierarchy = {
-  projects: string[];
   todos: string[];
   checklist_items: string[];
 };
@@ -68,7 +67,7 @@ export class TaskPermanentDeletionService {
     rootId: string,
   ): Promise<TaskPermanentDeletionPreview> {
     if (!isRootType(rootType) || !rootId.trim()) {
-      throw new InvalidTaskPermanentDeletionError('A deleted task or project is required');
+      throw new InvalidTaskPermanentDeletionError('A deleted task is required');
     }
     const { data, error } = await this.client.rpc('tasks_preview_permanent_deletion', {
       _root_type: rootType,
@@ -148,7 +147,6 @@ function parseRoot(value: unknown, requireTitle: boolean) {
 function parseHierarchy(value: unknown): TaskPermanentDeletionHierarchy {
   const hierarchy = requireRecord(value, 'Permanent-deletion hierarchy is invalid');
   return {
-    projects: requireStringArray(hierarchy.projects, 'projects'),
     todos: requireStringArray(hierarchy.todos, 'tasks'),
     checklist_items: requireStringArray(hierarchy.checklist_items, 'checklist items'),
   };
@@ -232,5 +230,5 @@ function isDigest(value: string): boolean {
 }
 
 function isRootType(value: unknown): value is TaskPermanentDeletionRootType {
-  return value === 'todo' || value === 'project';
+  return value === 'todo';
 }

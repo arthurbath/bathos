@@ -1,4 +1,3 @@
-import type { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
 import type { TaskRepository } from '@/modules/tasks/data/taskRepository';
 
 export async function activateTaskPlanningDate({
@@ -6,7 +5,6 @@ export async function activateTaskPlanningDate({
   planningDate,
   planningTimeZone,
   repository,
-  hierarchyRepository,
 }: {
   ownerId: string;
   planningDate: string;
@@ -15,12 +13,7 @@ export async function activateTaskPlanningDate({
     TaskRepository,
     'rolloverTodayTasks' | 'activateDueStartDates'
   >;
-  hierarchyRepository: Pick<
-    TaskHierarchyRepository,
-    'activateDueProjectStartDates'
-  >;
 }): Promise<void> {
   await repository.rolloverTodayTasks(ownerId, planningDate, planningTimeZone);
   await repository.activateDueStartDates(ownerId, planningDate);
-  await hierarchyRepository.activateDueProjectStartDates(ownerId, planningDate);
 }

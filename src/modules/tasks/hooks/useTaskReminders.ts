@@ -57,7 +57,7 @@ export function useTaskReminders(ownerId: string) {
 
   const byRootId = useMemo(
     () => new Map(reminders.map((reminder) => [
-      reminder.task_id ?? reminder.project_id!,
+      reminder.task_id!,
       reminder,
     ])),
     [reminders],

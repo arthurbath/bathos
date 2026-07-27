@@ -144,7 +144,6 @@ export function TasksRuntimeProvider({
             planningDate,
             planningTimeZone: settings.planning_timezone,
             repository,
-            hierarchyRepository,
           });
         };
         await activateReachedDates();

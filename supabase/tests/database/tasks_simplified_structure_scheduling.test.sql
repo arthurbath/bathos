@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(50);
+SELECT plan(42);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -332,34 +332,6 @@ SELECT is(
   NULL,
   'clears the obsolete terminal task horizon'
 );
-SELECT lives_ok(
-  $$
-    INSERT INTO public.tasks_projects (
-      id, owner_id, title, lifecycle, completed_at, destination,
-      start_date, today_section, order_key, planning_order_key,
-      client_mutation_id
-    ) VALUES (
-      'c2000000-0000-4000-8000-000000000046',
-      'c2000000-0000-4000-8000-000000000001',
-      'Historical completed project', 'completed', clock_timestamp(), 'anytime',
-      DATE '2020-01-01', 'later', 'a4', 'a4',
-      'c2000000-0000-4000-8000-000000000047'
-    )
-  $$,
-  'allows retained terminal project history with a past Start'
-);
-SELECT is(
-  (SELECT start_date FROM public.tasks_projects
-    WHERE id = 'c2000000-0000-4000-8000-000000000046'),
-  DATE '2020-01-01',
-  'preserves the historical terminal project Start'
-);
-SELECT is(
-  (SELECT today_section FROM public.tasks_projects
-    WHERE id = 'c2000000-0000-4000-8000-000000000046'),
-  NULL,
-  'clears the obsolete terminal project horizon'
-);
 RESET ROLE;
 SELECT is(
   tasks_private.normalize_export_v12_record(
@@ -408,96 +380,11 @@ SELECT is(
   'next',
   'instantiates a reached template Start into Today Next'
 );
-SET LOCAL ROLE authenticated;
-SELECT set_config('request.jwt.claim.sub', 'c2000000-0000-4000-8000-000000000001', true);
-SELECT set_config('request.jwt.claim.role', 'authenticated', true);
-
-INSERT INTO public.tasks_projects (
-  id, owner_id, title, destination, start_date, order_key, planning_order_key,
-  client_mutation_id
-) VALUES (
-  'c2000000-0000-4000-8000-000000000050',
-  'c2000000-0000-4000-8000-000000000001',
-  'Flat project', 'anytime', NULL, 'a0', 'a0',
-  'c2000000-0000-4000-8000-000000000051'
-);
-INSERT INTO public.tasks_todos (
-  id, owner_id, project_id, title, destination, start_date,
-  order_key, hierarchy_order_key, client_mutation_id
-) VALUES (
-  'c2000000-0000-4000-8000-000000000052',
-  'c2000000-0000-4000-8000-000000000001',
-  'c2000000-0000-4000-8000-000000000050',
-  'Flat child', 'anytime', NULL, 'a3', 'a0',
-  'c2000000-0000-4000-8000-000000000053'
-);
-SELECT set_config(
-  'test.tasks_v12_template',
-  public.tasks_capture_template(
-    NULL, 'project', 'c2000000-0000-4000-8000-000000000050',
-    'Flat project template', DATE '2099-07-22',
-    'c2000000-0000-4000-8000-000000000054'
-  )::text,
-  false
-);
-SELECT ok(
-  NOT (current_setting('test.tasks_v12_template')::jsonb
-    #> '{revision,snapshot}' ? 'headings'),
-  'captures a project template without heading structure'
-);
-SELECT set_config(
-  'test.tasks_v12_instance',
-  public.tasks_instantiate_template(
-    (current_setting('test.tasks_v12_template')::jsonb #>> '{template,id}')::uuid,
-    1, DATE '2099-07-23', 'c2000000-0000-4000-8000-000000000055'
-  )::text,
-  false
-);
-SELECT ok(
-  NOT (current_setting('test.tasks_v12_instance')::jsonb #> '{result}' ? 'heading_ids'),
-  'instantiates a project template without heading identifiers'
-);
-SELECT is(
-  jsonb_array_length(current_setting('test.tasks_v12_instance')::jsonb
-    #> '{result,task_ids}'),
-  1,
-  'instantiates the flattened project child'
-);
-
-SELECT set_config(
-  'test.tasks_v12_delete',
-  public.tasks_request_mcp_hierarchy_operation(
-    'c2000000-0000-4000-8000-000000000060', 'project',
-    'c2000000-0000-4000-8000-000000000050', 1, 'delete', 'cascade'
-  )::text,
-  false
-);
-SELECT is(
-  (SELECT disposition FROM public.tasks_projects
-    WHERE id = 'c2000000-0000-4000-8000-000000000050'),
-  'deleted',
-  'deletes a flat project hierarchy through the MCP boundary'
-);
-SELECT set_config(
-  'test.tasks_v12_restore',
-  public.tasks_request_mcp_hierarchy_operation(
-    'c2000000-0000-4000-8000-000000000061', 'project',
-    'c2000000-0000-4000-8000-000000000050', 2, 'restore', 'cascade'
-  )::text,
-  false
-);
-SELECT is(
-  (SELECT disposition FROM public.tasks_todos
-    WHERE id = 'c2000000-0000-4000-8000-000000000052'),
-  'present',
-  'restores flat project descendants through the MCP boundary'
-);
-
-SELECT set_config('test.tasks_v12_export', public.tasks_create_export_v12()::text, false);
+SELECT set_config('test.tasks_v12_export', public.tasks_create_export_v13()::text, false);
 SELECT is(
   (current_setting('test.tasks_v12_export')::jsonb ->> 'schema_version')::integer,
-  12,
-  'creates schema-12 task exports'
+  13,
+  'creates schema-thirteen task exports'
 );
 SELECT ok(
   NOT (current_setting('test.tasks_v12_export')::jsonb
@@ -508,8 +395,8 @@ SELECT is(
   public.tasks_restore_export_current(
     current_setting('test.tasks_v12_export')::jsonb, true
   ) ->> 'schema_version',
-  '12',
-  'previews a schema-12 merge restore through the current compatibility boundary'
+  '13',
+  'previews a schema-thirteen merge restore through the current boundary'
 );
 
 SELECT * FROM finish();

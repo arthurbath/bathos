@@ -26,7 +26,6 @@ import { TaskRecurrencePanel } from '@/modules/tasks/components/TaskRecurrencePa
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type {
   TaskTemplate,
-  TaskTemplateKind,
   TaskTemplateSnapshot,
 } from '@/modules/tasks/types/tasks';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
@@ -42,7 +41,6 @@ export function TaskTemplatesView({
   const basePath = useModuleBasePath();
   const model = useTaskTemplates(ownerId);
   const [templateId, setTemplateId] = useState<string | null>(null);
-  const [sourceType, setSourceType] = useState<TaskTemplateKind>('todo');
   const [sourceId, setSourceId] = useState('');
   const [name, setName] = useState('');
   const [captureAnchor, setCaptureAnchor] = useState(model.planningDate);
@@ -50,7 +48,7 @@ export function TaskTemplatesView({
   const [targetAreas, setTargetAreas] = useState<Record<string, string>>({});
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
-  const sources = sourceType === 'todo' ? model.todos : model.projects;
+  const sources = model.todos;
   const selectedTemplate = templateId
     ? model.templates.find((template) => template.id === templateId) ?? null
     : null;
@@ -64,14 +62,13 @@ export function TaskTemplatesView({
     if (!captureAnchor) setCaptureAnchor(model.planningDate);
   }, [captureAnchor, model.planningDate]);
 
-  const sourceLabelById = useMemo(() => new Map([
-    ...model.todos.map((todo) => [todo.id, todo.title] as const),
-    ...model.projects.map((project) => [project.id, project.title] as const),
-  ]), [model.projects, model.todos]);
+  const sourceLabelById = useMemo(
+    () => new Map(model.todos.map((todo) => [todo.id, todo.title] as const)),
+    [model.todos],
+  );
 
   const resetCapture = () => {
     setTemplateId(null);
-    setSourceType('todo');
     setName('');
   };
 
@@ -82,7 +79,7 @@ export function TaskTemplatesView({
     try {
       await model.capture({
         templateId,
-        sourceType,
+        sourceType: 'todo',
         sourceId,
         name,
         anchorDate: captureAnchor,
@@ -98,9 +95,8 @@ export function TaskTemplatesView({
 
   const revise = (template: TaskTemplate) => {
     setTemplateId(template.id);
-    setSourceType(template.kind);
     setName(template.name);
-    const availableSources = template.kind === 'todo' ? model.todos : model.projects;
+    const availableSources = model.todos;
     const priorSource = model.revisions.get(template.id)?.source_id;
     setSourceId(
       availableSources.some((source) => source.id === priorSource)
@@ -118,15 +114,11 @@ export function TaskTemplatesView({
         templateId: template.id,
         templateRevision: template.current_revision,
         anchorDate: instanceAnchors[template.id] ?? model.planningDate,
-        targetAreaId: template.kind === 'project'
-          ? targetAreas[template.id] || null
-          : null,
+        targetAreaId: targetAreas[template.id] || null,
       });
       toast({ title: 'Template Created' });
       const revision = model.revisions.get(template.id);
-      navigate(result.result.project_id
-        ? `${basePath}/projects/${result.result.project_id}`
-        : `${basePath}/${getTodoTemplateDestination(
+      navigate(`${basePath}/${getTodoTemplateDestination(
           revision?.snapshot,
           instanceAnchors[template.id] ?? model.planningDate,
           model.planningDate,
@@ -163,22 +155,6 @@ export function TaskTemplatesView({
           ) : null}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-xs font-medium text-muted-foreground">
-            <span>Source Type <span className="text-destructive">*</span></span>
-            <select
-              value={sourceType}
-              onChange={(event) => {
-                const kind = event.target.value as TaskTemplateKind;
-                setSourceType(kind);
-                setSourceId('');
-              }}
-              disabled={!connected || Boolean(selectedTemplate)}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="todo">Task</option>
-              <option value="project">Project</option>
-            </select>
-          </label>
           <label className="space-y-1 text-xs font-medium text-muted-foreground">
             <span>Current Source <span className="text-destructive">*</span></span>
             <select
@@ -231,7 +207,7 @@ export function TaskTemplatesView({
         <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
           {model.templates.map((template) => {
             const revision = model.revisions.get(template.id);
-            const Icon = template.kind === 'project' ? TASK_ICONS.Project : TASK_ICONS.Task;
+            const Icon = TASK_ICONS.Task;
             const nodeCount = revision ? countTemplateNodes(revision.snapshot) : null;
             return (
               <article key={template.id} className="space-y-4 px-2 py-5 sm:px-4">
@@ -240,7 +216,7 @@ export function TaskTemplatesView({
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-sm font-semibold">{template.name}</h3>
                     <p className="text-xs text-muted-foreground">
-                      {template.kind === 'project' ? 'Project' : 'Task'} / Revision {template.current_revision}
+                      Task / Revision {template.current_revision}
                       {nodeCount === null ? '' : ` / ${nodeCount} ${nodeCount === 1 ? 'Item' : 'Items'}`}
                     </p>
                   </div>
@@ -282,23 +258,21 @@ export function TaskTemplatesView({
                       disabled={!connected}
                     />
                   </label>
-                  {template.kind === 'project' ? (
-                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
-                      <span>Area</span>
-                      <select
-                        value={targetAreas[template.id] ?? ''}
-                        onChange={(event) => setTargetAreas((current) => ({
-                          ...current,
-                          [template.id]: event.target.value,
-                        }))}
-                        disabled={!connected}
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <option value="">No Area</option>
-                        {hierarchy.areas.map((area) => <option key={area.id} value={area.id}>{area.title}</option>)}
-                      </select>
-                    </label>
-                  ) : <span />}
+                  <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                    <span>Area</span>
+                    <select
+                      value={targetAreas[template.id] ?? ''}
+                      onChange={(event) => setTargetAreas((current) => ({
+                        ...current,
+                        [template.id]: event.target.value,
+                      }))}
+                      disabled={!connected}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <option value="">No Area</option>
+                      {hierarchy.areas.map((area) => <option key={area.id} value={area.id}>{area.title}</option>)}
+                    </select>
+                  </label>
                   <Button
                     type="button"
                     variant="outline-success"
@@ -346,7 +320,7 @@ function ArchiveTemplateButton({
         <AlertDialogHeader><AlertDialogTitle>Archive Template</AlertDialogTitle></AlertDialogHeader>
         <AlertDialogBody>
           <AlertDialogDescription>
-            Archive {template.name}? Existing tasks and projects created from it will not change.
+            Archive {template.name}? Existing tasks created from it will not change.
           </AlertDialogDescription>
         </AlertDialogBody>
         <AlertDialogFooter>
@@ -359,10 +333,7 @@ function ArchiveTemplateButton({
 }
 
 function countTemplateNodes(snapshot: TaskTemplateSnapshot): number {
-  if (snapshot.kind === 'todo') return 1 + snapshot.root.checklist.length;
-  return 1
-    + snapshot.todos.length
-    + snapshot.todos.reduce((total, todo) => total + todo.checklist.length, 0);
+  return 1 + snapshot.root.checklist.length;
 }
 
 function getTodoTemplateDestination(
@@ -370,7 +341,7 @@ function getTodoTemplateDestination(
   anchorDate: string,
   planningDate: string,
 ): 'today' | 'upcoming' | 'anytime' | 'someday' {
-  if (!snapshot || snapshot.kind !== 'todo') return 'anytime';
+  if (!snapshot) return 'anytime';
   if (snapshot.root.destination === 'someday') return 'someday';
   const startDate = snapshot.root.start_offset_days === null
     ? null

@@ -159,7 +159,6 @@ function creationSnapshot(row: StoredRow): Json {
     source_external_id: row.source_external_id as string | null,
     primary_link: row.primary_link as string | null,
     area_id: row.area_id as string | null,
-    project_id: row.project_id as string | null,
     heading_id: row.heading_id as string | null,
     hierarchy_order_key: row.hierarchy_order_key as string | null,
     deletion_root_id: row.deletion_root_id as string | null,

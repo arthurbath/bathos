@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   CreateTaskInput,
   EditableTaskPatch,
+  TaskBulkPatchInput,
   TaskPlanningMoveInput,
 } from '@/modules/tasks/data/taskRepository';
 import {
@@ -14,8 +15,8 @@ import {
 } from '@/modules/tasks/domain/taskOrder';
 import { taskCalendarDateInTimeZone } from '@/modules/tasks/domain/taskDates';
 import {
-  compareTaskUpcomingDates,
   getTaskUpcomingDate,
+  getTaskUpcomingGroup,
 } from '@/modules/tasks/domain/taskUpcoming';
 import type { TaskStateTransition } from '@/modules/tasks/domain/taskState';
 import type {
@@ -36,7 +37,6 @@ export type RetainedTaskViewPlacement = Pick<
   | 'actionability'
   | 'order_key'
   | 'area_id'
-  | 'project_id'
 >;
 export type TaskListCreateInput = Omit<
   CreateTaskInput,
@@ -341,7 +341,6 @@ export function useTaskList(
         primaryLink: source.primary_link,
         actionability: source.actionability,
         areaId: source.area_id,
-        projectId: source.project_id,
       });
       setOptimisticTask(duplicated.id, taskIsVisible(
         duplicated,
@@ -476,6 +475,49 @@ export function useTaskList(
       view,
     ],
   );
+  const applyTaskPatches = useCallback(async (inputs: readonly TaskBulkPatchInput[]) => {
+    const inputById = new Map(inputs.map((input) => [input.taskId, input]));
+    const currentTasks = allTasks.filter((task) => inputById.has(task.id));
+    const reservations = new Map(currentTasks.map((task) => [
+      task.id,
+      reserveForwardMutation?.(task),
+    ]));
+    for (const currentTask of currentTasks) {
+      const optimisticTask = {
+        ...currentTask,
+        ...inputById.get(currentTask.id)!.patch,
+        revision: currentTask.revision + 1,
+        client_mutation_id: `optimistic:${currentTask.client_mutation_id}`,
+        updated_at: new Date().toISOString(),
+      };
+      setOptimisticTask(currentTask.id, optimisticTask);
+    }
+    try {
+      const updatedTasks = await repository.applyTaskPatches(ownerId, inputs);
+      for (const updatedTask of updatedTasks) {
+        reservations.get(updatedTask.id)?.commit(updatedTask);
+        onForwardMutation?.(updatedTask);
+        setOptimisticTask(
+          updatedTask.id,
+          taskIsVisible(updatedTask, ownerId, view, planningDate) ? updatedTask : null,
+        );
+      }
+      return updatedTasks;
+    } catch (error) {
+      for (const reservation of reservations.values()) reservation?.cancel();
+      for (const { taskId } of inputs) setOptimisticTask(taskId, undefined);
+      throw error;
+    }
+  }, [
+    allTasks,
+    onForwardMutation,
+    ownerId,
+    planningDate,
+    repository,
+    reserveForwardMutation,
+    setOptimisticTask,
+    view,
+  ]);
   const reorderTask = useCallback(
     async (taskId: string, direction: 'up' | 'down') => {
       const currentTask = tasks.find((task) => task.id === taskId);
@@ -504,7 +546,13 @@ export function useTaskList(
       taskId: string,
       targetTaskId: string,
       placement: 'before' | 'after',
-      organizationPatch?: Pick<EditableTaskPatch, 'area_id' | 'project_id'>,
+      dropPatch?: Pick<
+        EditableTaskPatch,
+        | 'area_id'
+        | 'destination'
+        | 'start_date'
+        | 'today_section'
+      >,
     ) => {
       const currentTask = tasks.find((task) => task.id === taskId);
       const targetTask = tasks.find((task) => task.id === targetTaskId);
@@ -514,7 +562,15 @@ export function useTaskList(
       const currentSection = taskOrderSection(currentTask, view, planningDate);
       const targetSection = taskOrderSection(targetTask, view, planningDate);
       const isCrossHorizonTodayDrop = view === 'today' && currentSection !== targetSection;
-      if (currentSection !== targetSection && !isCrossHorizonTodayDrop) {
+      const isCrossUpcomingDrop = view === 'upcoming'
+        && currentSection !== targetSection
+        && dropPatch?.start_date !== undefined
+        && dropPatch.start_date !== null;
+      if (
+        currentSection !== targetSection
+        && !isCrossHorizonTodayDrop
+        && !isCrossUpcomingDrop
+      ) {
         return currentTask;
       }
       const targetSectionTasks = tasks.filter((task) => (
@@ -530,7 +586,7 @@ export function useTaskList(
         placement,
       );
       const patch: EditableTaskPatch = {
-        ...organizationPatch,
+        ...dropPatch,
         order_key: orderKey,
       };
       if (isCrossHorizonTodayDrop) {
@@ -549,6 +605,7 @@ export function useTaskList(
     updateTask,
     moveTask,
     moveTasks,
+    applyTaskPatches,
     reorderTask,
     reorderTaskTo,
     transitionTask,
@@ -604,7 +661,6 @@ export function taskWithRetainedViewPlacement(
     actionability: retainedPlacement.actionability,
     order_key: retainedPlacement.order_key,
     area_id: retainedPlacement.area_id,
-    project_id: retainedPlacement.project_id,
   };
 }
 
@@ -654,7 +710,15 @@ function compareTasksForView(
     ) || left.id.localeCompare(right.id);
   }
   if (view === 'upcoming') {
-    return compareTaskUpcomingDates(left, right, planningDate)
+    const leftDate = getTaskUpcomingDate(left, planningDate);
+    const rightDate = getTaskUpcomingDate(right, planningDate);
+    const leftSectionDate = leftDate === null
+      ? ''
+      : getTaskUpcomingGroup(leftDate, planningDate).date;
+    const rightSectionDate = rightDate === null
+      ? ''
+      : getTaskUpcomingGroup(rightDate, planningDate).date;
+    return leftSectionDate.localeCompare(rightSectionDate)
       || compareTaskOrder(
         { id: left.id, orderKey: left.order_key },
         { id: right.id, orderKey: right.order_key },
@@ -700,7 +764,10 @@ function taskOrderSection(task: TaskTodo, view: TaskListView, planningDate: stri
     return getTodayTaskSection(task, planningDate);
   }
   if (view === 'upcoming') {
-    return `upcoming:${getTaskUpcomingDate(task, planningDate) ?? ''}`;
+    const upcomingDate = getTaskUpcomingDate(task, planningDate);
+    return upcomingDate === null
+      ? 'upcoming:'
+      : `upcoming:${getTaskUpcomingGroup(upcomingDate, planningDate).key}`;
   }
   return view;
 }

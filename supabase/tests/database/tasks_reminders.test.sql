@@ -384,12 +384,12 @@ SELECT is(
 );
 
 SELECT set_config(
-  'test.reminder_export', public.tasks_create_export_v12()::text, false
+  'test.reminder_export', public.tasks_create_export_v13()::text, false
 );
 SELECT is(
   (current_setting('test.reminder_export')::jsonb ->> 'schema_version')::integer,
-  12,
-  'uses portable task export schema version twelve'
+  13,
+  'uses portable task export schema version thirteen'
 );
 SELECT ok(
   jsonb_array_length(
@@ -416,7 +416,7 @@ SELECT throws_ok(
     )
   $$,
   '22023',
-  'Task export v12 collection tasks_reminders is invalid',
+  'Task export collection tasks_reminders is invalid',
   'rejects reminder data with a mismatched checksum'
 );
 
@@ -506,7 +506,7 @@ SELECT throws_ok(
     )::text
   ),
   '22023',
-  'Task export v12 collection tasks_mail_sources is invalid',
+  'Task export collection tasks_mail_sources is invalid',
   'rejects Mail source tampering before adding its temporary validator identity'
 );
 SELECT ok(

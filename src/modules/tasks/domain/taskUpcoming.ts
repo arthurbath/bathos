@@ -1,7 +1,6 @@
-import type { TaskProject, TaskTodo } from '@/modules/tasks/types/tasks';
+import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
-type UpcomingDatedItem = Pick<TaskTodo, 'start_date' | 'deadline'>
-  | Pick<TaskProject, 'start_date' | 'deadline'>;
+type UpcomingDatedItem = Pick<TaskTodo, 'start_date' | 'deadline'>;
 
 export type TaskUpcomingGroup = {
   key: string;
@@ -10,19 +9,12 @@ export type TaskUpcomingGroup = {
   date: string;
 };
 
-export type TaskUpcomingEntry =
-  | {
-    kind: 'project';
-    item: TaskProject;
-    controllingDate: string;
-    sourceIndex: number;
-  }
-  | {
+export type TaskUpcomingEntry = {
     kind: 'task';
     item: TaskTodo;
     controllingDate: string;
     sourceIndex: number;
-  };
+};
 
 export type TaskUpcomingSection = TaskUpcomingGroup & {
   entries: TaskUpcomingEntry[];
@@ -85,6 +77,22 @@ export function getTaskUpcomingGroup(
   };
 }
 
+export function getTaskUpcomingCanonicalStart(
+  group: TaskUpcomingGroup,
+  planningDate: string,
+): string {
+  if (group.kind === 'day') return group.date;
+  if (group.kind === 'month') {
+    const firstGroupedMonthDate = addCalendarDays(planningDate, 8);
+    return group.date > firstGroupedMonthDate ? group.date : firstGroupedMonthDate;
+  }
+  const firstGroupedYearDate = addCalendarDays(
+    addCalendarMonths(planningDate, 12),
+    1,
+  );
+  return group.date > firstGroupedYearDate ? group.date : firstGroupedYearDate;
+}
+
 export function compareTaskUpcomingDates(
   left: UpcomingDatedItem,
   right: UpcomingDatedItem,
@@ -95,26 +103,17 @@ export function compareTaskUpcomingDates(
 }
 
 export function getTaskUpcomingSections(
-  projects: readonly TaskProject[],
   tasks: readonly TaskTodo[],
   planningDate: string,
   locale?: string,
 ): TaskUpcomingSection[] {
   const groups = new Map<string, TaskUpcomingSection>();
-  const entries: TaskUpcomingEntry[] = [
-    ...projects.flatMap((project, sourceIndex): TaskUpcomingEntry[] => {
-      const controllingDate = getTaskUpcomingDate(project, planningDate);
-      return controllingDate === null
-        ? []
-        : [{ kind: 'project', item: project, controllingDate, sourceIndex }];
-    }),
-    ...tasks.flatMap((task, sourceIndex): TaskUpcomingEntry[] => {
+  const entries: TaskUpcomingEntry[] = tasks.flatMap((task, sourceIndex): TaskUpcomingEntry[] => {
       const controllingDate = getTaskUpcomingDate(task, planningDate);
       return controllingDate === null
         ? []
         : [{ kind: 'task', item: task, controllingDate, sourceIndex }];
-    }),
-  ];
+    });
 
   for (const entry of entries) {
     const group = getTaskUpcomingGroup(entry.controllingDate, planningDate, locale);
@@ -126,19 +125,16 @@ export function getTaskUpcomingSections(
   return [...groups.values()]
     .map((group) => ({
       ...group,
-      entries: group.entries.sort(compareTaskUpcomingEntries),
+      date: getTaskUpcomingCanonicalStart(group, planningDate),
+      entries: orderTaskUpcomingSectionEntries(group.entries),
     }))
-    .sort((left, right) => (
-      left.entries[0].controllingDate.localeCompare(right.entries[0].controllingDate)
-    ));
+    .sort((left, right) => left.date.localeCompare(right.date));
 }
 
-function compareTaskUpcomingEntries(
-  left: TaskUpcomingEntry,
-  right: TaskUpcomingEntry,
-): number {
-  return left.controllingDate.localeCompare(right.controllingDate)
-    || (left.kind === right.kind ? left.sourceIndex - right.sourceIndex : left.kind === 'project' ? -1 : 1);
+function orderTaskUpcomingSectionEntries(
+  entries: readonly TaskUpcomingEntry[],
+): TaskUpcomingEntry[] {
+  return [...entries].sort((left, right) => left.sourceIndex - right.sourceIndex);
 }
 
 function addCalendarDays(value: string, days: number): string {

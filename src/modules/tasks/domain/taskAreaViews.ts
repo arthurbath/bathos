@@ -1,6 +1,6 @@
 import { compareTaskOrder } from '@/modules/tasks/domain/taskOrder';
 import { compareTaskAutomaticOrder } from '@/modules/tasks/domain/taskAutomaticOrder';
-import type { TaskArea, TaskProject, TaskTodo } from '@/modules/tasks/types/tasks';
+import type { TaskArea, TaskTodo } from '@/modules/tasks/types/tasks';
 
 export type TaskAreaSection = {
   area: TaskArea | null;
@@ -9,18 +9,14 @@ export type TaskAreaSection = {
 };
 
 export function getTaskEffectiveAreaId(
-  task: Pick<TaskTodo, 'area_id' | 'project_id'>,
-  projects: readonly Pick<TaskProject, 'id' | 'area_id'>[],
+  task: Pick<TaskTodo, 'area_id'>,
 ): string | null {
-  if (task.area_id !== null) return task.area_id;
-  if (task.project_id === null) return null;
-  return projects.find((project) => project.id === task.project_id)?.area_id ?? null;
+  return task.area_id;
 }
 
 export function deriveTaskAreaSections(
   tasks: readonly TaskTodo[],
   areas: readonly TaskArea[],
-  projects: readonly TaskProject[],
   automaticSort = false,
 ): TaskAreaSection[] {
   const orderedTasks = [...tasks].sort(automaticSort
@@ -33,7 +29,7 @@ export function deriveTaskAreaSections(
   const tasksByArea = new Map<string | null, TaskTodo[]>([[null, []]]);
 
   for (const task of orderedTasks) {
-    const effectiveAreaId = getTaskEffectiveAreaId(task, projects);
+    const effectiveAreaId = getTaskEffectiveAreaId(task);
     const areaId = effectiveAreaId !== null && presentAreaIds.has(effectiveAreaId)
       ? effectiveAreaId
       : null;

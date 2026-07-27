@@ -63,7 +63,6 @@ describe('task creation drafts', () => {
     ).task).toMatchObject({
       destination: 'anytime',
       area_id: 'area-work',
-      project_id: null,
       today_section: null,
       start_date: null,
     });
@@ -92,7 +91,6 @@ describe('task creation drafts', () => {
         notes: 'Context',
         start_date: '2026-07-24',
         today_section: 'later',
-        project_id: 'project-a',
       },
     );
     expect(getTaskCreationInput(draft)).toEqual({
@@ -105,7 +103,6 @@ describe('task creation drafts', () => {
       primaryLink: null,
       actionability: 'actionable',
       areaId: null,
-      projectId: 'project-a',
       atTop: true,
     });
   });

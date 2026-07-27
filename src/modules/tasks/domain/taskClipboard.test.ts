@@ -18,7 +18,6 @@ const snapshot: TaskClipboardSnapshot = {
   deadline: '2026-07-30',
   actionability: 'waiting',
   areaId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  projectId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   checklist: [{ title: 'Open it', completed: true, orderKey: 'a0' }],
   reminder: {
     localTime: '18:30',
@@ -87,17 +86,7 @@ describe('task clipboard', () => {
     });
   });
 
-  it('overrides organization in project and area destinations', () => {
-    expect(planTaskClipboardPaste(snapshot, {
-      kind: 'project',
-      projectId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-      areaId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-    }, {
-      planningTimeZone: 'America/Los_Angeles',
-    })).toMatchObject({
-      areaId: null,
-      projectId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-    });
+  it('overrides organization in Area destinations', () => {
     expect(planTaskClipboardPaste(snapshot, {
       kind: 'area',
       areaId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
@@ -105,7 +94,6 @@ describe('task clipboard', () => {
       planningTimeZone: 'America/Los_Angeles',
     })).toMatchObject({
       areaId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-      projectId: null,
     });
   });
 });

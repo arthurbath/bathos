@@ -1,6 +1,6 @@
 # Tasks Guide
 
-BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Things remains authoritative while Tasks earns trust. Tasks does not import, modify, or replace the Things library. The approved Inbox Manager parallel proof is complete and its BathOS handoff is disabled.
+BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/tasks/today](https://os.bath.garden/tasks/today). Things remains authoritative while Tasks earns trust. Tasks does not import, modify, or replace the Things library. Inbox Manager creates new Mail tasks in both Things and BathOS Tasks without backfilling or synchronizing later edits.
 
 ## Start Here
 
@@ -19,12 +19,11 @@ BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/ta
 | Anytime | All active work available now, including every Today task |
 | Someday | Inactive work kept for possible future attention, grouped by Area |
 | Done | Completed, canceled, and recoverably deleted tasks retained for 30 full owner-local days |
-| Projects | Project creation, organization, project tasks, and checklists |
-| Templates | Reusable task and project structures |
+| Templates | Reusable task and checklist structures |
 
-Today, Upcoming, Anytime, and Someday remain directly available in the primary navigation. Open More for Projects, Templates, Done, and Config. Config contains the Areas section for adding, renaming, reordering, and recoverably deleting Areas. Moving an Area higher or lower there controls the order of its buckets in Anytime and Someday.
+Today, Upcoming, Anytime, and Someday remain directly available in the primary navigation. Open More for Templates, Done, and Config. Config contains the Areas section for adding, renaming, reordering, and recoverably deleting Areas. Moving an Area higher or lower there controls the order of its buckets in Anytime and Someday.
 
-Use the magnifying-glass action in the page header to open Quick Find for tasks, projects, and areas. You can also begin typing any printable character from the background or a focused task on any Tasks page, including Config, to open Quick Find with that character already entered. Shifted letters and punctuation are preserved. Typing inside a field, menu, popover, or dialog remains with that control and does not invoke search. Quick Find shows up to three best matches. Choose Continue Search to open the complete live task-results page for the current query.
+Use the magnifying-glass action in the page header to open Quick Find for tasks and areas. You can also begin typing any printable character from the background or a focused task on any Tasks page, including Config, to open Quick Find with that character already entered. Shifted letters and punctuation are preserved. Typing inside a field, menu, popover, or dialog remains with that control and does not invoke search. Quick Find shows up to three best matches. Choose Continue Search to open the complete live task-results page for the current query.
 
 Press `Control+A` on Mac or `Alt+Shift+A` on Windows from Today, Upcoming, Anytime, or Someday to insert a blank complete task editor at the top of the view. Today drafts begin in Today Now. Anytime and Upcoming drafts begin as unplanned Anytime work, so an Upcoming draft leaves that view after it is saved unless a future Start or Deadline makes it visible there. Someday drafts remain inactive and undated. Raycast and Mail capture use their own explicit placement rules.
 
@@ -50,7 +49,7 @@ Press `⌘/` on Mac or `⌃/` on Windows to open the current keyboard and pointe
 | Close an Open Task | `⌘Return` / `⌘Escape` | `⌃Return` |
 | Show Keyboard Commands | `⌘/` | `⌃/` |
 
-Cut, Copy, Paste, and Select All remain native when an editable text control owns the command. Outside text editing, task Cut and Copy target either the single focused task or every task in multiple selection. Paste reconstructs a structured BathOS Tasks payload when available. Other nonblank clipboard text becomes one new task whose Title contains the clipboard text. Today paste produces Today Inbox work. Anytime paste produces unplanned Anytime work. Someday paste produces undated Someday work. Area and project detail views apply their visible organization. Upcoming, Done, Config, Projects, Templates, and Search reject task paste.
+Cut, Copy, Paste, and Select All remain native when an editable text control owns the command. Outside text editing, task Cut and Copy target either the single focused task or every task in multiple selection. Paste reconstructs a structured BathOS Tasks payload when available. Other nonblank clipboard text becomes one new task whose Summary contains the clipboard text. Today paste produces Today Inbox work. Anytime paste produces unplanned Anytime work. Someday paste produces undated Someday work. Area detail views apply their visible organization. Upcoming, Done, Config, Templates, and Search reject task paste.
 
 | View navigation | Mac | Windows |
 | --- | --- | --- |
@@ -75,7 +74,7 @@ Cut, Copy, Paste, and Select All remain native when an editable text control own
 | Set Start to Someday | `⌃G` | `⌥⇧G` |
 | Toggle Done | `⌃X` | `⌥⇧X` |
 | Edit Checklist | `⌃C` | `⌥⇧C` |
-| Choose Area or Project | `⌃V` | `⌥⇧V` |
+| Choose Area | `⌃V` | `⌥⇧V` |
 | Edit Reminder Time | `⌃B` | `⌥⇧B` |
 
 Tab and Shift+Tab follow the native page order through each closed task row and its available completion, title, source-link, and actions controls, then continue beyond the task list. Starting granular Tab traversal clears any whole-task focus without interrupting the browser's focus movement. When no task is focused, open, or multiply selected and no nested surface owns the keyboard, press Space from the Tasks page background to focus the first visible task without opening it. Space on a task row reached by Tab promotes that same row into whole-task focus without advancing. After whole-task focus is established, Space advances, Shift+Space reverses, and Up or Down moves through visible tasks. These whole-task movements wrap at both ends and scroll the destination into view. Held Space does not repeat movement. Space retains its native behavior on task controls, links, editors, dialogs, menus, popovers, and unrelated page controls. Escape relinquishes focus from a collapsed task row or one of its granular controls when no nested surface owns Escape. Return opens a whole-task-focused closed task. Open/Close Task opens a focused closed task or closes an open task and returns focus to its row. When completion, lifecycle, menu, or task-owned dialog actions return to the collapsed list, focus lands on the complete task row or its same-position fallback rather than a nested row control.
@@ -86,9 +85,9 @@ Clear Start moves targeted work to unplanned Anytime and cancels its Start-depen
 
 Tasks retains up to 100 safe forward changes for keyboard undo and redo. Every editable task mutation participates in this history, including completion, cancellation, deletion, reopening, and restoration. Tasks reserves a mutation before asynchronous persistence or a departing-row animation begins. If Undo arrives immediately, Tasks waits for that exact mutation and its synchronized task and history projections instead of traversing an older event. Each accepted autosave batch is an ordinary forward change, and a new forward change clears the redo path. The client rebuilds that cursor when synchronized history changes and temporarily withholds undo or redo until the current task and cursor-tip snapshots agree. It never skips an unsafe latest event to reach older history. The server independently rejects any stale inverse, preventing older work from overwriting intervening changes.
 
-The first Command-click on Mac, Control-click on Windows, or Shift-click focuses one closed task and establishes the range anchor without showing the multiple-selection toolbar. A second modified click or a Shift-click away from the anchor selects at least two tasks and reveals the toolbar. Once multiple selection is active, an ordinary click also toggles a task. Reducing the set to one task dismisses the toolbar and retains that task as the single focused task. Reducing it to zero clears task focus. Clicking outside every task or switching views clears task focus and multiple selection. Modified clicks on task links retain native link behavior, and direct clicks on completion or action controls perform only their own actions. Done rows support focus and selection for Copy and Duplicate. Cut is unavailable there because Done represents retained terminal task states rather than active work.
+The first Command-click on Mac, Control-click on Windows, or Shift-click immediately enters selection mode, selects the closed task, establishes the range anchor, and reveals the selection toolbar. A later modified click or Shift-click updates that explicit selection. If one task already has lightweight keyboard focus, a modified click begins selection with the focused task included and anchored. Once selection is active, an ordinary click also toggles a task. Reducing the set to one task retains selection mode and the toolbar. Reducing it to zero clears selection. Clicking outside every task or switching views clears task focus and selection. Modified clicks on task links retain native link behavior, and direct clicks on completion or action controls perform only their own actions. Done rows support selection for Copy and Duplicate. Cut is unavailable there because Done represents retained terminal task states rather than active work.
 
-Drag a Today task before or after a task in another visible Today section to change its day horizon and order together. Empty Today sections remain hidden and do not act as drop zones. Anytime and Someday show unassigned tasks first without a heading, then group Area work in the manual Area order maintained in Config. Dragging inside one Area region changes order. Dragging across Area regions assigns the destination Area, or removes organization when dropped into the unassigned region, and clears an incompatible Project assignment. Keyboard task reordering is not currently supported.
+Drag a Today task before or after a task in another visible Today section to change its day horizon and order together. Empty Today sections remain hidden and do not act as drop zones. Anytime and Someday show unassigned tasks first without a heading, then group Area work in the manual Area order maintained in Config. Dragging inside one Area region changes order. Dragging across Area regions assigns the destination Area, or removes organization when dropped into the unassigned region. Keyboard task reordering is not currently supported.
 
 ## Capture from Raycast
 
@@ -143,7 +142,7 @@ Use Backup and Restore under Config to download a checksum-protected JSON backup
 - Replace restore downloads a required pre-restore backup, asks for separate confirmation, and replaces the synchronized task graph in one server transaction.
 - Completed, canceled, and deleted tasks remain recoverable through Done until their retention boundary. Uncheck a completed task to reopen it, activate a canceled task's leading control to reopen it, or activate a deleted task's leading trash control to restore it. The trash changes to a restore icon on hover or keyboard focus.
 - Terminal content is automatically purged at the owner-local midnight beginning its 31st day in Done. The interface does not expose routine permanent deletion.
-- Current backups use schema version 12 and omit the retired heading entity. Supported schema 3 through 11 backups flatten heading children into their projects and normalize former Inbox, Today, daytime, evening, Logbook, and Trash semantics before restore.
+- Current backups use schema version 13 and omit the retired Project and heading entities. Supported schema 3 through 12 backups preserve Project-contained tasks by assigning the Project's Area directly when available, otherwise leaving the task unassigned. Project-only wrappers are not recreated.
 
 Keep periodic downloaded backups once Tasks begins holding information that would be painful to reconstruct.
 
@@ -153,7 +152,7 @@ Use Tasks alongside Things for as long as needed. There is no migration deadline
 
 - Keep important established workflows in Things while Tasks earns trust through ordinary use.
 - Do not expect edits in either application to appear in the other.
-- The approved Inbox Manager proof ended with seven accepted parallel tasks, an empty failure-free outbox, and a healthy post-disable Mail run. Inbox Manager now sends Mail tasks only to Things unless a separate future trial is explicitly approved.
+- The approved Inbox Manager proof ended with seven accepted parallel tasks, an empty failure-free outbox, and a healthy Mail run. Its persistent parallel mode now sends each new eligible Mail item to both Things and BathOS Tasks through one AI evaluation.
 - Parallel Mail handoff is creation-only. Things remains authoritative, no history is backfilled, and edits in either application do not appear in the other.
 - Report recurring friction, missed reminders, synchronization failures, or a specific desired widget or control. Those observations determine the next product slice.
 - Native Apple development remains deferred unless normal use reveals a gap that the installed web app, Web Push, Raycast, or MCP cannot serve adequately.

@@ -118,7 +118,6 @@ import {
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type {
   TaskReminder,
-  TaskProject,
   TaskTodaySection,
   TaskTodo,
 } from '@/modules/tasks/types/tasks';
@@ -127,17 +126,11 @@ import {
   getTaskPrimaryLinkHref,
   getTaskPrimaryLinkKind,
 } from '@/modules/tasks/domain/taskPrimaryLink';
-import { TaskProjectDetailView } from '@/modules/tasks/components/TaskProjectDetailView';
 import { TaskAreaDetailView } from '@/modules/tasks/components/TaskAreaDetailView';
 import { TaskAreaSettings } from '@/modules/tasks/components/TaskAreaSettings';
-import { TaskProjectsView } from '@/modules/tasks/components/TaskProjectsView';
 import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView';
 import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
-import {
-  TASK_PLANNING_LIST_CLASS,
-  TaskPlanningProjectItem,
-  TaskPlanningProjects,
-} from '@/modules/tasks/components/TaskPlanningProjects';
+import { TASK_PLANNING_LIST_CLASS } from '@/modules/tasks/components/taskPlanningStyles';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
 import { TaskSyncDiagnosticsDialog } from '@/modules/tasks/components/TaskSyncDiagnosticsDialog';
 import {
@@ -148,15 +141,15 @@ import {
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
-import { deriveTaskViewProjects } from '@/modules/tasks/domain/taskProjectViews';
 import {
   deriveTaskAreaSections,
   getTaskEffectiveAreaId,
 } from '@/modules/tasks/domain/taskAreaViews';
+import { projectTaskBulkDrop } from '@/modules/tasks/domain/taskBulkDrop';
+import { getAutomaticTaskDropTarget } from '@/modules/tasks/domain/taskAutomaticOrder';
 import {
-  getAutomaticTaskDropTarget,
-} from '@/modules/tasks/domain/taskAutomaticOrder';
-import {
+  getTaskUpcomingDate,
+  getTaskUpcomingGroup,
   getTaskUpcomingSections,
 } from '@/modules/tasks/domain/taskUpcoming';
 import {
@@ -204,9 +197,11 @@ type TasksShellProps = {
 
 type TaskDropIndicator = {
   draggedTaskId: string;
-  targetTaskId: string;
+  targetTaskId: string | null;
   placement: 'before' | 'after';
   targetAreaId?: string | null;
+  targetUpcomingSectionKey?: string;
+  targetUpcomingStartDate?: string;
 };
 
 const TaskMarkdownNotes = lazy(async () => {
@@ -232,7 +227,6 @@ const primaryTaskViews = [
 ] as const;
 
 const secondaryTaskViews = [
-  { path: '/projects', label: 'Projects', icon: TASK_ICONS.Project },
   { path: '/templates', label: 'Templates', icon: TASK_ICONS.Templates },
   { path: '/done', label: 'Done', icon: TASK_ICONS.Done },
   { path: '/config', label: 'Config', icon: TASK_ICONS.Config },
@@ -249,7 +243,7 @@ const taskCommandPaths: Partial<Record<TaskKeyboardCommand, string>> = {
   'view-config': '/config',
 };
 
-type TaskShellView = TaskListView | 'projects' | 'project' | 'area' | 'templates' | 'config' | 'search';
+type TaskShellView = TaskListView | 'area' | 'templates' | 'config' | 'search';
 
 function taskMotionAllowed(): boolean {
   return !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -287,8 +281,7 @@ function taskPlacementChanged(
     || task.start_date !== retainedPlacement.start_date
     || task.deadline !== retainedPlacement.deadline
     || task.order_key !== retainedPlacement.order_key
-    || task.area_id !== retainedPlacement.area_id
-    || task.project_id !== retainedPlacement.project_id;
+    || task.area_id !== retainedPlacement.area_id;
 }
 
 function animateTaskPlacementAfterClose(
@@ -369,11 +362,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
   const view = getTaskViewFromPath(location.pathname);
-  const projectId = getTaskProjectIdFromPath(location.pathname);
   const areaId = getTaskAreaIdFromPath(location.pathname);
-  const taskListView: TaskListView = view === 'projects'
-    || view === 'project'
-    || view === 'area'
+  useEffect(() => {
+    if (/\/tasks\/projects(?:\/[^/]+)?$/.test(location.pathname)) {
+      navigate(`${basePath}/anytime`, { replace: true });
+    }
+  }, [basePath, location.pathname, navigate]);
+  const taskListView: TaskListView = view === 'area'
     || view === 'templates'
     || view === 'config'
     || view === 'search'
@@ -408,12 +403,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const automaticListSorting = useTaskAutomaticListSorting(userId);
   const [taskDropIndicator, setTaskDropIndicator] = useState<TaskDropIndicator | null>(null);
   const taskDropIndicatorRef = useRef<TaskDropIndicator | null>(null);
+  // Safari may withhold dataTransfer payloads during dragover, so retain the
+  // source identity from dragstart instead of rediscovering it on every row.
+  const activeDraggedTaskIdRef = useRef<string | null>(null);
+  const activeDraggedTaskIdsRef = useRef<string[]>([]);
   taskDropIndicatorRef.current = taskDropIndicator;
   const updateTaskDropIndicator = useCallback((indicator: TaskDropIndicator | null) => {
     taskDropIndicatorRef.current = indicator;
     setTaskDropIndicator(indicator);
   }, []);
   useEffect(() => {
+    activeDraggedTaskIdRef.current = null;
+    activeDraggedTaskIdsRef.current = [];
     updateTaskDropIndicator(null);
   }, [updateTaskDropIndicator, view]);
   const deletedHierarchyRoots = useTaskDeletedHierarchyRoots(userId);
@@ -432,6 +433,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     updateTask,
     moveTask,
     moveTasks,
+    applyTaskPatches,
     reorderTaskTo,
     transitionTask,
     planningDate,
@@ -449,12 +451,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   projectedTasksRef.current = projectedTasks;
   retainedTaskPlacementRef.current = retainedTaskPlacement;
   transitionTaskRef.current = transitionTask;
-  const planningProjects = useMemo(() => deriveTaskViewProjects(
-    hierarchy.projects,
-    userId,
-    taskListView,
-    planningDate,
-  ), [hierarchy.projects, planningDate, taskListView, userId]);
   const [creationDraft, setCreationDraft] = useState<TaskCreationDraft | null>(null);
   const tasks = useMemo(
     () => creationDraft?.persistedTaskId
@@ -545,8 +541,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     && taskQuickFilter !== 'all'
     && filteredTasks.length === 0;
   const taskViewIsEmpty = creationDraft === null && (view === 'done'
-    ? filteredTasks.length === 0 && doneRoots.length === 0 && planningProjects.length === 0
-    : filteredTasks.length === 0 && planningProjects.length === 0);
+    ? filteredTasks.length === 0 && doneRoots.length === 0
+    : filteredTasks.length === 0);
   const serverReplacementAvailable = mode === 'connected'
     && syncState === 'connected'
     && pendingUploadCount === 0;
@@ -572,7 +568,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         retainedTaskPlacement,
       ));
       const firstSection = getTaskUpcomingSections(
-        planningProjects,
         placementTasks,
         planningDate,
       )[0];
@@ -582,7 +577,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [
     filteredTasks,
     planningDate,
-    planningProjects,
     retainedTaskId,
     retainedTaskPlacement,
     view,
@@ -1053,12 +1047,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         ? current
         : Array.from(bulkSelection).find((taskId) => visibleIds.has(taskId)) ?? null
     ));
-    if (bulkMode && remainingSelection.size < 2) {
-      const remainingId = remainingSelection.size === 1
-        ? [...remainingSelection][0]
-        : null;
-      if (remainingId !== null) focusTaskRow(remainingId);
-      else clearTaskSelection();
+    if (bulkMode && remainingSelection.size === 0) {
+      clearTaskSelection();
     } else {
       const currentFocusedId = focusedTaskIdRef.current;
       if (currentFocusedId !== null && !visibleIds.has(currentFocusedId)) {
@@ -1132,7 +1122,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [searchTargetTaskId, setOpenTask, tasks]);
 
   const getTaskCommandTargets = useCallback((): TaskTodo[] => {
-    if (bulkMode && bulkSelection.size >= 2) {
+    if (bulkMode && bulkSelection.size >= 1) {
       return selectableTasks.filter((task) => bulkSelection.has(task.id));
     }
     const taskId = selectedTaskIdRef.current ?? focusedTaskIdRef.current;
@@ -1303,17 +1293,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       return { kind: view };
     }
     if (view === 'area' && areaId) return { kind: 'area', areaId };
-    if (view === 'project' && projectId) {
-      const project = hierarchy.projects.find((candidate) => candidate.id === projectId);
-      if (!project) return null;
-      return {
-        kind: 'project',
-        projectId,
-        areaId: project.area_id,
-      };
-    }
     return null;
-  }, [areaId, hierarchy.projects, projectId, view]);
+  }, [areaId, view]);
 
   const runTaskClipboardWrite = useCallback(async (
     operation: 'copy' | 'cut',
@@ -1366,7 +1347,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (destination === null) {
       toast({
         title: 'Paste Not Available',
-        description: 'Tasks can be pasted into Today, Anytime, Someday, an area, or a project.',
+        description: 'Tasks can be pasted into Today, Anytime, Someday, or an Area.',
         variant: 'destructive',
       });
       return;
@@ -1436,7 +1417,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     mode: TaskBulkCommandMode,
   ) => {
     const targets = getTaskCommandTargets();
-    if (bulkMode && bulkSelection.size >= 2) {
+    if (bulkMode && bulkSelection.size >= 1) {
       const eligibleTargets = mode === 'reminder'
         ? targets.filter((task) => task.start_date !== null || task.today_section !== null)
         : targets;
@@ -1488,7 +1469,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [bulkMode, bulkSelection.size, getTaskCommandTargets, setOpenTask]);
 
   const runToggleCompletionShortcut = useCallback(async () => {
-    if (bulkMode && bulkSelection.size >= 2) {
+    if (bulkMode && bulkSelection.size >= 1) {
       const targets = selectableTasks.filter((task) => bulkSelection.has(task.id));
       const reservations = new Map(targets.map((task) => [
         task.id,
@@ -1578,6 +1559,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape' && activeDraggedTaskIdRef.current !== null) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        activeDraggedTaskIdRef.current = null;
+        activeDraggedTaskIdsRef.current = [];
+        updateTaskDropIndicator(null);
+        clearTaskSelection();
+        return;
+      }
       if (event.key === 'Escape' && taskNestedSurfaceOwnsEscape(event.target)) return;
       if (
         event.key === 'Escape'
@@ -1825,6 +1815,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     taskUndoPending,
     selectableTasks,
     quickFindOpen,
+    updateTaskDropIndicator,
   ]);
 
   const openCommandSurface = (open: (value: boolean) => void) => {
@@ -2030,12 +2021,26 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     event: MouseEvent<HTMLElement>,
     taskId: string,
   ) => {
-    const next = applyTaskSelectionGesture({
-      active: bulkMode,
-      anchorId: bulkSelectionAnchorId,
-      focusedId: focusedTaskId,
-      selectedIds: bulkSelection,
-    }, {
+    const platformModifier = macLikePlatform ? event.metaKey : event.ctrlKey;
+    const openTaskId = selectedTaskIdRef.current;
+    const selectionState = !bulkMode
+      && openTaskId !== null
+      && openTaskId !== NEW_TASK_DRAFT_ID
+      && openTaskId !== taskId
+      && (platformModifier || event.shiftKey)
+      ? {
+          active: false,
+          anchorId: openTaskId,
+          focusedId: openTaskId,
+          selectedIds: new Set<string>(),
+        }
+      : {
+          active: bulkMode,
+          anchorId: bulkSelectionAnchorId,
+          focusedId: focusedTaskId,
+          selectedIds: bulkSelection,
+        };
+    const next = applyTaskSelectionGesture(selectionState, {
       taskId,
       visibleTaskIds: selectableTasks.map(({ id }) => id),
       metaKey: event.metaKey,
@@ -2120,10 +2125,165 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (next.focusedId !== null) focusTaskRow(next.focusedId);
   };
 
+  const commitActiveTaskDrop = async () => {
+    const draggedTaskId = activeDraggedTaskIdRef.current;
+    const draggedTaskIds = activeDraggedTaskIdsRef.current;
+    const indicator = taskDropIndicatorRef.current;
+    if (
+      draggedTaskId === null
+      || indicator === null
+      || indicator.draggedTaskId !== draggedTaskId
+      || draggedTaskIds.length === 0
+    ) return;
+    try {
+      const selectedIds = new Set(draggedTaskIds);
+      const selectedTasks = tasks.filter(({ id }) => selectedIds.has(id));
+      if (draggedTaskIds.length === 1) {
+        const draggedTask = selectedTasks[0];
+        if (!draggedTask) return;
+        const sourceAreaId = getTaskEffectiveAreaId(draggedTask);
+        const organizationPatch = indicator.targetAreaId !== undefined
+          && sourceAreaId !== indicator.targetAreaId
+          ? { area_id: indicator.targetAreaId }
+          : undefined;
+        const sourceUpcomingDate = view === 'upcoming'
+          ? getTaskUpcomingDate(draggedTask, planningDate)
+          : null;
+        const sourceUpcomingSectionKey = sourceUpcomingDate === null
+          ? null
+          : getTaskUpcomingGroup(sourceUpcomingDate, planningDate).key;
+        const upcomingPlanningPatch = view === 'upcoming'
+          && indicator.targetUpcomingSectionKey !== undefined
+          && indicator.targetUpcomingStartDate !== undefined
+          && indicator.targetUpcomingSectionKey !== sourceUpcomingSectionKey
+          ? {
+              destination: 'anytime' as const,
+              start_date: indicator.targetUpcomingStartDate,
+              today_section: null,
+            }
+          : undefined;
+        const dropPatch = organizationPatch === undefined
+          ? upcomingPlanningPatch
+          : { ...organizationPatch, ...upcomingPlanningPatch };
+        if (indicator.targetTaskId === null) {
+          if (upcomingPlanningPatch === undefined) return;
+          await updateTask(draggedTask.id, upcomingPlanningPatch);
+        } else if (dropPatch === undefined) {
+          await reorderTaskTo(
+            draggedTask.id,
+            indicator.targetTaskId,
+            indicator.placement,
+          );
+        } else {
+          await reorderTaskTo(
+            draggedTask.id,
+            indicator.targetTaskId,
+            indicator.placement,
+            dropPatch,
+          );
+        }
+        if (upcomingPlanningPatch !== undefined) {
+          await rescheduleTaskReminders([draggedTask]);
+        }
+        return;
+      }
+      const targetTask = indicator.targetTaskId === null
+        ? null
+        : tasks.find(({ id }) => id === indicator.targetTaskId) ?? null;
+      const targetTodaySection = view === 'today' && targetTask
+        ? getTodayTaskSection(targetTask, planningDate)
+        : null;
+      const patchesByTaskId = new Map<string, EditableTaskPatch>();
+      for (const task of selectedTasks) {
+        const patch: EditableTaskPatch = {};
+        if (view === 'today' && targetTodaySection !== null) {
+          patch.destination = 'anytime';
+          patch.start_date = null;
+          patch.today_section = targetTodaySection;
+        }
+        if (
+          view === 'upcoming'
+          && indicator.targetUpcomingSectionKey !== undefined
+          && indicator.targetUpcomingStartDate !== undefined
+        ) {
+          const sourceDate = getTaskUpcomingDate(task, planningDate);
+          const sourceKey = sourceDate === null
+            ? null
+            : getTaskUpcomingGroup(sourceDate, planningDate).key;
+          if (sourceKey !== indicator.targetUpcomingSectionKey) {
+            patch.destination = 'anytime';
+            patch.start_date = indicator.targetUpcomingStartDate;
+            patch.today_section = null;
+          }
+        }
+        if (indicator.targetAreaId !== undefined) {
+          const sourceAreaId = getTaskEffectiveAreaId(task);
+          if (sourceAreaId !== indicator.targetAreaId) {
+            patch.area_id = indicator.targetAreaId;
+          }
+        }
+        patchesByTaskId.set(task.id, patch);
+      }
+
+      const targetAreaId = indicator.targetAreaId;
+      const scopeTasks = tasks.filter((task) => {
+        if (selectedIds.has(task.id)) return true;
+        if (view === 'today' && targetTodaySection !== null) {
+          return getTodayTaskSection(task, planningDate) === targetTodaySection;
+        }
+        if (view === 'upcoming' && indicator.targetUpcomingSectionKey) {
+          const date = getTaskUpcomingDate(task, planningDate);
+          return date !== null
+            && getTaskUpcomingGroup(date, planningDate).key
+              === indicator.targetUpcomingSectionKey;
+        }
+        if ((view === 'anytime' || view === 'someday') && targetAreaId !== undefined) {
+          return getTaskEffectiveAreaId(task) === targetAreaId;
+        }
+        return true;
+      });
+      const projection = indicator.targetTaskId === null
+        ? null
+        : projectTaskBulkDrop({
+            tasks: scopeTasks,
+            selectedTaskIds: selectedIds,
+            targetTaskId: indicator.targetTaskId,
+            placement: indicator.placement,
+            patchesByTaskId,
+            automaticSort: automaticListSorting.enabled
+              && (view === 'anytime' || view === 'someday'),
+          });
+      const inputs = projection?.patches
+        ?? selectedTasks.map((task) => ({
+          taskId: task.id,
+          patch: patchesByTaskId.get(task.id) ?? {},
+        }));
+      await applyTaskPatches(inputs);
+
+      const upcomingChangedTasks = selectedTasks.filter((task) => (
+        patchesByTaskId.get(task.id)?.start_date !== undefined
+      ));
+      if (upcomingChangedTasks.length > 0) {
+        try {
+          await rescheduleTaskReminders(upcomingChangedTasks);
+        } catch (reminderError) {
+          showTaskError('Reminder Could Not Be Rescheduled', reminderError);
+        }
+      }
+    } catch (reorderError) {
+      showTaskError('Task Could Not Be Reordered', reorderError);
+    } finally {
+      activeDraggedTaskIdRef.current = null;
+      activeDraggedTaskIdsRef.current = [];
+      updateTaskDropIndicator(null);
+    }
+  };
+
   const renderActiveTask = (
     task: TaskTodo,
     sectionTasks: TaskTodo[],
     targetAreaId?: string | null,
+    targetUpcomingSection?: { key: string; startDate: string },
   ) => {
     const isCreationDraft = task.id === NEW_TASK_DRAFT_ID;
     const persistedDraftTaskId = isCreationDraft
@@ -2196,26 +2356,51 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         }}
         planningActions={planningActionsForTask(task)}
         draggableTask={!isCreationDraft
-          && !bulkMode
-          && (view === 'today' || view === 'anytime' || view === 'someday')
+          && (
+            view === 'today'
+            || view === 'upcoming'
+            || view === 'anytime'
+            || view === 'someday'
+          )
           && (
             view === 'today'
               ? tasks.length > 1
+              : view === 'upcoming'
+                ? tasks.length > 0
               : view === 'anytime' || view === 'someday'
                 ? tasks.length > 0
                 : sectionTasks.length > 1
           )}
         dragPlacement={taskDragPlacement}
         onTaskDragStart={() => {
-          updateTaskDropIndicator(automaticSortActive ? {
+          const draggedIds = bulkMode && bulkSelection.has(task.id)
+            ? tasks.filter((candidate) => bulkSelection.has(candidate.id)).map(({ id }) => id)
+            : [task.id];
+          activeDraggedTaskIdRef.current = task.id;
+          activeDraggedTaskIdsRef.current = draggedIds;
+          updateTaskDropIndicator(automaticSortActive || view === 'upcoming' ? {
             draggedTaskId: task.id,
             targetTaskId: task.id,
             placement: 'before',
             targetAreaId,
+            targetUpcomingSectionKey: targetUpcomingSection?.key,
+            targetUpcomingStartDate: targetUpcomingSection?.startDate,
           } : null);
         }}
-        onTaskDragOver={(draggedTaskId, pointerPlacement) => {
-          if (draggedTaskId === task.id) return;
+        onTaskDragOver={(pointerPlacement) => {
+          const draggedTaskId = activeDraggedTaskIdRef.current;
+          if (draggedTaskId === null) return;
+          if (activeDraggedTaskIdsRef.current.includes(task.id)) return;
+          if (view === 'upcoming') {
+            updateTaskDropIndicator({
+              draggedTaskId,
+              targetTaskId: task.id,
+              placement: pointerPlacement,
+              targetUpcomingSectionKey: targetUpcomingSection?.key,
+              targetUpcomingStartDate: targetUpcomingSection?.startDate,
+            });
+            return;
+          }
           if (!automaticSortActive) {
             updateTaskDropIndicator({
               draggedTaskId,
@@ -2225,81 +2410,37 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             });
             return;
           }
-          const draggedTask = tasks.find(({ id }) => id === draggedTaskId);
-          if (!draggedTask) return;
-          const retainedDraggedTask = taskWithRetainedViewPlacement(
-            draggedTask,
-            retainedTaskId,
-            retainedTaskPlacement,
-          );
-          const retainedTargetTask = taskWithRetainedViewPlacement(
-            task,
-            retainedTaskId,
-            retainedTaskPlacement,
-          );
-          const sourceAreaId = getTaskEffectiveAreaId(
-            retainedDraggedTask,
-            hierarchy.projects,
-          );
-          const effectiveTargetAreaId = targetAreaId ?? null;
-          const target = getAutomaticTaskDropTarget(
-            retainedDraggedTask,
-            retainedTargetTask,
-            sectionTasks.map((candidate) => taskWithRetainedViewPlacement(
-              candidate,
-              retainedTaskId,
-              retainedTaskPlacement,
-            )),
-            pointerPlacement,
-            sourceAreaId !== effectiveTargetAreaId,
-          );
-          if (target === null) return;
+          if (activeDraggedTaskIdsRef.current.length === 1) {
+            const draggedTask = tasks.find(({ id }) => id === draggedTaskId);
+            if (!draggedTask) return;
+            const sourceAreaId = getTaskEffectiveAreaId(draggedTask);
+            const effectiveTargetAreaId = targetAreaId ?? null;
+            const target = getAutomaticTaskDropTarget(
+              draggedTask,
+              task,
+              sectionTasks,
+              pointerPlacement,
+              sourceAreaId !== effectiveTargetAreaId,
+            );
+            if (target === null) return;
+            updateTaskDropIndicator({
+              draggedTaskId,
+              ...target,
+              targetAreaId: effectiveTargetAreaId,
+            });
+            return;
+          }
           updateTaskDropIndicator({
             draggedTaskId,
-            ...target,
-            targetAreaId: effectiveTargetAreaId,
+            targetTaskId: task.id,
+            placement: pointerPlacement,
+            targetAreaId: targetAreaId ?? null,
           });
         }}
-        onTaskDragEnd={() => updateTaskDropIndicator(null)}
-        onDropTask={async (draggedTaskId) => {
-          const indicator = taskDropIndicatorRef.current;
-          if (indicator === null || indicator.draggedTaskId !== draggedTaskId) return;
-          try {
-            const draggedTask = tasks.find(({ id }) => id === draggedTaskId);
-            const sourceAreaId = draggedTask
-              ? getTaskEffectiveAreaId(
-                taskWithRetainedViewPlacement(
-                  draggedTask,
-                  retainedTaskId,
-                  retainedTaskPlacement,
-                ),
-                hierarchy.projects,
-              )
-              : null;
-            const organizationPatch = indicator.targetAreaId !== undefined
-              && sourceAreaId !== indicator.targetAreaId
-              ? { area_id: indicator.targetAreaId, project_id: null }
-              : undefined;
-            if (organizationPatch === undefined) {
-              await reorderTaskTo(
-                draggedTaskId,
-                indicator.targetTaskId,
-                indicator.placement,
-              );
-            } else {
-              await reorderTaskTo(
-                draggedTaskId,
-                indicator.targetTaskId,
-                indicator.placement,
-                organizationPatch,
-              );
-            }
-          } catch (reorderError) {
-            showTaskError('Task Could Not Be Reordered', reorderError);
-            throw reorderError;
-          } finally {
-            updateTaskDropIndicator(null);
-          }
+        onTaskDragEnd={() => {
+          activeDraggedTaskIdRef.current = null;
+          activeDraggedTaskIdsRef.current = [];
+          updateTaskDropIndicator(null);
         }}
         planningDate={planningDate}
         todayMarker={view === 'anytime'
@@ -2426,7 +2567,26 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className="min-h-screen bg-background"
+      data-task-module-drop-surface
+      onDragOver={(event) => {
+        if (
+          activeDraggedTaskIdRef.current === null
+          || taskDropIndicatorRef.current === null
+        ) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+      }}
+      onDrop={(event) => {
+        if (
+          activeDraggedTaskIdRef.current === null
+          || taskDropIndicatorRef.current === null
+        ) return;
+        event.preventDefault();
+        void commitActiveTaskDrop();
+      }}
+    >
       <ToplineHeader
         title="Tasks"
         moduleId="tasks"
@@ -2463,7 +2623,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 type="button"
                 variant="clear"
                 size="icon"
-                aria-label="Quick Find Tasks, Projects, and Areas"
+                aria-label="Quick Find Tasks and Areas"
                 onClick={() => {
                   setQuickFindInitialQuery('');
                   openCommandSurface(setQuickFindOpen);
@@ -2531,42 +2691,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 navigate(href);
               }}
             />
-          ) : view === 'project' && projectId ? (
-            <TaskProjectDetailView
-              ownerId={userId}
-              projectId={projectId}
-              hierarchy={hierarchy}
-              planningDate={planningDate}
-              reminder={reminders.byRootId.get(projectId) ?? null}
-              reminderMode={reminderAvailability}
-              onTaskMutation={registerForwardMutation}
-              reserveTaskMutation={reserveForwardMutation}
-              onSaveReminder={async (input) => {
-                try {
-                  await reminders.save({
-                    rootType: 'project',
-                    rootId: projectId,
-                    reminder: reminders.byRootId.get(projectId) ?? null,
-                    ...input,
-                  });
-                } catch (reminderError) {
-                  showTaskError('Project Reminder Could Not Be Saved', reminderError);
-                  throw reminderError;
-                }
-              }}
-              onCancelReminder={async () => {
-                const reminder = reminders.byRootId.get(projectId);
-                if (!reminder) return;
-                try {
-                  await reminders.cancel(reminder);
-                } catch (reminderError) {
-                  showTaskError('Project Reminder Could Not Be Canceled', reminderError);
-                  throw reminderError;
-                }
-              }}
-            />
-          ) : view === 'projects' ? <TaskProjectsView hierarchy={hierarchy} />
-            : view === 'templates' ? <TaskTemplatesView ownerId={userId} hierarchy={hierarchy} />
+          ) : view === 'templates' ? <TaskTemplatesView ownerId={userId} hierarchy={hierarchy} />
               : view === 'config' ? (
                 <TaskConfigView
                   keyboardHelpShortcut={macLikePlatform ? '⌘/' : '⌃/'}
@@ -2638,23 +2763,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   </div>
                   </section>
                 ) : null}
-                <TaskPlanningProjects
-                  projects={planningProjects}
-                  areas={hierarchy.areas}
-                  basePath={basePath}
-                  view={taskListView}
-                  planningDate={planningDate}
-                  onMove={async () => undefined}
-                  onReorder={async () => undefined}
-                  onReopen={async (project) => {
-                    try {
-                      await hierarchy.transitionProject(project.id, 'reopen_project');
-                    } catch (reopenError) {
-                      showTaskError('Project Could Not Be Reopened', reopenError);
-                      throw reopenError;
-                    }
-                  }}
-                />
                 {quickFilterHasNoMatches ? <TaskQuickFilterEmptyState /> : null}
                 {filteredTasks.length > 0 ? (
                   <section aria-label="Tasks">
@@ -2726,38 +2834,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               </div>
             ) : view === 'today' ? (
               <div className="space-y-7">
-                <TaskPlanningProjects
-                  projects={planningProjects}
-                  areas={hierarchy.areas}
-                  basePath={basePath}
-                  view={taskListView}
-                  planningDate={planningDate}
-                  onMove={async (project, input) => {
-                    try {
-                      await hierarchy.moveProjectInPlanning(project.id, input);
-                    } catch (moveError) {
-                      showTaskError('Project Could Not Be Moved', moveError);
-                      throw moveError;
-                    }
-                  }}
-                  onReorder={async (project, direction) => {
-                    try {
-                      await hierarchy.reorderProjectInPlanning(
-                        project.id,
-                        direction,
-                        taskListView,
-                        planningDate,
-                      );
-                    } catch (reorderError) {
-                      showTaskError('Project Could Not Be Reordered', reorderError);
-                      throw reorderError;
-                    }
-                  }}
-                  onReopen={async (project) => hierarchy.transitionProject(
-                    project.id,
-                    'reopen_project',
-                  )}
-                />
                 <TodayTaskSections
                   tasks={renderedPlanningTasks}
                   planningDate={planningDate}
@@ -2774,100 +2850,39 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               <div className="space-y-7">
                 {view === 'upcoming' ? (
                   <UpcomingTaskSections
-                    projects={planningProjects}
                     tasks={renderedPlanningTasks}
                     planningDate={planningDate}
                     retainedTaskId={retainedTaskId}
                     retainedTaskPlacement={retainedTaskPlacement}
+                    dropIndicator={taskDropIndicator}
                     onCreate={(startDate) => {
                       void beginTaskCreation({ startDate });
                     }}
-                    renderProject={(project) => (
-                      <TaskPlanningProjectItem
-                        key={project.id}
-                        project={project}
-                        projects={planningProjects}
-                        areas={hierarchy.areas}
-                        basePath={basePath}
-                        view={taskListView}
-                        planningDate={planningDate}
-                        onMove={async (candidate, input) => {
-                          try {
-                            await hierarchy.moveProjectInPlanning(candidate.id, input);
-                          } catch (moveError) {
-                            showTaskError('Project Could Not Be Moved', moveError);
-                            throw moveError;
-                          }
-                        }}
-                        onReorder={async (candidate, direction) => {
-                          try {
-                            await hierarchy.reorderProjectInPlanning(
-                              candidate.id,
-                              direction,
-                              taskListView,
-                              planningDate,
-                            );
-                          } catch (reorderError) {
-                            showTaskError('Project Could Not Be Reordered', reorderError);
-                            throw reorderError;
-                          }
-                        }}
-                        onReopen={async (candidate) => {
-                          try {
-                            await hierarchy.transitionProject(candidate.id, 'reopen_project');
-                          } catch (reopenError) {
-                            showTaskError('Project Could Not Be Reopened', reopenError);
-                            throw reopenError;
-                          }
-                        }}
-                      />
-                    )}
+                    onSectionDragOver={(section, sectionTasks, placement) => {
+                      const draggedTaskId = activeDraggedTaskIdRef.current;
+                      if (draggedTaskId === null) return;
+                      const draggedIds = new Set(activeDraggedTaskIdsRef.current);
+                      const candidates = sectionTasks.filter(({ id }) => !draggedIds.has(id));
+                      const targetTask = placement === 'before'
+                        ? candidates[0] ?? null
+                        : candidates.at(-1) ?? null;
+                      updateTaskDropIndicator({
+                        draggedTaskId,
+                        targetTaskId: targetTask?.id ?? null,
+                        placement,
+                        targetUpcomingSectionKey: section.key,
+                        targetUpcomingStartDate: section.date,
+                      });
+                    }}
                     renderTask={renderActiveTask}
                   />
                 ) : view === 'anytime' ? (
                   <>
-                    <TaskPlanningProjects
-                      projects={planningProjects}
-                      areas={hierarchy.areas}
-                      basePath={basePath}
-                      view={taskListView}
-                      planningDate={planningDate}
-                      onMove={async (project, input) => {
-                        try {
-                          await hierarchy.moveProjectInPlanning(project.id, input);
-                        } catch (moveError) {
-                          showTaskError('Project Could Not Be Moved', moveError);
-                          throw moveError;
-                        }
-                      }}
-                      onReorder={async (project, direction) => {
-                        try {
-                          await hierarchy.reorderProjectInPlanning(
-                            project.id,
-                            direction,
-                            taskListView,
-                            planningDate,
-                          );
-                        } catch (reorderError) {
-                          showTaskError('Project Could Not Be Reordered', reorderError);
-                          throw reorderError;
-                        }
-                      }}
-                      onReopen={async (project) => {
-                        try {
-                          await hierarchy.transitionProject(project.id, 'reopen_project');
-                        } catch (reopenError) {
-                          showTaskError('Project Could Not Be Reopened', reopenError);
-                          throw reopenError;
-                        }
-                      }}
-                    />
                     <TaskAreaSections
                       view="anytime"
                       automaticSort={automaticListSorting.enabled}
                       tasks={renderedPlanningTasks}
                       areas={hierarchy.areas}
-                      projects={hierarchy.projects}
                       retainedTaskId={retainedTaskId}
                       retainedTaskPlacement={retainedTaskPlacement}
                       onCreate={(areaId) => {
@@ -2877,20 +2892,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         const draggedTask = tasks.find(({ id }) => id === draggedTaskId);
                         if (
                           draggedTask
-                          && getTaskEffectiveAreaId(
-                            taskWithRetainedViewPlacement(
-                              draggedTask,
-                              retainedTaskId,
-                              retainedTaskPlacement,
-                            ),
-                            hierarchy.projects,
-                          ) === null
+                          && getTaskEffectiveAreaId(taskWithRetainedViewPlacement(
+                            draggedTask,
+                            retainedTaskId,
+                            retainedTaskPlacement,
+                          )) === null
                         ) return;
                         try {
-                          await updateTask(draggedTaskId, {
-                            area_id: null,
-                            project_id: null,
-                          });
+                          await updateTask(draggedTaskId, { area_id: null });
                         } catch (moveError) {
                           showTaskError('Task Could Not Be Moved', moveError);
                           throw moveError;
@@ -2901,48 +2910,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   </>
                 ) : (
                   <>
-                    <TaskPlanningProjects
-                      projects={planningProjects}
-                      areas={hierarchy.areas}
-                      basePath={basePath}
-                      view={taskListView}
-                      planningDate={planningDate}
-                      onMove={async (project, input) => {
-                        try {
-                          await hierarchy.moveProjectInPlanning(project.id, input);
-                        } catch (moveError) {
-                          showTaskError('Project Could Not Be Moved', moveError);
-                          throw moveError;
-                        }
-                      }}
-                      onReorder={async (project, direction) => {
-                        try {
-                          await hierarchy.reorderProjectInPlanning(
-                            project.id,
-                            direction,
-                            taskListView,
-                            planningDate,
-                          );
-                        } catch (reorderError) {
-                          showTaskError('Project Could Not Be Reordered', reorderError);
-                          throw reorderError;
-                        }
-                      }}
-                      onReopen={async (project) => {
-                        try {
-                          await hierarchy.transitionProject(project.id, 'reopen_project');
-                        } catch (reopenError) {
-                          showTaskError('Project Could Not Be Reopened', reopenError);
-                          throw reopenError;
-                        }
-                      }}
-                    />
                     <TaskAreaSections
                       view="someday"
                       automaticSort={automaticListSorting.enabled}
                       tasks={renderedPlanningTasks}
                       areas={hierarchy.areas}
-                      projects={hierarchy.projects}
                       retainedTaskId={retainedTaskId}
                       retainedTaskPlacement={retainedTaskPlacement}
                       onCreate={(areaId) => {
@@ -2952,20 +2924,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         const draggedTask = tasks.find(({ id }) => id === draggedTaskId);
                         if (
                           draggedTask
-                          && getTaskEffectiveAreaId(
-                            taskWithRetainedViewPlacement(
-                              draggedTask,
-                              retainedTaskId,
-                              retainedTaskPlacement,
-                            ),
-                            hierarchy.projects,
-                          ) === null
+                          && getTaskEffectiveAreaId(taskWithRetainedViewPlacement(
+                            draggedTask,
+                            retainedTaskId,
+                            retainedTaskPlacement,
+                          )) === null
                         ) return;
                         try {
-                          await updateTask(draggedTaskId, {
-                            area_id: null,
-                            project_id: null,
-                          });
+                          await updateTask(draggedTaskId, { area_id: null });
                         } catch (moveError) {
                           showTaskError('Task Could Not Be Moved', moveError);
                           throw moveError;
@@ -3949,7 +3915,6 @@ function TaskAreaSections({
   automaticSort,
   tasks,
   areas,
-  projects,
   retainedTaskId,
   retainedTaskPlacement,
   onCreate,
@@ -3960,7 +3925,6 @@ function TaskAreaSections({
   automaticSort: boolean;
   tasks: TaskTodo[];
   areas: TaskHierarchyModel['areas'];
-  projects: TaskProject[];
   retainedTaskId: string | null;
   retainedTaskPlacement: RetainedTaskViewPlacement | null;
   onCreate: (areaId: string) => void;
@@ -3980,7 +3944,6 @@ function TaskAreaSections({
   const sections = deriveTaskAreaSections(
     placementTasks,
     areas,
-    projects,
     automaticSort,
   );
   const unassigned = sections[0];
@@ -4065,23 +4028,32 @@ function TaskAreaSections({
 }
 
 function UpcomingTaskSections({
-  projects,
   tasks,
   planningDate,
   retainedTaskId,
   retainedTaskPlacement,
+  dropIndicator,
   onCreate,
-  renderProject,
+  onSectionDragOver,
   renderTask,
 }: {
-  projects: TaskProject[];
   tasks: TaskTodo[];
   planningDate: string;
   retainedTaskId: string | null;
   retainedTaskPlacement: RetainedTaskViewPlacement | null;
+  dropIndicator: TaskDropIndicator | null;
   onCreate: (startDate: string) => void;
-  renderProject: (project: TaskProject) => ReactNode;
-  renderTask: (task: TaskTodo, sectionTasks: TaskTodo[]) => ReactNode;
+  onSectionDragOver: (
+    section: { key: string; date: string },
+    sectionTasks: TaskTodo[],
+    placement: 'before' | 'after',
+  ) => void;
+  renderTask: (
+    task: TaskTodo,
+    sectionTasks: TaskTodo[],
+    targetAreaId?: string | null,
+    targetUpcomingSection?: { key: string; startDate: string },
+  ) => ReactNode;
 }) {
   const currentTaskById = new Map(tasks.map((task) => [task.id, task]));
   const placementTasks = tasks.map((task) => taskWithRetainedViewPlacement(
@@ -4089,30 +4061,51 @@ function UpcomingTaskSections({
     retainedTaskId,
     retainedTaskPlacement,
   ));
-  const sections = getTaskUpcomingSections(projects, placementTasks, planningDate);
+  const sections = getTaskUpcomingSections(placementTasks, planningDate);
   if (sections.length === 0) return null;
 
   return (
     <div className="space-y-7" aria-label="Upcoming Tasks">
       {sections.map((section) => {
         const orderedEntries = [
-          ...section.entries.filter((entry) => (
-            entry.kind === 'task' && entry.item.id === NEW_TASK_DRAFT_ID
-          )),
-          ...section.entries.filter((entry) => (
-            entry.kind !== 'task' || entry.item.id !== NEW_TASK_DRAFT_ID
-          )),
+          ...section.entries.filter((entry) => entry.item.id === NEW_TASK_DRAFT_ID),
+          ...section.entries.filter((entry) => entry.item.id !== NEW_TASK_DRAFT_ID),
         ];
-        const sectionTasks = orderedEntries.flatMap((entry) => (
-          entry.kind === 'task'
-            ? [currentTaskById.get(entry.item.id) ?? entry.item]
-            : []
-        ));
+        const sectionTasks = orderedEntries.map(
+          (entry) => currentTaskById.get(entry.item.id) ?? entry.item,
+        );
+        const sectionDropPlacement = dropIndicator?.targetUpcomingSectionKey === section.key
+          && dropIndicator.targetTaskId === null
+          ? dropIndicator.placement
+          : null;
         return (
           <section
             key={section.key}
             aria-labelledby={`tasks-${section.key.replace(':', '-')}-heading`}
+            className="relative"
+            data-task-upcoming-section={section.key}
+            data-drag-placement={sectionDropPlacement ?? undefined}
+            onDragOver={(event) => {
+              const target = event.target instanceof Element ? event.target : null;
+              if (target?.closest('[data-task-row-id]')) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+              const bounds = event.currentTarget.getBoundingClientRect();
+              onSectionDragOver(
+                section,
+                sectionTasks,
+                event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after',
+              );
+            }}
           >
+            {sectionDropPlacement ? (
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 bg-info ${
+                  sectionDropPlacement === 'before' ? 'top-0' : 'bottom-0'
+                }`}
+              />
+            ) : null}
             <h3
               id={`tasks-${section.key.replace(':', '-')}-heading`}
               aria-label={section.label}
@@ -4132,11 +4125,11 @@ function UpcomingTaskSections({
               </button>
             </h3>
             <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
-              {orderedEntries.map((entry) => entry.kind === 'project'
-                ? renderProject(entry.item)
-                : renderTask(
+              {orderedEntries.map((entry) => renderTask(
                   currentTaskById.get(entry.item.id) ?? entry.item,
                   sectionTasks,
+                  undefined,
+                  { key: section.key, startDate: section.date },
                 ))}
             </div>
           </section>
@@ -4171,7 +4164,6 @@ function TaskRow({
   onTaskDragStart,
   onTaskDragOver,
   onTaskDragEnd,
-  onDropTask,
   planningDate,
   todayMarker,
   todayMarkerContext,
@@ -4208,12 +4200,8 @@ function TaskRow({
   draggableTask: boolean;
   dragPlacement: 'before' | 'after' | null;
   onTaskDragStart: () => void;
-  onTaskDragOver: (
-    draggedTaskId: string,
-    placement: 'before' | 'after',
-  ) => void;
+  onTaskDragOver: (placement: 'before' | 'after') => void;
   onTaskDragEnd: () => void;
-  onDropTask: (draggedTaskId: string) => Promise<void>;
   planningDate: string;
   todayMarker?: TodayTaskSection;
   todayMarkerContext: 'Today' | 'Day Horizon';
@@ -4244,7 +4232,8 @@ function TaskRow({
   const titleButtonRef = useRef<HTMLButtonElement>(null);
   const suppressClickUntilRef = useRef(0);
   const pendingRef = useRef(false);
-  const { areaLabel, projectLabel } = getTaskHierarchyLabels(task, hierarchy);
+  const inBulkSelection = bulkSelection !== undefined;
+  const areaLabel = getTaskAreaLabel(task, hierarchy);
   const taskLabel = task.title || 'New Task';
   const todayMarkerPresentation = todayMarker
     ? getTaskHorizonPresentation(todayMarker)
@@ -4275,6 +4264,12 @@ function TaskRow({
       }
     };
     cancelScheduledMotion();
+
+    if (inBulkSelection) {
+      setEditorExpanded(false);
+      setEditorMounted(false);
+      return cancelScheduledMotion;
+    }
 
     const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
       ?? true;
@@ -4316,7 +4311,7 @@ function TaskRow({
       setEditorMounted(false);
     }, TASK_EDITOR_EXPANSION_DURATION_MS);
     return cancelScheduledMotion;
-  }, [selected]);
+  }, [inBulkSelection, selected]);
 
   useLayoutEffect(() => {
     const region = editorRegionRef.current;
@@ -4546,23 +4541,10 @@ function TaskRow({
         if (!draggableTask || pending) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
-        const draggedTaskId = event.dataTransfer.getData('application/x-bathos-task-id')
-          || event.dataTransfer.getData('text/plain');
-        if (!draggedTaskId) return;
         const bounds = event.currentTarget.getBoundingClientRect();
         onTaskDragOver(
-          draggedTaskId,
           event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after',
         );
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        const draggedTaskId = event.dataTransfer.getData('application/x-bathos-task-id')
-          || event.dataTransfer.getData('text/plain');
-        if (!draggableTask || !draggedTaskId || draggedTaskId === task.id) {
-          return;
-        }
-        void run(() => onDropTask(draggedTaskId));
       }}
       onDragEnd={() => {
         onTaskDragEnd();
@@ -4675,7 +4657,6 @@ function TaskRow({
           </span>
           {(
             areaLabel
-            || projectLabel
             || task.actionability !== 'actionable'
             || task.deadline
             || (reminder && (task.start_date || task.today_section))
@@ -4691,15 +4672,6 @@ function TaskRow({
                   data-task-metadata-kind="area"
                 >
                   {areaLabel}
-                </span>
-              ) : null}
-              {projectLabel ? (
-                <span
-                  className="min-w-0 shrink truncate text-info"
-                  title={projectLabel}
-                  data-task-metadata-kind="project"
-                >
-                  {projectLabel}
                 </span>
               ) : null}
               {reminder && (task.start_date || task.today_section) ? (
@@ -5308,22 +5280,12 @@ function TaskEditor({
               <SelectValue />
             </SelectTrigger>
             <SelectContent data-task-editor-owned-surface="true">
-              <SelectItem value="none">No Area or Project</SelectItem>
+              <SelectItem value="none">No Area</SelectItem>
               {hierarchy.areas.length > 0 ? (
                 <SelectGroup>
                   <SelectLabel>Areas</SelectLabel>
                   {hierarchy.areas.map((area) => (
                     <SelectItem key={area.id} value={`area:${area.id}`}>{area.title}</SelectItem>
-                  ))}
-                </SelectGroup>
-              ) : null}
-              {hierarchy.projects.length > 0 ? (
-                <SelectGroup>
-                  <SelectLabel>Projects</SelectLabel>
-                  {hierarchy.projects.map((project) => (
-                    <SelectItem key={project.id} value={`project:${project.id}`}>
-                      {project.title}
-                    </SelectItem>
                   ))}
                 </SelectGroup>
               ) : null}
@@ -5372,7 +5334,6 @@ function createPlainTextTaskSnapshot(title: string): TaskClipboardSnapshot {
     deadline: null,
     actionability: 'actionable',
     areaId: null,
-    projectId: null,
     checklist: [],
     reminder: null,
     recurrence: null,
@@ -5421,8 +5382,6 @@ function getTaskViewLabel(view: TaskShellView): string {
   if (view === 'someday') return 'Someday';
   if (view === 'done') return 'Done';
   if (view === 'upcoming') return 'Upcoming';
-  if (view === 'projects') return 'Projects';
-  if (view === 'project') return 'Project';
   if (view === 'area') return 'Area';
   if (view === 'templates') return 'Templates';
   if (view === 'config') return 'Config';
@@ -5432,7 +5391,6 @@ function getTaskViewLabel(view: TaskShellView): string {
 
 function isTaskNavigationActive(view: TaskShellView, path: string): boolean {
   return view === path.slice(1)
-    || (path === '/projects' && view === 'project')
     || (path === '/config' && view === 'area');
 }
 
@@ -5445,14 +5403,8 @@ function getTaskViewFromPath(pathname: string): TaskShellView {
   if (pathname.endsWith('/config')) return 'config';
   if (pathname.endsWith('/search')) return 'search';
   if (getTaskAreaIdFromPath(pathname)) return 'area';
-  if (getTaskProjectIdFromPath(pathname)) return 'project';
-  if (pathname.endsWith('/projects')) return 'projects';
+  if (/\/projects(?:\/[^/]+)?$/.test(pathname)) return 'anytime';
   return 'today';
-}
-
-function getTaskProjectIdFromPath(pathname: string): string | null {
-  const match = pathname.match(/\/projects\/([^/]+)$/);
-  return match ? decodeURIComponent(match[1]) : null;
 }
 
 function getTaskAreaIdFromPath(pathname: string): string | null {
@@ -5468,63 +5420,29 @@ function getTaskSectionLabel(view: TaskListView): string {
   return 'Today Tasks';
 }
 
-function getTaskHierarchyLabels(
+function getTaskAreaLabel(
   task: TaskTodo,
   hierarchy: TaskHierarchyModel,
-): { areaLabel: string | null; projectLabel: string | null } {
-  if (task.project_id) {
-    const project = hierarchy.projects.find(({ id }) => id === task.project_id);
-    if (!project) {
-      return {
-        areaLabel: null,
-        projectLabel: 'Unavailable Project',
-      };
-    }
-    const areaLabel = project.area_id
-      ? hierarchy.areas.find(({ id }) => id === project.area_id)?.title ?? null
-      : task.area_id
-        ? hierarchy.areas.find(({ id }) => id === task.area_id)?.title ?? 'Unavailable Area'
-        : null;
-    return {
-      areaLabel,
-      projectLabel: project.title,
-    };
-  }
+): string | null {
   if (task.area_id) {
-    return {
-      areaLabel: hierarchy.areas.find(({ id }) => id === task.area_id)?.title
-        ?? 'Unavailable Area',
-      projectLabel: null,
-    };
+    return hierarchy.areas.find(({ id }) => id === task.area_id)?.title
+      ?? 'Unavailable Area';
   }
-  return {
-    areaLabel: null,
-    projectLabel: null,
-  };
+  return null;
 }
 
 function taskOrganizationValue(task: TaskTodo): string {
-  if (task.project_id) return `project:${task.project_id}`;
   if (task.area_id) return `area:${task.area_id}`;
   return 'none';
 }
 
 function parseTaskOrganization(
   organization: string,
-): Pick<TaskTodo, 'area_id' | 'project_id'> {
-  if (organization.startsWith('project:')) {
-    return {
-      area_id: null,
-      project_id: organization.slice('project:'.length),
-    };
-  }
+): Pick<TaskTodo, 'area_id'> {
   if (organization.startsWith('area:')) {
-    return {
-      area_id: organization.slice('area:'.length),
-      project_id: null,
-    };
+    return { area_id: organization.slice('area:'.length) };
   }
-  return { area_id: null, project_id: null };
+  return { area_id: null };
 }
 
 function formatTaskTerminalDate(timestamp: string): string {

@@ -16,10 +16,8 @@ import { uuidSchema } from '../resource-utils';
 
 const directionSchema = z.enum(['up', 'down']);
 const taskScopeSchema = z.enum(['planning', 'hierarchy']);
-const hierarchyScopeSchema = z.enum(['structural', 'planning']);
 const taskPlanningViewSchema = z.enum(['today', 'upcoming', 'anytime', 'someday']);
-const projectPlanningViewSchema = z.enum(['today', 'upcoming', 'anytime', 'someday']);
-const hierarchyTypeSchema = z.enum(['area', 'project', 'checklist_item']);
+const hierarchyTypeSchema = z.enum(['area', 'checklist_item']);
 const calendarDateSchema = z.string().refine(isTaskCalendarDate, {
   message: 'Use an ISO calendar date in YYYY-MM-DD format.',
 });
@@ -27,7 +25,6 @@ const calendarDateSchema = z.string().refine(isTaskCalendarDate, {
 type Tables = Database['public']['Tables'];
 type TaskTodoRow = Tables['tasks_todos']['Row'];
 type TaskAreaRow = Tables['tasks_areas']['Row'];
-type TaskProjectRow = Tables['tasks_projects']['Row'];
 type TaskChecklistRow = Tables['tasks_checklist_items']['Row'];
 type TaskHistoryRow = Tables['tasks_history_events']['Row'];
 type HierarchyHistoryRow = Tables['tasks_hierarchy_history_events']['Row'];
@@ -35,8 +32,7 @@ type HierarchyOperationRow = Tables['tasks_hierarchy_operations']['Row'];
 type HierarchyType = z.infer<typeof hierarchyTypeSchema>;
 type Direction = z.infer<typeof directionSchema>;
 type TaskPlanningView = z.infer<typeof taskPlanningViewSchema>;
-type ProjectPlanningView = z.infer<typeof projectPlanningViewSchema>;
-type HierarchyRow = TaskAreaRow | TaskProjectRow | TaskChecklistRow;
+type HierarchyRow = TaskAreaRow | TaskChecklistRow;
 type Snapshot = Record<string, Json | undefined>;
 
 type MutationBase = {
@@ -55,9 +51,6 @@ export type ReorderTaskRequest = MutationBase & {
 export type ReorderTaskHierarchyRequest = MutationBase & {
   record_type: HierarchyType;
   record_id: string;
-  scope?: 'structural' | 'planning';
-  view?: ProjectPlanningView;
-  planning_date?: string;
 };
 
 type MutationReceipt = {
@@ -138,10 +131,6 @@ async function readHierarchyRecord(
 ): Promise<HierarchyRow | null> {
   if (type === 'area') {
     return readOne<TaskAreaRow>(auth.supabase.from('tasks_areas').select('*')
-      .eq('owner_id', auth.userId).eq('id', id).maybeSingle());
-  }
-  if (type === 'project') {
-    return readOne<TaskProjectRow>(auth.supabase.from('tasks_projects').select('*')
       .eq('owner_id', auth.userId).eq('id', id).maybeSingle());
   }
   return readOne<TaskChecklistRow>(auth.supabase.from('tasks_checklist_items').select('*')
@@ -234,8 +223,8 @@ function assertOpenPresent(record: { disposition: string; lifecycle?: string }):
 }
 
 function orderSection(
-  record: Snapshot | TaskTodoRow | TaskProjectRow,
-  view: TaskPlanningView | ProjectPlanningView,
+  record: Snapshot | TaskTodoRow,
+  view: TaskPlanningView,
   planningDate: string,
 ): string {
   if (view === 'today') {
@@ -246,8 +235,8 @@ function orderSection(
 }
 
 function visibleInPlanning(
-  record: Snapshot | TaskTodoRow | TaskProjectRow,
-  view: TaskPlanningView | ProjectPlanningView,
+  record: Snapshot | TaskTodoRow,
+  view: TaskPlanningView,
   planningDate: string,
 ): boolean {
   if (record.disposition !== 'present' || record.lifecycle !== 'open') return false;
@@ -271,13 +260,6 @@ function visibleInPlanning(
 function requireTaskPlanning(input: ReorderTaskRequest) {
   if (!input.view || !input.planning_date) {
     throw new Error('Planning reorder requires a view and explicit planning date.');
-  }
-  return { view: input.view, planningDate: input.planning_date };
-}
-
-function requireProjectPlanning(input: ReorderTaskHierarchyRequest) {
-  if (input.record_type !== 'project' || !input.view || !input.planning_date) {
-    throw new Error('Project planning reorder requires a project, view, and explicit planning date.');
   }
   return { view: input.view, planningDate: input.planning_date };
 }
@@ -336,7 +318,6 @@ async function taskPeers(
       .map((row) => ({ id: row.id, orderKey: row.order_key }));
   }
   return rows.filter((row) => row.area_id === current.area_id
-      && row.project_id === current.project_id
       && row.hierarchy_order_key !== null)
     .map((row) => ({ id: row.id, orderKey: row.hierarchy_order_key as string }));
 }
@@ -346,39 +327,11 @@ async function hierarchyPeers(
   current: HierarchyRow,
   auth: AuthenticatedMcpContext,
 ): Promise<OrderedTask[]> {
-  const scope = input.scope ?? 'structural';
-  if (scope === 'planning') {
-    const project = current as TaskProjectRow;
-    const { view, planningDate } = requireProjectPlanning(input);
-    if (!visibleInPlanning(project, view, planningDate)) {
-      throw new Error('The project is not in the requested planning view.');
-    }
-    const section = orderSection(project, view, planningDate);
-    const rows = await readAll<TaskProjectRow>((from, to) => auth.supabase
-      .from('tasks_projects').select('*')
-      .eq('owner_id', auth.userId).eq('disposition', 'present').eq('lifecycle', 'open')
-      .order('planning_order_key').order('id').range(from, to));
-    return rows.filter((row) => visibleInPlanning(row, view, planningDate)
-      && orderSection(row, view, planningDate) === section)
-      .map((row) => ({ id: row.id, orderKey: row.planning_order_key }));
-  }
-  if (input.view || input.planning_date) {
-    throw new Error('Structural reorder does not accept a planning view or date.');
-  }
   if (input.record_type === 'area') {
     const rows = await readAll<TaskAreaRow>((from, to) => auth.supabase
       .from('tasks_areas').select('*').eq('owner_id', auth.userId).eq('disposition', 'present')
       .order('order_key').order('id').range(from, to));
     return rows.map((row) => ({ id: row.id, orderKey: row.order_key }));
-  }
-  if (input.record_type === 'project') {
-    const project = current as TaskProjectRow;
-    const rows = await readAll<TaskProjectRow>((from, to) => auth.supabase
-      .from('tasks_projects').select('*')
-      .eq('owner_id', auth.userId).eq('disposition', 'present').eq('lifecycle', 'open')
-      .order('order_key').order('id').range(from, to));
-    return rows.filter((row) => row.area_id === project.area_id)
-      .map((row) => ({ id: row.id, orderKey: row.order_key }));
   }
   const item = current as TaskChecklistRow;
   const task = await readTask(auth, item.task_id);
@@ -424,22 +377,7 @@ function assertHierarchyRetry(
   }
   const before = jsonRecord(event.before_state);
   const after = jsonRecord(event.after_state);
-  const scope = input.scope ?? 'structural';
-  assertOnlyOrderChanged(
-    before,
-    after,
-    scope === 'planning' ? 'planning_order_key' : 'order_key',
-    input.direction,
-  );
-  if (scope === 'planning') {
-    const { view, planningDate } = requireProjectPlanning(input);
-    if (!visibleInPlanning(before, view, planningDate)
-      || orderSection(before, view, planningDate) !== orderSection(after, view, planningDate)) {
-      throw new Error('The mutation identifier was already used in a different planning scope.');
-    }
-  } else if (input.view || input.planning_date) {
-    throw new Error('Structural reorder does not accept a planning view or date.');
-  }
+  assertOnlyOrderChanged(before, after, 'order_key', input.direction);
 }
 
 async function resolveTaskRetry(input: ReorderTaskRequest, auth: AuthenticatedMcpContext) {
@@ -503,9 +441,8 @@ async function updateHierarchyOrder(
   orderKey: string,
   auth: AuthenticatedMcpContext,
 ): Promise<HierarchyRow | null> {
-  const scope = input.scope ?? 'structural';
   const patch = {
-    [scope === 'planning' ? 'planning_order_key' : 'order_key']: orderKey,
+    order_key: orderKey,
     revision: current.revision + 1,
     client_mutation_id: input.client_mutation_id,
     last_actor_type: 'automation',
@@ -515,12 +452,6 @@ async function updateHierarchyOrder(
     return readOne<TaskAreaRow>(auth.supabase.from('tasks_areas').update(patch)
       .eq('owner_id', auth.userId).eq('id', input.record_id)
       .eq('revision', input.expected_revision).eq('disposition', 'present')
-      .select('*').maybeSingle());
-  }
-  if (input.record_type === 'project') {
-    return readOne<TaskProjectRow>(auth.supabase.from('tasks_projects').update(patch)
-      .eq('owner_id', auth.userId).eq('id', input.record_id)
-      .eq('revision', input.expected_revision).eq('disposition', 'present').eq('lifecycle', 'open')
       .select('*').maybeSingle());
   }
   return readOne<TaskChecklistRow>(auth.supabase.from('tasks_checklist_items').update(patch)
@@ -583,10 +514,6 @@ export async function reorderTaskHierarchyData(
 ) {
   const retry = await resolveHierarchyRetry(input, auth);
   if (retry) return retry;
-  const scope = input.scope ?? 'structural';
-  if (scope === 'planning' && input.record_type !== 'project') {
-    throw new Error('Planning reorder is available only for projects.');
-  }
   const current = await readHierarchyRecord(auth, input.record_type, input.record_id);
   if (!current) throw new Error(`The task ${input.record_type.replace('_', ' ')} is unavailable.`);
   assertOpenPresent(current);
@@ -658,14 +585,11 @@ export const reorderTask = defineTool({
 export const reorderTaskHierarchy = defineTool({
   name: 'reorder_task_hierarchy',
   title: 'Reorder Task Hierarchy',
-  description: 'Move one area, project, or checklist item up or down within its exact structural peers, or reorder a project within one planning section.',
+  description: 'Move one Area or checklist item up or down within its exact structural peers.',
   inputSchema: {
     ...mutationBaseSchema,
     record_type: hierarchyTypeSchema,
     record_id: uuidSchema.describe('Stable hierarchy record identifier.'),
-    scope: hierarchyScopeSchema.optional().describe('Defaults to structural. Planning is available only for projects.'),
-    view: projectPlanningViewSchema.optional().describe('Required only for project planning order.'),
-    planning_date: calendarDateSchema.optional().describe('Explicit deterministic date required only for project planning order.'),
   },
   annotations: mutationAnnotations,
   handler: (input, ctx) => toMcpResult(

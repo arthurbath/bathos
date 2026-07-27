@@ -12,7 +12,6 @@ const reminder = {
   owner_id: 'owner-a',
   root_type: 'todo',
   task_id: 'task-a',
-  project_id: null,
   local_date: '2026-07-20',
   local_time: '09:00:00',
   time_zone: 'America/Los_Angeles',

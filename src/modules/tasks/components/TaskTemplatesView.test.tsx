@@ -12,7 +12,7 @@ import { TaskTemplatesView } from './TaskTemplatesView';
 const capture = vi.fn().mockResolvedValue({});
 const archive = vi.fn().mockResolvedValue({});
 const instantiate = vi.fn().mockResolvedValue({
-  result: { project_id: null, root_id: 'created-task' },
+  result: { root_id: 'created-task' },
 });
 const mockUseTaskTemplates = vi.fn();
 const mockUseTaskRecurrences = vi.fn();
@@ -82,7 +82,6 @@ function model(mode: 'local' | 'connected') {
     templates: [template],
     revisions: new Map([[template.id, revision]]),
     todos: [source],
-    projects: [],
     mode,
     planningDate: '2026-07-20',
     loading: false,
@@ -95,7 +94,6 @@ function model(mode: 'local' | 'connected') {
 
 const hierarchy = {
   areas: [],
-  projects: [],
   loading: false,
   error: null,
 };

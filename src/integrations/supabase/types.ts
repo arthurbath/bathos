@@ -1429,6 +1429,7 @@ export type Database = {
           id: string
           mutation_channel: string
           occurred_at: string
+          operation_id: string
           outcome: string
           owner_id: string
           result_revision: number
@@ -1446,6 +1447,7 @@ export type Database = {
           id?: string
           mutation_channel: string
           occurred_at: string
+          operation_id: string
           outcome?: string
           owner_id: string
           result_revision: number
@@ -1463,6 +1465,7 @@ export type Database = {
           id?: string
           mutation_channel?: string
           occurred_at?: string
+          operation_id?: string
           outcome?: string
           owner_id?: string
           result_revision?: number
@@ -1588,158 +1591,6 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "tasks_todos"
             referencedColumns: ["id", "owner_id"]
-          },
-        ]
-      }
-      tasks_projects: {
-        Row: {
-          area_id: string | null
-          canceled_at: string | null
-          client_mutation_id: string
-          completed_at: string | null
-          created_at: string
-          deadline: string | null
-          deleted_at: string | null
-          deletion_root_id: string | null
-          destination: string
-          disposition: string
-          entry_channel: string
-          id: string
-          last_actor_type: string
-          last_mutation_channel: string
-          lifecycle: string
-          notes: string
-          order_key: string
-          owner_id: string
-          planning_order_key: string
-          recurrence_definition_id: string | null
-          recurrence_logical_key: string | null
-          recurrence_occurrence_id: string | null
-          recurrence_revision: number | null
-          revision: number
-          start_date: string | null
-          template_definition_id: string | null
-          template_instantiation_id: string | null
-          template_node_id: string | null
-          template_revision: number | null
-          title: string
-          today_section: string | null
-          updated_at: string
-        }
-        Insert: {
-          area_id?: string | null
-          canceled_at?: string | null
-          client_mutation_id: string
-          completed_at?: string | null
-          created_at?: string
-          deadline?: string | null
-          deleted_at?: string | null
-          deletion_root_id?: string | null
-          destination?: string
-          disposition?: string
-          entry_channel?: string
-          id: string
-          last_actor_type?: string
-          last_mutation_channel?: string
-          lifecycle?: string
-          notes?: string
-          order_key: string
-          owner_id: string
-          planning_order_key: string
-          recurrence_definition_id?: string | null
-          recurrence_logical_key?: string | null
-          recurrence_occurrence_id?: string | null
-          recurrence_revision?: number | null
-          revision?: number
-          start_date?: string | null
-          template_definition_id?: string | null
-          template_instantiation_id?: string | null
-          template_node_id?: string | null
-          template_revision?: number | null
-          title: string
-          today_section?: string | null
-          updated_at?: string
-        }
-        Update: {
-          area_id?: string | null
-          canceled_at?: string | null
-          client_mutation_id?: string
-          completed_at?: string | null
-          created_at?: string
-          deadline?: string | null
-          deleted_at?: string | null
-          deletion_root_id?: string | null
-          destination?: string
-          disposition?: string
-          entry_channel?: string
-          id?: string
-          last_actor_type?: string
-          last_mutation_channel?: string
-          lifecycle?: string
-          notes?: string
-          order_key?: string
-          owner_id?: string
-          planning_order_key?: string
-          recurrence_definition_id?: string | null
-          recurrence_logical_key?: string | null
-          recurrence_occurrence_id?: string | null
-          recurrence_revision?: number | null
-          revision?: number
-          start_date?: string | null
-          template_definition_id?: string | null
-          template_instantiation_id?: string | null
-          template_node_id?: string | null
-          template_revision?: number | null
-          title?: string
-          today_section?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tasks_projects_area_owner_fkey"
-            columns: ["area_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_areas"
-            referencedColumns: ["id", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_projects_recurrence_occurrence_owner_fkey"
-            columns: ["recurrence_occurrence_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_recurrence_occurrences"
-            referencedColumns: ["id", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_projects_recurrence_revision_owner_fkey"
-            columns: [
-              "recurrence_definition_id",
-              "recurrence_revision",
-              "owner_id",
-            ]
-            isOneToOne: false
-            referencedRelation: "tasks_recurrence_revisions"
-            referencedColumns: ["recurrence_id", "revision", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_projects_template_definition_owner_fkey"
-            columns: ["template_definition_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_templates"
-            referencedColumns: ["id", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_projects_template_instantiation_owner_fkey"
-            columns: ["template_instantiation_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_template_instantiations"
-            referencedColumns: ["id", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_projects_template_revision_owner_fkey"
-            columns: ["template_definition_id", "template_revision", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_template_revisions"
-            referencedColumns: ["template_id", "revision", "owner_id"]
           },
         ]
       }
@@ -2161,7 +2012,6 @@ export type Database = {
           local_date: string
           local_time: string
           owner_id: string
-          project_id: string | null
           record_revision: number
           resolution_kind: string
           resolved_at: string
@@ -2181,7 +2031,6 @@ export type Database = {
           local_date: string
           local_time: string
           owner_id: string
-          project_id?: string | null
           record_revision?: number
           resolution_kind: string
           resolved_at: string
@@ -2201,7 +2050,6 @@ export type Database = {
           local_date?: string
           local_time?: string
           owner_id?: string
-          project_id?: string | null
           record_revision?: number
           resolution_kind?: string
           resolved_at?: string
@@ -2212,13 +2060,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "tasks_reminders_project_owner_fkey"
-            columns: ["project_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_projects"
-            referencedColumns: ["id", "owner_id"]
-          },
           {
             foreignKeyName: "tasks_reminders_task_owner_fkey"
             columns: ["task_id", "owner_id"]
@@ -2406,13 +2247,13 @@ export type Database = {
           hierarchy_order_key: string | null
           id: string
           last_actor_type: string
+          last_operation_id: string | null
           last_mutation_channel: string
           lifecycle: string
           notes: string
           order_key: string
           owner_id: string
           primary_link: string | null
-          project_id: string | null
           recurrence_definition_id: string | null
           recurrence_logical_key: string | null
           recurrence_occurrence_id: string | null
@@ -2448,13 +2289,13 @@ export type Database = {
           hierarchy_order_key?: string | null
           id: string
           last_actor_type?: string
+          last_operation_id?: string | null
           last_mutation_channel?: string
           lifecycle?: string
           notes?: string
           order_key: string
           owner_id: string
           primary_link?: string | null
-          project_id?: string | null
           recurrence_definition_id?: string | null
           recurrence_logical_key?: string | null
           recurrence_occurrence_id?: string | null
@@ -2490,13 +2331,13 @@ export type Database = {
           hierarchy_order_key?: string | null
           id?: string
           last_actor_type?: string
+          last_operation_id?: string | null
           last_mutation_channel?: string
           lifecycle?: string
           notes?: string
           order_key?: string
           owner_id?: string
           primary_link?: string | null
-          project_id?: string | null
           recurrence_definition_id?: string | null
           recurrence_logical_key?: string | null
           recurrence_occurrence_id?: string | null
@@ -2522,13 +2363,6 @@ export type Database = {
             columns: ["area_id", "owner_id"]
             isOneToOne: false
             referencedRelation: "tasks_areas"
-            referencedColumns: ["id", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_todos_project_owner_fkey"
-            columns: ["project_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_projects"
             referencedColumns: ["id", "owner_id"]
           },
           {
@@ -2958,6 +2792,7 @@ export type Database = {
       }
       tasks_create_export_v1: { Args: never; Returns: Json }
       tasks_create_export_v12: { Args: never; Returns: Json }
+      tasks_create_export_v13: { Args: never; Returns: Json }
       tasks_create_export_v2: { Args: never; Returns: Json }
       tasks_create_export_v3: { Args: never; Returns: Json }
       tasks_create_mail_capture: {
@@ -3015,6 +2850,10 @@ export type Database = {
         Args: { _envelope: Json }
         Returns: Json
       }
+      tasks_prepare_replace_restore_v13: {
+        Args: { _envelope: Json }
+        Returns: Json
+      }
       tasks_preview_permanent_deletion: {
         Args: { _root_id: string; _root_type: string }
         Returns: Json
@@ -3040,6 +2879,15 @@ export type Database = {
         Returns: Json
       }
       tasks_replace_restore_v12: {
+        Args: {
+          _confirmation: string
+          _envelope: Json
+          _expected_backup_digest: string
+          _request_id: string
+        }
+        Returns: Json
+      }
+      tasks_replace_restore_v13: {
         Args: {
           _confirmation: string
           _envelope: Json

@@ -7,7 +7,6 @@ export function useTaskAreaDetail(ownerId: string, areaId: string) {
     `SELECT * FROM tasks_todos
      WHERE owner_id = ?
        AND area_id = ?
-       AND project_id IS NULL
        AND disposition = 'present'
        AND lifecycle = 'open'
      ORDER BY hierarchy_order_key, id`,

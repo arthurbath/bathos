@@ -122,7 +122,7 @@ export function TaskRecurrencePanel({
         startDate,
         missedPolicy,
         catchUpLimit: 50,
-        targetAreaId: selectedTemplate.kind === 'project' ? targetAreaId || null : null,
+        targetAreaId: targetAreaId || null,
       });
       toast({ title: editingId ? 'Repeat Revision Saved' : 'Repeat Saved' });
       reset();
@@ -271,7 +271,7 @@ export function TaskRecurrencePanel({
               <option value="all">Create All</option>
             </select>
           </Field>
-          {selectedTemplate?.kind === 'project' ? (
+          {selectedTemplate ? (
             <Field label="Area" required={false}>
               <select
                 value={targetAreaId}

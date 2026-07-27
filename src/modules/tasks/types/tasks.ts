@@ -33,7 +33,7 @@ export const taskMailSourceTransitions = [
   'retirement_failed',
   'retired',
 ] as const;
-export const taskTemplateKinds = ['todo', 'project'] as const;
+export const taskTemplateKinds = ['todo'] as const;
 export const taskRecurrenceStatuses = ['active', 'paused', 'archived'] as const;
 export const taskRecurrenceRuleModes = ['calendar', 'after_completion'] as const;
 export const taskRecurrenceFrequencies = ['daily', 'weekly', 'monthly', 'yearly'] as const;
@@ -59,14 +59,10 @@ export const taskReminderDeliveryStatuses = [
 export const taskActorTypes = ['user', 'automation', 'system', 'import'] as const;
 export const taskHierarchyRootTypes = [
   'area',
-  'project',
   'todo',
   'checklist_item',
 ] as const;
 export const taskHierarchyOperations = [
-  'complete_project',
-  'cancel_project',
-  'reopen_project',
   'delete',
   'restore',
 ] as const;
@@ -125,7 +121,6 @@ type TaskTodoRow = Tables<'tasks_todos'>;
 type TaskTodoInsertRow = TablesInsert<'tasks_todos'>;
 type TaskTodoUpdateRow = TablesUpdate<'tasks_todos'>;
 type TaskAreaRow = Tables<'tasks_areas'>;
-type TaskProjectRow = Tables<'tasks_projects'>;
 type TaskChecklistItemRow = Tables<'tasks_checklist_items'>;
 type TaskMailSourceRow = Tables<'tasks_mail_sources'>;
 type TaskMailSourceEventRow = Tables<'tasks_mail_source_events'>;
@@ -172,17 +167,8 @@ type RefinedHierarchyFields = {
   last_actor_type: TaskActorType;
 };
 
-type RefinedProjectFields = RefinedHierarchyFields & {
-  lifecycle: TaskLifecycle;
-  destination: TaskDestination;
-  today_section: TaskTodaySection | null;
-};
-
 export type TaskArea = Omit<TaskAreaRow, keyof RefinedHierarchyFields> &
   RefinedHierarchyFields;
-
-export type TaskProject = Omit<TaskProjectRow, keyof RefinedProjectFields> &
-  RefinedProjectFields;
 
 export type TaskChecklistItem = Omit<
   TaskChecklistItemRow,
@@ -252,19 +238,7 @@ export type TaskTodoTemplateSnapshot = {
   root: TaskTemplateTodoNode;
 };
 
-export type TaskProjectTemplateSnapshot = {
-  version: 1;
-  kind: 'project';
-  root: Omit<
-    TaskTemplateTodoNode,
-    'actionability' | 'checklist' | 'hierarchy_order_key'
-  > & { planning_order_key: string };
-  todos: TaskTemplateTodoNode[];
-};
-
-export type TaskTemplateSnapshot =
-  | TaskTodoTemplateSnapshot
-  | TaskProjectTemplateSnapshot;
+export type TaskTemplateSnapshot = TaskTodoTemplateSnapshot;
 
 type RefinedTemplateFields = {
   kind: TaskTemplateKind;

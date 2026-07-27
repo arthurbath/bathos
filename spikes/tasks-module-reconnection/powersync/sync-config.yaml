@@ -8,7 +8,6 @@ streams:
     auto_subscribe: true
     queries:
       - SELECT * FROM tasks_areas WHERE owner_id = auth.user_id()
-      - SELECT * FROM tasks_projects WHERE owner_id = auth.user_id()
       - SELECT * FROM tasks_todos WHERE owner_id = auth.user_id()
       - SELECT * FROM tasks_checklist_items WHERE owner_id = auth.user_id()
       - SELECT * FROM tasks_history_events WHERE owner_id = auth.user_id()

@@ -104,18 +104,12 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     const hierarchy = new TaskHierarchyRepository(activeDatabase);
     await repository.ensurePlanningSettings(source.id, 'America/Los_Angeles');
     const area = await hierarchy.createArea({ ownerId: source.id, title: 'Recovery Area' });
-    const project = await hierarchy.createProject({
-      ownerId: source.id,
-      areaId: area.id,
-      title: 'Recovery Project',
-      notes: 'Representative hierarchy for backup validation',
-    });
     const primary = await repository.createTask({
       ownerId: source.id,
       title: 'Preserve This Task',
       notes: 'Original notes',
       destination: 'anytime',
-      projectId: project.id,
+      areaId: area.id,
     });
     await hierarchy.createChecklistItem({
       ownerId: source.id,

@@ -27,7 +27,7 @@ import { toast } from '@/hooks/use-toast';
 import {
   TaskHierarchyEditableTitle,
   TaskHierarchyOrderButton,
-} from '@/modules/tasks/components/TaskProjectsView';
+} from '@/modules/tasks/components/TaskHierarchyControls';
 import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 
@@ -203,7 +203,7 @@ export function TaskAreaSettings({ hierarchy }: { hierarchy: TaskHierarchyModel 
           <AlertDialogBody>
             <AlertDialogDescription>
               {deletingAreaRecord
-                ? `${deletingAreaRecord.title}, its projects, tasks, and checklist items will move to Done together.`
+                ? `${deletingAreaRecord.title}, its tasks, and checklist items will move to Done together.`
                 : 'The area and its contents will move to Done together.'}
             </AlertDialogDescription>
           </AlertDialogBody>

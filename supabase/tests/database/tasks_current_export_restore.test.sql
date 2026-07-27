@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(18);
+SELECT plan(16);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -21,18 +21,22 @@ INSERT INTO auth.users (
   );
 
 SELECT has_function(
-  'public', 'tasks_create_export_v12', ARRAY[]::text[],
-  'creates the current schema-twelve export'
+  'public', 'tasks_create_export_v13', ARRAY[]::text[],
+  'creates the current schema-thirteen export'
 );
 SELECT has_function(
   'public', 'tasks_restore_export_current', ARRAY['jsonb', 'boolean'],
-  'restores supported exports through the current planning contract'
+  'restores supported exports through the current contract'
 );
 SELECT has_function(
-  'public', 'tasks_replace_restore_v12', ARRAY['jsonb', 'text', 'uuid', 'text'],
+  'public', 'tasks_replace_restore_v13', ARRAY['jsonb', 'text', 'uuid', 'text'],
   'keeps guarded replacement restore versioned with the current export'
 );
-SELECT hasnt_table('public', 'tasks_headings', 'keeps headings out of current persistence');
+SELECT hasnt_table('public', 'tasks_projects', 'removes Project persistence');
+SELECT hasnt_column(
+  'public', 'tasks_todos', 'project_id',
+  'removes Project assignment from tasks'
+);
 SELECT is(
   has_function_privilege(
     'anon', 'public.tasks_restore_export_current(jsonb,boolean)', 'EXECUTE'
@@ -55,114 +59,120 @@ INSERT INTO public.tasks_user_settings (
   'America/Los_Angeles',
   'dc000000-0000-4000-8000-000000000011'
 );
-INSERT INTO public.tasks_projects (
-  id, owner_id, title, destination, start_date, today_section,
-  order_key, planning_order_key, client_mutation_id
+INSERT INTO public.tasks_areas (
+  id, owner_id, title, order_key, client_mutation_id
 ) VALUES (
   'dc000000-0000-4000-8000-000000000012',
   'dc000000-0000-4000-8000-000000000001',
-  'Legacy fixture project', 'anytime', DATE '2099-07-22', 'next',
-  'a0', 'a0', 'dc000000-0000-4000-8000-000000000013'
+  'Legacy fixture area', 'a0',
+  'dc000000-0000-4000-8000-000000000013'
 );
 INSERT INTO public.tasks_todos (
-  id, owner_id, project_id, title, destination, today_section, start_date,
+  id, owner_id, area_id, title, destination, start_date,
   order_key, hierarchy_order_key, client_mutation_id
 ) VALUES (
   'dc000000-0000-4000-8000-000000000020',
   'dc000000-0000-4000-8000-000000000001',
   'dc000000-0000-4000-8000-000000000012',
-  'Current capture', 'anytime', 'later', DATE '2099-07-22', 'a0', 'a0',
+  'Current capture', 'anytime', DATE '2099-07-22', 'a0', 'a0',
   'dc000000-0000-4000-8000-000000000021'
 );
-SELECT public.tasks_capture_template(
-  NULL, 'project', 'dc000000-0000-4000-8000-000000000012',
-  'Legacy fixture template', DATE '2099-07-22',
-  'dc000000-0000-4000-8000-000000000022'
-);
 
-SELECT set_config('test.tasks_export_v12', public.tasks_create_export_v12()::text, false);
-SELECT is(
-  (current_setting('test.tasks_export_v12')::jsonb ->> 'schema_version')::integer,
-  12,
-  'emits schema version twelve'
+SELECT set_config(
+  'test.tasks_export_v13',
+  public.tasks_create_export_v13()::text,
+  false
 );
 SELECT is(
-  current_setting('test.tasks_export_v12')::jsonb
-    #>> '{data,tasks_todos,0,today_section}',
-  NULL,
-  'emits no Today horizon alongside a future Start'
+  (current_setting('test.tasks_export_v13')::jsonb
+    ->> 'schema_version')::integer,
+  13,
+  'emits schema version thirteen'
+);
+SELECT is(
+  jsonb_array_length(
+    current_setting('test.tasks_export_v13')::jsonb
+      #> '{manifest,collections}'
+  ),
+  19,
+  'declares exactly the project-free portable collections'
 );
 SELECT ok(
-  NOT (current_setting('test.tasks_export_v12')::jsonb
-    #> '{manifest,collections}' @> '["tasks_headings"]'::jsonb),
-  'keeps headings out of the current export manifest'
+  NOT (
+    current_setting('test.tasks_export_v13')::jsonb
+      #> '{manifest,collections}'
+    @> '["tasks_projects"]'::jsonb
+  ),
+  'keeps Projects out of the current export manifest'
 );
 
 RESET ROLE;
 DO $fixture$
 DECLARE
   _legacy jsonb;
-  _headings jsonb := jsonb_build_array(jsonb_build_object(
+  _projects jsonb := jsonb_build_array(jsonb_build_object(
     'id', 'dc000000-0000-4000-8000-000000000030',
-    'project_id', 'dc000000-0000-4000-8000-000000000012'
+    'area_id', 'dc000000-0000-4000-8000-000000000012',
+    'title', 'Disposable legacy wrapper',
+    'notes', '',
+    'destination', 'anytime',
+    'today_section', NULL,
+    'start_date', NULL,
+    'deadline_date', NULL,
+    'lifecycle', 'open',
+    'completed_at', NULL,
+    'disposition', 'present',
+    'deleted_at', NULL,
+    'deletion_root_id', NULL,
+    'order_key', 'a0',
+    'planning_order_key', 'a0',
+    'revision', 1,
+    'client_mutation_id', 'dc000000-0000-4000-8000-000000000031',
+    'last_mutation_channel', 'import',
+    'last_actor_type', 'import',
+    'undo_source_event_id', NULL,
+    'template_instantiation_id', NULL,
+    'template_node_id', NULL,
+    'recurrence_occurrence_id', NULL,
+    'recurrence_logical_key', NULL,
+    'created_at', '2099-07-20T00:00:00+00:00',
+    'updated_at', '2099-07-20T00:00:00+00:00'
   ));
   _todos jsonb;
-  _template_revisions jsonb;
 BEGIN
-  _legacy := tasks_private.export_v12_as_v10_for_validation(
-    current_setting('test.tasks_export_v12')::jsonb
+  _legacy := tasks_private.export_v13_as_v12_for_validation(
+    current_setting('test.tasks_export_v13')::jsonb
   );
-  _legacy := jsonb_set(_legacy, '{schema_version}', '11'::jsonb);
-  _legacy := jsonb_set(_legacy, '{data,tasks_headings}', _headings);
-  _legacy := jsonb_set(_legacy, '{manifest,counts,tasks_headings}', '1'::jsonb);
+  _legacy := jsonb_set(_legacy, '{data,tasks_projects}', _projects);
+  _legacy := jsonb_set(_legacy, '{manifest,counts,tasks_projects}', '1'::jsonb);
   _legacy := jsonb_set(
-    _legacy, '{manifest,checksums,tasks_headings}',
-    to_jsonb(tasks_private.export_checksum(_headings))
+    _legacy, '{manifest,checksums,tasks_projects}',
+    to_jsonb(tasks_private.export_checksum(_projects))
   );
   _todos := jsonb_set(
-    _legacy #> '{data,tasks_todos}', '{0,heading_id}',
-    '"dc000000-0000-4000-8000-000000000030"'::jsonb
+    jsonb_set(
+      _legacy #> '{data,tasks_todos}',
+      '{0,project_id}',
+      '"dc000000-0000-4000-8000-000000000030"'::jsonb
+    ),
+    '{0,area_id}',
+    'null'::jsonb
   );
   _legacy := jsonb_set(_legacy, '{data,tasks_todos}', _todos);
   _legacy := jsonb_set(
     _legacy, '{manifest,checksums,tasks_todos}',
     to_jsonb(tasks_private.export_checksum(_todos))
   );
-  _template_revisions := jsonb_set(
-    _legacy #> '{data,tasks_template_revisions}',
-    '{0,snapshot,headings}',
-    '[{"node_id":"legacy-heading-node","title":"Legacy heading","order_key":"a0"}]'::jsonb,
-    true
-  );
-  _template_revisions := jsonb_set(
-    _template_revisions,
-    '{0,snapshot,todos,0,heading_node_id}',
-    '"legacy-heading-node"'::jsonb,
-    true
-  );
-  _legacy := jsonb_set(
-    _legacy, '{data,tasks_template_revisions}', _template_revisions
-  );
-  _legacy := jsonb_set(
-    _legacy, '{manifest,checksums,tasks_template_revisions}',
-    to_jsonb(tasks_private.export_checksum(_template_revisions))
-  );
-  PERFORM tasks_private.validate_export_v11(_legacy);
-  PERFORM set_config('test.tasks_export_v11_fixture', _legacy::text, false);
+  PERFORM tasks_private.validate_export_v12(_legacy);
+  PERFORM set_config('test.tasks_export_v12_fixture', _legacy::text, false);
 END;
 $fixture$;
 
 SELECT is(
-  (current_setting('test.tasks_export_v11_fixture')::jsonb
-    #>> '{manifest,counts,tasks_headings}')::integer,
+  (current_setting('test.tasks_export_v12_fixture')::jsonb
+    #>> '{manifest,counts,tasks_projects}')::integer,
   1,
-  'builds a checksum-valid schema-eleven heading fixture'
-);
-SELECT is(
-  current_setting('test.tasks_export_v11_fixture')::jsonb
-    #>> '{data,tasks_todos,0,heading_id}',
-  'dc000000-0000-4000-8000-000000000030',
-  'binds the legacy child task to the synthetic heading'
+  'builds a checksum-valid schema-twelve Project fixture'
 );
 
 SELECT set_config('request.jwt.claim.sub', '', true);
@@ -179,56 +189,47 @@ SELECT throws_ok(
   format(
     'SELECT public.tasks_restore_export_current(%L::jsonb, true)',
     jsonb_set(
-      current_setting('test.tasks_export_v11_fixture')::jsonb,
+      current_setting('test.tasks_export_v12_fixture')::jsonb,
       '{data,tasks_todos,0,title}', '"Tampered"'::jsonb
     )::text
   ),
   '22023',
-  'Task export v10 collection tasks_todos is invalid',
-  'rejects a tampered schema-eleven fixture before normalization'
+  'Task export v12 collection tasks_todos is invalid',
+  'rejects a tampered legacy fixture before normalization'
 );
 SELECT is(
   (
     public.tasks_restore_export_current(
-      current_setting('test.tasks_export_v11_fixture')::jsonb, true
+      current_setting('test.tasks_export_v12_fixture')::jsonb, true
     ) #>> '{tasks_todos,inserts}'
   )::integer,
   1,
-  'previews the legacy heading child as one flat task insert'
+  'previews the legacy Project child as one direct task insert'
 );
 SELECT is(
   (
     public.tasks_restore_export_current(
-      current_setting('test.tasks_export_v11_fixture')::jsonb, false
+      current_setting('test.tasks_export_v12_fixture')::jsonb, false
     ) ->> 'applied'
   )::boolean,
   true,
-  'applies the normalized schema-eleven fixture'
+  'applies the normalized schema-twelve fixture'
 );
 SELECT is(
-  (SELECT project_id FROM public.tasks_todos
+  (SELECT area_id FROM public.tasks_todos
     WHERE id = 'dc000000-0000-4000-8000-000000000020'),
   'dc000000-0000-4000-8000-000000000012'::uuid,
-  'preserves the child task in its project while discarding its heading'
+  'maps the legacy Project Area directly onto the restored task'
 );
 SELECT is(
-  (SELECT today_section FROM public.tasks_todos
+  (SELECT start_date FROM public.tasks_todos
     WHERE id = 'dc000000-0000-4000-8000-000000000020'),
-  NULL,
-  'normalizes the legacy child to a horizon-free future Start'
-);
-SELECT ok(
-  NOT ((SELECT snapshot FROM public.tasks_template_revisions LIMIT 1) ? 'headings'),
-  'removes legacy heading nodes from the restored project template'
-);
-SELECT ok(
-  NOT ((SELECT snapshot #> '{todos,0}' FROM public.tasks_template_revisions LIMIT 1)
-    ? 'heading_node_id'),
-  'preserves the legacy template task without its heading-node reference'
+  DATE '2099-07-22',
+  'preserves non-Project task planning data'
 );
 SELECT is(
   public.tasks_restore_export_current(
-    current_setting('test.tasks_export_v11_fixture')::jsonb, false
+    current_setting('test.tasks_export_v12_fixture')::jsonb, false
   ) ->> 'code',
   'already_applied',
   'keeps normalized legacy replay idempotent'

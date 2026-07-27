@@ -50,10 +50,6 @@ The system SHALL deploy remote task synchronization only through an explicitly a
 - **WHEN** the synchronized task projection is configured
 - **THEN** it excludes Web Push subscription material, Mail source lifecycle records, private operational context, and every non-Tasks module table
 
-#### Scenario: Bound non-Tasks database access
-- **WHEN** the dedicated synchronization role connects for logical replication
-- **THEN** its publication and application-data access contain exactly the approved synchronized Tasks tables, while deployment verification rejects every additional schema or relation except a documented, owner-controlled pg_net surface that hosted Supabase grants to all roles and the project database owner cannot revoke
-
 #### Scenario: Operate without an approved remote topology
 - **WHEN** no production PowerSync endpoint is configured
 - **THEN** the module identifies itself as local-only, preserves that installation's durable task data, and does not imply cross-device or MCP convergence
@@ -63,15 +59,7 @@ The system SHALL deploy remote task synchronization only through an explicitly a
 - **THEN** the system does not treat that topology as authoritative until uptime, monitoring, backup, upgrade, outage, and recovery behavior pass a later explicit review
 
 ### Requirement: Exclusive Start And Today Horizon
-The system SHALL store Start and a Today horizon as mutually exclusive planning states for every to-do and project, and SHALL require Start to be future-only for active present work while preserving supported terminal history.
-
-#### Scenario: Assign a future Start
-- **WHEN** a user assigns a future Start to an Anytime to-do or project
-- **THEN** the system stores the date, clears its Today horizon, and keeps the item in Upcoming until that owner-local date
-
-#### Scenario: Assign a Today horizon
-- **WHEN** a user assigns Inbox, Now, Next, or Later to an Anytime to-do or project
-- **THEN** the system stores the horizon, clears any future Start, and includes the item in Today
+The system SHALL store Start and a Today horizon as mutually exclusive planning states for every tasks, and SHALL require Start to be future-only for active present work while preserving supported terminal history.
 
 #### Scenario: Keep undated work outside Today
 - **WHEN** an open present Anytime item has no Start and no Today horizon
@@ -148,47 +136,11 @@ The Tasks unified Start picker SHALL expose Someday as an explicit planning choi
 - **THEN** Clear and Someday appear as sibling actions on one footer row and remain reachable by pointer and keyboard
 
 ### Requirement: Core Task Organization
-The system SHALL organize active work through Anytime, Someday, areas, projects, to-dos, and checklist items without headings, a separate Inbox destination, generic tags, multiple membership, or required parent containers.
-
-#### Scenario: Organize work in a project
-- **WHEN** a user places a to-do under a project
-- **THEN** the to-do belongs to exactly that one project and retains its stable identity and planning membership
-
-#### Scenario: Organize ongoing responsibility
-- **WHEN** a user places a project or loose to-do in an area
-- **THEN** the item belongs to exactly that one area and the system includes it in that area's active work
-
-#### Scenario: Leave work unattached
-- **WHEN** a to-do has no project or area, or a project has no area
-- **THEN** the system preserves that valid unattached state without inventing a container
-
-#### Scenario: Review active work in an area
-- **WHEN** a user opens an area from Projects
-- **THEN** the interface presents that owner's present open loose to-dos and projects, preserves real links to project details and each to-do's current planning view, and excludes Done or unrelated work
-
-#### Scenario: Keep project membership canonical
-- **WHEN** a to-do belongs to a project whose area changes
-- **THEN** the to-do remains in its one project, derives its area from that project, and does not retain a competing direct area assignment
-
-#### Scenario: Keep project identity legible beside lifecycle controls
-- **WHEN** a project with a long title is opened at 390 CSS pixels wide
-- **THEN** the complete project title occupies its own mobile row without overlapping or collapsing behind Complete, Cancel, Reopen, or Delete actions, and the actions remain fully operable
-
-#### Scenario: Move a to-do between containers
-- **WHEN** a user moves a to-do to one area, one project, or no container
-- **THEN** the system clears incompatible parent references, preserves the to-do's stable identity and planning state, and assigns an order within the new hierarchy scope
+The system SHALL organize active work through Anytime, Someday, Areas, tasks, and checklist items without headings, a separate Inbox destination, generic tags, multiple membership, or required parent containers.
 
 #### Scenario: Maintain a checklist
 - **WHEN** a user adds, edits, reorders, completes, reopens, or recoverably removes a checklist item
 - **THEN** the checklist item remains owned by exactly one to-do and its completion state remains independent from the parent to-do's lifecycle
-
-#### Scenario: Order hierarchy independently from planning views
-- **WHEN** a user reorders an area, project, project to-do, loose area to-do, unattached to-do, or checklist item
-- **THEN** the system changes only the selected item's hierarchy order and does not change its order or membership in Today, Anytime, Someday, Upcoming, or Done
-
-#### Scenario: Preserve to-dos while removing headings
-- **WHEN** the system migrates a to-do previously assigned to a heading
-- **THEN** it retains the to-do in the same project with the same stable identity, task content, planning state, hierarchy order, checklist, history, and source metadata while removing the heading reference
 
 #### Scenario: Capture new work for triage
 - **WHEN** a user or supported integration creates a to-do without an explicit planning placement
@@ -251,14 +203,6 @@ The system SHALL distinguish task completion from bulk selection by shape and SH
 ### Requirement: Date-Based Planning Views
 The system SHALL derive Today, Upcoming, Anytime, Someday, and Done from task state, owner-local future Starts, mutually exclusive Today horizons, deadlines, and terminal timestamps.
 
-#### Scenario: Defer work to a future date
-- **WHEN** a user assigns a future start date to a to-do or project
-- **THEN** the system includes the item in Upcoming, withholds it from Today and Anytime until its owner-local start date arrives, and stores no Today horizon
-
-#### Scenario: Store an uncommitted possibility
-- **WHEN** a user assigns a to-do or project to Someday
-- **THEN** the system clears its start date, day horizon, and reminder and withholds it from Today, Upcoming, and Anytime
-
 #### Scenario: Activate Someday work
 - **WHEN** a user moves a Someday item to Anytime without a start date
 - **THEN** the system changes its destination to Anytime, includes it in Anytime, and retains a null day horizon
@@ -316,11 +260,7 @@ The system SHALL derive Today, Upcoming, Anytime, Someday, and Done from task st
 - **THEN** the system removes it from active planning views and includes it in Done until recovery or automatic purge
 
 ### Requirement: Chronological Upcoming Presentation
-The system SHALL present the complete Upcoming view from the nearest controlling date to the latest controlling date, regardless of whether each dated item is a project or a to-do.
-
-#### Scenario: Interleave projects and to-dos chronologically
-- **WHEN** Upcoming contains projects and to-dos with different controlling dates
-- **THEN** the interface orders every item by controlling date from nearest to latest instead of rendering one entity type before the other
+The system SHALL present the complete Upcoming view from the nearest controlling date to the latest controlling date for every dated task.
 
 #### Scenario: Order exact dates inside broader groups
 - **WHEN** multiple Upcoming items fall within the same month or year group
@@ -348,10 +288,6 @@ The system SHALL represent workflow meaning through explicit structured concepts
 #### Scenario: Return work to immediate actionability
 - **WHEN** a user changes waiting or rechecking open work back to `actionable`
 - **THEN** the system changes only its structured actionability and mutation metadata and leaves its other task dimensions intact
-
-#### Scenario: Preserve non-actionable work in a planned view
-- **WHEN** a waiting or rechecking to-do belongs to Today, Anytime, Someday, Upcoming, a project, or another defined view
-- **THEN** the system keeps it in that deliberate placement, presents its exact actionability state, and excludes it only when an actionability filter requests actionable work
 
 #### Scenario: Reject actionability changes outside active work
 - **WHEN** a caller attempts to change actionability on completed, canceled, or recoverably deleted work
@@ -427,9 +363,6 @@ The system SHALL provide an accessible task-row selection mode for visible to-do
 #### Scenario: Operate selection accessibly
 - **WHEN** one or more visible to-dos are selected in Today, Upcoming, Anytime, Someday, or Done
 - **THEN** the fixed bottom selection overlay reports the selected count, exposes Select All and Select None, communicates each selected state to keyboard and assistive-technology users without shifting list content, and withholds planning actions that are illegal for terminal Done records
-#### Scenario: Select every visible to-do by keyboard
-- **WHEN** focus is not owned by an editable text control and a user presses Command+A on Mac or Control+A on Windows in Today, Upcoming, Anytime, Someday, or Done
-- **THEN** the interface suppresses the matching browser command, enters selection when necessary, and selects every to-do in the active view without selecting projects, areas, checklist items, or other non-to-do content
 #### Scenario: Preserve native text selection
 - **WHEN** a text input, textarea, or contenteditable region owns Command+A on Mac or Control+A on Windows
 - **THEN** the interface leaves the gesture available to that editable control and does not change task selection
@@ -478,11 +411,7 @@ The system SHALL provide an accessible task-row selection mode for visible to-do
 - **THEN** Tasks permits Copy and Duplicate, rejects Cut and open-task planning, and does not select deleted hierarchy records
 
 ### Requirement: Native Templates
-The system SHALL support reusable, revisioned to-do and project template definitions that are separate from active task records and contain no heading layer.
-
-#### Scenario: Create work from a template
-- **WHEN** a user instantiates a to-do or project template revision with an explicit planning anchor
-- **THEN** the system atomically creates independent active areas, projects, to-dos, and checklist items, resolves relative planning values, and records template, revision, instantiation, and template-node provenance
+The system SHALL support reusable, revisioned tasks template definitions that are separate from active task records and contain no heading layer.
 
 #### Scenario: Edit an instantiated task
 - **WHEN** a user edits work created from a template
@@ -503,18 +432,6 @@ The system SHALL support reusable, revisioned to-do and project template definit
 #### Scenario: Reject a changed template retry
 - **WHEN** a caller reuses a template-instantiation idempotency key with a different template, revision, anchor, target area, channel, or actor
 - **THEN** the system rejects the request and leaves the original generated hierarchy unchanged
-
-#### Scenario: Capture relative planning from current work
-- **WHEN** a user saves a current open to-do or project hierarchy as a template revision with an explicit reference date
-- **THEN** the system stores immutable relative Start and Deadline offsets, Today horizons, ordering, actionability, and checklist content without treating the source work as the template definition
-
-#### Scenario: Normalize a legacy heading template
-- **WHEN** the system instantiates a legacy project-template revision containing heading nodes
-- **THEN** it preserves each descendant to-do directly beneath the project in deterministic order and creates no heading record or reference
-
-#### Scenario: Capture a template during a concurrent edit
-- **WHEN** a source to-do or project hierarchy changes while template capture is reading it
-- **THEN** the stored source revision and complete hierarchy snapshot come from one database statement snapshot rather than mixing source state from different moments
 
 #### Scenario: Archive a used template
 - **WHEN** a user deletes a template that has generated instances
@@ -597,10 +514,6 @@ The Tasks Start picker and bulk reminder surface SHALL accept a bounded grammar 
 #### Scenario: Keep Reminder compact
 - **WHEN** the Start picker or bulk reminder surface renders Reminder
 - **THEN** its text input uses the same ordinary text-field style and only the width needed for a time value
-
-#### Scenario: Keep reminder resolution metadata internal
-- **WHEN** Tasks presents reminder editing for a to-do, project, or bulk task selection
-- **THEN** the interface omits repeated-time selection and time-zone display while persistence uses the deterministic earlier repeated-time instance and the authoritative planning time zone internally
 
 ### Requirement: Reminder-Initiated Today Planning
 The Tasks unified Start picker SHALL allow reminder entry before a task has Start planning and SHALL convert a successfully entered reminder into owner-local Today Inbox planning without replacing an existing planning choice.
@@ -740,10 +653,6 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 ### Requirement: Focused To-Do Action Menu
 The Tasks interface SHALL keep the to-do ellipsis menu limited to actionability, structural Move, temporal Do, Start planning, and recoverable Delete while retaining drag and keyboard ordering outside that menu.
 
-#### Scenario: Present planning actions by intent
-- **WHEN** a user opens an active to-do's ellipsis menu
-- **THEN** the menu exposes Move for area or project placement, Do for Today, Anytime, and Someday placement, and Start for the unified Start picker
-
 #### Scenario: Omit redundant terminal action
 - **WHEN** a user opens an active to-do's ellipsis menu
 - **THEN** the menu exposes Delete and does not expose Cancel
@@ -812,14 +721,6 @@ The system SHALL model lifecycle, record disposition, planning destination, Toda
 #### Scenario: Request the current lifecycle again
 - **WHEN** a caller with a new mutation identifier requests a lifecycle value the record already has
 - **THEN** the system returns a no-op receipt without appending a duplicate terminal event
-
-#### Scenario: Transition a project with open descendants
-- **WHEN** a caller completes or cancels a project that still has open descendants without an explicit descendant policy
-- **THEN** the system rejects the transition without changing the project or descendants
-
-#### Scenario: Cascade a project transition explicitly
-- **WHEN** a caller invokes a supported cascade transition for a project and its open descendants
-- **THEN** the system applies the transition atomically and reports every affected stable identifier
 
 #### Scenario: Complete a parent to-do with checklist state
 - **WHEN** a caller completes and later reopens a to-do with checklist items
@@ -1209,10 +1110,6 @@ The system SHALL provide append-only history, a projection-safe guarded 100-step
 - **WHEN** the system accepts, rejects, or treats a task mutation as a no-op
 - **THEN** it returns a content-free receipt with the client mutation identifier, actor, channel, affected stable identifiers, revisions, transition, timestamp, outcome, and applicable code
 
-#### Scenario: Delete a task
-- **WHEN** a user deletes a to-do or project through the normal interface
-- **THEN** the system moves it to a recoverable deleted state rather than immediately erasing it
-
 #### Scenario: Restore deleted work
 - **WHEN** a user restores a recoverably deleted item
 - **THEN** the system restores the item and its supported descendants to their prior lifecycle, planning, parent, and order values when those destinations remain valid
@@ -1316,10 +1213,6 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **WHEN** a reminder instant is accepted
 - **THEN** the server creates one stable logical delivery occurrence and targets each registered delivery endpoint idempotently
 
-#### Scenario: Manage a project reminder from the web
-- **WHEN** a user saves or clears a reminder from an open project detail
-- **THEN** the web interface uses the existing project-root reminder contract, owner planning time zone, daylight-saving ambiguity choice, connected-only mutation gate, and visible degraded-state explanation
-
 #### Scenario: Recover an in-app reminder claim automatically
 - **WHEN** an open connected client cannot claim due reminder deliveries
 - **THEN** the interface preserves scheduled reminders and previously claimed items, presents no task-list warning or manual retry action, and performs the next automatic claim within one minute or when the tab next becomes visible
@@ -1335,10 +1228,6 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 #### Scenario: Report a reminder acknowledgement failure
 - **WHEN** a visible or notification-opened reminder cannot be acknowledged
 - **THEN** the interface reports fixed content-free failure copy, preserves the reminder for retry, and does not expose the underlying provider or transport error
-
-#### Scenario: Protect schedules while the reminder projection is untrustworthy
-- **WHEN** current reminder data is loading or fails to load
-- **THEN** to-do and project reminder editors distinguish that state from local-only operation, disable reminder mutation, and do not treat an unknown current schedule as an empty schedule
 
 #### Scenario: Read synchronized reminder time precision
 - **WHEN** synchronization represents a canonical PostgreSQL reminder time with fractional-second precision
@@ -1446,11 +1335,6 @@ The system SHALL present a visible interaction reference that documents the comp
 - **WHEN** Keyboard Commands opens or its non-interactive dialog container receives focus
 - **THEN** the container does not display an outline, focus ring, or focus shadow, while interactive descendants retain their ordinary focus indicators
 
-#### Scenario: Discover the replacement keyboard map
-- **WHEN** the interaction reference is open
-- **THEN** it documents Command 1 through Command 6 view navigation on Mac, Control 1 through Control 6 navigation on Windows, the platform keyboard-help shortcut, every current application command, every current Tasks-specific metadata and traversal command, and pointer selection gestures
-- **THEN** it does not list superseded Control-letter view navigation, removed aliases, Find, Projects, Templates, keyboard reordering, toggle-after-selection, or direct-reordering guidance
-
 #### Scenario: Open Keyboard Commands by shortcut
 - **WHEN** the user presses Command+/ on Mac or Control+/ on Windows outside active composition while Tasks is mounted
 - **THEN** Tasks suppresses the matching browser action and opens Keyboard Commands even when a task text field is active
@@ -1537,9 +1421,6 @@ The system SHALL provide a platform-aware keyboard contract for full-editor crea
 #### Scenario: Create through the complete editor
 - **WHEN** Control+A on Mac or Alt+Shift+A on Windows is invoked from Today, Upcoming, Anytime, or Someday
 - **THEN** Tasks injects one blank local task draft at the top of that view, opens the ordinary complete editor, and focuses its blank title
-#### Scenario: Create from outside a planning list
-- **WHEN** the new-task command is invoked from Projects, Templates, Done, Config, Search, a project, or an area
-- **THEN** Tasks navigates to Today and opens one blank Today Now draft in the complete editor
 #### Scenario: Persist a valid draft
 - **WHEN** a blank draft first obtains a nonblank title
 - **THEN** Tasks creates exactly one ordinary task using the complete latest draft metadata, keeps the open row at the top until close, and routes subsequent edits through ordinary ordered autosave
@@ -1564,10 +1445,6 @@ The system SHALL provide a platform-aware keyboard contract for full-editor crea
 - **WHEN** the final accepted metadata places a newly persisted task outside the view where it was created
 - **THEN** Tasks shows one neutral toast stating that the task was saved but is not visible in the current list
 
-#### Scenario: Submit inline hierarchy capture
-- **WHEN** a keyboard user enters a nonblank area, project, project task, or checklist-item name and presses Enter without an active composition event
-- **THEN** the corresponding hierarchy form submits exactly as its visible add button would
-
 #### Scenario: Search without unstructured labels
 - **WHEN** a user searches present work through Quick Find or the complete results route
 - **THEN** the module matches task text and structured source or hierarchy context without introducing generic tags or an advanced filter surface
@@ -1576,9 +1453,6 @@ The system SHALL provide a platform-aware keyboard contract for full-editor crea
 - **WHEN** a user activates a task search result
 - **THEN** the module navigates through a real in-app link to the task's current planning or history view and opens or focuses the stable task record
 
-#### Scenario: Keep structural movement and temporal planning distinct
-- **WHEN** a user invokes Control+V on Mac or Alt+Shift+V on Windows, or invokes a temporal planning command, on an open task or nonempty selection
-- **THEN** the organization command changes only area or project placement while temporal commands change only Start, day horizon, Deadline, reminder intent, or lifecycle placement
 #### Scenario: Restore focus after a movement command
 - **WHEN** a structural or temporal movement command succeeds and its command surface closes
 - **THEN** focus returns to the moved task when it remains in the current view, or follows the same-position, prior-task, and primary-heading fallback when the move removes it
@@ -1649,13 +1523,13 @@ The system SHALL provide a platform-aware keyboard contract for full-editor crea
 #### Scenario: Open the previous visible task
 - **WHEN** the user presses Control+W on Mac or Alt+Shift+W on Windows
 - **THEN** Tasks opens the last visible task when none is open, otherwise closes the current editor and opens the previous visible task, closing without wrapping when the current task is first
-#### Scenario: Focus a newly opened title
+#### Scenario: Focus and reveal a newly opened task
 - **WHEN** a pointer, search result, creation command, or keyboard traversal command opens a task
-- **THEN** focus lands in the title input with its insertion point at the end and the page scrolls only as needed to reveal that title, never the bottom of a long editor
+- **THEN** focus lands in the Summary input with its insertion point at the end and Tasks shifts the page so the task summary row reaches the top of the visible content area below sticky chrome, or as close to that boundary as the available document scroll range permits
 
 #### Scenario: Animate inline editor disclosure
 - **WHEN** a user opens or closes a task and reduced motion is not requested
-- **THEN** Tasks commits the opening row in a collapsed frame, quickly animates expansion or collapse, then focuses and smoothly scrolls only as needed to reveal the opened title
+- **THEN** Tasks commits the opening row in a collapsed frame, quickly animates expansion or collapse, and only after the expanded drawer reaches its final layout height smoothly performs the best-effort summary-row top alignment without scrolling to the bottom of a long editor
 #### Scenario: Close an editor from outside
 - **WHEN** a pointer interaction begins outside the open task and any calendar, menu, listbox, or dialog launched from its editor
 - **THEN** Tasks flushes pending autosave, closes the editor, and commits any deferred completion through the ordinary close path
@@ -1673,10 +1547,6 @@ The Tasks module SHALL expose pointer and touch creation affordances on active p
 #### Scenario: Present the primary floating creation action
 - **WHEN** a user views Today, Upcoming, Anytime, or Someday outside bulk selection mode
 - **THEN** Tasks presents one large circular New Task button fixed near the bottom-right edge of the bounded Tasks list with a two-pixel green outline, green plus, and fully opaque dark background at rest and on hover, clear of mobile navigation and safe-area insets, and does not present the former New Task action in the view header
-
-#### Scenario: Omit creation from non-planning views
-- **WHEN** a user views Done, Search, Config, Templates, Projects, an area, or a project
-- **THEN** Tasks does not present the floating or task-bucket creation affordances
 
 #### Scenario: Create in the first Today bucket
 - **WHEN** a user invokes the floating action from Today
@@ -1707,7 +1577,7 @@ The Tasks module SHALL expose pointer and touch creation affordances on active p
 - **THEN** Tasks preserves its existing view defaults and single-draft behavior rather than requiring a visible pointer bucket
 
 ### Requirement: Uniform Task List Bottom Clearance
-The Tasks module SHALL reserve one consistent responsive bottom clearance across every Tasks view and selection state so fixed lower-viewport controls cannot cover the final task or project when the user reaches the end of a list.
+The Tasks module SHALL reserve one consistent responsive bottom clearance across every Tasks view and selection state so fixed lower-viewport controls cannot cover the final task when the user reaches the end of a list.
 
 #### Scenario: Preserve clearance outside selection mode
 - **WHEN** a user scrolls to the end of any Tasks view without bulk selection active
@@ -1716,10 +1586,6 @@ The Tasks module SHALL reserve one consistent responsive bottom clearance across
 #### Scenario: Preserve the same clearance during selection mode
 - **WHEN** bulk selection activates or deactivates
 - **THEN** the Tasks view retains the same responsive bottom clearance while the floating selection toolbar appears or disappears
-
-#### Scenario: Apply clearance to every Tasks view
-- **WHEN** a user navigates among planning, Done, Search, Config, Templates, area, or project views
-- **THEN** each view uses the same responsive list-end clearance regardless of whether it currently presents a floating creation or selection control
 
 ### Requirement: Continuous Task Editor Disclosure
 The Tasks module SHALL reveal and conceal an expanded task editor as one continuous disclosure without a secondary spacing expansion while preserving ordinary layout space between the summary row and the first visible metadata field.
@@ -1750,10 +1616,6 @@ The Tasks expanded editor SHALL reflect accepted changes to its current task whi
 #### Scenario: Reflect a keyboard actionability mutation
 - **WHEN** Control+F on Mac or Alt+Shift+F on Windows changes the actionability of the currently open task
 - **THEN** the open task remains expanded and its Actionability dropdown shows the newly accepted status
-
-#### Scenario: Reflect an external organization mutation
-- **WHEN** the accepted area or project placement of the currently open task changes outside the Organization dropdown
-- **THEN** the open task remains expanded and its Organization dropdown shows the current accepted placement
 
 #### Scenario: Dismiss an editor-owned select
 - **WHEN** a pointer interaction dismisses the open Actionability or Organization popover, including activation of its label or trigger
@@ -1930,13 +1792,6 @@ The Tasks expanded editor SHALL reflect accepted changes to its current task whi
 - **WHEN** parallel-use approval has not passed verification
 - **THEN** Mail capture remains disabled and Inbox Manager does not dual-write to BathOS
 
-#### Scenario: Navigate task views
-- **WHEN** the user presses the documented application-modifier number chord
-- **THEN** the interface navigates directly to Today, Upcoming, Anytime, Someday, Done, or Config while leaving direct Projects or Templates navigation unmodified
-#### Scenario: Search tasks and views
-- **WHEN** the user activates the visible Quick Find Tasks, Projects, and Areas control
-- **THEN** Quick Find searches owner-scoped tasks, projects, and areas and supports keyboard selection without exposing retired Inbox, Logbook, or Trash destinations
-
 #### Scenario: Preserve native editing behavior
 - **WHEN** focus is inside an editable control and the key chord is not a documented task-level history, form, or Tasks-specific Control command
 - **THEN** native typing, composition, selection, clipboard, Tab traversal, and control behavior remain available
@@ -1992,10 +1847,6 @@ The Tasks module SHALL offer exactly four predefined actionability quick filters
 - **WHEN** Only Waiting or Only Rechecking is active
 - **THEN** each primary list presents only task rows with that exact structured actionability
 
-#### Scenario: Preserve non-task planning content
-- **WHEN** an actionability quick filter is active in a primary list that also presents project cards or deleted hierarchy roots
-- **THEN** the filter changes task-row presentation without removing those non-task items
-
 #### Scenario: Show and replace the active filter
 - **WHEN** a predefined filter is active
 - **THEN** its name appears in the list's top-right action row and the same control allows the user to select another filter or All Tasks
@@ -2029,7 +1880,7 @@ The Tasks module SHALL offer exactly four predefined actionability quick filters
 - **THEN** Tasks safely treats it as All Tasks
 
 ### Requirement: Global Task Quick Find
-The system SHALL provide Quick Find as the primary Tasks search entry point across tasks, projects, and areas and SHALL retain a live full task-results route for exhaustive continuation.
+The system SHALL provide Quick Find as the primary Tasks search entry point across to-dos, and areas and SHALL retain a live full task-results route for exhaustive continuation.
 
 #### Scenario: Open Quick Find from persistent search
 - **WHEN** a user activates the persistent magnifying-glass search action on any Tasks route
@@ -2043,17 +1894,9 @@ The system SHALL provide Quick Find as the primary Tasks search entry point acro
 - **WHEN** Shift is the only modifier held while type-to-search receives a printable character
 - **THEN** Quick Find opens with the resulting uppercase letter or shifted punctuation unchanged
 
-#### Scenario: Support every Tasks route
-- **WHEN** type-to-search is invoked from a planning list, Done, Search, Projects, Templates, an area, a project, or Config
-- **THEN** the same Quick Find surface opens over the current Tasks runtime
-
 #### Scenario: Preserve owned keyboard input
 - **WHEN** a printable key belongs to an input, textarea, select, contenteditable region, active composition, dialog, menu, listbox, popover, or another nested interaction surface
 - **THEN** Tasks leaves the key with that surface and does not open or reseed Quick Find
-
-#### Scenario: Show the best quick matches
-- **WHEN** a user types a substring in Quick Find
-- **THEN** the surface updates with each keystroke and presents at most three matching task, project, or area results with their entity types
 
 #### Scenario: Close Quick Find
 - **WHEN** Quick Find is visible and the user presses Escape
@@ -2061,15 +1904,11 @@ The system SHALL provide Quick Find as the primary Tasks search entry point acro
 
 #### Scenario: Continue a search
 - **WHEN** the user activates Continue Search
-- **THEN** the module navigates through a real in-app link to `/tasks/search` with the current query and lists every matching task from every planning and lifecycle view
+- **THEN** the module navigates through a real in-app link to `/tasks/search` with the current query and lists every matching to-do from every planning and lifecycle view
 
 #### Scenario: Refine full results
 - **WHEN** the user edits the query on the search-results page
-- **THEN** the URL query and full task results update with each keystroke
-
-#### Scenario: Open a hierarchy result
-- **WHEN** the user activates a project or area Quick Find result
-- **THEN** a real in-app link opens that hierarchy record and preserves modified-click behavior
+- **THEN** the URL query and full to-do results update with each keystroke
 
 ### Requirement: Task Duplication
 The system SHALL duplicate present or Done to-dos from an open task or multi-selection by reconstructing supported user-authored state with fresh identity and open lifecycle.
@@ -2183,14 +2022,6 @@ The system SHALL preserve one authenticated Tasks runtime and synchronization se
 - **WHEN** a user follows a plain in-app link from one supported Tasks planning view to another
 - **THEN** the URL and rendered view change without closing or recreating the Tasks local database, synchronization connector, reliability observer, or reminder polling lifecycle
 
-#### Scenario: Navigate to hierarchy details
-- **WHEN** a user opens a project or area detail from the Tasks hierarchy
-- **THEN** the registered detail route renders inside the existing Tasks runtime and preserves real-link browser behavior
-
-#### Scenario: Reject an unknown Tasks route
-- **WHEN** navigation reaches a path under `/tasks/...` that is not a registered static, project-detail, or area-detail route
-- **THEN** the application renders its normal not-found boundary and does not silently render a default Tasks view
-
 #### Scenario: Leave the Tasks module
 - **WHEN** a user navigates from Tasks to another BathOS module or signs out
 - **THEN** the Tasks runtime may close its owner-bound local database and synchronization session according to the existing cleanup contract
@@ -2210,10 +2041,6 @@ The system SHALL keep Tasks navigation to five or fewer persistent destinations 
 - **WHEN** Tasks renders below the desktop breakpoint
 - **THEN** persistent mobile navigation presents exactly Today, Upcoming, Anytime, Someday, and More
 
-#### Scenario: Open secondary destinations
-- **WHEN** a user opens More
-- **THEN** the menu presents Projects, Templates, Done, and Config with Lucide icons and a clear active state
-
 #### Scenario: Preserve link behavior
 - **WHEN** a user invokes a direct or overflow navigation item with an ordinary or modified click
 - **THEN** the destination remains a real link, plain left click uses SPA navigation, and modified or middle click preserves browser behavior
@@ -2224,14 +2051,6 @@ The system SHALL keep infrequent Tasks settings, capability state, diagnostics, 
 #### Scenario: Open Tasks Config
 - **WHEN** a user follows the Config destination
 - **THEN** `/tasks/config` renders inside the existing Tasks runtime and presents Browser Reminders, Synchronization, and Backup and Restore sections
-
-#### Scenario: Keep daily views concise
-- **WHEN** a user opens Today, Upcoming, Anytime, Someday, Projects, Templates, Done, or Config
-- **THEN** the page does not persistently render browser-reminder capability, synchronization diagnostics, backup/restore, or duplicate Projects and Templates shortcuts
-
-#### Scenario: Preserve actionable reminder failures
-- **WHEN** the current client cannot claim or project due reminder work
-- **THEN** the daily task surface retains its existing content-free failure and retry behavior even though browser-reminder capability is managed on Config
 
 #### Scenario: Manage browser reminders
 - **WHEN** a user opens Browser Reminders on Config
@@ -2246,23 +2065,7 @@ The system SHALL keep infrequent Tasks settings, capability state, diagnostics, 
 - **THEN** the existing verified export, merge, replacement, and safety behavior remains available without a persistent module-header control
 
 ### Requirement: Concise Task View Presentation
-The Tasks module SHALL keep Today, Upcoming, Anytime, Someday, Done, Projects, area, and project views task-focused and compact while presenting full metadata only when it is needed.
-
-#### Scenario: Name the active view
-- **WHEN** any supported Tasks route renders
-- **THEN** the primary heading identifies Today, Upcoming, Anytime, Someday, Projects, Project, Area, Templates, Done, or Config at every viewport
-
-#### Scenario: Create an area progressively
-- **WHEN** a user activates Add Area from Projects
-- **THEN** a title-only BathOS form dialog requests the required area title, disables Save til the title is nonblank, supports Enter submission and complete keyboard traversal, and restores focus to Add Area after close
-
-#### Scenario: Create a project progressively
-- **WHEN** a user activates Add Project from Projects
-- **THEN** a title-only BathOS form dialog requests the required project title and optional area, disables Save til the title is nonblank, supports Enter submission and complete keyboard traversal, and restores focus to Add Project after close
-
-#### Scenario: Browse projects without setup clutter
-- **WHEN** the Projects view is not creating an area or project
-- **THEN** it shows compact icon-only Add Area and Add Project controls with nonempty programmatic names and does not render permanent creation fields
+The Tasks module SHALL keep Today, Upcoming, Anytime, Someday, Done, and Area views task-focused and compact while presenting full metadata only when it is needed.
 
 #### Scenario: Mark a resolved day horizon
 - **WHEN** an active Anytime or deferred Upcoming row has an Inbox, Now, Next, or Later horizon
@@ -2316,10 +2119,6 @@ The Tasks module SHALL keep Today, Upcoming, Anytime, Someday, Done, Projects, a
 - **WHEN** a user opens Done
 - **THEN** the interface shows retained terminal work in reverse terminal order with its terminal reason, date, and one appropriate restore or reopen action
 
-#### Scenario: Create hierarchy progressively
-- **WHEN** a user creates an area or project from Projects
-- **THEN** compact icon-only controls open title-only keyboard-complete BathOS dialogs and restore trigger focus after close
-
 ### Requirement: Semantic Today Horizon Identity
 The Tasks module SHALL use a consistent icon-and-color identity for each Today horizon wherever the horizon is presented as a symbol: green Inbox, yellow Now, red-orange Next, and reddish-purple Later.
 
@@ -2346,20 +2145,12 @@ The Tasks module SHALL render ordinary task rows directly in Anytime, Someday, a
 - **WHEN** Someday contains ordinary tasks
 - **THEN** the task rows appear directly beneath the view's other applicable content without a visible nested Tasks heading
 
-#### Scenario: Browse Done without a generic bucket heading
-- **WHEN** Done contains terminal tasks
-- **THEN** the task rows appear without a visible nested Tasks heading while meaningful Deleted and project group headings remain available when applicable
-
 #### Scenario: Preserve accessible list structure
 - **WHEN** a generic Tasks heading is omitted
 - **THEN** the route retains its named view landmark and the task rows remain inside an accessible task-list region
 
 ### Requirement: Consistent Tasks list density
-The interface SHALL present Tasks list and grouping headings without item-count adornments, SHALL keep every collapsed task at a dense uniform height, and SHALL present optional task metadata in the stable order Area, Project, Reminder, Deadline, and Actionability as flat inline content without resting card or chip decoration or bold typography.
-
-#### Scenario: Present count-free headings
-- **WHEN** a Tasks list, section, grouping, search-results, project, area, or checklist heading is presented
-- **THEN** the interface presents its descriptive label without a visible or programmatic numeric item count
+The interface SHALL present Tasks list and grouping headings without item-count adornments, SHALL keep every collapsed task at a dense uniform height, and SHALL present optional task metadata in the stable order Area, Reminder, Deadline, and Actionability as flat inline content without resting card or chip decoration or bold typography.
 
 #### Scenario: Keep closed rows uniform
 - **WHEN** a list contains collapsed tasks with different combinations of hierarchy, actionability, deadline, reminder, or other secondary details
@@ -2369,21 +2160,9 @@ The interface SHALL present Tasks list and grouping headings without item-count 
 - **WHEN** a collapsed task has one or more secondary details
 - **THEN** the interface presents those details in one bounded nonwrapping metadata line without increasing the row height
 
-#### Scenario: Present metadata without chips
-- **WHEN** any Area, Project, Reminder, Deadline, or Actionability item appears in the second metadata row
-- **THEN** it appears without a background fill, border, enclosing corner radius, or chip-specific padding
-
-#### Scenario: Order optional task metadata
-- **WHEN** a collapsed task summary presents secondary metadata
-- **THEN** its available items appear in the order Area, Project, Reminder, Deadline, and Actionability
-
 #### Scenario: Omit absent task metadata
 - **WHEN** any canonical secondary metadata item is unavailable or not applicable to a task
 - **THEN** the item is absent without a placeholder and the remaining items preserve their relative canonical order
-
-#### Scenario: Show inherited Area before Project
-- **WHEN** a task belongs to a project that belongs to an area
-- **THEN** the metadata line presents the parent Area followed by the Project as separate items
 
 #### Scenario: Compress actionability on mobile
 - **WHEN** a mobile task row presents Waiting or Rechecking actionability
@@ -2421,24 +2200,12 @@ The interface SHALL present Tasks list and grouping headings without item-count 
 - **WHEN** a user opens a task
 - **THEN** the complete editor expands beneath the fixed-height row header inside one quiet rounded background with a subtly increased horizontal content inset that visibly contains the summary and editor without a resting border or shadow
 
-#### Scenario: Preserve planning-project cards
-- **WHEN** a primary planning view presents project navigation items alongside compact task rows
-- **THEN** the project items retain their distinct card presentation and spacing
-
 ### Requirement: Canonical Tasks Iconography
 The Tasks module SHALL maintain and consistently reuse a documented Lucide icon for every established Tasks product concept, while preserving accessible text or programmatic names independently from the icon.
-
-#### Scenario: Use canonical entity icons
-- **WHEN** Tasks represents a Task, Project, Area, combined Areas & Projects, Task Checklist, or Attachment concept with an icon
-- **THEN** it uses Lucide `SquareCheckBig`, `CopyCheck`, `Layers3` (the Stack glyph), `Layers3` (the Stack glyph), `ListTree`, or `Paperclip`, respectively
 
 #### Scenario: Use canonical lifecycle view icons
 - **WHEN** Tasks represents Someday or Done with an icon
 - **THEN** it uses Lucide `SquareDashed` or `ListChecks`, respectively
-
-#### Scenario: Use canonical creation icons
-- **WHEN** Tasks presents an icon for Add Task, Add Project, or Add Area
-- **THEN** it uses Lucide `SquarePlus`, `Layers3` (the Stack glyph), or `SquarePlus`, respectively
 
 #### Scenario: Preserve approved existing concepts
 - **WHEN** Tasks renders an established concept that is not explicitly overridden
@@ -2447,10 +2214,6 @@ The Tasks module SHALL maintain and consistently reuse a documented Lucide icon 
 #### Scenario: Reuse one concept across surfaces
 - **WHEN** one established Tasks concept appears in navigation, search, a list, a picker, a dialog, or another module surface
 - **THEN** every occurrence uses the same canonical icon unless the iconography reference explicitly defines a distinct action concept
-
-#### Scenario: Keep icon meaning accessible
-- **WHEN** a canonical icon appears without adjacent visible text
-- **THEN** its control or containing semantic element retains a nonempty accessible name that communicates the concept without requiring icon recognition
 
 ### Requirement: Module Isolation
 The task module SHALL remain removable without importing code from another BathOS module or requiring another module's data.
@@ -2483,7 +2246,7 @@ The system SHALL migrate retired planning and terminal vocabulary without losing
 - **THEN** the router replaces the location with `/tasks/today` or `/tasks/done` and never renders a retired view
 
 ### Requirement: Deferral-Anchored Reminder Time
-The system SHALL allow at most one active reminder per to-do or project, SHALL derive its calendar date from the item's future Start Date or owner-local planning date for a Today horizon, and SHALL expose only its local time as user-editable reminder intent.
+The system SHALL allow at most one active reminder per tasks, SHALL derive its calendar date from the item's future Start Date or owner-local planning date for a Today horizon, and SHALL expose only its local time as user-editable reminder intent.
 
 #### Scenario: Add a reminder to scheduled work
 - **WHEN** a user assigns a reminder time to an open item with a future Start Date
@@ -2556,18 +2319,6 @@ The system SHALL support durable, versioned task-object Copy, Cut, and Paste thr
 - **WHEN** a valid task envelope is pasted in Someday
 - **THEN** Tasks creates open Someday tasks at the top in payload order with Start and Today horizon cleared
 
-#### Scenario: Paste structured tasks into a project
-- **WHEN** a valid task envelope is pasted in a project detail view
-- **THEN** Tasks creates open tasks at the top in payload order inside that project and derives the containing area from the project
-
-#### Scenario: Paste structured tasks into an area
-- **WHEN** a valid task envelope is pasted in an area detail view
-- **THEN** Tasks creates open loose area tasks at the top in payload order inside that area without retaining a source project
-
-#### Scenario: Reject unsupported paste destinations
-- **WHEN** a user pastes outside an editable text control in Upcoming, Done, Config, Projects index, Templates, Search, or another unsupported Tasks view
-- **THEN** Tasks creates no task, leaves the clipboard unchanged, and shows a brief rejection toast
-
 #### Scenario: Paste ordinary text as one task
 - **WHEN** supported-destination Paste receives clipboard text that is not a valid supported task envelope and is not all whitespace
 - **THEN** Tasks creates one open task at the top using the exact clipboard text as Title and applies the destination's planning and organization rules
@@ -2595,3 +2346,469 @@ The system SHALL support durable, versioned task-object Copy, Cut, and Paste thr
 #### Scenario: Use task clipboard from a menu command
 - **WHEN** the browser dispatches Copy, Cut, or Paste from a menu instead of a keydown and task selection or a supported destination owns the operation
 - **THEN** Tasks applies the same task-object behavior as the documented keyboard command
+
+### Requirement: Area-Aware Task Planning
+The Tasks module SHALL use name-only Areas to organize ongoing responsibilities through direct optional task assignment and SHALL keep Area organization separate from temporal planning.
+
+#### Scenario: Keep Areas name-only
+- **WHEN** a user creates or edits an Area
+- **THEN** the Area exposes a name and manual order without completion, Start, Deadline, destination, or day-horizon state
+
+#### Scenario: Leave Today work intermingled
+- **WHEN** Today contains tasks from different Areas and tasks with no Area
+- **THEN** the user can order them together inside one day horizon without an Area bucket changing membership or rank
+
+#### Scenario: Order Area buckets manually
+- **WHEN** multiple Area buckets contain visible Anytime tasks
+- **THEN** the interface orders the buckets by the manual Area order maintained in Config, after the unlabelled unassigned region
+
+#### Scenario: Omit an empty Area bucket
+- **WHEN** an Area has no task visible under ordinary Anytime membership and the active Quick Filter
+- **THEN** Anytime omits that Area's heading and does not render an empty bucket
+
+#### Scenario: Create inside an Area bucket
+- **WHEN** a user activates an Area bucket heading in Anytime or Someday
+- **THEN** Tasks opens one new task in that view assigned directly to that Area at the top of the bucket
+
+#### Scenario: Create generic Anytime work
+- **WHEN** a user activates the floating New Task action in Anytime
+- **THEN** Tasks opens one unassigned Anytime task at the top of the unlabelled region
+
+#### Scenario: Manage Areas in Config
+- **WHEN** a user opens Tasks Config
+- **THEN** one Areas section allows the user to add, rename, reorder, or recoverably delete Areas
+
+#### Scenario: Return from an Area detail
+- **WHEN** an Area detail presents a return breadcrumb
+- **THEN** the breadcrumb returns to Config and Area renaming remains available only in Config
+
+### Requirement: Optional Automatic Planning Order
+The Tasks module SHALL provide one synchronized, owner-scoped preference that optionally applies deterministic automatic ordering to Anytime and Someday while preserving manual order among exact automatic-sort peers.
+
+#### Scenario: Default automatic sorting off
+- **WHEN** an owner has not explicitly enabled automatic list sorting
+- **THEN** Anytime and Someday retain their fully manual order and permit ordinary same-Area manual reordering
+
+#### Scenario: Share one preference across lists and devices
+- **WHEN** an owner enables or disables automatic list sorting
+- **THEN** the same preference governs both Anytime and Someday and synchronizes across the owner's sessions and devices
+
+#### Scenario: Sort independently inside every Area
+- **WHEN** automatic sorting is enabled
+- **THEN** Tasks preserves the unassigned and effective-Area section order and applies automatic task sorting independently inside each section
+
+#### Scenario: Order deadlines from oldest to absent
+- **WHEN** one Area section contains tasks with overdue, Today, future, and absent Deadlines
+- **THEN** Tasks orders the oldest overdue Deadline first, then later calendar Deadlines in ascending order through Today and the future, then tasks without a Deadline
+
+#### Scenario: Order Anytime horizons
+- **WHEN** automatic sorting is enabled and Anytime tasks in one equal-Deadline group have different Today horizons
+- **THEN** Tasks orders Inbox, Now, Next, Later, then tasks without a horizon
+
+#### Scenario: Skip the inapplicable Someday horizon rank
+- **WHEN** automatic sorting is enabled in Someday
+- **THEN** all tasks tie on the absent horizon rank and continue to Actionability ordering without acquiring Today planning metadata
+
+#### Scenario: Order Actionability
+- **WHEN** automatic sorting is enabled and tasks share one Area, Deadline, and horizon rank
+- **THEN** Tasks orders Ready first, Rechecking second, and Waiting third
+
+#### Scenario: Preserve manual peer order
+- **WHEN** automatically sorted tasks share the same effective Area, normalized Deadline, horizon, and Actionability
+- **THEN** Tasks orders them by their durable manual rank and permits pointer reordering among those exact peers
+
+#### Scenario: Restrict an illegal same-Area drag
+- **WHEN** a user drags an automatically sorted task over non-peer rows in its current Area
+- **THEN** the insertion indicator remains at the most recent legal peer position and dropping uses that displayed legal position
+
+#### Scenario: Commit the last legal position from the Tasks interface
+- **WHEN** a task drag has a displayed legal insertion position and the user releases it anywhere inside the Tasks interface
+- **THEN** Tasks commits the task at that displayed position even when the release is outside a task row or list
+
+#### Scenario: Preserve an explicitly canceled drag
+- **WHEN** the browser does not deliver an in-app drop event because the user cancels the drag or releases it outside the browser
+- **THEN** Tasks leaves the task unchanged
+
+#### Scenario: Move across Areas without changing sort metadata
+- **WHEN** the user drops an automatically sorted task into another Area or the unassigned region
+- **THEN** Tasks applies the ordinary exact organization move and displayed legal manual rank without changing Deadline, horizon, or Actionability
+
+#### Scenario: Retain an edited task until close
+- **WHEN** an open task's Deadline, horizon, Actionability, or Area changes while automatic sorting is enabled
+- **THEN** Tasks keeps the task in its retained visible position until close and then applies the established delayed animated reconciliation into its automatic position
+
+#### Scenario: Retain a new draft until close
+- **WHEN** a task is created in an automatically sorted view
+- **THEN** Tasks keeps the open draft at its contextual insertion point and joins it to automatic order only after the editor closes
+
+#### Scenario: Materialize automatic order on disable
+- **WHEN** an owner disables automatic sorting
+- **THEN** Tasks persists the complete current automatic order of Anytime and Someday as the new manual order before exposing fully manual reordering
+
+#### Scenario: Ignore an active Quick Filter when materializing
+- **WHEN** automatic sorting is disabled while a Quick Filter hides some tasks
+- **THEN** Tasks materializes the complete unfiltered owner order so hidden tasks retain their correct relative rank
+
+#### Scenario: Fail closed while disabling
+- **WHEN** the automatic order cannot be completely materialized
+- **THEN** Tasks keeps automatic sorting enabled and reports the failed preference change without exposing a partially materialized manual order
+
+#### Scenario: Present conceptual Actionability order
+- **WHEN** Tasks presents an Actionability selection control
+- **THEN** its options appear as Ready, Rechecking, then Waiting
+
+### Requirement: Upcoming Date-Section Ordering
+The Tasks module SHALL permit manual task ordering inside each visible Upcoming date section and SHALL convert cross-section task drops into future Start planning.
+
+#### Scenario: Manually order tasks inside one Upcoming section
+- **WHEN** a user drags an Upcoming task before or after another task in the same visible day, month, or year section
+- **THEN** Tasks persists the selected manual order without changing either task's Start or Deadline
+
+#### Scenario: Move a task to another Upcoming section
+- **WHEN** a user drags an Upcoming task into another visible date section
+- **THEN** Tasks assigns the destination section's canonical future date as the task's Start, clears any Today horizon, and persists the selected manual position inside that section
+
+#### Scenario: Move a deadline-only task to another Upcoming section
+- **WHEN** a task appears in Upcoming only because of its Deadline and the user drops it into a different Upcoming section
+- **THEN** Tasks assigns the destination section date as its Start and retains its existing Deadline
+
+#### Scenario: Prefer Start over Deadline exactly once
+- **WHEN** an open task has both a future Start and a future Deadline
+- **THEN** Upcoming displays it once in the section controlled by Start and does not also display it in the Deadline section
+
+#### Scenario: Drop into an Upcoming section without another task
+- **WHEN** the destination Upcoming section contains no task row that can serve as a manual-order target
+- **THEN** dropping on the section still assigns its canonical future Start and places the task as that section's only manually ordered task
+
+#### Scenario: Reschedule a reminder after an Upcoming move
+- **WHEN** a task with a reminder moves to another Upcoming section
+- **THEN** Tasks reschedules the reminder against the task's newly assigned Start
+
+### Requirement: Bulk Task Drag Group
+On Today, Upcoming, Anytime, and Someday, the system SHALL allow a pointer drag that begins on a selected task to move the complete current task selection. The system SHALL derive group order from the tasks' current visual order rather than selection order.
+
+#### Scenario: Non-contiguous selection moves in visual order
+- **WHEN** the user selects non-contiguous tasks and begins dragging any selected task
+- **THEN** the system treats every selected task as the drag group and preserves their pre-drag visual order
+
+#### Scenario: Unselected row starts a single-task drag
+- **WHEN** the user begins dragging a task that is not part of the current multi-selection
+- **THEN** the system treats only that task as the drag subject
+
+#### Scenario: Scope is limited to planning lists
+- **WHEN** the user visits a Tasks surface other than Today, Upcoming, Anytime, or Someday
+- **THEN** the system does not offer bulk task drag reordering on that surface
+
+### Requirement: Bulk Visible-Bucket Projection
+The system SHALL interpret a bulk drop as one desired visible boundary after the selected tasks are removed. A drop into a different visible Today horizon, Upcoming date section, or Anytime or Someday Area region SHALL apply the metadata required for every selected task to belong to that visible bucket.
+
+#### Scenario: Today horizon bulk drop
+- **WHEN** selected Today tasks are dropped into a different horizon
+- **THEN** every selected task receives that horizon and the group is ordered at the requested legal position
+
+#### Scenario: Upcoming date bulk drop
+- **WHEN** selected Upcoming tasks are dropped into a different date section
+- **THEN** every selected task receives that date as its Start, clears any Today horizon, retains its Deadline, and appears only in the Start date section
+
+#### Scenario: Same Upcoming date reorder
+- **WHEN** selected Upcoming tasks are reordered within their existing date section
+- **THEN** the system preserves their existing Start and Deadline metadata
+
+### Requirement: Bulk Automatic-Sort Projection
+When automatic sorting is enabled for Anytime and Someday, the system SHALL preserve the invisible Deadline, Today horizon, and Actionability tuple for each selected task. It SHALL place each post-drop tuple subgroup at the desired boundary when legal and otherwise at the closest legal boundary within its peer interval.
+
+#### Scenario: Same invisible peer group
+- **WHEN** all selected tasks share one invisible automatic-sort tuple and the desired boundary is within that peer interval
+- **THEN** the tasks are compacted at that boundary in their prior visual order
+
+#### Scenario: Mixed invisible peer groups
+- **WHEN** the selection contains tasks from multiple invisible tuples
+- **THEN** each tuple subgroup settles into its own legal peer interval while preserving visual order within the subgroup
+
+#### Scenario: Cross-Area automatic drop
+- **WHEN** a mixed selection is dropped into another visible Area while automatic sorting is enabled
+- **THEN** the Area metadata changes and each resulting invisible tuple subgroup settles into its legal position in the target Area
+
+#### Scenario: Invisible placement does not rewrite metadata
+- **WHEN** the desired pointer boundary lies outside a selected task's legal invisible peer interval
+- **THEN** the system clamps placement without changing Deadline, horizon, or Actionability
+
+### Requirement: Bulk Drag Cancellation And Selection
+The system SHALL persist a drag only after an accepted in-app drop. Drag end without an accepted drop SHALL not mutate tasks. A successful drop SHALL keep the moved tasks selected.
+
+#### Scenario: Successful drop retains selection
+- **WHEN** a bulk drop is accepted and persisted
+- **THEN** all moved tasks remain selected and can be dragged again
+
+#### Scenario: Escape reaches BathOS during drag
+- **WHEN** the user presses Escape during a drag and BathOS receives the key event
+- **THEN** the system clears the pending drag projection and task selection without persisting order or metadata changes
+
+#### Scenario: Release outside an accepted drop surface
+- **WHEN** the native drag ends without an accepted BathOS drop
+- **THEN** the system clears transient drag state and performs no task mutation
+
+### Requirement: Atomic Bulk Drag History
+The system SHALL persist every accepted bulk drop atomically and SHALL represent the complete gesture as one history operation. Undo and redo SHALL validate and traverse all task events in that operation atomically.
+
+#### Scenario: Atomic successful drop
+- **WHEN** a bulk drop changes multiple tasks
+- **THEN** all task order and visible-bucket metadata changes commit together with one shared operation identity
+
+#### Scenario: Drop failure rolls back
+- **WHEN** any task in a bulk drop cannot be validated or persisted
+- **THEN** no task in the drop retains a partial persisted change
+
+#### Scenario: One undo restores the group
+- **WHEN** the user invokes Undo after a successful bulk drop
+- **THEN** every task changed by that drop returns to its prior metadata and order in one action
+
+#### Scenario: One redo reapplies the group
+- **WHEN** the user invokes Redo after undoing a bulk drop
+- **THEN** every task changed by that drop returns to its post-drop metadata and order in one action
+
+#### Scenario: Unsafe member blocks grouped traversal
+- **WHEN** any member of a grouped history operation no longer matches the state required for undo or redo
+- **THEN** the complete traversal is rejected and no member is partially changed
+
+### Requirement: Upcoming Bulk Reminder Consistency
+When a bulk Upcoming drop changes task Starts, the system SHALL reconcile each affected reminder with the new Start while preserving existing reminder time behavior.
+
+#### Scenario: Cross-date drop reschedules reminders
+- **WHEN** selected Upcoming tasks with reminders are dropped into another future date section
+- **THEN** each reminder is reconciled to that task's new Start date
+
+#### Scenario: Same-date drop leaves reminders unchanged
+- **WHEN** selected Upcoming tasks are reordered within the same date section
+- **THEN** the system does not reschedule their reminders
+
+### Requirement: Whole-Task Focus And Selection
+The Tasks module SHALL represent no task target, one whole-task-focused closed task, one or more explicitly selected tasks, and one open task as distinct interaction states; SHALL preserve granular sequential keyboard access to every interactive control in collapsed task summaries; and SHALL provide a faster Space-and-arrow whole-task traversal mode.
+
+#### Scenario: Traverse task summaries and the complete page
+- **WHEN** a keyboard user presses Tab or Shift+Tab in or around a collapsed task summary
+- **THEN** native sequential focus visits the task row and its available completion, title, source-link, and actions controls in DOM order and can continue to controls outside the task list
+
+#### Scenario: Leave whole-task focus for granular Tab traversal
+- **WHEN** Tab or Shift+Tab is pressed while one closed task has whole-task focus
+- **THEN** Tasks clears whole-task focus and its range anchor without blurring the current element or preventing native sequential focus movement
+
+#### Scenario: Enter whole-task focus from the Tasks background
+- **WHEN** no task is focused, open, or multiply selected; no nested surface is open; an eligible noninteractive Tasks page or list surface owns focus; and the user presses a nonrepeated unmodified Space
+- **THEN** Tasks prevents page scrolling, gives whole-task focus to the first visible task, scrolls it into view, and does not open it
+
+#### Scenario: Promote a Tab-focused task row
+- **WHEN** a closed task row has granular Tab focus without whole-task focus and the user presses a nonrepeated unmodified Space
+- **THEN** Tasks prevents page scrolling, promotes that same row into whole-task focus, establishes the range anchor, and does not open or advance the task
+
+#### Scenario: Traverse whole-task focus with Space
+- **WHEN** a closed task has whole-task focus and the user presses a nonrepeated unmodified Space or Shift+Space
+- **THEN** Tasks prevents page scrolling and moves whole-task focus to the next or previous visible task respectively, wrapping across list boundaries and scrolling the destination into view
+
+#### Scenario: Ignore held Space traversal
+- **WHEN** a Space or Shift+Space keydown repeats while a task has whole-task focus
+- **THEN** Tasks prevents page scrolling but performs no additional focus movement
+
+#### Scenario: Wrap arrow traversal
+- **WHEN** ArrowDown or ArrowUp is pressed while a closed task has whole-task focus
+- **THEN** focus moves to the next or previous visible task respectively, wraps across list boundaries, and scrolls the destination into view without moving task order
+
+#### Scenario: Preserve native Space ownership
+- **WHEN** Space is pressed while an interactive task control, link, editable control, open task, multiple selection, dialog, menu, listbox, popover, or unrelated page control owns the interaction
+- **THEN** Tasks does not invoke whole-task Space traversal and preserves that surface's native or documented Space behavior
+
+#### Scenario: Select one task with a modified click
+- **WHEN** a user Command-clicks on Mac, Control-clicks on Windows, or Shift-clicks the activation surface of a task while no task selection is active
+- **THEN** Tasks enters explicit selection mode, selects that task, establishes it as the range anchor, presents its selection control and the fixed bulk toolbar, and does not open the editor
+
+#### Scenario: Clear one explicitly selected task
+- **WHEN** the user repeats the platform-modifier click on the only explicitly selected task
+- **THEN** Tasks clears selection mode and the range anchor without opening the task
+
+#### Scenario: Begin selection from keyboard focus
+- **WHEN** one closed task has lightweight whole-task keyboard focus and the user modifier-clicks or Shift-clicks a task activation surface
+- **THEN** Tasks enters explicit selection mode with the keyboard-focused task as the selected anchor; selects the clicked task or anchored range as applicable; clears lightweight whole-task focus; and shows the fixed bulk toolbar
+
+#### Scenario: Add to explicit selection
+- **WHEN** a user additively modifier-clicks another task or Shift-clicks away from the selection range anchor
+- **THEN** Tasks updates the explicit selection, clears closed focus, closes any open editor first, and keeps the fixed bulk toolbar visible
+
+#### Scenario: Enter multiple selection from an open task
+- **WHEN** one task is open and the user additively modifier-clicks or Shift-clicks a different visible task
+- **THEN** Tasks treats the open task as the initial selection anchor, closes its editor, selects both tasks, and shows the fixed bulk toolbar
+
+#### Scenario: Replace a selected range
+- **WHEN** Shift-click selects a new visible endpoint while multi-selection remains active
+- **THEN** Tasks replaces the prior range with the contiguous visible task range from the stable anchor to that endpoint
+
+#### Scenario: Retain selection mode with one task
+- **WHEN** pointer selection reduces a multi-selection to exactly one task
+- **THEN** Tasks keeps selection mode, the remaining task's selection control, and the fixed bulk toolbar visible, and does not reopen an editor
+
+#### Scenario: Clear all task targeting
+- **WHEN** a user clicks outside every task and selection-owned surface or navigates to another Tasks view
+- **THEN** Tasks clears closed focus, multi-selection, and the range anchor after completing any required open-editor close
+
+#### Scenario: Relinquish collapsed task focus with Escape
+- **WHEN** Escape is pressed while a collapsed task row or one of its granular row controls has keyboard focus and no nested surface owns Escape
+- **THEN** Tasks clears whole-task focus and its range anchor, blurs the row-owned active element, and performs no task mutation
+
+#### Scenario: Preserve direct row controls
+- **WHEN** a user clicks a completion control, actions trigger, source link, or Primary Link, including a modified click on a link
+- **THEN** that control retains its pointer behavior and ordinary modified-link behavior without being reinterpreted as task focus or selection
+
+#### Scenario: Open a focused task
+- **WHEN** Return or the platform Open/Close Task command is invoked on one focused closed task
+- **THEN** Tasks clears closed focus, opens that task, focuses its Summary at the insertion point end, and keeps multi-selection inactive
+
+#### Scenario: Close to whole-row focus
+- **WHEN** the Open/Close Task command closes an open task
+- **THEN** Tasks flushes autosave, commits deferred completion, and returns focus to the complete surviving task row or the documented same-position fallback
+
+#### Scenario: Target one focused task
+- **WHEN** a supported completion, planning, actionability, organization, checklist, clipboard, duplication, or lifecycle command is invoked with one focused closed task
+- **THEN** Tasks applies the same eligible single-target behavior available to an open task or multi-selection without showing bulk controls
+
+#### Scenario: Converge bulk actionability before advancing
+- **WHEN** the user cycles actionability for multiple selected tasks whose actionability states are mixed or uniformly Ready
+- **THEN** Tasks sets every selected task to Waiting
+- **WHEN** every selected task is already Waiting
+- **THEN** Tasks sets every selected task to Rechecking
+- **WHEN** every selected task is already Rechecking
+- **THEN** Tasks sets every selected task to Ready
+
+#### Scenario: Open inline metadata from closed focus
+- **WHEN** a focused closed task receives a command whose interaction surface exists only inside the expanded editor
+- **THEN** Tasks opens the task, focuses the requested surface, and preserves ordinary autosave behavior
+
+#### Scenario: Copy or cut one focused task
+- **WHEN** a task-object Copy or eligible Cut command is invoked with one focused closed task and no editable control owns native clipboard behavior
+- **THEN** Tasks serializes that task through the ordinary task clipboard contract and applies Cut lifecycle behavior only after the clipboard write succeeds
+
+#### Scenario: Duplicate one focused closed task
+- **WHEN** Duplicate is invoked with one focused closed task
+- **THEN** Tasks creates one closed duplicate at the documented destination and transfers whole-row focus to the duplicate without opening it
+
+#### Scenario: Traverse while opening
+- **WHEN** Control+S or Control+W on Mac, or the corresponding Alt+Shift chord on Windows, is invoked with no open task
+- **THEN** Tasks uses the focused closed task as the current position, opens the next or previous visible task, opens the first or last task when no task is focused, and does not wrap at list boundaries
+
+#### Scenario: Focus after a task leaves the view
+- **WHEN** an immediate command removes the focused closed task from the current view
+- **THEN** focus moves to the task at the same visual position, then the prior visible task, then clears when no visible task remains
+
+#### Scenario: Restore action focus to the whole task
+- **WHEN** a task completion, lifecycle, menu, or task-owned dialog action returns keyboard focus to a collapsed task that remains in the current list or to its same-position fallback
+- **THEN** Tasks establishes whole-task focus on the complete task row and does not leave focus on a nested completion, title, source-link, or actions control
+
+#### Scenario: Select all under the state threshold
+- **WHEN** Select All targets one visible task
+- **THEN** Tasks establishes single-task focus without showing bulk controls
+- **WHEN** Select All targets two or more visible tasks
+- **THEN** Tasks enters multi-selection and shows the bulk toolbar
+
+#### Scenario: Present one whole-task focus target accessibly
+- **WHEN** assistive technology inspects a collapsed task
+- **THEN** the complete row has a nonempty task name and visible focus treatment while every available nested interactive control remains named and sequentially keyboard accessible
+
+#### Scenario: Keep the focus treatment consistent across navigation methods
+- **WHEN** whole-task focus is established or moved by Space, Shift+Space, ArrowUp, or ArrowDown
+- **THEN** the focused task uses the same thick white inset outline without an additional browser-native focus color
+
+#### Scenario: Present granular row focus without whole-task focus
+- **WHEN** native Tab traversal focuses a closed task row without promoting it into whole-task focus
+- **THEN** the row exposes a visible white keyboard focus outline while task commands do not retain a stale whole-task target after granular traversal continues
+
+#### Scenario: Describe the toggle command
+- **WHEN** the Keyboard Commands reference presents the former Close Task action
+- **THEN** it labels the action Open/Close Task and documents its focused-closed and open-task behavior for Mac and Windows
+
+### Requirement: Revised Control task-command layout
+BathOS Tasks SHALL expose the revised Control-based task-command layout, SHALL remove the displaced task-command assignments, and SHALL preserve platform-standard Undo and Redo behavior.
+
+#### Scenario: Windows task commands use shifted Alt
+- **WHEN** a user operates Tasks on Windows
+- **THEN** every revised Tasks-specific command SHALL use Alt+Shift with the same letter assigned to Control on Mac
+- **AND** unshifted Windows Control combinations SHALL retain their standard application meanings
+
+#### Scenario: Undo and Redo preserve platform conventions
+- **WHEN** a Mac user presses either Command+Z or Control+Z
+- **THEN** Tasks SHALL invoke Undo
+- **WHEN** a Mac user presses Command+Y or Command+Shift+Z
+- **THEN** Tasks SHALL invoke Redo
+- **WHEN** a Windows user presses Control+Z
+- **THEN** Tasks SHALL invoke Undo
+- **WHEN** a Windows user presses Alt+Shift+Z
+- **THEN** Tasks SHALL invoke Undo
+- **WHEN** a Windows user presses Control+Y or Control+Shift+Z
+- **THEN** Tasks SHALL invoke Redo
+
+#### Scenario: Displaced task-command assignments are removed
+- **WHEN** a user presses a former Tasks-specific chord that is absent from the revised layout
+- **THEN** Tasks SHALL NOT invoke that chord's former task action
+
+#### Scenario: Keyboard reference matches executable behavior
+- **WHEN** a user opens the Keyboard Commands dialog or reads the Tasks guide
+- **THEN** the displayed Control commands SHALL match the executable platform-specific layout
+
+#### Scenario: Alternate command notation uses slashes
+- **WHEN** the Keyboard Commands dialog presents alternate Undo or Close Open Task chords
+- **THEN** it separates those chords with `/` rather than the word `or`, matching the Redo row
+
+### Requirement: Reserved forward task history
+Tasks SHALL reserve every user-editable forward task mutation before asynchronous persistence or visual departure can make its result unavailable, and SHALL bind the reservation to the accepted mutation identifier before resolving it.
+
+#### Scenario: Undo completion while its write is in flight
+- **WHEN** a user completes a task and invokes Command-Z after the task begins leaving its source list but before the completion write returns
+- **THEN** Tasks waits for that reserved completion to settle and undoes its exact accepted history event without traversing an older mutation
+
+#### Scenario: Undo completion while history is projecting
+- **WHEN** the completion write has returned but its exact history event or completed task snapshot has not yet projected locally
+- **THEN** Tasks waits within a bounded interval for both projections and reopens the task into its retained prior planning state
+
+#### Scenario: Match equivalent synchronized terminal timestamps
+- **WHEN** a local task projection and its authoritative history snapshot encode the same completion, cancellation, or deletion instant with different valid ISO time-zone spellings
+- **THEN** Tasks treats those terminal timestamps as equal for guarded undo while continuing to reject malformed values and genuinely different instants
+
+#### Scenario: Redo an undone completion
+- **WHEN** a user undoes a completion and then invokes redo without an intervening forward mutation
+- **THEN** Tasks reapplies the exact completion event and returns the task to Done
+
+#### Scenario: Invoke redo with either standard chord
+- **WHEN** a user presses Command-Y or Command-Shift-Z on Mac, or Control-Y or Control-Shift-Z on Windows
+- **THEN** Tasks captures the command before the browser or an editable field and traverses the same redo cursor
+
+#### Scenario: Reach an unavailable history boundary
+- **WHEN** undo or redo has no cursor entry, or its next historical state can no longer satisfy current task invariants
+- **THEN** Tasks performs no mutation and shows an ordinary Nothing to Undo or Nothing to Redo toast without destructive styling
+
+#### Scenario: Cancel a failed reservation
+- **WHEN** a reserved forward mutation fails before acceptance
+- **THEN** Tasks cancels that reservation, restores the visible task state, and does not let a later undo substitute an older or unrelated history event for the failed mutation
+
+#### Scenario: Include all editable task metadata
+- **WHEN** a user changes any task field or state that Tasks permits them to edit, including title, notes, link, planning, organization, actionability, Deadline, completion, cancellation, deletion, reopening, or restoration
+- **THEN** the accepted mutation participates in the same guarded undo and redo chain
+
+### Requirement: Directly recoverable Done task controls
+Done SHALL present retained tasks as recoverable task states with task-native leading controls instead of archive-only rows with detached textual recovery actions.
+
+#### Scenario: Reopen a completed task by unchecking it
+- **WHEN** Done presents a completed present task
+- **THEN** its leading control is a checked task checkbox, and activating that control reopens the task and returns it to its retained prior planning state
+
+#### Scenario: Reopen a canceled task
+- **WHEN** Done presents a canceled present task
+- **THEN** its leading control communicates cancellation and activating it reopens the task through the same guarded lifecycle path
+
+#### Scenario: Restore a deleted task from its trash control
+- **WHEN** Done presents a recoverably deleted task root
+- **THEN** its leading icon-only control shows a trash icon at rest, changes to a restore icon on hover or keyboard focus, and restores the task through the existing hierarchy-safe restore transition when activated
+
+#### Scenario: Preserve task-row interaction in Done
+- **WHEN** a retained task appears in Done
+- **THEN** its title, source link, terminal date, whole-task focus, selection behavior, and direct recovery control remain operable without exposing permanent deletion
+
+#### Scenario: Retain terminal work for purge
+- **WHEN** a task is completed, canceled, or deleted
+- **THEN** its existing completion, cancellation, or deletion timestamp remains the Done ordering and 31-day retention timestamp until the task is recovered or purged

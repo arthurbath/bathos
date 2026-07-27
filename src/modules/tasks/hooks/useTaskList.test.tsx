@@ -403,10 +403,10 @@ describe('useTaskList optimistic display', () => {
 
     try {
       expect(latest.tasks.map((task) => task.id)).toEqual([
+        'task-available-deadline',
         'task-deadline',
         'task-future',
         'task-later',
-        'task-available-deadline',
       ]);
       expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain('start_date > ?');
       expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain('deadline > ?');
@@ -532,7 +532,6 @@ describe('useTaskList optimistic display', () => {
         primaryLink: 'https://example.test',
         actionability: 'actionable',
         areaId: null,
-        projectId: null,
       });
       expect(repository.createTask.mock.calls[0][0]).not.toHaveProperty('sourceKind');
       expect(repository.createTask.mock.calls[0][0]).not.toHaveProperty('sourceExternalId');
@@ -679,7 +678,6 @@ describe('useTaskList optimistic display', () => {
     const retainedTask = {
       ...originalTask,
       area_id: null,
-      project_id: 'project-original',
       today_section: 'next' as const,
       start_date: null,
       order_key: 'a1',
@@ -696,7 +694,6 @@ describe('useTaskList optimistic display', () => {
       ...retainedTask,
       actionability: 'waiting' as const,
       area_id: 'area-new',
-      project_id: null,
       today_section: 'now' as const,
       order_key: 'z9',
       revision: 2,
@@ -716,7 +713,6 @@ describe('useTaskList optimistic display', () => {
         await latest.updateTask('task-a', {
           actionability: 'waiting',
           area_id: 'area-new',
-          project_id: null,
           today_section: 'now',
         });
       });
@@ -729,14 +725,12 @@ describe('useTaskList optimistic display', () => {
         id: 'task-a',
         actionability: 'waiting',
         area_id: 'area-new',
-        project_id: null,
         today_section: 'now',
         order_key: 'z9',
       });
       expect(latest.retainedTaskPlacement).toMatchObject({
         id: 'task-a',
         area_id: null,
-        project_id: 'project-original',
         today_section: 'next',
         order_key: 'a1',
       });
@@ -907,7 +901,7 @@ describe('useTaskList optimistic display', () => {
           'task-next-second',
           'task-next-first',
           'after',
-          { area_id: 'area-work', project_id: null },
+          { area_id: 'area-work' },
         );
       });
       expect(repository.updateTask).toHaveBeenLastCalledWith(
@@ -915,7 +909,6 @@ describe('useTaskList optimistic display', () => {
         'task-next-second',
         {
           area_id: 'area-work',
-          project_id: null,
           order_key: expect.any(String),
         },
       );
@@ -938,6 +931,90 @@ describe('useTaskList optimistic display', () => {
         'task-next-second',
         'task-later',
       ]);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('manually orders one Upcoming section and atomically moves across sections', async () => {
+    harnessView = 'upcoming';
+    const laterInYear = taskTodoFixture({
+      id: 'task-later-in-year',
+      title: 'Later in year',
+      start_date: '2999-08-20',
+      deadline: '2999-08-25',
+      order_key: 'a0',
+    });
+    const earlierInYear = taskTodoFixture({
+      id: 'task-earlier-in-year',
+      title: 'Earlier in year',
+      start_date: '2999-02-10',
+      order_key: 'a1',
+    });
+    const nextYear = taskTodoFixture({
+      id: 'task-next-year',
+      title: 'Next year',
+      start_date: '3000-03-10',
+      order_key: 'a2',
+    });
+    queryData = [earlierInYear, nextYear, laterInYear];
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn().mockImplementation(
+        async (_owner: string, id: string, patch: object) => ({
+          ...queryData.find((task) => task.id === id)!,
+          ...patch,
+          revision: 2,
+          client_mutation_id: 'mutation-upcoming-reordered',
+        }),
+      ),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.tasks.map(({ id }) => id)).toEqual([
+        'task-later-in-year',
+        'task-earlier-in-year',
+        'task-next-year',
+      ]);
+
+      await act(async () => {
+        await latest.reorderTaskTo(
+          'task-later-in-year',
+          'task-earlier-in-year',
+          'after',
+        );
+      });
+      expect(repository.updateTask).toHaveBeenLastCalledWith(
+        'owner-a',
+        'task-later-in-year',
+        { order_key: expect.any(String) },
+      );
+
+      await act(async () => {
+        await latest.reorderTaskTo(
+          'task-later-in-year',
+          'task-next-year',
+          'before',
+          {
+            destination: 'anytime',
+            start_date: '3000-01-01',
+            today_section: null,
+          },
+        );
+      });
+      expect(repository.updateTask).toHaveBeenLastCalledWith(
+        'owner-a',
+        'task-later-in-year',
+        {
+          destination: 'anytime',
+          start_date: '3000-01-01',
+          today_section: null,
+          order_key: expect.any(String),
+        },
+      );
     } finally {
       cleanup(root, container);
     }

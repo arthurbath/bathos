@@ -47,7 +47,6 @@ const snapshot: TaskClipboardSnapshot = {
   deadline: '2026-07-30',
   actionability: 'waiting',
   areaId: null,
-  projectId: null,
   checklist: [],
   reminder: null,
   recurrence: null,

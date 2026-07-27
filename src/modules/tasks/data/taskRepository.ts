@@ -29,7 +29,6 @@ import type {
   TaskArea,
   TaskDestination,
   TaskEntryChannel,
-  TaskProject,
   TaskSourceKind,
   TaskTodaySection,
   TaskTodo,
@@ -56,13 +55,19 @@ export type CreateTaskInput = {
   actorType?: TaskActorType;
   actionability?: TaskActionability;
   areaId?: string | null;
-  projectId?: string | null;
   hierarchyOrderKey?: string | null;
 };
 
 export type TaskMutationContext = {
   channel?: TaskEntryChannel;
   actorType?: TaskActorType;
+  operationId?: string;
+};
+
+type NormalizedTaskMutationContext = {
+  channel: TaskEntryChannel;
+  actorType: TaskActorType;
+  operationId?: string;
 };
 
 export type TaskPlanningMoveInput = {
@@ -73,8 +78,12 @@ export type TaskPlanningMoveInput = {
 
 export type TaskContainerMoveInput = {
   areaId?: string | null;
-  projectId?: string | null;
   hierarchyOrderKey?: string | null;
+};
+
+export type TaskBulkPatchInput = {
+  taskId: string;
+  patch: EditableTaskPatch;
 };
 
 export type EditableTaskPatch = Partial<
@@ -87,7 +96,6 @@ export type EditableTaskPatch = Partial<
     | 'today_section'
     | 'order_key'
     | 'area_id'
-    | 'project_id'
     | 'hierarchy_order_key'
     | 'start_date'
     | 'deadline'
@@ -109,7 +117,6 @@ const insertColumns = [
   'owner_id',
   'actionability',
   'area_id',
-  'project_id',
   'title',
   'notes',
   'lifecycle',
@@ -128,6 +135,7 @@ const insertColumns = [
   'entry_channel',
   'last_mutation_channel',
   'last_actor_type',
+  'last_operation_id',
   'undo_source_event_id',
   'source_kind',
   'source_url',
@@ -194,8 +202,6 @@ export class TaskRepository {
     const requestedStartDate = input.startDate;
     const startDate = normalizeTaskCalendarDate(requestedStartDate, "Start") ?? null;
     const deadline = normalizeTaskCalendarDate(input.deadline, 'Deadline') ?? null;
-    assertTaskContainer(input.areaId ?? null, input.projectId ?? null);
-
     return this.database.writeTransaction(async (transaction) => {
       const timestamp = this.now();
       const todaySection = destination === 'someday'
@@ -205,12 +211,7 @@ export class TaskRepository {
           : input.todaySection ?? (input.startDate === undefined ? 'next' : null);
       assertPlanningPlacement(destination, todaySection, startDate);
       await assertFutureStartDate(transaction, input.ownerId, startDate, timestamp);
-      await assertOwnedTaskContainer(
-        transaction,
-        input.ownerId,
-        input.areaId ?? null,
-        input.projectId ?? null,
-      );
+      await assertOwnedTaskArea(transaction, input.ownerId, input.areaId ?? null);
       const lastTask = input.orderKey
         ? null
         : await transaction.getOptional<{ order_key: string }>(
@@ -230,15 +231,15 @@ export class TaskRepository {
           transaction,
           input.ownerId,
           input.areaId ?? null,
-          input.projectId ?? null,
         );
       const entryChannel = input.entryChannel ?? 'web';
+      const taskId = this.createId();
+      const clientMutationId = this.createId();
       const task: TaskTodo = {
-        id: this.createId(),
+        id: taskId,
         owner_id: input.ownerId,
         actionability: input.actionability ?? 'actionable',
         area_id: input.areaId ?? null,
-        project_id: input.projectId ?? null,
         title,
         notes: input.notes ?? '',
         lifecycle: 'open',
@@ -257,6 +258,7 @@ export class TaskRepository {
         entry_channel: entryChannel,
         last_mutation_channel: entryChannel,
         last_actor_type: input.actorType ?? 'user',
+        last_operation_id: clientMutationId,
         undo_source_event_id: null,
         source_kind: input.sourceKind ?? null,
         source_url: input.sourceUrl ?? null,
@@ -271,7 +273,7 @@ export class TaskRepository {
         recurrence_occurrence_id: null,
         recurrence_logical_key: null,
         revision: 1,
-        client_mutation_id: this.createId(),
+        client_mutation_id: clientMutationId,
         created_at: timestamp,
         updated_at: timestamp,
       };
@@ -363,16 +365,10 @@ export class TaskRepository {
            WHERE owner_id = ? AND disposition = 'present'`,
           [ownerId],
         );
-        const projects = await transaction.getAll<TaskProject>(
-          `SELECT * FROM tasks_projects
-           WHERE owner_id = ? AND disposition = 'present'`,
-          [ownerId],
-        );
         const orderedGroups = (['anytime', 'someday'] as const).flatMap((destination) => (
           deriveTaskAreaSections(
             tasks.filter((task) => task.destination === destination),
             areas,
-            projects,
             true,
           ).map((section) => section.tasks)
         ));
@@ -683,6 +679,59 @@ export class TaskRepository {
     });
   }
 
+  async applyTaskPatches(
+    ownerId: string,
+    inputs: readonly TaskBulkPatchInput[],
+    context?: TaskMutationContext,
+  ): Promise<TaskTodo[]> {
+    assertOwner(ownerId);
+    const uniqueInputs = [...new Map(inputs.map((input) => [input.taskId, input])).values()];
+    if (uniqueInputs.length === 0) {
+      throw new InvalidTaskMutationError('Select at least one task to move');
+    }
+    return this.database.writeTransaction(async (transaction) => {
+      const occurredAt = this.now();
+      const operationId = context?.operationId ?? this.createId();
+      const mutationContext = normalizeMutationContext({ ...context, operationId });
+      const prepared: Array<{ current: TaskTodo; patch: EditableTaskPatch }> = [];
+
+      for (const input of uniqueInputs) {
+        const current = await getOwnedTask(transaction, ownerId, input.taskId);
+        if (current.lifecycle !== 'open' || current.disposition !== 'present') {
+          throw new InvalidTaskMutationError('Bulk movement applies only to open, present tasks');
+        }
+        const patch = normalizeEditablePatch(input.patch);
+        const destination = patch.destination ?? current.destination;
+        const todaySection = patch.today_section === undefined
+          ? current.today_section
+          : patch.today_section;
+        const startDate = patch.start_date === undefined ? current.start_date : patch.start_date;
+        assertPlanningPlacement(destination, todaySection, startDate);
+        if (patch.start_date !== undefined) {
+          await assertFutureStartDate(transaction, ownerId, patch.start_date, occurredAt);
+        }
+        const areaId = patch.area_id === undefined ? current.area_id : patch.area_id;
+        if (patch.area_id !== undefined) {
+          await assertOwnedTaskArea(transaction, ownerId, areaId);
+        }
+        prepared.push({ current, patch });
+      }
+
+      const results: TaskTodo[] = [];
+      for (const { current, patch } of prepared) {
+        results.push(await updateOwnedTask(
+          transaction,
+          current,
+          patch,
+          this.createId(),
+          occurredAt,
+          mutationContext,
+        ));
+      }
+      return results;
+    });
+  }
+
   async transitionTask(
     ownerId: string,
     taskId: string,
@@ -747,24 +796,16 @@ export class TaskRepository {
   ): Promise<TaskTodo> {
     assertOwner(ownerId);
     const areaId = input.areaId ?? null;
-    const projectId = input.projectId ?? null;
-    assertTaskContainer(areaId, projectId);
 
     return this.database.writeTransaction(async (transaction) => {
       const current = await getOwnedTask(transaction, ownerId, taskId);
-      await assertOwnedTaskContainer(
-        transaction,
-        ownerId,
-        areaId,
-        projectId,
-      );
+      await assertOwnedTaskArea(transaction, ownerId, areaId);
       const hierarchyOrderKey = input.hierarchyOrderKey !== undefined
         ? input.hierarchyOrderKey
         : await nextHierarchyOrderKey(
           transaction,
           ownerId,
           areaId,
-          projectId,
           taskId,
         );
       return updateOwnedTask(
@@ -772,7 +813,6 @@ export class TaskRepository {
         current,
         {
           area_id: areaId,
-          project_id: projectId,
           hierarchy_order_key: hierarchyOrderKey,
         },
         this.createId(),
@@ -787,7 +827,7 @@ export class TaskRepository {
     eventId: string,
     context?: TaskMutationContext,
   ): Promise<TaskTodo> {
-    return this.applyHistoryEvent(ownerId, eventId, 'undo', context);
+    return (await this.applyHistoryOperation(ownerId, [eventId], 'undo', context))[0];
   }
 
   async redoTask(
@@ -795,32 +835,56 @@ export class TaskRepository {
     eventId: string,
     context?: TaskMutationContext,
   ): Promise<TaskTodo> {
-    return this.applyHistoryEvent(ownerId, eventId, 'redo', context);
+    return (await this.applyHistoryOperation(ownerId, [eventId], 'redo', context))[0];
   }
 
-  private async applyHistoryEvent(
+  async undoTaskOperation(
     ownerId: string,
-    eventId: string,
+    eventIds: readonly string[],
+    context?: TaskMutationContext,
+  ): Promise<TaskTodo[]> {
+    return this.applyHistoryOperation(ownerId, eventIds, 'undo', context);
+  }
+
+  async redoTaskOperation(
+    ownerId: string,
+    eventIds: readonly string[],
+    context?: TaskMutationContext,
+  ): Promise<TaskTodo[]> {
+    return this.applyHistoryOperation(ownerId, eventIds, 'redo', context);
+  }
+
+  private async applyHistoryOperation(
+    ownerId: string,
+    eventIds: readonly string[],
     direction: 'undo' | 'redo',
     context?: TaskMutationContext,
-  ): Promise<TaskTodo> {
+  ): Promise<TaskTodo[]> {
     assertOwner(ownerId);
+    if (eventIds.length === 0) {
+      throw new TaskHistoryEventNotFoundError();
+    }
     return this.database.writeTransaction(async (transaction) => {
-      const storedEvent = await transaction.getOptional<TaskHistoryStorageRow>(
-        'SELECT * FROM tasks_history_events WHERE id = ? AND owner_id = ?',
-        [eventId, ownerId],
-      );
-      if (storedEvent === null) {
-        throw new TaskHistoryEventNotFoundError();
-      }
-
-      const event = parseTaskHistoryEvent(storedEvent);
-      const current = await getOwnedTask(transaction, ownerId, event.task_id);
-      const patch = direction === 'undo'
-        ? createTaskUndoPatch(current, event)
-        : createTaskRedoPatch(current, event);
       const occurredAt = this.now();
-      try {
+      const operationId = context?.operationId
+        ?? (eventIds.length > 1 ? this.createId() : undefined);
+      const prepared: Array<{
+        event: ReturnType<typeof parseTaskHistoryEvent>;
+        current: TaskTodo;
+        patch: TaskHistorySnapshot;
+      }> = [];
+      for (const eventId of [...new Set(eventIds)]) {
+        const storedEvent = await transaction.getOptional<TaskHistoryStorageRow>(
+          'SELECT * FROM tasks_history_events WHERE id = ? AND owner_id = ?',
+          [eventId, ownerId],
+        );
+        if (storedEvent === null) throw new TaskHistoryEventNotFoundError();
+        const event = parseTaskHistoryEvent(storedEvent);
+        const current = await getOwnedTask(transaction, ownerId, event.task_id);
+        const patch = direction === 'undo'
+          ? createTaskUndoPatch(current, event)
+          : createTaskRedoPatch(current, event);
+        try {
         assertSource(
           patch.source_kind,
           patch.source_url,
@@ -835,34 +899,38 @@ export class TaskRepository {
         if (patch.start_date !== undefined) {
           await assertFutureStartDate(transaction, ownerId, patch.start_date, occurredAt);
         }
-      } catch (error) {
-        if (error instanceof InvalidTaskMutationError) {
-          throw direction === 'undo'
-            ? new UnsafeTaskUndoError('There are no more task changes to undo')
-            : new UnsafeTaskRedoError('There are no more task changes to redo');
+        } catch (error) {
+          if (error instanceof InvalidTaskMutationError) {
+            throw direction === 'undo'
+              ? new UnsafeTaskUndoError('There are no more task changes to undo')
+              : new UnsafeTaskRedoError('There are no more task changes to redo');
+          }
+          throw error;
         }
-        throw error;
+        await assertOwnedTaskArea(
+          transaction,
+          ownerId,
+          patch.area_id,
+        );
+        prepared.push({ event, current, patch });
       }
-      assertTaskContainer(
-        patch.area_id === undefined ? current.area_id : patch.area_id,
-        patch.project_id === undefined ? current.project_id : patch.project_id,
-      );
-      await assertOwnedTaskContainer(
-        transaction,
-        ownerId,
-        patch.area_id,
-        patch.project_id,
-      );
-
-      return updateOwnedTask(
-        transaction,
-        current,
-        patch,
-        this.createId(),
-        occurredAt,
-        normalizeMutationContext(context),
-        event.id,
-      );
+      const results: TaskTodo[] = [];
+      for (const { event, current, patch } of prepared) {
+        const mutationId = this.createId();
+        results.push(await updateOwnedTask(
+          transaction,
+          current,
+          patch,
+          mutationId,
+          occurredAt,
+          normalizeMutationContext({
+            ...context,
+            operationId: operationId ?? mutationId,
+          }),
+          event.id,
+        ));
+      }
+      return results;
     });
   }
 
@@ -922,19 +990,9 @@ export class TaskRepository {
         await assertFutureStartDate(transaction, ownerId, patch.start_date, occurredAt);
       }
       const areaId = patch.area_id === undefined ? current.area_id : patch.area_id;
-      const projectId = patch.project_id === undefined ? current.project_id : patch.project_id;
-      assertTaskContainer(areaId, projectId);
-      const containerChanged = (
-        patch.area_id !== undefined
-        || patch.project_id !== undefined
-      );
+      const containerChanged = patch.area_id !== undefined;
       if (containerChanged) {
-        await assertOwnedTaskContainer(
-          transaction,
-          ownerId,
-          areaId,
-          projectId,
-        );
+        await assertOwnedTaskArea(transaction, ownerId, areaId);
       }
 
       const preparedPatch = containerChanged && patch.hierarchy_order_key === undefined
@@ -944,7 +1002,6 @@ export class TaskRepository {
             transaction,
             ownerId,
             areaId,
-            projectId,
             taskId,
           ),
         }
@@ -983,12 +1040,13 @@ async function updateOwnedTask(
   patch: EditableTaskPatch | TaskStatePatch | TaskHistorySnapshot,
   mutationId: string,
   updatedAt: string,
-  context: Required<TaskMutationContext>,
+  context: NormalizedTaskMutationContext,
   undoSourceEventId: string | null = null,
 ): Promise<TaskTodo> {
   const metadataPatch = {
     last_mutation_channel: context.channel,
     last_actor_type: context.actorType,
+    last_operation_id: context.operationId ?? mutationId,
     undo_source_event_id: undoSourceEventId,
   };
   const next = {
@@ -1024,10 +1082,11 @@ type TaskStatePatch = Pick<
 
 function normalizeMutationContext(
   context: TaskMutationContext | undefined,
-): Required<TaskMutationContext> {
+): NormalizedTaskMutationContext {
   return {
     channel: context?.channel ?? 'web',
     actorType: context?.actorType ?? 'user',
+    ...(context?.operationId ? { operationId: context.operationId } : {}),
   };
 }
 
@@ -1074,22 +1133,10 @@ function normalizeTitle(title: string): string {
   return normalized;
 }
 
-function assertTaskContainer(
-  areaId: string | null,
-  projectId: string | null,
-): void {
-  if (areaId != null && projectId != null) {
-    throw new InvalidTaskMutationError(
-      'A task cannot belong directly to both an area and a project',
-    );
-  }
-}
-
-async function assertOwnedTaskContainer(
+async function assertOwnedTaskArea(
   transaction: Transaction,
   ownerId: string,
   areaId: string | null | undefined,
-  projectId: string | null | undefined,
 ): Promise<void> {
   if (areaId != null) {
     const area = await transaction.getOptional<{ id: string }>(
@@ -1098,37 +1145,28 @@ async function assertOwnedTaskContainer(
     );
     if (area === null) throw new InvalidTaskMutationError('The task area is unavailable');
   }
-  if (projectId != null) {
-    const project = await transaction.getOptional<{ id: string }>(
-      'SELECT id FROM tasks_projects WHERE id = ? AND owner_id = ?',
-      [projectId, ownerId],
-    );
-    if (project === null) throw new InvalidTaskMutationError('The task project is unavailable');
-  }
 }
 
 async function nextHierarchyOrderKey(
   transaction: Transaction,
   ownerId: string,
   areaId: string | null,
-  projectId: string | null,
   excludeTaskId?: string,
 ): Promise<string | null> {
-  if (areaId === null && projectId === null) return null;
+  if (areaId === null) return null;
   const excludedTaskClause = excludeTaskId ? 'AND id <> ?' : '';
   const lastTask = await transaction.getOptional<{ hierarchy_order_key: string }>(
     `SELECT hierarchy_order_key
      FROM tasks_todos
      WHERE owner_id = ?
        AND area_id IS ?
-       AND project_id IS ?
        AND lifecycle = 'open'
        AND disposition = 'present'
        AND hierarchy_order_key IS NOT NULL
        ${excludedTaskClause}
      ORDER BY hierarchy_order_key DESC, id DESC
      LIMIT 1`,
-    [ownerId, areaId, projectId, ...(excludeTaskId ? [excludeTaskId] : [])],
+    [ownerId, areaId, ...(excludeTaskId ? [excludeTaskId] : [])],
   );
   return generateTaskOrderKey(lastTask?.hierarchy_order_key ?? null, null);
 }

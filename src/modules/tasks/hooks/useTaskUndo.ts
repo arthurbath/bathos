@@ -84,8 +84,8 @@ export function useTaskUndo(ownerId: string) {
   const redoEvent = cursor.redo.at(-1) ?? null;
   const tipTaskIds = [...new Set(
     [
-      undoEvent?.task_id,
-      redoEvent?.task_id,
+      ...historyOperationEvents(undoEvent).map(({ task_id }) => task_id),
+      ...historyOperationEvents(redoEvent).map(({ task_id }) => task_id),
       ...pendingForwardMutations.map(({ taskId }) => taskId),
     ].filter((value): value is string => Boolean(value)),
   )];
@@ -96,18 +96,14 @@ export function useTaskUndo(ownerId: string) {
     tipTaskIds.length > 0 ? [ownerId, ...tipTaskIds] : [],
   );
   taskProjectionRef.current = taskQuery.data;
-  const undoTask = undoEvent === null
-    ? null
-    : taskQuery.data.find((task) => task.id === undoEvent.task_id) ?? null;
-  const redoTask = redoEvent === null
-    ? null
-    : taskQuery.data.find((task) => task.id === redoEvent.task_id) ?? null;
+  const undoTasks = historyOperationTasks(taskQuery.data, undoEvent);
+  const redoTasks = historyOperationTasks(taskQuery.data, redoEvent);
   const undoSafe = undoEvent !== null
-    && undoTask !== null
-    && taskHistoryMovementIsSafe(undoTask, undoEvent, 'undo');
+    && undoTasks.length === historyOperationEvents(undoEvent).length
+    && taskHistoryOperationIsSafe(undoTasks, undoEvent, 'undo');
   const redoSafe = redoEvent !== null
-    && redoTask !== null
-    && taskHistoryMovementIsSafe(redoTask, redoEvent, 'redo');
+    && redoTasks.length === historyOperationEvents(redoEvent).length
+    && taskHistoryOperationIsSafe(redoTasks, redoEvent, 'redo');
 
   useEffect(() => {
     const next = projectedCursorRef.current;
@@ -211,7 +207,13 @@ export function useTaskUndo(ownerId: string) {
     pendingRef.current = true;
     setPending(true);
     try {
-      const task = await repository.undoTask(ownerId, event.id);
+      const operationEvents = historyOperationEvents(event);
+      const task = operationEvents.length === 1
+        ? await repository.undoTask(ownerId, event.id)
+        : (await repository.undoTaskOperation(
+            ownerId,
+            operationEvents.map(({ id }) => id),
+          ))[0];
       const next = moveUndoCursorBackward(cursorRef.current, event);
       cursorRef.current = next;
       setCursor(next);
@@ -224,14 +226,12 @@ export function useTaskUndo(ownerId: string) {
 
   const undo = useCallback(async () => {
     const event = cursorRef.current.undo.at(-1) ?? null;
-    const currentTask = event === null
-      ? null
-      : taskProjectionRef.current.find((task) => task.id === event.task_id) ?? null;
+    const currentTasks = historyOperationTasks(taskProjectionRef.current, event);
     if (
       pendingRef.current
       || event === null
-      || currentTask === null
-      || !taskHistoryMovementIsSafe(currentTask, event, 'undo')
+      || currentTasks.length !== historyOperationEvents(event).length
+      || !taskHistoryOperationIsSafe(currentTasks, event, 'undo')
     ) {
       throw new UnsafeTaskUndoError('There is no current task change available to undo');
     }
@@ -243,7 +243,13 @@ export function useTaskUndo(ownerId: string) {
     pendingRef.current = true;
     setPending(true);
     try {
-      const task = await repository.redoTask(ownerId, event.id);
+      const operationEvents = historyOperationEvents(event);
+      const task = operationEvents.length === 1
+        ? await repository.redoTask(ownerId, event.id)
+        : (await repository.redoTaskOperation(
+            ownerId,
+            operationEvents.map(({ id }) => id),
+          ))[0];
       const next = moveUndoCursorForward(cursorRef.current, event);
       cursorRef.current = next;
       setCursor(next);
@@ -256,14 +262,12 @@ export function useTaskUndo(ownerId: string) {
 
   const redo = useCallback(async () => {
     const event = cursorRef.current.redo.at(-1) ?? null;
-    const currentTask = event === null
-      ? null
-      : taskProjectionRef.current.find((task) => task.id === event.task_id) ?? null;
+    const currentTasks = historyOperationTasks(taskProjectionRef.current, event);
     if (
       pendingRef.current
       || event === null
-      || currentTask === null
-      || !taskHistoryMovementIsSafe(currentTask, event, 'redo')
+      || currentTasks.length !== historyOperationEvents(event).length
+      || !taskHistoryOperationIsSafe(currentTasks, event, 'redo')
     ) {
       throw new UnsafeTaskRedoError('There is no current task change available to redo');
     }
@@ -288,26 +292,39 @@ export function useTaskUndo(ownerId: string) {
       while (true) {
         if (expectedReservation?.status === 'canceled') return null;
         const expectedMutationId = expectedReservation?.mutationId ?? null;
-        const expectedEvent = expectedReservation === null
+        const projectedEvent = expectedReservation === null
           ? cursorRef.current.undo.at(-1) ?? null
           : expectedMutationId === null
             ? null
             : projectedEventsRef.current.find(
               ({ client_mutation_id }) => client_mutation_id === expectedMutationId,
             ) ?? null;
+        const expectedEvent = projectedEvent === null
+          ? null
+          : cursorRef.current.undo.find((candidate) => (
+            historyOperationEvents(candidate).some(
+              ({ client_mutation_id }) => (
+                client_mutation_id === projectedEvent.client_mutation_id
+              ),
+            )
+          )) ?? null;
         if (
           expectedEvent !== null
-          && (expectedReservation !== null || expectedEvent.id === expectedEventId)
+          && (
+            expectedReservation !== null
+            || historyOperationEvents(expectedEvent).some(({ id }) => id === expectedEventId)
+          )
         ) {
           if (!taskHistoryEventSupportsMovement(expectedEvent)) return null;
           const cursorEvent = cursorRef.current.undo.at(-1) ?? null;
-          const currentTask = taskProjectionRef.current.find(
-            (task) => task.id === expectedEvent.task_id,
-          ) ?? null;
+          const currentTasks = historyOperationTasks(
+            taskProjectionRef.current,
+            expectedEvent,
+          );
           if (
             cursorEvent?.id === expectedEvent.id
-            && currentTask !== null
-            && taskHistoryMovementIsSafe(currentTask, expectedEvent, 'undo')
+            && currentTasks.length === historyOperationEvents(expectedEvent).length
+            && taskHistoryOperationIsSafe(currentTasks, expectedEvent, 'undo')
           ) {
             return await applyUndoEvent(expectedEvent);
           }
@@ -340,13 +357,11 @@ export function useTaskUndo(ownerId: string) {
       const deadline = Date.now() + Math.max(0, waitMs);
       while (true) {
         const event = cursorRef.current.redo.at(-1) ?? null;
-        const currentTask = event === null
-          ? null
-          : taskProjectionRef.current.find((task) => task.id === event.task_id) ?? null;
+        const currentTasks = historyOperationTasks(taskProjectionRef.current, event);
         if (
           event?.id === expectedEventId
-          && currentTask !== null
-          && taskHistoryMovementIsSafe(currentTask, event, 'redo')
+          && currentTasks.length === historyOperationEvents(event).length
+          && taskHistoryOperationIsSafe(currentTasks, event, 'redo')
         ) {
           return await applyRedoEvent(event);
         }
@@ -430,9 +445,9 @@ export function taskHistoryMovementIsSafe(
 }
 
 export function replayTaskHistory(events: readonly TaskHistoryEvent[]): TaskHistoryCursor {
-  return [...events]
+  return collapseHistoryOperations([...events]
     .sort(compareHistoryEvents)
-    .reduce(applyTaskHistoryEvent, emptyCursor());
+  ).reduce(applyTaskHistoryEvent, emptyCursor());
 }
 
 export function applyTaskHistoryEvent(
@@ -497,18 +512,65 @@ function inverseMatchesSource(
   source: TaskHistoryEvent,
   direction: 'undo' | 'redo',
 ): boolean {
-  if (
-    source.before_state === null
-    || inverse.owner_id !== source.owner_id
-    || inverse.task_id !== source.task_id
-  ) {
-    return false;
+  const inverseEvents = historyOperationEvents(inverse);
+  const sourceEvents = historyOperationEvents(source);
+  if (inverseEvents.length !== sourceEvents.length) return false;
+  return sourceEvents.every((sourceEvent) => {
+    if (sourceEvent.before_state === null) return false;
+    const inverseEvent = inverseEvents.find((candidate) => (
+      candidate.owner_id === sourceEvent.owner_id
+      && candidate.task_id === sourceEvent.task_id
+    ));
+    if (!inverseEvent) return false;
+    return direction === 'undo'
+      ? snapshotsEqual(inverseEvent.before_state, sourceEvent.after_state)
+        && snapshotsEqual(inverseEvent.after_state, sourceEvent.before_state)
+      : snapshotsEqual(inverseEvent.before_state, sourceEvent.before_state)
+        && snapshotsEqual(inverseEvent.after_state, sourceEvent.after_state);
+  });
+}
+
+function collapseHistoryOperations(events: readonly TaskHistoryEvent[]): TaskHistoryEvent[] {
+  const result: TaskHistoryEvent[] = [];
+  for (const event of events) {
+    const previous = result.at(-1);
+    if (previous?.operation_id === event.operation_id) {
+      const operationEvents = [...historyOperationEvents(previous), event];
+      result[result.length - 1] = {
+        ...event,
+        affected_ids: [...new Set(operationEvents.flatMap(({ affected_ids }) => affected_ids))],
+        operation_events: operationEvents,
+      };
+    } else {
+      result.push(event);
+    }
   }
-  return direction === 'undo'
-    ? snapshotsEqual(inverse.before_state, source.after_state)
-      && snapshotsEqual(inverse.after_state, source.before_state)
-    : snapshotsEqual(inverse.before_state, source.before_state)
-      && snapshotsEqual(inverse.after_state, source.after_state);
+  return result;
+}
+
+function historyOperationEvents(event: TaskHistoryEvent | null): TaskHistoryEvent[] {
+  if (event === null) return [];
+  return event.operation_events ?? [event];
+}
+
+function historyOperationTasks(
+  tasks: readonly TaskTodo[],
+  event: TaskHistoryEvent | null,
+): TaskTodo[] {
+  const taskIds = new Set(historyOperationEvents(event).map(({ task_id }) => task_id));
+  return tasks.filter(({ id }) => taskIds.has(id));
+}
+
+function taskHistoryOperationIsSafe(
+  tasks: readonly TaskTodo[],
+  event: TaskHistoryEvent,
+  direction: 'undo' | 'redo',
+): boolean {
+  const byTaskId = new Map(tasks.map((task) => [task.id, task]));
+  return historyOperationEvents(event).every((operationEvent) => {
+    const task = byTaskId.get(operationEvent.task_id);
+    return task !== undefined && taskHistoryMovementIsSafe(task, operationEvent, direction);
+  });
 }
 
 function snapshotsEqual(

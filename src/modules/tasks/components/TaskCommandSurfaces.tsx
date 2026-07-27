@@ -132,32 +132,23 @@ export function TaskBulkCommandDialog({
               ref={organizationRef}
               defaultValue=""
               disabled={pending}
-              aria-label="Area or Project"
+              aria-label="Area"
               onChange={(event) => {
                 const value = event.target.value;
                 if (!value) return;
                 const [kind, id] = value.split(':', 2);
-                void onApplyOrganization(kind === 'project'
-                  ? { project_id: id, area_id: null }
-                  : kind === 'area'
-                    ? { area_id: id, project_id: null }
-                    : { area_id: null, project_id: null });
+                void onApplyOrganization(kind === 'area'
+                  ? { area_id: id }
+                  : { area_id: null });
               }}
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <option value="" disabled>Select an Area or Project</option>
-              <option value="none">No Area or Project</option>
+              <option value="" disabled>Select an Area</option>
+              <option value="none">No Area</option>
               {hierarchy.areas.length > 0 ? (
                 <optgroup label="Areas">
                   {hierarchy.areas.map((area) => (
                     <option key={area.id} value={`area:${area.id}`}>{area.title}</option>
-                  ))}
-                </optgroup>
-              ) : null}
-              {hierarchy.projects.length > 0 ? (
-                <optgroup label="Projects">
-                  {hierarchy.projects.map((project) => (
-                    <option key={project.id} value={`project:${project.id}`}>{project.title}</option>
                   ))}
                 </optgroup>
               ) : null}
@@ -269,7 +260,7 @@ export function TaskKeyboardHelpDialog({
         ['Set Start to Someday', '⌃G', '⌥⇧G'],
         ['Toggle Done', '⌃X', '⌥⇧X'],
         ['Edit Checklist', '⌃C', '⌥⇧C'],
-        ['Choose Area or Project', '⌃V', '⌥⇧V'],
+        ['Choose Area', '⌃V', '⌥⇧V'],
         ['Edit Reminder Time', '⌃B', '⌥⇧B'],
       ],
     },
@@ -393,10 +384,10 @@ export function TaskMoveDialog({
           <p className="truncate text-sm font-medium text-foreground">{task.title}</p>
           <div className="border-y border-[hsl(var(--grid-sticky-line))]">
             <TaskCommandButton
-              label="No Area or Project"
-              current={!task.area_id && !task.project_id}
+              label="No Area"
+              current={!task.area_id}
               disabled={pending}
-              onClick={() => void move({ area_id: null, project_id: null })}
+              onClick={() => void move({ area_id: null })}
             />
           </div>
           {hierarchy.areas.length > 0 ? (
@@ -407,28 +398,8 @@ export function TaskMoveDialog({
                   label={area.title}
                   current={task.area_id === area.id}
                   disabled={pending}
-                  onClick={() => void move({
-                    area_id: area.id,
-                    project_id: null,
-                  })}
+                  onClick={() => void move({ area_id: area.id })}
                 />
-              ))}
-            </TaskCommandGroup>
-          ) : null}
-          {hierarchy.projects.length > 0 ? (
-            <TaskCommandGroup label="Projects">
-              {hierarchy.projects.map((project) => (
-                <div key={project.id}>
-                  <TaskCommandButton
-                    label={project.title}
-                    current={task.project_id === project.id}
-                    disabled={pending}
-                    onClick={() => void move({
-                      area_id: null,
-                      project_id: project.id,
-                    })}
-                  />
-                </div>
               ))}
             </TaskCommandGroup>
           ) : null}

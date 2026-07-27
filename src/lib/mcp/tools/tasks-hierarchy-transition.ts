@@ -10,13 +10,11 @@ import { uuidSchema } from '../resource-utils';
 
 type Tables = Database['public']['Tables'];
 type TaskAreaRow = Tables['tasks_areas']['Row'];
-type TaskProjectRow = Tables['tasks_projects']['Row'];
 type TaskChecklistItemRow = Tables['tasks_checklist_items']['Row'];
 type HierarchyOperationRow = Tables['tasks_hierarchy_operations']['Row'];
-type HierarchyRootType = 'area' | 'project' | 'checklist_item';
-type HierarchyRootRow = TaskAreaRow | TaskProjectRow | TaskChecklistItemRow;
-type HierarchyTransition = 'complete' | 'cancel' | 'reopen' | 'delete' | 'restore';
-type DescendantPolicy = 'reject' | 'cascade';
+type HierarchyRootType = 'area' | 'checklist_item';
+type HierarchyRootRow = TaskAreaRow | TaskChecklistItemRow;
+type HierarchyTransition = 'delete' | 'restore';
 
 export type TransitionTaskHierarchyRequest = {
   root_type: HierarchyRootType;
@@ -24,12 +22,11 @@ export type TransitionTaskHierarchyRequest = {
   expected_revision: number;
   client_mutation_id: string;
   transition: HierarchyTransition;
-  descendant_policy?: DescendantPolicy;
 };
 
 type NormalizedRequest = TransitionTaskHierarchyRequest & {
-  operation: 'complete_project' | 'cancel_project' | 'reopen_project' | 'delete' | 'restore';
-  policy: DescendantPolicy;
+  operation: 'delete' | 'restore';
+  policy: 'cascade';
 };
 
 function stripOwner<T extends { owner_id: string }>(row: T): Omit<T, 'owner_id'> {
@@ -45,28 +42,6 @@ function jsonObject(value: Json | null): Record<string, Json | undefined> {
 }
 
 function normalizeRequest(input: TransitionTaskHierarchyRequest): NormalizedRequest {
-  if (input.transition === 'complete' || input.transition === 'cancel') {
-    if (input.root_type !== 'project') {
-      throw new Error('Only projects can be completed or canceled through this hierarchy operation.');
-    }
-    return {
-      ...input,
-      operation: input.transition === 'complete' ? 'complete_project' : 'cancel_project',
-      policy: input.descendant_policy ?? 'reject',
-    };
-  }
-  if (input.transition === 'reopen') {
-    if (input.root_type !== 'project') {
-      throw new Error('Only projects can be reopened through this hierarchy operation.');
-    }
-    if (input.descendant_policy === 'cascade') {
-      throw new Error('Reopening a project does not cascade to descendants.');
-    }
-    return { ...input, operation: 'reopen_project', policy: 'reject' };
-  }
-  if (input.descendant_policy !== undefined) {
-    throw new Error('Deletion and restoration use the required atomic cascade automatically.');
-  }
   return { ...input, operation: input.transition, policy: 'cascade' };
 }
 
@@ -85,10 +60,6 @@ async function readRoot(
 ): Promise<HierarchyRootRow | null> {
   if (rootType === 'area') {
     return readOne<TaskAreaRow>(auth.supabase.from('tasks_areas').select('*')
-      .eq('owner_id', auth.userId).eq('id', rootId).maybeSingle());
-  }
-  if (rootType === 'project') {
-    return readOne<TaskProjectRow>(auth.supabase.from('tasks_projects').select('*')
       .eq('owner_id', auth.userId).eq('id', rootId).maybeSingle());
   }
   return readOne<TaskChecklistItemRow>(auth.supabase.from('tasks_checklist_items').select('*')
@@ -220,25 +191,7 @@ function mutationResult(
 
 function alreadyCurrent(request: NormalizedRequest, root: HierarchyRootRow): boolean {
   if (request.transition === 'delete') return root.disposition === 'deleted';
-  if (request.transition === 'restore') return root.disposition === 'present';
-  const project = root as TaskProjectRow;
-  return (request.transition === 'complete' && project.lifecycle === 'completed')
-    || (request.transition === 'cancel' && project.lifecycle === 'canceled')
-    || (request.transition === 'reopen' && project.lifecycle === 'open');
-}
-
-function assertLifecycleSource(request: NormalizedRequest, root: HierarchyRootRow): void {
-  if (request.transition === 'complete' || request.transition === 'cancel') {
-    if ((root as TaskProjectRow).lifecycle !== 'open') {
-      throw new Error('Reopen the project before completing or canceling it.');
-    }
-  }
-}
-
-function assertLifecycleRootPresent(request: NormalizedRequest, root: HierarchyRootRow): void {
-  if (request.operation.endsWith('_project') && root.disposition !== 'present') {
-    throw new Error('Restore the project before changing its lifecycle.');
-  }
+  return root.disposition === 'present';
 }
 
 async function callOperation(
@@ -284,7 +237,6 @@ export async function transitionTaskHierarchyData(
       current,
     );
   }
-  assertLifecycleRootPresent(request, current);
   if (alreadyCurrent(request, current)) {
     return mutationResult(
       'noop',
@@ -293,8 +245,6 @@ export async function transitionTaskHierarchyData(
       current,
     );
   }
-  assertLifecycleSource(request, current);
-
   const operation = await callOperation(request, auth);
   assertExactRetry(request, operation);
   const updated = await readRoot(auth, request.root_type, request.root_id);
@@ -314,14 +264,13 @@ export async function transitionTaskHierarchyData(
 export const transitionTaskHierarchy = defineTool({
   name: 'transition_task_hierarchy',
   title: 'Transition Task Hierarchy',
-  description: 'Complete, cancel, or reopen one project, or recoverably delete or restore one area, project, or checklist item with one atomic revision-checked hierarchy operation. Permanent deletion is not available.',
+  description: 'Recoverably delete or restore one area or checklist item with one atomic revision-checked hierarchy operation. Permanent deletion is not available.',
   inputSchema: {
-    root_type: z.enum(['area', 'project', 'checklist_item']),
+    root_type: z.enum(['area', 'checklist_item']),
     root_id: uuidSchema.describe('Stable hierarchy root identifier.'),
     expected_revision: z.number().int().positive().describe('Current root revision returned by a task hierarchy read.'),
     client_mutation_id: uuidSchema.describe('Stable UUID for this logical mutation. Reuse it only to retry the exact same request.'),
-    transition: z.enum(['complete', 'cancel', 'reopen', 'delete', 'restore']),
-    descendant_policy: z.enum(['reject', 'cascade']).optional().describe('Project completion or cancellation policy. Omit for the safe reject default; cascade must be explicit.'),
+    transition: z.enum(['delete', 'restore']),
   },
   annotations: {
     readOnlyHint: false,

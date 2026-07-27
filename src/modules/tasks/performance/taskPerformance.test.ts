@@ -20,10 +20,6 @@ describePerformance('Tasks large-library performance', () => {
       id: `area-${index}`,
       title: `Area ${index}`,
     })),
-    projects: Array.from({ length: 500 }, (_, index) => ({
-      id: `project-${index}`,
-      title: `Project ${index}`,
-    })),
   };
   const tasks = Array.from({ length: taskCount }, (_, index) => syntheticTask(index));
   const searchableTasks = tasks.filter(({ disposition }) => disposition === 'present');
@@ -87,7 +83,6 @@ function syntheticTask(index: number): TaskTodo {
   const destination = destinations[index % destinations.length];
   const lifecycle = index % 10 === 0 ? 'completed' : index % 17 === 0 ? 'canceled' : 'open';
   const deleted = index % 37 === 0;
-  const usesProject = index % 2 === 0;
   const taskId = `task-${String(index).padStart(5, '0')}`;
   const sourceKind = sourceKinds[index % sourceKinds.length];
   const startDate = destination === 'anytime'
@@ -97,8 +92,7 @@ function syntheticTask(index: number): TaskTodo {
   return taskTodoFixture({
     id: taskId,
     owner_id: ownerId,
-    area_id: usesProject ? null : `area-${index % 100}`,
-    project_id: usesProject ? `project-${index % 500}` : null,
+    area_id: index % 2 === 0 ? null : `area-${index % 100}`,
     title: index === 9_999 ? 'Needle Saturn 9999' : `Synthetic Task ${index}`,
     notes: `Performance notes for synthetic task ${index}`,
     lifecycle,

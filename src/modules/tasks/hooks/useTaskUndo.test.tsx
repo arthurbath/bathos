@@ -173,6 +173,48 @@ describe('useTaskUndo', () => {
     expect(branched.undo.at(-1)?.id).toBe('event-branch');
   });
 
+  it('treats same-operation task events as one atomic undo step', async () => {
+    const first = historyRow(0, {
+      task_id: 'task-a',
+      operation_id: 'operation-bulk',
+    });
+    const second = historyRow(1, {
+      task_id: 'task-b',
+      operation_id: 'operation-bulk',
+    });
+    const historyData = [second, first];
+    const taskData = [
+      taskTodoFixture({ id: 'task-a', title: 'Title 1' }),
+      taskTodoFixture({ id: 'task-b', title: 'Title 2' }),
+    ];
+    const repository = {
+      undoTask: vi.fn(),
+      redoTask: vi.fn(),
+      undoTaskOperation: vi.fn().mockResolvedValue(taskData),
+      redoTaskOperation: vi.fn().mockResolvedValue(taskData),
+    };
+    mocks.useQuery.mockImplementation((sql: string) => ({
+      data: sql.includes('tasks_history_events') ? historyData : taskData,
+      isLoading: false,
+      error: null,
+    }));
+    mocks.useTasksRuntime.mockReturnValue({ repository });
+    const { container, root } = renderHookHarness();
+    try {
+      expect(latest.undoDepth).toBe(1);
+      await act(async () => {
+        await latest.undo();
+      });
+      expect(repository.undoTaskOperation).toHaveBeenCalledWith(
+        'owner-a',
+        [first.id, second.id],
+      );
+      expect(repository.undoTask).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('does not expose history movement without a supported source event', async () => {
     mocks.useQuery.mockReturnValue({ data: [], isLoading: false, error: null });
     mocks.useTasksRuntime.mockReturnValue({

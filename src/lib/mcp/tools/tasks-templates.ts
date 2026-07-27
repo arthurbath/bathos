@@ -93,7 +93,7 @@ export async function instantiateTaskTemplateData(
 export const getTaskTemplates = defineTool({
   name: 'get_task_templates',
   title: 'Get Task Templates',
-  description: 'Read the signed-in user\'s native to-do and project templates with each current immutable revision and relative planning snapshot.',
+  description: 'Read the signed-in user\'s native task templates with each current immutable revision and relative planning snapshot.',
   inputSchema: {
     include_archived: z.boolean().default(false),
     limit: z.number().int().min(1).max(500).default(250),
@@ -105,7 +105,7 @@ export const getTaskTemplates = defineTool({
 export const instantiateTaskTemplate = defineTool({
   name: 'instantiate_task_template',
   title: 'Instantiate Task Template',
-  description: 'Atomically create a complete to-do or project hierarchy from one native template revision for an explicit calendar date.',
+  description: 'Atomically create a complete task and checklist hierarchy from one native template revision for an explicit calendar date.',
   inputSchema: {
     template_id: uuidSchema,
     template_revision: z.number().int().positive().optional()
@@ -113,7 +113,7 @@ export const instantiateTaskTemplate = defineTool({
     anchor_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
       .describe('Explicit reference date used to preserve relative Starts and Deadlines.'),
     target_area_id: uuidSchema.optional()
-      .describe('Optional accessible destination area for a project template.'),
+      .describe('Optional accessible destination Area for the instantiated task.'),
     idempotency_key: uuidSchema
       .describe('Stable UUID for this exact creation request. Reuse only for an exact retry.'),
   },

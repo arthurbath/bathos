@@ -64,7 +64,6 @@ export type MoveTaskRequest = MutationBase & {
   today_section?: TaskTodaySection | null;
   start_date?: string | null;
   area_id?: string | null;
-  project_id?: string | null;
 };
 
 export type ScheduleTaskRequest = MutationBase & {
@@ -104,7 +103,7 @@ const snapshotKeys = [
   'deleted_at', 'destination', 'today_section', 'order_key', 'start_date', 'deadline',
   'actionability',
   'source_kind', 'source_url', 'source_title', 'source_external_id', 'primary_link', 'area_id',
-  'project_id', 'hierarchy_order_key', 'deletion_root_id',
+  'hierarchy_order_key', 'deletion_root_id',
 ] as const;
 
 function trimRequired(value: string, label: string, maxLength: number): string {
@@ -375,30 +374,19 @@ async function nextPlanningOrderKey(
 async function validateContainer(
   auth: AuthenticatedMcpContext,
   areaId: string | null,
-  projectId: string | null,
 ): Promise<void> {
-  if (areaId !== null && projectId !== null) {
-    throw new Error('A task cannot belong directly to both an area and a project.');
-  }
-  const [area, project] = await Promise.all([
-    areaId === null ? null : readOne<{ id: string }>(auth.supabase
-      .from('tasks_areas').select('id').eq('owner_id', auth.userId).eq('id', areaId)
-      .eq('disposition', 'present').maybeSingle()),
-    projectId === null ? null : readOne<{ id: string }>(auth.supabase
-      .from('tasks_projects').select('id').eq('owner_id', auth.userId).eq('id', projectId)
-      .eq('disposition', 'present').eq('lifecycle', 'open').maybeSingle()),
-  ]);
+  const area = areaId === null ? null : await readOne<{ id: string }>(auth.supabase
+    .from('tasks_areas').select('id').eq('owner_id', auth.userId).eq('id', areaId)
+    .eq('disposition', 'present').maybeSingle());
   if (areaId !== null && area === null) throw new Error('The task area is unavailable.');
-  if (projectId !== null && project === null) throw new Error('The task project is unavailable.');
 }
 
 async function nextHierarchyOrderKey(
   auth: AuthenticatedMcpContext,
   taskId: string,
   areaId: string | null,
-  projectId: string | null,
 ): Promise<string | null> {
-  if (areaId === null && projectId === null) return null;
+  if (areaId === null) return null;
   let query = auth.supabase
     .from('tasks_todos')
     .select('hierarchy_order_key')
@@ -407,7 +395,6 @@ async function nextHierarchyOrderKey(
     .eq('disposition', 'present')
     .neq('id', taskId);
   query = areaId === null ? query.is('area_id', null) : query.eq('area_id', areaId);
-  query = projectId === null ? query.is('project_id', null) : query.eq('project_id', projectId);
   const last = await readOne<{ hierarchy_order_key: string | null }>(query
     .not('hierarchy_order_key', 'is', null)
     .order('hierarchy_order_key', { ascending: false })
@@ -442,12 +429,8 @@ async function movePatch(
   if (!planningRequested && (input.today_section !== undefined || input.start_date !== undefined)) {
     throw new Error('today_section and start_date require a destination.');
   }
-  const containerKeys = ['area_id', 'project_id'] as const;
-  const suppliedContainerKeys = containerKeys.filter((key) => hasOwn(input, key));
-  if (suppliedContainerKeys.length > 0 && suppliedContainerKeys.length !== containerKeys.length) {
-    throw new Error('Container moves require area_id and project_id together; use null to clear a value.');
-  }
-  if (!planningRequested && suppliedContainerKeys.length === 0) {
+  const containerRequested = hasOwn(input, 'area_id');
+  if (!planningRequested && !containerRequested) {
     throw new Error('Move either planning placement or the complete task container.');
   }
 
@@ -477,15 +460,13 @@ async function movePatch(
     }
   }
 
-  if (suppliedContainerKeys.length === containerKeys.length) {
+  if (containerRequested) {
     const areaId = input.area_id ?? null;
-    const projectId = input.project_id ?? null;
-    await validateContainer(auth, areaId, projectId);
+    await validateContainer(auth, areaId);
     patch.area_id = areaId;
-    patch.project_id = projectId;
-    if (areaId !== current.area_id || projectId !== current.project_id) {
+    if (areaId !== current.area_id) {
       patch.hierarchy_order_key = await nextHierarchyOrderKey(
-        auth, current.id, areaId, projectId,
+        auth, current.id, areaId,
       );
     }
   }
@@ -575,9 +556,8 @@ function expectedAfterForRetry(
         : expected.start_date === null ? input.today_section ?? null : null;
       ignored.add('order_key');
     }
-    if (hasOwn(input, 'area_id') && hasOwn(input, 'project_id')) {
+    if (hasOwn(input, 'area_id')) {
       expected.area_id = input.area_id ?? null;
-      expected.project_id = input.project_id ?? null;
       ignored.add('hierarchy_order_key');
     }
     return { expected, ignored, transition: 'move' };
@@ -956,14 +936,13 @@ export const updateTask = defineTool({
 export const moveTask = defineTool({
   name: 'move_task',
   title: 'Move Task',
-  description: 'Move one open to-do between planning placements, hierarchy containers, or both. Container changes require both container IDs, using null to clear.',
+  description: 'Move one open task between planning placements, Areas, or both. Use a null Area to remove organization.',
   inputSchema: {
     ...mutationBaseSchema,
     destination: destinationSchema.optional(),
     today_section: todaySectionSchema.nullable().optional(),
     start_date: calendarDateSchema.nullable().optional(),
     area_id: uuidSchema.nullable().optional(),
-    project_id: uuidSchema.nullable().optional(),
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
   handler: (input, ctx) => toMcpResult(moveTaskData(input, requireAuthenticated(ctx))),

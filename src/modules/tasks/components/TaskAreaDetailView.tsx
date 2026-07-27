@@ -53,9 +53,6 @@ export function TaskAreaDetailView({
     );
   }
 
-  const activeProjects = hierarchy.projects.filter((project) => (
-    project.area_id === areaId && project.lifecycle === 'open'
-  ));
   const configHref = `${basePath}/config`;
 
   return (
@@ -114,27 +111,6 @@ export function TaskAreaDetailView({
         })}
       </AreaWorkSection>
 
-      <AreaWorkSection
-        title="Projects"
-        icon={TASK_ICONS.Project}
-      >
-        {activeProjects.length === 0 ? (
-          <p className="px-4 py-5 text-sm text-muted-foreground">No active projects</p>
-        ) : activeProjects.map((project) => {
-          const href = `${basePath}/projects/${project.id}`;
-          return (
-            <a
-              key={project.id}
-              href={href}
-              onClick={(event) => handleClientSideLinkNavigation(event, navigate, href)}
-              className="flex min-h-14 items-center gap-2 px-3 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4"
-            >
-              <span className="min-w-0 flex-1 truncate">{project.title}</span>
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            </a>
-          );
-        })}
-      </AreaWorkSection>
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import {
-  CopyCheck,
   Layers3,
   ListChecks,
   ListTree,
@@ -28,14 +27,12 @@ import {
 describe('Tasks iconography', () => {
   it('uses the approved concept overrides', () => {
     expect(TASK_ICONS.Task).toBe(SquareCheckBig);
-    expect(TASK_ICONS.Project).toBe(CopyCheck);
     expect(TASK_ICONS.Area).toBe(Layers3);
     expect(TASK_ICONS.TaskChecklist).toBe(ListTree);
     expect(TASK_ICONS.Attachment).toBe(Paperclip);
     expect(TASK_ICONS.Someday).toBe(SquareDashed);
     expect(TASK_ICONS.Done).toBe(ListChecks);
     expect(TASK_ICONS.AddTask).toBe(SquarePlus);
-    expect(TASK_ICONS.AddProject).toBe(Layers3);
     expect(TASK_ICONS.AddArea).toBe(SquarePlus);
   });
 

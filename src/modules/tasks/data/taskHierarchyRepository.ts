@@ -5,15 +5,10 @@ import {
   InvalidTaskMutationError,
   type TaskMutationContext,
 } from '@/modules/tasks/data/taskRepository';
-import {
-  isTaskPlanningTimeZone,
-  taskCalendarDateInTimeZone,
-} from '@/modules/tasks/domain/taskDates';
 import type {
   TaskArea,
   TaskChecklistItem,
   TaskEntryChannel,
-  TaskProject,
 } from '@/modules/tasks/types/tasks';
 
 export type TaskHierarchyRepositoryDatabase = Pick<
@@ -36,32 +31,11 @@ type CreateHierarchyInput = {
 
 export type CreateTaskAreaInput = CreateHierarchyInput;
 
-export type CreateTaskProjectInput = CreateHierarchyInput & {
-  areaId?: string | null;
-  notes?: string;
-  planningOrderKey?: string;
-};
-
 export type CreateTaskChecklistItemInput = CreateHierarchyInput & {
   taskId: string;
 };
 
 export type TaskAreaPatch = Partial<Pick<TaskArea, 'title' | 'order_key'>>;
-
-export type TaskProjectPatch = Partial<
-  Pick<
-    TaskProject,
-    | 'area_id'
-    | 'title'
-    | 'notes'
-    | 'destination'
-    | 'today_section'
-    | 'order_key'
-    | 'planning_order_key'
-    | 'start_date'
-    | 'deadline'
-  >
->;
 
 export type TaskChecklistItemPatch = Partial<
   Pick<
@@ -113,52 +87,6 @@ export class TaskHierarchyRepository {
     });
   }
 
-  async createProject(input: CreateTaskProjectInput): Promise<TaskProject> {
-    return this.database.writeTransaction(async (transaction) => {
-      const areaId = input.areaId ?? null;
-      if (areaId !== null) {
-        await assertOwnedParent(transaction, 'tasks_areas', input.ownerId, areaId, 'area');
-      }
-      const metadata = this.createMetadata(input);
-      const project: TaskProject = {
-        ...metadata,
-        area_id: areaId,
-        title: normalizeTitle(input.title),
-        notes: input.notes ?? '',
-        lifecycle: 'open',
-        completed_at: null,
-        canceled_at: null,
-        disposition: 'present',
-        deleted_at: null,
-        deletion_root_id: null,
-        destination: 'anytime',
-        today_section: null,
-        order_key: input.orderKey ?? await nextOrderKey(
-          transaction,
-          'tasks_projects',
-          input.ownerId,
-          [['area_id', areaId]],
-        ),
-        planning_order_key: input.planningOrderKey ?? await nextPlanningOrderKey(
-          transaction,
-          input.ownerId,
-        ),
-        start_date: null,
-        deadline: null,
-        template_definition_id: null,
-        template_revision: null,
-        template_instantiation_id: null,
-        template_node_id: null,
-        recurrence_definition_id: null,
-        recurrence_revision: null,
-        recurrence_occurrence_id: null,
-        recurrence_logical_key: null,
-      };
-      await insertRow(transaction, 'tasks_projects', project);
-      return project;
-    });
-  }
-
   async createChecklistItem(
     input: CreateTaskChecklistItemInput,
   ): Promise<TaskChecklistItem> {
@@ -206,100 +134,6 @@ export class TaskHierarchyRepository {
     return this.updateRow<TaskArea>(
       'tasks_areas', 'area', ownerId, areaId, normalizePatch(patch), context,
     );
-  }
-
-  updateProject(
-    ownerId: string,
-    projectId: string,
-    patch: TaskProjectPatch,
-    context?: TaskMutationContext,
-  ): Promise<TaskProject> {
-    const normalized = normalizePatch(patch);
-    if (normalized.title !== undefined) normalized.title = normalizeTitle(normalized.title);
-    if (normalized.start_date) normalized.today_section = null;
-    else if (normalized.today_section) normalized.start_date = null;
-    return this.updateRow<TaskProject>(
-      'tasks_projects',
-      'project',
-      ownerId,
-      projectId,
-      normalized,
-      context,
-      async (next, transaction) => {
-        if (next.area_id !== null) {
-          await assertOwnedParent(
-            transaction,
-            'tasks_areas',
-            ownerId,
-            next.area_id,
-            'area',
-          );
-        }
-        assertProjectPlanning(next);
-        if (normalized.start_date !== undefined) {
-          await assertFutureProjectStartDate(
-            transaction,
-            ownerId,
-            normalized.start_date,
-            this.now(),
-          );
-        }
-      },
-    );
-  }
-
-  async activateDueProjectStartDates(
-    ownerId: string,
-    planningDate: string,
-  ): Promise<TaskProject[]> {
-    assertOwner(ownerId);
-    requireId(planningDate, 'A planning date is required for activation');
-    return this.database.writeTransaction(async (transaction) => {
-      const dueProjects = await transaction.getAll<TaskProject>(
-        `SELECT * FROM tasks_projects
-         WHERE owner_id = ?
-           AND destination = 'anytime'
-           AND lifecycle = 'open'
-           AND disposition = 'present'
-           AND start_date IS NOT NULL
-           AND start_date <= ?
-         ORDER BY start_date, planning_order_key, id`,
-        [ownerId, planningDate],
-      );
-      const updatedAt = this.now();
-      const activated: TaskProject[] = [];
-      for (const current of dueProjects) {
-        const next: TaskProject = {
-          ...current,
-          start_date: null,
-          today_section: 'next',
-          last_mutation_channel: 'native',
-          last_actor_type: 'system',
-          revision: current.revision + 1,
-          client_mutation_id: this.createId(),
-          updated_at: updatedAt,
-        };
-        await transaction.execute(
-          `UPDATE tasks_projects
-           SET start_date = ?, today_section = ?, last_mutation_channel = ?, last_actor_type = ?,
-             revision = ?, client_mutation_id = ?, updated_at = ?
-           WHERE id = ? AND owner_id = ?`,
-          [
-            next.start_date,
-            next.today_section,
-            next.last_mutation_channel,
-            next.last_actor_type,
-            next.revision,
-            next.client_mutation_id,
-            next.updated_at,
-            next.id,
-            ownerId,
-          ],
-        );
-        activated.push(next);
-      }
-      return activated;
-    });
   }
 
   updateChecklistItem(
@@ -402,10 +236,9 @@ export class TaskHierarchyRepository {
   }
 }
 
-type HierarchyRow = TaskArea | TaskProject | TaskChecklistItem;
+type HierarchyRow = TaskArea | TaskChecklistItem;
 type HierarchyTable =
   | 'tasks_areas'
-  | 'tasks_projects'
   | 'tasks_checklist_items';
 
 function normalizeStoredHierarchyRow<T extends HierarchyRow>(
@@ -419,7 +252,7 @@ function normalizeStoredHierarchyRow<T extends HierarchyRow>(
   } as T;
 }
 
-type HierarchyParentTable = 'tasks_areas' | 'tasks_projects' | 'tasks_todos';
+type HierarchyParentTable = 'tasks_areas' | 'tasks_todos';
 
 async function insertRow(
   transaction: Transaction,
@@ -469,20 +302,6 @@ async function nextOrderKey(
   return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 
-async function nextPlanningOrderKey(
-  transaction: Transaction,
-  ownerId: string,
-): Promise<string> {
-  const last = await transaction.getOptional<{ planning_order_key: string }>(
-    `SELECT planning_order_key FROM tasks_projects
-     WHERE owner_id = ? AND destination = 'anytime'
-       AND lifecycle = 'open' AND disposition = 'present'
-     ORDER BY planning_order_key DESC, id DESC LIMIT 1`,
-    [ownerId],
-  );
-  return generateTaskOrderKey(last?.planning_order_key ?? null, null);
-}
-
 function normalizePatch<T extends object>(patch: T): T {
   const normalized = Object.fromEntries(
     Object.entries(patch).filter(([, value]) => value !== undefined),
@@ -510,47 +329,6 @@ function requireId(value: string, message: string): void {
   if (!value.trim()) throw new InvalidTaskMutationError(message);
 }
 
-function assertProjectPlanning(patch: TaskProjectPatch): void {
-  if (patch.destination === 'someday' && patch.today_section !== undefined
-    && patch.today_section !== null) {
-    throw new InvalidTaskMutationError('Someday projects cannot appear in Today');
-  }
-  if (
-    patch.destination === 'someday'
-    && patch.start_date !== undefined
-    && patch.start_date !== null
-  ) {
-    throw new InvalidTaskMutationError("Someday projects cannot have a Start");
-  }
-  if (patch.start_date != null && patch.today_section != null) {
-    throw new InvalidTaskMutationError('A future Start cannot retain a Today horizon');
-  }
-}
-
-async function assertFutureProjectStartDate(
-  transaction: Transaction,
-  ownerId: string,
-  startDate: string | null,
-  now: string,
-): Promise<void> {
-  if (startDate === null) return;
-  const [settings] = await transaction.getAll<{ planning_timezone: string }>(
-    `SELECT planning_timezone
-     FROM tasks_user_settings
-     WHERE owner_id = ?
-     LIMIT 1`,
-    [ownerId],
-  );
-  const planningTimeZone = settings?.planning_timezone
-    && isTaskPlanningTimeZone(settings.planning_timezone)
-    ? settings.planning_timezone
-    : 'UTC';
-  const planningDate = taskCalendarDateInTimeZone(planningTimeZone, new Date(now));
-  if (startDate <= planningDate) {
-    throw new InvalidTaskMutationError("Start must be after Today");
-  }
-}
-
 function assertChecklistCompletion(patch: TaskChecklistItemPatch): void {
   const isCompleted = patch.completed === true && patch.completed_at != null;
   const isOpen = patch.completed === false && patch.completed_at == null;
@@ -567,6 +345,7 @@ function normalizeContext(
   return {
     channel: context?.channel ?? 'web',
     actorType: context?.actorType ?? 'user',
+    operationId: context?.operationId ?? '',
   };
 }
 

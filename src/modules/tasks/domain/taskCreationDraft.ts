@@ -54,7 +54,6 @@ export function createTaskCreationDraft(
       id: NEW_TASK_DRAFT_ID,
       owner_id: ownerId,
       area_id: areaId,
-      project_id: null,
       title: '',
       notes: '',
       lifecycle: 'open',
@@ -87,6 +86,7 @@ export function createTaskCreationDraft(
       entry_channel: 'web',
       last_mutation_channel: 'web',
       last_actor_type: 'user',
+      last_operation_id: null,
       revision: 0,
       client_mutation_id: 'draft',
       created_at: timestamp,
@@ -139,7 +139,6 @@ export function getTaskCreationInput(draft: TaskCreationDraft): TaskCreationInpu
     primaryLink: task.primary_link,
     actionability: task.actionability,
     areaId: task.area_id,
-    projectId: task.project_id,
     atTop: true,
   };
 }

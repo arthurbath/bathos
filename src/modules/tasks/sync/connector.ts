@@ -13,14 +13,12 @@ const supportedUploadTables = new Set([
   'tasks_todos',
   'tasks_user_settings',
   'tasks_areas',
-  'tasks_projects',
   'tasks_checklist_items',
   'tasks_hierarchy_operations',
 ]);
 
 type HierarchyTable =
   | 'tasks_areas'
-  | 'tasks_projects'
   | 'tasks_checklist_items';
 
 type TaskInsert = TablesInsert<'tasks_todos'>;
@@ -29,8 +27,6 @@ type TaskSettingsInsert = TablesInsert<'tasks_user_settings'>;
 type TaskSettingsUpdate = TablesUpdate<'tasks_user_settings'>;
 type TaskAreaInsert = TablesInsert<'tasks_areas'>;
 type TaskAreaUpdate = TablesUpdate<'tasks_areas'>;
-type TaskProjectInsert = TablesInsert<'tasks_projects'>;
-type TaskProjectUpdate = TablesUpdate<'tasks_projects'>;
 type TaskChecklistItemInsert = TablesInsert<'tasks_checklist_items'>;
 type TaskChecklistItemUpdate = TablesUpdate<'tasks_checklist_items'>;
 type TaskHierarchyOperationInsert = TablesInsert<'tasks_hierarchy_operations'>;
@@ -55,8 +51,6 @@ export interface TasksRemoteStore {
   ): Promise<TasksRemoteWriteOutcome>;
   insertArea(area: TaskAreaInsert): Promise<TasksRemoteWriteOutcome>;
   updateArea(id: string, baseRevision: number, patch: TaskAreaUpdate): Promise<TasksRemoteWriteOutcome>;
-  insertProject(project: TaskProjectInsert): Promise<TasksRemoteWriteOutcome>;
-  updateProject(id: string, baseRevision: number, patch: TaskProjectUpdate): Promise<TasksRemoteWriteOutcome>;
   insertChecklistItem(item: TaskChecklistItemInsert): Promise<TasksRemoteWriteOutcome>;
   updateChecklistItem(
     id: string,
@@ -174,14 +168,6 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
           parseAreaUpdate,
           this.options.remoteStore.insertArea.bind(this.options.remoteStore),
           this.options.remoteStore.updateArea.bind(this.options.remoteStore),
-        );
-      } else if (entry.table === 'tasks_projects') {
-        outcome = await uploadHierarchyEntry(
-          entry,
-          parseProjectInsert,
-          parseProjectUpdate,
-          this.options.remoteStore.insertProject.bind(this.options.remoteStore),
-          this.options.remoteStore.updateProject.bind(this.options.remoteStore),
         );
       } else if (entry.table === 'tasks_checklist_items') {
         outcome = await uploadHierarchyEntry(
@@ -359,18 +345,6 @@ export class TasksSupabaseRemoteStore implements TasksRemoteStore {
     return this.updateHierarchy('tasks_areas', id, baseRevision, patch);
   }
 
-  insertProject(project: TaskProjectInsert): Promise<TasksRemoteWriteOutcome> {
-    return this.insertHierarchy('tasks_projects', project);
-  }
-
-  updateProject(
-    id: string,
-    baseRevision: number,
-    patch: TaskProjectUpdate,
-  ): Promise<TasksRemoteWriteOutcome> {
-    return this.updateHierarchy('tasks_projects', id, baseRevision, patch);
-  }
-
   insertChecklistItem(item: TaskChecklistItemInsert): Promise<TasksRemoteWriteOutcome> {
     return this.insertHierarchy('tasks_checklist_items', item);
   }
@@ -530,7 +504,6 @@ function parseTaskInsert(entry: CrudEntry): TaskInsert {
     owner_id: requireText(data.owner_id, 'owner_id'),
     actionability: parseTaskActionability(data.actionability),
     area_id: optionalText(data.area_id),
-    project_id: optionalText(data.project_id),
     title: requireText(data.title, 'title'),
     notes: optionalText(data.notes) ?? '',
     lifecycle: optionalText(data.lifecycle) ?? 'open',
@@ -577,7 +550,6 @@ function parseTaskUpdate(entry: CrudEntry): TaskUpdate {
     'today_section',
     'order_key',
     'area_id',
-    'project_id',
     'hierarchy_order_key',
     'start_date',
     'deadline',
@@ -681,10 +653,6 @@ function parseAreaInsert(entry: CrudEntry): TaskAreaInsert {
   return parseHierarchyInsert(entry, ['title', 'order_key']) as TaskAreaInsert;
 }
 
-function parseProjectInsert(entry: CrudEntry): TaskProjectInsert {
-  return parseHierarchyInsert(entry, ['title', 'order_key', 'planning_order_key']) as TaskProjectInsert;
-}
-
 function parseChecklistItemInsert(entry: CrudEntry): TaskChecklistItemInsert {
   const parsed = parseHierarchyInsert(entry, ['task_id', 'title', 'order_key']);
   return {
@@ -695,10 +663,6 @@ function parseChecklistItemInsert(entry: CrudEntry): TaskChecklistItemInsert {
 
 function parseAreaUpdate(entry: CrudEntry): TaskAreaUpdate {
   return parseHierarchyUpdate(entry, hierarchyMutableColumns.area) as TaskAreaUpdate;
-}
-
-function parseProjectUpdate(entry: CrudEntry): TaskProjectUpdate {
-  return parseHierarchyUpdate(entry, hierarchyMutableColumns.project) as TaskProjectUpdate;
 }
 
 function parseChecklistItemUpdate(entry: CrudEntry): TaskChecklistItemUpdate {
@@ -729,11 +693,6 @@ function parseHierarchyOperationInsert(entry: CrudEntry): TaskHierarchyOperation
 
 const hierarchyMutableColumns = {
   area: ['title', 'order_key', 'disposition', 'deleted_at', 'deletion_root_id'],
-  project: [
-    'area_id', 'title', 'notes', 'lifecycle', 'completed_at', 'canceled_at',
-    'disposition', 'deleted_at', 'deletion_root_id', 'destination', 'today_section', 'order_key',
-    'planning_order_key', 'start_date', 'deadline',
-  ],
   checklist: [
     'title', 'completed', 'completed_at', 'order_key', 'disposition', 'deleted_at',
     'deletion_root_id',

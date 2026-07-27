@@ -16,7 +16,6 @@ const areaPersonal = taskAreaFixture({ id: 'area-personal', title: 'Personal', o
 function hierarchy(): TaskHierarchyModel {
   return {
     areas: [areaWork, areaPersonal],
-    projects: [],
     loading: false,
     error: null,
     createArea: vi.fn().mockResolvedValue(undefined),
@@ -86,7 +85,7 @@ describe('TaskAreaSettings', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Delete Work' }));
       expect(screen.getByRole('alertdialog', { name: 'Delete Area' })).toBeTruthy();
       expect(screen.getByText(
-        'Work, its projects, tasks, and checklist items will move to Done together.',
+        'Work, its tasks, and checklist items will move to Done together.',
       )).toBeTruthy();
       expect(model.deleteHierarchy).not.toHaveBeenCalled();
 

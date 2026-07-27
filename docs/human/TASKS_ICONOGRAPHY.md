@@ -9,7 +9,6 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 | Registry Concept | Lucide Icon | Product Meaning |
 |---|---|---|
 | Task | `SquareCheckBig` | A task and the Tasks module launcher |
-| Project | `CopyCheck` | A Tasks project and the Projects destination |
 | Area | `Layers3` | An area and the Areas section in Config; this is the three-layer Stack glyph |
 | TaskChecklist | `ListTree` | A task's checklist |
 | Attachment | `Paperclip` | A task attachment |
@@ -23,7 +22,7 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 | Anytime | `ListTodo` | The Anytime view |
 | Someday | `SquareDashed` | The Someday planning state and view |
 | Done | `ListChecks` | The Done view |
-| Templates | `LayoutTemplate` | Task and project templates |
+| Templates | `LayoutTemplate` | Task templates |
 | Config | `Settings` | Tasks configuration |
 | Inbox | `Inbox` | Today's Inbox horizon |
 | Now | `Clock2` | Today's Now horizon |
@@ -41,14 +40,13 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 | Ready | `CircleCheckBig` | Ready actionability |
 | Waiting | `Hourglass` | Waiting actionability |
 | Rechecking | `RotateCcw` | Rechecking actionability |
-| Canceled | `CircleSlash2` | A canceled task or project |
+| Canceled | `CircleSlash2` | A canceled task |
 
 ## Creation and Task Actions
 
 | Registry Concept | Lucide Icon | Product Meaning |
 |---|---|---|
 | AddTask | `SquarePlus` | Add a task |
-| AddProject | `Layers3` | Add a project; this uses the Stack glyph |
 | AddArea | `SquarePlus` | Add an area |
 | Search | `Search` | Search Tasks and views |
 | QuickFilters | `Filter` | Apply a predefined quick filter |

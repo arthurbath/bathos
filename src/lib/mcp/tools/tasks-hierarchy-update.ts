@@ -10,12 +10,11 @@ import { uuidSchema } from '../resource-utils';
 
 type Tables = Database['public']['Tables'];
 type TaskAreaRow = Tables['tasks_areas']['Row'];
-type TaskProjectRow = Tables['tasks_projects']['Row'];
 type TaskChecklistItemRow = Tables['tasks_checklist_items']['Row'];
 type TaskHierarchyHistoryRow = Tables['tasks_hierarchy_history_events']['Row'];
-type HierarchyRecordType = 'area' | 'project' | 'checklist_item';
-type HierarchyRow = TaskAreaRow | TaskProjectRow | TaskChecklistItemRow;
-type MutableKey = 'title' | 'notes' | 'completed' | 'completed_at';
+type HierarchyRecordType = 'area' | 'checklist_item';
+type HierarchyRow = TaskAreaRow | TaskChecklistItemRow;
+type MutableKey = 'title' | 'completed' | 'completed_at';
 type NormalizedPatch = Partial<Record<MutableKey, Json>>;
 
 type MutationBase = {
@@ -26,12 +25,6 @@ type MutationBase = {
 export type UpdateTaskAreaRequest = MutationBase & {
   area_id: string;
   title: string;
-};
-
-export type UpdateTaskProjectRequest = MutationBase & {
-  project_id: string;
-  title?: string;
-  notes?: string;
 };
 
 export type UpdateTaskChecklistItemRequest = MutationBase & {
@@ -81,10 +74,6 @@ async function readHierarchyRecord(
 ): Promise<HierarchyRow | null> {
   if (recordType === 'area') {
     return readOne<TaskAreaRow>(auth.supabase.from('tasks_areas')
-      .select('*').eq('owner_id', auth.userId).eq('id', id).maybeSingle());
-  }
-  if (recordType === 'project') {
-    return readOne<TaskProjectRow>(auth.supabase.from('tasks_projects')
       .select('*').eq('owner_id', auth.userId).eq('id', id).maybeSingle());
   }
   return readOne<TaskChecklistItemRow>(auth.supabase.from('tasks_checklist_items')
@@ -217,9 +206,6 @@ function assertMutable(record: HierarchyRow): void {
   if (record.disposition !== 'present') {
     throw new Error('Restore the hierarchy record before editing it.');
   }
-  if ('lifecycle' in record && record.lifecycle !== 'open') {
-    throw new Error('Reopen the project before editing it.');
-  }
 }
 
 async function assertParentMutable(
@@ -251,7 +237,6 @@ function changedPatch(record: HierarchyRow, patch: NormalizedPatch): NormalizedP
 
 function tableFor(recordType: HierarchyRecordType) {
   if (recordType === 'area') return 'tasks_areas' as const;
-  if (recordType === 'project') return 'tasks_projects' as const;
   return 'tasks_checklist_items' as const;
 }
 
@@ -336,25 +321,6 @@ export function updateTaskAreaData(
   }, auth);
 }
 
-export function updateTaskProjectData(
-  input: UpdateTaskProjectRequest,
-  auth: AuthenticatedMcpContext,
-) {
-  if (input.title === undefined && input.notes === undefined) {
-    throw new Error('Update at least one of title or notes.');
-  }
-  return runMutation({
-    ...input,
-    recordType: 'project',
-    recordId: input.project_id,
-    patch: {
-      ...(input.title === undefined ? {} : { title: trimTitle(input.title) }),
-      ...(input.notes === undefined ? {} : { notes: input.notes }),
-    },
-    mutableKeys: ['title', 'notes'],
-  }, auth);
-}
-
 export function updateTaskChecklistItemData(
   input: UpdateTaskChecklistItemRequest,
   auth: AuthenticatedMcpContext,
@@ -395,20 +361,6 @@ export const updateTaskArea = defineTool({
   inputSchema: { ...mutationInput, area_id: uuidSchema, title: z.string().min(1).max(500) },
   annotations: mutationAnnotations,
   handler: (input, ctx) => toMcpResult(updateTaskAreaData(input, requireAuthenticated(ctx))),
-});
-
-export const updateTaskProject = defineTool({
-  name: 'update_task_project',
-  title: 'Update Task Project',
-  description: 'Edit supported content on one owner-scoped open project through an optimistic revision boundary.',
-  inputSchema: {
-    ...mutationInput,
-    project_id: uuidSchema,
-    title: z.string().min(1).max(500).optional(),
-    notes: z.string().max(100_000).optional(),
-  },
-  annotations: mutationAnnotations,
-  handler: (input, ctx) => toMcpResult(updateTaskProjectData(input, requireAuthenticated(ctx))),
 });
 
 export const updateTaskChecklistItem = defineTool({

@@ -122,7 +122,6 @@ describe('TaskTemplateService', () => {
         result: {
           root_type: 'todo',
           root_id: '80000000-0000-4000-8000-000000000001',
-          project_id: null,
           task_ids: ['80000000-0000-4000-8000-000000000001'],
           checklist_item_ids: [],
         },

@@ -1,33 +1,13 @@
 import { useQuery } from '@powersync/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type {
-  TaskAreaPatch,
-  TaskProjectPatch,
-} from '@/modules/tasks/data/taskHierarchyRepository';
+import type { TaskAreaPatch } from '@/modules/tasks/data/taskHierarchyRepository';
 import {
   compareTaskOrder,
   generateTaskMoveOrderKey,
-  generateTaskOrderKey,
 } from '@/modules/tasks/domain/taskOrder';
-import {
-  deriveTaskViewProjects,
-  projectPlanningOrderSection,
-} from '@/modules/tasks/domain/taskProjectViews';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
-import type {
-  TaskArea,
-  TaskDestination,
-  TaskProject,
-  TaskTodaySection,
-} from '@/modules/tasks/types/tasks';
-import type { TaskListView } from '@/modules/tasks/hooks/useTaskList';
-
-export type TaskProjectPlanningMoveInput = {
-  destination: TaskDestination;
-  todaySection: TaskTodaySection | null;
-  startDate: string | null;
-};
+import type { TaskArea } from '@/modules/tasks/types/tasks';
 
 export function useTaskHierarchy(ownerId: string) {
   const { hierarchyOperationsRepository, hierarchyRepository } = useTasksRuntime();
@@ -37,31 +17,15 @@ export function useTaskHierarchy(ownerId: string) {
      ORDER BY order_key, id`,
     [ownerId],
   );
-  const projectsQuery = useQuery<TaskProject>(
-    `SELECT * FROM tasks_projects
-     WHERE owner_id = ? AND disposition = 'present'
-     ORDER BY area_id, order_key, id`,
-    [ownerId],
-  );
   const [optimisticAreas, setOptimisticAreas] = useState<Record<string, TaskArea | null>>({});
-  const [optimisticProjects, setOptimisticProjects] = useState<
-    Record<string, TaskProject | null>
-  >({});
 
   useEffect(() => {
     setOptimisticAreas((current) => clearCaughtUpRows(current, areasQuery.data));
   }, [areasQuery.data]);
-  useEffect(() => {
-    setOptimisticProjects((current) => clearCaughtUpRows(current, projectsQuery.data));
-  }, [projectsQuery.data]);
 
   const areas = useMemo(
     () => mergeRows(areasQuery.data, optimisticAreas).sort(compareHierarchyRows),
     [areasQuery.data, optimisticAreas],
-  );
-  const projects = useMemo(
-    () => mergeRows(projectsQuery.data, optimisticProjects).sort(compareHierarchyRows),
-    [optimisticProjects, projectsQuery.data],
   );
 
   const createArea = useCallback(async (title: string) => {
@@ -69,13 +33,6 @@ export function useTaskHierarchy(ownerId: string) {
     setOptimisticAreas((current) => ({ ...current, [area.id]: area }));
     return area;
   }, [hierarchyRepository, ownerId]);
-
-  const createProject = useCallback(async (title: string, areaId: string | null = null) => {
-    const project = await hierarchyRepository.createProject({ ownerId, title, areaId });
-    setOptimisticProjects((current) => ({ ...current, [project.id]: project }));
-    return project;
-  }, [hierarchyRepository, ownerId]);
-
 
   const updateArea = useCallback(async (areaId: string, patch: TaskAreaPatch) => {
     const area = await hierarchyRepository.updateArea(ownerId, areaId, patch);
@@ -86,110 +43,13 @@ export function useTaskHierarchy(ownerId: string) {
     return area;
   }, [hierarchyRepository, ownerId]);
 
-  const updateProject = useCallback(async (projectId: string, patch: TaskProjectPatch) => {
-    const project = await hierarchyRepository.updateProject(ownerId, projectId, patch);
-    setOptimisticProjects((current) => ({
-      ...current,
-      [projectId]: project.disposition === 'present' ? project : null,
-    }));
-    return project;
-  }, [hierarchyRepository, ownerId]);
-
-
   const reorderArea = useCallback(async (areaId: string, direction: 'up' | 'down') => {
     const orderKey = moveOrderKey(areas, areaId, direction);
     return orderKey === null ? undefined : updateArea(areaId, { order_key: orderKey });
   }, [areas, updateArea]);
 
-  const reorderProject = useCallback(async (projectId: string, direction: 'up' | 'down') => {
-    const project = projects.find(({ id }) => id === projectId);
-    if (!project) return undefined;
-    const peers = projects.filter(({ area_id }) => area_id === project.area_id);
-    const orderKey = moveOrderKey(peers, projectId, direction);
-    return orderKey === null ? undefined : updateProject(projectId, { order_key: orderKey });
-  }, [projects, updateProject]);
-
-  const moveProjectToArea = useCallback(async (
-    projectId: string,
-    areaId: string | null,
-  ) => {
-    const peers = projects.filter((project) => (
-      project.id !== projectId && project.area_id === areaId
-    ));
-    const tail = peers.at(-1)?.order_key ?? null;
-    return updateProject(projectId, {
-      area_id: areaId,
-      order_key: generateTaskOrderKey(tail, null),
-    });
-  }, [projects, updateProject]);
-
-  const moveProjectInPlanning = useCallback(async (
-    projectId: string,
-    input: TaskProjectPlanningMoveInput,
-  ) => {
-    const peers = projects
-      .filter((project) => (
-        project.id !== projectId
-        && project.lifecycle === 'open'
-        && project.disposition === 'present'
-        && project.destination === input.destination
-        && project.today_section === input.todaySection
-      ))
-      .sort((left, right) => compareTaskOrder(
-        { id: left.id, orderKey: left.planning_order_key },
-        { id: right.id, orderKey: right.planning_order_key },
-      ));
-    return updateProject(projectId, {
-      destination: input.destination,
-      today_section: input.todaySection,
-      start_date: input.startDate,
-      planning_order_key: generateTaskOrderKey(
-        peers.at(-1)?.planning_order_key ?? null,
-        null,
-      ),
-    });
-  }, [projects, updateProject]);
-
-  const reorderProjectInPlanning = useCallback(async (
-    projectId: string,
-    direction: 'up' | 'down',
-    view: TaskListView,
-    planningDate: string,
-  ) => {
-    const visible = deriveTaskViewProjects(projects, ownerId, view, planningDate);
-    const current = visible.find((project) => project.id === projectId);
-    if (!current) return undefined;
-    const section = projectPlanningOrderSection(current, view, planningDate);
-    const peers = visible.filter((project) => (
-      projectPlanningOrderSection(project, view, planningDate) === section
-    ));
-    const currentIndex = peers.findIndex((project) => project.id === projectId);
-    const destinationIndex = currentIndex + (direction === 'up' ? -1 : 1);
-    if (currentIndex < 0 || destinationIndex < 0 || destinationIndex >= peers.length) {
-      return current;
-    }
-    const planningOrderKey = generateTaskMoveOrderKey(
-      peers.map((project) => ({ id: project.id, orderKey: project.planning_order_key })),
-      projectId,
-      destinationIndex,
-    );
-    return updateProject(projectId, { planning_order_key: planningOrderKey });
-  }, [ownerId, projects, updateProject]);
-
-  const transitionProject = useCallback(async (
-    projectId: string,
-    operation: 'complete_project' | 'cancel_project' | 'reopen_project',
-    cascade = false,
-  ) => hierarchyOperationsRepository.request({
-    ownerId,
-    rootType: 'project',
-    rootId: projectId,
-    operation,
-    descendantPolicy: cascade ? 'cascade' : 'reject',
-  }), [hierarchyOperationsRepository, ownerId]);
-
   const deleteHierarchy = useCallback(async (
-    rootType: 'area' | 'project',
+    rootType: 'area',
     rootId: string,
   ) => {
     const result = await hierarchyOperationsRepository.request({
@@ -199,29 +59,17 @@ export function useTaskHierarchy(ownerId: string) {
       operation: 'delete',
       descendantPolicy: 'cascade',
     });
-    if (rootType === 'area') {
-      setOptimisticAreas((current) => ({ ...current, [rootId]: null }));
-    } else if (rootType === 'project') {
-      setOptimisticProjects((current) => ({ ...current, [rootId]: null }));
-    }
+    setOptimisticAreas((current) => ({ ...current, [rootId]: null }));
     return result;
   }, [hierarchyOperationsRepository, ownerId]);
 
   return {
     areas,
-    projects,
-    loading: areasQuery.isLoading || projectsQuery.isLoading,
-    error: areasQuery.error ?? projectsQuery.error,
+    loading: areasQuery.isLoading,
+    error: areasQuery.error,
     createArea,
-    createProject,
     updateArea,
-    updateProject,
     reorderArea,
-    reorderProject,
-    moveProjectToArea,
-    moveProjectInPlanning,
-    reorderProjectInPlanning,
-    transitionProject,
     deleteHierarchy,
   };
 }

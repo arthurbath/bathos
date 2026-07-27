@@ -63,7 +63,6 @@ export type TaskClipboardSnapshot = {
   deadline: string | null;
   actionability: TaskActionability;
   areaId: string | null;
-  projectId: string | null;
   checklist: TaskClipboardChecklistItem[];
   reminder: TaskClipboardReminder | null;
   recurrence: TaskClipboardRecurrence | null;
@@ -80,15 +79,13 @@ export type TaskClipboardDestination =
   | { kind: 'today' }
   | { kind: 'anytime' }
   | { kind: 'someday' }
-  | { kind: 'area'; areaId: string }
-  | { kind: 'project'; areaId: string | null; projectId: string };
+  | { kind: 'area'; areaId: string };
 
 export type TaskClipboardCreatePlan = TaskClipboardSnapshot & {
   destination: TaskDestination;
   todaySection: TaskTodaySection | null;
   startDate: string | null;
   areaId: string | null;
-  projectId: string | null;
 };
 
 export type ParsedTaskClipboard =
@@ -171,11 +168,9 @@ export function planTaskClipboardPaste(
   destination: TaskClipboardDestination,
   options: { now?: Date; planningTimeZone: string },
 ): TaskClipboardCreatePlan {
-  const organization = destination.kind === 'project'
-    ? { areaId: null, projectId: destination.projectId }
-    : destination.kind === 'area'
-      ? { areaId: destination.areaId, projectId: null }
-      : { areaId: snapshot.areaId, projectId: snapshot.projectId };
+  const organization = destination.kind === 'area'
+    ? { areaId: destination.areaId }
+    : { areaId: snapshot.areaId };
   const planning = destination.kind === 'today'
     ? { destination: 'anytime' as const, todaySection: 'inbox' as const, startDate: null }
     : destination.kind === 'someday'
@@ -201,7 +196,7 @@ export function planTaskClipboardPaste(
         : null;
   const recurrence = snapshot.recurrence === null
     ? null
-    : destination.kind === 'project' || destination.kind === 'area'
+    : destination.kind === 'area'
       ? {
         ...snapshot.recurrence,
         targetAreaId: destination.areaId,
@@ -236,7 +231,6 @@ function parseSnapshot(value: unknown): TaskClipboardSnapshot {
     'Task actionability',
   );
   const areaId = requireNullableId(row.areaId, 'Task area');
-  const projectId = requireNullableId(row.projectId, 'Task project');
   if (!Array.isArray(row.checklist) || row.checklist.length > 500) {
     throw new Error('Task checklist is invalid');
   }
@@ -261,7 +255,6 @@ function parseSnapshot(value: unknown): TaskClipboardSnapshot {
     deadline,
     actionability,
     areaId,
-    projectId,
     checklist,
     reminder: row.reminder === null ? null : parseReminder(row.reminder),
     recurrence: row.recurrence === null ? null : parseRecurrence(row.recurrence),

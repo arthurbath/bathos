@@ -5,7 +5,6 @@ const taskTodos = new Table(
     owner_id: column.text,
     actionability: column.text,
     area_id: column.text,
-    project_id: column.text,
     title: column.text,
     notes: column.text,
     lifecycle: column.text,
@@ -24,6 +23,7 @@ const taskTodos = new Table(
     entry_channel: column.text,
     last_mutation_channel: column.text,
     last_actor_type: column.text,
+    last_operation_id: column.text,
     undo_source_event_id: column.text,
     source_kind: column.text,
     source_url: column.text,
@@ -66,7 +66,6 @@ const taskTodos = new Table(
       ownerContainerOrder: [
         'owner_id',
         'area_id',
-        'project_id',
         'disposition',
         'hierarchy_order_key',
       ],
@@ -91,55 +90,6 @@ const taskAreas = new Table(
     updated_at: column.text,
   },
   { indexes: { ownerOrder: ['owner_id', 'disposition', 'order_key'] } },
-);
-
-const taskProjects = new Table(
-  {
-    owner_id: column.text,
-    area_id: column.text,
-    title: column.text,
-    notes: column.text,
-    lifecycle: column.text,
-    completed_at: column.text,
-    canceled_at: column.text,
-    disposition: column.text,
-    deleted_at: column.text,
-    deletion_root_id: column.text,
-    destination: column.text,
-    today_section: column.text,
-    order_key: column.text,
-    planning_order_key: column.text,
-    start_date: column.text,
-    deadline: column.text,
-    template_definition_id: column.text,
-    template_revision: column.integer,
-    template_instantiation_id: column.text,
-    template_node_id: column.text,
-    recurrence_definition_id: column.text,
-    recurrence_revision: column.integer,
-    recurrence_occurrence_id: column.text,
-    recurrence_logical_key: column.text,
-    entry_channel: column.text,
-    last_mutation_channel: column.text,
-    last_actor_type: column.text,
-    revision: column.integer,
-    client_mutation_id: column.text,
-    created_at: column.text,
-    updated_at: column.text,
-  },
-  {
-    indexes: {
-      ownerAreaOrder: ['owner_id', 'area_id', 'disposition', 'order_key'],
-      ownerPlanningOrder: [
-        'owner_id',
-        'destination',
-        'today_section',
-        'disposition',
-        'lifecycle',
-        'planning_order_key',
-      ],
-    },
-  },
 );
 
 const taskChecklistItems = new Table(
@@ -173,6 +123,7 @@ const taskHistoryEvents = new Table(
     owner_id: column.text,
     task_id: column.text,
     client_mutation_id: column.text,
+    operation_id: column.text,
     actor_type: column.text,
     mutation_channel: column.text,
     affected_ids: column.text,
@@ -433,7 +384,6 @@ const taskReminders = new Table(
     owner_id: column.text,
     root_type: column.text,
     task_id: column.text,
-    project_id: column.text,
     local_date: column.text,
     local_time: column.text,
     time_zone: column.text,
@@ -450,7 +400,7 @@ const taskReminders = new Table(
   },
   {
     indexes: {
-      ownerRoot: ['owner_id', 'root_type', 'task_id', 'project_id', 'status'],
+      ownerRoot: ['owner_id', 'root_type', 'task_id', 'status'],
       ownerResolved: ['owner_id', 'status', 'resolved_at'],
     },
   },
@@ -561,7 +511,6 @@ const taskOwnerBinding = new Table(
 
 export const tasksPowerSyncSchema = new Schema({
   tasks_areas: taskAreas,
-  tasks_projects: taskProjects,
   tasks_todos: taskTodos,
   tasks_checklist_items: taskChecklistItems,
   tasks_history_events: taskHistoryEvents,

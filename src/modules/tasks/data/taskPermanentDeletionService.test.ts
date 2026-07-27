@@ -8,9 +8,9 @@ import {
 } from './taskPermanentDeletionService';
 
 const preview: TaskPermanentDeletionPreview = {
-  root: { type: 'project', id: 'project-a', title: 'Retired Project' },
+  root: { type: 'todo', id: 'todo-a', title: 'Retired Task' },
   hierarchy: {
-    projects: ['project-a'], todos: ['todo-a'],
+    todos: ['todo-a'],
     checklist_items: ['checklist-a'],
   },
   related: {
@@ -27,7 +27,7 @@ const preview: TaskPermanentDeletionPreview = {
     template_instantiations: [],
     recurrence_occurrences: [],
   },
-  erased_record_count: 11,
+  erased_record_count: 10,
   scope_digest: 'a'.repeat(64),
 };
 const requestId = '10000000-0000-4000-8000-000000000001';
@@ -37,17 +37,17 @@ describe('TaskPermanentDeletionService', () => {
     const rpc = vi.fn().mockResolvedValue({ data: preview, error: null });
     const service = new TaskPermanentDeletionService({ rpc } as never);
 
-    await expect(service.preview('project', 'project-a')).resolves.toEqual(preview);
+    await expect(service.preview('todo', 'todo-a')).resolves.toEqual(preview);
     expect(rpc).toHaveBeenCalledWith('tasks_preview_permanent_deletion', {
-      _root_type: 'project',
-      _root_id: 'project-a',
+      _root_type: 'todo',
+      _root_id: 'todo-a',
     });
   });
 
   it('executes an exact preview using the explicit phrase and request identifier', async () => {
     const result = {
       ...preview,
-      root: { type: 'project', id: 'project-a' },
+      root: { type: 'todo', id: 'todo-a' },
       outcome: 'accepted',
       request_id: requestId,
       completed_at: '2026-07-20T20:00:00Z',
@@ -61,8 +61,8 @@ describe('TaskPermanentDeletionService', () => {
       requestId,
     )).resolves.toEqual(result);
     expect(rpc).toHaveBeenCalledWith('tasks_permanently_delete', {
-      _root_type: 'project',
-      _root_id: 'project-a',
+      _root_type: 'todo',
+      _root_id: 'todo-a',
       _scope_digest: 'a'.repeat(64),
       _request_id: requestId,
       _confirmation: TASK_PERMANENT_DELETION_CONFIRMATION,
@@ -85,7 +85,7 @@ describe('TaskPermanentDeletionService', () => {
     });
     const service = new TaskPermanentDeletionService({ rpc } as never);
 
-    await expect(service.preview('project', 'project-a'))
+    await expect(service.preview('todo', 'todo-a'))
       .rejects.toBeInstanceOf(InvalidTaskPermanentDeletionError);
   });
 

@@ -165,7 +165,6 @@ describe('Tasks Mail MCP tool', () => {
         id: crypto.randomUUID(),
         owner_id: ownerId,
         area_id: areaId,
-        project_id: null,
         heading_id: null,
         destination: 'anytime',
         today_section: 'later',

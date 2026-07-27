@@ -32,7 +32,7 @@ const snapshotKeys = [
   'deleted_at', 'destination', 'today_section', 'order_key', 'start_date', 'deadline',
   'actionability',
   'source_kind', 'source_url', 'source_title', 'source_external_id', 'primary_link', 'area_id',
-  'project_id', 'hierarchy_order_key', 'deletion_root_id',
+  'hierarchy_order_key', 'deletion_root_id',
 ] as const;
 
 function snapshot(row: StoredRow): Json {
@@ -44,7 +44,6 @@ function task(overrides: Partial<Tables['tasks_todos']['Row']> = {}): Tables['ta
     id: taskId,
     owner_id: ownerA,
     area_id: null,
-    project_id: null,
     title: 'Synthetic task',
     notes: '',
     lifecycle: 'open',
@@ -63,6 +62,7 @@ function task(overrides: Partial<Tables['tasks_todos']['Row']> = {}): Tables['ta
     entry_channel: 'web',
     last_mutation_channel: 'web',
     last_actor_type: 'user',
+    last_operation_id: null,
     undo_source_event_id: null,
     source_kind: null,
     source_url: null,
@@ -151,7 +151,7 @@ class FakeTasksClient {
       ? row.lifecycle === 'completed' ? 'complete' : row.lifecycle === 'canceled' ? 'cancel' : 'reopen'
       : before.actionability !== row.actionability ? 'set_actionability'
       : before.destination !== row.destination || before.today_section !== row.today_section
-        || before.area_id !== row.area_id || before.project_id !== row.project_id
+        || before.area_id !== row.area_id
         ? 'move' : before.order_key !== row.order_key ? 'reorder' : 'update';
     this.rows('tasks_history_events').push({
       id: crypto.randomUUID(),
@@ -426,7 +426,6 @@ describe('Tasks MCP mutation tools', () => {
       today_section: 'next',
       start_date: null,
       area_id: areaId,
-      project_id: null,
     }, authFor(ownerA, client));
     expect(result).toMatchObject({
       mutation_outcome: 'applied',
@@ -458,7 +457,6 @@ describe('Tasks MCP mutation tools', () => {
       today_section: 'later',
       start_date: null,
       area_id: null,
-      project_id: null,
     }, authFor(ownerA, client));
 
     expect(result).toMatchObject({

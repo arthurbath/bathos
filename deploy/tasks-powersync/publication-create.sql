@@ -2,7 +2,6 @@
 
 CREATE PUBLICATION powersync FOR TABLE
   public.tasks_areas,
-  public.tasks_projects,
   public.tasks_todos,
   public.tasks_checklist_items,
   public.tasks_history_events,

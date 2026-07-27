@@ -20,8 +20,6 @@ const taskA = '20000000-0000-4000-8000-000000000001';
 const taskB = '20000000-0000-4000-8000-000000000002';
 const areaA = '30000000-0000-4000-8000-000000000001';
 const areaB = '30000000-0000-4000-8000-000000000002';
-const projectA = '40000000-0000-4000-8000-000000000001';
-const projectB = '40000000-0000-4000-8000-000000000002';
 const checklistA = '60000000-0000-4000-8000-000000000001';
 const checklistB = '60000000-0000-4000-8000-000000000002';
 
@@ -29,7 +27,7 @@ const taskSnapshotKeys = [
   'title', 'notes', 'lifecycle', 'completed_at', 'canceled_at', 'disposition',
   'deleted_at', 'destination', 'today_section', 'order_key', 'start_date', 'deadline',
   'actionability', 'source_kind', 'source_url', 'source_title', 'source_external_id',
-  'area_id', 'project_id', 'hierarchy_order_key', 'deletion_root_id',
+  'area_id', 'hierarchy_order_key', 'deletion_root_id',
 ] as const;
 
 function taskSnapshot(row: StoredRow): Json {
@@ -92,9 +90,7 @@ class FakeReorderClient {
         after_state: taskSnapshot(row),
       });
     } else {
-      const entityType = table === 'tasks_areas' ? 'area'
-        : table === 'tasks_projects' ? 'project'
-          : 'checklist_item';
+      const entityType = table === 'tasks_areas' ? 'area' : 'checklist_item';
       this.rows('tasks_hierarchy_history_events').push({
         id: crypto.randomUUID(),
         owner_id: row.owner_id,
@@ -182,7 +178,6 @@ function todo(id: string, orderKey: string, overrides: StoredRow = {}): StoredRo
     id,
     owner_id: ownerId,
     area_id: null,
-    project_id: null,
     title: `Task ${id}`,
     notes: '',
     lifecycle: 'open',
@@ -221,20 +216,6 @@ function area(id: string, orderKey: string): StoredRow {
     entry_channel: 'web', last_mutation_channel: 'web', last_actor_type: 'user',
     revision: 1, client_mutation_id: crypto.randomUUID(),
     created_at: '2026-07-20T17:00:00.000Z', updated_at: '2026-07-20T17:00:00.000Z',
-  };
-}
-
-function project(id: string, orderKey: string, overrides: StoredRow = {}): StoredRow {
-  return {
-    id, owner_id: ownerId, area_id: areaA, title: `Project ${id}`, notes: '',
-    lifecycle: 'open', completed_at: null, canceled_at: null,
-    disposition: 'present', deleted_at: null, deletion_root_id: null,
-    destination: 'anytime', today_section: null, start_date: null, deadline: null,
-    order_key: orderKey, planning_order_key: orderKey,
-    entry_channel: 'web', last_mutation_channel: 'web', last_actor_type: 'user',
-    revision: 1, client_mutation_id: crypto.randomUUID(),
-    created_at: '2026-07-20T17:00:00.000Z', updated_at: '2026-07-20T17:00:00.000Z',
-    ...overrides,
   };
 }
 
@@ -277,9 +258,9 @@ describe('Tasks MCP reorder tools', () => {
   });
 
   it('reorders a to-do within exact hierarchy peers without changing planning order', async () => {
-    const first = todo(taskA, 'a0', { project_id: projectA });
-    const second = todo(taskB, 'a1', { project_id: projectA });
-    const other = todo(crypto.randomUUID(), 'a0', { project_id: projectB });
+    const first = todo(taskA, 'a0', { area_id: areaA });
+    const second = todo(taskB, 'a1', { area_id: areaA });
+    const other = todo(crypto.randomUUID(), 'a0', { area_id: areaB });
     const client = new FakeReorderClient({ tasks_todos: [first, second, other] });
     const result = await reorderTaskData({
       task_id: taskB,
@@ -315,29 +296,8 @@ describe('Tasks MCP reorder tools', () => {
     expect(client.rangeCount).toBeGreaterThanOrEqual(2);
   });
 
-  it('reorders project planning independently from structural order', async () => {
-    const client = new FakeReorderClient({
-      tasks_projects: [project(projectA, 'a0'), project(projectB, 'a1')],
-    });
-    const result = await reorderTaskHierarchyData({
-      record_type: 'project',
-      record_id: projectB,
-      scope: 'planning',
-      view: 'anytime',
-      planning_date: '2026-07-20',
-      direction: 'up',
-      expected_revision: 1,
-      client_mutation_id: crypto.randomUUID(),
-    }, auth(client));
-
-    expect(result.mutation_outcome).toBe('applied');
-    expect((result.record as StoredRow).planning_order_key < 'a0').toBe(true);
-    expect((result.record as StoredRow).order_key).toBe('a1');
-  });
-
   it.each([
     ['area', areaB, 'tasks_areas', [area(areaA, 'a0'), area(areaB, 'a1')]],
-    ['project', projectB, 'tasks_projects', [project(projectA, 'a0'), project(projectB, 'a1')]],
     ['checklist_item', checklistB, 'tasks_checklist_items', [checklist(checklistA, 'a0'), checklist(checklistB, 'a1')]],
   ] as const)('reorders one %s within its structural peers', async (recordType, recordId, table, rows) => {
     const tables: Partial<Record<TableName, StoredRow[]>> = { [table]: [...rows] };

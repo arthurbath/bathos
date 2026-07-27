@@ -30,10 +30,8 @@ export type TaskHierarchyOperationResult = {
 };
 
 export class TaskHierarchyOperationRejectedError extends Error {
-  constructor(readonly code: 'root_not_found' | 'open_descendants' | 'parent_not_present') {
-    super(code === 'open_descendants'
-      ? 'The project still has open tasks. Choose the explicit cascade action to continue.'
-      : code === 'parent_not_present'
+  constructor(readonly code: 'root_not_found' | 'parent_not_present') {
+    super(code === 'parent_not_present'
         ? 'Restore the parent container before restoring this item.'
         : 'The selected task hierarchy is unavailable.');
     this.name = 'TaskHierarchyOperationRejectedError';
@@ -59,21 +57,6 @@ export class TaskHierarchyOperationsRepository {
       const candidates = await getCandidates(transaction, input, policy);
       if (!candidates.some((candidate) => candidate.id === input.rootId)) {
         throw new TaskHierarchyOperationRejectedError('root_not_found');
-      }
-      if (
-        policy === 'reject'
-        && (input.operation === 'complete_project' || input.operation === 'cancel_project')
-      ) {
-        const openDescendant = await transaction.getOptional<{ id: string }>(
-          `SELECT id FROM tasks_todos
-           WHERE owner_id = ? AND project_id = ?
-             AND disposition = 'present' AND lifecycle = 'open'
-           LIMIT 1`,
-          [input.ownerId, input.rootId],
-        );
-        if (openDescendant !== null) {
-          throw new TaskHierarchyOperationRejectedError('open_descendants');
-        }
       }
       await assertRestorableStructuralRoot(transaction, input);
 
@@ -126,36 +109,16 @@ async function getCandidates(
   input: TaskHierarchyOperationRequest,
   policy: TaskHierarchyDescendantPolicy,
 ): Promise<Candidate[]> {
-  if (input.operation === 'complete_project'
-    || input.operation === 'cancel_project'
-    || input.operation === 'reopen_project') {
-    const project = await transaction.getAll<Candidate>(
-      `SELECT 'project' AS entity_type, id, revision FROM tasks_projects
-       WHERE owner_id = ? AND id = ? AND disposition = 'present'`,
-      [input.ownerId, input.rootId],
-    );
-    if (policy !== 'cascade' || input.operation === 'reopen_project') return project;
-    const tasks = await transaction.getAll<Candidate>(
-      `SELECT 'todo' AS entity_type, id, revision FROM tasks_todos
-       WHERE owner_id = ? AND project_id = ?
-         AND disposition = 'present' AND lifecycle = 'open'`,
-      [input.ownerId, input.rootId],
-    );
-    return [...project, ...tasks];
-  }
-
   if (input.operation === 'restore') {
     return transaction.getAll<Candidate>(
       `SELECT 'area' AS entity_type, id, revision FROM tasks_areas
-       WHERE owner_id = ? AND deletion_root_id = ?
-       UNION ALL SELECT 'project', id, revision FROM tasks_projects
        WHERE owner_id = ? AND deletion_root_id = ?
        UNION ALL SELECT 'todo', id, revision FROM tasks_todos
        WHERE owner_id = ? AND deletion_root_id = ?
        UNION ALL SELECT 'checklist_item', id, revision FROM tasks_checklist_items
        WHERE owner_id = ? AND deletion_root_id = ?`,
       [
-        input.ownerId, input.rootId, input.ownerId, input.rootId,
+        input.ownerId, input.rootId,
         input.ownerId, input.rootId, input.ownerId, input.rootId,
       ],
     );
@@ -174,38 +137,18 @@ async function getDeleteCandidates(
     return transaction.getAll<Candidate>(
       `SELECT 'area' AS entity_type, id, revision FROM tasks_areas
        WHERE owner_id = ? AND id = ? AND disposition = 'present'
-       UNION ALL SELECT 'project', id, revision FROM tasks_projects
-       WHERE owner_id = ? AND area_id = ? AND disposition = 'present'
        UNION ALL SELECT 'todo', task.id, task.revision
-       FROM tasks_todos AS task LEFT JOIN tasks_projects AS project
-         ON project.id = task.project_id AND project.owner_id = task.owner_id
-       WHERE task.owner_id = ? AND (task.area_id = ? OR project.area_id = ?)
+       FROM tasks_todos AS task
+       WHERE task.owner_id = ? AND task.area_id = ?
          AND task.disposition = 'present'
        UNION ALL SELECT 'checklist_item', item.id, item.revision
        FROM tasks_checklist_items AS item JOIN tasks_todos AS task
          ON task.id = item.task_id AND task.owner_id = item.owner_id
-       LEFT JOIN tasks_projects AS project
-         ON project.id = task.project_id AND project.owner_id = task.owner_id
-       WHERE item.owner_id = ? AND (task.area_id = ? OR project.area_id = ?)
+       WHERE item.owner_id = ? AND task.area_id = ?
          AND item.disposition = 'present' AND task.disposition = 'present'`,
       [
-        ownerId, rootId, ownerId, rootId,
-        ownerId, rootId, rootId, ownerId, rootId, rootId,
+        ownerId, rootId, ownerId, rootId, ownerId, rootId,
       ],
-    );
-  }
-  if (rootType === 'project') {
-    return transaction.getAll<Candidate>(
-      `SELECT 'project' AS entity_type, id, revision FROM tasks_projects
-       WHERE owner_id = ? AND id = ? AND disposition = 'present'
-       UNION ALL SELECT 'todo', id, revision FROM tasks_todos
-       WHERE owner_id = ? AND project_id = ? AND disposition = 'present'
-       UNION ALL SELECT 'checklist_item', item.id, item.revision
-       FROM tasks_checklist_items AS item JOIN tasks_todos AS task
-         ON task.id = item.task_id AND task.owner_id = item.owner_id
-       WHERE item.owner_id = ? AND task.project_id = ?
-         AND item.disposition = 'present' AND task.disposition = 'present'`,
-      [ownerId, rootId, ownerId, rootId, ownerId, rootId],
     );
   }
   if (rootType === 'todo') {
@@ -230,30 +173,9 @@ async function applyOptimisticOperation(
   policy: TaskHierarchyDescendantPolicy,
   candidates: Candidate[],
   occurredAt: string,
-  context: Required<TaskMutationContext>,
+  context: TaskOperationContext,
   createId: () => string,
 ): Promise<void> {
-  if (input.operation === 'complete_project'
-    || input.operation === 'cancel_project'
-    || input.operation === 'reopen_project') {
-    const lifecycle = input.operation === 'complete_project'
-      ? 'completed'
-      : input.operation === 'cancel_project' ? 'canceled' : 'open';
-    await updateLifecycleRow(
-      transaction, 'tasks_projects', input.ownerId, input.rootId,
-      lifecycle, occurredAt, context, createId,
-    );
-    if (policy === 'cascade' && lifecycle !== 'open') {
-      for (const candidate of candidates.filter(({ entity_type }) => entity_type === 'todo')) {
-        await updateLifecycleRow(
-          transaction, 'tasks_todos', input.ownerId, candidate.id,
-          lifecycle, occurredAt, context, createId,
-        );
-      }
-    }
-    return;
-  }
-
   if (input.operation === 'delete') {
     for (const candidate of candidates) {
       await transaction.execute(
@@ -279,11 +201,11 @@ async function restoreOptimistically(
   input: TaskHierarchyOperationRequest,
   candidates: Candidate[],
   occurredAt: string,
-  context: Required<TaskMutationContext>,
+  context: TaskOperationContext,
   createId: () => string,
 ): Promise<void> {
   const orderedTypes: TaskHierarchyRootType[] = [
-    'area', 'project', 'todo', 'checklist_item',
+    'area', 'todo', 'checklist_item',
   ];
   for (const entityType of orderedTypes) {
     for (const candidate of candidates.filter(({ entity_type }) => entity_type === entityType)) {
@@ -315,31 +237,18 @@ async function restorationPatch(
   entityType: TaskHierarchyRootType,
   id: string,
 ): Promise<Record<string, string | null>> {
-  if (entityType === 'project') {
-    const project = await transaction.get<{ area_id: string | null }>(
-      'SELECT area_id FROM tasks_projects WHERE id = ? AND owner_id = ?',
+  if (entityType === 'todo') {
+    const task = await transaction.get<{ area_id: string | null }>(
+      'SELECT area_id FROM tasks_todos WHERE id = ? AND owner_id = ?',
       [id, ownerId],
     );
-    return project.area_id !== null
-      && !await isPresent(transaction, 'tasks_areas', ownerId, project.area_id)
-      ? { area_id: null }
-      : {};
-  }
-  if (entityType === 'todo') {
-    const task = await transaction.get<{
-      area_id: string | null;
-      project_id: string | null;
-    }>('SELECT area_id, project_id FROM tasks_todos WHERE id = ? AND owner_id = ?', [id, ownerId]);
     const areaPresent = task.area_id === null
       || await isPresent(transaction, 'tasks_areas', ownerId, task.area_id);
-    const projectPresent = task.project_id === null
-      || await isPresent(transaction, 'tasks_projects', ownerId, task.project_id);
-    if (areaPresent && projectPresent) {
+    if (areaPresent) {
       return {};
     }
     return {
       area_id: null,
-      project_id: null,
       destination: 'anytime',
       today_section: null,
       start_date: null,
@@ -364,30 +273,6 @@ async function assertRestorableStructuralRoot(
   }
 }
 
-async function updateLifecycleRow(
-  transaction: Transaction,
-  table: 'tasks_projects' | 'tasks_todos',
-  ownerId: string,
-  id: string,
-  lifecycle: 'open' | 'completed' | 'canceled',
-  occurredAt: string,
-  context: Required<TaskMutationContext>,
-  createId: () => string,
-): Promise<void> {
-  await transaction.execute(
-    `UPDATE ${table} SET lifecycle = ?, completed_at = ?, canceled_at = ?,
-       revision = revision + 1, client_mutation_id = ?,
-       last_mutation_channel = ?, last_actor_type = ?, updated_at = ?
-     WHERE id = ? AND owner_id = ?`,
-    [
-      lifecycle,
-      lifecycle === 'completed' ? occurredAt : null,
-      lifecycle === 'canceled' ? occurredAt : null,
-      createId(), context.channel, context.actorType, occurredAt, id, ownerId,
-    ],
-  );
-}
-
 async function isPresent(
   transaction: Transaction,
   table: string,
@@ -402,19 +287,20 @@ async function isPresent(
 
 function tableFor(entityType: TaskHierarchyRootType): string {
   return entityType === 'area' ? 'tasks_areas'
-    : entityType === 'project' ? 'tasks_projects'
-      : entityType === 'todo' ? 'tasks_todos'
-        : 'tasks_checklist_items';
+    : entityType === 'todo' ? 'tasks_todos'
+      : 'tasks_checklist_items';
 }
 
 function assertRequest(input: TaskHierarchyOperationRequest): void {
   if (!input.ownerId.trim() || !input.rootId.trim()) {
     throw new TaskHierarchyOperationRejectedError('root_not_found');
   }
-  if (input.operation.endsWith('_project') && input.rootType !== 'project') {
-    throw new TaskHierarchyOperationRejectedError('root_not_found');
-  }
 }
+
+type TaskOperationContext = {
+  channel: NonNullable<TaskMutationContext['channel']>;
+  actorType: NonNullable<TaskMutationContext['actorType']>;
+};
 
 function createUuid(): string {
   if (typeof crypto === 'undefined' || typeof crypto.randomUUID !== 'function') {

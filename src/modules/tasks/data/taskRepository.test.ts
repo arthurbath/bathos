@@ -527,42 +527,65 @@ describe('task repository', () => {
     expect(transaction.execute).toHaveBeenCalledTimes(2);
   });
 
-  it('moves a task into one owned project without changing planning order', async () => {
+  it('persists ordered task patches atomically under one operation identity', async () => {
+    const secondTask = taskTodoFixture({
+      ...existingTask,
+      id: 'task-b',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    });
+    const { repository, database, transaction } = createHarness(null);
+    vi.mocked(transaction.getOptional)
+      .mockResolvedValueOnce(existingTask)
+      .mockResolvedValueOnce(secondTask);
+
+    const result = await repository.applyTaskPatches('owner-a', [
+      { taskId: 'task-a', patch: { order_key: 'a2' } },
+      { taskId: 'task-b', patch: { order_key: 'a3' } },
+    ]);
+
+    expect(database.writeTransaction).toHaveBeenCalledTimes(1);
+    expect(result).toHaveLength(2);
+    expect(result.map(({ last_operation_id }) => last_operation_id))
+      .toEqual(['task-new', 'task-new']);
+    expect(result.map(({ client_mutation_id }) => client_mutation_id))
+      .toEqual(['mutation-new', 'mutation-next']);
+    expect(transaction.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('moves a task into one owned Area without changing planning order', async () => {
     const { repository, transaction } = createHarness(existingTask);
     vi.mocked(transaction.getOptional)
       .mockResolvedValueOnce(existingTask)
-      .mockResolvedValueOnce({ id: 'project-a' });
+      .mockResolvedValueOnce({ id: 'area-a' });
 
     await expect(repository.moveTaskToContainer('owner-a', 'task-a', {
-      projectId: 'project-a',
+      areaId: 'area-a',
       hierarchyOrderKey: 'a1',
     })).resolves.toMatchObject({
-      project_id: 'project-a',
       hierarchy_order_key: 'a1',
       destination: 'anytime',
       order_key: 'a0',
       revision: 2,
     });
     expect(vi.mocked(transaction.execute).mock.calls[0][0]).toContain(
-      'project_id = ?, hierarchy_order_key = ?',
+      'area_id = ?, hierarchy_order_key = ?',
     );
   });
 
-  it('assigns a hierarchy tail key when an edit places a task into a project', async () => {
+  it('assigns a hierarchy tail key when an edit places a task into an Area', async () => {
     const { repository, transaction } = createHarness(existingTask);
     vi.mocked(transaction.getOptional)
       .mockResolvedValueOnce(existingTask)
-      .mockResolvedValueOnce({ id: 'project-a' })
+      .mockResolvedValueOnce({ id: 'area-a' })
       .mockResolvedValueOnce({ hierarchy_order_key: 'a0' });
 
     const moved = await repository.updateTask('owner-a', 'task-a', {
-      area_id: null,
-      project_id: 'project-a',
+      area_id: 'area-a',
     });
 
     expect(moved).toMatchObject({
-      area_id: null,
-      project_id: 'project-a',
+      area_id: 'area-a',
       destination: 'anytime',
       order_key: 'a0',
     });

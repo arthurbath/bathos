@@ -77,7 +77,7 @@ SELECT is(
   'allows the owner to enable automatic sorting'
 );
 SELECT is(
-  public.tasks_create_export_v12()
+  public.tasks_create_export_v13()
     #>> '{data,tasks_user_settings,0,automatic_list_sorting}',
   'true',
   'includes the preference in current portable exports'

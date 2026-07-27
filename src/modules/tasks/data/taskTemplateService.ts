@@ -6,7 +6,6 @@ import {
   taskActorTypes,
   taskEntryChannels,
   taskTemplateKinds,
-  type TaskProjectTemplateSnapshot,
   type TaskTemplate,
   type TaskTemplateInstantiation,
   type TaskTemplateKind,
@@ -40,7 +39,6 @@ export type TaskTemplateArchiveResult = {
 export type TaskTemplateInstanceResult = {
   root_type: TaskTemplateKind;
   root_id: string;
-  project_id: string | null;
   task_ids: string[];
   checklist_item_ids: string[];
 };
@@ -226,40 +224,11 @@ export function parseTaskTemplateSnapshot(value: unknown): TaskTemplateSnapshot 
     throw new InvalidTaskTemplateError('Template snapshot version is unsupported');
   }
   const kind = requireEnum(record.kind, taskTemplateKinds, 'template snapshot kind');
-  if (kind === 'todo') {
-    return {
-      version: 1,
-      kind,
-      root: parseTodoNode(record.root, false),
-    } satisfies TaskTodoTemplateSnapshot;
-  }
-  // Legacy project snapshots may contain headings. Their descendant tasks are
-  // intentionally flattened into the project when parsed.
-  if (record.headings !== undefined) {
-    requireArray(record.headings, 'Project template headings are invalid');
-  }
-  const root = parseTodoNode(record.root, false);
   return {
     version: 1,
     kind,
-    root: {
-      node_id: root.node_id,
-      title: root.title,
-      notes: root.notes,
-      destination: root.destination,
-      today_section: root.today_section,
-      order_key: root.order_key,
-      planning_order_key: requireText(
-        requireRecord(record.root, 'Project template root is invalid').planning_order_key,
-        'project planning order',
-      ),
-      start_offset_days: root.start_offset_days,
-      deadline_offset_days: root.deadline_offset_days,
-    },
-    todos: requireArray(record.todos, 'Project template tasks are invalid').map(
-      (todo) => parseTodoNode(todo, true),
-    ),
-  } satisfies TaskProjectTemplateSnapshot;
+    root: parseTodoNode(record.root, false),
+  } satisfies TaskTodoTemplateSnapshot;
 }
 
 function parseTodoNode(value: unknown, _includeLegacyHeading: boolean) {
@@ -325,7 +294,6 @@ function parseTaskTemplateInstanceResult(value: unknown): TaskTemplateInstanceRe
   return {
     root_type: requireEnum(record.root_type, taskTemplateKinds, 'root type'),
     root_id: requireText(record.root_id, 'root identifier'),
-    project_id: optionalText(record.project_id, 'project identifier'),
     task_ids: requireStringArray(record.task_ids, 'task identifiers'),
     checklist_item_ids: requireStringArray(
       record.checklist_item_ids,

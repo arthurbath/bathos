@@ -596,14 +596,12 @@ var setWardrobe = defineTool({
 // src/lib/mcp/tools/tasks-read.ts
 var taskRecordTypeSchema = z.enum([
   "area",
-  "project",
   "todo",
   "checklist_item"
 ]);
 var taskHierarchyRootTypeSchema = z.enum([
   "all",
   "area",
-  "project",
   "todo"
 ]);
 var taskViewSchema = z.enum([
@@ -616,7 +614,7 @@ var taskViewSchema = z.enum([
 var planningDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 var defaultLimit = 250;
 function emptyHierarchyRows() {
-  return { areas: [], projects: [], todos: [], checklist_items: [] };
+  return { areas: [], todos: [], checklist_items: [] };
 }
 async function readMany(query, limit) {
   const { data, error } = await query;
@@ -637,9 +635,6 @@ async function getOwnedTaskRecord(auth2, recordType, id) {
   if (recordType === "area") {
     return readOne(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
   }
-  if (recordType === "project") {
-    return readOne(auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
-  }
   if (recordType === "todo") {
     return readOne(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
   }
@@ -651,31 +646,24 @@ async function getTaskRecordData(input, auth2) {
   return { record_type: input.record_type, record: stripOwner(record) };
 }
 async function loadAllHierarchy(auth2, includeTerminal, limit) {
-  let projectsQuery = auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("disposition", "present");
   let todosQuery = auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("disposition", "present");
   if (!includeTerminal) {
-    projectsQuery = projectsQuery.eq("lifecycle", "open");
     todosQuery = todosQuery.eq("lifecycle", "open");
   }
-  const [areas, projects, todos, checklistItems] = await Promise.all([
+  const [areas, todos, checklistItems] = await Promise.all([
     readMany(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("disposition", "present").order("order_key").order("id").limit(limit + 1), limit),
-    readMany(projectsQuery.order("area_id").order("order_key").order("id").limit(limit + 1), limit),
-    readMany(todosQuery.order("project_id").order("hierarchy_order_key").order("id").limit(limit + 1), limit),
+    readMany(todosQuery.order("area_id").order("hierarchy_order_key").order("id").limit(limit + 1), limit),
     readMany(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("disposition", "present").order("task_id").order("order_key").order("id").limit(limit + 1), limit)
   ]);
-  const visibleProjectIds = new Set(projects.rows.map(({ id }) => id));
-  const visibleTodos = todos.rows.filter(({ project_id }) => project_id === null || visibleProjectIds.has(project_id));
-  const visibleTodoIds = new Set(visibleTodos.map(({ id }) => id));
+  const visibleTodoIds = new Set(todos.rows.map(({ id }) => id));
   return {
     rows: {
       areas: areas.rows,
-      projects: projects.rows,
-      todos: visibleTodos,
+      todos: todos.rows,
       checklist_items: checklistItems.rows.filter(({ task_id }) => visibleTodoIds.has(task_id))
     },
     truncatedCollections: [
       areas.truncated && "areas",
-      projects.truncated && "projects",
       todos.truncated && "todos",
       checklistItems.truncated && "checklist_items"
     ].filter((name) => Boolean(name))
@@ -689,22 +677,12 @@ function scopeHierarchyRows(rows, rootType, rootId) {
     const area = rows.areas.find(({ id }) => id === rootId);
     if (!area) throw new Error("Task area not found within the bounded hierarchy result.");
     result.areas = [area];
-    result.projects = rows.projects.filter(({ area_id }) => area_id === rootId);
-    const projectIds = new Set(result.projects.map(({ id }) => id));
-    result.todos = rows.todos.filter(({ area_id, project_id }) => area_id === rootId || project_id !== null && projectIds.has(project_id));
-  } else if (rootType === "project") {
-    const project = rows.projects.find(({ id }) => id === rootId);
-    if (!project) throw new Error("Task project not found within the bounded hierarchy result.");
-    result.projects = [project];
-    result.areas = rows.areas.filter(({ id }) => id === project.area_id);
-    result.todos = rows.todos.filter(({ project_id }) => project_id === rootId);
+    result.todos = rows.todos.filter(({ area_id }) => area_id === rootId);
   } else {
     const todo = rows.todos.find(({ id }) => id === rootId);
     if (!todo) throw new Error("Task to-do not found within the bounded hierarchy result.");
-    const project = rows.projects.find(({ id }) => id === todo.project_id);
     result.todos = [todo];
-    result.projects = project ? [project] : [];
-    result.areas = rows.areas.filter(({ id }) => id === (todo.area_id ?? project?.area_id));
+    result.areas = rows.areas.filter(({ id }) => id === todo.area_id);
   }
   const todoIds = new Set(result.todos.map(({ id }) => id));
   result.checklist_items = rows.checklist_items.filter(({ task_id }) => todoIds.has(task_id));
@@ -723,7 +701,6 @@ async function getTaskHierarchyData(input, auth2) {
     truncated_collections: loaded.truncatedCollections,
     collections: {
       areas: scoped.areas.map(stripOwner),
-      projects: scoped.projects.map(stripOwner),
       todos: scoped.todos.map(stripOwner),
       checklist_items: scoped.checklist_items.map(stripOwner)
     }
@@ -787,19 +764,14 @@ function comparePlanningRows(left, right, view, planningDate) {
   return planningOrder(left).localeCompare(planningOrder(right)) || left.id.localeCompare(right.id);
 }
 function planningOrder(row) {
-  return "planning_order_key" in row ? row.planning_order_key : row.order_key;
+  return row.order_key;
 }
 async function loadPlanningRows(auth2, view, planningDate, limit) {
-  const [todos, projects] = await Promise.all([
-    loadTodoPlanningRows(auth2, view, planningDate, limit),
-    loadProjectPlanningRows(auth2, view, planningDate, limit)
-  ]);
+  const todos = await loadTodoPlanningRows(auth2, view, planningDate, limit);
   return {
     todos: todos.rows,
-    projects: projects.rows,
     truncatedCollections: [
-      todos.truncated && "todos",
-      projects.truncated && "projects"
+      todos.truncated && "todos"
     ].filter((name) => Boolean(name))
   };
 }
@@ -830,33 +802,6 @@ async function loadTodoPlanningRows(auth2, view, planningDate, limit) {
   }
   return readMany(query.limit(limit + 1), limit);
 }
-async function loadProjectPlanningRows(auth2, view, planningDate, limit) {
-  const base = () => auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId);
-  if (view === "today") {
-    const todayBase = () => base().eq("destination", "anytime").eq("lifecycle", "open").eq("disposition", "present").or(`start_date.is.null,start_date.lte.${planningDate}`);
-    const segments = await Promise.all([
-      readMany(todayBase().eq("today_section", "inbox").order("planning_order_key").order("id").limit(limit + 1), limit),
-      readMany(todayBase().eq("today_section", "now").order("planning_order_key").order("id").limit(limit + 1), limit),
-      readMany(todayBase().eq("today_section", "next").order("planning_order_key").order("id").limit(limit + 1), limit),
-      readMany(todayBase().eq("today_section", "later").order("planning_order_key").order("id").limit(limit + 1), limit)
-    ]);
-    return mergePlanningSegments(segments, view, planningDate, limit);
-  }
-  let query = base();
-  if (view === "done") {
-    query = query.eq("disposition", "present").in("lifecycle", ["completed", "canceled"]).order("updated_at", { ascending: false }).order("id");
-  } else {
-    query = query.eq("lifecycle", "open").eq("disposition", "present");
-    if (view === "upcoming") {
-      query = query.eq("destination", "anytime").gt("start_date", planningDate).order("start_date").order("planning_order_key").order("id");
-    } else {
-      query = query.eq("destination", view);
-      if (view === "anytime") query = query.or(`start_date.is.null,start_date.lte.${planningDate}`);
-      query = query.order("planning_order_key").order("id");
-    }
-  }
-  return readMany(query.limit(limit + 1), limit);
-}
 function mergePlanningSegments(segments, view, planningDate, limit) {
   const unique = /* @__PURE__ */ new Map();
   for (const segment of segments) {
@@ -869,15 +814,13 @@ function mergePlanningSegments(segments, view, planningDate, limit) {
   };
 }
 async function loadDoneRoots(auth2, limit) {
-  const [areas, projects, todos, checklistItems] = await Promise.all([
+  const [areas, todos, checklistItems] = await Promise.all([
     readMany(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("disposition", "deleted").order("deleted_at", { ascending: false }).limit(limit + 1), limit),
-    readMany(auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("disposition", "deleted").order("deleted_at", { ascending: false }).limit(limit + 1), limit),
     readMany(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("disposition", "deleted").order("deleted_at", { ascending: false }).limit(limit + 1), limit),
     readMany(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("disposition", "deleted").order("deleted_at", { ascending: false }).limit(limit + 1), limit)
   ]);
   const roots = [
     ...areas.rows.filter(({ id, deletion_root_id }) => deletion_root_id === id).map((record) => ({ root_type: "area", record })),
-    ...projects.rows.filter(({ id, deletion_root_id }) => deletion_root_id === id).map((record) => ({ root_type: "project", record })),
     ...todos.rows.filter(({ id, deletion_root_id }) => deletion_root_id === id).map((record) => ({ root_type: "todo", record })),
     ...checklistItems.rows.filter(({ id, deletion_root_id }) => deletion_root_id === id).map((record) => ({ root_type: "checklist_item", record }))
   ].sort((left, right) => (right.record.deleted_at ?? "").localeCompare(left.record.deleted_at ?? "") || left.record.id.localeCompare(right.record.id));
@@ -886,7 +829,7 @@ async function loadDoneRoots(auth2, limit) {
       root_type,
       record: stripOwner(record)
     })),
-    truncated: roots.length > limit || [areas, projects, todos, checklistItems].some((collection) => collection.truncated)
+    truncated: roots.length > limit || [areas, todos, checklistItems].some((collection) => collection.truncated)
   };
 }
 async function getTaskViewData(input, auth2) {
@@ -899,10 +842,6 @@ async function getTaskViewData(input, auth2) {
     limit_per_collection: input.limit,
     truncated_collections: loaded.truncatedCollections,
     ...done === null ? {} : { roots: done.roots, roots_truncated: done.truncated },
-    projects: loaded.projects.map((record) => ({
-      ...stripOwner(record),
-      ...input.view === "today" ? { derived_section: todaySection(record, planning.planning_date) } : {}
-    })),
     todos: loaded.todos.map((record) => ({
       ...stripOwner(record),
       ...input.view === "today" ? { derived_section: todaySection(record, planning.planning_date) } : {}
@@ -912,11 +851,11 @@ async function getTaskViewData(input, auth2) {
 var getTaskHierarchy = defineTool({
   name: "get_task_hierarchy",
   title: "Get Task Hierarchy",
-  description: "Read the signed-in user's normalized task areas, projects, to-dos, and checklist items. Returns stable ids and relationship fields without mutating data.",
+  description: "Read the signed-in user's normalized task Areas, tasks, and checklist items. Returns stable ids and relationship fields without mutating data.",
   inputSchema: {
-    root_type: taskHierarchyRootTypeSchema.default("all").describe("Read the complete bounded hierarchy or scope it to one area, project, or to-do."),
+    root_type: taskHierarchyRootTypeSchema.default("all").describe("Read the complete bounded hierarchy or scope it to one Area or task."),
     root_id: uuidSchema.optional().describe("Required when root_type is not all."),
-    include_terminal: z.boolean().default(false).describe("Include completed and canceled projects and to-dos."),
+    include_terminal: z.boolean().default(false).describe("Include completed and canceled tasks."),
     limit: z.number().int().min(1).max(500).default(defaultLimit).describe("Maximum rows returned per hierarchy collection.")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -925,7 +864,7 @@ var getTaskHierarchy = defineTool({
 var getTaskRecord = defineTool({
   name: "get_task_record",
   title: "Get Task Record",
-  description: "Read one task area, project, to-do, or checklist item by stable id for the signed-in user.",
+  description: "Read one task Area, task, or checklist item by stable id for the signed-in user.",
   inputSchema: {
     record_type: taskRecordTypeSchema,
     id: uuidSchema.describe("Stable record id.")
@@ -940,7 +879,7 @@ var getTaskView = defineTool({
   inputSchema: {
     view: taskViewSchema,
     planning_date: planningDateSchema.optional().describe("Optional ISO calendar date for deterministic planning review. Defaults to today in the owner's stored planning time zone."),
-    limit: z.number().int().min(1).max(500).default(defaultLimit).describe("Maximum projects, to-dos, or Done roots returned.")
+    limit: z.number().int().min(1).max(500).default(defaultLimit).describe("Maximum tasks or Done roots returned.")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: (input, ctx) => toMcpResult(getTaskViewData(input, requireAuthenticated(ctx)))
@@ -1097,10 +1036,6 @@ function normalizeRequest(input) {
     }
   }
   const areaId = input.area_id ?? null;
-  const projectId = input.project_id ?? null;
-  if (areaId !== null && projectId !== null) {
-    throw new Error("A task cannot belong directly to both an area and a project.");
-  }
   const destination = input.destination ?? "anytime";
   const requestedStartDate = input.start_date ?? null;
   if (requestedStartDate !== null && !isTaskCalendarDate(requestedStartDate)) {
@@ -1126,7 +1061,6 @@ function normalizeRequest(input) {
     placementWasImplicit: input.destination === void 0 && input.start_date === void 0 && input.today_section === void 0,
     deadline,
     areaId,
-    projectId,
     sourceKind,
     sourceUrl,
     sourceTitle,
@@ -1162,7 +1096,6 @@ function assertSameCreationRequest(request, existing) {
     [existing.event.mutation_channel, request.entryChannel],
     [state.deadline, request.deadline],
     [state.area_id, request.areaId],
-    [state.project_id, request.projectId],
     [state.source_kind, request.sourceKind],
     [state.source_url, request.sourceUrl],
     [state.source_title, request.sourceTitle],
@@ -1197,12 +1130,8 @@ async function ownerPlanningDate(auth2) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 async function validateContainer(request, auth2) {
-  const [area, project] = await Promise.all([
-    request.areaId === null ? null : readOne2(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", request.areaId).eq("disposition", "present").maybeSingle()),
-    request.projectId === null ? null : readOne2(auth2.supabase.from("tasks_projects").select("id").eq("owner_id", auth2.userId).eq("id", request.projectId).eq("disposition", "present").eq("lifecycle", "open").maybeSingle())
-  ]);
+  const area = request.areaId === null ? null : await readOne2(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", request.areaId).eq("disposition", "present").maybeSingle());
   if (request.areaId !== null && area === null) throw new Error("The task area is unavailable.");
-  if (request.projectId !== null && project === null) throw new Error("The task project is unavailable.");
 }
 async function nextPlanningOrderKey(request, auth2) {
   const query = auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", request.destination).eq("lifecycle", "open").eq("disposition", "present");
@@ -1210,12 +1139,11 @@ async function nextPlanningOrderKey(request, auth2) {
   return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function nextHierarchyOrderKey(request, auth2) {
-  if (request.areaId === null && request.projectId === null) {
+  if (request.areaId === null) {
     return null;
   }
   let query = auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("lifecycle", "open").eq("disposition", "present");
   query = request.areaId === null ? query.is("area_id", null) : query.eq("area_id", request.areaId);
-  query = request.projectId === null ? query.is("project_id", null) : query.eq("project_id", request.projectId);
   const last = await readOne2(query.not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.hierarchy_order_key ?? null, null);
 }
@@ -1268,7 +1196,6 @@ async function createTaskData(input, auth2) {
     id: crypto.randomUUID(),
     owner_id: auth2.userId,
     area_id: request.areaId,
-    project_id: request.projectId,
     title: request.title,
     notes: request.notes,
     lifecycle: "open",
@@ -1327,7 +1254,6 @@ var createTask = defineTool({
     start_date: calendarDateSchema.nullable().optional(),
     deadline: calendarDateSchema.nullable().optional(),
     area_id: uuidSchema.optional(),
-    project_id: uuidSchema.optional(),
     source: sourceSchema.optional().describe("Optional typed source reference. Template provenance is reserved for template instantiation."),
     primary_link: z.string().max(8e3).nullable().optional().describe("Optional editable shortcut, stored independently from typed source provenance.")
   },
@@ -1336,11 +1262,6 @@ var createTask = defineTool({
 });
 
 // src/lib/mcp/tools/tasks-hierarchy-create.ts
-var destinationSchema2 = z.enum(["anytime", "someday"]);
-var todaySectionSchema2 = z.enum(["inbox", "now", "next", "later"]);
-var calendarDateSchema2 = z.string().refine(isTaskCalendarDate, {
-  message: "Expected a valid ISO calendar date."
-});
 function trimTitle(value) {
   const title = value.trim();
   if (!title) throw new Error("A title is required.");
@@ -1366,9 +1287,6 @@ async function readHierarchyRecord(auth2, recordType, id) {
   if (recordType === "area") {
     return readOne3(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
   }
-  if (recordType === "project") {
-    return readOne3(auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
-  }
   return readOne3(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
 }
 async function findExistingCreation2(auth2, idempotencyKey) {
@@ -1378,7 +1296,7 @@ async function findExistingCreation2(auth2, idempotencyKey) {
     throw new Error("The idempotency key belongs to a different hierarchy mutation.");
   }
   const recordType = event.entity_type;
-  if (!["area", "project", "checklist_item"].includes(recordType)) {
+  if (!["area", "checklist_item"].includes(recordType)) {
     throw new Error("The hierarchy creation receipt has an unsupported record type.");
   }
   const record = await readHierarchyRecord(auth2, recordType, event.entity_id);
@@ -1452,20 +1370,6 @@ async function nextAreaOrderKey(auth2) {
   const last = await readOne3(auth2.supabase.from("tasks_areas").select("order_key").eq("owner_id", auth2.userId).eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.order_key ?? null, null);
 }
-async function nextProjectOrderKeys(auth2, areaId, destination, todaySection2) {
-  let structuralQuery = auth2.supabase.from("tasks_projects").select("order_key").eq("owner_id", auth2.userId).eq("disposition", "present");
-  structuralQuery = areaId === null ? structuralQuery.is("area_id", null) : structuralQuery.eq("area_id", areaId);
-  let planningQuery = auth2.supabase.from("tasks_projects").select("planning_order_key").eq("owner_id", auth2.userId).eq("disposition", "present").eq("lifecycle", "open").eq("destination", destination);
-  planningQuery = todaySection2 === null ? planningQuery.is("today_section", null) : planningQuery.eq("today_section", todaySection2);
-  const [structural, planning] = await Promise.all([
-    readOne3(structuralQuery.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle()),
-    readOne3(planningQuery.order("planning_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle())
-  ]);
-  return {
-    orderKey: generateTaskOrderKey(structural?.order_key ?? null, null),
-    planningOrderKey: generateTaskOrderKey(planning?.planning_order_key ?? null, null)
-  };
-}
 async function nextChecklistOrderKey(auth2, taskId) {
   const last = await readOne3(auth2.supabase.from("tasks_checklist_items").select("order_key").eq("owner_id", auth2.userId).eq("task_id", taskId).eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.order_key ?? null, null);
@@ -1492,79 +1396,6 @@ async function createTaskAreaData(input, auth2) {
     created_at: timestamp,
     updated_at: timestamp
   }, input.idempotency_key, "area", expected);
-}
-async function createTaskProjectData(input, auth2) {
-  const title = trimTitle(input.title);
-  const areaId = input.area_id ?? null;
-  const startDate = input.start_date ?? null;
-  const deadline = input.deadline ?? null;
-  if (input.destination === "someday" && (input.today_section != null || startDate !== null)) {
-    throw new Error("Someday projects cannot retain a Start or day horizon.");
-  }
-  if (startDate !== null && !isTaskCalendarDate(startDate)) {
-    throw new Error("Start must be a valid ISO calendar date.");
-  }
-  if (deadline !== null && !isTaskCalendarDate(deadline)) {
-    throw new Error("Deadline must be a valid ISO calendar date.");
-  }
-  if (areaId !== null) {
-    const area = await readOne3(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle());
-    if (area === null) throw new Error("The task area is unavailable.");
-  }
-  if (startDate !== null) {
-    const settings = await readOne3(auth2.supabase.from("tasks_user_settings").select("planning_timezone").eq("owner_id", auth2.userId).maybeSingle());
-    if (!settings) {
-      throw new Error("Task planning settings are not initialized. Open the Tasks module once.");
-    }
-    if (startDate <= planningDateInTimeZone(settings.planning_timezone)) {
-      throw new Error("Start must be later than today in the owner planning time zone.");
-    }
-  }
-  const todaySection2 = input.destination === "someday" ? null : startDate === null ? input.today_section ?? null : null;
-  const expected = {
-    title,
-    notes: input.notes,
-    area_id: areaId,
-    destination: input.destination,
-    today_section: todaySection2,
-    start_date: startDate,
-    deadline
-  };
-  const replay = await replayOrNull(auth2, input.idempotency_key, "project", expected);
-  if (replay !== null) return replay;
-  const { orderKey, planningOrderKey } = await nextProjectOrderKeys(
-    auth2,
-    areaId,
-    input.destination,
-    todaySection2
-  );
-  const timestamp = (/* @__PURE__ */ new Date()).toISOString();
-  return insertWithReplay(auth2, "tasks_projects", {
-    id: crypto.randomUUID(),
-    owner_id: auth2.userId,
-    area_id: areaId,
-    title,
-    notes: input.notes,
-    lifecycle: "open",
-    completed_at: null,
-    canceled_at: null,
-    disposition: "present",
-    deleted_at: null,
-    deletion_root_id: null,
-    destination: input.destination,
-    today_section: todaySection2,
-    order_key: orderKey,
-    planning_order_key: planningOrderKey,
-    start_date: startDate,
-    deadline,
-    entry_channel: "mcp",
-    last_mutation_channel: "mcp",
-    last_actor_type: "automation",
-    revision: 1,
-    client_mutation_id: input.idempotency_key,
-    created_at: timestamp,
-    updated_at: timestamp
-  }, input.idempotency_key, "project", expected);
 }
 async function createTaskChecklistItemData(input, auth2) {
   const title = trimTitle(input.title);
@@ -1613,22 +1444,6 @@ var createTaskArea = defineTool({
   annotations: mutationAnnotations,
   handler: (input, ctx) => toMcpResult(createTaskAreaData(input, requireAuthenticated(ctx)))
 });
-var createTaskProject = defineTool({
-  name: "create_task_project",
-  title: "Create Task Project",
-  description: "Create one owner-scoped open project with structured placement and planning fields.",
-  inputSchema: {
-    ...idempotencyInput,
-    notes: z.string().max(1e5).default(""),
-    area_id: uuidSchema.optional(),
-    destination: destinationSchema2.default("anytime"),
-    today_section: todaySectionSchema2.nullable().optional(),
-    start_date: calendarDateSchema2.nullable().optional(),
-    deadline: calendarDateSchema2.nullable().optional()
-  },
-  annotations: mutationAnnotations,
-  handler: (input, ctx) => toMcpResult(createTaskProjectData(input, requireAuthenticated(ctx)))
-});
 var createTaskChecklistItem = defineTool({
   name: "create_task_checklist_item",
   title: "Create Task Checklist Item",
@@ -1665,9 +1480,6 @@ async function readOne4(query) {
 async function readHierarchyRecord2(auth2, recordType, id) {
   if (recordType === "area") {
     return readOne4(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
-  }
-  if (recordType === "project") {
-    return readOne4(auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
   }
   return readOne4(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
 }
@@ -1759,9 +1571,6 @@ function assertMutable(record) {
   if (record.disposition !== "present") {
     throw new Error("Restore the hierarchy record before editing it.");
   }
-  if ("lifecycle" in record && record.lifecycle !== "open") {
-    throw new Error("Reopen the project before editing it.");
-  }
 }
 async function assertParentMutable(request, record, auth2) {
   if (request.recordType === "checklist_item") {
@@ -1782,7 +1591,6 @@ function changedPatch(record, patch) {
 }
 function tableFor(recordType) {
   if (recordType === "area") return "tasks_areas";
-  if (recordType === "project") return "tasks_projects";
   return "tasks_checklist_items";
 }
 async function writeMutation(request, current, patch, auth2) {
@@ -1851,21 +1659,6 @@ function updateTaskAreaData(input, auth2) {
     mutableKeys: ["title"]
   }, auth2);
 }
-function updateTaskProjectData(input, auth2) {
-  if (input.title === void 0 && input.notes === void 0) {
-    throw new Error("Update at least one of title or notes.");
-  }
-  return runMutation({
-    ...input,
-    recordType: "project",
-    recordId: input.project_id,
-    patch: {
-      ...input.title === void 0 ? {} : { title: trimTitle2(input.title) },
-      ...input.notes === void 0 ? {} : { notes: input.notes }
-    },
-    mutableKeys: ["title", "notes"]
-  }, auth2);
-}
 function updateTaskChecklistItemData(input, auth2) {
   if (input.title === void 0 && input.completed === void 0) {
     throw new Error("Update at least one of title or completed.");
@@ -1901,19 +1694,6 @@ var updateTaskArea = defineTool({
   annotations: mutationAnnotations2,
   handler: (input, ctx) => toMcpResult(updateTaskAreaData(input, requireAuthenticated(ctx)))
 });
-var updateTaskProject = defineTool({
-  name: "update_task_project",
-  title: "Update Task Project",
-  description: "Edit supported content on one owner-scoped open project through an optimistic revision boundary.",
-  inputSchema: {
-    ...mutationInput,
-    project_id: uuidSchema,
-    title: z.string().min(1).max(500).optional(),
-    notes: z.string().max(1e5).optional()
-  },
-  annotations: mutationAnnotations2,
-  handler: (input, ctx) => toMcpResult(updateTaskProjectData(input, requireAuthenticated(ctx)))
-});
 var updateTaskChecklistItem = defineTool({
   name: "update_task_checklist_item",
   title: "Update Task Checklist Item",
@@ -1942,28 +1722,6 @@ function jsonObject(value) {
   return value;
 }
 function normalizeRequest2(input) {
-  if (input.transition === "complete" || input.transition === "cancel") {
-    if (input.root_type !== "project") {
-      throw new Error("Only projects can be completed or canceled through this hierarchy operation.");
-    }
-    return {
-      ...input,
-      operation: input.transition === "complete" ? "complete_project" : "cancel_project",
-      policy: input.descendant_policy ?? "reject"
-    };
-  }
-  if (input.transition === "reopen") {
-    if (input.root_type !== "project") {
-      throw new Error("Only projects can be reopened through this hierarchy operation.");
-    }
-    if (input.descendant_policy === "cascade") {
-      throw new Error("Reopening a project does not cascade to descendants.");
-    }
-    return { ...input, operation: "reopen_project", policy: "reject" };
-  }
-  if (input.descendant_policy !== void 0) {
-    throw new Error("Deletion and restoration use the required atomic cascade automatically.");
-  }
   return { ...input, operation: input.transition, policy: "cascade" };
 }
 async function readOne5(query) {
@@ -1974,9 +1732,6 @@ async function readOne5(query) {
 async function readRoot(auth2, rootType, rootId) {
   if (rootType === "area") {
     return readOne5(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", rootId).maybeSingle());
-  }
-  if (rootType === "project") {
-    return readOne5(auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("id", rootId).maybeSingle());
   }
   return readOne5(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", rootId).maybeSingle());
 }
@@ -2065,21 +1820,7 @@ function mutationResult2(mutationOutcome, receipt2, request, root) {
 }
 function alreadyCurrent(request, root) {
   if (request.transition === "delete") return root.disposition === "deleted";
-  if (request.transition === "restore") return root.disposition === "present";
-  const project = root;
-  return request.transition === "complete" && project.lifecycle === "completed" || request.transition === "cancel" && project.lifecycle === "canceled" || request.transition === "reopen" && project.lifecycle === "open";
-}
-function assertLifecycleSource(request, root) {
-  if (request.transition === "complete" || request.transition === "cancel") {
-    if (root.lifecycle !== "open") {
-      throw new Error("Reopen the project before completing or canceling it.");
-    }
-  }
-}
-function assertLifecycleRootPresent(request, root) {
-  if (request.operation.endsWith("_project") && root.disposition !== "present") {
-    throw new Error("Restore the project before changing its lifecycle.");
-  }
+  return root.disposition === "present";
 }
 async function callOperation(request, auth2) {
   const { data, error } = await auth2.supabase.rpc("tasks_request_mcp_hierarchy_operation", {
@@ -2114,7 +1855,6 @@ async function transitionTaskHierarchyData(input, auth2) {
       current
     );
   }
-  assertLifecycleRootPresent(request, current);
   if (alreadyCurrent(request, current)) {
     return mutationResult2(
       "noop",
@@ -2123,7 +1863,6 @@ async function transitionTaskHierarchyData(input, auth2) {
       current
     );
   }
-  assertLifecycleSource(request, current);
   const operation = await callOperation(request, auth2);
   assertExactRetry2(request, operation);
   const updated = await readRoot(auth2, request.root_type, request.root_id);
@@ -2138,14 +1877,13 @@ async function transitionTaskHierarchyData(input, auth2) {
 var transitionTaskHierarchy = defineTool({
   name: "transition_task_hierarchy",
   title: "Transition Task Hierarchy",
-  description: "Complete, cancel, or reopen one project, or recoverably delete or restore one area, project, or checklist item with one atomic revision-checked hierarchy operation. Permanent deletion is not available.",
+  description: "Recoverably delete or restore one area or checklist item with one atomic revision-checked hierarchy operation. Permanent deletion is not available.",
   inputSchema: {
-    root_type: z.enum(["area", "project", "checklist_item"]),
+    root_type: z.enum(["area", "checklist_item"]),
     root_id: uuidSchema.describe("Stable hierarchy root identifier."),
     expected_revision: z.number().int().positive().describe("Current root revision returned by a task hierarchy read."),
     client_mutation_id: uuidSchema.describe("Stable UUID for this logical mutation. Reuse it only to retry the exact same request."),
-    transition: z.enum(["complete", "cancel", "reopen", "delete", "restore"]),
-    descendant_policy: z.enum(["reject", "cascade"]).optional().describe("Project completion or cancellation policy. Omit for the safe reject default; cascade must be explicit.")
+    transition: z.enum(["delete", "restore"])
   },
   annotations: {
     readOnlyHint: false,
@@ -2158,425 +1896,12 @@ var transitionTaskHierarchy = defineTool({
   )
 });
 
-// src/lib/mcp/tools/tasks-project-mutate.ts
-var destinationSchema3 = z.enum(["anytime", "someday"]);
-var todaySectionSchema3 = z.enum(["inbox", "now", "next", "later"]);
-var calendarDateSchema3 = z.string().refine(isTaskCalendarDate, {
-  message: "Expected a valid ISO calendar date."
-});
-var snapshotKeys = [
-  "area_id",
-  "title",
-  "notes",
-  "lifecycle",
-  "completed_at",
-  "canceled_at",
-  "disposition",
-  "deleted_at",
-  "deletion_root_id",
-  "destination",
-  "today_section",
-  "order_key",
-  "planning_order_key",
-  "start_date",
-  "deadline",
-  "entry_channel",
-  "template_definition_id",
-  "template_revision",
-  "template_instantiation_id",
-  "template_node_id",
-  "recurrence_definition_id",
-  "recurrence_revision",
-  "recurrence_occurrence_id",
-  "recurrence_logical_key"
-];
-function hasOwn(input, key) {
-  return Object.prototype.hasOwnProperty.call(input, key);
-}
-function withoutOwner2(row) {
-  const { owner_id: _ownerId, ...project } = row;
-  return project;
-}
-function jsonRecord4(value) {
-  if (value === null || Array.isArray(value) || typeof value !== "object") {
-    throw new Error("The accepted project mutation record is invalid.");
-  }
-  return value;
-}
-function rowSnapshot(row) {
-  return Object.fromEntries(snapshotKeys.map((key) => [key, row[key]]));
-}
-function snapshotsMatch(actual, expected, ignored) {
-  return snapshotKeys.every((key) => ignored.has(key) || actual[key] === expected[key]);
-}
-async function readOne6(query) {
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return data;
-}
-async function readProject(auth2, projectId) {
-  return readOne6(auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("id", projectId).maybeSingle());
-}
-async function requireProject(auth2, projectId) {
-  const project = await readProject(auth2, projectId);
-  if (project === null) throw new Error("The task project is unavailable.");
-  return project;
-}
-async function readHierarchyMutation2(auth2, mutationId) {
-  return readOne6(auth2.supabase.from("tasks_hierarchy_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
-}
-function historyReceipt(event) {
-  return {
-    client_mutation_id: event.client_mutation_id,
-    actor_type: "automation",
-    mutation_channel: "mcp",
-    affected_ids: event.affected_ids,
-    base_revision: event.base_revision,
-    result_revision: event.result_revision,
-    transition: event.transition,
-    occurred_at: event.occurred_at,
-    outcome: "accepted",
-    code: null
-  };
-}
-function ephemeralReceipt3(input, project, transition, outcome, code) {
-  return {
-    client_mutation_id: input.client_mutation_id,
-    actor_type: "automation",
-    mutation_channel: "mcp",
-    affected_ids: [project.id],
-    base_revision: input.expected_revision,
-    result_revision: project.revision,
-    transition,
-    occurred_at: (/* @__PURE__ */ new Date()).toISOString(),
-    outcome,
-    code
-  };
-}
-function mutationResult3(outcome, receipt2, project) {
-  return { mutation_outcome: outcome, receipt: receipt2, project: withoutOwner2(project) };
-}
-function assertMutable2(project) {
-  if (project.disposition !== "present") {
-    throw new Error("Restore the project before moving or scheduling it.");
-  }
-  if (project.lifecycle !== "open") {
-    throw new Error("Reopen the project before moving or scheduling it.");
-  }
-}
-function validatePlanningPlacement(destination, todaySection2, startDate) {
-  if (destination === "someday" && (todaySection2 !== null || startDate !== null)) {
-    throw new Error("Someday projects cannot retain a Start or day horizon.");
-  }
-  if (startDate !== null && todaySection2 !== null) {
-    throw new Error("A future Start cannot retain a Today horizon.");
-  }
-}
-async function validateArea(auth2, areaId) {
-  if (areaId === null) return;
-  const area = await readOne6(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle());
-  if (area === null) throw new Error("The task area is unavailable.");
-}
-async function nextStructuralOrderKey(auth2, projectId, areaId) {
-  let query = auth2.supabase.from("tasks_projects").select("order_key").eq("owner_id", auth2.userId).eq("disposition", "present").neq("id", projectId);
-  query = areaId === null ? query.is("area_id", null) : query.eq("area_id", areaId);
-  const last = await readOne6(query.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey(last?.order_key ?? null, null);
-}
-async function nextPlanningOrderKey2(auth2, projectId, destination, todaySection2) {
-  const query = auth2.supabase.from("tasks_projects").select("planning_order_key").eq("owner_id", auth2.userId).eq("destination", destination).eq("lifecycle", "open").eq("disposition", "present").neq("id", projectId);
-  const scoped = todaySection2 === null ? query.is("today_section", null) : query.eq("today_section", todaySection2);
-  const last = await readOne6(scoped.order("planning_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
-  return generateTaskOrderKey(last?.planning_order_key ?? null, null);
-}
-async function ownerPlanningDate2(auth2) {
-  const settings = await readOne6(auth2.supabase.from("tasks_user_settings").select("planning_timezone").eq("owner_id", auth2.userId).maybeSingle());
-  if (!settings) {
-    throw new Error("Task planning settings are not initialized. Open the Tasks module once.");
-  }
-  return planningDateInTimeZone(settings.planning_timezone);
-}
-async function movePatch(input, current, auth2) {
-  const areaRequested = hasOwn(input, "area_id");
-  const planningRequested = input.destination !== void 0;
-  if (!planningRequested && (input.today_section !== void 0 || input.start_date !== void 0)) {
-    throw new Error("today_section and start_date require a destination.");
-  }
-  if (!areaRequested && !planningRequested) {
-    throw new Error("Move the project to an area, a planning placement, or both.");
-  }
-  const patch = {};
-  if (areaRequested) {
-    const areaId = input.area_id ?? null;
-    await validateArea(auth2, areaId);
-    patch.area_id = areaId;
-    if (areaId !== current.area_id) {
-      patch.order_key = await nextStructuralOrderKey(auth2, current.id, areaId);
-    }
-  }
-  if (planningRequested) {
-    const destination = input.destination;
-    const startDate = destination === "someday" ? null : input.start_date ?? null;
-    if (startDate !== null && startDate <= await ownerPlanningDate2(auth2)) {
-      throw new Error("Start must be later than today in the owner planning time zone.");
-    }
-    const todaySection2 = destination === "someday" ? null : startDate === null ? input.today_section ?? null : null;
-    validatePlanningPlacement(destination, todaySection2, startDate);
-    if (destination === current.destination && todaySection2 === current.today_section && startDate !== current.start_date) {
-      throw new Error("Use schedule_task_project to change dates without moving planning placement.");
-    }
-    patch.destination = destination;
-    patch.today_section = todaySection2;
-    patch.start_date = startDate;
-    if (destination !== current.destination || todaySection2 !== current.today_section || startDate !== current.start_date) {
-      patch.planning_order_key = await nextPlanningOrderKey2(
-        auth2,
-        current.id,
-        destination,
-        todaySection2
-      );
-    }
-  }
-  return patch;
-}
-async function schedulePatch(input, current, auth2) {
-  if (!hasOwn(input, "start_date") && !hasOwn(input, "deadline")) {
-    throw new Error("Schedule at least one of start_date or deadline.");
-  }
-  const startDate = hasOwn(input, "start_date") ? input.start_date ?? null : current.start_date;
-  const deadline = hasOwn(input, "deadline") ? input.deadline ?? null : current.deadline;
-  if (startDate !== null && !isTaskCalendarDate(startDate)) {
-    throw new Error("Start must be a valid ISO calendar date.");
-  }
-  if (deadline !== null && !isTaskCalendarDate(deadline)) {
-    throw new Error("Deadline must be a valid ISO calendar date.");
-  }
-  if (startDate !== null && startDate <= await ownerPlanningDate2(auth2)) {
-    throw new Error("Start must be later than today in the owner planning time zone.");
-  }
-  let destination = current.destination;
-  let todaySection2 = current.today_section;
-  if (destination === "someday" && startDate !== null) {
-    destination = "anytime";
-  }
-  if (startDate !== null) {
-    todaySection2 = null;
-  }
-  validatePlanningPlacement(destination, todaySection2, startDate);
-  const patch = { start_date: startDate, deadline };
-  if (destination !== current.destination) {
-    patch.destination = destination;
-    patch.today_section = todaySection2;
-    patch.planning_order_key = await nextPlanningOrderKey2(
-      auth2,
-      current.id,
-      destination,
-      todaySection2
-    );
-  } else if (todaySection2 !== current.today_section) {
-    patch.today_section = todaySection2;
-  }
-  return patch;
-}
-function changedPatch2(current, patch) {
-  return Object.fromEntries(
-    Object.entries(patch).filter(([key, value]) => current[key] !== value)
-  );
-}
-function expectedAfterForRetry(request, before, after) {
-  const expected = { ...before };
-  const ignored = /* @__PURE__ */ new Set();
-  if (request.kind === "move") {
-    const input2 = request.input;
-    if (hasOwn(input2, "area_id")) {
-      expected.area_id = input2.area_id ?? null;
-      ignored.add("order_key");
-    }
-    if (input2.destination !== void 0) {
-      expected.destination = input2.destination;
-      expected.start_date = input2.destination === "someday" ? null : input2.start_date ?? null;
-      expected.today_section = input2.destination === "someday" ? null : expected.start_date === null ? input2.today_section ?? null : null;
-      ignored.add("planning_order_key");
-    }
-    return { expected, ignored };
-  }
-  const input = request.input;
-  if (hasOwn(input, "start_date")) expected.start_date = input.start_date ?? null;
-  if (hasOwn(input, "deadline")) expected.deadline = input.deadline ?? null;
-  if (before.destination === "someday" && expected.start_date !== null) {
-    expected.destination = "anytime";
-    expected.today_section = null;
-    ignored.add("planning_order_key");
-  } else if (expected.start_date !== null) {
-    expected.today_section = null;
-  }
-  return { expected, ignored };
-}
-function expectedHistoryTransition(before, after) {
-  if (before.area_id !== after.area_id) return "move";
-  if (before.order_key !== after.order_key || before.planning_order_key !== after.planning_order_key) return "reorder";
-  return "update";
-}
-function requestChangedAcceptedState(request, before, expected) {
-  if (request.kind === "move") {
-    const input = request.input;
-    const areaChanged = hasOwn(input, "area_id") && before.area_id !== expected.area_id;
-    const planningChanged = input.destination !== void 0 && (before.destination !== expected.destination || before.today_section !== expected.today_section || before.start_date !== expected.start_date);
-    return areaChanged || planningChanged;
-  }
-  return hasOwn(request.input, "start_date") && before.start_date !== expected.start_date || hasOwn(request.input, "deadline") && before.deadline !== expected.deadline || before.destination !== expected.destination || before.today_section !== expected.today_section;
-}
-function assertExactRetry3(request, event) {
-  if (event.entity_type !== "project" || event.entity_id !== request.input.project_id || event.base_revision !== request.input.expected_revision || event.actor_type !== "automation" || event.mutation_channel !== "mcp" || event.before_state === null) {
-    throw new Error("The mutation identifier was already used for a different project request.");
-  }
-  const before = jsonRecord4(event.before_state);
-  const after = jsonRecord4(event.after_state);
-  const { expected, ignored } = expectedAfterForRetry(request, before, after);
-  if (!requestChangedAcceptedState(request, before, expected) || event.transition !== expectedHistoryTransition(before, after) || !snapshotsMatch(after, expected, ignored)) {
-    throw new Error("The mutation identifier was already used with different project data.");
-  }
-}
-async function resolveRetry2(request, auth2) {
-  const [event, todoEvent, hierarchyOperation] = await Promise.all([
-    readHierarchyMutation2(auth2, request.input.client_mutation_id),
-    readOne6(auth2.supabase.from("tasks_history_events").select("id").eq("owner_id", auth2.userId).eq("client_mutation_id", request.input.client_mutation_id).maybeSingle()),
-    readOne6(auth2.supabase.from("tasks_hierarchy_operations").select("id").eq("owner_id", auth2.userId).eq("id", request.input.client_mutation_id).maybeSingle())
-  ]);
-  if (todoEvent !== null) {
-    throw new Error("The mutation identifier was already used for a different task request.");
-  }
-  if (hierarchyOperation !== null) {
-    throw new Error("The mutation identifier was already used for a different hierarchy operation.");
-  }
-  if (event === null) return null;
-  assertExactRetry3(request, event);
-  const current = await requireProject(auth2, request.input.project_id);
-  return mutationResult3("already_applied", historyReceipt(event), current);
-}
-async function writeMutation2(request, current, patch, auth2) {
-  const nextPatch = changedPatch2(rowSnapshot(current), patch);
-  const transition = request.kind === "move" ? "move" : "update";
-  if (Object.keys(nextPatch).length === 0) {
-    return mutationResult3(
-      "noop",
-      ephemeralReceipt3(request.input, current, transition, "noop", "already_current"),
-      current
-    );
-  }
-  const { data, error } = await auth2.supabase.from("tasks_projects").update({
-    ...nextPatch,
-    revision: current.revision + 1,
-    client_mutation_id: request.input.client_mutation_id,
-    last_mutation_channel: "mcp",
-    last_actor_type: "automation"
-  }).eq("owner_id", auth2.userId).eq("id", current.id).eq("revision", current.revision).eq("disposition", "present").eq("lifecycle", "open").select("*").maybeSingle();
-  if (error) {
-    const retry = await resolveRetry2(request, auth2);
-    if (retry !== null) return retry;
-    if ("code" in error && error.code === "23505") {
-      throw new Error("The mutation identifier is unavailable. Use a new UUID for a new request.");
-    }
-    throw new Error(error.message);
-  }
-  if (data === null) {
-    const retry = await resolveRetry2(request, auth2);
-    if (retry !== null) return retry;
-    const authoritative = await requireProject(auth2, current.id);
-    return mutationResult3(
-      "conflict",
-      ephemeralReceipt3(
-        request.input,
-        authoritative,
-        transition,
-        "conflict",
-        "revision_conflict"
-      ),
-      authoritative
-    );
-  }
-  const event = await readHierarchyMutation2(auth2, request.input.client_mutation_id);
-  if (event === null) throw new Error("The accepted project mutation receipt is unavailable.");
-  assertExactRetry3(request, event);
-  return mutationResult3("applied", historyReceipt(event), data);
-}
-async function runMutation2(request, auth2) {
-  const retry = await resolveRetry2(request, auth2);
-  if (retry !== null) return retry;
-  const current = await requireProject(auth2, request.input.project_id);
-  const transition = request.kind === "move" ? "move" : "update";
-  if (current.revision !== request.input.expected_revision) {
-    return mutationResult3(
-      "conflict",
-      ephemeralReceipt3(
-        request.input,
-        current,
-        transition,
-        "conflict",
-        "revision_conflict"
-      ),
-      current
-    );
-  }
-  assertMutable2(current);
-  const patch = request.kind === "move" ? await movePatch(request.input, current, auth2) : await schedulePatch(request.input, current, auth2);
-  return writeMutation2(request, current, patch, auth2);
-}
-function moveTaskProjectData(input, auth2) {
-  return runMutation2({ kind: "move", input }, auth2);
-}
-function scheduleTaskProjectData(input, auth2) {
-  return runMutation2({ kind: "schedule", input }, auth2);
-}
-var mutationBaseSchema = {
-  project_id: uuidSchema.describe("Stable project identifier."),
-  expected_revision: z.number().int().positive().describe("Current project revision."),
-  client_mutation_id: uuidSchema.describe(
-    "Stable UUID for this exact logical mutation. Reuse it only for an exact retry."
-  )
-};
-var mutationAnnotations3 = {
-  readOnlyHint: false,
-  idempotentHint: true,
-  openWorldHint: false
-};
-var moveTaskProject = defineTool({
-  name: "move_task_project",
-  title: "Move Task Project",
-  description: "Move one open project to an area, a planning placement, or both without accepting raw order keys.",
-  inputSchema: {
-    ...mutationBaseSchema,
-    area_id: uuidSchema.nullable().optional().describe("Present area or null for no area."),
-    destination: destinationSchema3.optional(),
-    today_section: todaySectionSchema3.nullable().optional(),
-    start_date: calendarDateSchema3.nullable().optional()
-  },
-  annotations: mutationAnnotations3,
-  handler: (input, ctx) => toMcpResult(
-    moveTaskProjectData(input, requireAuthenticated(ctx))
-  )
-});
-var scheduleTaskProject = defineTool({
-  name: "schedule_task_project",
-  title: "Schedule Task Project",
-  description: "Set or clear one open project Start or Deadline without accepting timestamps or time-zone offsets.",
-  inputSchema: {
-    ...mutationBaseSchema,
-    start_date: calendarDateSchema3.nullable().optional(),
-    deadline: calendarDateSchema3.nullable().optional()
-  },
-  annotations: mutationAnnotations3,
-  handler: (input, ctx) => toMcpResult(
-    scheduleTaskProjectData(input, requireAuthenticated(ctx))
-  )
-});
-
 // src/lib/mcp/tools/tasks-mail.ts
 var messageDeepLinkSchema = z.string().max(8e3).refine(
   (value) => value.startsWith("message://"),
   { message: "Expected a message:// Mail deep link." }
 );
-async function readOne7(query) {
+async function readOne6(query) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data;
@@ -2589,19 +1914,19 @@ function trimRequired2(value, label, maxLength) {
   }
   return normalized;
 }
-async function validateArea2(areaId, auth2) {
+async function validateArea(areaId, auth2) {
   if (!areaId) return null;
-  const area = await readOne7(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle());
+  const area = await readOne6(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle());
   if (!area) throw new Error("The task area is unavailable.");
   return area.id;
 }
-async function nextPlanningOrderKey3(auth2) {
-  const last = await readOne7(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", "anytime").eq("lifecycle", "open").eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+async function nextPlanningOrderKey2(auth2) {
+  const last = await readOne6(auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", "anytime").eq("lifecycle", "open").eq("disposition", "present").order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.order_key ?? null, null);
 }
 async function nextAreaOrderKey2(areaId, auth2) {
   if (areaId === null) return null;
-  const last = await readOne7(auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("area_id", areaId).is("project_id", null).eq("lifecycle", "open").eq("disposition", "present").not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne6(auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("area_id", areaId).eq("lifecycle", "open").eq("disposition", "present").not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.hierarchy_order_key ?? null, null);
 }
 async function createMailTaskData(input, auth2) {
@@ -2615,9 +1940,9 @@ async function createMailTaskData(input, auth2) {
     1e3
   );
   const sourceTitle = input.source_title?.trim() || null;
-  const areaId = await validateArea2(input.area_id, auth2);
+  const areaId = await validateArea(input.area_id, auth2);
   const [orderKey, hierarchyOrderKey] = await Promise.all([
-    nextPlanningOrderKey3(auth2),
+    nextPlanningOrderKey2(auth2),
     nextAreaOrderKey2(areaId, auth2)
   ]);
   const { data, error } = await auth2.supabase.rpc("tasks_create_mail_capture", {
@@ -2808,8 +2133,8 @@ function assertValidInstant(value) {
 }
 
 // src/lib/mcp/tools/tasks-mutate.ts
-var destinationSchema4 = z.enum(["anytime", "someday"]);
-var todaySectionSchema4 = z.enum(["inbox", "now", "next", "later"]);
+var destinationSchema2 = z.enum(["anytime", "someday"]);
+var todaySectionSchema2 = z.enum(["inbox", "now", "next", "later"]);
 var actionabilitySchema2 = z.enum(["actionable", "waiting", "rechecking"]);
 var sourceKindSchema2 = z.enum([
   "webpage",
@@ -2818,7 +2143,7 @@ var sourceKindSchema2 = z.enum([
   "reading_item",
   "other"
 ]);
-var calendarDateSchema4 = z.string().refine(isTaskCalendarDate, {
+var calendarDateSchema2 = z.string().refine(isTaskCalendarDate, {
   message: "Expected a valid ISO calendar date."
 });
 var sourceSchema2 = z.object({
@@ -2827,7 +2152,7 @@ var sourceSchema2 = z.object({
   title: z.string().max(1e3).optional(),
   external_id: z.string().max(2e3).optional()
 });
-var snapshotKeys2 = [
+var snapshotKeys = [
   "title",
   "notes",
   "lifecycle",
@@ -2847,7 +2172,6 @@ var snapshotKeys2 = [
   "source_external_id",
   "primary_link",
   "area_id",
-  "project_id",
   "hierarchy_order_key",
   "deletion_root_id"
 ];
@@ -2863,23 +2187,23 @@ function trimOptional2(value) {
   const normalized = value?.trim() ?? "";
   return normalized || null;
 }
-function withoutOwner3(row) {
+function withoutOwner2(row) {
   const { owner_id: _ownerId, ...task } = row;
   return task;
 }
-function jsonRecord5(value) {
+function jsonRecord4(value) {
   if (value === null || Array.isArray(value) || typeof value !== "object") {
     throw new Error("The accepted task mutation record is invalid.");
   }
   return value;
 }
-function rowSnapshot2(row) {
-  return Object.fromEntries(snapshotKeys2.map((key) => [key, row[key]]));
+function rowSnapshot(row) {
+  return Object.fromEntries(snapshotKeys.map((key) => [key, row[key]]));
 }
-function snapshotsMatch2(actual, expected, ignored = /* @__PURE__ */ new Set()) {
-  return snapshotKeys2.every((key) => ignored.has(key) || actual[key] === expected[key]);
+function snapshotsMatch(actual, expected, ignored = /* @__PURE__ */ new Set()) {
+  return snapshotKeys.every((key) => ignored.has(key) || actual[key] === expected[key]);
 }
-async function readOne8(query) {
+async function readOne7(query) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data;
@@ -2890,7 +2214,7 @@ async function readMany2(query) {
   return data ?? [];
 }
 async function readTask(auth2, taskId) {
-  return readOne8(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", taskId).maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", taskId).maybeSingle());
 }
 async function requireTask(auth2, taskId) {
   const task = await readTask(auth2, taskId);
@@ -2898,12 +2222,12 @@ async function requireTask(auth2, taskId) {
   return task;
 }
 async function readHistoryByMutation(auth2, mutationId) {
-  return readOne8(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
 }
 async function readHierarchyOperation(auth2, mutationId) {
-  return readOne8(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
+  return readOne7(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
 }
-function historyReceipt2(event) {
+function historyReceipt(event) {
   return {
     client_mutation_id: event.client_mutation_id,
     actor_type: "automation",
@@ -2917,7 +2241,7 @@ function historyReceipt2(event) {
     code: event.code
   };
 }
-function ephemeralReceipt4(input, transition, task, outcome, code) {
+function ephemeralReceipt3(input, transition, task, outcome, code) {
   return {
     client_mutation_id: input.client_mutation_id,
     actor_type: "automation",
@@ -2931,20 +2255,20 @@ function ephemeralReceipt4(input, transition, task, outcome, code) {
     code
   };
 }
-function mutationResult4(status, receipt2, task) {
-  return { mutation_outcome: status, receipt: receipt2, task: withoutOwner3(task) };
+function mutationResult3(status, receipt2, task) {
+  return { mutation_outcome: status, receipt: receipt2, task: withoutOwner2(task) };
 }
 function assertCurrentMutationBoundary(input, task, transition) {
   if (task.revision !== input.expected_revision) {
-    return mutationResult4(
+    return mutationResult3(
       "conflict",
-      ephemeralReceipt4(input, transition, task, "conflict", "revision_conflict"),
+      ephemeralReceipt3(input, transition, task, "conflict", "revision_conflict"),
       task
     );
   }
   return null;
 }
-function assertMutable3(task) {
+function assertMutable2(task) {
   if (task.disposition !== "present") {
     throw new Error("Restore the task before editing, moving, or scheduling it.");
   }
@@ -3002,12 +2326,12 @@ function updatePatch(input) {
 function updateTransition(input, current) {
   return input.actionability !== void 0 && input.actionability !== current.actionability ? "set_actionability" : "update";
 }
-function changedPatch3(current, patch) {
+function changedPatch2(current, patch) {
   return Object.fromEntries(
     Object.entries(patch).filter(([key, value]) => current[key] !== value)
   );
 }
-function validatePlanningPlacement2(destination, todaySection2, startDate) {
+function validatePlanningPlacement(destination, todaySection2, startDate) {
   if (destination === "someday" && (todaySection2 !== null || startDate !== null)) {
     throw new Error("Someday work cannot retain a Start or day horizon.");
   }
@@ -3015,62 +2339,50 @@ function validatePlanningPlacement2(destination, todaySection2, startDate) {
     throw new Error("A future Start cannot retain a Today horizon.");
   }
 }
-async function nextPlanningOrderKey4(auth2, taskId, destination) {
+async function nextPlanningOrderKey3(auth2, taskId, destination) {
   const query = auth2.supabase.from("tasks_todos").select("order_key").eq("owner_id", auth2.userId).eq("destination", destination).eq("lifecycle", "open").eq("disposition", "present").neq("id", taskId);
-  const last = await readOne8(query.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne7(query.order("order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.order_key ?? null, null);
 }
-async function validateContainer2(auth2, areaId, projectId) {
-  if (areaId !== null && projectId !== null) {
-    throw new Error("A task cannot belong directly to both an area and a project.");
-  }
-  const [area, project] = await Promise.all([
-    areaId === null ? null : readOne8(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle()),
-    projectId === null ? null : readOne8(auth2.supabase.from("tasks_projects").select("id").eq("owner_id", auth2.userId).eq("id", projectId).eq("disposition", "present").eq("lifecycle", "open").maybeSingle())
-  ]);
+async function validateContainer2(auth2, areaId) {
+  const area = areaId === null ? null : await readOne7(auth2.supabase.from("tasks_areas").select("id").eq("owner_id", auth2.userId).eq("id", areaId).eq("disposition", "present").maybeSingle());
   if (areaId !== null && area === null) throw new Error("The task area is unavailable.");
-  if (projectId !== null && project === null) throw new Error("The task project is unavailable.");
 }
-async function nextHierarchyOrderKey2(auth2, taskId, areaId, projectId) {
-  if (areaId === null && projectId === null) return null;
+async function nextHierarchyOrderKey2(auth2, taskId, areaId) {
+  if (areaId === null) return null;
   let query = auth2.supabase.from("tasks_todos").select("hierarchy_order_key").eq("owner_id", auth2.userId).eq("lifecycle", "open").eq("disposition", "present").neq("id", taskId);
   query = areaId === null ? query.is("area_id", null) : query.eq("area_id", areaId);
-  query = projectId === null ? query.is("project_id", null) : query.eq("project_id", projectId);
-  const last = await readOne8(query.not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
+  const last = await readOne7(query.not("hierarchy_order_key", "is", null).order("hierarchy_order_key", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle());
   return generateTaskOrderKey(last?.hierarchy_order_key ?? null, null);
 }
-function hasOwn2(input, key) {
+function hasOwn(input, key) {
   return Object.prototype.hasOwnProperty.call(input, key);
 }
-async function ownerPlanningDate3(auth2) {
-  const settings = await readOne8(auth2.supabase.from("tasks_user_settings").select("planning_timezone").eq("owner_id", auth2.userId).maybeSingle());
+async function ownerPlanningDate2(auth2) {
+  const settings = await readOne7(auth2.supabase.from("tasks_user_settings").select("planning_timezone").eq("owner_id", auth2.userId).maybeSingle());
   if (!settings) {
     throw new Error("Task planning settings are not initialized. Open the Tasks module once.");
   }
   return planningDateInTimeZone(settings.planning_timezone);
 }
-async function movePatch2(input, current, auth2) {
+async function movePatch(input, current, auth2) {
   const planningRequested = input.destination !== void 0;
   if (!planningRequested && (input.today_section !== void 0 || input.start_date !== void 0)) {
     throw new Error("today_section and start_date require a destination.");
   }
-  const containerKeys = ["area_id", "project_id"];
-  const suppliedContainerKeys = containerKeys.filter((key) => hasOwn2(input, key));
-  if (suppliedContainerKeys.length > 0 && suppliedContainerKeys.length !== containerKeys.length) {
-    throw new Error("Container moves require area_id and project_id together; use null to clear a value.");
-  }
-  if (!planningRequested && suppliedContainerKeys.length === 0) {
+  const containerRequested = hasOwn(input, "area_id");
+  if (!planningRequested && !containerRequested) {
     throw new Error("Move either planning placement or the complete task container.");
   }
   const patch = {};
   if (planningRequested) {
     const destination = input.destination;
     const startDate = destination === "someday" ? null : input.start_date ?? null;
-    if (startDate !== null && startDate <= await ownerPlanningDate3(auth2)) {
+    if (startDate !== null && startDate <= await ownerPlanningDate2(auth2)) {
       throw new Error("Start must be later than today in the owner planning time zone.");
     }
     const todaySection2 = destination === "someday" ? null : startDate === null ? input.today_section ?? null : null;
-    validatePlanningPlacement2(destination, todaySection2, startDate);
+    validatePlanningPlacement(destination, todaySection2, startDate);
     if (destination === current.destination && todaySection2 === current.today_section && startDate !== current.start_date) {
       throw new Error("Use schedule_task to change dates without moving planning placement.");
     }
@@ -3078,43 +2390,40 @@ async function movePatch2(input, current, auth2) {
     patch.today_section = todaySection2;
     patch.start_date = startDate;
     if (destination !== current.destination) {
-      patch.order_key = await nextPlanningOrderKey4(
+      patch.order_key = await nextPlanningOrderKey3(
         auth2,
         current.id,
         destination
       );
     }
   }
-  if (suppliedContainerKeys.length === containerKeys.length) {
+  if (containerRequested) {
     const areaId = input.area_id ?? null;
-    const projectId = input.project_id ?? null;
-    await validateContainer2(auth2, areaId, projectId);
+    await validateContainer2(auth2, areaId);
     patch.area_id = areaId;
-    patch.project_id = projectId;
-    if (areaId !== current.area_id || projectId !== current.project_id) {
+    if (areaId !== current.area_id) {
       patch.hierarchy_order_key = await nextHierarchyOrderKey2(
         auth2,
         current.id,
-        areaId,
-        projectId
+        areaId
       );
     }
   }
   return patch;
 }
-async function schedulePatch2(input, current, auth2) {
-  if (!hasOwn2(input, "start_date") && !hasOwn2(input, "deadline")) {
+async function schedulePatch(input, current, auth2) {
+  if (!hasOwn(input, "start_date") && !hasOwn(input, "deadline")) {
     throw new Error("Schedule at least one of start_date or deadline.");
   }
-  const startDate = hasOwn2(input, "start_date") ? input.start_date ?? null : current.start_date;
-  const deadline = hasOwn2(input, "deadline") ? input.deadline ?? null : current.deadline;
+  const startDate = hasOwn(input, "start_date") ? input.start_date ?? null : current.start_date;
+  const deadline = hasOwn(input, "deadline") ? input.deadline ?? null : current.deadline;
   if (startDate !== null && !isTaskCalendarDate(startDate)) {
     throw new Error("Start must be a valid ISO calendar date.");
   }
   if (deadline !== null && !isTaskCalendarDate(deadline)) {
     throw new Error("Deadline must be a valid ISO calendar date.");
   }
-  if (startDate !== null && startDate <= await ownerPlanningDate3(auth2)) {
+  if (startDate !== null && startDate <= await ownerPlanningDate2(auth2)) {
     throw new Error("Start must be later than today in the owner planning time zone.");
   }
   let destination = current.destination;
@@ -3125,12 +2434,12 @@ async function schedulePatch2(input, current, auth2) {
   if (startDate !== null) {
     todaySection2 = null;
   }
-  validatePlanningPlacement2(destination, todaySection2, startDate);
+  validatePlanningPlacement(destination, todaySection2, startDate);
   const patch = { start_date: startDate, deadline };
   if (destination !== current.destination) {
     patch.destination = destination;
     patch.today_section = todaySection2;
-    patch.order_key = await nextPlanningOrderKey4(auth2, current.id, destination);
+    patch.order_key = await nextPlanningOrderKey3(auth2, current.id, destination);
   } else if (todaySection2 !== current.today_section) {
     patch.today_section = todaySection2;
   }
@@ -3153,7 +2462,7 @@ function transitionPatch(input, current, occurredAt) {
     }
   };
 }
-function expectedAfterForRetry2(request, before, after) {
+function expectedAfterForRetry(request, before, after) {
   const expected = { ...before };
   const ignored = /* @__PURE__ */ new Set();
   if (request.kind === "update") {
@@ -3168,17 +2477,16 @@ function expectedAfterForRetry2(request, before, after) {
       expected.today_section = input.destination === "someday" ? null : expected.start_date === null ? input.today_section ?? null : null;
       ignored.add("order_key");
     }
-    if (hasOwn2(input, "area_id") && hasOwn2(input, "project_id")) {
+    if (hasOwn(input, "area_id")) {
       expected.area_id = input.area_id ?? null;
-      expected.project_id = input.project_id ?? null;
       ignored.add("hierarchy_order_key");
     }
     return { expected, ignored, transition: "move" };
   }
   if (request.kind === "schedule") {
     const input = request.input;
-    if (hasOwn2(input, "start_date")) expected.start_date = input.start_date ?? null;
-    if (hasOwn2(input, "deadline")) expected.deadline = input.deadline ?? null;
+    if (hasOwn(input, "start_date")) expected.start_date = input.start_date ?? null;
+    if (hasOwn(input, "deadline")) expected.deadline = input.deadline ?? null;
     if (before.destination === "someday" && expected.start_date !== null) {
       expected.destination = "anytime";
       expected.today_section = null;
@@ -3212,10 +2520,10 @@ function assertExactHistoryRetry(request, event) {
   if (event.task_id !== request.input.task_id || event.base_revision !== request.input.expected_revision || event.actor_type !== "automation" || event.mutation_channel !== "mcp" || event.before_state === null) {
     throw new Error("The mutation identifier was already used for a different task request.");
   }
-  const before = jsonRecord5(event.before_state);
-  const after = jsonRecord5(event.after_state);
-  const expected = expectedAfterForRetry2(request, before, after);
-  if (event.transition !== expected.transition || !snapshotsMatch2(after, expected.expected, expected.ignored)) {
+  const before = jsonRecord4(event.before_state);
+  const after = jsonRecord4(event.after_state);
+  const expected = expectedAfterForRetry(request, before, after);
+  if (event.transition !== expected.transition || !snapshotsMatch(after, expected.expected, expected.ignored)) {
     throw new Error("The mutation identifier was already used for a different task request.");
   }
 }
@@ -3224,14 +2532,14 @@ async function resolveDirectRetry(request, auth2) {
   if (event === null) return null;
   assertExactHistoryRetry(request, event);
   const task = await requireTask(auth2, event.task_id);
-  return mutationResult4("already_applied", historyReceipt2(event), task);
+  return mutationResult3("already_applied", historyReceipt(event), task);
 }
 async function writeDirectMutation(request, current, patch, transition, auth2) {
-  const logicalPatch = changedPatch3(rowSnapshot2(current), patch);
+  const logicalPatch = changedPatch2(rowSnapshot(current), patch);
   if (Object.keys(logicalPatch).length === 0) {
-    return mutationResult4(
+    return mutationResult3(
       "noop",
-      ephemeralReceipt4(request.input, transition, current, "noop", "already_current"),
+      ephemeralReceipt3(request.input, transition, current, "noop", "already_current"),
       current
     );
   }
@@ -3255,16 +2563,16 @@ async function writeDirectMutation(request, current, patch, transition, auth2) {
     const retry = await resolveDirectRetry(request, auth2);
     if (retry !== null) return retry;
     const authoritative = await requireTask(auth2, current.id);
-    return mutationResult4(
+    return mutationResult3(
       "conflict",
-      ephemeralReceipt4(request.input, transition, authoritative, "conflict", "revision_conflict"),
+      ephemeralReceipt3(request.input, transition, authoritative, "conflict", "revision_conflict"),
       authoritative
     );
   }
   const event = await readHistoryByMutation(auth2, request.input.client_mutation_id);
   if (event === null) throw new Error("The accepted task mutation receipt is unavailable.");
   assertExactHistoryRetry(request, event);
-  return mutationResult4("applied", historyReceipt2(event), data);
+  return mutationResult3("applied", historyReceipt(event), data);
 }
 async function runDirectMutation(request, auth2) {
   const retry = await resolveDirectRetry(request, auth2);
@@ -3277,32 +2585,32 @@ async function runDirectMutation(request, auth2) {
   const conflict = assertCurrentMutationBoundary(request.input, current, transition);
   if (conflict !== null) return conflict;
   if (request.kind === "update") {
-    assertMutable3(current);
+    assertMutable2(current);
     const patch = updatePatch(request.input);
     return writeDirectMutation(
       request,
       current,
       patch,
-      updateTransition(request.input, rowSnapshot2(current)),
+      updateTransition(request.input, rowSnapshot(current)),
       auth2
     );
   }
   if (request.kind === "move") {
-    assertMutable3(current);
+    assertMutable2(current);
     return writeDirectMutation(
       request,
       current,
-      await movePatch2(request.input, current, auth2),
+      await movePatch(request.input, current, auth2),
       "move",
       auth2
     );
   }
   if (request.kind === "schedule") {
-    assertMutable3(current);
+    assertMutable2(current);
     return writeDirectMutation(
       request,
       current,
-      await schedulePatch2(request.input, current, auth2),
+      await schedulePatch(request.input, current, auth2),
       "update",
       auth2
     );
@@ -3312,9 +2620,9 @@ async function runDirectMutation(request, auth2) {
   }
   const transitionResult = transitionPatch(request.input, current, (/* @__PURE__ */ new Date()).toISOString());
   if (transitionResult.noop) {
-    return mutationResult4(
+    return mutationResult3(
       "noop",
-      ephemeralReceipt4(
+      ephemeralReceipt3(
         request.input,
         request.input.transition,
         current,
@@ -3333,7 +2641,7 @@ async function runDirectMutation(request, auth2) {
   );
 }
 function parseRevisionMap(value) {
-  const record = jsonRecord5(value);
+  const record = jsonRecord4(value);
   const parsed = {};
   for (const [id, revision] of Object.entries(record)) {
     if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1) {
@@ -3382,7 +2690,7 @@ async function hierarchyResult(input, operation, auth2, retry) {
   const task = await requireTask(auth2, input.task_id);
   const receipt2 = hierarchyReceipt(operation);
   const status = retry && (operation.outcome === "accepted" || operation.outcome === "noop") ? "already_applied" : operation.outcome === "accepted" ? "applied" : operation.outcome === "noop" ? "noop" : operation.outcome === "conflict" ? "conflict" : "rejected";
-  return mutationResult4(status, receipt2, task);
+  return mutationResult3(status, receipt2, task);
 }
 async function expectedHierarchyRevisions(input, current, auth2) {
   let query = auth2.supabase.from("tasks_checklist_items").select("id, revision").eq("owner_id", auth2.userId);
@@ -3404,9 +2712,9 @@ async function runRecoveryTransition(input, auth2) {
   if (conflict !== null) return conflict;
   const alreadyCurrent2 = input.transition === "delete" && current.disposition === "deleted" || input.transition === "restore" && current.disposition === "present";
   if (alreadyCurrent2) {
-    return mutationResult4(
+    return mutationResult3(
       "noop",
-      ephemeralReceipt4(input, input.transition, current, "noop", "already_current"),
+      ephemeralReceipt3(input, input.transition, current, "noop", "already_current"),
       current
     );
   }
@@ -3453,7 +2761,7 @@ function scheduleTaskData(input, auth2) {
 function transitionTaskData(input, auth2) {
   return input.transition === "delete" || input.transition === "restore" ? runRecoveryTransition(input, auth2) : runDirectMutation({ kind: "transition", input }, auth2);
 }
-var mutationBaseSchema2 = {
+var mutationBaseSchema = {
   task_id: uuidSchema.describe("Stable to-do identifier."),
   expected_revision: z.number().int().positive().describe("Current revision returned by a task read."),
   client_mutation_id: uuidSchema.describe("Stable UUID for this logical mutation. Reuse it only to retry the exact same request.")
@@ -3463,7 +2771,7 @@ var updateTask = defineTool({
   title: "Update Task",
   description: "Edit one current to-do title, notes, actionability, Primary Link, or complete typed source reference with an optimistic revision guard.",
   inputSchema: {
-    ...mutationBaseSchema2,
+    ...mutationBaseSchema,
     title: z.string().max(500).optional(),
     notes: z.string().max(1e5).optional(),
     actionability: actionabilitySchema2.optional().describe("Mark the task actionable, waiting on an outside party or signal, or requiring deliberate rechecking."),
@@ -3476,14 +2784,13 @@ var updateTask = defineTool({
 var moveTask = defineTool({
   name: "move_task",
   title: "Move Task",
-  description: "Move one open to-do between planning placements, hierarchy containers, or both. Container changes require both container IDs, using null to clear.",
+  description: "Move one open task between planning placements, Areas, or both. Use a null Area to remove organization.",
   inputSchema: {
-    ...mutationBaseSchema2,
-    destination: destinationSchema4.optional(),
-    today_section: todaySectionSchema4.nullable().optional(),
-    start_date: calendarDateSchema4.nullable().optional(),
-    area_id: uuidSchema.nullable().optional(),
-    project_id: uuidSchema.nullable().optional()
+    ...mutationBaseSchema,
+    destination: destinationSchema2.optional(),
+    today_section: todaySectionSchema2.nullable().optional(),
+    start_date: calendarDateSchema2.nullable().optional(),
+    area_id: uuidSchema.nullable().optional()
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
   handler: (input, ctx) => toMcpResult(moveTaskData(input, requireAuthenticated(ctx)))
@@ -3493,9 +2800,9 @@ var scheduleTask = defineTool({
   title: "Schedule Task",
   description: "Set or clear one open task Start or Deadline without accepting timestamps or time-zone offsets.",
   inputSchema: {
-    ...mutationBaseSchema2,
-    start_date: calendarDateSchema4.nullable().optional(),
-    deadline: calendarDateSchema4.nullable().optional()
+    ...mutationBaseSchema,
+    start_date: calendarDateSchema2.nullable().optional(),
+    deadline: calendarDateSchema2.nullable().optional()
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
   handler: (input, ctx) => toMcpResult(scheduleTaskData(input, requireAuthenticated(ctx)))
@@ -3505,7 +2812,7 @@ var transitionTask = defineTool({
   title: "Transition Task",
   description: "Complete, cancel, reopen, recoverably delete, or restore one to-do. Permanent deletion is not available.",
   inputSchema: {
-    ...mutationBaseSchema2,
+    ...mutationBaseSchema,
     transition: z.enum(["complete", "cancel", "reopen", "delete", "restore"])
   },
   annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
@@ -3515,11 +2822,9 @@ var transitionTask = defineTool({
 // src/lib/mcp/tools/tasks-reorder.ts
 var directionSchema = z.enum(["up", "down"]);
 var taskScopeSchema = z.enum(["planning", "hierarchy"]);
-var hierarchyScopeSchema = z.enum(["structural", "planning"]);
 var taskPlanningViewSchema = z.enum(["today", "upcoming", "anytime", "someday"]);
-var projectPlanningViewSchema = z.enum(["today", "upcoming", "anytime", "someday"]);
-var hierarchyTypeSchema = z.enum(["area", "project", "checklist_item"]);
-var calendarDateSchema5 = z.string().refine(isTaskCalendarDate, {
+var hierarchyTypeSchema = z.enum(["area", "checklist_item"]);
+var calendarDateSchema3 = z.string().refine(isTaskCalendarDate, {
   message: "Use an ISO calendar date in YYYY-MM-DD format."
 });
 var PAGE_SIZE = 500;
@@ -3528,7 +2833,7 @@ function stripOwner5(row) {
   const { owner_id: _ownerId, ...record } = row;
   return record;
 }
-function jsonRecord6(value) {
+function jsonRecord5(value) {
   if (value === null || Array.isArray(value) || typeof value !== "object") {
     throw new Error("The reorder history receipt is invalid.");
   }
@@ -3537,7 +2842,7 @@ function jsonRecord6(value) {
 function jsonEqual(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
-async function readOne9(query) {
+async function readOne8(query) {
   const { data, error } = await query;
   if (error) {
     const failure = new Error(error.message);
@@ -3563,27 +2868,24 @@ async function readAll(loadPage) {
   }
 }
 async function readTask2(auth2, id) {
-  return readOne9(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+  return readOne8(auth2.supabase.from("tasks_todos").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
 }
 async function readHierarchyRecord3(auth2, type, id) {
   if (type === "area") {
-    return readOne9(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+    return readOne8(auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
   }
-  if (type === "project") {
-    return readOne9(auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
-  }
-  return readOne9(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
+  return readOne8(auth2.supabase.from("tasks_checklist_items").select("*").eq("owner_id", auth2.userId).eq("id", id).maybeSingle());
 }
 async function readTaskHistory(auth2, mutationId) {
-  return readOne9(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
+  return readOne8(auth2.supabase.from("tasks_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
 }
 async function readHierarchyHistory(auth2, mutationId) {
-  return readOne9(auth2.supabase.from("tasks_hierarchy_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
+  return readOne8(auth2.supabase.from("tasks_hierarchy_history_events").select("*").eq("owner_id", auth2.userId).eq("client_mutation_id", mutationId).maybeSingle());
 }
 async function readHierarchyOperation2(auth2, mutationId) {
-  return readOne9(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
+  return readOne8(auth2.supabase.from("tasks_hierarchy_operations").select("*").eq("owner_id", auth2.userId).eq("id", mutationId).maybeSingle());
 }
-function historyReceipt3(event) {
+function historyReceipt2(event) {
   return {
     client_mutation_id: event.client_mutation_id,
     actor_type: event.actor_type,
@@ -3597,7 +2899,7 @@ function historyReceipt3(event) {
     code: null
   };
 }
-function ephemeralReceipt5(input, id, revision, outcome, code) {
+function ephemeralReceipt4(input, id, revision, outcome, code) {
   return {
     client_mutation_id: input.client_mutation_id,
     actor_type: "automation",
@@ -3655,12 +2957,6 @@ function requireTaskPlanning(input) {
   }
   return { view: input.view, planningDate: input.planning_date };
 }
-function requireProjectPlanning(input) {
-  if (input.record_type !== "project" || !input.view || !input.planning_date) {
-    throw new Error("Project planning reorder requires a project, view, and explicit planning date.");
-  }
-  return { view: input.view, planningDate: input.planning_date };
-}
 function assertOnlyOrderChanged(before, after, orderKey, direction) {
   const mutationMetadata = /* @__PURE__ */ new Set([
     "revision",
@@ -3696,31 +2992,12 @@ async function taskPeers(input, current, auth2) {
     const section = orderSection(current, view, planningDate);
     return rows.filter((row) => visibleInPlanning(row, view, planningDate) && orderSection(row, view, planningDate) === section).map((row) => ({ id: row.id, orderKey: row.order_key }));
   }
-  return rows.filter((row) => row.area_id === current.area_id && row.project_id === current.project_id && row.hierarchy_order_key !== null).map((row) => ({ id: row.id, orderKey: row.hierarchy_order_key }));
+  return rows.filter((row) => row.area_id === current.area_id && row.hierarchy_order_key !== null).map((row) => ({ id: row.id, orderKey: row.hierarchy_order_key }));
 }
 async function hierarchyPeers(input, current, auth2) {
-  const scope = input.scope ?? "structural";
-  if (scope === "planning") {
-    const project = current;
-    const { view, planningDate } = requireProjectPlanning(input);
-    if (!visibleInPlanning(project, view, planningDate)) {
-      throw new Error("The project is not in the requested planning view.");
-    }
-    const section = orderSection(project, view, planningDate);
-    const rows2 = await readAll((from, to) => auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("disposition", "present").eq("lifecycle", "open").order("planning_order_key").order("id").range(from, to));
-    return rows2.filter((row) => visibleInPlanning(row, view, planningDate) && orderSection(row, view, planningDate) === section).map((row) => ({ id: row.id, orderKey: row.planning_order_key }));
-  }
-  if (input.view || input.planning_date) {
-    throw new Error("Structural reorder does not accept a planning view or date.");
-  }
   if (input.record_type === "area") {
     const rows2 = await readAll((from, to) => auth2.supabase.from("tasks_areas").select("*").eq("owner_id", auth2.userId).eq("disposition", "present").order("order_key").order("id").range(from, to));
     return rows2.map((row) => ({ id: row.id, orderKey: row.order_key }));
-  }
-  if (input.record_type === "project") {
-    const project = current;
-    const rows2 = await readAll((from, to) => auth2.supabase.from("tasks_projects").select("*").eq("owner_id", auth2.userId).eq("disposition", "present").eq("lifecycle", "open").order("order_key").order("id").range(from, to));
-    return rows2.filter((row) => row.area_id === project.area_id).map((row) => ({ id: row.id, orderKey: row.order_key }));
   }
   const item = current;
   const task = await readTask2(auth2, item.task_id);
@@ -3733,8 +3010,8 @@ function assertTaskRetry(input, event) {
   if (event.task_id !== input.task_id || event.base_revision !== input.expected_revision || event.transition !== "reorder" || event.actor_type !== "automation" || event.mutation_channel !== "mcp") {
     throw new Error("The mutation identifier was already used for a different to-do request.");
   }
-  const before = jsonRecord6(event.before_state);
-  const after = jsonRecord6(event.after_state);
+  const before = jsonRecord5(event.before_state);
+  const after = jsonRecord5(event.after_state);
   const orderKey = input.scope === "planning" ? "order_key" : "hierarchy_order_key";
   assertOnlyOrderChanged(before, after, orderKey, input.direction);
   if (input.scope === "planning") {
@@ -3750,23 +3027,9 @@ function assertHierarchyRetry(input, event) {
   if (event.entity_type !== input.record_type || event.entity_id !== input.record_id || event.base_revision !== input.expected_revision || event.transition !== "reorder" || event.actor_type !== "automation" || event.mutation_channel !== "mcp") {
     throw new Error("The mutation identifier was already used for a different hierarchy request.");
   }
-  const before = jsonRecord6(event.before_state);
-  const after = jsonRecord6(event.after_state);
-  const scope = input.scope ?? "structural";
-  assertOnlyOrderChanged(
-    before,
-    after,
-    scope === "planning" ? "planning_order_key" : "order_key",
-    input.direction
-  );
-  if (scope === "planning") {
-    const { view, planningDate } = requireProjectPlanning(input);
-    if (!visibleInPlanning(before, view, planningDate) || orderSection(before, view, planningDate) !== orderSection(after, view, planningDate)) {
-      throw new Error("The mutation identifier was already used in a different planning scope.");
-    }
-  } else if (input.view || input.planning_date) {
-    throw new Error("Structural reorder does not accept a planning view or date.");
-  }
+  const before = jsonRecord5(event.before_state);
+  const after = jsonRecord5(event.after_state);
+  assertOnlyOrderChanged(before, after, "order_key", input.direction);
 }
 async function resolveTaskRetry(input, auth2) {
   const [event, hierarchyEvent, operation] = await Promise.all([
@@ -3781,7 +3044,7 @@ async function resolveTaskRetry(input, auth2) {
   assertTaskRetry(input, event);
   const task = await readTask2(auth2, input.task_id);
   if (!task) throw new Error("The accepted to-do reorder no longer has a current record.");
-  return taskResult("already_applied", historyReceipt3(event), task);
+  return taskResult("already_applied", historyReceipt2(event), task);
 }
 async function resolveHierarchyRetry(input, auth2) {
   const [event, taskEvent, operation] = await Promise.all([
@@ -3796,7 +3059,7 @@ async function resolveHierarchyRetry(input, auth2) {
   assertHierarchyRetry(input, event);
   const record = await readHierarchyRecord3(auth2, input.record_type, input.record_id);
   if (!record) throw new Error("The accepted hierarchy reorder no longer has a current record.");
-  return hierarchyResult2("already_applied", historyReceipt3(event), input.record_type, record);
+  return hierarchyResult2("already_applied", historyReceipt2(event), input.record_type, record);
 }
 async function updateTaskOrder(input, current, orderKey, auth2) {
   const patch = {
@@ -3807,24 +3070,20 @@ async function updateTaskOrder(input, current, orderKey, auth2) {
     last_mutation_channel: "mcp",
     undo_source_event_id: null
   };
-  return readOne9(auth2.supabase.from("tasks_todos").update(patch).eq("owner_id", auth2.userId).eq("id", input.task_id).eq("revision", input.expected_revision).eq("disposition", "present").eq("lifecycle", "open").select("*").maybeSingle());
+  return readOne8(auth2.supabase.from("tasks_todos").update(patch).eq("owner_id", auth2.userId).eq("id", input.task_id).eq("revision", input.expected_revision).eq("disposition", "present").eq("lifecycle", "open").select("*").maybeSingle());
 }
 async function updateHierarchyOrder(input, current, orderKey, auth2) {
-  const scope = input.scope ?? "structural";
   const patch = {
-    [scope === "planning" ? "planning_order_key" : "order_key"]: orderKey,
+    order_key: orderKey,
     revision: current.revision + 1,
     client_mutation_id: input.client_mutation_id,
     last_actor_type: "automation",
     last_mutation_channel: "mcp"
   };
   if (input.record_type === "area") {
-    return readOne9(auth2.supabase.from("tasks_areas").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").select("*").maybeSingle());
+    return readOne8(auth2.supabase.from("tasks_areas").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").select("*").maybeSingle());
   }
-  if (input.record_type === "project") {
-    return readOne9(auth2.supabase.from("tasks_projects").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").eq("lifecycle", "open").select("*").maybeSingle());
-  }
-  return readOne9(auth2.supabase.from("tasks_checklist_items").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").select("*").maybeSingle());
+  return readOne8(auth2.supabase.from("tasks_checklist_items").update(patch).eq("owner_id", auth2.userId).eq("id", input.record_id).eq("revision", input.expected_revision).eq("disposition", "present").select("*").maybeSingle());
 }
 async function reorderTaskData(input, auth2) {
   const retry = await resolveTaskRetry(input, auth2);
@@ -3836,7 +3095,7 @@ async function reorderTaskData(input, auth2) {
   if (!current) throw new Error("The to-do is unavailable.");
   assertOpenPresent(current);
   if (current.revision !== input.expected_revision) {
-    return taskResult("conflict", ephemeralReceipt5(
+    return taskResult("conflict", ephemeralReceipt4(
       input,
       current.id,
       current.revision,
@@ -3847,7 +3106,7 @@ async function reorderTaskData(input, auth2) {
   const peers = await taskPeers(input, current, auth2);
   const destination = targetIndex(peers, current.id, input.direction);
   if (destination === null) {
-    return taskResult("noop", ephemeralReceipt5(
+    return taskResult("noop", ephemeralReceipt4(
       input,
       current.id,
       current.revision,
@@ -3862,7 +3121,7 @@ async function reorderTaskData(input, auth2) {
       const event = await readTaskHistory(auth2, input.client_mutation_id);
       if (!event) throw new Error("The accepted to-do reorder receipt is unavailable.");
       assertTaskRetry(input, event);
-      return taskResult("applied", historyReceipt3(event), updated);
+      return taskResult("applied", historyReceipt2(event), updated);
     }
   } catch (error) {
     const accepted = await resolveTaskRetry(input, auth2);
@@ -3874,7 +3133,7 @@ async function reorderTaskData(input, auth2) {
   }
   const latest = await readTask2(auth2, input.task_id);
   if (!latest) throw new Error("The to-do is unavailable.");
-  return taskResult("conflict", ephemeralReceipt5(
+  return taskResult("conflict", ephemeralReceipt4(
     input,
     latest.id,
     latest.revision,
@@ -3885,15 +3144,11 @@ async function reorderTaskData(input, auth2) {
 async function reorderTaskHierarchyData(input, auth2) {
   const retry = await resolveHierarchyRetry(input, auth2);
   if (retry) return retry;
-  const scope = input.scope ?? "structural";
-  if (scope === "planning" && input.record_type !== "project") {
-    throw new Error("Planning reorder is available only for projects.");
-  }
   const current = await readHierarchyRecord3(auth2, input.record_type, input.record_id);
   if (!current) throw new Error(`The task ${input.record_type.replace("_", " ")} is unavailable.`);
   assertOpenPresent(current);
   if (current.revision !== input.expected_revision) {
-    return hierarchyResult2("conflict", ephemeralReceipt5(
+    return hierarchyResult2("conflict", ephemeralReceipt4(
       input,
       current.id,
       current.revision,
@@ -3904,7 +3159,7 @@ async function reorderTaskHierarchyData(input, auth2) {
   const peers = await hierarchyPeers(input, current, auth2);
   const destination = targetIndex(peers, current.id, input.direction);
   if (destination === null) {
-    return hierarchyResult2("noop", ephemeralReceipt5(
+    return hierarchyResult2("noop", ephemeralReceipt4(
       input,
       current.id,
       current.revision,
@@ -3919,7 +3174,7 @@ async function reorderTaskHierarchyData(input, auth2) {
       const event = await readHierarchyHistory(auth2, input.client_mutation_id);
       if (!event) throw new Error("The accepted hierarchy reorder receipt is unavailable.");
       assertHierarchyRetry(input, event);
-      return hierarchyResult2("applied", historyReceipt3(event), input.record_type, updated);
+      return hierarchyResult2("applied", historyReceipt2(event), input.record_type, updated);
     }
   } catch (error) {
     const accepted = await resolveHierarchyRetry(input, auth2);
@@ -3931,7 +3186,7 @@ async function reorderTaskHierarchyData(input, auth2) {
   }
   const latest = await readHierarchyRecord3(auth2, input.record_type, input.record_id);
   if (!latest) throw new Error(`The task ${input.record_type.replace("_", " ")} is unavailable.`);
-  return hierarchyResult2("conflict", ephemeralReceipt5(
+  return hierarchyResult2("conflict", ephemeralReceipt4(
     input,
     latest.id,
     latest.revision,
@@ -3939,14 +3194,14 @@ async function reorderTaskHierarchyData(input, auth2) {
     "revision_conflict"
   ), input.record_type, latest);
 }
-var mutationBaseSchema3 = {
+var mutationBaseSchema2 = {
   expected_revision: z.number().int().positive().describe("Current positive record revision."),
   client_mutation_id: uuidSchema.describe(
     "Stable UUID for this exact logical reorder. Reuse it only for an exact retry."
   ),
   direction: directionSchema.describe("Move one position up or down within the exact peer scope.")
 };
-var mutationAnnotations4 = {
+var mutationAnnotations3 = {
   readOnlyHint: false,
   idempotentHint: true,
   openWorldHint: false
@@ -3956,28 +3211,25 @@ var reorderTask = defineTool({
   title: "Reorder Task",
   description: "Move one open to-do up or down within its planning section or exact hierarchy peers without accepting a raw order key.",
   inputSchema: {
-    ...mutationBaseSchema3,
+    ...mutationBaseSchema2,
     task_id: uuidSchema.describe("Stable to-do identifier."),
     scope: taskScopeSchema,
     view: taskPlanningViewSchema.optional().describe("Required for planning order and omitted for hierarchy order."),
-    planning_date: calendarDateSchema5.optional().describe("Explicit deterministic planning date required for planning order.")
+    planning_date: calendarDateSchema3.optional().describe("Explicit deterministic planning date required for planning order.")
   },
-  annotations: mutationAnnotations4,
+  annotations: mutationAnnotations3,
   handler: (input, ctx) => toMcpResult(reorderTaskData(input, requireAuthenticated(ctx)))
 });
 var reorderTaskHierarchy = defineTool({
   name: "reorder_task_hierarchy",
   title: "Reorder Task Hierarchy",
-  description: "Move one area, project, or checklist item up or down within its exact structural peers, or reorder a project within one planning section.",
+  description: "Move one Area or checklist item up or down within its exact structural peers.",
   inputSchema: {
-    ...mutationBaseSchema3,
+    ...mutationBaseSchema2,
     record_type: hierarchyTypeSchema,
-    record_id: uuidSchema.describe("Stable hierarchy record identifier."),
-    scope: hierarchyScopeSchema.optional().describe("Defaults to structural. Planning is available only for projects."),
-    view: projectPlanningViewSchema.optional().describe("Required only for project planning order."),
-    planning_date: calendarDateSchema5.optional().describe("Explicit deterministic date required only for project planning order.")
+    record_id: uuidSchema.describe("Stable hierarchy record identifier.")
   },
-  annotations: mutationAnnotations4,
+  annotations: mutationAnnotations3,
   handler: (input, ctx) => toMcpResult(
     reorderTaskHierarchyData(input, requireAuthenticated(ctx))
   )
@@ -4030,7 +3282,7 @@ async function instantiateTaskTemplateData(input, auth2) {
 var getTaskTemplates = defineTool({
   name: "get_task_templates",
   title: "Get Task Templates",
-  description: "Read the signed-in user's native to-do and project templates with each current immutable revision and relative planning snapshot.",
+  description: "Read the signed-in user's native task templates with each current immutable revision and relative planning snapshot.",
   inputSchema: {
     include_archived: z.boolean().default(false),
     limit: z.number().int().min(1).max(500).default(250)
@@ -4041,12 +3293,12 @@ var getTaskTemplates = defineTool({
 var instantiateTaskTemplate = defineTool({
   name: "instantiate_task_template",
   title: "Instantiate Task Template",
-  description: "Atomically create a complete to-do or project hierarchy from one native template revision for an explicit calendar date.",
+  description: "Atomically create a complete task and checklist hierarchy from one native template revision for an explicit calendar date.",
   inputSchema: {
     template_id: uuidSchema,
     template_revision: z.number().int().positive().optional().describe("Immutable revision to create. Defaults to the template current revision."),
     anchor_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("Explicit reference date used to preserve relative Starts and Deadlines."),
-    target_area_id: uuidSchema.optional().describe("Optional accessible destination area for a project template."),
+    target_area_id: uuidSchema.optional().describe("Optional accessible destination Area for the instantiated task."),
     idempotency_key: uuidSchema.describe("Stable UUID for this exact creation request. Reuse only for an exact retry.")
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
@@ -4142,7 +3394,7 @@ async function evaluateTaskRecurrenceData(input, auth2) {
   if (error) throw new Error(error.message);
   return data;
 }
-var calendarDateSchema6 = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+var calendarDateSchema4 = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 var getTaskRecurrences = defineTool({
   name: "get_task_recurrences",
   title: "Get Task Recurrences",
@@ -4168,7 +3420,7 @@ var saveTaskRecurrence = defineTool({
     rule_mode: z.enum(["calendar", "after_completion"]),
     frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
     interval_count: z.number().int().min(1).max(1e3).default(1),
-    start_date: calendarDateSchema6,
+    start_date: calendarDateSchema4,
     planning_timezone: z.string().min(1).max(200),
     missed_policy: z.enum(["skip", "latest", "all"]).default("latest"),
     catch_up_limit: z.number().int().min(1).max(100).default(50),
@@ -4197,7 +3449,7 @@ var evaluateTaskRecurrence = defineTool({
   description: "Request idempotent server-side catch-up for one recurrence through an explicit local calendar date.",
   inputSchema: {
     recurrence_id: uuidSchema,
-    through_date: calendarDateSchema6,
+    through_date: calendarDateSchema4,
     idempotency_key: uuidSchema.describe("Stable UUID for this exact evaluation request.")
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
@@ -4230,7 +3482,7 @@ async function getTaskRemindersData(input, auth2) {
   return {
     reminders: visible.map((reminder) => ({
       ...stripOwner8(reminder),
-      root_id: reminder.task_id ?? reminder.project_id,
+      root_id: reminder.task_id,
       ...input.include_occurrences ? { occurrences: occurrencesByReminder.get(reminder.id) ?? [] } : {}
     })),
     truncated: reminders.length > input.limit,
@@ -4280,11 +3532,11 @@ var getTaskReminders = defineTool({
 var saveTaskReminder = defineTool({
   name: "save_task_reminder",
   title: "Save Task Reminder",
-  description: "Create or revise one task or project reminder at a wall-clock time on its Start, using an IANA time zone and daylight-saving ambiguity choice.",
+  description: "Create or revise one task reminder at a wall-clock time on its Start, using an IANA time zone and daylight-saving ambiguity choice.",
   inputSchema: {
     reminder_id: uuidSchema.optional().describe("Existing reminder to revise. Omit to create."),
     expected_record_revision: z.number().int().positive().optional().describe("Required current record revision when revising an existing reminder."),
-    root_type: z.enum(["todo", "project"]),
+    root_type: z.literal("todo"),
     root_id: uuidSchema,
     local_time: localTimeSchema,
     time_zone: z.string().min(1).max(255),
@@ -4318,7 +3570,7 @@ var mcp_default = defineMcp({
   name: "bathos-mcp",
   title: "BathOS",
   version: "0.1.0",
-  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped hierarchy, record, planning views, native templates, recurrence definitions, and resolved reminders plus guarded creation and content updates for to-dos, areas, projects, and checklist items; move, reorder, schedule, template-instantiation, recurrence, reminder, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates. Reminder times are tied to each item's Start and use its IANA time zone and daylight-saving ambiguity choice. Neither uses tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
+  instructions: "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped areas, tasks, checklist items, planning views, native templates, recurrence definitions, and resolved reminders plus guarded creation, content updates, move, reorder, schedule, template-instantiation, recurrence, reminder, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates. Reminder times are tied to each task's Start and use its IANA time zone and daylight-saving ambiguity choice. Neither uses tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -4341,14 +3593,10 @@ var mcp_default = defineMcp({
     getTaskReminders,
     createTask,
     createTaskArea,
-    createTaskProject,
     createTaskChecklistItem,
     updateTaskArea,
-    updateTaskProject,
     updateTaskChecklistItem,
     transitionTaskHierarchy,
-    moveTaskProject,
-    scheduleTaskProject,
     createMailTask,
     beginMailRetirement,
     resolveMailRetirement,

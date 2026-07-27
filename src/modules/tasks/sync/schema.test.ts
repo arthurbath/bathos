@@ -17,7 +17,6 @@ describe('tasks PowerSync schema', () => {
       'tasks_hierarchy_operations',
       'tasks_history_events',
       'tasks_owner_binding',
-      'tasks_projects',
       'tasks_recurrence_definitions',
       'tasks_recurrence_evaluations',
       'tasks_recurrence_occurrences',
@@ -39,7 +38,6 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_history_events.local_only).toBe(false);
     expect(tables.tasks_user_settings.local_only).toBe(false);
     expect(tables.tasks_areas.local_only).toBe(false);
-    expect(tables.tasks_projects.local_only).toBe(false);
     expect(tables.tasks_checklist_items.local_only).toBe(false);
     expect(tables.tasks_hierarchy_operations.local_only).toBe(false);
     expect(tables.tasks_hierarchy_history_events.local_only).toBe(false);
@@ -74,15 +72,14 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain(
       'recurrence_occurrence_id',
     );
-    expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('project_id');
+    expect(tables.tasks_todos.columns.map(({ name }) => name)).not.toContain('project_id');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('deletion_root_id');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain(
       'hierarchy_order_key',
     );
-    expect(tables.tasks_projects.columns.map(({ name }) => name)).toContain(
-      'planning_order_key',
-    );
     expect(tables.tasks_history_events.columns.map(({ name }) => name)).toContain('before_state');
+    expect(tables.tasks_history_events.columns.map(({ name }) => name)).toContain('operation_id');
+    expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('last_operation_id');
     expect(tables.tasks_hierarchy_operations.columns.map(({ name }) => name)).toContain(
       'expected_revisions',
     );

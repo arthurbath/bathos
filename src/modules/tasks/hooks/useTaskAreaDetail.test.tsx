@@ -35,7 +35,6 @@ describe('useTaskAreaDetail', () => {
     const task = taskTodoFixture({
       owner_id: 'owner-a',
       area_id: 'area-a',
-      project_id: null,
       lifecycle: 'open',
       disposition: 'present',
     });
@@ -53,6 +52,5 @@ describe('useTaskAreaDetail', () => {
     );
     expect(useQuery.mock.calls[0][0]).toContain("AND disposition = 'present'");
     expect(useQuery.mock.calls[0][0]).toContain('AND area_id = ?');
-    expect(useQuery.mock.calls[0][0]).toContain('AND project_id IS NULL');
   });
 });

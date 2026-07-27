@@ -23,7 +23,6 @@ class Query {
 
 const reminder = {
   id: 'reminder-a', owner_id: 'owner-a', root_type: 'todo', task_id: 'task-a',
-  project_id: null, local_date: '2026-07-20', local_time: '09:00:00',
   time_zone: 'America/Los_Angeles', ambiguity_choice: 'earlier',
   resolved_at: '2026-07-20T16:00:00Z', resolution_kind: 'exact', status: 'active',
   record_revision: 1, last_mutation_channel: 'web', last_actor_type: 'user',

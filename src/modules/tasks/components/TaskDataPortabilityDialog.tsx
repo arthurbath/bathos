@@ -28,7 +28,7 @@ import {
   parseTaskExport,
   serializeTaskExport,
   TASK_REPLACE_RESTORE_CONFIRMATION,
-  type TaskExportV12,
+  type TaskExportV13,
   type TaskPortableExport,
   type TaskPortabilityService,
   type TaskReplaceRestorePreparation,
@@ -131,7 +131,7 @@ export function TaskDataPortabilityDialog({
   const prepareReplace = async () => {
     if (
       !taskExport
-      || taskExport.schema_version !== 12
+      || taskExport.schema_version !== 13
       || !replaceAvailable
       || busy
     ) return;
@@ -164,7 +164,7 @@ export function TaskDataPortabilityDialog({
   const confirmReplace = async () => {
     if (
       !taskExport
-      || taskExport.schema_version !== 12
+      || taskExport.schema_version !== 13
       || !preparation
       || !backupDownloaded
       || !replaceAvailable
@@ -289,7 +289,7 @@ export function TaskDataPortabilityDialog({
                   >
                     Merge Backup
                   </Button>
-                  {taskExport.schema_version === 12 ? (
+                  {taskExport.schema_version === 13 ? (
                     <Button
                       type="button"
                       variant="outline-destructive"
@@ -306,7 +306,7 @@ export function TaskDataPortabilityDialog({
                   )}
                 </div>
               ) : null}
-              {taskExport?.schema_version === 12 && !replaceAvailable ? (
+              {taskExport?.schema_version === 13 && !replaceAvailable ? (
                 <p role="status" className="text-sm text-warning">
                   {replaceUnavailableReason ?? 'Connect and synchronize task changes before replacing data.'}
                 </p>
@@ -427,7 +427,7 @@ function countRecord(counts: Record<string, number>): number {
   return Object.values(counts).reduce((total, count) => total + count, 0);
 }
 
-function downloadTaskExport(taskExport: TaskExportV12 | TaskPortableExport, fileName: string) {
+function downloadTaskExport(taskExport: TaskExportV13 | TaskPortableExport, fileName: string) {
   const url = URL.createObjectURL(new Blob([serializeTaskExport(taskExport)], {
     type: 'application/json',
   }));

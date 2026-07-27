@@ -97,7 +97,6 @@ async function nextAreaOrderKey(
     .select('hierarchy_order_key')
     .eq('owner_id', auth.userId)
     .eq('area_id', areaId)
-    .is('project_id', null)
     .eq('lifecycle', 'open')
     .eq('disposition', 'present')
     .not('hierarchy_order_key', 'is', null)

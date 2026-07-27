@@ -38,16 +38,6 @@ export function applyTaskSelectionGesture(
       };
     }
 
-    if (selectedIds.size === 1) {
-      const focusedId = [...selectedIds][0];
-      return {
-        active: false,
-        anchorId: focusedId,
-        focusedId,
-        selectedIds: new Set(),
-      };
-    }
-
     return {
       active: true,
       anchorId,
@@ -57,12 +47,7 @@ export function applyTaskSelectionGesture(
   };
 
   if (!current.active && current.focusedId === null) {
-    return {
-      active: false,
-      anchorId: gesture.taskId,
-      focusedId: gesture.taskId,
-      selectedIds: new Set(),
-    };
+    return normalize(new Set([gesture.taskId]), gesture.taskId);
   }
 
   const anchorId = current.anchorId ?? current.focusedId ?? gesture.taskId;
@@ -77,6 +62,14 @@ export function applyTaskSelectionGesture(
         anchorId,
       );
     }
+  }
+
+  if (
+    !current.active
+    && current.focusedId === gesture.taskId
+    && platformModifier
+  ) {
+    return normalize(new Set([gesture.taskId]), anchorId);
   }
 
   const selectedIds = current.active

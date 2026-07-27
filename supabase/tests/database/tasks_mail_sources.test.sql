@@ -259,7 +259,7 @@ SELECT throws_ok(
 );
 
 SELECT has_function(
-  'public', 'tasks_create_export_v12', ARRAY[]::text[],
+  'public', 'tasks_create_export_v13', ARRAY[]::text[],
   'creates portable task exports with Mail source records'
 );
 
@@ -269,11 +269,11 @@ SELECT has_function(
 );
 
 CREATE TEMP TABLE captured_mail_export AS
-SELECT public.tasks_create_export_v12() AS envelope;
+SELECT public.tasks_create_export_v13() AS envelope;
 
 SELECT is(
   (SELECT envelope ->> 'schema_version' FROM captured_mail_export),
-  '12',
+  '13',
   'uses the current portable task schema for Mail sources'
 );
 

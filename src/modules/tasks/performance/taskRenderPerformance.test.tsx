@@ -39,7 +39,7 @@ vi.mock('@/modules/tasks/hooks/useTaskUndo', () => ({
 }));
 vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({
   useTaskHierarchy: () => ({
-    areas: [], projects: [], loading: false, error: null,
+    areas: [], loading: false, error: null,
   }),
 }));
 vi.mock('@/modules/tasks/hooks/useTaskDeletedHierarchyRoots', () => ({
@@ -79,12 +79,6 @@ vi.mock('@/platform/components/MobileBottomNav', () => ({
 }));
 vi.mock('@/platform/hooks/useHostModule', () => ({
   useModuleBasePath: () => '/tasks',
-}));
-vi.mock('@/modules/tasks/components/TaskProjectsView', () => ({
-  TaskProjectsView: () => null,
-}));
-vi.mock('@/modules/tasks/components/TaskProjectDetailView', () => ({
-  TaskProjectDetailView: () => null,
 }));
 vi.mock('@/modules/tasks/components/TaskTemplatesView', () => ({
   TaskTemplatesView: () => null,
@@ -130,13 +124,13 @@ describePerformance('Tasks rendered-view performance', () => {
       const searchStartedAt = performance.now();
       act(() => {
         container.querySelector<HTMLButtonElement>(
-          '[aria-label="Quick Find Tasks, Projects, and Areas"]',
+          '[aria-label="Quick Find Tasks and Areas"]',
         )?.click();
       });
       const searchOpenMs = performance.now() - searchStartedAt;
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
       expect(dialog).toHaveAccessibleName('Quick Find');
-      expect(dialog?.querySelector('[aria-label="Find Tasks, Projects, and Areas"]')).toBeTruthy();
+      expect(dialog?.querySelector('[aria-label="Find Tasks and Areas"]')).toBeTruthy();
       expect(dialog?.querySelectorAll('select')).toHaveLength(0);
       expect(searchOpenMs).toBeLessThan(1_000);
 
@@ -158,7 +152,6 @@ function syntheticTask(index: number): TaskTodo {
     id: `render-task-${index}`,
     owner_id: 'synthetic-owner',
     area_id: null,
-    project_id: null,
     title: `Rendered Synthetic Task ${index}`,
     notes: `Rendered synthetic notes ${index}`,
     lifecycle: 'open',

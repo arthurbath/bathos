@@ -91,7 +91,6 @@ export class TaskClipboardService {
         deadline: task.deadline,
         actionability: task.actionability,
         areaId: task.area_id,
-        projectId: task.project_id,
         checklist: (checklistByTask.get(task.id) ?? []).map((item) => ({
           title: item.title,
           completed: item.completed,
@@ -149,7 +148,7 @@ export class TaskClipboardService {
         const orderKey = options.atTop
           ? generateTaskOrderKey(null, nextPlanningKey)
           : undefined;
-        const hierarchyOrderKey = options.atTop && (plan.areaId !== null || plan.projectId !== null)
+        const hierarchyOrderKey = options.atTop && plan.areaId !== null
           ? generateTaskOrderKey(null, nextHierarchyKey)
           : undefined;
         const task = await this.repository.createTask({
@@ -163,7 +162,6 @@ export class TaskClipboardService {
           deadline: plan.deadline,
           actionability: plan.actionability,
           areaId: plan.areaId,
-          projectId: plan.projectId,
           ...(orderKey ? { orderKey } : {}),
           ...(hierarchyOrderKey ? { hierarchyOrderKey } : {}),
         });
@@ -291,13 +289,13 @@ export class TaskClipboardService {
   private async firstHierarchyOrderKey(
     plan: TaskClipboardSnapshot,
   ): Promise<string | null> {
-    if (plan.areaId === null && plan.projectId === null) return null;
+    if (plan.areaId === null) return null;
     const row = await this.database.getOptional<{ hierarchy_order_key: string }>(
       `SELECT hierarchy_order_key FROM tasks_todos
-       WHERE owner_id = ? AND area_id IS ? AND project_id IS ?
+       WHERE owner_id = ? AND area_id IS ?
          AND lifecycle = 'open' AND disposition = 'present'
        ORDER BY hierarchy_order_key, id LIMIT 1`,
-      [this.ownerId, plan.areaId, plan.projectId],
+      [this.ownerId, plan.areaId],
     );
     return row?.hierarchy_order_key ?? null;
   }

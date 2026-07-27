@@ -57,7 +57,7 @@ export async function getTaskRemindersData(
   return {
     reminders: visible.map((reminder) => ({
       ...stripOwner(reminder),
-      root_id: reminder.task_id ?? reminder.project_id,
+      root_id: reminder.task_id,
       ...(input.include_occurrences
         ? { occurrences: occurrencesByReminder.get(reminder.id) ?? [] }
         : {}),
@@ -71,7 +71,7 @@ export async function saveTaskReminderData(
   input: {
     reminder_id?: string;
     expected_record_revision?: number;
-    root_type: 'todo' | 'project';
+    root_type: 'todo';
     root_id: string;
     local_time: string;
     time_zone: string;
@@ -133,12 +133,12 @@ export const getTaskReminders = defineTool({
 export const saveTaskReminder = defineTool({
   name: 'save_task_reminder',
   title: 'Save Task Reminder',
-  description: 'Create or revise one task or project reminder at a wall-clock time on its Start, using an IANA time zone and daylight-saving ambiguity choice.',
+  description: 'Create or revise one task reminder at a wall-clock time on its Start, using an IANA time zone and daylight-saving ambiguity choice.',
   inputSchema: {
     reminder_id: uuidSchema.optional().describe('Existing reminder to revise. Omit to create.'),
     expected_record_revision: z.number().int().positive().optional()
       .describe('Required current record revision when revising an existing reminder.'),
-    root_type: z.enum(['todo', 'project']),
+    root_type: z.literal('todo'),
     root_id: uuidSchema,
     local_time: localTimeSchema,
     time_zone: z.string().min(1).max(255),
