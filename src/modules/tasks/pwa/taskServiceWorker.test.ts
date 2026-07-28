@@ -68,7 +68,7 @@ describe('Tasks service-worker registration', () => {
     expect(first).toBe(second);
     await expect(first).resolves.toBe(registration);
     expect(register).toHaveBeenCalledOnce();
-    expect(register).toHaveBeenCalledWith('/tasks-service-worker.js?version=9', {
+    expect(register).toHaveBeenCalledWith('/tasks-service-worker.js?version=10', {
       scope: '/',
       updateViaCache: 'none',
     });

@@ -275,12 +275,14 @@ describe('Tasks service worker offline shell', () => {
     const listener = environment.listeners.get('fetch');
     if (!listener) throw new Error('The Tasks service worker did not register fetch');
     offline = true;
+    environment.fetchStub.mockClear();
 
     const vitePreload = await runFetch(
       listener,
       new Request(`${ORIGIN}/assets/tasks-chunk.js`),
     );
     expect(await vitePreload?.text()).toContain('/tasks-offline-assets/assets/tasks.worker.js');
+    expect(environment.fetchStub).not.toHaveBeenCalled();
 
     const nestedWorkerAsset = await runFetch(
       listener,

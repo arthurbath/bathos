@@ -1,8 +1,8 @@
-self.__BATHOS_TASKS_WORKER_VERSION__ = 9;
+self.__BATHOS_TASKS_WORKER_VERSION__ = 10;
 
 const TASKS_SHELL_CACHE_PREFIX = 'bathos-tasks-shell-';
 const TASKS_SHELL_META_CACHE = 'bathos-tasks-meta-v1';
-const TASKS_SHELL_FORMAT_VERSION = '6';
+const TASKS_SHELL_FORMAT_VERSION = '7';
 const TASKS_SHELL_ASSET_LIMIT = 256;
 const TASKS_SHELL_POINTER_KEY = new URL('/tasks-offline-shell-active', self.location.origin).href;
 const TASKS_SHELL_DOCUMENT_KEY = new URL('/tasks-offline-shell', self.location.origin).href;
@@ -240,17 +240,13 @@ async function handleOfflineAsset(request) {
 }
 
 async function handleVersionedAsset(request) {
-  try {
-    return await fetch(request);
-  } catch (error) {
-    const cacheName = await activeShellCacheName();
-    if (cacheName) {
-      const shellCache = await caches.open(cacheName);
-      const cached = await shellCache.match(offlineAssetUrl(request.url));
-      if (cached) return cached;
-    }
-    throw error;
+  const cacheName = await activeShellCacheName();
+  if (cacheName) {
+    const shellCache = await caches.open(cacheName);
+    const cached = await shellCache.match(offlineAssetUrl(request.url));
+    if (cached) return cached;
   }
+  return fetch(request);
 }
 
 self.addEventListener('install', (event) => {
