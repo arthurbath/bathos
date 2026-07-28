@@ -28,3 +28,8 @@ verify_jwt = false
 verify_jwt = false
 entrypoint = "./functions/dispatch-task-reminders/index.ts"
 import_map = "./functions/dispatch-task-reminders/deno.json"
+
+[functions.tasks-widget-actions]
+verify_jwt = false
+entrypoint = "./functions/tasks-widget-actions/index.ts"
+import_map = "./functions/tasks-widget-actions/deno.json"

@@ -1,0 +1,43 @@
+import { createClient } from '@supabase/supabase-js';
+
+import {
+  createTasksWidgetActionsHandler,
+  type WidgetActionRpcClient,
+} from './handler.ts';
+
+const handler = createTasksWidgetActionsHandler({
+  getEnvironment: (name) => Deno.env.get(name) ?? null,
+  authenticateUser: async (supabaseUrl, publishableKey, accessToken) => {
+    const client = createClient(supabaseUrl, publishableKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    });
+    const { data, error } = await client.auth.getUser(accessToken);
+    return error ? null : data.user?.id ?? null;
+  },
+  createRpcClient: (supabaseUrl, serviceKey): WidgetActionRpcClient => {
+    const client = createClient(supabaseUrl, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    return {
+      issue: async (input) => client.rpc('tasks_issue_widget_completion_credential', {
+        _owner_id: input.ownerId,
+        _installation_id: input.installationId,
+        _raw_token: input.rawToken,
+        _expires_at: input.expiresAt,
+      }),
+      complete: async (input) => client.rpc('tasks_complete_from_widget', {
+        _raw_token: input.rawToken,
+        _task_id: input.taskId,
+        _client_mutation_id: input.clientMutationId,
+        _operation_id: input.operationId,
+      }),
+      revoke: async (rawToken) => client.rpc(
+        'tasks_revoke_widget_completion_credential',
+        { _raw_token: rawToken },
+      ),
+    };
+  },
+});
+
+Deno.serve(handler);

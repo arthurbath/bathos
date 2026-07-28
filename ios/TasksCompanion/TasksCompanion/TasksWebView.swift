@@ -61,6 +61,19 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
             context.coordinator,
             name: TaskCompanionConstants.webBridgeHandler
         )
+        if let installationID = try? TaskWidgetInstallationStore()?.identifier() {
+            let script = """
+            window.__bathosTasksNative = Object.freeze({
+              schemaVersion: 2,
+              installationId: "\(installationID.uuidString.lowercased())"
+            });
+            """
+            userContentController.addUserScript(WKUserScript(
+                source: script,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+        }
 
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = userContentController

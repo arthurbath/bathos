@@ -15,11 +15,17 @@ import type {
 } from '@/modules/tasks/types/tasks';
 import type { TaskLifecycle } from '@/modules/tasks/domain/taskState';
 import {
+  getTaskPrimaryLinkHref,
+  getTaskPrimaryLinkKind,
+  type TaskPrimaryLinkKind,
+} from '@/modules/tasks/domain/taskPrimaryLink';
+import {
   getTasksNativeMessageHandler,
+  getTasksNativeInstallationId,
   TASKS_NATIVE_BRIDGE_HANDLER,
 } from '@/platform/native/tasksNativeCompanion';
 
-export const TASK_NATIVE_WIDGET_SCHEMA_VERSION = 1;
+export const TASK_NATIVE_WIDGET_SCHEMA_VERSION = 2;
 export const TASK_NATIVE_WIDGET_LIST_LIMIT = 50;
 export const TASK_NATIVE_WIDGET_BRIDGE_HANDLER = TASKS_NATIVE_BRIDGE_HANDLER;
 export const TASK_NATIVE_TASK_QUERY_PARAMETER = 'native_task';
@@ -41,6 +47,10 @@ export type TaskNativeWidgetTask = {
   todaySection: TaskTodaySection | null;
   actionability: TaskActionability;
   terminalState: Exclude<TaskLifecycle, 'open'> | 'deleted' | null;
+  primaryLink: {
+    href: string;
+    kind: TaskPrimaryLinkKind;
+  } | null;
 };
 
 export type TaskNativeWidgetList = {
@@ -63,6 +73,15 @@ export type TaskNativeWidgetSnapshot = {
 export type TaskNativeWidgetClearMessage = {
   type: 'clear';
   schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
+};
+
+export type TaskNativeWidgetCredentialMessage = {
+  type: 'credential';
+  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
+  ownerId: string;
+  installationId: string;
+  credential: string;
+  expiresAt: string;
 };
 
 type BuildTaskNativeWidgetSnapshotInput = {
@@ -144,13 +163,16 @@ export function publishTaskNativeWidgetSnapshot(
   const handler = getTasksNativeMessageHandler(target);
   if (!handler) return false;
 
+  const message = getTasksNativeInstallationId(target)
+    ? snapshot
+    : toLegacyTaskNativeWidgetSnapshot(snapshot);
   const content = JSON.stringify({
-    ...snapshot,
+    ...message,
     generatedAt: null,
   });
   if (content === lastPublishedContent) return false;
 
-  handler.postMessage(snapshot);
+  handler.postMessage(message);
   lastPublishedContent = content;
   return true;
 }
@@ -160,9 +182,25 @@ export function clearTaskNativeWidgetCache(target: Window = window): boolean {
   if (!handler) return false;
   handler.postMessage({
     type: 'clear',
-    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
+    schemaVersion: getTasksNativeInstallationId(target)
+      ? TASK_NATIVE_WIDGET_SCHEMA_VERSION
+      : 1,
   });
   lastPublishedContent = null;
+  return true;
+}
+
+export function publishTaskNativeWidgetCredential(
+  message: Omit<TaskNativeWidgetCredentialMessage, 'type' | 'schemaVersion'>,
+  target: Window = window,
+): boolean {
+  const handler = getTasksNativeMessageHandler(target);
+  if (!handler) return false;
+  handler.postMessage({
+    type: 'credential',
+    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
+    ...message,
+  } satisfies TaskNativeWidgetCredentialMessage);
   return true;
 }
 
@@ -183,6 +221,8 @@ export function resetTaskNativeWidgetPublisherForTests(): void {
 }
 
 function toTaskNativeWidgetTask(task: TaskTodo): TaskNativeWidgetTask {
+  const primaryLinkHref = getTaskPrimaryLinkHref(task.primary_link);
+  const primaryLinkKind = getTaskPrimaryLinkKind(task.primary_link);
   return {
     id: task.id,
     summary: task.title.trim().slice(0, 500),
@@ -192,5 +232,19 @@ function toTaskNativeWidgetTask(task: TaskTodo): TaskNativeWidgetTask {
     terminalState: task.disposition === 'deleted'
       ? 'deleted'
       : task.lifecycle === 'open' ? null : task.lifecycle,
+    primaryLink: primaryLinkHref && primaryLinkKind
+      ? { href: primaryLinkHref.slice(0, 8_000), kind: primaryLinkKind }
+      : null,
+  };
+}
+
+function toLegacyTaskNativeWidgetSnapshot(snapshot: TaskNativeWidgetSnapshot) {
+  return {
+    ...snapshot,
+    schemaVersion: 1,
+    lists: snapshot.lists.map((list) => ({
+      ...list,
+      tasks: list.tasks.map(({ primaryLink: _primaryLink, ...task }) => task),
+    })),
   };
 }

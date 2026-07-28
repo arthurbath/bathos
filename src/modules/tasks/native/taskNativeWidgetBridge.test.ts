@@ -5,6 +5,7 @@ import {
   clearTaskNativeWidgetCache,
   getNativeTaskDeepLinkId,
   publishTaskNativeWidgetSnapshot,
+  publishTaskNativeWidgetCredential,
   removeNativeTaskDeepLink,
   resetTaskNativeWidgetPublisherForTests,
 } from './taskNativeWidgetBridge';
@@ -14,8 +15,16 @@ const taskA = '10000000-0000-4000-8000-000000000001';
 const taskB = '10000000-0000-4000-8000-000000000002';
 const taskC = '10000000-0000-4000-8000-000000000003';
 
-function bridgeWindow(messages: unknown[]): Window {
+function bridgeWindow(messages: unknown[], schemaVersion: 1 | 2 = 2): Window {
   return {
+    ...(schemaVersion === 2
+      ? {
+        __bathosTasksNative: {
+          schemaVersion: 2,
+          installationId: '30000000-0000-4000-8000-000000000001',
+        },
+      }
+      : {}),
     webkit: {
       messageHandlers: {
         bathosTasksWidget: {
@@ -87,8 +96,28 @@ describe('taskNativeWidgetBridge', () => {
       expect.objectContaining({ id: taskC }),
     ]);
     expect(JSON.stringify(snapshot)).not.toContain('Private Notes');
-    expect(JSON.stringify(snapshot)).not.toContain('private.example');
+    expect(snapshot.lists.find(({ id }) => id === 'today')?.tasks[0]?.primaryLink)
+      .toEqual({ href: 'https://private.example', kind: 'link' });
     expect(JSON.stringify(snapshot)).not.toContain('Other Owner');
+  });
+
+  it('normalizes only supported Primary Link protocols for native widget actions', () => {
+    const snapshot = buildTaskNativeWidgetSnapshot({
+      ownerId,
+      planningDate: '2026-07-27',
+      quickFilter: 'all',
+      automaticListSorting: false,
+      areas: [],
+      tasks: [
+        taskTodoFixture({ id: taskA, owner_id: ownerId, primary_link: 'message://mail-a' }),
+        taskTodoFixture({ id: taskB, owner_id: ownerId, primary_link: 'example.test/read' }),
+      ],
+    });
+    const tasks = snapshot.lists.find(({ id }) => id === 'anytime')?.tasks;
+    expect(tasks?.find(({ id }) => id === taskA)?.primaryLink)
+      .toEqual({ href: 'message://mail-a', kind: 'mail' });
+    expect(tasks?.find(({ id }) => id === taskB)?.primaryLink)
+      .toEqual({ href: 'https://example.test/read', kind: 'link' });
   });
 
   it('flattens areas in configured order and applies automatic ordering inside them', () => {
@@ -197,6 +226,31 @@ describe('taskNativeWidgetBridge', () => {
     expect(messages).toEqual([snapshot]);
   });
 
+  it('keeps the schema-one snapshot and clear contract during a native rollout', () => {
+    const messages: unknown[] = [];
+    const target = bridgeWindow(messages, 1);
+    const snapshot = buildTaskNativeWidgetSnapshot({
+      ownerId,
+      planningDate: '2026-07-27',
+      quickFilter: 'all',
+      automaticListSorting: false,
+      areas: [],
+      tasks: [
+        taskTodoFixture({
+          id: taskA,
+          owner_id: ownerId,
+          primary_link: 'https://example.test/read',
+        }),
+      ],
+    });
+
+    expect(publishTaskNativeWidgetSnapshot(snapshot, target)).toBe(true);
+    expect(clearTaskNativeWidgetCache(target)).toBe(true);
+    expect(messages[0]).toMatchObject({ type: 'snapshot', schemaVersion: 1 });
+    expect(JSON.stringify(messages[0])).not.toContain('primaryLink');
+    expect(messages[1]).toEqual({ type: 'clear', schemaVersion: 1 });
+  });
+
   it('clears through the bridge and allows the same content to publish again', () => {
     const messages: unknown[] = [];
     const target = bridgeWindow(messages);
@@ -214,6 +268,23 @@ describe('taskNativeWidgetBridge', () => {
     expect(publishTaskNativeWidgetSnapshot(snapshot, target)).toBe(true);
     expect(messages.map((message) => (message as { type: string }).type))
       .toEqual(['snapshot', 'clear', 'snapshot']);
+  });
+
+  it('publishes a credential only through the trusted native bridge', () => {
+    const messages: unknown[] = [];
+    const message = {
+      ownerId,
+      installationId: '30000000-0000-4000-8000-000000000001',
+      credential: `twc_${'A'.repeat(43)}`,
+      expiresAt: '2026-10-26T12:00:00.000Z',
+    };
+    expect(publishTaskNativeWidgetCredential(message, {} as Window)).toBe(false);
+    expect(publishTaskNativeWidgetCredential(message, bridgeWindow(messages))).toBe(true);
+    expect(messages).toEqual([expect.objectContaining({
+      type: 'credential',
+      schemaVersion: 2,
+      ...message,
+    })]);
   });
 
   it('accepts only UUID native-task links and removes just that parameter', () => {

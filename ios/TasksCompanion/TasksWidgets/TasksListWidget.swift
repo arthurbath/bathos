@@ -8,6 +8,52 @@ private let taskWidgetLogger = Logger(
     category: "timeline-provider"
 )
 
+private struct CompleteTaskIntent: AppIntent {
+    static let title: LocalizedStringResource = "Complete Task"
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Task")
+    var taskID: String
+
+    init() {
+        taskID = ""
+    }
+
+    init(taskID: String) {
+        self.taskID = taskID
+    }
+
+    func perform() async throws -> some IntentResult {
+        do {
+            guard let taskUUID = UUID(uuidString: taskID),
+                  let credentialStore = TaskWidgetCredentialStore(),
+                  let credential = try credentialStore.load(),
+                  let snapshotStore = TaskWidgetStore() else {
+                return .result()
+            }
+            guard let completion = await TaskWidgetCompletionClient().complete(
+                taskID: taskUUID,
+                credential: credential
+            ) else {
+                return .result()
+            }
+
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            if var snapshot = try snapshotStore.load() {
+                let completedAt = completion.completedAt
+                    ?? ISO8601DateFormatter().string(from: Date())
+                if snapshot.completeTask(taskUUID, completedAt: completedAt) {
+                    _ = try snapshotStore.store(snapshot)
+                }
+            }
+            WidgetCenter.shared.reloadTimelines(ofKind: TaskCompanionConstants.widgetKind)
+            return .result()
+        } catch {
+            return .result()
+        }
+    }
+}
+
 struct TaskListWidgetEntry: TimelineEntry {
     let date: Date
     let listID: TaskWidgetListID
@@ -74,8 +120,9 @@ struct TaskListWidgetProvider: AppIntentTimelineProvider {
             summary: summary,
             deadline: nil,
             todaySection: nil,
-            actionability: "actionable",
-            terminalState: nil
+                        actionability: "actionable",
+                        terminalState: nil,
+                        primaryLink: nil
         )
     }
 }
@@ -140,21 +187,57 @@ private struct TaskListWidgetView: View {
             } else {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(list.tasks.prefix(8)) { task in
-                        Link(destination: TaskNativeRoute.task(task.id, list: entry.listID).deepLinkURL) {
-                            HStack(spacing: 9) {
+                        HStack(spacing: 9) {
+                            if task.terminalState == nil {
+                                Button(intent: CompleteTaskIntent(
+                                    taskID: task.id.uuidString.lowercased()
+                                )) {
+                                    Image(systemName: taskSymbol(task))
+                                        .font(.system(size: 14, weight: .regular))
+                                        .foregroundStyle(taskColor(task))
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Complete \(task.summary)")
+                            } else {
                                 Image(systemName: taskSymbol(task))
                                     .font(.system(size: 14, weight: .regular))
                                     .foregroundStyle(taskColor(task))
+                            }
+                            Link(
+                                destination: TaskNativeRoute.task(
+                                    task.id,
+                                    list: entry.listID
+                                ).deepLinkURL
+                            ) {
                                 Text(task.summary)
                                     .font(.system(size: 14))
                                     .lineLimit(1)
                                     .privacySensitive()
-                                Spacer(minLength: 0)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 29, alignment: .leading)
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
+                            Spacer(minLength: 0)
+                            if let primaryLink = task.primaryLink,
+                               let destination = primaryLink.url {
+                                Link(destination: destination) {
+                                    Image(systemName: primaryLink.kind == .mail
+                                        ? "envelope"
+                                        : "arrow.up.right.square"
+                                    )
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.secondary)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(
+                                    primaryLink.kind == .mail
+                                        ? "Open Message"
+                                        : "Open Primary Link"
+                                )
+                            }
                         }
-                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity, minHeight: 29, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                     if list.truncated || list.totalCount > min(list.tasks.count, 8) {
                         Text("+\(list.totalCount - min(list.totalCount, 8)) More")

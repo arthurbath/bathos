@@ -21,7 +21,7 @@ final class TasksCompanionTests: XCTestCase {
             encoding: .utf8
         )!
         XCTAssertFalse(encoded.contains("notes"))
-        XCTAssertFalse(encoded.contains("primaryLink"))
+        XCTAssertTrue(encoded.contains("primaryLink"))
         XCTAssertFalse(encoded.contains("checklist"))
     }
 
@@ -39,7 +39,7 @@ final class TasksCompanionTests: XCTestCase {
         let ownerID = UUID()
         let incomplete = TaskWidgetSnapshot(
             type: "snapshot",
-            schemaVersion: 1,
+            schemaVersion: TaskWidgetSnapshot.schemaVersion,
             ownerId: ownerID,
             generatedAt: "2026-07-28T08:00:00Z",
             planningDate: "2026-07-28",
@@ -74,7 +74,7 @@ final class TasksCompanionTests: XCTestCase {
         )
         let invalid = TaskWidgetSnapshot(
             type: "snapshot",
-            schemaVersion: 1,
+            schemaVersion: TaskWidgetSnapshot.schemaVersion,
             ownerId: ownerID,
             generatedAt: "2026-07-28T08:00:00Z",
             planningDate: "2026-07-28",
@@ -95,6 +95,151 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertTrue(try store.clear())
         XCTAssertNil(try store.load())
         XCTAssertFalse(try store.clear())
+    }
+
+    func testPrimaryLinkAllowsOnlyTheDeclaredMailOrWebProtocol() {
+        XCTAssertNotNil(TaskWidgetPrimaryLink(
+            href: "message://synthetic-message",
+            kind: .mail
+        ).url)
+        XCTAssertNotNil(TaskWidgetPrimaryLink(
+            href: "https://example.test/read",
+            kind: .link
+        ).url)
+        XCTAssertNil(TaskWidgetPrimaryLink(
+            href: "javascript:alert(1)",
+            kind: .link
+        ).url)
+        XCTAssertNil(TaskWidgetPrimaryLink(
+            href: "https://example.test/read",
+            kind: .mail
+        ).url)
+    }
+
+    func testCredentialStorePersistsOnlyAValidUnexpiredCapability() throws {
+        let directory = temporaryDirectory()
+        let store = TaskWidgetCredentialStore(directoryURL: directory)
+        let credential = TaskWidgetCredential(
+            schemaVersion: TaskWidgetCredential.schemaVersion,
+            ownerId: UUID(),
+            installationId: UUID(),
+            credential: "twc_" + String(repeating: "A", count: 43),
+            expiresAt: "2099-10-26T12:00:00.123Z"
+        )
+        try store.store(credential)
+        XCTAssertEqual(
+            try store.load(now: Date(timeIntervalSince1970: 0)),
+            credential
+        )
+        XCTAssertThrowsError(try store.load(
+            now: Date(timeIntervalSince1970: 4_102_444_800)
+        ))
+        XCTAssertTrue(try store.clear())
+    }
+
+    func testCompletionClientUsesTheNarrowCredentialAndBoundedRequest() async throws {
+        let taskID = UUID(uuidString: "10c452c2-5767-4c0d-87ff-ab9fbc12ea25")!
+        let mutationID = UUID(uuidString: "20c452c2-5767-4c0d-87ff-ab9fbc12ea25")!
+        let operationID = UUID(uuidString: "30c452c2-5767-4c0d-87ff-ab9fbc12ea25")!
+        let credential = TaskWidgetCredential(
+            schemaVersion: TaskWidgetCredential.schemaVersion,
+            ownerId: UUID(),
+            installationId: UUID(),
+            credential: "twc_" + String(repeating: "A", count: 43),
+            expiresAt: "2099-10-26T12:00:00.123Z"
+        )
+        var capturedRequest: URLRequest?
+        let client = TaskWidgetCompletionClient { request in
+            capturedRequest = request
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (
+                Data(#"{"outcome":"accepted","completed_at":"2026-07-28T22:00:00.123Z"}"#.utf8),
+                response
+            )
+        }
+
+        let result = await client.complete(
+            taskID: taskID,
+            credential: credential,
+            clientMutationID: mutationID,
+            operationID: operationID
+        )
+
+        XCTAssertEqual(result, TaskWidgetCompletionResult(
+            outcome: "accepted",
+            completedAt: "2026-07-28T22:00:00.123Z"
+        ))
+        XCTAssertEqual(capturedRequest?.timeoutInterval, 5)
+        XCTAssertEqual(
+            capturedRequest?.value(forHTTPHeaderField: "Authorization"),
+            "Widget \(credential.credential)"
+        )
+        let body = try XCTUnwrap(capturedRequest?.httpBody)
+        let payload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: body) as? [String: String]
+        )
+        XCTAssertEqual(payload["action"], "complete")
+        XCTAssertEqual(payload["taskId"], taskID.uuidString.lowercased())
+        XCTAssertEqual(payload["clientMutationId"], mutationID.uuidString.lowercased())
+        XCTAssertEqual(payload["operationId"], operationID.uuidString.lowercased())
+    }
+
+    func testCompletionClientAcceptsRetryOutcomeAndRetainsFailure() async {
+        let credential = TaskWidgetCredential(
+            schemaVersion: TaskWidgetCredential.schemaVersion,
+            ownerId: UUID(),
+            installationId: UUID(),
+            credential: "twc_" + String(repeating: "A", count: 43),
+            expiresAt: "2099-10-26T12:00:00.123Z"
+        )
+        let response = HTTPURLResponse(
+            url: TaskCompanionConstants.widgetActionsURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        let retryClient = TaskWidgetCompletionClient { _ in
+            (Data(#"{"outcome":"already_applied"}"#.utf8), response)
+        }
+        let retryResult = await retryClient.complete(
+            taskID: UUID(),
+            credential: credential
+        )
+        XCTAssertEqual(retryResult?.outcome, "already_applied")
+
+        let timeoutClient = TaskWidgetCompletionClient { _ in
+            throw URLError(.timedOut)
+        }
+        let timeoutResult = await timeoutClient.complete(
+            taskID: UUID(),
+            credential: credential
+        )
+        XCTAssertNil(timeoutResult)
+    }
+
+    func testSuccessfulCompletionReconcilesEveryActiveListAndDone() throws {
+        let taskID = UUID(uuidString: "10c452c2-5767-4c0d-87ff-ab9fbc12ea25")!
+        var snapshot = makeSnapshot(ownerID: UUID())
+        snapshot.lists[2] = TaskWidgetList(
+            id: .anytime,
+            title: "Anytime",
+            totalCount: 1,
+            truncated: false,
+            tasks: snapshot.lists[0].tasks
+        )
+        XCTAssertTrue(snapshot.completeTask(
+            taskID,
+            completedAt: "2026-07-28T12:00:00Z"
+        ))
+        XCTAssertTrue(snapshot.list(.today)?.tasks.isEmpty == true)
+        XCTAssertTrue(snapshot.list(.anytime)?.tasks.isEmpty == true)
+        XCTAssertEqual(snapshot.list(.done)?.tasks.first?.id, taskID)
+        XCTAssertEqual(snapshot.list(.done)?.tasks.first?.terminalState, "completed")
     }
 
     func testRouteParsingIsAllowlistedAndProducesProductionURLs() {
@@ -182,11 +327,15 @@ final class TasksCompanionTests: XCTestCase {
             deadline: "2026-07-28",
             todaySection: "inbox",
             actionability: "actionable",
-            terminalState: nil
+            terminalState: nil,
+            primaryLink: TaskWidgetPrimaryLink(
+                href: "https://example.test/read",
+                kind: .link
+            )
         )
         return TaskWidgetSnapshot(
             type: "snapshot",
-            schemaVersion: 1,
+            schemaVersion: TaskWidgetSnapshot.schemaVersion,
             ownerId: ownerID,
             generatedAt: generatedAt,
             planningDate: "2026-07-28",

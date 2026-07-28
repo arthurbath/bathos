@@ -156,8 +156,37 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             let changed: Bool
             if envelope.type == "clear" {
                 changed = try store.clear()
+                if let credentialStore = TaskWidgetCredentialStore() {
+                    let credential = try? credentialStore.load()
+                    try? credentialStore.clear()
+                    if let credential {
+                        Task {
+                            await Self.revokeCredential(credential.credential)
+                        }
+                    }
+                }
             } else if envelope.type == "snapshot" {
                 changed = try store.accept(data)
+            } else if envelope.type == "credential" {
+                let message = try JSONDecoder().decode(TaskCredentialBridgeMessage.self, from: data)
+                let credential = TaskWidgetCredential(
+                    schemaVersion: TaskWidgetCredential.schemaVersion,
+                    ownerId: message.ownerId,
+                    installationId: message.installationId,
+                    credential: message.credential,
+                    expiresAt: message.expiresAt
+                )
+                guard let credentialStore = TaskWidgetCredentialStore() else {
+                    Self.recordBridgeDiagnostic("Rejected: credential store unavailable")
+                    return
+                }
+                guard let installationID = try TaskWidgetInstallationStore()?.identifier(),
+                      installationID == credential.installationId else {
+                    Self.recordBridgeDiagnostic("Rejected: installation mismatch")
+                    return
+                }
+                try credentialStore.store(credential)
+                changed = false
             } else {
                 Self.recordBridgeDiagnostic("Rejected: unsupported message type")
                 return
@@ -175,9 +204,28 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             return
         }
     }
+
+    private static func revokeCredential(_ credential: String) async {
+        var request = URLRequest(url: TaskCompanionConstants.widgetActionsURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 5
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Widget \(credential)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "action": "revoke",
+        ])
+        _ = try? await URLSession.shared.data(for: request)
+    }
 }
 
 private struct TaskBridgeEnvelope: Decodable {
     let type: String
     let schemaVersion: Int
+}
+
+private struct TaskCredentialBridgeMessage: Decodable {
+    let ownerId: UUID
+    let installationId: UUID
+    let credential: String
+    let expiresAt: String
 }
