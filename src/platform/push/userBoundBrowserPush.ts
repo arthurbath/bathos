@@ -4,7 +4,12 @@ export async function getExistingUserBoundBrowserPushSubscription(): Promise<Pus
   }
 
   const registration = await navigator.serviceWorker.getRegistration('/');
-  return registration?.pushManager.getSubscription() ?? null;
+  const pushManager = registration?.pushManager;
+  if (!pushManager || typeof pushManager.getSubscription !== 'function') {
+    return null;
+  }
+
+  return pushManager.getSubscription();
 }
 
 export async function unsubscribeUserBoundBrowserPush(): Promise<boolean> {

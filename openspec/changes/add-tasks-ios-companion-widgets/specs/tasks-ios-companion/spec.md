@@ -25,7 +25,7 @@ The iOS companion SHALL house the authoritative BathOS Tasks web application wit
 
 #### Scenario: Fail visibly instead of presenting a blank web view
 - **WHEN** a top-level Tasks navigation or restarted WebKit content process cannot recover cached or network content
-- **THEN** the companion presents its native unavailable state and retry action rather than leaving an empty web surface
+- **THEN** the companion performs one bounded automatic recovery navigation and presents its native unavailable state and retry action only if that recovery also fails, rather than leaving an empty web surface
 
 ### Requirement: Owner-Scoped Native Projection
 The Tasks web application SHALL provide the native companion with one versioned, bounded, owner-scoped projection for every supported widget list while withholding authentication material and detailed private task content.
@@ -56,7 +56,7 @@ The Tasks web application SHALL provide the native companion with one versioned,
 
 #### Scenario: Sign out
 - **WHEN** the authenticated web session signs out
-- **THEN** the web module asks the native host to clear cached task projections and the widgets stop showing the prior owner's tasks
+- **THEN** the web module treats an unavailable browser Push API as no existing browser subscription, asks the native host to clear cached task projections, and the widgets stop showing the prior owner's tasks
 
 ### Requirement: Configurable Large Task List Widget
 The companion SHALL provide a configurable large Home Screen widget that lets the user choose one supported task list and renders its cached leading tasks.

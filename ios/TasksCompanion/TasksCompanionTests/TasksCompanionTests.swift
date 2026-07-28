@@ -137,20 +137,39 @@ final class TasksCompanionTests: XCTestCase {
     }
 
     @MainActor
-    func testFailedOrTerminatedNavigationCannotLeaveAStaleBlankState() {
+    func testFinishedContentIgnoresAStaleFailureAndRecoversAfterTermination() {
         let model = TasksBrowserModel()
         model.didFinishLoading()
         XCTAssertTrue(model.hasLoadedContent)
 
         model.didFailLoading(URLError(.notConnectedToInternet))
-        XCTAssertFalse(model.hasLoadedContent)
-        XCTAssertFalse(model.isLoading)
-        XCTAssertNotNil(model.loadError)
+        XCTAssertTrue(model.hasLoadedContent)
 
         model.didTerminateWebContent()
         XCTAssertFalse(model.hasLoadedContent)
         XCTAssertTrue(model.isLoading)
         XCTAssertNil(model.loadError)
+    }
+
+    @MainActor
+    func testColdStartNavigationRetriesOnceBeforeShowingUnavailable() {
+        let model = TasksBrowserModel(
+            coldStartRecoveryDelayNanoseconds: 60_000_000_000
+        )
+        let loadError = URLError(.notConnectedToInternet)
+
+        model.didFailLoading(loadError)
+
+        XCTAssertTrue(model.isLoading)
+        XCTAssertFalse(model.hasLoadedContent)
+        XCTAssertNil(model.loadError)
+
+        model.performColdStartRecovery()
+        model.didFailLoading(loadError)
+
+        XCTAssertFalse(model.isLoading)
+        XCTAssertFalse(model.hasLoadedContent)
+        XCTAssertEqual(model.loadError, loadError.localizedDescription)
     }
 
     private func makeSnapshot(

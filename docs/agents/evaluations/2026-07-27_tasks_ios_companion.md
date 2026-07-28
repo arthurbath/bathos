@@ -65,7 +65,11 @@ The first physical Airplane Mode widget launch exposed two independent offline-s
 1. The native wrapper had not declared the trusted production host in `WKAppBoundDomains` or limited the persistent web view to app-bound navigation. WebKit therefore did not expose service-worker behavior to the wrapper, and the launch left a white web surface.
 2. After that native policy was corrected and the app reported `Offline Launch: Ready`, the cached black BathOS document loaded, but the Tasks application remained absent. Production inspection showed that Vite's generated preload table requests lazy dependencies from root `/assets/` paths, while the offline shell stores them under `/tasks-offline-assets/`. Worker and WASM children can also resolve into one duplicated `/tasks-offline-assets/assets/assets/` path.
 
-The release candidate declares only `os.bath.garden` as app-bound, keeps external links in the operating system, and resets the native loaded state after failed navigation or WebKit process termination. Service-worker format 6 and registration version 9 added root-preload fallback and normalized the generated nested worker-asset path, but the physical app then remained on its centered startup spinner because WebKit did not promptly reject the disconnected network-first preload request. Service-worker format 7 and registration version 10 therefore serve only exact, content-hashed assets already present in the active complete Tasks shell cache-first; cache misses, uncached shared assets, and non-Tasks data APIs retain their ordinary network path. Focused production-shaped coverage proves the cached root preload does not call the network, nested worker/WASM resolution, unrelated API pass-through, reminder registration, and atomic shell replacement. Physical Airplane Mode acceptance remains required after this candidate is published.
+The release candidate declares only `os.bath.garden` as app-bound, keeps external links in the operating system, and resets the native loaded state after failed navigation or WebKit process termination. Service-worker format 6 and registration version 9 added root-preload fallback and normalized the generated nested worker-asset path, but the physical app then remained on its centered startup spinner because WebKit did not promptly reject the disconnected network-first preload request. Service-worker format 7 and registration version 10 therefore serve only exact, content-hashed assets already present in the active complete Tasks shell cache-first; cache misses, uncached shared assets, and non-Tasks data APIs retain their ordinary network path. Focused production-shaped coverage proves the cached root preload does not call the network, nested worker/WASM resolution, unrelated API pass-through, reminder registration, and atomic shell replacement.
+
+The next physical cold launch reached the native `Tasks Unavailable` surface with `FetchEvent.respondWith received an error: TypeError: Load failed`, but activating the existing Retry action while the phone remained in Airplane Mode immediately loaded the cached application and opened the widget-selected task. This proved that the shell and owner-bound database persisted correctly and isolated a cold app-bound WebKit/service-worker startup race on the first navigation. The native host now performs that same recovery once automatically after a short bounded delay and exposes the unavailable state only if the recovery also fails.
+
+The signed recovery candidate passed all eight native tests on the physical iPhone. With Airplane Mode still enabled, the companion was force quit and a task row in the widget was tapped. The cold launch recovered automatically, rendered the complete cached Tasks application, and opened the exact widget-selected task without exposing `Tasks Unavailable` or requiring the Retry action. This completes the physical offline-launch acceptance.
 
 ## Widget Configuration Compatibility
 
@@ -73,9 +77,12 @@ Interactive acceptance on iOS 26.5 exposed a WidgetKit parameter-decoding regres
 
 The widget now uses a finite `DynamicOptionsProvider` backed by primitive string values. The user still sees exactly Today, Upcoming, Anytime, Someday, and Done, and the provider maps those values to the existing allowlisted identifiers. Timeline-provider logs and rendered widgets prove all five choices on both iOS 26.5 and iOS 26.4. This changes only configuration transport, not the cache, privacy, rendering, or deep-link contracts.
 
+## Sign-Out Compatibility
+
+The first physical sign-out attempt correctly refused to complete because app-bound WebKit exposed a service-worker registration without `PushManager`, while the shared browser Push lookup assumed every registration had that API. The compatibility fix treats that capability absence as no existing browser subscription. Browsers that expose Web Push retain the existing endpoint revocation and unsubscribe requirements, while the iOS companion can continue clearing its owner-bound PowerSync data and native widget cache.
+
 ## Remaining Acceptance
 
-1. Prove the companion's already-cached web shell and the widget remain usable during a physical Airplane Mode launch.
-2. Sign out once, prove the widget removes the prior owner's rows, then sign back in and prove the cache repopulates.
+1. Sign out once, prove the widget removes the prior owner's rows, then sign back in and prove the cache repopulates.
 
 The OpenSpec change should remain active until this physical-device acceptance is complete.

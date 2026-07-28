@@ -17,6 +17,14 @@ final class TasksBrowserModel: NSObject, ObservableObject {
 
     weak var webView: WKWebView?
 
+    private let coldStartRecoveryDelayNanoseconds: UInt64
+    private var coldStartRecoveryTask: Task<Void, Never>?
+    private var isPerformingColdStartRecovery = false
+
+    init(coldStartRecoveryDelayNanoseconds: UInt64 = 400_000_000) {
+        self.coldStartRecoveryDelayNanoseconds = coldStartRecoveryDelayNanoseconds
+    }
+
     private static func recordBridgeDiagnostic(_ message: String) {
         logger.notice("\(message, privacy: .public)")
     }
@@ -30,6 +38,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     }
 
     func open(_ route: TaskNativeRoute) {
+        cancelColdStartRecovery()
         let nextURL = route.webURL
         requestedURL = nextURL
         loadError = nil
@@ -38,6 +47,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     }
 
     func retry() {
+        cancelColdStartRecovery()
         loadError = nil
         isLoading = true
         if let webView, webView.url != nil {
@@ -53,22 +63,62 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     }
 
     func didFinishLoading() {
+        cancelColdStartRecovery()
         isLoading = false
         hasLoadedContent = true
         loadError = nil
     }
 
     func didFailLoading(_ error: Error) {
+        guard !hasLoadedContent else {
+            return
+        }
+        if coldStartRecoveryTask != nil {
+            return
+        }
+        if !isPerformingColdStartRecovery {
+            isLoading = true
+            loadError = nil
+            coldStartRecoveryTask = Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+                try? await Task.sleep(
+                    nanoseconds: self.coldStartRecoveryDelayNanoseconds
+                )
+                guard !Task.isCancelled else {
+                    return
+                }
+                self.performColdStartRecovery()
+            }
+            return
+        }
+
+        isPerformingColdStartRecovery = false
         isLoading = false
         hasLoadedContent = false
         loadError = error.localizedDescription
     }
 
     func didTerminateWebContent() {
+        cancelColdStartRecovery()
         hasLoadedContent = false
         loadError = nil
         isLoading = true
         webView?.load(URLRequest(url: requestedURL))
+    }
+
+    func performColdStartRecovery() {
+        coldStartRecoveryTask?.cancel()
+        coldStartRecoveryTask = nil
+        isPerformingColdStartRecovery = true
+        webView?.load(URLRequest(url: requestedURL))
+    }
+
+    private func cancelColdStartRecovery() {
+        coldStartRecoveryTask?.cancel()
+        coldStartRecoveryTask = nil
+        isPerformingColdStartRecovery = false
     }
 
     func acceptBridgeMessage(_ message: WKScriptMessage) {
