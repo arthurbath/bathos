@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -1447,7 +1427,7 @@ export type Database = {
           id?: string
           mutation_channel: string
           occurred_at: string
-          operation_id: string
+          operation_id?: string
           outcome?: string
           owner_id: string
           result_revision: number
@@ -1766,11 +1746,11 @@ export type Database = {
           name: string
           owner_id: string
           planning_timezone: string
-          reminder_local_time: string | null
           recurrence_id: string
+          reminder_local_time: string | null
           revision: number
-          rule_mode: string
           rule_config: Json
+          rule_mode: string
           start_date: string
           target_area_id: string | null
           template_id: string
@@ -1791,11 +1771,11 @@ export type Database = {
           name: string
           owner_id: string
           planning_timezone: string
-          reminder_local_time?: string | null
           recurrence_id: string
+          reminder_local_time?: string | null
           revision: number
-          rule_mode: string
           rule_config?: Json
+          rule_mode: string
           start_date: string
           target_area_id?: string | null
           template_id: string
@@ -1816,11 +1796,11 @@ export type Database = {
           name?: string
           owner_id?: string
           planning_timezone?: string
-          reminder_local_time?: string | null
           recurrence_id?: string
+          reminder_local_time?: string | null
           revision?: number
-          rule_mode?: string
           rule_config?: Json
+          rule_mode?: string
           start_date?: string
           target_area_id?: string | null
           template_id?: string
@@ -2268,8 +2248,8 @@ export type Database = {
           hierarchy_order_key: string | null
           id: string
           last_actor_type: string
-          last_operation_id: string | null
           last_mutation_channel: string
+          last_operation_id: string
           lifecycle: string
           notes: string
           order_key: string
@@ -2310,8 +2290,8 @@ export type Database = {
           hierarchy_order_key?: string | null
           id: string
           last_actor_type?: string
-          last_operation_id?: string | null
           last_mutation_channel?: string
+          last_operation_id?: string
           lifecycle?: string
           notes?: string
           order_key: string
@@ -2352,8 +2332,8 @@ export type Database = {
           hierarchy_order_key?: string | null
           id?: string
           last_actor_type?: string
-          last_operation_id?: string | null
           last_mutation_channel?: string
+          last_operation_id?: string
           lifecycle?: string
           notes?: string
           order_key?: string
@@ -2812,7 +2792,6 @@ export type Database = {
         Returns: Json
       }
       tasks_create_export_v1: { Args: never; Returns: Json }
-      tasks_create_export_v12: { Args: never; Returns: Json }
       tasks_create_export_v13: { Args: never; Returns: Json }
       tasks_create_export_v2: { Args: never; Returns: Json }
       tasks_create_export_v3: { Args: never; Returns: Json }
@@ -2829,9 +2808,29 @@ export type Database = {
           _order_key: string
           _retirement_destination_identifier: string
           _source_title?: string
-          _start_date: string | null
+          _start_date: string
           _task_id: string
           _title: string
+        }
+        Returns: Json
+      }
+      tasks_create_recurrence_from_task: {
+        Args: {
+          _actor_type?: string
+          _deadline_offset_days: number
+          _end_after_count: number
+          _end_mode: string
+          _end_on_date: string
+          _frequency: string
+          _interval_count: number
+          _mutation_channel?: string
+          _mutation_id: string
+          _name: string
+          _reminder_local_time: string
+          _rule_config: Json
+          _rule_mode: string
+          _schedule_date: string
+          _task_id: string
         }
         Returns: Json
       }
@@ -2842,26 +2841,6 @@ export type Database = {
           _recurrence_id: string
           _request_id: string
           _through_date: string
-        }
-        Returns: Json
-      }
-      tasks_create_recurrence_from_task: {
-        Args: {
-          _actor_type?: string
-          _deadline_offset_days: number | null
-          _end_after_count: number | null
-          _end_mode: string
-          _end_on_date: string | null
-          _frequency: string
-          _interval_count: number
-          _mutation_channel?: string
-          _mutation_id: string
-          _name: string
-          _reminder_local_time: string | null
-          _rule_config: Json
-          _rule_mode: string
-          _schedule_date: string
-          _task_id: string
         }
         Returns: Json
       }
@@ -2885,10 +2864,6 @@ export type Database = {
           _root_type: string
           _scope_digest: string
         }
-        Returns: Json
-      }
-      tasks_prepare_replace_restore_v12: {
-        Args: { _envelope: Json }
         Returns: Json
       }
       tasks_prepare_replace_restore_v13: {
@@ -2916,15 +2891,6 @@ export type Database = {
           _label?: string
           _p256dh: string
           _reactivate_revoked?: boolean
-        }
-        Returns: Json
-      }
-      tasks_replace_restore_v12: {
-        Args: {
-          _confirmation: string
-          _envelope: Json
-          _expected_backup_digest: string
-          _request_id: string
         }
         Returns: Json
       }
@@ -2966,7 +2932,7 @@ export type Database = {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
       }
-      tasks_restore_export_v12: {
+      tasks_restore_export_v13: {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
       }
@@ -3011,11 +2977,12 @@ export type Database = {
         }
         Returns: Json
       }
-      tasks_save_start_reminder: {
+      tasks_save_reminder: {
         Args: {
           _actor_type?: string
           _ambiguity_choice: string
           _expected_record_revision: number
+          _local_date: string
           _local_time: string
           _mutation_channel?: string
           _mutation_id: string
@@ -3026,12 +2993,11 @@ export type Database = {
         }
         Returns: Json
       }
-      tasks_save_reminder: {
+      tasks_save_start_reminder: {
         Args: {
           _actor_type?: string
           _ambiguity_choice: string
           _expected_record_revision: number
-          _local_date: string
           _local_time: string
           _mutation_channel?: string
           _mutation_id: string
@@ -3199,9 +3165,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       app_role: ["admin", "user"],

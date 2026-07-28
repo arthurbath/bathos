@@ -450,7 +450,7 @@
       {
         "name": "get_task_hierarchy",
         "title": "Get Task Hierarchy",
-        "description": "Read the signed-in user's normalized task areas, projects, to-dos, and checklist items. Returns stable ids and relationship fields without mutating data.",
+        "description": "Read the signed-in user's normalized task Areas, tasks, and checklist items. Returns stable ids and relationship fields without mutating data.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,
@@ -464,11 +464,10 @@
               "enum": [
                 "all",
                 "area",
-                "project",
                 "todo"
               ],
               "default": "all",
-              "description": "Read the complete bounded hierarchy or scope it to one area, project, or to-do."
+              "description": "Read the complete bounded hierarchy or scope it to one Area or task."
             },
             "root_id": {
               "type": "string",
@@ -478,7 +477,7 @@
             "include_terminal": {
               "type": "boolean",
               "default": false,
-              "description": "Include completed and canceled projects and to-dos."
+              "description": "Include completed and canceled tasks."
             },
             "limit": {
               "type": "integer",
@@ -496,7 +495,7 @@
       {
         "name": "get_task_record",
         "title": "Get Task Record",
-        "description": "Read one task area, project, to-do, or checklist item by stable id for the signed-in user.",
+        "description": "Read one task Area, task, or checklist item by stable id for the signed-in user.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,
@@ -509,7 +508,6 @@
               "type": "string",
               "enum": [
                 "area",
-                "project",
                 "todo",
                 "checklist_item"
               ]
@@ -561,7 +559,7 @@
               "minimum": 1,
               "maximum": 500,
               "default": 250,
-              "description": "Maximum projects, to-dos, or Done roots returned."
+              "description": "Maximum tasks or Done roots returned."
             }
           },
           "required": [
@@ -575,7 +573,7 @@
       {
         "name": "get_task_templates",
         "title": "Get Task Templates",
-        "description": "Read the signed-in user's native to-do and project templates with each current immutable revision and relative planning snapshot.",
+        "description": "Read the signed-in user's native task templates with each current immutable revision and relative planning snapshot.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,
@@ -762,9 +760,6 @@
               "type": "string",
               "format": "uuid"
             },
-            "project_id": {
-              "$ref": "#/properties/area_id"
-            },
             "source": {
               "type": "object",
               "properties": {
@@ -840,91 +835,6 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 500
-            }
-          },
-          "required": [
-            "idempotency_key",
-            "title"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": null
-      },
-      {
-        "name": "create_task_project",
-        "title": "Create Task Project",
-        "description": "Create one owner-scoped open project with structured placement and planning fields.",
-        "annotations": {
-          "readOnlyHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "idempotency_key": {
-              "type": "string",
-              "format": "uuid",
-              "description": "Stable UUID for this logical creation request. Reuse it only for an exact retry."
-            },
-            "title": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 500
-            },
-            "notes": {
-              "type": "string",
-              "maxLength": 100000,
-              "default": ""
-            },
-            "area_id": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "destination": {
-              "type": "string",
-              "enum": [
-                "anytime",
-                "someday"
-              ],
-              "default": "anytime"
-            },
-            "today_section": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": [
-                    "inbox",
-                    "now",
-                    "next",
-                    "later"
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "start_date": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "deadline": {
-              "anyOf": [
-                {
-                  "$ref": "#/properties/start_date/anyOf/0"
-                },
-                {
-                  "type": "null"
-                }
-              ]
             }
           },
           "required": [
@@ -1017,52 +927,6 @@
         "outputSchema": null
       },
       {
-        "name": "update_task_project",
-        "title": "Update Task Project",
-        "description": "Edit supported content on one owner-scoped open project through an optimistic revision boundary.",
-        "annotations": {
-          "readOnlyHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "expected_revision": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "description": "Current positive record revision."
-            },
-            "client_mutation_id": {
-              "type": "string",
-              "format": "uuid",
-              "description": "Stable UUID for this exact logical mutation."
-            },
-            "project_id": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "title": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 500
-            },
-            "notes": {
-              "type": "string",
-              "maxLength": 100000
-            }
-          },
-          "required": [
-            "expected_revision",
-            "client_mutation_id",
-            "project_id"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": null
-      },
-      {
         "name": "update_task_checklist_item",
         "title": "Update Task Checklist Item",
         "description": "Edit or complete one owner-scoped checklist item beneath an open to-do through an optimistic revision boundary.",
@@ -1110,7 +974,7 @@
       {
         "name": "transition_task_hierarchy",
         "title": "Transition Task Hierarchy",
-        "description": "Complete, cancel, or reopen one project, or recoverably delete or restore one area, project, or checklist item with one atomic revision-checked hierarchy operation. Permanent deletion is not available.",
+        "description": "Recoverably delete or restore one area or checklist item with one atomic revision-checked hierarchy operation. Permanent deletion is not available.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -1124,7 +988,6 @@
               "type": "string",
               "enum": [
                 "area",
-                "project",
                 "checklist_item"
               ]
             },
@@ -1146,20 +1009,9 @@
             "transition": {
               "type": "string",
               "enum": [
-                "complete",
-                "cancel",
-                "reopen",
                 "delete",
                 "restore"
               ]
-            },
-            "descendant_policy": {
-              "type": "string",
-              "enum": [
-                "reject",
-                "cascade"
-              ],
-              "description": "Project completion or cancellation policy. Omit for the safe reject default; cascade must be explicit."
             }
           },
           "required": [
@@ -1168,147 +1020,6 @@
             "expected_revision",
             "client_mutation_id",
             "transition"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": null
-      },
-      {
-        "name": "move_task_project",
-        "title": "Move Task Project",
-        "description": "Move one open project to an area, a planning placement, or both without accepting raw order keys.",
-        "annotations": {
-          "readOnlyHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "project_id": {
-              "type": "string",
-              "format": "uuid",
-              "description": "Stable project identifier."
-            },
-            "expected_revision": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "description": "Current project revision."
-            },
-            "client_mutation_id": {
-              "type": "string",
-              "format": "uuid",
-              "description": "Stable UUID for this exact logical mutation. Reuse it only for an exact retry."
-            },
-            "area_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Present area or null for no area."
-            },
-            "destination": {
-              "type": "string",
-              "enum": [
-                "anytime",
-                "someday"
-              ]
-            },
-            "today_section": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": [
-                    "inbox",
-                    "now",
-                    "next",
-                    "later"
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "start_date": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "project_id",
-            "expected_revision",
-            "client_mutation_id"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": null
-      },
-      {
-        "name": "schedule_task_project",
-        "title": "Schedule Task Project",
-        "description": "Set or clear one open project Start or Deadline without accepting timestamps or time-zone offsets.",
-        "annotations": {
-          "readOnlyHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "project_id": {
-              "type": "string",
-              "format": "uuid",
-              "description": "Stable project identifier."
-            },
-            "expected_revision": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "description": "Current project revision."
-            },
-            "client_mutation_id": {
-              "type": "string",
-              "format": "uuid",
-              "description": "Stable UUID for this exact logical mutation. Reuse it only for an exact retry."
-            },
-            "start_date": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "deadline": {
-              "anyOf": [
-                {
-                  "$ref": "#/properties/start_date/anyOf/0"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "project_id",
-            "expected_revision",
-            "client_mutation_id"
           ],
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
@@ -1588,7 +1299,7 @@
       {
         "name": "move_task",
         "title": "Move Task",
-        "description": "Move one open to-do between planning placements, hierarchy containers, or both. Container changes require both container IDs, using null to clear.",
+        "description": "Move one open task between planning placements, Areas, or both. Use a null Area to remove organization.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -1650,16 +1361,6 @@
                 {
                   "type": "string",
                   "format": "uuid"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "project_id": {
-              "anyOf": [
-                {
-                  "$ref": "#/properties/area_id/anyOf/0"
                 },
                 {
                   "type": "null"
@@ -1857,7 +1558,7 @@
       {
         "name": "reorder_task_hierarchy",
         "title": "Reorder Task Hierarchy",
-        "description": "Move one area, project, or checklist item up or down within its exact structural peers, or reorder a project within one planning section.",
+        "description": "Move one Area or checklist item up or down within its exact structural peers.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -1888,7 +1589,6 @@
               "type": "string",
               "enum": [
                 "area",
-                "project",
                 "checklist_item"
               ]
             },
@@ -1896,28 +1596,6 @@
               "type": "string",
               "format": "uuid",
               "description": "Stable hierarchy record identifier."
-            },
-            "scope": {
-              "type": "string",
-              "enum": [
-                "structural",
-                "planning"
-              ],
-              "description": "Defaults to structural. Planning is available only for projects."
-            },
-            "view": {
-              "type": "string",
-              "enum": [
-                "today",
-                "upcoming",
-                "anytime",
-                "someday"
-              ],
-              "description": "Required only for project planning order."
-            },
-            "planning_date": {
-              "type": "string",
-              "description": "Explicit deterministic date required only for project planning order."
             }
           },
           "required": [
@@ -1935,7 +1613,7 @@
       {
         "name": "instantiate_task_template",
         "title": "Instantiate Task Template",
-        "description": "Atomically create a complete to-do or project hierarchy from one native template revision for an explicit calendar date.",
+        "description": "Atomically create a complete task and checklist hierarchy from one native template revision for an explicit calendar date.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -1960,7 +1638,7 @@
             },
             "target_area_id": {
               "$ref": "#/properties/template_id",
-              "description": "Optional accessible destination area for a project template."
+              "description": "Optional accessible destination Area for the instantiated task."
             },
             "idempotency_key": {
               "type": "string",
@@ -2166,7 +1844,7 @@
       {
         "name": "save_task_reminder",
         "title": "Save Task Reminder",
-        "description": "Create or revise one task or project reminder at a wall-clock time on its Start, using an IANA time zone and daylight-saving ambiguity choice.",
+        "description": "Create or revise one task reminder at a wall-clock time on its Start, using an IANA time zone and daylight-saving ambiguity choice.",
         "annotations": {
           "readOnlyHint": false,
           "idempotentHint": true,
@@ -2187,10 +1865,7 @@
             },
             "root_type": {
               "type": "string",
-              "enum": [
-                "todo",
-                "project"
-              ]
+              "const": "todo"
             },
             "root_id": {
               "$ref": "#/properties/reminder_id"
