@@ -36,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let cancelled = false;
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         const isSigningOut = isSigningOutRef.current;
@@ -84,17 +85,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (isSigningOutRef.current) return;
-      const nextUser = session?.user ?? null;
-      setSession(session);
-      setUser(nextUser);
-      setDisplayNameState(readUserDisplayName(nextUser));
-      hasSeenAuthenticatedSessionRef.current = !!nextUser;
-      setLoading(false);
-    });
+    void supabase.auth.getSession().then(
+      ({ data: { session } }) => {
+        if (cancelled || isSigningOutRef.current) return;
+        const nextUser = session?.user ?? null;
+        setSession(session);
+        setUser(nextUser);
+        setDisplayNameState(readUserDisplayName(nextUser));
+        hasSeenAuthenticatedSessionRef.current = !!nextUser;
+        setLoading(false);
+      },
+      () => {
+        if (
+          cancelled
+          || isSigningOutRef.current
+          || hasSeenAuthenticatedSessionRef.current
+        ) return;
 
-    return () => subscription.unsubscribe();
+        setSession(null);
+        setUser(null);
+        setDisplayNameState('');
+        setLoading(false);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {

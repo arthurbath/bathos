@@ -66,10 +66,12 @@ function cleanup(root: Root, container: HTMLElement) {
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
     resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 async function waitForCondition(assertion: () => void, timeoutMs = 1500) {
@@ -195,6 +197,51 @@ describe('AuthProvider', () => {
         expect(state?.getAttribute('data-user-id')).toBe('user-1');
         expect(state?.getAttribute('data-loading')).toBe('false');
       });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('leaves loading state when the initial session read rejects', async () => {
+    getSessionMock.mockRejectedValueOnce(new Error('auth lock unavailable'));
+
+    const { container, root } = mount();
+    try {
+      const state = container.querySelector<HTMLElement>('[data-testid="state"]');
+      expect(state).toBeTruthy();
+
+      await waitForCondition(() => {
+        expect(state?.getAttribute('data-loading')).toBe('false');
+        expect(state?.getAttribute('data-user-id')).toBe('');
+        expect(state?.getAttribute('data-display-name')).toBe('');
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('keeps an authenticated event that wins before a failed session read', async () => {
+    const deferredSession = createDeferred<never>();
+    getSessionMock.mockReturnValueOnce(deferredSession.promise);
+
+    const { container, root } = mount();
+    try {
+      const state = container.querySelector<HTMLElement>('[data-testid="state"]');
+      expect(state).toBeTruthy();
+
+      act(() => {
+        authStateChangeHandler?.('SIGNED_IN', {
+          user: { id: 'user-2', email: 'restored@example.com' },
+        } as Session);
+      });
+
+      await act(async () => {
+        deferredSession.reject(new Error('late auth lock failure'));
+        await deferredSession.promise.catch(() => undefined);
+      });
+
+      expect(state?.getAttribute('data-loading')).toBe('false');
+      expect(state?.getAttribute('data-user-id')).toBe('user-2');
     } finally {
       cleanup(root, container);
     }

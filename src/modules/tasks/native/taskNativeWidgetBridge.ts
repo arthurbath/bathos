@@ -14,10 +14,14 @@ import type {
   TaskTodo,
 } from '@/modules/tasks/types/tasks';
 import type { TaskLifecycle } from '@/modules/tasks/domain/taskState';
+import {
+  getTasksNativeMessageHandler,
+  TASKS_NATIVE_BRIDGE_HANDLER,
+} from '@/platform/native/tasksNativeCompanion';
 
 export const TASK_NATIVE_WIDGET_SCHEMA_VERSION = 1;
 export const TASK_NATIVE_WIDGET_LIST_LIMIT = 50;
-export const TASK_NATIVE_WIDGET_BRIDGE_HANDLER = 'bathosTasksWidget';
+export const TASK_NATIVE_WIDGET_BRIDGE_HANDLER = TASKS_NATIVE_BRIDGE_HANDLER;
 export const TASK_NATIVE_TASK_QUERY_PARAMETER = 'native_task';
 
 export const taskNativeWidgetListIds = [
@@ -59,20 +63,6 @@ export type TaskNativeWidgetSnapshot = {
 export type TaskNativeWidgetClearMessage = {
   type: 'clear';
   schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
-};
-
-type TaskNativeWidgetBridgeMessage =
-  | TaskNativeWidgetSnapshot
-  | TaskNativeWidgetClearMessage;
-
-type NativeMessageHandler = {
-  postMessage: (message: TaskNativeWidgetBridgeMessage) => void;
-};
-
-type NativeBridgeWindow = Window & {
-  webkit?: {
-    messageHandlers?: Partial<Record<string, NativeMessageHandler>>;
-  };
 };
 
 type BuildTaskNativeWidgetSnapshotInput = {
@@ -151,7 +141,7 @@ export function publishTaskNativeWidgetSnapshot(
   snapshot: TaskNativeWidgetSnapshot,
   target: Window = window,
 ): boolean {
-  const handler = getNativeMessageHandler(target);
+  const handler = getTasksNativeMessageHandler(target);
   if (!handler) return false;
 
   const content = JSON.stringify({
@@ -166,7 +156,7 @@ export function publishTaskNativeWidgetSnapshot(
 }
 
 export function clearTaskNativeWidgetCache(target: Window = window): boolean {
-  const handler = getNativeMessageHandler(target);
+  const handler = getTasksNativeMessageHandler(target);
   if (!handler) return false;
   handler.postMessage({
     type: 'clear',
@@ -203,10 +193,4 @@ function toTaskNativeWidgetTask(task: TaskTodo): TaskNativeWidgetTask {
       ? 'deleted'
       : task.lifecycle === 'open' ? null : task.lifecycle,
   };
-}
-
-function getNativeMessageHandler(target: Window): NativeMessageHandler | null {
-  const nativeWindow = target as NativeBridgeWindow;
-  const handler = nativeWindow.webkit?.messageHandlers?.[TASK_NATIVE_WIDGET_BRIDGE_HANDLER];
-  return handler && typeof handler.postMessage === 'function' ? handler : null;
 }
