@@ -108,6 +108,16 @@ Before relying on an installed Tasks web app offline, open that specific install
 
 An iPhone or iPad Home Screen web app has cookies and storage separate from Safari. A successful Safari load therefore does not prepare the installed app. Launch the Home Screen icon online, sign in there if requested, and confirm both `Synced` and `Offline Launch: Ready` inside the Home Screen app before testing or relying on offline startup.
 
+### Native iPhone Companion And Widgets
+
+The native Tasks companion uses the same production web application for signing in, reading, and editing tasks. It adds the native surface the installed web app cannot provide: a configurable large Home Screen widget for Today, Upcoming, Anytime, Someday, or Done.
+
+The widget is a read-only projection of the last accepted Tasks state. Open the companion while connected to refresh it. The widget may show that its data is stale when iOS has not recently allowed the companion to update the shared cache. It does not sign in to Supabase or fetch task data independently while the companion is closed.
+
+Widget rows expose only the information needed to identify work in the selected list. Notes, checklist text, Primary Link, Mail provenance, credentials, and synchronization errors are not copied into the widget cache. Signing out of the companion clears its cached widget data.
+
+Tapping the widget title opens the selected list. Tapping a task opens that task only after the signed-in Tasks web application confirms that it belongs to the current owner and is visible in the selected list.
+
 After that online stage, an installed Tasks app can reopen a `/tasks/*` route without a network connection. The service worker caches only the public HTML and versioned application assets needed to start Tasks. Task content, account data, credentials, API responses, PowerSync traffic, and other BathOS modules are not stored in that shell cache. Tasks continues reading and writing task data through its durable local database. A failed application update leaves the previous complete offline shell active instead of replacing it with a partial build.
 
 `Preparing Sync` means the installation is connected but has not completed its first full synchronization. Do not treat it as synchronized yet. Open Synchronization under Config to inspect connection state, full-synchronization completion, queue depth, transfer activity, recent reliability events, and conflict receipts.
@@ -155,4 +165,4 @@ Use Tasks alongside Things for as long as needed. There is no migration deadline
 - The approved Inbox Manager proof ended with seven accepted parallel tasks, an empty failure-free outbox, and a healthy Mail run. Its persistent parallel mode now sends each new eligible Mail item to both Things and BathOS Tasks through one AI evaluation.
 - Parallel Mail handoff is creation-only. Things remains authoritative, no history is backfilled, and edits in either application do not appear in the other.
 - Report recurring friction, missed reminders, synchronization failures, or a specific desired widget or control. Those observations determine the next product slice.
-- Native Apple development remains deferred unless normal use reveals a gap that the installed web app, Web Push, Raycast, or MCP cannot serve adequately.
+- The native companion remains intentionally subordinate to the web module. Native code should add Apple-only surfaces without creating a second task-editing implementation.

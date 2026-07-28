@@ -95,6 +95,7 @@ import {
   type TodayTaskSection,
 } from '@/modules/tasks/hooks/useTaskList';
 import { useTaskHierarchy, type TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
+import { useTaskNativeWidgetBridge } from '@/modules/tasks/hooks/useTaskNativeWidgetBridge';
 import { useTaskSearch } from '@/modules/tasks/hooks/useTaskSearch';
 import { useTaskQuickFilterPreference } from '@/modules/tasks/hooks/useTaskQuickFilterPreference';
 import { useTaskAutomaticListSorting } from '@/modules/tasks/hooks/useTaskAutomaticListSorting';
@@ -115,6 +116,10 @@ import {
   type DeletedTaskHierarchyRoot,
 } from '@/modules/tasks/hooks/useTaskDeletedHierarchyRoots';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
+import {
+  getNativeTaskDeepLinkId,
+  removeNativeTaskDeepLink,
+} from '@/modules/tasks/native/taskNativeWidgetBridge';
 import type {
   TaskReminder,
   TaskTodaySection,
@@ -456,6 +461,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     registerForwardMutation,
     reserveForwardMutation,
   );
+  useTaskNativeWidgetBridge({
+    ownerId: userId,
+    planningDate,
+    areas: hierarchy.areas,
+    automaticListSorting: automaticListSorting.enabled,
+    quickFilter: taskQuickFilter,
+  });
   const projectedTasksRef = useRef(projectedTasks);
   const retainedTaskPlacementRef = useRef(retainedTaskPlacement);
   const transitionTaskRef = useRef(transitionTask);
@@ -547,6 +559,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const commandReturnFocusRef = useRef<HTMLElement | null>(null);
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
   const selectedTaskIdRef = useRef<string | null>(null);
+  const previousViewRef = useRef(view);
   const openTaskSequenceRef = useRef(0);
   const focusedTaskIdRef = useRef<string | null>(null);
   const visibleTaskIdsRef = useRef<string[]>([]);
@@ -882,6 +895,33 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     finishCreationDraft,
   ]);
 
+  useEffect(() => {
+    const nativeTaskId = getNativeTaskDeepLinkId(location.search);
+    if (nativeTaskId === null || loading) return;
+
+    let active = true;
+    void (async () => {
+      if (projectedTasks.some(({ id }) => id === nativeTaskId)) {
+        await setOpenTask(nativeTaskId);
+      }
+      if (!active) return;
+      navigate({
+        pathname: location.pathname,
+        search: removeNativeTaskDeepLink(location.search),
+      }, { replace: true });
+    })();
+    return () => {
+      active = false;
+    };
+  }, [
+    loading,
+    location.pathname,
+    location.search,
+    navigate,
+    projectedTasks,
+    setOpenTask,
+  ]);
+
   const clearTaskSelection = useCallback(() => {
     if (
       document.activeElement instanceof HTMLElement
@@ -1130,6 +1170,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [selectedTaskId, setOpenTask]);
 
   useEffect(() => {
+    if (previousViewRef.current === view) return;
+    previousViewRef.current = view;
     clearTaskSelection();
     setBulkWhenOpen(false);
     const draft = creationDraftRef.current;

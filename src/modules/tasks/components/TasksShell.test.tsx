@@ -127,6 +127,10 @@ vi.mock('@/modules/tasks/hooks/useTaskHierarchy', () => ({
   useTaskHierarchy: (...args: unknown[]) => mockTaskHierarchy(...args),
 }));
 
+vi.mock('@/modules/tasks/hooks/useTaskNativeWidgetBridge', () => ({
+  useTaskNativeWidgetBridge: vi.fn(),
+}));
+
 vi.mock('@/modules/tasks/hooks/useTaskDeletedHierarchyRoots', () => ({
   useTaskDeletedHierarchyRoots: (...args: unknown[]) => mockTaskDeletedHierarchyRoots(...args),
 }));
@@ -597,6 +601,58 @@ describe('TasksShell', () => {
       setStatus: vi.fn(),
       evaluate: vi.fn(),
     });
+  });
+
+  it('opens a visible task supplied by the native companion deep link', async () => {
+    const nativeTask = taskTodoFixture({
+      id: '53a4b5c1-3a4e-4fab-a5bf-4c1b114fc690',
+      title: 'Native companion task',
+      destination: 'anytime',
+      today_section: 'next',
+      start_date: '2026-07-20',
+    });
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [nativeTask],
+    });
+    const { container, root } = renderShell(
+      `/tasks/today?native_task=${nativeTask.id}`,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(container.querySelector(`#task-title-${nativeTask.id}`)).toBeTruthy();
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('does not open a native deep-linked task outside the current visible projection', async () => {
+    const nativeTask = taskTodoFixture({
+      id: '53a4b5c1-3a4e-4fab-a5bf-4c1b114fc690',
+      title: 'Future native companion task',
+      destination: 'anytime',
+      today_section: null,
+      start_date: '2026-07-21',
+    });
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [],
+    });
+    const { container, root } = renderShell(
+      `/tasks/today?native_task=${nativeTask.id}`,
+    );
+
+    try {
+      await act(async () => {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(container.querySelector(`#task-title-${nativeTask.id}`)).toBeNull();
+      expect(container.querySelector('[data-task-editor-region]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
   });
 
   it('opens a blank complete editor with Alt+Shift+A and persists the first valid title', async () => {
