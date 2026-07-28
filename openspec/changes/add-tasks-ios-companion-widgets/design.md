@@ -54,7 +54,7 @@ This approach is preferred over copying a Supabase session to native Keychain be
 
 ### Keep widget configuration finite and stable
 
-The WidgetKit extension uses `AppIntentConfiguration` with a finite list entity for Today, Upcoming, Anytime, Someday, and Done. The first widget supports `.systemLarge`, matching the requested large Home Screen surface. The data model and view remain family-aware so later medium, Lock Screen, or watchOS surfaces can be added without changing the cache contract.
+The WidgetKit extension uses `AppIntentConfiguration` with a finite `DynamicOptionsProvider` for Today, Upcoming, Anytime, Someday, and Done. The parameter persists a primitive list title and maps it back to the existing allowlisted list identifier. This avoids an iOS 26.5 WidgetKit regression in which an `AppEntity` selection is persisted correctly by SpringBoard but the timeline provider receives the default entity. The first widget supports `.systemLarge`, matching the requested large Home Screen surface. The data model and view remain family-aware so later medium, Lock Screen, or watchOS surfaces can be added without changing the cache contract.
 
 The widget reads only the App Group snapshot. It displays the configured list name, visible count, bounded summaries, an empty state, or a signed-out/not-yet-synchronized state. The system's default redaction and widget privacy behavior remain intact.
 

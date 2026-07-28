@@ -1,6 +1,12 @@
 import AppIntents
+import OSLog
 import SwiftUI
 import WidgetKit
+
+private let taskWidgetLogger = Logger(
+    subsystem: "garden.bath.tasks.widgets",
+    category: "timeline-provider"
+)
 
 struct TaskListWidgetEntry: TimelineEntry {
     let date: Date
@@ -48,7 +54,11 @@ struct TaskListWidgetProvider: AppIntentTimelineProvider {
     }
 
     private func entry(for configuration: TaskListSelectionIntent) -> TaskListWidgetEntry {
-        let listID = configuration.list?.listID ?? .today
+        let configuredValue = configuration.list ?? TaskWidgetListID.today.title
+        let listID = TaskWidgetListID(rawValue: configuredValue.lowercased()) ?? .today
+        taskWidgetLogger.notice(
+            "Resolved widget list parameter \(configuredValue, privacy: .public) as \(listID.rawValue, privacy: .public)"
+        )
         let snapshot = try? TaskWidgetStore()?.load()
         return TaskListWidgetEntry(
             date: Date(),

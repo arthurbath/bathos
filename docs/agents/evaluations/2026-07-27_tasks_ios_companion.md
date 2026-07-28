@@ -42,6 +42,12 @@ The paired physical iPhone is visible to Apple’s device tooling, but Developer
 
 These are environment gates rather than source-code substitutions. They do not justify removing the real icon catalog, App Group entitlement, widget extension, or device-signing configuration.
 
+## Widget Configuration Compatibility
+
+Interactive acceptance on iOS 26.5 exposed a WidgetKit parameter-decoding regression. SpringBoard persisted the selected `AppEntity` identifier, but the timeline provider still received the default Today entity. Host configuration and timeline archives proved the mismatch independently.
+
+The widget now uses a finite `DynamicOptionsProvider` backed by primitive string values. The user still sees exactly Today, Upcoming, Anytime, Someday, and Done, and the provider maps those values to the existing allowlisted identifiers. Timeline-provider logs and rendered widgets prove all five choices on both iOS 26.5 and iOS 26.4. This changes only configuration transport, not the cache, privacy, rendering, or deep-link contracts.
+
 ## Remaining Acceptance
 
 1. Update Xcode and its runtimes as one compatible set once Apple supplies a runtime matching the active SDK, then run the ordinary asset-inclusive Simulator test action.
