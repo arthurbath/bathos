@@ -30,6 +30,6 @@
 - [x] 5.2 Build the iOS app and widget for a generic simulator with signing disabled and run native tests wherever local Apple services permit
 - [x] 5.3 Inspect signing identities and Simulator health, repair safe local service issues where possible, and document any external Apple account or device gates
 - [x] 5.4 Update BathOS architecture, Tasks guidance, README, and a dated native-companion evaluation with build and privacy boundaries
-- [ ] 5.5 Run `openspec validate --all --strict`, sync and archive the change only when implementation tasks are complete, then commit, push, and prove `main` is clean and synchronized
-- [ ] 5.6 Perform an on-device acceptance pass proving sign-in, offline web launch, configurable large widgets for supported lists, cache clearing, and deep links after an eligible Apple team provisions the App Group
+- [x] 5.5 Run `openspec validate --all --strict`, sync and archive the change only when implementation tasks are complete, then commit, push, and prove `main` is clean and synchronized
+- [x] 5.6 Perform an on-device acceptance pass proving sign-in, offline web launch, configurable large widgets for supported lists, cache clearing, and deep links after an eligible Apple team provisions the App Group
 - [x] 5.7 Enable service-worker offline launch inside the app-bound WebKit host, retain a visible native failure state, and repeat physical Airplane Mode acceptance after the defect discovered in 5.6

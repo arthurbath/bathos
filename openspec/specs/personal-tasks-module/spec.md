@@ -1676,23 +1676,31 @@ The system SHALL keep the server authoritative for reminder scheduling and logic
 - **THEN** the worker requests immediate activation so future offline launch, push, and notification-click events use the published behavior without requiring every existing BathOS tab to close
 
 ### Requirement: Evidence-Gated Native Apple Expansion
-The system SHALL treat native Apple surfaces as an optional extension of the shared task domain and SHALL require a specific observed workflow gap before creating a native companion.
+The system SHALL treat native Apple surfaces as optional extensions of the shared task domain and SHALL add only a specific surface whose observed or explicitly approved workflow gap cannot be served adequately by the installed web app.
 
-#### Scenario: Continue without a native companion
-- **WHEN** the installed web app, Web Push, and Raycast adequately support the observed daily workflows
-- **THEN** the system continues the parallel-use trial without creating a native client, Apple extension, or permanent bundle identity
+#### Scenario: Continue without an unneeded native surface
+- **WHEN** the installed web app, Web Push, and Raycast adequately support an observed daily workflow
+- **THEN** the system continues without creating a native implementation for that workflow
 
 #### Scenario: Diagnose a reminder incident before adding native push
 - **WHEN** a production reminder is missed, duplicated, or materially late
 - **THEN** the evaluation first verifies schedule computation, permission, target registration, provider outcome, and device state, and approves a native push target only when the remaining failure is a browser delivery limitation
 
-#### Scenario: Approve one native system surface
-- **WHEN** parallel use identifies a recurring gap served by a specific widget, control, App Intent, notification target, or distribution path
-- **THEN** the approved implementation is limited to the smallest native host and extensions that resolve that gap while reusing the shared ownership, mutation, synchronization, and reminder contracts
+#### Scenario: Approve a configurable task-list widget
+- **WHEN** the user explicitly identifies configurable iOS Home Screen task-list widgets as a recurring native-only need
+- **THEN** the system permits the smallest native host and WidgetKit extension that display owner-scoped projections of the existing Today, Upcoming, Anytime, Someday, and Done lists
+
+#### Scenario: House the existing task product
+- **WHEN** the approved task-list widget requires a containing iOS app
+- **THEN** the app houses the existing Tasks web UI and does not recreate ordinary task management as a second native product
 
 #### Scenario: Avoid a second task product
 - **WHEN** a native surface reads or mutates task data
 - **THEN** it uses the authoritative task-domain contract and does not introduce an independent task database, reminder scheduler, or generic mutation API
+
+#### Scenario: Keep later Apple surfaces evidence-gated
+- **WHEN** a later control, App Intent, notification target, distribution path, native editor, or Apple Watch complication is proposed
+- **THEN** that surface remains outside the approved widget scope until its workflow, data, privacy, refresh, and interaction contract is explicitly approved
 
 ### Requirement: Cross-Platform Task Interaction Reference
 The system SHALL present a visible interaction reference that documents the complete supported Tasks keyboard and pointer-selection contract for both Mac and Windows using compact, platform-recognizable key notation without plus signs between modifiers and keys.

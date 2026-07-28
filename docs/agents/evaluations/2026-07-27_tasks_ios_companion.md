@@ -79,10 +79,13 @@ The widget now uses a finite `DynamicOptionsProvider` backed by primitive string
 
 ## Sign-Out Compatibility
 
-The first physical sign-out attempt correctly refused to complete because app-bound WebKit exposed a service-worker registration without `PushManager`, while the shared browser Push lookup assumed every registration had that API. The compatibility fix treats that capability absence as no existing browser subscription. Browsers that expose Web Push retain the existing endpoint revocation and unsubscribe requirements, while the iOS companion can continue clearing its owner-bound PowerSync data and native widget cache.
+The first physical sign-out attempt correctly refused to complete and reported `Tasks Could Not Sign Out Safely` because app-bound WebKit exposed a service-worker registration without `PushManager`, while the shared browser Push lookup assumed every registration had that API. The compatibility fix treats either a missing `PushManager` or missing `getSubscription` method as no existing browser subscription. Browsers that expose Web Push retain the existing endpoint revocation and unsubscribe requirements, while the iOS companion can continue clearing its owner-bound PowerSync data and native widget cache.
 
-## Remaining Acceptance
+The exact source state from BathOS commit `57e13e6` was published through Lovable and verified in the production asset. Physical acceptance then proved the complete account boundary:
 
-1. Sign out once, prove the widget removes the prior owner's rows, then sign back in and prove the cache repopulates.
+- Sign-out completed in the signed companion.
+- The widget immediately removed every prior-owner task row and showed its signed-out `Open BathOS Tasks` state.
+- Signing back in restored the authenticated Today list in the companion.
+- After WidgetKit's normal timeline refresh, the widget repopulated with the current owner's Today count and bounded task rows.
 
-The OpenSpec change should remain active until this physical-device acceptance is complete.
+This completes the signed-device sign-in, offline launch, configuration, deep-link, owner replacement, sign-out clearing, and sign-in repopulation acceptance boundary.
