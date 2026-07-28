@@ -42,20 +42,40 @@ function cleanup(root: Root, container: HTMLElement) {
   container.remove();
 }
 
-function setSelect(select: HTMLSelectElement, value: string) {
-  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(
-    select,
-    value,
-  );
-  select.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
 function setInput(input: HTMLInputElement, value: string) {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
     input,
     value,
   );
   input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+async function selectBathosOption(label: string, optionLabel: string) {
+  const trigger = document.querySelector<HTMLButtonElement>(
+    `button[aria-label="${label}"]`,
+  );
+  if (!trigger) throw new Error(`BathOS Select trigger not found: ${label}`);
+  await act(async () => {
+    trigger.focus();
+    trigger.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    }));
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  });
+  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))
+    .find((candidate) => candidate.textContent?.trim() === optionLabel);
+  if (!option) throw new Error(`BathOS Select option not found: ${optionLabel}`);
+  await act(async () => {
+    option.focus();
+    option.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    }));
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  });
 }
 
 describe('TaskRepeatDialog', () => {
@@ -65,6 +85,10 @@ describe('TaskRepeatDialog', () => {
       observe() {}
       unobserve() {}
       disconnect() {}
+    });
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
     });
     createFromTask.mockResolvedValue({
       outcome: 'accepted',
@@ -88,6 +112,7 @@ describe('TaskRepeatDialog', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
   });
 
   it('adopts the existing task and materializes a bounded calendar horizon', async () => {
@@ -127,8 +152,7 @@ describe('TaskRepeatDialog', () => {
     const task = taskTodoFixture({ id: 'task-after', title: 'Water Plants' });
     const { container, root } = renderDialog(task);
     try {
-      const mode = document.querySelectorAll<HTMLSelectElement>('select')[0];
-      await act(async () => setSelect(mode, 'after_completion'));
+      await selectBathosOption('Repeat', 'After Completion');
       await act(async () => {
         document.querySelector<HTMLButtonElement>(
           `button[form="task-repeat-form-${task.id}"]`,
@@ -141,6 +165,56 @@ describe('TaskRepeatDialog', () => {
         frequency: 'weekly',
       }));
       expect(evaluate).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('uses shared BathOS Select controls for explicit monthly cadence', async () => {
+    const task = taskTodoFixture({
+      id: 'task-monthly-repeat',
+      title: 'Monthly Review',
+      start_date: '2026-08-01',
+      deadline: '2026-08-03',
+    });
+    const { container, root } = renderDialog(task);
+    try {
+      expect(document.querySelectorAll('[role="combobox"]').length).toBeGreaterThanOrEqual(3);
+
+      await selectBathosOption('Frequency', 'Months');
+      await selectBathosOption('Monthly Pattern', 'Day-Type Position');
+      await selectBathosOption('Monthly Ordinal', 'Last');
+      await selectBathosOption('Monthly Day Type', 'Weekend Day');
+
+      const offset = document.querySelector<HTMLInputElement>(
+        'input[aria-label="Start Days Earlier"]',
+      )!;
+      await act(async () => setInput(offset, '7'));
+
+      const preview = document.querySelector('[aria-label="Next Three Occurrences"]')!;
+      expect(preview.querySelectorAll('li')).toHaveLength(3);
+      expect(preview).toHaveTextContent('Start');
+      expect(preview).toHaveTextContent('Deadline');
+      expect(preview).toHaveTextContent('Aug 23, 2026');
+      expect(preview).toHaveTextContent('Aug 30, 2026');
+
+      await act(async () => {
+        document.querySelector<HTMLButtonElement>(
+          `button[form="task-repeat-form-${task.id}"]`,
+        )?.click();
+        await Promise.resolve();
+      });
+
+      expect(createFromTask).toHaveBeenCalledWith(expect.objectContaining({
+        scheduleDate: '2026-08-30',
+        frequency: 'monthly',
+        ruleConfig: {
+          monthly_kind: 'ordinal_day_type',
+          ordinal: -1,
+          day_type: 'weekend_day',
+        },
+        deadlineOffsetDays: 7,
+      }));
     } finally {
       cleanup(root, container);
     }

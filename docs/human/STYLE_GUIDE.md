@@ -78,6 +78,13 @@ A system-authored accessible name or tooltip title that labels a button or input
 - Max content width: `max-w-5xl` for data views, `max-w-lg` for forms
 - Cards use standard `Card` component with minimal padding
 
+## Select Controls
+
+- Use the shared BathOS `Select` component from `src/components/ui/select.tsx` for every new ordinary single-selection dropdown.
+- Use its standard `SelectTrigger`, `SelectValue`, `SelectContent`, and `SelectItem` parts so styling, focus, keyboard traversal, and popover behavior remain consistent.
+- Do not add native `<select>` elements or locally styled dropdown substitutes unless a documented specialized platform, accessibility, DataGrid, or input-mode requirement cannot be met by the shared Select.
+- A specialized exception must be explicit in the governing task or durable specification rather than inferred from convenience.
+
 ## Data Grid Card Convention
 
 - When a `DataGrid` is rendered inside a `Card`, the grid must span the full card width.

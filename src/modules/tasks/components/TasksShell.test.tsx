@@ -5308,6 +5308,7 @@ describe('TasksShell', () => {
       area_id: 'area-work',
       hierarchy_order_key: 'a0',
       actionability: 'waiting' as const,
+      notes: '',
     };
     const taskList = { ...defaultTaskList(), tasks: [organizedTask] };
     mockTaskList.mockReturnValue(taskList);
@@ -5459,6 +5460,7 @@ describe('TasksShell', () => {
       today_section: 'next',
       deadline: '2026-07-25',
       actionability: 'waiting',
+      notes: 'Supporting details',
     });
     const partialTask = taskTodoFixture({
       ...task,
@@ -5469,6 +5471,7 @@ describe('TasksShell', () => {
       today_section: null,
       deadline: null,
       actionability: 'actionable',
+      notes: '',
     });
     const reminder = taskReminderFixture({
       task_id: completeTask.id,
@@ -5516,7 +5519,15 @@ describe('TasksShell', () => {
         Array.from(completeMetadata?.children ?? [], (item) => (
           item.getAttribute('data-task-metadata-kind')
         )),
-      ).toEqual(['area', 'horizon', 'reminder', 'actionability', 'deadline', 'checklist']);
+      ).toEqual([
+        'area',
+        'horizon',
+        'reminder',
+        'actionability',
+        'deadline',
+        'notes',
+        'checklist',
+      ]);
       expect(completeMetadata).toHaveTextContent('Home');
       expect(
         completeMetadata?.querySelector('[data-task-metadata-kind="area"]'),
@@ -5532,6 +5543,14 @@ describe('TasksShell', () => {
       ).toHaveClass('text-admin');
       expect(
         completeMetadata?.querySelector(
+          '[data-task-metadata-kind="notes"] svg.lucide-notepad-text',
+        ),
+      ).toBeTruthy();
+      expect(
+        completeMetadata?.querySelector('[data-task-metadata-kind="notes"]'),
+      ).toHaveAccessibleName('Notes');
+      expect(
+        completeMetadata?.querySelector(
           '[data-task-metadata-kind="checklist"] svg.lucide-list-tree',
         ),
       ).toBeTruthy();
@@ -5545,6 +5564,9 @@ describe('TasksShell', () => {
         )),
       ).toEqual(['area']);
       expect(partialMetadata).toHaveTextContent('Home');
+      expect(
+        partialMetadata?.querySelector('[data-task-metadata-kind="notes"]'),
+      ).toBeNull();
       expect(
         partialMetadata?.querySelector('[data-task-metadata-kind="checklist"]'),
       ).toBeNull();

@@ -363,14 +363,22 @@ function parseRuleConfig(value: unknown): TaskRecurrenceRuleConfig {
   }
   return {
     ...(Array.isArray(weekdays) ? { weekdays: weekdays.map(Number) } : {}),
-    ...(record.monthly_kind === 'day_of_month' || record.monthly_kind === 'ordinal_weekday'
+    ...(
+      record.monthly_kind === 'day_of_month'
+      || record.monthly_kind === 'last_day'
+      || record.monthly_kind === 'ordinal_weekday'
+      || record.monthly_kind === 'ordinal_day_type'
       ? { monthly_kind: record.monthly_kind }
-      : {}),
+      : {}
+    ),
     ...(Number.isInteger(record.month_day) ? { month_day: Number(record.month_day) } : {}),
     ...(Number.isInteger(record.ordinal)
       ? { ordinal: Number(record.ordinal) as -1 | 1 | 2 | 3 | 4 | 5 }
       : {}),
     ...(Number.isInteger(record.weekday) ? { weekday: Number(record.weekday) } : {}),
+    ...(record.day_type === 'weekday' || record.day_type === 'weekend_day'
+      ? { day_type: record.day_type }
+      : {}),
   };
 }
 

@@ -15,6 +15,7 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 | Selection | `Circle` | An available task or checklist-item selection control |
 | Selected | `CircleCheck` | A selected task or checklist item |
 | Area | `Layers3` | An area and the Areas section in Config; this is the three-layer Stack glyph |
+| Notes | `NotepadText` | Task Notes contain at least one character |
 | TaskChecklist | `ListTree` | A task's checklist |
 | Attachment | `Paperclip` | A task attachment |
 

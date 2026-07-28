@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(51);
+SELECT plan(56);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -583,6 +583,133 @@ SELECT is(
 SELECT ok(
   (SELECT count(*) FROM public.tasks_recurrence_occurrences) > 0,
   'rebinds restored recurrence occurrences to the authenticated owner'
+);
+
+RESET ROLE;
+
+INSERT INTO public.tasks_recurrence_definitions (
+  id, owner_id, name, current_revision, record_revision, client_mutation_id
+) VALUES (
+  '96000000-0000-4000-8000-000000000090',
+  '96000000-0000-4000-8000-000000000002',
+  'Explicit monthly patterns',
+  5,
+  1,
+  '96000000-0000-4000-8000-000000000091'
+);
+
+INSERT INTO public.tasks_recurrence_revisions (
+  id, owner_id, recurrence_id, revision, name, template_id, template_revision,
+  rule_mode, frequency, interval_count, start_date, planning_timezone,
+  missed_policy, catch_up_limit, client_mutation_id, rule_config
+)
+SELECT
+  values.id,
+  '96000000-0000-4000-8000-000000000002'::uuid,
+  '96000000-0000-4000-8000-000000000090'::uuid,
+  values.revision,
+  values.name,
+  template.template_id,
+  template.revision,
+  'calendar',
+  'monthly',
+  1,
+  '2026-07-01'::date,
+  'UTC',
+  'latest',
+  50,
+  values.client_mutation_id,
+  values.rule_config
+FROM (
+  VALUES
+    (
+      '96000000-0000-4000-8000-000000000092'::uuid,
+      1::bigint,
+      'Last day',
+      '96000000-0000-4000-8000-000000000093'::uuid,
+      '{"monthly_kind":"last_day"}'::jsonb
+    ),
+    (
+      '96000000-0000-4000-8000-000000000094'::uuid,
+      2::bigint,
+      'First Thursday',
+      '96000000-0000-4000-8000-000000000095'::uuid,
+      '{"monthly_kind":"ordinal_weekday","ordinal":1,"weekday":4}'::jsonb
+    ),
+    (
+      '96000000-0000-4000-8000-000000000096'::uuid,
+      3::bigint,
+      'Last weekday',
+      '96000000-0000-4000-8000-000000000097'::uuid,
+      '{"monthly_kind":"ordinal_day_type","ordinal":-1,"day_type":"weekday"}'::jsonb
+    ),
+    (
+      '96000000-0000-4000-8000-000000000098'::uuid,
+      4::bigint,
+      'Last weekend day',
+      '96000000-0000-4000-8000-000000000099'::uuid,
+      '{"monthly_kind":"ordinal_day_type","ordinal":-1,"day_type":"weekend_day"}'::jsonb
+    ),
+    (
+      '96000000-0000-4000-8000-000000000100'::uuid,
+      5::bigint,
+      'Fifth Monday',
+      '96000000-0000-4000-8000-000000000101'::uuid,
+      '{"monthly_kind":"ordinal_weekday","ordinal":5,"weekday":1}'::jsonb
+    )
+) AS values(id, revision, name, client_mutation_id, rule_config)
+CROSS JOIN LATERAL (
+  SELECT revision.template_id, revision.revision
+  FROM public.tasks_template_revisions AS revision
+  WHERE revision.owner_id = '96000000-0000-4000-8000-000000000002'
+  ORDER BY revision.created_at
+  LIMIT 1
+) AS template;
+
+SELECT is(
+  (
+    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
+    FROM public.tasks_recurrence_revisions AS recurrence_revision
+    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000092'
+  ),
+  '2026-07-31'::date,
+  'monthly recurrence supports the final calendar day'
+);
+SELECT is(
+  (
+    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
+    FROM public.tasks_recurrence_revisions AS recurrence_revision
+    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000094'
+  ),
+  '2026-07-02'::date,
+  'monthly recurrence supports an explicit ordinal weekday'
+);
+SELECT is(
+  (
+    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
+    FROM public.tasks_recurrence_revisions AS recurrence_revision
+    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000096'
+  ),
+  '2026-07-31'::date,
+  'monthly recurrence supports the final weekday'
+);
+SELECT is(
+  (
+    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
+    FROM public.tasks_recurrence_revisions AS recurrence_revision
+    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000098'
+  ),
+  '2026-07-26'::date,
+  'monthly recurrence supports the final weekend day'
+);
+SELECT is(
+  (
+    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
+    FROM public.tasks_recurrence_revisions AS recurrence_revision
+    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000100'
+  ),
+  '2026-08-31'::date,
+  'monthly recurrence skips months without the requested fifth weekday'
 );
 
 SELECT * FROM finish();

@@ -29,12 +29,12 @@ describe('TaskMarkdownNotes', () => {
     expect(screen.queryByRole('button', { name: 'Preview Notes' })).toBeNull();
   });
 
-  it('styles the approved source subset while keeping fixed-width indicators visible', () => {
+  it('semantically presents supported Markdown while retaining exact source text', () => {
     const { container } = render(<TaskMarkdownPreview notes={supportedNotes} />);
 
     const heading = container.querySelector('[data-task-markdown-indicator="heading"]');
     expect(heading?.textContent).toBe('# ');
-    expect(heading).toHaveClass('font-mono', 'text-muted-foreground');
+    expect(heading).toHaveClass('font-mono', 'text-muted-foreground', 'text-[0px]');
     expect(heading?.parentElement).toHaveClass('text-lg');
 
     expect(container.querySelector('em')?.textContent).toBe('*italic*');
@@ -42,32 +42,178 @@ describe('TaskMarkdownNotes', () => {
     expect(container.querySelectorAll('[data-task-markdown-indicator="italic"]')).toHaveLength(2);
     expect(container.querySelectorAll('[data-task-markdown-indicator="strong"]')).toHaveLength(2);
     expect(container.querySelector('[data-task-markdown-indicator="bullet"]'))
-      .toHaveClass('font-mono', 'text-muted-foreground');
+      .toHaveClass('font-mono', 'text-muted-foreground', 'text-[0px]', "after:content-['•_']");
     expect(container.querySelector('[data-task-markdown-indicator="bullet"]')?.parentElement)
       .toHaveClass('pl-[2ch]', '[text-indent:-2ch]');
 
-    const link = screen.getByRole('link', { name: '[Link](https://example.com/reading)' });
+    const link = screen.getByRole('link', { name: 'Link' });
     expect(link).toHaveAttribute('href', 'https://example.com/reading');
     expect(link).toHaveAttribute('target', '_blank');
     expect(container.querySelectorAll('[data-task-markdown-indicator="link"]')).toHaveLength(3);
     expect(container.querySelectorAll('[data-task-markdown-indicator="link"]')[0])
-      .toHaveClass('font-mono', 'text-muted-foreground');
+      .toHaveClass('font-mono', 'text-muted-foreground', 'text-[0px]');
     expect(container.querySelector('[data-task-markdown-link-label]'))
-      .toHaveClass('text-foreground');
+      .toHaveClass('text-info');
     expect(container.querySelector('[data-task-markdown-link-label]'))
       .toHaveTextContent('Link');
     expect(container.querySelector('[data-task-markdown-link-destination]'))
-      .toHaveClass('text-info');
+      .toHaveClass('text-[0px]');
     expect(container.querySelector('[data-task-markdown-link-destination]'))
       .toHaveTextContent('https://example.com/reading');
-    expect(link).not.toHaveClass('text-info');
+    expect(link).toHaveClass('text-info');
 
     const code = container.querySelector('code');
     expect(code).toHaveTextContent('`inline code`');
     expect(code).toHaveClass('font-mono', 'bg-foreground/[0.08]');
     expect(code?.querySelectorAll('[data-task-markdown-indicator="code"]')).toHaveLength(2);
     expect(code?.querySelector('[data-task-markdown-indicator="code"]'))
-      .toHaveClass('font-mono', 'text-muted-foreground');
+      .toHaveClass('font-mono', 'text-muted-foreground', 'text-[0px]');
+  });
+
+  it('reveals raw Markdown only on the caret line and preserves source offsets', () => {
+    const notes = [
+      '# Heading',
+      '[Link](https://example.test/read)',
+      '**bold** and `code`',
+    ].join('\n');
+    const { container } = render(
+      <TaskMarkdownNotes id="notes-lines" notes={notes} disabled={false} onChange={vi.fn()} />,
+    );
+    const editor = screen.getByRole('textbox', { name: 'Notes' });
+    const lines = () => Array.from(
+      container.querySelectorAll<HTMLElement>('[data-task-note-line]'),
+    );
+
+    expect(lines().every((line) => line.dataset.taskNotePresentation === 'semantic')).toBe(true);
+    editor.focus();
+    const label = findTextNode(editor, 'Link');
+    setCaret(label, 2);
+    fireSelectionChange();
+
+    expect(lines()[0]).toHaveAttribute('data-task-note-presentation', 'semantic');
+    expect(lines()[1]).toHaveAttribute('data-task-note-presentation', 'source');
+    expect(lines()[2]).toHaveAttribute('data-task-note-presentation', 'semantic');
+    expect(lines()[1].querySelector('[data-task-markdown-indicator="link"]'))
+      .not.toHaveClass('text-[0px]');
+    expect(lines()[1].querySelector('[data-task-markdown-link-label]'))
+      .toHaveClass('text-foreground');
+    expect(lines()[1].querySelector('[data-task-markdown-link-destination]'))
+      .toHaveClass('text-info');
+    expect(editor.textContent).toBe(notes.replaceAll('\n', ''));
+    expect(window.getSelection()?.anchorNode?.textContent).toBe('Link');
+    expect(window.getSelection()?.anchorOffset).toBe(2);
+
+    const activeLabel = findTextNode(editor, 'Link');
+    const bold = findTextNode(editor, 'bold');
+    setSelection(activeLabel, 1, bold, 3);
+    fireSelectionChange();
+    expect(lines()[1]).toHaveAttribute('data-task-note-presentation', 'source');
+    expect(lines()[2]).toHaveAttribute('data-task-note-presentation', 'source');
+  });
+
+  it('preserves a backward cross-line selection while revealing its source lines', () => {
+    const notes = [
+      '# Heading',
+      '[Link](https://example.test/read)',
+      '**bold** and `code`',
+    ].join('\n');
+    const { container } = render(
+      <TaskMarkdownNotes
+        id="notes-backward-selection"
+        notes={notes}
+        disabled={false}
+        onChange={vi.fn()}
+      />,
+    );
+    const editor = screen.getByRole('textbox', { name: 'Notes' });
+    editor.focus();
+    setBackwardSelection(
+      findTextNode(editor, 'bold'),
+      3,
+      findTextNode(editor, 'Link'),
+      1,
+    );
+
+    fireSelectionChange();
+
+    const lines = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-task-note-line]'),
+    );
+    expect(lines[1]).toHaveAttribute('data-task-note-presentation', 'source');
+    expect(lines[2]).toHaveAttribute('data-task-note-presentation', 'source');
+    expect(window.getSelection()?.anchorNode?.textContent).toBe('bold');
+    expect(window.getSelection()?.anchorOffset).toBe(3);
+    expect(window.getSelection()?.focusNode?.textContent).toBe('Link');
+    expect(window.getSelection()?.focusOffset).toBe(1);
+  });
+
+  it('keeps the DOM stable while a pointer selection extends backward', () => {
+    const notes = [
+      '# Heading',
+      '[Link](https://example.test/read)',
+      '**bold** and `code`',
+    ].join('\n');
+    const { container } = render(
+      <TaskMarkdownNotes
+        id="notes-backward-pointer-selection"
+        notes={notes}
+        disabled={false}
+        onChange={vi.fn()}
+      />,
+    );
+    const editor = screen.getByRole('textbox', { name: 'Notes' });
+    const anchorNode = findTextNode(editor, 'bold');
+    const focusNode = findTextNode(editor, 'Link');
+    const originalLines = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-task-note-line]'),
+    );
+
+    editor.focus();
+    fireEvent.mouseDown(anchorNode.parentElement ?? editor, { button: 0 });
+    setBackwardSelection(anchorNode, 3, focusNode, 1);
+    fireSelectionChange();
+
+    expect(anchorNode.isConnected).toBe(true);
+    expect(focusNode.isConnected).toBe(true);
+    expect(Array.from(
+      container.querySelectorAll<HTMLElement>('[data-task-note-line]'),
+    )).toEqual(originalLines);
+    expect(originalLines.every(
+      (line) => line.dataset.taskNotePresentation === 'semantic',
+    )).toBe(true);
+
+    fireEvent.mouseUp(document, { button: 0 });
+
+    const decoratedLines = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-task-note-line]'),
+    );
+    expect(decoratedLines[1]).toHaveAttribute('data-task-note-presentation', 'source');
+    expect(decoratedLines[2]).toHaveAttribute('data-task-note-presentation', 'source');
+    expect(window.getSelection()?.anchorNode?.textContent).toBe('bold');
+    expect(window.getSelection()?.anchorOffset).toBe(3);
+    expect(window.getSelection()?.focusNode?.textContent).toBe('Link');
+    expect(window.getSelection()?.focusOffset).toBe(1);
+  });
+
+  it('returns every line to semantic presentation when the editor loses focus', () => {
+    const { container } = render(
+      <TaskMarkdownNotes
+        id="notes-blur"
+        notes={'* first\n**second**'}
+        disabled={false}
+        onChange={vi.fn()}
+      />,
+    );
+    const editor = screen.getByRole('textbox', { name: 'Notes' });
+    editor.focus();
+    setCaret(findTextNode(editor, 'first'), 2);
+    fireSelectionChange();
+    expect(container.querySelector('[data-task-note-presentation="source"]')).toBeTruthy();
+
+    fireEvent.blur(editor);
+
+    expect(container.querySelector('[data-task-note-presentation="source"]')).toBeNull();
+    expect(container.querySelectorAll('[data-task-note-presentation="semantic"]')).toHaveLength(2);
   });
 
   it('applies Markdown styling as the user edits without changing the source', () => {
@@ -202,7 +348,8 @@ describe('TaskMarkdownNotes', () => {
     open.mockRestore();
   });
 
-  it('styles a live Markdown link as white label, muted syntax, and blue destination', () => {
+  it('switches a Markdown link between semantic navigation and active-line source editing', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
     const { container } = render(
       <TaskMarkdownNotes
         id="notes-markdown-link"
@@ -213,15 +360,39 @@ describe('TaskMarkdownNotes', () => {
     );
 
     const link = screen.getByRole('link');
-    expect(link).not.toHaveClass('text-info');
+    expect(link).toHaveClass('text-info');
     expect(link.textContent).toBe('[Take the survey](https://example.test/survey)');
+    expect(container.querySelector('[data-task-markdown-link-label]'))
+      .toHaveClass('text-info');
+    expect(container.querySelector('[data-task-markdown-link-destination]'))
+      .toHaveClass('text-[0px]');
+    for (const indicator of container.querySelectorAll('[data-task-markdown-indicator="link"]')) {
+      expect(indicator).toHaveClass('font-mono', 'text-muted-foreground', 'text-[0px]');
+    }
+
+    fireEvent.click(link);
+    expect(open).toHaveBeenCalledWith(
+      'https://example.test/survey',
+      '_blank',
+      'noopener,noreferrer',
+    );
+
+    const editor = screen.getByRole('textbox', { name: 'Notes' });
+    editor.focus();
+    setCaret(findTextNode(editor, 'Take the survey'), 4);
+    fireSelectionChange();
+
+    const activeLink = screen.getByRole('link', {
+      name: '[Take the survey](https://example.test/survey)',
+    });
+    expect(activeLink).not.toHaveClass('text-info');
     expect(container.querySelector('[data-task-markdown-link-label]'))
       .toHaveClass('text-foreground');
     expect(container.querySelector('[data-task-markdown-link-destination]'))
       .toHaveClass('text-info');
-    for (const indicator of container.querySelectorAll('[data-task-markdown-indicator="link"]')) {
-      expect(indicator).toHaveClass('font-mono', 'text-muted-foreground');
-    }
+    fireEvent.click(activeLink);
+    expect(open).toHaveBeenCalledTimes(1);
+    open.mockRestore();
   });
 
   it('uses the same live editor for empty and disabled notes', () => {
@@ -254,6 +425,40 @@ function setCaret(node: Node, offset: number): void {
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
+}
+
+function setSelection(
+  startNode: Node,
+  startOffset: number,
+  endNode: Node,
+  endOffset: number,
+): void {
+  const range = document.createRange();
+  range.setStart(startNode, startOffset);
+  range.setEnd(endNode, endOffset);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function setBackwardSelection(
+  anchorNode: Node,
+  anchorOffset: number,
+  focusNode: Node,
+  focusOffset: number,
+): void {
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.setBaseAndExtent(
+    anchorNode,
+    anchorOffset,
+    focusNode,
+    focusOffset,
+  );
+}
+
+function fireSelectionChange(): void {
+  document.dispatchEvent(new Event('selectionchange'));
 }
 
 function selectContents(element: HTMLElement): void {

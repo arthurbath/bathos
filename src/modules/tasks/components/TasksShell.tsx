@@ -5105,6 +5105,7 @@ function TaskRow({
             areaLabel
             || todayMarker
             || hasChecklistItems
+            || task.notes.length > 0
             || task.actionability !== 'actionable'
             || task.deadline
             || (reminder && (task.start_date || task.today_section))
@@ -5187,6 +5188,19 @@ function TaskRow({
                   >
                     {formatTaskRelativeCalendarDate(task.deadline, planningDate)}
                   </span>
+                </span>
+              ) : null}
+              {task.notes.length > 0 ? (
+                <span
+                  className="inline-flex shrink-0 items-center"
+                  aria-label="Notes"
+                  title="Notes"
+                  data-task-metadata-kind="notes"
+                >
+                  <TASK_ICONS.Notes
+                    className="h-3.5 w-3.5"
+                    aria-hidden="true"
+                  />
                 </span>
               ) : null}
               {hasChecklistItems ? (

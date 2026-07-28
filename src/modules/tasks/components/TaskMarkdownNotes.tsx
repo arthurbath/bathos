@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useLayoutEffect,
   useRef,
   type ClipboardEvent,
@@ -33,12 +34,15 @@ type TaskNoteSourceLine = {
 type SelectionOffsets = {
   start: number;
   end: number;
+  direction?: 'forward' | 'backward';
 };
 
 type EditorHistory = {
   undo: string[];
   redo: string[];
 };
+
+type TaskNotePresentation = 'source' | 'semantic';
 
 const taskNoteTokenPattern = /(\[[^\]\n]+\]\([A-Za-z][A-Za-z0-9]*:\/\/[^)\s]+\)|https?:\/\/[^\s<]+|[A-Za-z][A-Za-z0-9]*:\/\/[^\s<]+|\*\*[^*\n]+\*\*|`[^`\n]+`|\*[^*\n]+\*)/giu;
 const blockedTaskNoteSchemes = new Set(['javascript', 'data', 'vbscript']);
@@ -59,7 +63,9 @@ export function TaskMarkdownNotes({
   const editorRef = useRef<HTMLDivElement>(null);
   const renderedValueRef = useRef<string | null>(null);
   const composingRef = useRef(false);
+  const pointerSelectingRef = useRef(false);
   const historyRef = useRef<EditorHistory>({ undo: [], redo: [] });
+  const sourceLineIndexesRef = useRef<Set<number>>(new Set());
 
   useLayoutEffect(() => {
     const editor = editorRef.current;
@@ -76,17 +82,48 @@ export function TaskMarkdownNotes({
     const selection = document.activeElement === editor
       ? captureSelectionOffsets(editor)
       : null;
-    decorateTaskNotesEditor(editor, notes);
+    const sourceLineIndexes = selection === null
+      ? new Set<number>()
+      : sourceLineIndexesForSelection(notes, selection);
+    sourceLineIndexesRef.current = sourceLineIndexes;
+    decorateTaskNotesEditor(editor, notes, sourceLineIndexes);
     renderedValueRef.current = notes;
     restoreSelectionOffsets(editor, selection);
   }, [notes]);
+
+  useEffect(() => {
+    const synchronizeSelectionPresentation = () => {
+      if (composingRef.current || pointerSelectingRef.current) return;
+      synchronizeTaskNotesSelectionPresentation(
+        editorRef.current,
+        sourceLineIndexesRef,
+      );
+    };
+    const finishPointerSelection = () => {
+      if (!pointerSelectingRef.current) return;
+      pointerSelectingRef.current = false;
+      synchronizeSelectionPresentation();
+    };
+    document.addEventListener('selectionchange', synchronizeSelectionPresentation);
+    document.addEventListener('mouseup', finishPointerSelection, true);
+    window.addEventListener('blur', finishPointerSelection);
+    return () => {
+      document.removeEventListener('selectionchange', synchronizeSelectionPresentation);
+      document.removeEventListener('mouseup', finishPointerSelection, true);
+      window.removeEventListener('blur', finishPointerSelection);
+    };
+  }, []);
 
   const synchronizeEditor = () => {
     const editor = editorRef.current;
     if (editor === null) return;
     const nextNotes = readTaskNotesEditor(editor);
     const selection = captureSelectionOffsets(editor);
-    decorateTaskNotesEditor(editor, nextNotes);
+    const sourceLineIndexes = selection === null
+      ? new Set<number>()
+      : sourceLineIndexesForSelection(nextNotes, selection);
+    sourceLineIndexesRef.current = sourceLineIndexes;
+    decorateTaskNotesEditor(editor, nextNotes, sourceLineIndexes);
     renderedValueRef.current = nextNotes;
     restoreSelectionOffsets(editor, selection);
     onChange(nextNotes);
@@ -105,7 +142,9 @@ export function TaskMarkdownNotes({
       if (history.undo.at(-1) !== currentNotes) history.undo.push(currentNotes);
       history.redo = [];
     }
-    decorateTaskNotesEditor(editor, nextNotes);
+    const sourceLineIndexes = sourceLineIndexesForSelection(nextNotes, selection);
+    sourceLineIndexesRef.current = sourceLineIndexes;
+    decorateTaskNotesEditor(editor, nextNotes, sourceLineIndexes);
     renderedValueRef.current = nextNotes;
     restoreSelectionOffsets(editor, selection);
     onChange(nextNotes);
@@ -246,16 +285,42 @@ export function TaskMarkdownNotes({
     replaceCurrentSelection(event.clipboardData.getData('text/plain'));
   };
 
+  const handleMouseDown = (event: MouseEvent<HTMLDivElement>) => {
+    const anchor = closestTaskNoteAnchor(event.target, event.currentTarget);
+    if (
+      anchor !== null
+      && anchor.closest<HTMLElement>('[data-task-note-line]')
+        ?.dataset.taskNotePresentation === 'semantic'
+    ) {
+      event.preventDefault();
+      return;
+    }
+    if (event.button === 0) pointerSelectingRef.current = true;
+  };
+
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const anchor = target.closest<HTMLAnchorElement>('a[href]');
-    if (anchor === null || !event.currentTarget.contains(anchor)) return;
+    const anchor = closestTaskNoteAnchor(event.target, event.currentTarget);
+    if (anchor === null) return;
     event.preventDefault();
+    if (
+      anchor.closest<HTMLElement>('[data-task-note-line]')
+        ?.dataset.taskNotePresentation === 'source'
+    ) {
+      return;
+    }
     const href = anchor.getAttribute('href');
     if (!href) return;
     const targetName = /^https?:\/\//iu.test(href) ? '_blank' : '_self';
     window.open(href, targetName, 'noopener,noreferrer');
+  };
+
+  const handleBlur = () => {
+    const editor = editorRef.current;
+    if (editor === null || composingRef.current) return;
+    const currentNotes = readTaskNotesEditor(editor);
+    sourceLineIndexesRef.current = new Set();
+    decorateTaskNotesEditor(editor, currentNotes);
+    renderedValueRef.current = currentNotes;
   };
 
   return (
@@ -276,7 +341,9 @@ export function TaskMarkdownNotes({
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
+        onMouseDown={handleMouseDown}
         onClick={handleClick}
+        onBlur={handleBlur}
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
         className="min-h-28 w-full min-w-0 rounded-md border border-[hsl(var(--grid-sticky-line))] bg-background px-3 py-2 text-sm leading-6 text-foreground [overflow-wrap:anywhere] focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 data-[empty=true]:before:pointer-events-none data-[empty=true]:before:text-muted-foreground data-[empty=true]:before:content-[attr(data-placeholder)]"
@@ -295,7 +362,7 @@ export function TaskMarkdownPreview({ notes }: { notes: string }) {
             key={`${lineIndex}:${line}`}
             className={taskNoteLineClass(parsed)}
           >
-            {renderTaskNoteSourceLine(parsed)}
+            {renderTaskNoteSourceLine(parsed, 'semantic')}
           </span>
         );
       })}
@@ -309,73 +376,142 @@ function taskNoteLineClass(line: TaskNoteSourceLine): string {
   return noteLineClass;
 }
 
-function renderTaskNoteSourceLine(line: TaskNoteSourceLine): ReactNode {
+function renderTaskNoteSourceLine(
+  line: TaskNoteSourceLine,
+  presentation: TaskNotePresentation,
+): ReactNode {
   if (line.source.length === 0) return '\u00a0';
   return (
     <>
       {line.headingIndicator !== null ? (
-        <span className={indicatorClass} data-task-markdown-indicator="heading">
+        <span
+          className={taskNoteIndicatorClass('heading', presentation)}
+          data-task-markdown-indicator="heading"
+        >
           {line.headingIndicator}
         </span>
       ) : null}
       {line.bulletIndicator !== null ? (
-        <span className={indicatorClass} data-task-markdown-indicator="bullet">
+        <span
+          className={taskNoteIndicatorClass('bullet', presentation)}
+          data-task-markdown-indicator="bullet"
+        >
           {line.bulletIndicator}
         </span>
       ) : null}
-      {line.tokens.map((token, index) => renderTaskNoteToken(token, index))}
+      {line.tokens.map((token, index) => renderTaskNoteToken(token, index, presentation))}
     </>
   );
 }
 
-function renderTaskNoteToken(token: TaskNoteSourceToken, index: number): ReactNode {
+function renderTaskNoteToken(
+  token: TaskNoteSourceToken,
+  index: number,
+  presentation: TaskNotePresentation,
+): ReactNode {
   const key = `${index}:${token.kind}:${token.text}`;
   if (token.kind === 'strong') {
     return (
       <strong key={key} className="font-semibold">
-        <span className={indicatorClass} data-task-markdown-indicator="strong">**</span>
+        <span
+          className={taskNoteIndicatorClass('strong', presentation)}
+          data-task-markdown-indicator="strong"
+        >
+          **
+        </span>
         {token.text.slice(2, -2)}
-        <span className={indicatorClass} data-task-markdown-indicator="strong">**</span>
+        <span
+          className={taskNoteIndicatorClass('strong', presentation)}
+          data-task-markdown-indicator="strong"
+        >
+          **
+        </span>
       </strong>
     );
   }
   if (token.kind === 'emphasis') {
     return (
       <em key={key} className="italic">
-        <span className={indicatorClass} data-task-markdown-indicator="italic">*</span>
+        <span
+          className={taskNoteIndicatorClass('italic', presentation)}
+          data-task-markdown-indicator="italic"
+        >
+          *
+        </span>
         {token.text.slice(1, -1)}
-        <span className={indicatorClass} data-task-markdown-indicator="italic">*</span>
+        <span
+          className={taskNoteIndicatorClass('italic', presentation)}
+          data-task-markdown-indicator="italic"
+        >
+          *
+        </span>
       </em>
     );
   }
   if (token.kind === 'code') {
     return (
       <code key={key} className={codeClass}>
-        <span className={indicatorClass} data-task-markdown-indicator="code">`</span>
+        <span
+          className={taskNoteIndicatorClass('code', presentation)}
+          data-task-markdown-indicator="code"
+        >
+          `
+        </span>
         {token.text.slice(1, -1)}
-        <span className={indicatorClass} data-task-markdown-indicator="code">`</span>
+        <span
+          className={taskNoteIndicatorClass('code', presentation)}
+          data-task-markdown-indicator="code"
+        >
+          `
+        </span>
       </code>
     );
   }
   if (token.kind === 'link' && token.href !== undefined) {
     const markdownLink = token.label !== undefined;
     const opensWebTab = /^https?:\/\//i.test(token.href);
+    const sourceVisible = presentation === 'source';
     return (
       <a
         key={key}
         href={token.href}
-        aria-label={token.text}
+        aria-label={markdownLink && !sourceVisible ? token.label : token.text}
         target={opensWebTab ? '_blank' : undefined}
         rel="noopener noreferrer"
-        className={markdownLink ? linkClass : bareLinkClass}
+        className={markdownLink && sourceVisible ? linkClass : bareLinkClass}
       >
         {markdownLink ? (
           <>
-            <span className={indicatorClass} data-task-markdown-indicator="link">[</span>
-            <span className="text-foreground" data-task-markdown-link-label>{token.label}</span>
-            <span className={indicatorClass} data-task-markdown-indicator="link">](</span>
-            <span className="text-info" data-task-markdown-link-destination>{token.href}</span>
-            <span className={indicatorClass} data-task-markdown-indicator="link">)</span>
+            <span
+              className={taskNoteIndicatorClass('link', presentation)}
+              data-task-markdown-indicator="link"
+            >
+              [
+            </span>
+            <span
+              className={sourceVisible ? 'text-foreground' : 'text-info'}
+              data-task-markdown-link-label
+            >
+              {token.label}
+            </span>
+            <span
+              className={taskNoteIndicatorClass('link', presentation)}
+              data-task-markdown-indicator="link"
+            >
+              ](
+            </span>
+            <span
+              className={sourceVisible ? 'text-info' : 'text-[0px] leading-none'}
+              data-task-markdown-link-destination
+            >
+              {token.href}
+            </span>
+            <span
+              className={taskNoteIndicatorClass('link', presentation)}
+              data-task-markdown-indicator="link"
+            >
+              )
+            </span>
           </>
         ) : token.text}
       </a>
@@ -424,17 +560,23 @@ function tokenizeTaskNoteSourceLine(source: string): TaskNoteSourceLine {
   return { source, headingIndicator, bulletIndicator, tokens };
 }
 
-function decorateTaskNotesEditor(editor: HTMLDivElement, notes: string): void {
+function decorateTaskNotesEditor(
+  editor: HTMLDivElement,
+  notes: string,
+  sourceLineIndexes: ReadonlySet<number> = new Set(),
+): void {
   const fragment = document.createDocumentFragment();
-  for (const source of notes === '' ? [] : notes.split('\n')) {
+  for (const [lineIndex, source] of (notes === '' ? [] : notes.split('\n')).entries()) {
     const parsed = tokenizeTaskNoteSourceLine(source);
     const line = document.createElement('div');
     line.dataset.taskNoteLine = '';
+    const presentation = sourceLineIndexes.has(lineIndex) ? 'source' : 'semantic';
+    line.dataset.taskNotePresentation = presentation;
     line.className = taskNoteLineClass(parsed);
     if (source === '') {
       line.append(document.createElement('br'));
     } else {
-      appendTaskNoteLine(line, parsed);
+      appendTaskNoteLine(line, parsed, presentation);
     }
     fragment.append(line);
   }
@@ -442,25 +584,32 @@ function decorateTaskNotesEditor(editor: HTMLDivElement, notes: string): void {
   editor.dataset.empty = notes.length === 0 ? 'true' : 'false';
 }
 
-function appendTaskNoteLine(line: HTMLElement, parsed: TaskNoteSourceLine): void {
+function appendTaskNoteLine(
+  line: HTMLElement,
+  parsed: TaskNoteSourceLine,
+  presentation: TaskNotePresentation,
+): void {
   if (parsed.headingIndicator !== null) {
-    line.append(createIndicator(parsed.headingIndicator, 'heading'));
+    line.append(createIndicator(parsed.headingIndicator, 'heading', presentation));
   }
   if (parsed.bulletIndicator !== null) {
-    line.append(createIndicator(parsed.bulletIndicator, 'bullet'));
+    line.append(createIndicator(parsed.bulletIndicator, 'bullet', presentation));
   }
-  for (const token of parsed.tokens) line.append(createTaskNoteToken(token));
+  for (const token of parsed.tokens) line.append(createTaskNoteToken(token, presentation));
 }
 
-function createTaskNoteToken(token: TaskNoteSourceToken): Node {
+function createTaskNoteToken(
+  token: TaskNoteSourceToken,
+  presentation: TaskNotePresentation,
+): Node {
   if (token.kind === 'plain') return document.createTextNode(token.text);
   if (token.kind === 'code') {
     const code = document.createElement('code');
     code.className = codeClass;
     code.append(
-      createIndicator('`', 'code'),
+      createIndicator('`', 'code', presentation),
       document.createTextNode(token.text.slice(1, -1)),
-      createIndicator('`', 'code'),
+      createIndicator('`', 'code', presentation),
     );
     return code;
   }
@@ -469,34 +618,46 @@ function createTaskNoteToken(token: TaskNoteSourceToken): Node {
     element.className = token.kind === 'strong' ? 'font-semibold' : 'italic';
     const marker = token.kind === 'strong' ? '**' : '*';
     element.append(
-      createIndicator(marker, token.kind === 'strong' ? 'strong' : 'italic'),
+      createIndicator(
+        marker,
+        token.kind === 'strong' ? 'strong' : 'italic',
+        presentation,
+      ),
       document.createTextNode(token.text.slice(marker.length, -marker.length)),
-      createIndicator(marker, token.kind === 'strong' ? 'strong' : 'italic'),
+      createIndicator(
+        marker,
+        token.kind === 'strong' ? 'strong' : 'italic',
+        presentation,
+      ),
     );
     return element;
   }
   if (token.kind === 'link' && token.href !== undefined) {
     const anchor = document.createElement('a');
     anchor.href = token.href;
-    anchor.ariaLabel = token.text;
+    const sourceVisible = presentation === 'source';
+    anchor.setAttribute(
+      'aria-label',
+      token.label !== undefined && !sourceVisible ? token.label : token.text,
+    );
     anchor.rel = 'noopener noreferrer';
-    anchor.className = token.label !== undefined ? linkClass : bareLinkClass;
+    anchor.className = token.label !== undefined && sourceVisible ? linkClass : bareLinkClass;
     if (/^https?:\/\//i.test(token.href)) anchor.target = '_blank';
     if (token.label !== undefined) {
       const label = document.createElement('span');
-      label.className = 'text-foreground';
+      label.className = sourceVisible ? 'text-foreground' : 'text-info';
       label.dataset.taskMarkdownLinkLabel = '';
       label.textContent = token.label;
       const destination = document.createElement('span');
-      destination.className = 'text-info';
+      destination.className = sourceVisible ? 'text-info' : 'text-[0px] leading-none';
       destination.dataset.taskMarkdownLinkDestination = '';
       destination.textContent = token.href;
       anchor.append(
-        createIndicator('[', 'link'),
+        createIndicator('[', 'link', presentation),
         label,
-        createIndicator('](', 'link'),
+        createIndicator('](', 'link', presentation),
         destination,
-        createIndicator(')', 'link'),
+        createIndicator(')', 'link', presentation),
       );
     } else {
       anchor.textContent = token.text;
@@ -506,12 +667,27 @@ function createTaskNoteToken(token: TaskNoteSourceToken): Node {
   return document.createTextNode(token.text);
 }
 
-function createIndicator(text: string, kind: string): HTMLSpanElement {
+function createIndicator(
+  text: string,
+  kind: string,
+  presentation: TaskNotePresentation,
+): HTMLSpanElement {
   const indicator = document.createElement('span');
-  indicator.className = indicatorClass;
+  indicator.className = taskNoteIndicatorClass(kind, presentation);
   indicator.dataset.taskMarkdownIndicator = kind;
   indicator.textContent = text;
   return indicator;
+}
+
+function taskNoteIndicatorClass(
+  kind: string,
+  presentation: TaskNotePresentation,
+): string {
+  if (presentation === 'source') return indicatorClass;
+  if (kind === 'bullet') {
+    return `${indicatorClass} text-[0px] leading-none after:font-sans after:text-sm after:leading-6 after:text-foreground after:content-['•_']`;
+  }
+  return `${indicatorClass} text-[0px] leading-none`;
 }
 
 function readTaskNotesEditor(editor: HTMLElement): string {
@@ -521,6 +697,52 @@ function readTaskNotesEditor(editor: HTMLElement): string {
     return (node.textContent ?? '').replaceAll('\u00a0', ' ');
   });
   return lines.join('\n').replaceAll('\r\n', '\n');
+}
+
+function synchronizeTaskNotesSelectionPresentation(
+  editor: HTMLDivElement | null,
+  sourceLineIndexesRef: { current: Set<number> },
+): void {
+  if (editor === null || document.activeElement !== editor) return;
+  const selection = captureSelectionOffsets(editor);
+  if (selection === null) return;
+  const source = readTaskNotesEditor(editor);
+  const sourceLineIndexes = sourceLineIndexesForSelection(source, selection);
+  if (setsEqual(sourceLineIndexesRef.current, sourceLineIndexes)) return;
+  sourceLineIndexesRef.current = sourceLineIndexes;
+  decorateTaskNotesEditor(editor, source, sourceLineIndexes);
+  restoreSelectionOffsets(editor, selection);
+}
+
+function sourceLineIndexesForSelection(
+  source: string,
+  selection: SelectionOffsets,
+): Set<number> {
+  if (source.length === 0) return new Set();
+  const start = Math.min(selection.start, selection.end);
+  const end = Math.max(selection.start, selection.end);
+  const firstLine = source.slice(0, Math.min(start, source.length)).split('\n').length - 1;
+  const lastLine = source.slice(0, Math.min(end, source.length)).split('\n').length - 1;
+  const indexes = new Set<number>();
+  for (let index = firstLine; index <= lastLine; index += 1) indexes.add(index);
+  return indexes;
+}
+
+function setsEqual(left: ReadonlySet<number>, right: ReadonlySet<number>): boolean {
+  if (left.size !== right.size) return false;
+  for (const value of left) {
+    if (!right.has(value)) return false;
+  }
+  return true;
+}
+
+function closestTaskNoteAnchor(
+  target: EventTarget | null,
+  editor: HTMLElement,
+): HTMLAnchorElement | null {
+  if (!(target instanceof Element)) return null;
+  const anchor = target.closest<HTMLAnchorElement>('a[href]');
+  return anchor !== null && editor.contains(anchor) ? anchor : null;
 }
 
 function captureSelectionOffsets(editor: HTMLElement): SelectionOffsets | null {
@@ -535,10 +757,12 @@ function captureSelectionOffsets(editor: HTMLElement): SelectionOffsets | null {
   ) {
     return null;
   }
-  const range = selection.getRangeAt(0);
+  const anchor = endpointOffset(editor, selection.anchorNode, selection.anchorOffset);
+  const focus = endpointOffset(editor, selection.focusNode, selection.focusOffset);
   return {
-    start: endpointOffset(editor, range.startContainer, range.startOffset),
-    end: endpointOffset(editor, range.endContainer, range.endOffset),
+    start: Math.min(anchor, focus),
+    end: Math.max(anchor, focus),
+    direction: anchor > focus ? 'backward' : 'forward',
   };
 }
 
@@ -575,6 +799,17 @@ function restoreSelectionOffsets(
   if (selection === null) return;
   const start = positionForOffset(editor, offsets.start);
   const end = positionForOffset(editor, offsets.end);
+  if (typeof selection.setBaseAndExtent === 'function') {
+    const anchor = offsets.direction === 'backward' ? end : start;
+    const focus = offsets.direction === 'backward' ? start : end;
+    selection.setBaseAndExtent(
+      anchor.node,
+      anchor.offset,
+      focus.node,
+      focus.offset,
+    );
+    return;
+  }
   const range = document.createRange();
   range.setStart(start.node, start.offset);
   range.setEnd(end.node, end.offset);

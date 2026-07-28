@@ -64,6 +64,27 @@ describe('TaskRecurrenceService', () => {
     }).logical_key).toBe('calendar:2026-07-20');
   });
 
+  it('parses explicit monthly calendar and day-type rules', () => {
+    expect(parseTaskRecurrenceRevision({
+      ...revision,
+      frequency: 'monthly',
+      rule_config: { monthly_kind: 'last_day' },
+    }).rule_config).toEqual({ monthly_kind: 'last_day' });
+    expect(parseTaskRecurrenceRevision({
+      ...revision,
+      frequency: 'monthly',
+      rule_config: {
+        monthly_kind: 'ordinal_day_type',
+        ordinal: -1,
+        day_type: 'weekend_day',
+      },
+    }).rule_config).toEqual({
+      monthly_kind: 'ordinal_day_type',
+      ordinal: -1,
+      day_type: 'weekend_day',
+    });
+  });
+
   it('saves a structured rule through the server-authoritative RPC', async () => {
     const { owner_id: _definitionOwner, ...ownerSafeDefinition } = definition;
     const { owner_id: _revisionOwner, ...ownerSafeRevision } = revision;

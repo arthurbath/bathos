@@ -33,6 +33,65 @@ describe('task recurrence previews', () => {
     })).toEqual(['2026-07-27', '2026-08-31', '2026-09-28']);
   });
 
+  it('previews explicit numbered and final calendar days', () => {
+    expect(getTaskRecurrencePreviewDates({
+      startDate: '2026-01-31',
+      frequency: 'monthly',
+      intervalCount: 1,
+      ruleConfig: {
+        monthly_kind: 'day_of_month',
+        month_day: 31,
+      },
+      limit: 3,
+    })).toEqual(['2026-01-31', '2026-02-28', '2026-03-31']);
+    expect(getTaskRecurrencePreviewDates({
+      startDate: '2026-01-31',
+      frequency: 'monthly',
+      intervalCount: 1,
+      ruleConfig: { monthly_kind: 'last_day' },
+      limit: 3,
+    })).toEqual(['2026-01-31', '2026-02-28', '2026-03-31']);
+  });
+
+  it('previews ordinal weekday and weekend-day groups', () => {
+    expect(getTaskRecurrencePreviewDates({
+      startDate: '2026-07-01',
+      frequency: 'monthly',
+      intervalCount: 1,
+      ruleConfig: {
+        monthly_kind: 'ordinal_day_type',
+        ordinal: -1,
+        day_type: 'weekday',
+      },
+      limit: 3,
+    })).toEqual(['2026-07-31', '2026-08-31', '2026-09-30']);
+    expect(getTaskRecurrencePreviewDates({
+      startDate: '2026-07-01',
+      frequency: 'monthly',
+      intervalCount: 1,
+      ruleConfig: {
+        monthly_kind: 'ordinal_day_type',
+        ordinal: -1,
+        day_type: 'weekend_day',
+      },
+      limit: 3,
+    })).toEqual(['2026-07-26', '2026-08-30', '2026-09-27']);
+  });
+
+  it('skips months that do not contain a requested fifth weekday', () => {
+    expect(getTaskRecurrencePreviewDates({
+      startDate: '2026-07-01',
+      frequency: 'monthly',
+      intervalCount: 1,
+      ruleConfig: {
+        monthly_kind: 'ordinal_weekday',
+        ordinal: 5,
+        weekday: 1,
+      },
+      limit: 3,
+    })).toEqual(['2026-08-31', '2026-11-30', '2027-03-29']);
+  });
+
   it('honors inclusive date and occurrence count endings', () => {
     expect(getTaskRecurrencePreviewDates({
       startDate: '2026-07-27',

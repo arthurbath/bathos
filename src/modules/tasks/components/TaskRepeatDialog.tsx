@@ -11,6 +11,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/hooks/use-toast';
 import { getTaskRecurrencePreviewDates } from '@/modules/tasks/domain/taskRecurrenceDates';
@@ -37,6 +44,28 @@ const weekdayLabels = [
   [7, 'S'],
 ] as const;
 
+const weekdays = [
+  [1, 'Monday'],
+  [2, 'Tuesday'],
+  [3, 'Wednesday'],
+  [4, 'Thursday'],
+  [5, 'Friday'],
+  [6, 'Saturday'],
+  [7, 'Sunday'],
+] as const;
+
+const monthlyOrdinals = [
+  [1, 'First'],
+  [2, 'Second'],
+  [3, 'Third'],
+  [4, 'Fourth'],
+  [5, 'Fifth'],
+  [-1, 'Last'],
+] as const;
+
+type MonthlyPattern = 'date' | 'weekday_position' | 'day_type_position';
+type MonthlyOrdinal = -1 | 1 | 2 | 3 | 4 | 5;
+
 export function TaskRepeatDialog({
   task,
   planningDate,
@@ -55,11 +84,19 @@ export function TaskRepeatDialog({
   const [scheduleDate, setScheduleDate] = useState(
     task.deadline ?? task.start_date ?? planningDate,
   );
-  const [weekdays, setWeekdays] = useState<number[]>([
+  const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([
     isoWeekday(task.deadline ?? task.start_date ?? planningDate),
   ]);
-  const [monthlyKind, setMonthlyKind] = useState<'day_of_month' | 'ordinal_weekday'>(
-    'day_of_month',
+  const [monthlyPattern, setMonthlyPattern] = useState<MonthlyPattern>('date');
+  const [monthlyDate, setMonthlyDate] = useState<number | 'last'>(
+    Number(scheduleDate.slice(8, 10)),
+  );
+  const [monthlyOrdinal, setMonthlyOrdinal] = useState<MonthlyOrdinal>(
+    ordinalInMonth(scheduleDate),
+  );
+  const [monthlyWeekday, setMonthlyWeekday] = useState(isoWeekday(scheduleDate));
+  const [monthlyDayType, setMonthlyDayType] = useState<'weekday' | 'weekend_day'>(
+    'weekday',
   );
   const [endMode, setEndMode] = useState<TaskRecurrenceEndMode>('never');
   const [endAfterCount, setEndAfterCount] = useState(10);
@@ -72,17 +109,33 @@ export function TaskRepeatDialog({
 
   const ruleConfig = useMemo<TaskRecurrenceRuleConfig>(() => (
     frequency === 'weekly'
-      ? { weekdays }
+      ? { weekdays: selectedWeekdays }
       : frequency === 'monthly'
-        ? monthlyKind === 'day_of_month'
-          ? { monthly_kind: monthlyKind, month_day: Number(scheduleDate.slice(8, 10)) }
-          : {
-              monthly_kind: monthlyKind,
-              ordinal: ordinalInMonth(scheduleDate),
-              weekday: isoWeekday(scheduleDate),
-            }
+        ? monthlyPattern === 'date'
+          ? monthlyDate === 'last'
+            ? { monthly_kind: 'last_day' }
+            : { monthly_kind: 'day_of_month', month_day: monthlyDate }
+          : monthlyPattern === 'weekday_position'
+            ? {
+                monthly_kind: 'ordinal_weekday',
+                ordinal: monthlyOrdinal,
+                weekday: monthlyWeekday,
+              }
+            : {
+                monthly_kind: 'ordinal_day_type',
+                ordinal: monthlyOrdinal,
+                day_type: monthlyDayType,
+              }
         : {}
-  ), [frequency, monthlyKind, scheduleDate, weekdays]);
+  ), [
+    frequency,
+    monthlyDate,
+    monthlyDayType,
+    monthlyOrdinal,
+    monthlyPattern,
+    monthlyWeekday,
+    selectedWeekdays,
+  ]);
   const preview = getTaskRecurrencePreviewDates({
     startDate: scheduleDate,
     frequency,
@@ -91,8 +144,20 @@ export function TaskRepeatDialog({
     endMode,
     endAfterCount,
     endOnDate,
-    limit: 5,
+    limit: 3,
   });
+  const alignedMonthlyDate = useMemo(() => (
+    ruleMode === 'calendar' && frequency === 'monthly'
+      ? getTaskRecurrencePreviewDates({
+          startDate: scheduleDate,
+          frequency,
+          intervalCount,
+          ruleConfig,
+          limit: 1,
+        })[0] ?? null
+      : null
+  ), [frequency, intervalCount, ruleConfig, ruleMode, scheduleDate]);
+  const effectiveScheduleDate = alignedMonthlyDate ?? scheduleDate;
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -105,7 +170,7 @@ export function TaskRepeatDialog({
         ruleMode,
         frequency,
         intervalCount,
-        scheduleDate,
+        scheduleDate: effectiveScheduleDate,
         ruleConfig,
         endMode,
         endAfterCount: endMode === 'after' ? endAfterCount : null,
@@ -142,14 +207,18 @@ export function TaskRepeatDialog({
           <form id={`task-repeat-form-${task.id}`} onSubmit={save} className="space-y-4">
             <div className="grid grid-cols-[auto_1fr] items-center gap-3">
               <span className="text-sm font-medium">Repeat</span>
-              <select
+              <Select
                 value={ruleMode}
-                onChange={(event) => setRuleMode(event.target.value as TaskRecurrenceRuleMode)}
-                className={selectClassName}
+                onValueChange={(value) => setRuleMode(value as TaskRecurrenceRuleMode)}
               >
-                <option value="after_completion">After Completion</option>
-                <option value="calendar">On a Schedule</option>
-              </select>
+                <SelectTrigger aria-label="Repeat">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="after_completion">After Completion</SelectItem>
+                  <SelectItem value="calendar">On a Schedule</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="rounded-md bg-foreground/[0.04] p-4">
               <div className="grid grid-cols-[auto_5rem_1fr] items-center gap-2">
@@ -161,16 +230,20 @@ export function TaskRepeatDialog({
                   value={intervalCount}
                   onChange={(event) => setIntervalCount(Math.max(1, Number(event.target.value)))}
                 />
-                <select
+                <Select
                   value={frequency}
-                  onChange={(event) => setFrequency(event.target.value as TaskRecurrenceFrequency)}
-                  className={selectClassName}
+                  onValueChange={(value) => setFrequency(value as TaskRecurrenceFrequency)}
                 >
-                  <option value="daily">Days</option>
-                  <option value="weekly">Weeks</option>
-                  <option value="monthly">Months</option>
-                  <option value="yearly">Years</option>
-                </select>
+                  <SelectTrigger aria-label="Frequency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Days</SelectItem>
+                    <SelectItem value="weekly">Weeks</SelectItem>
+                    <SelectItem value="monthly">Months</SelectItem>
+                    <SelectItem value="yearly">Years</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               {ruleMode === 'calendar' && frequency === 'weekly' ? (
                 <div className="mt-3 flex justify-between gap-1" aria-label="Repeat Weekdays">
@@ -178,12 +251,12 @@ export function TaskRepeatDialog({
                     <Button
                       key={day}
                       type="button"
-                      variant={weekdays.includes(day) ? 'outline-success' : 'outline'}
+                      variant={selectedWeekdays.includes(day) ? 'outline-success' : 'outline'}
                       size="icon"
                       className="h-9 w-9"
                       aria-label={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][index]}
-                      aria-pressed={weekdays.includes(day)}
-                      onClick={() => setWeekdays((current) => (
+                      aria-pressed={selectedWeekdays.includes(day)}
+                      onClick={() => setSelectedWeekdays((current) => (
                         current.includes(day)
                           ? current.length === 1 ? current : current.filter((value) => value !== day)
                           : [...current, day].sort()
@@ -195,39 +268,120 @@ export function TaskRepeatDialog({
                 </div>
               ) : null}
               {ruleMode === 'calendar' && frequency === 'monthly' ? (
-                <select
-                  value={monthlyKind}
-                  onChange={(event) => setMonthlyKind(
-                    event.target.value as 'day_of_month' | 'ordinal_weekday',
+                <div className="mt-3 grid gap-3" data-task-monthly-cadence>
+                  <div className="grid grid-cols-[auto_1fr] items-center gap-3">
+                    <span className="text-sm">On</span>
+                    <Select
+                      value={monthlyPattern}
+                      onValueChange={(value) => setMonthlyPattern(value as MonthlyPattern)}
+                    >
+                      <SelectTrigger aria-label="Monthly Pattern">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="date">Calendar Date</SelectItem>
+                        <SelectItem value="weekday_position">Weekday Position</SelectItem>
+                        <SelectItem value="day_type_position">Day-Type Position</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {monthlyPattern === 'date' ? (
+                    <Select
+                      value={String(monthlyDate)}
+                      onValueChange={(value) => setMonthlyDate(
+                        value === 'last' ? 'last' : Number(value),
+                      )}
+                    >
+                      <SelectTrigger aria-label="Monthly Date">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
+                          <SelectItem key={day} value={String(day)}>
+                            {ordinalNumber(day)}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="last">Last Day</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select
+                        value={String(monthlyOrdinal)}
+                        onValueChange={(value) => setMonthlyOrdinal(Number(value) as MonthlyOrdinal)}
+                      >
+                        <SelectTrigger aria-label="Monthly Ordinal">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {monthlyOrdinals.map(([ordinal, label]) => (
+                            <SelectItem key={ordinal} value={String(ordinal)}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {monthlyPattern === 'weekday_position' ? (
+                        <Select
+                          value={String(monthlyWeekday)}
+                          onValueChange={(value) => setMonthlyWeekday(Number(value))}
+                        >
+                          <SelectTrigger aria-label="Monthly Weekday">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {weekdays.map(([day, label]) => (
+                              <SelectItem key={day} value={String(day)}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Select
+                          value={monthlyDayType}
+                          onValueChange={(value) => setMonthlyDayType(
+                            value as 'weekday' | 'weekend_day',
+                          )}
+                        >
+                          <SelectTrigger aria-label="Monthly Day Type">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="weekday">Weekday</SelectItem>
+                            <SelectItem value="weekend_day">Weekend Day</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
                   )}
-                  className={`${selectClassName} mt-3`}
-                >
-                  <option value="day_of_month">Same Day of Month</option>
-                  <option value="ordinal_weekday">Same Weekday Position</option>
-                </select>
+                </div>
               ) : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-sm">
                 <span>{addDeadline ? 'Next Deadline' : 'Next Start'}</span>
                 <DatePickerField
-                  value={scheduleDate}
+                  value={effectiveScheduleDate}
                   onValueChange={setScheduleDate}
                   todayDate={planningDate}
                 />
               </label>
               <div className="space-y-1 text-sm">
                 <span>Ends</span>
-                <select
-                  aria-label="Ends"
+                <Select
                   value={endMode}
-                  onChange={(event) => setEndMode(event.target.value as TaskRecurrenceEndMode)}
-                  className={selectClassName}
+                  onValueChange={(value) => setEndMode(value as TaskRecurrenceEndMode)}
                 >
-                  <option value="never">Never</option>
-                  <option value="after">After</option>
-                  <option value="on_date">On Date</option>
-                </select>
+                  <SelectTrigger aria-label="Ends">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="never">Never</SelectItem>
+                    <SelectItem value="after">After</SelectItem>
+                    <SelectItem value="on_date">On Date</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               {endMode === 'after' ? (
                 <Input
@@ -247,12 +401,35 @@ export function TaskRepeatDialog({
               ) : null}
             </div>
             {ruleMode === 'calendar' && preview.length > 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Next: {preview.map((date) => formatTaskDateControlLabel(
-                  date,
-                  planningDate,
-                )).join(', ')}
-              </p>
+              <div
+                className="space-y-1 text-sm text-muted-foreground"
+                aria-label="Next Three Occurrences"
+              >
+                <span className="font-medium text-foreground">Next</span>
+                <ol className="space-y-1">
+                  {preview.map((date) => (
+                    <li key={date}>
+                      {addDeadline ? (
+                        <>
+                          <span className="text-foreground">Start</span>{' '}
+                          {formatTaskDateControlLabel(
+                            addTaskCalendarDays(date, -deadlineOffsetDays),
+                            planningDate,
+                          )}
+                          <span aria-hidden="true"> · </span>
+                          <span className="text-foreground">Deadline</span>{' '}
+                          {formatTaskDateControlLabel(date, planningDate)}
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-foreground">Start</span>{' '}
+                          {formatTaskDateControlLabel(date, planningDate)}
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </div>
             ) : null}
             <OptionSwitch
               label="Add Reminders"
@@ -349,4 +526,11 @@ function ordinalInMonth(value: string): -1 | 1 | 2 | 3 | 4 | 5 {
   return nextSameWeekday > lastDay ? -1 : ordinal;
 }
 
-const selectClassName = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+function ordinalNumber(value: number): string {
+  const remainder = value % 100;
+  if (remainder >= 11 && remainder <= 13) return `${value}th`;
+  if (value % 10 === 1) return `${value}st`;
+  if (value % 10 === 2) return `${value}nd`;
+  if (value % 10 === 3) return `${value}rd`;
+  return `${value}th`;
+}

@@ -53,17 +53,19 @@ function recurrenceDateForStep(
     return addMonthsClamped(input.startDate, input.intervalCount * step * 12);
   }
   if (input.frequency === 'monthly') {
-    const month = addMonthsClamped(input.startDate.slice(0, 8) + '01', input.intervalCount * step);
     const config = input.ruleConfig ?? {};
-    if (config.monthly_kind === 'ordinal_weekday') {
-      return ordinalWeekdayInMonth(
-        month,
-        config.ordinal ?? 1,
-        config.weekday ?? isoWeekday(input.startDate),
+    let found = -1;
+    for (let monthStep = 0; monthStep < 1_200; monthStep += 1) {
+      const month = addMonthsClamped(
+        input.startDate.slice(0, 8) + '01',
+        input.intervalCount * monthStep,
       );
+      const candidate = monthlyDateForMonth(month, input.startDate, config);
+      if (!candidate || candidate < input.startDate) continue;
+      found += 1;
+      if (found === step) return candidate;
     }
-    const day = config.month_day ?? Number(input.startDate.slice(8, 10));
-    return setClampedMonthDay(month, day);
+    return null;
   }
 
   const weekdays = [...new Set(
@@ -106,6 +108,44 @@ function setClampedMonthDay(monthStart: string, day: number): string {
   return formatDate(year, month, Math.min(Math.max(day, 1), lastDay));
 }
 
+function monthlyDateForMonth(
+  month: string,
+  startDate: string,
+  config: TaskRecurrenceRuleConfig,
+): string | null {
+  if (config.monthly_kind === 'last_day') {
+    return lastDayInMonth(month);
+  }
+  if (config.monthly_kind === 'ordinal_weekday') {
+    return ordinalWeekdayInMonth(
+      month,
+      config.ordinal ?? 1,
+      config.weekday ?? isoWeekday(startDate),
+    );
+  }
+  if (config.monthly_kind === 'ordinal_day_type') {
+    return ordinalDayTypeInMonth(
+      month,
+      config.ordinal ?? 1,
+      config.day_type ?? 'weekday',
+    );
+  }
+  return setClampedMonthDay(
+    month,
+    config.month_day ?? Number(startDate.slice(8, 10)),
+  );
+}
+
+function lastDayInMonth(monthStart: string): string {
+  const year = Number(monthStart.slice(0, 4));
+  const month = Number(monthStart.slice(5, 7));
+  return formatDate(
+    year,
+    month,
+    new Date(Date.UTC(year, month, 0)).getUTCDate(),
+  );
+}
+
 function ordinalWeekdayInMonth(
   monthStart: string,
   ordinal: -1 | 1 | 2 | 3 | 4 | 5,
@@ -125,6 +165,36 @@ function ordinalWeekdayInMonth(
   for (let day = 1; day <= lastDay; day += 1) {
     const date = formatDate(year, month, day);
     if (isoWeekday(date) !== weekday) continue;
+    count += 1;
+    if (count === ordinal) return date;
+  }
+  return null;
+}
+
+function ordinalDayTypeInMonth(
+  monthStart: string,
+  ordinal: -1 | 1 | 2 | 3 | 4 | 5,
+  dayType: 'weekday' | 'weekend_day',
+): string | null {
+  const year = Number(monthStart.slice(0, 4));
+  const month = Number(monthStart.slice(5, 7));
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const matches = (date: string) => (
+    dayType === 'weekend_day'
+      ? isoWeekday(date) >= 6
+      : isoWeekday(date) <= 5
+  );
+  if (ordinal === -1) {
+    for (let day = lastDay; day >= 1; day -= 1) {
+      const date = formatDate(year, month, day);
+      if (matches(date)) return date;
+    }
+    return null;
+  }
+  let count = 0;
+  for (let day = 1; day <= lastDay; day += 1) {
+    const date = formatDate(year, month, day);
+    if (!matches(date)) continue;
     count += 1;
     if (count === ordinal) return date;
   }

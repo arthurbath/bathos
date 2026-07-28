@@ -362,39 +362,63 @@ The system SHALL treat adjacent checklist-item inputs as continuous lines for pl
 - **THEN** Tasks keeps focus in the current checklist input and leaves the event to native boundary behavior
 
 ### Requirement: Readable Markdown Task Notes
-The system SHALL retain task notes as plain text while presenting one complete, directly editable, live-styled Markdown source surface in an expanded to-do without separate editing and preview modes.
+The system SHALL retain task notes as plain text while presenting one complete, directly editable, line-aware Markdown surface in an expanded to-do without separate editing and preview modes.
 
-#### Scenario: Edit complete live-styled source
-- **WHEN** a user opens a to-do and edits its notes
-- **THEN** the interface keeps the complete plain-text source directly editable without an internal height limit, preserves every Markdown delimiter visibly, and updates recognized Markdown styling as the source changes without requiring an alternate mode
+#### Scenario: Reveal source on the active line
+- **WHEN** the user's collapsed caret is on a task-note line
+- **THEN** the interface keeps that line's complete plain-text source directly editable, preserves every recognized Markdown delimiter visibly in its live-styled source presentation, and semantically presents every other line
+
+#### Scenario: Reveal source across a selection
+- **WHEN** the user selects source across more than one task-note line
+- **THEN** the interface reveals the complete Markdown source of every line crossed by the selection and preserves the exact selected source range
+
+#### Scenario: Select source backward
+- **WHEN** the user begins a task-note selection at a later source position and extends it backward or upward across Markdown lines
+- **THEN** line-aware redecoration preserves the later anchor and earlier moving edge so the selection continues extending naturally in that direction
+
+#### Scenario: Present inactive inline Markdown
+- **WHEN** a supported heading, italic, bold, or inline-code construct is on a line that does not contain the caret or active selection
+- **THEN** the editor hides its Markdown delimiters while retaining the recognized heading, italic, bold, or code presentation of its content
+
+#### Scenario: Present an inactive bullet
+- **WHEN** an asterisk-plus-space bullet is on a line that does not contain the caret or active selection
+- **THEN** the editor presents an ordinary bullet marker in place of the source asterisk and retains the line's hanging indentation
+
+#### Scenario: Present an inactive Markdown link
+- **WHEN** `[label](destination)` source is on a line that does not contain the caret or active selection
+- **THEN** the editor hides its brackets, parentheses, and destination, presents only the label in semantic link-blue, and exposes the safe underlying destination as an actionable link
+
+#### Scenario: Edit a Markdown link source
+- **WHEN** the caret or active selection enters a line containing `[label](destination)` source
+- **THEN** the editor reveals the complete source with muted fixed-width bracket and parenthesis indicators, ordinary foreground label text, and semantic link-blue destination text without navigating from an ordinary editing click
 
 #### Scenario: Limit live Markdown recognition
 - **WHEN** notes contain supported Markdown syntax
 - **THEN** the editor recognizes headings introduced by one or more hashmarks and a space, single-asterisk italic, double-asterisk bold, asterisk-plus-space bullets, Markdown links, and single-backtick inline code while treating other Markdown constructs as ordinary text
 
-#### Scenario: Style Markdown indicators
-- **WHEN** the editor recognizes a heading, italic, bold, bullet, Markdown link, or inline-code delimiter
+#### Scenario: Style visible Markdown indicators
+- **WHEN** the editor reveals a heading, italic, bold, bullet, Markdown link, or inline-code delimiter on an active source line
 - **THEN** the original hashmark-and-space, asterisk, bracket, parenthesis, and backtick indicators remain visible in a fixed-width muted-foreground style while the marked content retains its recognized heading, italic, bold, bullet, link, or code presentation
 
-#### Scenario: Differentiate Markdown link source
-- **WHEN** the editor recognizes `[label](destination)` Markdown link source
-- **THEN** the bracket and parenthesis indicators use the muted fixed-width indicator style, the label uses ordinary foreground text, the destination uses semantic link-blue text, and the complete source remains one safe clickable link
-
 #### Scenario: Style inline code completely
-- **WHEN** the editor recognizes text enclosed by single backticks on one line
+- **WHEN** the editor reveals source text enclosed by single backticks on one active line
 - **THEN** the complete string uses a fixed-width font and a light semantic background while both backticks use the muted indicator color
 
 #### Scenario: Continue an asterisk bullet
 - **WHEN** a user presses Enter without Shift while editing a line that begins with `* `
 - **THEN** the editor inserts a new line beginning with `* ` and wraps each bullet with a two-fixed-width-character hanging indent
 
-#### Scenario: Follow a note link
-- **WHEN** notes contain a Markdown link, bare HTTP(S) URL, or bare alphanumeric `scheme://` destination such as `message://`
+#### Scenario: Follow an inactive note link
+- **WHEN** an inactive line contains a Markdown link, bare HTTP(S) URL, or bare alphanumeric `scheme://` destination such as `message://`
 - **THEN** the live editor exposes the safe destination with a pointer cursor and no hover underline, opens HTTP(S) in a new browser context, dispatches `message://` to Mail, and keeps known executable or content-injection schemes inert
 
 #### Scenario: Preserve editing mechanics while styling
-- **WHEN** the editor retokenizes changed source
-- **THEN** it preserves the user's caret or selection, defers decoration during composition, accepts pasted content as plain text, yields documented undo and redo commands to Tasks, and autosaves the identical source to the same notes field
+- **WHEN** the editor retokenizes changed source or changes which lines expose source
+- **THEN** it preserves the user's caret or selection by exact source offset and direction, defers decoration during composition, accepts pasted content as plain text, yields documented undo and redo commands to Tasks, and autosaves the identical source to the same notes field
+
+#### Scenario: Present unfocused notes semantically
+- **WHEN** the Notes control does not own the caret or an active selection
+- **THEN** every nonempty line uses its semantic inactive presentation while the same live editor remains available for direct activation and editing
 
 #### Scenario: Start empty notes directly
 - **WHEN** an expanded to-do has empty notes
@@ -1170,6 +1194,33 @@ The system SHALL keep revisioned recurrence definitions separate from task occur
 #### Scenario: Hydrate an owner-safe recurrence response
 - **WHEN** an authenticated recurrence RPC omits the owner identifier from its returned definition or revision
 - **THEN** the client assigns the already authenticated owner to the parsed result while synchronized recurrence rows continue to validate their stored owner identifier
+
+### Requirement: Explicit Monthly Recurrence Cadence
+Tasks SHALL expose every value that controls a monthly recurrence and SHALL evaluate the same explicit rule in the preview and authoritative server paths.
+
+#### Scenario: Repeat on a numbered calendar date
+- **WHEN** a user configures a monthly recurrence for a numbered day from 1 through 31
+- **THEN** the dialog visibly records that date and each eligible month schedules on that date, clamped to the month's final date when necessary
+
+#### Scenario: Repeat on the last calendar day
+- **WHEN** a user configures a monthly recurrence for Last Day
+- **THEN** every eligible month schedules on its final calendar date
+
+#### Scenario: Repeat on an ordinal weekday
+- **WHEN** a user configures a monthly recurrence such as First Thursday or Last Monday
+- **THEN** every eligible month schedules on the explicitly selected ordinal and weekday
+
+#### Scenario: Repeat on an ordinal weekday group
+- **WHEN** a user configures an ordinal Weekday or Weekend Day recurrence such as Last Weekend Day
+- **THEN** every eligible month schedules on the matching calendar day counted from the beginning for positive ordinals or from the end for Last
+
+#### Scenario: Preview the next three Starts
+- **WHEN** a calendar recurrence does not add Deadlines
+- **THEN** the repeat dialog previews the next three occurrence Start dates produced by the visible rule
+
+#### Scenario: Preview paired Starts and Deadlines
+- **WHEN** a calendar recurrence adds Deadlines and starts work a nonnegative number of days earlier
+- **THEN** the repeat dialog previews the next three instances with both the derived Start and controlling Deadline for each instance
 
 ### Requirement: Stable Manual Ordering
 The system SHALL preserve intentional manual ordering across direct drag, keyboard moves, same-view Today horizon changes, saves, refreshes, offline operation, and synchronization.
@@ -2493,10 +2544,10 @@ The Tasks module SHALL render ordinary task rows directly in Anytime, Someday, a
 - **THEN** the route retains its named view landmark and the task rows remain inside an accessible task-list region
 
 ### Requirement: Consistent Tasks list density
-The interface SHALL present Tasks list and grouping headings without item-count adornments, SHALL keep every collapsed task at a dense uniform height, and SHALL present optional task metadata in the stable order Area, Anytime horizon, Reminder, Actionability, Deadline, and Checklist as flat inline content without resting card or chip decoration or bold typography.
+The interface SHALL present Tasks list and grouping headings without item-count adornments, SHALL keep every collapsed task at a dense uniform height, and SHALL present optional task metadata in the stable order Area, Anytime horizon, Reminder, Actionability, Deadline, Notes, and Checklist as flat inline content without resting card or chip decoration or bold typography.
 
 #### Scenario: Keep closed rows uniform
-- **WHEN** a list contains collapsed tasks with different combinations of hierarchy, checklist content, actionability, deadline, reminder, or other secondary details
+- **WHEN** a list contains collapsed tasks with different combinations of hierarchy, notes, checklist content, actionability, deadline, reminder, or other secondary details
 - **THEN** every collapsed task row occupies the same 44-pixel height
 
 #### Scenario: Keep secondary details compact
@@ -2515,9 +2566,17 @@ The interface SHALL present Tasks list and grouping headings without item-count 
 - **WHEN** a task has Reminder, non-Ready actionability, and Deadline metadata
 - **THEN** the metadata line presents Actionability immediately after Reminder and immediately before Deadline
 
+#### Scenario: Present Notes presence
+- **WHEN** a task's Notes contain at least one character
+- **THEN** its metadata line presents the canonical Lucide `NotepadText` icon immediately before Checklist without a count or written label
+
+#### Scenario: Omit an empty Notes indicator
+- **WHEN** a task's Notes are empty
+- **THEN** its metadata line does not present the Notes icon
+
 #### Scenario: Present checklist presence
 - **WHEN** a task contains at least one checklist item
-- **THEN** its metadata line presents the established Task checklist icon after Deadline without a count or written label
+- **THEN** its metadata line presents the established Task checklist icon after Notes without a count or written label
 
 #### Scenario: Omit an empty checklist indicator
 - **WHEN** a task has no checklist items

@@ -5,6 +5,7 @@ import {
   Layers3,
   ListChecks,
   ListTree,
+  NotepadText,
   Paperclip,
   Plus,
   Square,
@@ -39,6 +40,7 @@ describe('Tasks iconography', () => {
     expect(TASK_ICONS.Selection).toBe(Circle);
     expect(TASK_ICONS.Selected).toBe(CircleCheck);
     expect(TASK_ICONS.Area).toBe(Layers3);
+    expect(TASK_ICONS.Notes).toBe(NotepadText);
     expect(TASK_ICONS.TaskChecklist).toBe(ListTree);
     expect(TASK_ICONS.Attachment).toBe(Paperclip);
     expect(TASK_ICONS.Someday).toBe(SquareDashed);

@@ -30,6 +30,7 @@ import {
   ListTodo,
   ListTree,
   Mail,
+  NotepadText,
   Paperclip,
   Pause,
   Play,
@@ -64,6 +65,7 @@ export const TASK_ICONS = {
   Selection: Circle,
   Selected: CircleCheck,
   Area: Layers3,
+  Notes: NotepadText,
   TaskChecklist: ListTree,
   Attachment: Paperclip,
 
@@ -128,6 +130,7 @@ export const TASK_ICON_NAMES = {
   Selection: 'Circle',
   Selected: 'CircleCheck',
   Area: 'Layers3',
+  Notes: 'NotepadText',
   TaskChecklist: 'ListTree',
   Attachment: 'Paperclip',
 

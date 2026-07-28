@@ -301,10 +301,15 @@ export type TaskRecurrenceOccurrence = Omit<
 
 export type TaskRecurrenceRuleConfig = {
   weekdays?: number[];
-  monthly_kind?: 'day_of_month' | 'ordinal_weekday';
+  monthly_kind?:
+    | 'day_of_month'
+    | 'last_day'
+    | 'ordinal_weekday'
+    | 'ordinal_day_type';
   month_day?: number;
   ordinal?: -1 | 1 | 2 | 3 | 4 | 5;
   weekday?: number;
+  day_type?: 'weekday' | 'weekend_day';
 };
 
 export type TaskRecurrenceEvaluation = TaskRecurrenceEvaluationRow;
