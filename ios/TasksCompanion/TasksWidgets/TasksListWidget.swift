@@ -48,7 +48,7 @@ struct TaskListWidgetProvider: AppIntentTimelineProvider {
     }
 
     private func entry(for configuration: TaskListSelectionIntent) -> TaskListWidgetEntry {
-        let listID = configuration.list.listID
+        let listID = configuration.list?.listID ?? .today
         let snapshot = try? TaskWidgetStore()?.load()
         return TaskListWidgetEntry(
             date: Date(),
