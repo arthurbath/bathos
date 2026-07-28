@@ -34,4 +34,4 @@
 - [x] 5.3 Document exact production preflight, data effects, secrets, rollback, and the approval prompt without mutating production
 - [ ] 5.4 After explicit approval, refresh and verify the private backup, apply the migration, deploy the Edge Function, publish the web release, reinstall the signed companion, and run and clean up the owner-scoped fixture
 - [ ] 5.5 Prove physical checkbox completion, direct Primary Link activation, cross-client convergence, PowerSync, cron, advisors, production parity, and repository synchronization
-- [ ] 5.6 Reinstall the incident-hardened companion and prove failed/retried completion cannot strand the app on an indefinite spinner
+- [x] 5.6 Reinstall the incident-hardened companion and prove failed/retried completion cannot strand the app on an indefinite spinner
