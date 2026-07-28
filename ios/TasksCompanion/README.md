@@ -46,4 +46,4 @@ Run the `TasksCompanion` scheme from Xcode to perform interactive sign-in and wi
 
 The companion accepts widget snapshots only from the main frame at `https://os.bath.garden/tasks/*`. The versioned decoder enforces list, row, string, date, and enum bounds before atomically replacing the App Group cache.
 
-The cache intentionally omits authentication material, notes, checklist text, Primary Link, Mail metadata, and raw errors. It contains only the bounded list information rendered by the widget. Signing out clears the cache.
+The cache intentionally omits authentication material, notes, checklist text, Mail source metadata, and raw errors. It contains only the bounded list information rendered by the widget, including an optional normalized Primary Link action for approved HTTP, HTTPS, or Mail-message URLs. Signing out clears the cache and the separate completion-only native credential.
