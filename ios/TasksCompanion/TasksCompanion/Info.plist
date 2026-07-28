@@ -37,5 +37,9 @@
 	<dict/>
 	<key>UIRequiresFullScreen</key>
 	<false/>
+	<key>WKAppBoundDomains</key>
+	<array>
+		<string>os.bath.garden</string>
+	</array>
 </dict>
 </plist>

@@ -1,8 +1,8 @@
-self.__BATHOS_TASKS_WORKER_VERSION__ = 8;
+self.__BATHOS_TASKS_WORKER_VERSION__ = 9;
 
 const TASKS_SHELL_CACHE_PREFIX = 'bathos-tasks-shell-';
 const TASKS_SHELL_META_CACHE = 'bathos-tasks-meta-v1';
-const TASKS_SHELL_FORMAT_VERSION = '5';
+const TASKS_SHELL_FORMAT_VERSION = '6';
 const TASKS_SHELL_ASSET_LIMIT = 256;
 const TASKS_SHELL_POINTER_KEY = new URL('/tasks-offline-shell-active', self.location.origin).href;
 const TASKS_SHELL_DOCUMENT_KEY = new URL('/tasks-offline-shell', self.location.origin).href;
@@ -223,8 +223,34 @@ async function handleOfflineAsset(request) {
     const shellCache = await caches.open(cacheName);
     const cached = await shellCache.match(request);
     if (cached) return cached;
+
+    const url = new URL(request.url);
+    const duplicatedAssetPrefix = `${TASKS_OFFLINE_ASSET_PREFIX}assets/assets/`;
+    if (url.pathname.startsWith(duplicatedAssetPrefix)) {
+      const canonicalUrl = new URL(
+        `${TASKS_OFFLINE_ASSET_PREFIX}assets/${url.pathname.slice(duplicatedAssetPrefix.length)}`,
+        self.location.origin,
+      );
+      canonicalUrl.search = url.search;
+      const canonical = await shellCache.match(canonicalUrl.href);
+      if (canonical) return canonical;
+    }
   }
   return fetch(request);
+}
+
+async function handleVersionedAsset(request) {
+  try {
+    return await fetch(request);
+  } catch (error) {
+    const cacheName = await activeShellCacheName();
+    if (cacheName) {
+      const shellCache = await caches.open(cacheName);
+      const cached = await shellCache.match(offlineAssetUrl(request.url));
+      if (cached) return cached;
+    }
+    throw error;
+  }
 }
 
 self.addEventListener('install', (event) => {
@@ -264,6 +290,10 @@ self.addEventListener('fetch', (event) => {
   }
   if (url.pathname.startsWith(TASKS_OFFLINE_ASSET_PREFIX)) {
     event.respondWith(handleOfflineAsset(request));
+    return;
+  }
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(handleVersionedAsset(request));
   }
 });
 

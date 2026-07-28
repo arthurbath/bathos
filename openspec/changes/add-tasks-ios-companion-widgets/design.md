@@ -2,7 +2,7 @@
 
 BathOS Tasks is a mature React/PowerSync web application with offline operation, owner-scoped synchronization, and production routes at `https://os.bath.garden/tasks/*`. Its prior native-Apple decision gate intentionally deferred native work until a concrete native-only gap emerged. The requested configurable Home Screen task-list widget now satisfies that gate.
 
-The companion must remain a host for the web product, not become a second task client. WidgetKit renders extensions in a separate process and cannot render a `WKWebView`, so the widget needs a bounded native representation of the existing web projection. The local machine has Xcode but does not currently expose a valid Apple Development signing identity, configured development team, or healthy booted Simulator service. Simulator-independent compilation and unit testing remain possible; physical-device installation, App Group provisioning, and final on-device widget acceptance require Apple account state outside the repository.
+The companion must remain a host for the web product, not become a second task client. WidgetKit renders extensions in a separate process and cannot render a `WKWebView`, so the widget needs a bounded native representation of the existing web projection. Initial implementation began before an eligible Apple Development team and physical-device configuration were available. The user subsequently configured Xcode automatic signing, App Group provisioning, Developer Mode, and the intended iPhone, allowing the signed app, extension, shared cache, native tests, and widget behavior to be validated without committing Apple account identity.
 
 ## Goals / Non-Goals
 
@@ -35,6 +35,10 @@ The main target contains a single observable browser model and `WKWebView` wrapp
 
 This is preferred over a native task client because it preserves one UI, one task-domain implementation, one offline database, and one release cadence. A native PowerSync client was rejected for this phase because it would duplicate substantial domain behavior and require its own convergence matrix.
 
+The app declares only `os.bath.garden` in `WKAppBoundDomains` and configures the persistent Tasks web view to limit top-level navigation to that domain. This is required for WebKit to expose service workers to a native wrapper, allowing the existing Tasks offline shell to be staged and served from the same persistent browsing partition. External destinations never enter that restricted web view; the navigation delegate continues handing them to the operating system. A failed top-level navigation or terminated web-content process also resets the native presentation state so an unrecoverable load shows the native unavailable treatment instead of a blank surface.
+
+The cached shell stores the complete discovered Tasks asset graph under a dedicated offline URL namespace. Generated Vite preload tables can still request the same versioned files from their original root `/assets/` URLs, and worker code can resolve an `assets/` child beneath the offline namespace. The service worker therefore keeps online asset traffic network-first but falls back to the corresponding staged response when disconnected, and normalizes that one generated nested-asset form. It does not generically cache arbitrary responses or intercept non-Tasks data APIs.
+
 ### Publish a bounded projection instead of credentials
 
 The Tasks web module performs one owner-scoped local query covering active and retained terminal task rows, derives the five supported list projections with the same domain predicates and ordering helpers used by list views, bounds each list, and posts a versioned JSON message only when the WebKit handler exists.
@@ -49,6 +53,8 @@ The payload contains:
 - total count and truncation state
 
 It never contains notes, primary links, checklist text, reminder credentials, mail-source metadata, Supabase tokens, PowerSync credentials, or secrets. The native app atomically replaces the complete cache in the App Group and clears it on explicit web sign-out or owner change.
+
+Web generation timestamps use JavaScript ISO 8601 formatting, including fractional seconds. Native validation accepts both fractional and whole-second internet timestamps so the bridge contract does not reject a standards-compliant `Date.toISOString()` value.
 
 This approach is preferred over copying a Supabase session to native Keychain because the latter creates a second authenticated data client and a materially larger security and maintenance surface. It is also preferred over DOM scraping because the projection remains typed, testable, and independent of presentation markup.
 
@@ -87,6 +93,7 @@ The native project uses only SwiftUI, WebKit, WidgetKit, AppIntents, and Foundat
 - **Widget task titles are visible on the Home Screen** -> This is an explicit user-installed surface; keep detailed notes, links, and private source metadata out of the snapshot and allow normal iOS widget privacy/redaction.
 - **Custom schemes are not verified domains** -> Use them only as local navigation hints, never as authorization, and validate task visibility after web authentication.
 - **Manual Xcode project files are harder to maintain than generated projects** -> Keep two small targets, centralize shared files, and add a project-integrity build test; reconsider generation only if native scope materially grows.
+- **WebKit wrappers do not receive service-worker offline support automatically** -> Declare only the trusted Tasks host as app-bound, opt the persistent web view into that policy, verify offline readiness before disconnecting, and retain a native failure surface when neither network nor cached shell can satisfy navigation.
 
 ## Migration Plan
 
@@ -102,6 +109,5 @@ No database migration, production Supabase deployment, PowerSync topology change
 
 ## Open Questions
 
-- Whether the user's existing Apple account is enrolled in the paid Apple Developer Program and can provision App Groups.
-- Whether the first physical-device installation will use direct Xcode deployment or TestFlight. Direct deployment is sufficient for private use; TestFlight requires program enrollment and App Store Connect setup.
+- Whether lived use later justifies TestFlight or App Store distribution instead of the accepted direct Xcode installation.
 - Whether lived use later justifies background server refresh, additional widget families, interactive widget actions, native notification delivery, or an Apple Watch count complication.

@@ -32,15 +32,40 @@ The custom scheme accepts only known Tasks list identifiers or a canonical UUID 
 
 ## Validation
 
-The web projection and deep-link integration are covered by Vitest. The native app, widget, and XCTest bundle compile through the shared Xcode scheme with signing disabled when the asset catalog is excluded.
+The web projection and deep-link integration are covered by Vitest. The complete web suite, Tasks TypeScript check, lint, production build, and strict OpenSpec validation passed before physical acceptance.
 
-The checked-in app icon is valid. Apple’s iOS 26.5 arm64 Simulator runtime build `23F73` was installed and a disposable iPhone 17 Pro Simulator was created. The compiled companion was installed manually through `simctl`, launched successfully, and rendered the live BathOS sign-in interface inside its native WebKit shell.
+The project also builds through Xcode 27 beta 4 for a generic iOS destination with the checked-in asset catalog, extension embedding, App Intents metadata, and automatic signing intact. The committed project leaves `DEVELOPMENT_TEAM` unset.
 
-The complete ordinary Simulator test action remains unavailable because the active Xcode’s iOS 26.5 Simulator SDK is build `23F81a`, while Apple’s component service supplies runtime build `23F73`. Asset compilation requires an exact runtime build and rejects the otherwise valid project. A request for runtime build `23F81a` reports that it is not available for download. The source build therefore excludes only the asset catalog to prove Swift compilation, target dependency wiring, App Intents metadata generation, extension embedding, and XCTest bundle compilation. The committed project retains the real asset catalog and signing configuration.
+On July 28, 2026, automatic signing provisioned the app and extension for the user's private Apple team and the shared `group.garden.bath.tasks` App Group. The signed app and widget installed on an iPhone 16 running iOS 27 with Developer Mode enabled. The physical XCTest action passed seven tests with zero failures, covering:
 
-The paired physical iPhone is visible to Apple’s device tooling, but Developer Mode is disabled. The Mac has the private `Art Bath Personal Code Signing` identity for local macOS software, not an Apple Development identity capable of provisioning iOS. No eligible Apple development team is configured in the project.
+- all five bounded lists and private-field omissions
+- JavaScript ISO 8601 timestamps with fractional seconds
+- malformed lists and oversized task rows
+- atomic owner replacement and cache clearing
+- allowlisted list and task route parsing
+- persistent app-bound WebKit configuration
+- visible native recovery after failed navigation or WebKit process termination
 
-These are environment gates rather than source-code substitutions. They do not justify removing the real icon catalog, App Group entitlement, widget extension, or device-signing configuration.
+The fractional-second test closes a physical acceptance defect discovered after the production bridge went live. JavaScript `Date.toISOString()` generated a value such as `2026-07-28T10:37:45.123Z`, while the original Swift validator accepted only whole-second internet timestamps. The corrected validator accepts both forms, and the signed companion then accepted and stored the real owner-scoped snapshot.
+
+Physical rendered acceptance has proved:
+
+- authenticated sign-in and session persistence
+- default Today launch
+- all five widget choices through the native editor: Today, Upcoming, Anytime, Someday, and Done
+- live task counts, bounded rows, truncation messaging, Today horizon colors, terminal icons, and Someday dashed checkboxes
+- cold and running list links
+- a cold task-row link that opened the selected owner-visible task
+- App Group access by both signed targets
+
+## Offline Acceptance Findings
+
+The first physical Airplane Mode widget launch exposed two independent offline-shell gaps:
+
+1. The native wrapper had not declared the trusted production host in `WKAppBoundDomains` or limited the persistent web view to app-bound navigation. WebKit therefore did not expose service-worker behavior to the wrapper, and the launch left a white web surface.
+2. After that native policy was corrected and the app reported `Offline Launch: Ready`, the cached black BathOS document loaded, but the Tasks application remained absent. Production inspection showed that Vite's generated preload table requests lazy dependencies from root `/assets/` paths, while the offline shell stores them under `/tasks-offline-assets/`. Worker and WASM children can also resolve into one duplicated `/tasks-offline-assets/assets/assets/` path.
+
+The release candidate declares only `os.bath.garden` as app-bound, keeps external links in the operating system, and resets the native loaded state after failed navigation or WebKit process termination. Service-worker format 6 and registration version 9 retain network-first online asset behavior, fall back to the corresponding complete staged Tasks asset while disconnected, and normalize the generated nested worker-asset path. Focused production-shaped coverage passes for root preload, nested worker/WASM, unrelated API pass-through, reminder registration, and atomic shell replacement. Physical Airplane Mode acceptance remains required after this candidate is published.
 
 ## Widget Configuration Compatibility
 
@@ -50,11 +75,7 @@ The widget now uses a finite `DynamicOptionsProvider` backed by primitive string
 
 ## Remaining Acceptance
 
-1. Update Xcode and its runtimes as one compatible set once Apple supplies a runtime matching the active SDK, then run the ordinary asset-inclusive Simulator test action.
-2. Enable Developer Mode on the intended iPhone.
-3. Select an eligible Apple Developer team.
-4. Enable `group.garden.bath.tasks` for `garden.bath.tasks` and `garden.bath.tasks.widgets`.
-5. Build and run on the intended iPhone.
-6. Prove sign-in, offline web launch, all five configurable widget choices, stale and signed-out states, cache clearing, list links, and owner-gated task links.
+1. Prove the companion's already-cached web shell and the widget remain usable during a physical Airplane Mode launch.
+2. Sign out once, prove the widget removes the prior owner's rows, then sign back in and prove the cache repopulates.
 
 The OpenSpec change should remain active until this physical-device acceptance is complete.

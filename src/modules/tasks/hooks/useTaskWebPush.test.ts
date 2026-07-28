@@ -84,7 +84,7 @@ describe('task Web Push capability', () => {
       await result.current.enable();
     });
     expect(requestPermission).toHaveBeenCalledTimes(1);
-    expect(register).toHaveBeenCalledWith('/tasks-service-worker.js?version=8', {
+    expect(register).toHaveBeenCalledWith('/tasks-service-worker.js?version=9', {
       scope: '/',
       updateViaCache: 'none',
     });

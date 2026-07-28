@@ -1,4 +1,5 @@
 import Foundation
+import WebKit
 import XCTest
 @testable import TasksCompanion
 
@@ -22,6 +23,16 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertFalse(encoded.contains("notes"))
         XCTAssertFalse(encoded.contains("primaryLink"))
         XCTAssertFalse(encoded.contains("checklist"))
+    }
+
+    func testSnapshotAcceptsJavaScriptISO8601Timestamps() throws {
+        let snapshot = makeSnapshot(
+            ownerID: UUID(),
+            generatedAt: "2026-07-28T10:37:45.123Z"
+        )
+
+        XCTAssertNoThrow(try snapshot.validate())
+        XCTAssertNotNil(snapshot.generatedDate)
     }
 
     func testSnapshotRejectsUnexpectedListsAndOversizedRows() throws {
@@ -110,6 +121,36 @@ final class TasksCompanionTests: XCTestCase {
             TaskNativeRoute.task(taskID, list: .done).webURL.absoluteString,
             "https://os.bath.garden/tasks/done?native_task=\(taskID.uuidString.lowercased())"
         )
+    }
+
+    func testWebViewUsesPersistentAppBoundConfiguration() {
+        let configuration = WKWebViewConfiguration()
+
+        TasksWebViewPolicy.apply(to: configuration)
+
+        XCTAssertTrue(configuration.limitsNavigationsToAppBoundDomains)
+        XCTAssertTrue(configuration.websiteDataStore === WKWebsiteDataStore.default())
+        XCTAssertEqual(
+            Bundle.main.object(forInfoDictionaryKey: "WKAppBoundDomains") as? [String],
+            [TaskCompanionConstants.trustedWebHost]
+        )
+    }
+
+    @MainActor
+    func testFailedOrTerminatedNavigationCannotLeaveAStaleBlankState() {
+        let model = TasksBrowserModel()
+        model.didFinishLoading()
+        XCTAssertTrue(model.hasLoadedContent)
+
+        model.didFailLoading(URLError(.notConnectedToInternet))
+        XCTAssertFalse(model.hasLoadedContent)
+        XCTAssertFalse(model.isLoading)
+        XCTAssertNotNil(model.loadError)
+
+        model.didTerminateWebContent()
+        XCTAssertFalse(model.hasLoadedContent)
+        XCTAssertTrue(model.isLoading)
+        XCTAssertNil(model.loadError)
     }
 
     private func makeSnapshot(

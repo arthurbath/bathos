@@ -65,7 +65,7 @@ struct TaskWidgetSnapshot: Codable, Equatable {
         guard type == "snapshot", schemaVersion == Self.schemaVersion else {
             throw TaskWidgetSnapshotError.invalidSchema
         }
-        guard ISO8601DateFormatter().date(from: generatedAt) != nil else {
+        guard Self.parseGeneratedAt(generatedAt) != nil else {
             throw TaskWidgetSnapshotError.invalidGeneratedAt
         }
         guard Self.isCalendarDate(planningDate) else {
@@ -109,7 +109,19 @@ struct TaskWidgetSnapshot: Codable, Equatable {
     }
 
     var generatedDate: Date? {
-        ISO8601DateFormatter().date(from: generatedAt)
+        Self.parseGeneratedAt(generatedAt)
+    }
+
+    private static func parseGeneratedAt(_ value: String) -> Date? {
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [
+            .withInternetDateTime,
+            .withFractionalSeconds,
+        ]
+        if let date = fractionalFormatter.date(from: value) {
+            return date
+        }
+        return ISO8601DateFormatter().date(from: value)
     }
 
     private static func isCalendarDate(_ value: String) -> Bool {

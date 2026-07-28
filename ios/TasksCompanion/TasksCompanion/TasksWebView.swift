@@ -2,6 +2,13 @@ import SwiftUI
 import UIKit
 import WebKit
 
+enum TasksWebViewPolicy {
+    static func apply(to configuration: WKWebViewConfiguration) {
+        configuration.websiteDataStore = .default()
+        configuration.limitsNavigationsToAppBoundDomains = true
+    }
+}
+
 struct TasksWebView: View {
     @ObservedObject var model: TasksBrowserModel
 
@@ -58,7 +65,7 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = userContentController
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        configuration.websiteDataStore = .default()
+        TasksWebViewPolicy.apply(to: configuration)
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -149,6 +156,10 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
             withError error: Error
         ) {
             model.didFailLoading(error)
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            model.didTerminateWebContent()
         }
 
         func webView(

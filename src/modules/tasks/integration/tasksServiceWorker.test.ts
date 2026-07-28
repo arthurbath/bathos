@@ -235,11 +235,16 @@ describe('Tasks service worker offline shell', () => {
   });
 
   it('stages recursive same-origin module, worker, and WASM dependencies', async () => {
+    let offline = false;
     const environment = loadServiceWorker([], async (request) => {
       const url = requestUrl(request);
+      if (offline) throw new TypeError('offline');
       if (url.endsWith('/tasks/today')) return htmlResponse();
       if (url.endsWith('/assets/app-v1.js')) {
-        return assetResponse('import("./tasks-chunk.js");');
+        return assetResponse(`
+          const map = ["assets/tasks-chunk.js"];
+          import("./tasks-chunk.js");
+        `);
       }
       if (url.endsWith('/assets/app-v1.css')) return assetResponse('body { color: white; }');
       if (url.endsWith('/assets/tasks-chunk.js')) {
@@ -262,9 +267,26 @@ describe('Tasks service worker offline shell', () => {
     expect(shellStore?.has(`${ORIGIN}/tasks-offline-assets/assets/tasks.wasm`)).toBe(true);
     const cachedChunk = await shellStore
       ?.get(`${ORIGIN}/tasks-offline-assets/assets/tasks-chunk.js`)
+      ?.clone()
       ?.text();
     expect(cachedChunk).toContain('/tasks-offline-assets/assets/tasks.worker.js');
     expect(cachedChunk).not.toContain('"/assets/tasks.worker.js"');
+
+    const listener = environment.listeners.get('fetch');
+    if (!listener) throw new Error('The Tasks service worker did not register fetch');
+    offline = true;
+
+    const vitePreload = await runFetch(
+      listener,
+      new Request(`${ORIGIN}/assets/tasks-chunk.js`),
+    );
+    expect(await vitePreload?.text()).toContain('/tasks-offline-assets/assets/tasks.worker.js');
+
+    const nestedWorkerAsset = await runFetch(
+      listener,
+      new Request(`${ORIGIN}/tasks-offline-assets/assets/assets/tasks.wasm`),
+    );
+    expect(await nestedWorkerAsset?.text()).toBe('wasm');
   });
 
   it('claims clients and removes inactive shell caches on activation', async () => {
@@ -380,7 +402,6 @@ describe('Tasks service worker offline shell', () => {
 
   it.each([
     navigationRequest('/budget/expenses'),
-    new Request(`${ORIGIN}/assets/shared.js`),
     new Request(`${ORIGIN}/rest/v1/tasks_items`),
     new Request(`${ORIGIN}/tasks/today`, { method: 'POST' }),
     navigationRequest('https://example.com/tasks/today'),
@@ -391,6 +412,22 @@ describe('Tasks service worker offline shell', () => {
 
     expect(await runFetch(listener, request)).toBeUndefined();
     expect(environment.fetchStub).not.toHaveBeenCalled();
+  });
+
+  it('passes uncached shared assets through to the network', async () => {
+    const environment = loadServiceWorker([], async (request) => (
+      assetResponse(`network:${requestUrl(request)}`)
+    ));
+    const listener = environment.listeners.get('fetch');
+    if (!listener) throw new Error('The Tasks service worker did not register fetch');
+
+    const response = await runFetch(
+      listener,
+      new Request(`${ORIGIN}/assets/shared.js`),
+    );
+
+    expect(await response?.text()).toBe(`network:${ORIGIN}/assets/shared.js`);
+    expect(environment.fetchStub).toHaveBeenCalledOnce();
   });
 });
 

@@ -32,3 +32,4 @@
 - [x] 5.4 Update BathOS architecture, Tasks guidance, README, and a dated native-companion evaluation with build and privacy boundaries
 - [ ] 5.5 Run `openspec validate --all --strict`, sync and archive the change only when implementation tasks are complete, then commit, push, and prove `main` is clean and synchronized
 - [ ] 5.6 Perform an on-device acceptance pass proving sign-in, offline web launch, configurable large widgets for supported lists, cache clearing, and deep links after an eligible Apple team provisions the App Group
+- [ ] 5.7 Enable service-worker offline launch inside the app-bound WebKit host, retain a visible native failure state, and repeat physical Airplane Mode acceptance after the defect discovered in 5.6

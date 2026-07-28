@@ -19,6 +19,8 @@ supabase/.branches/
 !.vscode/extensions.json
 .idea
 .DS_Store
+xcuserdata/
+*.xcuserstate
 *.suo
 *.ntvs*
 *.njsproj

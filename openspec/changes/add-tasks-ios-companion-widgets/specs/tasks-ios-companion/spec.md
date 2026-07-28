@@ -19,6 +19,14 @@ The iOS companion SHALL house the authoritative BathOS Tasks web application wit
 - **WHEN** the companion edits, synchronizes, schedules, or reminds
 - **THEN** it delegates that behavior to the existing web module and does not create a second native task database, generic mutation API, or reminder scheduler
 
+#### Scenario: Prepare the existing offline web shell
+- **WHEN** the companion loads the trusted production Tasks origin while online
+- **THEN** its persistent WebKit container treats that origin as app-bound so the existing Tasks service worker can stage the authenticated offline shell in the same browsing partition
+
+#### Scenario: Fail visibly instead of presenting a blank web view
+- **WHEN** a top-level Tasks navigation or restarted WebKit content process cannot recover cached or network content
+- **THEN** the companion presents its native unavailable state and retry action rather than leaving an empty web surface
+
 ### Requirement: Owner-Scoped Native Projection
 The Tasks web application SHALL provide the native companion with one versioned, bounded, owner-scoped projection for every supported widget list while withholding authentication material and detailed private task content.
 
@@ -94,7 +102,7 @@ The native companion SHALL refresh widget timelines after accepting a changed we
 
 #### Scenario: Remain usable offline
 - **WHEN** the device has no network connection but a valid shared projection exists
-- **THEN** the widget continues rendering that cached projection and the containing web app retains its existing offline behavior
+- **THEN** the widget continues rendering that cached projection and the containing app launches the existing cached Tasks web shell and owner-bound local task data
 
 ### Requirement: Native Task Deep Links
 The iOS companion SHALL map its private deep links to allowlisted Tasks web routes without treating any deep-link identifier as authorization.
