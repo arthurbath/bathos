@@ -5,6 +5,8 @@ import WidgetKit
 
 @MainActor
 final class TasksBrowserModel: NSObject, ObservableObject {
+    typealias InPageNavigator = (WKWebView, URL) -> Void
+
     private static let logger = Logger(
         subsystem: "garden.bath.tasks",
         category: "WidgetBridge"
@@ -18,11 +20,16 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     weak var webView: WKWebView?
 
     private let coldStartRecoveryDelayNanoseconds: UInt64
+    private let inPageNavigator: InPageNavigator
     private var coldStartRecoveryTask: Task<Void, Never>?
     private var isPerformingColdStartRecovery = false
 
-    init(coldStartRecoveryDelayNanoseconds: UInt64 = 400_000_000) {
+    init(
+        coldStartRecoveryDelayNanoseconds: UInt64 = 400_000_000,
+        inPageNavigator: @escaping InPageNavigator = TasksBrowserModel.navigateInPage
+    ) {
         self.coldStartRecoveryDelayNanoseconds = coldStartRecoveryDelayNanoseconds
+        self.inPageNavigator = inPageNavigator
     }
 
     private static func recordBridgeDiagnostic(_ message: String) {
@@ -42,6 +49,11 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         let nextURL = route.webURL
         requestedURL = nextURL
         loadError = nil
+        if hasLoadedContent, let webView {
+            isLoading = false
+            inPageNavigator(webView, nextURL)
+            return
+        }
         isLoading = true
         webView?.load(URLRequest(url: nextURL))
     }
@@ -70,6 +82,11 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     }
 
     func didFailLoading(_ error: Error) {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain,
+           nsError.code == NSURLErrorCancelled {
+            return
+        }
         guard !hasLoadedContent else {
             return
         }
@@ -119,6 +136,23 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         coldStartRecoveryTask?.cancel()
         coldStartRecoveryTask = nil
         isPerformingColdStartRecovery = false
+    }
+
+    static func navigateInPage(_ webView: WKWebView, to url: URL) {
+        var components = URLComponents()
+        components.path = url.path
+        components.query = url.query
+        let destination = components.string ?? url.path
+        guard let encoded = try? JSONSerialization.data(
+            withJSONObject: destination
+        ),
+        let literal = String(data: encoded, encoding: .utf8) else {
+            return
+        }
+        webView.evaluateJavaScript("""
+        window.history.pushState({}, "", \(literal));
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        """)
     }
 
     func acceptBridgeMessage(_ message: WKScriptMessage) {

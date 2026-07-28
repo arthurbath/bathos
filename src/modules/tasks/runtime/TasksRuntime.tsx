@@ -45,6 +45,30 @@ import {
 } from '@/modules/tasks/pwa/taskServiceWorker';
 import { activateTaskPlanningDate } from '@/modules/tasks/runtime/taskPlanningDate';
 
+export const TASKS_RUNTIME_INITIALIZATION_TIMEOUT_MS = 15_000;
+
+export async function waitForTasksRuntimeInitialization<T>(
+  initialization: Promise<T>,
+  timeoutMs = TASKS_RUNTIME_INITIALIZATION_TIMEOUT_MS,
+  onTimeout?: () => void,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      onTimeout?.();
+      reject(new Error('Local task data took too long to open'));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([initialization, deadline]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 export function TasksRuntimeProvider({
   ownerId,
   children,
@@ -107,6 +131,7 @@ export function TasksRuntimeProvider({
 
   useEffect(() => {
     let active = true;
+    let initializationExpired = false;
     let disposeStatusListener: (() => void) | undefined;
     let queuePoll: ReturnType<typeof setInterval> | undefined;
     let activationPoll: ReturnType<typeof setInterval> | undefined;
@@ -127,13 +152,15 @@ export function TasksRuntimeProvider({
       }
     };
 
-    void (async () => {
+    const initialize = async () => {
       try {
         await bindTasksDatabaseOwner(database, ownerId);
+        if (!active || initializationExpired) return;
         const settings = await repository.ensurePlanningSettings(
           ownerId,
           resolveTaskPlanningTimeZone(),
         );
+        if (!active || initializationExpired) return;
         const activateReachedDates = async () => {
           const planningDate = taskCalendarDateInTimeZone(
             settings.planning_timezone,
@@ -147,6 +174,7 @@ export function TasksRuntimeProvider({
           });
         };
         await activateReachedDates();
+        if (!active || initializationExpired) return;
         activationPoll = setInterval(() => {
           void activateReachedDates().catch(() => undefined);
         }, 60_000);
@@ -194,14 +222,31 @@ export function TasksRuntimeProvider({
           setPendingUploadCount(0);
         }
       } catch (error) {
-        if (active) {
+        if (active && !initializationExpired) {
           setState({
             status: 'error',
             error: error instanceof Error ? error : new Error('Unable to open local task data'),
           });
         }
       }
-    })();
+    };
+
+    void waitForTasksRuntimeInitialization(
+      initialize(),
+      TASKS_RUNTIME_INITIALIZATION_TIMEOUT_MS,
+      () => {
+        initializationExpired = true;
+      },
+    ).catch((error) => {
+      if (active) {
+        setState({
+          status: 'error',
+          error: error instanceof Error
+            ? error
+            : new Error('Unable to open local task data'),
+        });
+      }
+    });
 
     return () => {
       active = false;
@@ -278,7 +323,11 @@ export function TasksRuntimeProvider({
           <p className="text-sm text-muted-foreground">{state.error.message}</p>
           <Button type="button" variant="outline" onClick={() => {
             setState({ status: 'loading' });
-            setDatabase(createTasksPowerSyncDatabase());
+            void database.close()
+              .catch(() => undefined)
+              .finally(() => {
+                setDatabase(createTasksPowerSyncDatabase());
+              });
           }}>
             Retry
           </Button>

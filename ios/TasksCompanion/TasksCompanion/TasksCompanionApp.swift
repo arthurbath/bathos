@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 struct TasksCompanionApp: App {
@@ -9,7 +10,14 @@ struct TasksCompanionApp: App {
             TasksWebView(model: browserModel)
                 .ignoresSafeArea(.container, edges: .bottom)
                 .onOpenURL { url in
-                    browserModel.open(TaskNativeRoute.parse(url))
+                    switch TaskCompanionURLAction.resolve(url) {
+                    case .task(let route):
+                        browserModel.open(route)
+                    case .external(let destination):
+                        UIApplication.shared.open(destination)
+                    case .ignore:
+                        break
+                    }
                 }
         }
     }

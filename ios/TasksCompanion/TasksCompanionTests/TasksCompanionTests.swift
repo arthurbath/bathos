@@ -97,6 +97,28 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertFalse(try store.clear())
     }
 
+    func testStoreReplacesAnObsoleteSnapshotSchema() throws {
+        let directory = temporaryDirectory()
+        let store = TaskWidgetStore(directoryURL: directory)
+        let current = makeSnapshot(ownerID: UUID())
+        let obsolete = TaskWidgetSnapshot(
+            type: "snapshot",
+            schemaVersion: 1,
+            ownerId: UUID(),
+            generatedAt: "2026-07-27T08:00:00Z",
+            planningDate: "2026-07-27",
+            lists: current.lists
+        )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        try JSONEncoder().encode(obsolete).write(to: store.fileURL, options: .atomic)
+
+        XCTAssertTrue(try store.store(current))
+        XCTAssertEqual(try store.load(), current)
+    }
+
     func testPrimaryLinkAllowsOnlyTheDeclaredMailOrWebProtocol() {
         XCTAssertNotNil(TaskWidgetPrimaryLink(
             href: "message://synthetic-message",
@@ -222,6 +244,72 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertNil(timeoutResult)
     }
 
+    func testCompletionClientRetriesTransientFailureWithStableIdentifiers() async {
+        let credential = TaskWidgetCredential(
+            schemaVersion: TaskWidgetCredential.schemaVersion,
+            ownerId: UUID(),
+            installationId: UUID(),
+            credential: "twc_" + String(repeating: "A", count: 43),
+            expiresAt: "2099-10-26T12:00:00.123Z"
+        )
+        var requests: [URLRequest] = []
+        let client = TaskWidgetCompletionClient { request in
+            requests.append(request)
+            if requests.count == 1 {
+                throw URLError(.timedOut)
+            }
+            return (
+                Data(#"{"outcome":"accepted"}"#.utf8),
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+            )
+        }
+
+        let result = await client.complete(
+            taskID: UUID(),
+            credential: credential
+        )
+
+        XCTAssertEqual(result?.outcome, "accepted")
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests[0].httpBody, requests[1].httpBody)
+    }
+
+    func testCompletionClientDoesNotRetryRejectedCredential() async {
+        let credential = TaskWidgetCredential(
+            schemaVersion: TaskWidgetCredential.schemaVersion,
+            ownerId: UUID(),
+            installationId: UUID(),
+            credential: "twc_" + String(repeating: "A", count: 43),
+            expiresAt: "2099-10-26T12:00:00.123Z"
+        )
+        var requestCount = 0
+        let client = TaskWidgetCompletionClient { request in
+            requestCount += 1
+            return (
+                Data(),
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 401,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+            )
+        }
+
+        let result = await client.complete(
+            taskID: UUID(),
+            credential: credential
+        )
+
+        XCTAssertNil(result)
+        XCTAssertEqual(requestCount, 1)
+    }
+
     func testSuccessfulCompletionReconcilesEveryActiveListAndDone() throws {
         let taskID = UUID(uuidString: "10c452c2-5767-4c0d-87ff-ab9fbc12ea25")!
         var snapshot = makeSnapshot(ownerID: UUID())
@@ -266,6 +354,44 @@ final class TasksCompanionTests: XCTestCase {
             TaskNativeRoute.task(taskID, list: .done).webURL.absoluteString,
             "https://os.bath.garden/tasks/done?native_task=\(taskID.uuidString.lowercased())"
         )
+        XCTAssertEqual(
+            TaskCompanionURLAction.resolve(
+                URL(string: "bathostasks://task/\(taskID.uuidString)?list=anytime")!
+            ),
+            .task(.task(taskID, list: .anytime))
+        )
+        XCTAssertEqual(
+            TaskCompanionURLAction.resolve(URL(string: "https://example.test/read")!),
+            .external(URL(string: "https://example.test/read")!)
+        )
+        XCTAssertEqual(
+            TaskCompanionURLAction.resolve(URL(string: "message://synthetic-message")!),
+            .external(URL(string: "message://synthetic-message")!)
+        )
+        XCTAssertEqual(
+            TaskCompanionURLAction.resolve(URL(string: "javascript:alert(1)")!),
+            .ignore
+        )
+    }
+
+    func testCompletionIntentIsAvailableToTheContainingAppTarget() {
+        let intent = CompleteTaskIntent(
+            taskID: "10c452c2-5767-4c0d-87ff-ab9fbc12ea25"
+        )
+
+        XCTAssertEqual(intent.taskID, "10c452c2-5767-4c0d-87ff-ab9fbc12ea25")
+        XCTAssertFalse(intent.value)
+        XCTAssertFalse(CompleteTaskIntent.openAppWhenRun)
+    }
+
+    func testWidgetConfigurationExcludesDoneAndRejectsLegacyDoneSelection() {
+        XCTAssertEqual(
+            TaskWidgetListID.widgetConfigurationCases.map(\.title),
+            ["Today", "Upcoming", "Anytime", "Someday"]
+        )
+        XCTAssertEqual(TaskWidgetListID.widgetConfigurationValue("Upcoming"), .upcoming)
+        XCTAssertEqual(TaskWidgetListID.widgetConfigurationValue("Done"), .today)
+        XCTAssertEqual(TaskWidgetListID.widgetConfigurationValue(nil), .today)
     }
 
     func testWebViewUsesPersistentAppBoundConfiguration() {
@@ -293,6 +419,40 @@ final class TasksCompanionTests: XCTestCase {
         model.didTerminateWebContent()
         XCTAssertFalse(model.hasLoadedContent)
         XCTAssertTrue(model.isLoading)
+        XCTAssertNil(model.loadError)
+    }
+
+    @MainActor
+    func testLoadedContentUsesInPageNavigationForAWidgetDeepLink() {
+        var navigatedURL: URL?
+        let model = TasksBrowserModel(
+            inPageNavigator: { _, url in
+                navigatedURL = url
+            }
+        )
+        let webView = WKWebView()
+        model.webView = webView
+        model.didFinishLoading()
+        let route = TaskNativeRoute.task(UUID(), list: .today)
+
+        model.open(route)
+
+        XCTAssertEqual(navigatedURL, route.webURL)
+        XCTAssertEqual(model.requestedURL, route.webURL)
+        XCTAssertTrue(model.hasLoadedContent)
+        XCTAssertFalse(model.isLoading)
+    }
+
+    @MainActor
+    func testCancelledReplacementNavigationDoesNotStartRecovery() {
+        let model = TasksBrowserModel(
+            coldStartRecoveryDelayNanoseconds: 60_000_000_000
+        )
+
+        model.didFailLoading(URLError(.cancelled))
+
+        XCTAssertTrue(model.isLoading)
+        XCTAssertFalse(model.hasLoadedContent)
         XCTAssertNil(model.loadError)
     }
 

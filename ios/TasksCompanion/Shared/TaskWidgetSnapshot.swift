@@ -1,4 +1,6 @@
+import AppIntents
 import Foundation
+import WidgetKit
 
 enum TaskWidgetSnapshotError: Error, Equatable {
     case invalidSchema
@@ -18,8 +20,24 @@ enum TaskWidgetListID: String, Codable, CaseIterable {
     case someday
     case done
 
+    static let widgetConfigurationCases: [TaskWidgetListID] = [
+        .today,
+        .upcoming,
+        .anytime,
+        .someday,
+    ]
+
     var title: String {
         rawValue.prefix(1).uppercased() + rawValue.dropFirst()
+    }
+
+    static func widgetConfigurationValue(_ value: String?) -> TaskWidgetListID {
+        guard let value,
+              let listID = TaskWidgetListID(rawValue: value.lowercased()),
+              widgetConfigurationCases.contains(listID) else {
+            return .today
+        }
+        return listID
     }
 }
 
@@ -269,7 +287,7 @@ struct TaskWidgetStore {
 
     func store(_ snapshot: TaskWidgetSnapshot) throws -> Bool {
         try snapshot.validate()
-        if let current = try load(),
+        if let current = try? load(),
            try current.contentSignature() == snapshot.contentSignature() {
             return false
         }
@@ -349,6 +367,119 @@ struct TaskWidgetCompletionResult: Equatable {
     let completedAt: String?
 }
 
+struct TaskWidgetActionDiagnosticStore {
+    static let fileName = "task-widget-action-status.txt"
+
+    let fileURL: URL
+
+    init?(appGroupIdentifier: String = TaskCompanionConstants.appGroupIdentifier) {
+        guard let containerURL = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: appGroupIdentifier
+        ) else {
+            return nil
+        }
+        fileURL = containerURL
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent(Self.fileName, isDirectory: false)
+    }
+
+    func record(_ status: String) {
+        guard status.range(
+            of: #"^[a-z][a-z0-9-]{0,63}$"#,
+            options: .regularExpression
+        ) != nil else {
+            return
+        }
+        do {
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data(status.utf8).write(to: fileURL, options: .atomic)
+#if os(iOS)
+            try FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                ofItemAtPath: fileURL.path
+            )
+#endif
+        } catch {
+            return
+        }
+    }
+}
+
+struct CompleteTaskIntent: SetValueIntent {
+    static let title: LocalizedStringResource = "Complete Task"
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Task")
+    var taskID: String
+
+    @Parameter(title: "Completed")
+    var value: Bool
+
+    init() {
+        taskID = ""
+        value = false
+    }
+
+    init(taskID: String) {
+        self.taskID = taskID
+        value = false
+    }
+
+    func perform() async throws -> some IntentResult {
+        let diagnosticStore = TaskWidgetActionDiagnosticStore()
+        diagnosticStore?.record(value ? "started-on" : "started-off")
+        do {
+            // This intent is exposed only on open tasks and is deliberately
+            // one-way. Some physical-device WidgetKit versions deliver the
+            // Toggle's pre-tap value here, so either Boolean means "complete".
+            guard let taskUUID = UUID(uuidString: taskID) else {
+                diagnosticStore?.record("invalid-task")
+                return .result()
+            }
+            guard let credentialStore = TaskWidgetCredentialStore() else {
+                diagnosticStore?.record("credential-store-unavailable")
+                return .result()
+            }
+            guard let credential = try credentialStore.load() else {
+                diagnosticStore?.record("credential-missing")
+                return .result()
+            }
+            guard let snapshotStore = TaskWidgetStore() else {
+                diagnosticStore?.record("snapshot-store-unavailable")
+                return .result()
+            }
+
+            diagnosticStore?.record("requesting")
+            guard let completion = await TaskWidgetCompletionClient().complete(
+                taskID: taskUUID,
+                credential: credential
+            ) else {
+                diagnosticStore?.record("request-failed")
+                return .result()
+            }
+
+            diagnosticStore?.record("request-accepted")
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if var snapshot = try snapshotStore.load() {
+                let completedAt = completion.completedAt
+                    ?? ISO8601DateFormatter().string(from: Date())
+                if snapshot.completeTask(taskUUID, completedAt: completedAt) {
+                    _ = try snapshotStore.store(snapshot)
+                }
+            }
+            WidgetCenter.shared.reloadTimelines(ofKind: TaskCompanionConstants.widgetKind)
+            diagnosticStore?.record("reconciled")
+            return .result()
+        } catch {
+            TaskWidgetActionDiagnosticStore()?.record("local-store-failed")
+            return .result()
+        }
+    }
+}
+
 struct TaskWidgetCompletionClient {
     typealias Transport = (URLRequest) async throws -> (Data, URLResponse)
 
@@ -372,6 +503,7 @@ struct TaskWidgetCompletionClient {
         operationID: UUID = UUID()
     ) async -> TaskWidgetCompletionResult? {
         do {
+            try credential.validate()
             var request = URLRequest(url: endpoint)
             request.httpMethod = "POST"
             request.timeoutInterval = 5
@@ -387,22 +519,45 @@ struct TaskWidgetCompletionClient {
                 "operationId": operationID.uuidString.lowercased(),
             ])
 
-            let (data, response) = try await transport(request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200,
-                  data.count <= 2_048,
-                  let body = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let outcome = body["outcome"] as? String,
-                  ["accepted", "already_applied", "noop"].contains(outcome) else {
-                return nil
+            for attempt in 0..<2 {
+                do {
+                    let (data, response) = try await transport(request)
+                    guard let httpResponse = response as? HTTPURLResponse else {
+                        return nil
+                    }
+                    if httpResponse.statusCode != 200 {
+                        if attempt == 0, Self.isRetryable(httpResponse.statusCode) {
+                            try? await Task.sleep(nanoseconds: 250_000_000)
+                            continue
+                        }
+                        return nil
+                    }
+                    guard data.count <= 2_048,
+                          let body = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let outcome = body["outcome"] as? String,
+                          ["accepted", "already_applied", "noop"].contains(outcome) else {
+                        return nil
+                    }
+                    return TaskWidgetCompletionResult(
+                        outcome: outcome,
+                        completedAt: body["completed_at"] as? String
+                    )
+                } catch {
+                    if attempt == 0 {
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        continue
+                    }
+                    return nil
+                }
             }
-            return TaskWidgetCompletionResult(
-                outcome: outcome,
-                completedAt: body["completed_at"] as? String
-            )
+            return nil
         } catch {
             return nil
         }
+    }
+
+    private static func isRetryable(_ statusCode: Int) -> Bool {
+        [408, 425, 429].contains(statusCode) || (500...599).contains(statusCode)
     }
 }
 

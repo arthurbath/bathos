@@ -25,6 +25,7 @@
 - [x] 4.3 Reconcile successful completion into the local snapshot after a brief pause and reload WidgetKit timelines
 - [x] 4.4 Split widget rows into independent completion, task-summary, and optional direct Primary Link actions with accessible Mail and link iconography
 - [x] 4.5 Add native tests for credential persistence, URL validation, independent action routing, successful reconciliation, retry, and failure retention
+- [x] 4.6 Harden physical Toggle invocation, transient retry, and resident companion deep-link runtime continuity
 
 ## 5. Validation and Controlled Rollout
 
@@ -33,3 +34,4 @@
 - [x] 5.3 Document exact production preflight, data effects, secrets, rollback, and the approval prompt without mutating production
 - [ ] 5.4 After explicit approval, refresh and verify the private backup, apply the migration, deploy the Edge Function, publish the web release, reinstall the signed companion, and run and clean up the owner-scoped fixture
 - [ ] 5.5 Prove physical checkbox completion, direct Primary Link activation, cross-client convergence, PowerSync, cron, advisors, production parity, and repository synchronization
+- [ ] 5.6 Reinstall the incident-hardened companion and prove failed/retried completion cannot strand the app on an indefinite spinner

@@ -70,3 +70,20 @@ enum TaskNativeRoute: Equatable {
         }
     }
 }
+
+enum TaskCompanionURLAction: Equatable {
+    case task(TaskNativeRoute)
+    case external(URL)
+    case ignore
+
+    static func resolve(_ url: URL) -> TaskCompanionURLAction {
+        switch url.scheme?.lowercased() {
+        case TaskNativeRoute.scheme:
+            return .task(TaskNativeRoute.parse(url))
+        case "http", "https", "message":
+            return .external(url)
+        default:
+            return .ignore
+        }
+    }
+}

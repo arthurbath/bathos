@@ -31,11 +31,17 @@ iOS 17 interactive widgets can run an `AppIntent` without presenting the contain
 
 Each open widget row is split into three independent surfaces:
 
-- a `Button(intent:)` for the square completion control
+- a `Toggle(isOn:intent:)` backed by a `SetValueIntent` for the square completion control
 - a `Link` on the summary that preserves the existing task deep link
 - an optional trailing `Link` for the normalized Primary Link
 
-The completion intent executes in the widget extension and does not request foreground app launch. Terminal Done rows retain their noninteractive terminal symbol. This is preferred over a custom URL action because URL activation opens the app and cannot complete work directly.
+The completion intent executes in the widget extension and does not request foreground app launch. The system-supported Toggle changes to its checked appearance optimistically while the intent is running. A failed request leaves the authoritative snapshot untouched so a subsequent render returns to unchecked. Terminal Done rows retain their noninteractive terminal symbol. This is preferred over a custom URL action because URL activation opens the app and cannot complete work directly.
+
+The completion intent lives in shared native source with target membership in both
+the containing app and widget extension, as required by WidgetKit's App Intent
+execution contract. Keeping the intent only in the widget view source can render
+the button without making the action discoverable to the system on a physical
+device.
 
 ### Add one purpose-built completion credential rather than reusing Supabase authentication
 
@@ -81,7 +87,7 @@ Schema version 2 also covers `credential` bridge messages and the injected insta
 
 ### Update the cache only after authoritative success
 
-The App Intent sends task ID and a fresh idempotency UUID to the Edge Function. On an accepted or already-completed response, it waits approximately 350 milliseconds, then atomically transforms the cached snapshot:
+The App Intent sends task ID and a fresh idempotency UUID to the Edge Function. The Toggle immediately shows the checked state while the request is pending. On an accepted or already-completed response, the intent keeps the checked acknowledgement visible for approximately two seconds, then atomically transforms the cached snapshot:
 
 - remove the task from Today, Upcoming, Anytime, and Someday
 - add or replace it in Done with terminal state `completed`
@@ -91,9 +97,34 @@ It then calls `WidgetCenter.reloadTimelines`. Stable task IDs plus an explicit r
 
 The local transform is presentation reconciliation, not a second database. The next web projection replaces it with authoritative list ordering and task data.
 
+Physical WidgetKit releases can supply the Toggle's pre-tap Boolean to a
+`SetValueIntent`. Because the completion control exists only for an open task,
+both Boolean values invoke the same one-way complete operation. The client
+retries one transient transport or retryable HTTP failure with the same
+operation and mutation identifiers so the authority remains idempotent.
+
+### Preserve the resident web runtime when opening a widget deep link
+
+When the companion already has loaded Tasks content, a widget deep link updates
+the same-origin browser history and dispatches an in-page navigation event
+instead of loading a new document. This preserves the live PowerSync OPFS
+database instance. A full reload can otherwise overlap React cleanup with a new
+runtime and leave the replacement waiting on the prior local database lock.
+
+Canceled replacement navigations are not failures and do not start cold-launch
+recovery. Web runtime initialization also has a bounded watchdog so an
+unexpected local-database stall becomes a recoverable error with Retry rather
+than an indefinite central spinner.
+
+### Keep widget presentation native while matching canonical Tasks concepts
+
+WidgetKit cannot render the React components used by the web module. The widget therefore draws native SwiftUI line versions of the same canonical Lucide concepts: Star for Today, CalendarRange for Upcoming, ListTodo for Anytime, and SquareDashed for Someday. These title icons use one neutral foreground treatment rather than web horizon colors.
+
+Only Today, Upcoming, Anytime, and Someday are configurable widget lists. Done remains in the bounded snapshot because successful completion reconciliation and the companion's privacy-safe projection still require it, but it is not offered as a widget destination. Legacy Done configuration values fail safely to Today. The header omits the redundant total count, open-task controls use neutral gray, and an outer flexible spacer keeps short list contents pinned to the top of the large widget.
+
 ### Keep Primary Link activation entirely separate from completion and task opening
 
-The trailing icon uses `envelope` for Mail-message links and `arrow.up.right.square` for ordinary links. It appears only when a validated Primary Link exists, is visually right-aligned, has a distinct accessibility label, and opens the URL through WidgetKit's `Link`. The summary continues opening the task. Tapping either link never invokes completion.
+The trailing icon uses `envelope` for Mail-message links and `arrow.up.right.square` for ordinary links. It appears only when a validated Primary Link exists, is visually right-aligned, has a distinct accessibility label, and passes the URL through WidgetKit's `Link`. WidgetKit activates the containing app process for `Link` and delivers the URL to its scene. The companion therefore classifies the incoming URL before touching the web view: BathOS deep links open the requested task, validated HTTP(S) and `message://` Primary Links are immediately delegated to the operating system, and unsupported schemes are ignored. This system-mediated handoff avoids navigating or presenting Tasks content as the link destination even though iOS activates the containing process. The summary continues opening the task. Tapping either link never invokes completion.
 
 ## Risks / Trade-offs
 

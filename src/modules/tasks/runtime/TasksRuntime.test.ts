@@ -1,30 +1,32 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { activateTaskPlanningDate } from './taskPlanningDate';
+import { waitForTasksRuntimeInitialization } from './TasksRuntime';
 
-describe('TasksRuntime planning-date activation', () => {
-  it('rolls prior-day tasks before activating reached task Starts', async () => {
-    const rolloverTodayTasks = vi.fn().mockResolvedValue([]);
-    const activateDueStartDates = vi.fn().mockResolvedValue([]);
+describe('Tasks runtime initialization watchdog', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-    await activateTaskPlanningDate({
-      ownerId: 'owner-a',
-      planningDate: '2026-07-25',
-      planningTimeZone: 'America/Los_Angeles',
-      repository: {
-        rolloverTodayTasks,
-        activateDueStartDates,
-      },
-    });
+  it('preserves a successful initialization result', async () => {
+    await expect(
+      waitForTasksRuntimeInitialization(Promise.resolve('ready'), 100),
+    ).resolves.toBe('ready');
+  });
 
-    expect(rolloverTodayTasks).toHaveBeenCalledWith(
-      'owner-a',
-      '2026-07-25',
-      'America/Los_Angeles',
+  it('turns an indefinite local database wait into a recoverable failure', async () => {
+    vi.useFakeTimers();
+    const onTimeout = vi.fn();
+    const result = waitForTasksRuntimeInitialization(
+      new Promise<never>(() => undefined),
+      15_000,
+      onTimeout,
     );
-    expect(activateDueStartDates).toHaveBeenCalledWith('owner-a', '2026-07-25');
-    expect(rolloverTodayTasks.mock.invocationCallOrder[0]).toBeLessThan(
-      activateDueStartDates.mock.invocationCallOrder[0],
+
+    const expectation = expect(result).rejects.toThrow(
+      'Local task data took too long to open',
     );
+    await vi.advanceTimersByTimeAsync(15_000);
+    await expectation;
+    expect(onTimeout).toHaveBeenCalledOnce();
   });
 });

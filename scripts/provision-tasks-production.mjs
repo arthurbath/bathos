@@ -279,6 +279,7 @@ function runSyntheticTopology(powerSyncUrl, testScript = 'test:tasks:production-
     'test:tasks:production-quick-filter-reached-start': 'Synthetic production quick-filter and reached-Start gate passed.\n',
     'test:tasks:production-rich-task-behavior': 'Synthetic production checklist, recurrence, terminal-editing, deletion, and Done gate passed.\n',
     'test:tasks:production-undo-redo': 'Synthetic production undo/redo gate passed.\n',
+    'test:tasks:production-widget-actions': 'Synthetic production widget-actions gate passed.\n',
   };
   const successMessage = successMessages[testScript]
     ?? 'Synthetic production topology gate passed.\n';
@@ -297,9 +298,10 @@ if (![
   'synthetic-quick-filter-reached-start',
   'synthetic-rich-task-behavior',
   'synthetic-undo-redo',
+  'synthetic-widget-actions',
   'synthetic-topology',
 ].includes(command)) {
-  fail('Usage: node scripts/provision-tasks-production.mjs <sync-database|verify-sync-database|reminders|verify-reminders|synthetic-exclusive-start|synthetic-structure-simplification|synthetic-unified-start|synthetic-quick-filter-reached-start|synthetic-rich-task-behavior|synthetic-undo-redo|synthetic-topology> [PowerSync URL]');
+  fail('Usage: node scripts/provision-tasks-production.mjs <sync-database|verify-sync-database|reminders|verify-reminders|synthetic-exclusive-start|synthetic-structure-simplification|synthetic-unified-start|synthetic-quick-filter-reached-start|synthetic-rich-task-behavior|synthetic-undo-redo|synthetic-widget-actions|synthetic-topology> [PowerSync URL]');
 }
 
 const tempDirectory = mkdtempSync(join(tmpdir(), 'bathos-tasks-production-'));
@@ -325,6 +327,9 @@ try {
   }
   if (command === 'synthetic-undo-redo') {
     runSyntheticTopology(process.argv[3], 'test:tasks:production-undo-redo');
+  }
+  if (command === 'synthetic-widget-actions') {
+    runSyntheticTopology(process.argv[3], 'test:tasks:production-widget-actions');
   }
   if (command === 'synthetic-topology') runSyntheticTopology(process.argv[3]);
 } finally {

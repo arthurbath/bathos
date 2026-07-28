@@ -8,52 +8,6 @@ private let taskWidgetLogger = Logger(
     category: "timeline-provider"
 )
 
-private struct CompleteTaskIntent: AppIntent {
-    static let title: LocalizedStringResource = "Complete Task"
-    static let openAppWhenRun = false
-
-    @Parameter(title: "Task")
-    var taskID: String
-
-    init() {
-        taskID = ""
-    }
-
-    init(taskID: String) {
-        self.taskID = taskID
-    }
-
-    func perform() async throws -> some IntentResult {
-        do {
-            guard let taskUUID = UUID(uuidString: taskID),
-                  let credentialStore = TaskWidgetCredentialStore(),
-                  let credential = try credentialStore.load(),
-                  let snapshotStore = TaskWidgetStore() else {
-                return .result()
-            }
-            guard let completion = await TaskWidgetCompletionClient().complete(
-                taskID: taskUUID,
-                credential: credential
-            ) else {
-                return .result()
-            }
-
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            if var snapshot = try snapshotStore.load() {
-                let completedAt = completion.completedAt
-                    ?? ISO8601DateFormatter().string(from: Date())
-                if snapshot.completeTask(taskUUID, completedAt: completedAt) {
-                    _ = try snapshotStore.store(snapshot)
-                }
-            }
-            WidgetCenter.shared.reloadTimelines(ofKind: TaskCompanionConstants.widgetKind)
-            return .result()
-        } catch {
-            return .result()
-        }
-    }
-}
-
 struct TaskListWidgetEntry: TimelineEntry {
     let date: Date
     let listID: TaskWidgetListID
@@ -101,7 +55,7 @@ struct TaskListWidgetProvider: AppIntentTimelineProvider {
 
     private func entry(for configuration: TaskListSelectionIntent) -> TaskListWidgetEntry {
         let configuredValue = configuration.list ?? TaskWidgetListID.today.title
-        let listID = TaskWidgetListID(rawValue: configuredValue.lowercased()) ?? .today
+        let listID = TaskWidgetListID.widgetConfigurationValue(configuration.list)
         taskWidgetLogger.notice(
             "Resolved widget list parameter \(configuredValue, privacy: .public) as \(listID.rawValue, privacy: .public)"
         )
@@ -154,28 +108,25 @@ private struct TaskListWidgetView: View {
                 .overlay(Color.white.opacity(0.16))
                 .padding(.bottom, 6)
             content
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 15)
         .padding(.vertical, 13)
         .foregroundStyle(.white)
-        .widgetURL(TaskNativeRoute.list(entry.listID).deepLinkURL)
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: headerSymbol)
-                .foregroundStyle(headerColor)
-                .font(.system(size: 17, weight: .semibold))
-            Text(entry.listID.title)
-                .font(.headline)
-                .lineLimit(1)
-            Spacer()
-            if let list = entry.list {
-                Text("\(list.totalCount)")
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+        Link(destination: TaskNativeRoute.list(entry.listID).deepLinkURL) {
+            HStack(spacing: 8) {
+                TaskWidgetLucideListIcon(listID: entry.listID)
+                    .frame(width: 17, height: 17)
+                Text(entry.listID.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                Spacer()
             }
         }
+        .buttonStyle(.plain)
         .padding(.bottom, 9)
     }
 
@@ -189,15 +140,17 @@ private struct TaskListWidgetView: View {
                     ForEach(list.tasks.prefix(8)) { task in
                         HStack(spacing: 9) {
                             if task.terminalState == nil {
-                                Button(intent: CompleteTaskIntent(
-                                    taskID: task.id.uuidString.lowercased()
-                                )) {
-                                    Image(systemName: taskSymbol(task))
-                                        .font(.system(size: 14, weight: .regular))
-                                        .foregroundStyle(taskColor(task))
-                                        .contentShape(Rectangle())
+                                Toggle(
+                                    isOn: false,
+                                    intent: CompleteTaskIntent(
+                                        taskID: task.id.uuidString.lowercased()
+                                    )
+                                ) {
+                                    EmptyView()
                                 }
-                                .buttonStyle(.plain)
+                                .toggleStyle(TaskWidgetCompletionToggleStyle(
+                                    someday: entry.listID == .someday
+                                ))
                                 .accessibilityLabel("Complete \(task.summary)")
                             } else {
                                 Image(systemName: taskSymbol(task))
@@ -220,13 +173,7 @@ private struct TaskListWidgetView: View {
                             if let primaryLink = task.primaryLink,
                                let destination = primaryLink.url {
                                 Link(destination: destination) {
-                                    Image(systemName: primaryLink.kind == .mail
-                                        ? "envelope"
-                                        : "arrow.up.right.square"
-                                    )
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(.secondary)
-                                    .contentShape(Rectangle())
+                                    primaryLinkLabel(primaryLink)
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel(
@@ -258,18 +205,28 @@ private struct TaskListWidgetView: View {
         }
     }
 
+    private func primaryLinkLabel(_ primaryLink: TaskWidgetPrimaryLink) -> some View {
+        Image(systemName: primaryLink.kind == .mail
+            ? "envelope"
+            : "arrow.up.right.square"
+        )
+        .font(.system(size: 13))
+        .foregroundStyle(.secondary)
+        .frame(width: 28, height: 28)
+        .contentShape(Rectangle())
+    }
+
     private func emptyState(_ message: String) -> some View {
         VStack(spacing: 8) {
-            Spacer()
             Image(systemName: entry.snapshot == nil ? "rectangle.and.hand.point.up.left" : "checkmark")
                 .font(.title2)
                 .foregroundStyle(.secondary)
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Spacer()
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .padding(.top, 8)
     }
 
     private var isStale: Bool {
@@ -277,20 +234,6 @@ private struct TaskListWidgetView: View {
             return false
         }
         return entry.date.timeIntervalSince(date) > 4 * 60 * 60
-    }
-
-    private var headerSymbol: String {
-        switch entry.listID {
-        case .today: "star"
-        case .upcoming: "calendar"
-        case .anytime: "checklist"
-        case .someday: "square.dashed"
-        case .done: "checklist.checked"
-        }
-    }
-
-    private var headerColor: Color {
-        entry.listID == .today ? .yellow : .white
     }
 
     private func taskSymbol(_ task: TaskWidgetTask) -> String {
@@ -310,12 +253,117 @@ private struct TaskListWidgetView: View {
         if task.terminalState != nil {
             return .green
         }
-        switch task.todaySection {
-        case "inbox": return .green
-        case "now": return .yellow
-        case "next": return .orange
-        case "later": return .purple
-        default: return .secondary
+        return .secondary
+    }
+}
+
+private struct TaskWidgetCompletionToggleStyle: ToggleStyle {
+    let someday: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
+            Image(systemName: configuration.isOn
+                ? "checkmark.square"
+                : someday ? "square.dashed" : "square"
+            )
+            .font(.system(size: 14, weight: .regular))
+            .foregroundStyle(configuration.isOn ? Color.green : Color.secondary)
+            .frame(width: 28, height: 28)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct TaskWidgetLucideListIcon: View {
+    let listID: TaskWidgetListID
+
+    var body: some View {
+        Canvas { context, size in
+            var path = Path()
+            let x = { (value: Double) in value * size.width / 24 }
+            let y = { (value: Double) in value * size.height / 24 }
+            let point = { (xValue: Double, yValue: Double) in
+                CGPoint(x: x(xValue), y: y(yValue))
+            }
+
+            switch listID {
+            case .today:
+                let center = point(12, 12)
+                let outerRadius = min(size.width, size.height) * 0.42
+                let innerRadius = outerRadius * 0.46
+                for index in 0..<10 {
+                    let angle = -Double.pi / 2 + Double(index) * Double.pi / 5
+                    let radius = index.isMultiple(of: 2) ? outerRadius : innerRadius
+                    let vertex = CGPoint(
+                        x: center.x + CGFloat(cos(angle)) * radius,
+                        y: center.y + CGFloat(sin(angle)) * radius
+                    )
+                    index == 0 ? path.move(to: vertex) : path.addLine(to: vertex)
+                }
+                path.closeSubpath()
+            case .upcoming:
+                path.addRoundedRect(
+                    in: CGRect(x: x(3), y: y(4), width: x(18), height: y(18)),
+                    cornerSize: CGSize(width: x(2), height: y(2))
+                )
+                addLine(&path, from: point(16, 2), to: point(16, 6))
+                addLine(&path, from: point(3, 10), to: point(21, 10))
+                addLine(&path, from: point(8, 2), to: point(8, 6))
+                addLine(&path, from: point(17, 14), to: point(11, 14))
+                addLine(&path, from: point(13, 18), to: point(7, 18))
+                addLine(&path, from: point(7, 14), to: point(7.01, 14))
+                addLine(&path, from: point(17, 18), to: point(17.01, 18))
+            case .anytime:
+                addLine(&path, from: point(13, 5), to: point(21, 5))
+                addLine(&path, from: point(13, 12), to: point(21, 12))
+                addLine(&path, from: point(13, 19), to: point(21, 19))
+                path.move(to: point(3, 17))
+                path.addLine(to: point(5, 19))
+                path.addLine(to: point(9, 15))
+                path.addRoundedRect(
+                    in: CGRect(x: x(3), y: y(4), width: x(6), height: y(6)),
+                    cornerSize: CGSize(width: x(1), height: y(1))
+                )
+            case .someday:
+                path.addRoundedRect(
+                    in: CGRect(x: x(3), y: y(3), width: x(18), height: y(18)),
+                    cornerSize: CGSize(width: x(2), height: y(2))
+                )
+            case .done:
+                addLine(&path, from: point(13, 5), to: point(21, 5))
+                addLine(&path, from: point(13, 12), to: point(21, 12))
+                addLine(&path, from: point(13, 19), to: point(21, 19))
+                path.move(to: point(3, 5))
+                path.addLine(to: point(5, 7))
+                path.addLine(to: point(9, 3))
+                path.move(to: point(3, 12))
+                path.addLine(to: point(5, 14))
+                path.addLine(to: point(9, 10))
+                path.move(to: point(3, 19))
+                path.addLine(to: point(5, 21))
+                path.addLine(to: point(9, 17))
+            }
+
+            let dash: [CGFloat] = listID == .someday ? [2.2, 3.2] : []
+            context.stroke(
+                path,
+                with: .color(.primary),
+                style: StrokeStyle(
+                    lineWidth: max(1.4, size.width / 12),
+                    lineCap: .round,
+                    lineJoin: .round,
+                    dash: dash
+                )
+            )
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func addLine(_ path: inout Path, from: CGPoint, to: CGPoint) {
+        path.move(to: from)
+        path.addLine(to: to)
     }
 }

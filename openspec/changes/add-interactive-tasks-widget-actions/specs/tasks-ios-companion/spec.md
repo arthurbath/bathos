@@ -65,7 +65,19 @@ The Tasks widget SHALL let the user complete a visible open task from its checkb
 
 #### Scenario: Acknowledge and remove a completed task
 - **WHEN** authoritative widget completion succeeds
-- **THEN** the widget briefly retains the pressed row, removes it from active cached lists with a system-supported animation, reconciles it into Done, and reloads the Tasks widget timeline
+- **THEN** the tapped control optimistically shows its completed state, the widget keeps that acknowledgement visible for approximately two seconds after authoritative acceptance, removes the task from active cached lists with a system-supported animation, reconciles it into Done, and reloads the Tasks widget timeline
+
+#### Scenario: Revert an unconfirmed optimistic acknowledgement
+- **WHEN** the completion request cannot be confirmed
+- **THEN** the widget leaves the cached task in place and returns its completion control to the ordinary unchecked appearance without claiming completion
+
+#### Scenario: Invoke one-way completion for either delivered Toggle value
+- **WHEN** WidgetKit invokes an open task's completion intent with either the pre-tap or post-tap Boolean value
+- **THEN** the intent treats the invocation as the same one-way request to complete that open task
+
+#### Scenario: Retry one transient completion failure
+- **WHEN** the first completion attempt has a transient transport failure or retryable HTTP response
+- **THEN** the extension retries once with the same operation and mutation identifiers before retaining the task as open
 
 #### Scenario: Retry the same completion
 - **WHEN** the extension repeats a completion request with the same idempotency identifier after an ambiguous response
@@ -106,6 +118,29 @@ The Tasks widget SHALL expose a separate direct Primary Link action for a visibl
 - **WHEN** iOS redacts sensitive widget content
 - **THEN** the task summary and Primary Link action participate in the system privacy treatment without revealing the href as visible text
 
+### Requirement: Native Widget List Presentation
+The Tasks widget SHALL present the four active planning lists with compact, top-aligned, neutral native rendering that follows the canonical Tasks iconography.
+
+#### Scenario: Offer supported widget lists
+- **WHEN** the user configures a Tasks list widget
+- **THEN** the available choices are Today, Upcoming, Anytime, and Someday, with Done omitted
+
+#### Scenario: Render canonical list identity
+- **WHEN** a widget renders a supported list
+- **THEN** its title uses a neutral native rendering of the canonical Lucide concept for that list: Star for Today, CalendarRange for Upcoming, ListTodo for Anytime, and SquareDashed for Someday
+
+#### Scenario: Keep short lists at the top
+- **WHEN** a widget list does not fill the available vertical space
+- **THEN** its header and task rows remain aligned to the top rather than being vertically centered
+
+#### Scenario: Keep active completion controls neutral
+- **WHEN** a widget renders an open task
+- **THEN** its unchecked square uses the ordinary neutral gray treatment without inheriting Today horizon colors
+
+#### Scenario: Omit an extraneous header count
+- **WHEN** a widget renders its list header
+- **THEN** it shows the canonical icon and list name without a task-count badge or number
+
 ### Requirement: Native Completion Credential Boundary
 The system SHALL provision, store, rotate, revoke, and validate a purpose-built native credential whose sole authority is completing an owned present open task.
 
@@ -124,3 +159,18 @@ The system SHALL provision, store, rotate, revoke, and validate a purpose-built 
 #### Scenario: Preserve the replication boundary
 - **WHEN** native widget credentials are stored centrally
 - **THEN** their records remain outside the public PowerSync publication and the approved publication remains exactly 20 Tasks tables
+
+### Requirement: Widget Deep-Link Runtime Continuity
+The companion SHALL open widget deep links without creating overlapping local Tasks database runtimes and SHALL turn an unexpected startup stall into a recoverable state.
+
+#### Scenario: Route through loaded companion content
+- **WHEN** a widget deep link arrives after the companion has loaded Tasks content
+- **THEN** the companion performs same-document route navigation without reloading the web document or reconstructing the PowerSync database
+
+#### Scenario: Ignore a canceled replacement navigation
+- **WHEN** WebKit reports a canceled navigation because another requested navigation replaced it
+- **THEN** the companion does not treat the cancellation as a cold-start failure and does not start recovery
+
+#### Scenario: Bound local runtime initialization
+- **WHEN** opening the local Tasks database does not finish within the bounded startup window
+- **THEN** Tasks replaces the central spinner with a recoverable error and offers Retry through a fresh database instance

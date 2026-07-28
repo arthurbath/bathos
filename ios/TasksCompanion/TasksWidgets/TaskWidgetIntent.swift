@@ -3,7 +3,7 @@ import WidgetKit
 
 struct TaskWidgetListOptionsProvider: DynamicOptionsProvider {
     func results() async throws -> [String] {
-        TaskWidgetListID.allCases.map(\.title)
+        TaskWidgetListID.widgetConfigurationCases.map(\.title)
     }
 
     func defaultResult() async -> String? {
