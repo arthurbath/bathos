@@ -12,6 +12,8 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 | OpenTask | `Square` | An ordinary open task checkbox |
 | SomedayTask | `SquareDashed` | A Someday task checkbox |
 | CompletedTask | `SquareCheck` | A completed task checkbox |
+| Selection | `Circle` | An available task or checklist-item selection control |
+| Selected | `CircleCheck` | A selected task or checklist item |
 | Area | `Layers3` | An area and the Areas section in Config; this is the three-layer Stack glyph |
 | TaskChecklist | `ListTree` | A task's checklist |
 | Attachment | `Paperclip` | A task attachment |
@@ -51,6 +53,7 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 |---|---|---|
 | AddTask | `Plus` | Add a task |
 | AddArea | `Plus` | Add an area |
+| MultiSelect | `Lasso` | Enter task multi-selection mode |
 | Search | `Search` | Search Tasks and views |
 | QuickFilters | `Filter` | Apply a predefined quick filter |
 | Delete | `Trash2` | Recoverably delete task content |

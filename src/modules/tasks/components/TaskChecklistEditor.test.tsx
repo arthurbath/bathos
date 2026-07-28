@@ -15,7 +15,9 @@ const createItem = vi.fn();
 const updateItem = vi.fn();
 const setCompleted = vi.fn();
 const deleteItem = vi.fn();
+const deleteItems = vi.fn();
 const reorderItem = vi.fn();
+const reorderItems = vi.fn();
 
 function checklistModel(items = [
   taskChecklistItemFixture(),
@@ -27,7 +29,9 @@ function checklistModel(items = [
     updateItem,
     setCompleted,
     deleteItem,
+    deleteItems,
     reorderItem,
+    reorderItems,
   };
 }
 
@@ -58,6 +62,19 @@ function setInput(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function waitForAnimationFrames(count = 3): Promise<void> {
+  return new Promise((resolve) => {
+    const advance = (remaining: number) => {
+      if (remaining === 0) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(() => advance(remaining - 1));
+    };
+    advance(count);
+  });
+}
+
 describe('TaskChecklistEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -65,11 +82,33 @@ describe('TaskChecklistEditor', () => {
     updateItem.mockResolvedValue(taskChecklistItemFixture());
     setCompleted.mockResolvedValue(taskChecklistItemFixture({ completed: true }));
     deleteItem.mockResolvedValue(undefined);
+    deleteItems.mockResolvedValue(undefined);
     reorderItem.mockResolvedValue(taskChecklistItemFixture());
+    reorderItems.mockResolvedValue([]);
     mockUseTaskChecklist.mockReturnValue(checklistModel());
   });
 
   it('focuses an existing checklist from the task command request', async () => {
+    const completed = taskChecklistItemFixture({
+      id: 'item-completed',
+      title: 'Completed step',
+      completed: true,
+    });
+    const firstUnchecked = taskChecklistItemFixture({
+      id: 'item-first',
+      title: 'First unchecked',
+      order_key: 'a1',
+    });
+    const finalUnchecked = taskChecklistItemFixture({
+      id: 'item-final',
+      title: 'Final unchecked',
+      order_key: 'a2',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([
+      completed,
+      firstUnchecked,
+      finalUnchecked,
+    ]));
     const { container, root } = renderEditor('task-draft');
     try {
       await act(async () => {
@@ -79,8 +118,554 @@ describe('TaskChecklistEditor', () => {
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       });
       expect(document.activeElement).toBe(
-        container.querySelector<HTMLInputElement>('input[aria-label="Checklist Item"]'),
+        container.querySelectorAll<HTMLInputElement>(
+          'input[aria-label="Checklist Item"]',
+        )[2],
       );
+      expect((document.activeElement as HTMLInputElement).selectionStart)
+        .toBe('Final unchecked'.length);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('creates an empty row when the checklist shortcut has no unchecked item', async () => {
+    const completed = taskChecklistItemFixture({
+      id: 'item-completed',
+      title: 'Completed step',
+      completed: true,
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([completed]));
+    const { container, root } = renderEditor('task-draft');
+    try {
+      await act(async () => {
+        document.dispatchEvent(new CustomEvent('bathos:task-checklist-focus', {
+          detail: { taskId: 'task-draft' },
+        }));
+        await waitForAnimationFrames();
+      });
+      const draft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      expect(document.activeElement).toBe(draft);
+      expect(draft.selectionStart).toBe(0);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('uses the Item placeholder for existing and new checklist inputs', async () => {
+    const { container, root } = renderEditor();
+    try {
+      const existing = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      expect(existing.placeholder).toBe('Item');
+
+      await act(async () => {
+        existing.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+
+      const draft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      expect(draft.placeholder).toBe('Item');
+      expect(document.activeElement).toBe(draft);
+      expect(draft.selectionStart).toBe(0);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('owns unmodified Return, inserts one draft input, and ignores composition', async () => {
+    const { container, root } = renderEditor();
+    const bubbledKeyDown = vi.fn();
+    document.addEventListener('keydown', bubbledKeyDown);
+    try {
+      const existing = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      expect(existing.getAttribute('data-bathos-field-return-owned')).toBe('true');
+
+      await act(async () => {
+        existing.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+          isComposing: true,
+        }));
+      });
+      expect(container.querySelector('input[aria-label="New Checklist Item"]')).toBeNull();
+      bubbledKeyDown.mockClear();
+
+      await act(async () => {
+        existing.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(container.querySelectorAll('input[aria-label="New Checklist Item"]')).toHaveLength(1);
+      expect(bubbledKeyDown).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener('keydown', bubbledKeyDown);
+      cleanup(root, container);
+    }
+  });
+
+  it('splits a persisted checklist item at the caret and focuses the suffix', async () => {
+    const item = taskChecklistItemFixture({
+      id: 'item-a',
+      title: 'AlphaBeta',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([item]));
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      input.focus();
+      input.setSelectionRange(5, 5);
+
+      await act(async () => {
+        input.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+
+      const draft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      expect(input.value).toBe('Alpha');
+      expect(draft.value).toBe('Beta');
+      expect(updateItem).toHaveBeenCalledWith('item-a', { title: 'Alpha' });
+      expect(document.activeElement).toBe(draft);
+      expect(draft.selectionStart).toBe(0);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('replaces a selected checklist range with the Return line split', async () => {
+    const item = taskChecklistItemFixture({
+      id: 'item-a',
+      title: 'AlphaBeta',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([item]));
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      input.focus();
+      input.setSelectionRange(5, 7);
+
+      await act(async () => {
+        input.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+
+      expect(input.value).toBe('Alpha');
+      expect(container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )?.value).toBe('ta');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('moves vertically through persisted and draft checklist inputs at value ends', async () => {
+    const first = taskChecklistItemFixture({
+      id: 'item-a',
+      title: 'AlphaBeta',
+    });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const persisted = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      persisted[0].focus();
+      persisted[0].setSelectionRange(persisted[0].value.length, persisted[0].value.length);
+      await act(async () => {
+        persisted[0].dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+
+      const draft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      persisted[0].focus();
+      persisted[0].setSelectionRange(2, 2);
+      await act(async () => {
+        persisted[0].dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(document.activeElement).toBe(draft);
+      expect(draft.selectionStart).toBe(draft.value.length);
+
+      await act(async () => {
+        draft.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(document.activeElement).toBe(persisted[1]);
+      expect(persisted[1].selectionStart).toBe(persisted[1].value.length);
+
+      await act(async () => {
+        persisted[1].dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowUp',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(document.activeElement).toBe(draft);
+      expect(draft.selectionStart).toBe(draft.value.length);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('moves horizontally across persisted and draft checklist boundaries', async () => {
+    const first = taskChecklistItemFixture({
+      id: 'item-a',
+      title: 'First',
+    });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const persisted = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      persisted[0].focus();
+      persisted[0].setSelectionRange(persisted[0].value.length, persisted[0].value.length);
+      await act(async () => {
+        persisted[0].dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+
+      const draft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      draft.focus();
+      draft.setSelectionRange(0, 0);
+      await act(async () => {
+        draft.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(document.activeElement).toBe(persisted[0]);
+      expect(persisted[0].selectionStart).toBe(persisted[0].value.length);
+
+      await act(async () => {
+        persisted[0].dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(document.activeElement).toBe(draft);
+      expect(draft.selectionStart).toBe(0);
+
+      await act(async () => {
+        draft.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(document.activeElement).toBe(persisted[1]);
+      expect(persisted[1].selectionStart).toBe(0);
+
+      await act(async () => {
+        persisted[1].dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(document.activeElement).toBe(draft);
+      expect(draft.selectionStart).toBe(draft.value.length);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('moves horizontally across checklist boundaries with Option on macOS', async () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    const first = taskChecklistItemFixture({
+      id: 'item-a',
+      title: 'First',
+    });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const persisted = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      persisted[1].focus();
+      persisted[1].setSelectionRange(0, 0);
+      await act(async () => {
+        persisted[1].dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(document.activeElement).toBe(persisted[0]);
+      expect(persisted[0].selectionStart).toBe(persisted[0].value.length);
+
+      await act(async () => {
+        persisted[0].dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(document.activeElement).toBe(persisted[1]);
+      expect(persisted[1].selectionStart).toBe(0);
+
+      persisted[0].focus();
+      persisted[0].setSelectionRange(persisted[0].value.length, persisted[0].value.length);
+      await act(async () => {
+        persisted[0].dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      const draft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      expect(document.activeElement).toBe(draft);
+
+      await act(async () => {
+        draft.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(document.activeElement).toBe(persisted[0]);
+      expect(persisted[0].selectionStart).toBe(persisted[0].value.length);
+
+      await act(async () => {
+        persisted[0].dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(document.activeElement).toBe(draft);
+      expect(draft.selectionStart).toBe(0);
+
+      await act(async () => {
+        draft.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(document.activeElement).toBe(persisted[1]);
+      expect(persisted[1].selectionStart).toBe(0);
+    } finally {
+      cleanup(root, container);
+      platform.mockRestore();
+    }
+  });
+
+  it('leaves horizontal input behavior native outside eligible boundaries', () => {
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      const dispatchArrow = (
+        input: HTMLInputElement,
+        key: 'ArrowLeft' | 'ArrowRight',
+        start: number,
+        end = start,
+        modifiers: KeyboardEventInit = {},
+      ) => {
+        input.focus();
+        input.setSelectionRange(start, end);
+        const event = new KeyboardEvent('keydown', {
+          key,
+          bubbles: true,
+          cancelable: true,
+          ...modifiers,
+        });
+        expect(input.dispatchEvent(event)).toBe(true);
+        expect(event.defaultPrevented).toBe(false);
+        expect(document.activeElement).toBe(input);
+      };
+
+      dispatchArrow(inputs[0], 'ArrowLeft', 0);
+      dispatchArrow(inputs[1], 'ArrowRight', inputs[1].value.length);
+      dispatchArrow(inputs[0], 'ArrowRight', 2);
+      dispatchArrow(inputs[0], 'ArrowRight', 1, 3);
+      dispatchArrow(
+        inputs[0],
+        'ArrowRight',
+        inputs[0].value.length,
+        inputs[0].value.length,
+        { shiftKey: true },
+      );
+      dispatchArrow(inputs[0], 'ArrowRight', 2, 2, { altKey: true });
+      dispatchArrow(inputs[0], 'ArrowRight', 1, 3, { altKey: true });
+      dispatchArrow(
+        inputs[0],
+        'ArrowRight',
+        inputs[0].value.length,
+        inputs[0].value.length,
+        { altKey: true, shiftKey: true },
+      );
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('leaves non-macOS Alt arrow behavior native at checklist boundaries', () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('Win32');
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      const left = new KeyboardEvent('keydown', {
+        key: 'ArrowLeft',
+        altKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      inputs[1].focus();
+      inputs[1].setSelectionRange(0, 0);
+      expect(inputs[1].dispatchEvent(left)).toBe(true);
+      expect(left.defaultPrevented).toBe(false);
+      expect(document.activeElement).toBe(inputs[1]);
+
+      const right = new KeyboardEvent('keydown', {
+        key: 'ArrowRight',
+        altKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      inputs[0].focus();
+      inputs[0].setSelectionRange(inputs[0].value.length, inputs[0].value.length);
+      expect(inputs[0].dispatchEvent(right)).toBe(true);
+      expect(right.defaultPrevented).toBe(false);
+      expect(document.activeElement).toBe(inputs[0]);
+    } finally {
+      cleanup(root, container);
+      platform.mockRestore();
+    }
+  });
+
+  it('leaves vertical arrow behavior native at checklist boundaries', () => {
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      const up = new KeyboardEvent('keydown', {
+        key: 'ArrowUp',
+        bubbles: true,
+        cancelable: true,
+      });
+      const down = new KeyboardEvent('keydown', {
+        key: 'ArrowDown',
+        bubbles: true,
+        cancelable: true,
+      });
+
+      expect(inputs[0].dispatchEvent(up)).toBe(true);
+      expect(up.defaultPrevented).toBe(false);
+      expect(inputs[1].dispatchEvent(down)).toBe(true);
+      expect(down.defaultPrevented).toBe(false);
     } finally {
       cleanup(root, container);
     }
@@ -105,7 +690,54 @@ describe('TaskChecklistEditor', () => {
         }));
         await Promise.resolve();
       });
-      expect(createItem).toHaveBeenCalledWith('First step');
+      expect(createItem).toHaveBeenCalledWith('First step', 0);
+      expect(createItem).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('splits a new checklist draft at the caret and keeps editing the suffix', async () => {
+    const modelItems: ReturnType<typeof taskChecklistItemFixture>[] = [];
+    createItem.mockImplementation(async (title: string, destinationIndex: number) => {
+      const created = taskChecklistItemFixture({
+        id: 'created-item',
+        title,
+      });
+      modelItems.splice(destinationIndex, 0, created);
+      return created;
+    });
+    mockUseTaskChecklist.mockImplementation(() => checklistModel(modelItems));
+    const { container, root } = renderEditor();
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('button[aria-label="Add Checklist"]')?.click();
+      });
+      const draft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      await act(async () => setInput(draft, 'AlphaBeta'));
+      draft.setSelectionRange(5, 5);
+
+      await act(async () => {
+        draft.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+
+      const nextDraft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      expect(createItem).toHaveBeenCalledWith('Alpha', 0);
+      expect(container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )?.value).toBe('Alpha');
+      expect(nextDraft.value).toBe('Beta');
+      expect(document.activeElement).toBe(nextDraft);
+      expect(nextDraft.selectionStart).toBe(0);
     } finally {
       cleanup(root, container);
     }
@@ -156,7 +788,192 @@ describe('TaskChecklistEditor', () => {
     expect(deleteItem).toHaveBeenCalledWith('item-a');
   });
 
-  it('reorders with the checklist handle and accepts the final drop position', async () => {
+  it('deletes the first empty checklist row when it cannot join backward', async () => {
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First step' });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first]));
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      await act(async () => setInput(input, ''));
+      input.setSelectionRange(0, 0);
+      await act(async () => {
+        input.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Backspace',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      expect(deleteItem).toHaveBeenCalledWith('item-a');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('keeps a following empty draft visible when the preceding item is deleted', async () => {
+    const modelItems = [
+      taskChecklistItemFixture({ id: 'item-a', title: 'First step' }),
+    ];
+    deleteItem.mockImplementation(async (itemId: string) => {
+      const index = modelItems.findIndex(({ id }) => id === itemId);
+      if (index >= 0) modelItems.splice(index, 1);
+    });
+    mockUseTaskChecklist.mockImplementation(() => checklistModel(modelItems));
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      input.setSelectionRange(input.value.length, input.value.length);
+      await act(async () => {
+        input.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      await act(async () => {
+        setInput(input, '');
+        await Promise.resolve();
+      });
+      input.setSelectionRange(0, 0);
+      await act(async () => {
+        input.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Backspace',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+
+      const draft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      expect(deleteItem).toHaveBeenCalledWith('item-a');
+      expect(draft).not.toBeNull();
+      expect(document.activeElement).toBe(draft);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('joins adjacent checklist rows backward and preserves the caret boundary', async () => {
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First ' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'second',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      inputs[1].setSelectionRange(0, 0);
+      await act(async () => {
+        inputs[1].dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Backspace',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(updateItem).toHaveBeenCalledWith('item-a', { title: 'First second' });
+      expect(deleteItem).toHaveBeenCalledWith('item-b');
+      expect(document.activeElement).toBe(inputs[0]);
+      expect(inputs[0].selectionStart).toBe('First '.length);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('joins adjacent checklist rows forward and preserves the caret boundary', async () => {
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First ' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'second',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      inputs[0].setSelectionRange(inputs[0].value.length, inputs[0].value.length);
+      await act(async () => {
+        inputs[0].dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Delete',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      expect(updateItem).toHaveBeenCalledWith('item-a', { title: 'First second' });
+      expect(deleteItem).toHaveBeenCalledWith('item-b');
+      expect(document.activeElement).toBe(inputs[0]);
+      expect(inputs[0].selectionStart).toBe('First '.length);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('leaves Select All native to one input', () => {
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      const event = new KeyboardEvent('keydown', {
+        key: 'a',
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      expect(input.dispatchEvent(event)).toBe(true);
+      expect(event.defaultPrevented).toBe(false);
+      expect(updateItem).not.toHaveBeenCalled();
+      expect(deleteItem).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('makes an empty row directly draggable and omits handles and the append button', async () => {
+    const { container, root } = renderEditor();
+    try {
+      const existing = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      await act(async () => {
+        existing.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      const draftInput = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      expect(draftInput.draggable).toBe(true);
+      expect(draftInput.closest<HTMLElement>('[data-checklist-item-id="draft"]')?.draggable)
+        .toBe(true);
+      expect(container.querySelector('[data-checklist-reorder-handle]')).toBeNull();
+      expect(container.querySelector('button[aria-label="Add Checklist Item"]')).toBeNull();
+      expect(existing.className).toContain('h-8');
+      expect(existing.closest('div')?.className).not.toContain('transition-transform');
+      expect(draftInput.closest('div')?.className).not.toContain('transition-transform');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('moves the empty row from its input before it is persisted', async () => {
     const first = taskChecklistItemFixture({ id: 'item-a', title: 'First step' });
     const second = taskChecklistItemFixture({
       id: 'item-b',
@@ -166,8 +983,19 @@ describe('TaskChecklistEditor', () => {
     mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
     const { container, root } = renderEditor();
     try {
-      const handle = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Reorder First step"]',
+      const firstInput = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      await act(async () => {
+        firstInput.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      const draftInput = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
       )!;
       const dataTransfer = {
         effectAllowed: '',
@@ -175,7 +1003,68 @@ describe('TaskChecklistEditor', () => {
       };
       const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
       Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
-      await act(async () => handle.dispatchEvent(dragStart));
+      await act(async () => draftInput.dispatchEvent(dragStart));
+
+      const firstRow = firstInput.closest('div')!;
+      const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragOver, 'dataTransfer', { value: dataTransfer });
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+      await act(async () => {
+        firstRow.dispatchEvent(dragOver);
+        firstRow.dispatchEvent(drop);
+        await waitForAnimationFrames();
+      });
+
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label$="Checklist Item"]',
+      );
+      expect(inputs[0].getAttribute('aria-label')).toBe('New Checklist Item');
+      expect(createItem).not.toHaveBeenCalled();
+      expect(reorderItem).not.toHaveBeenCalled();
+      expect(reorderItems).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('reorders directly from the checklist input and accepts the final drop position', async () => {
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First step' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second step',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      const row = input.closest<HTMLElement>('[data-checklist-item-id]')!;
+      expect(input.draggable).toBe(true);
+      expect(row.draggable).toBe(true);
+      act(() => {
+        input.focus();
+        input.setSelectionRange(3, 3);
+      });
+      expect(document.activeElement).toBe(input);
+      expect(input.selectionStart).toBe(3);
+      expect(row.dataset.selected).toBeUndefined();
+
+      const dataTransfer = {
+        effectAllowed: '',
+        setData: vi.fn(),
+      };
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      await act(async () => input.dispatchEvent(dragStart));
+      expect(document.activeElement).not.toBe(input);
+      expect(row.dataset.selected).toBeUndefined();
+      expect(
+        container.querySelector('[data-task-checklist]')
+          ?.getAttribute('data-checklist-selection-active'),
+      ).toBeNull();
 
       const end = container.querySelector<HTMLElement>('[data-checklist-drop-end]')!;
       const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
@@ -187,8 +1076,724 @@ describe('TaskChecklistEditor', () => {
         end.dispatchEvent(drop);
         await Promise.resolve();
       });
-      expect(reorderItem).toHaveBeenCalledWith('item-a', 1);
+      expect(reorderItems).toHaveBeenCalledWith(['item-a'], 2);
+      expect(reorderItems).toHaveBeenCalledTimes(1);
     } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('keeps checklist drag start and drag end out of the enclosing task drag scope', async () => {
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First step' });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first]));
+    const outerDragStart = vi.fn();
+    const outerDragEnd = vi.fn();
+    document.addEventListener('dragstart', outerDragStart);
+    document.addEventListener('dragend', outerDragEnd);
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      const dataTransfer = {
+        effectAllowed: '',
+        setData: vi.fn(),
+      };
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      const dragEnd = new Event('dragend', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragEnd, 'dataTransfer', { value: dataTransfer });
+
+      await act(async () => {
+        input.dispatchEvent(dragStart);
+        input.dispatchEvent(dragEnd);
+      });
+
+      expect(dataTransfer.setData).toHaveBeenCalledWith(
+        'application/x-bathos-checklist-item',
+        'item-a',
+      );
+      expect(outerDragStart).not.toHaveBeenCalled();
+      expect(outerDragEnd).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener('dragstart', outerDragStart);
+      document.removeEventListener('dragend', outerDragEnd);
+      cleanup(root, container);
+    }
+  });
+
+  it('commits the last valid checklist position when dropped elsewhere in BathOS', async () => {
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First step' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second step',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      const dataTransfer = {
+        effectAllowed: '',
+        dropEffect: 'none',
+        setData: vi.fn(),
+      };
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      await act(async () => input.dispatchEvent(dragStart));
+
+      const end = container.querySelector<HTMLElement>('[data-checklist-drop-end]')!;
+      const validDragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperty(validDragOver, 'dataTransfer', { value: dataTransfer });
+      await act(async () => end.dispatchEvent(validDragOver));
+
+      const outsideDragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperty(outsideDragOver, 'dataTransfer', { value: dataTransfer });
+      const outsideDrop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(outsideDrop, 'dataTransfer', { value: dataTransfer });
+      await act(async () => {
+        document.body.dispatchEvent(outsideDragOver);
+        document.body.dispatchEvent(outsideDrop);
+        await Promise.resolve();
+      });
+
+      expect(outsideDragOver.defaultPrevented).toBe(true);
+      expect(dataTransfer.dropEffect).toBe('move');
+      expect(outsideDrop.defaultPrevented).toBe(true);
+      expect(reorderItems).toHaveBeenCalledWith(['item-a'], 2);
+      expect(reorderItems).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('moves an empty checklist draft at its last valid position after an outside drop', async () => {
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First step' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second step',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const firstInput = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      await act(async () => {
+        firstInput.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      const draftInput = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      const dataTransfer = {
+        effectAllowed: '',
+        dropEffect: 'none',
+        setData: vi.fn(),
+      };
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      await act(async () => draftInput.dispatchEvent(dragStart));
+
+      const end = container.querySelector<HTMLElement>('[data-checklist-drop-end]')!;
+      const validDragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperty(validDragOver, 'dataTransfer', { value: dataTransfer });
+      await act(async () => end.dispatchEvent(validDragOver));
+
+      const outsideDrop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(outsideDrop, 'dataTransfer', { value: dataTransfer });
+      await act(async () => {
+        document.body.dispatchEvent(outsideDrop);
+        await waitForAnimationFrames();
+      });
+
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label$="Checklist Item"]',
+      );
+      expect(inputs[inputs.length - 1].getAttribute('aria-label')).toBe(
+        'New Checklist Item',
+      );
+      expect(createItem).not.toHaveBeenCalled();
+      expect(reorderItems).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('ignores an outside drop until a valid checklist position has been visited', async () => {
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First step' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second step',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      const dataTransfer = {
+        effectAllowed: '',
+        dropEffect: 'none',
+        setData: vi.fn(),
+      };
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      await act(async () => input.dispatchEvent(dragStart));
+
+      const outsideDrop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(outsideDrop, 'dataTransfer', { value: dataTransfer });
+      await act(async () => {
+        document.body.dispatchEvent(outsideDrop);
+        await Promise.resolve();
+      });
+
+      expect(outsideDrop.defaultPrevented).toBe(false);
+      expect(reorderItems).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('cancels a checklist drag that ends without an in-app drop', async () => {
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First step' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second step',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      const dataTransfer = {
+        effectAllowed: '',
+        dropEffect: 'none',
+        setData: vi.fn(),
+      };
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      await act(async () => input.dispatchEvent(dragStart));
+
+      const end = container.querySelector<HTMLElement>('[data-checklist-drop-end]')!;
+      const validDragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperty(validDragOver, 'dataTransfer', { value: dataTransfer });
+      await act(async () => end.dispatchEvent(validDragOver));
+      expect(end.querySelector('.bg-info')).not.toBeNull();
+
+      const dragEnd = new Event('dragend', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragEnd, 'dataTransfer', { value: dataTransfer });
+      await act(async () => input.dispatchEvent(dragEnd));
+
+      expect(reorderItems).not.toHaveBeenCalled();
+      expect(end.querySelector('.bg-info')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('selects checklist items additively from the focused item and by anchored range', async () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    const items = [
+      taskChecklistItemFixture({ id: 'item-a', title: 'First', order_key: 'a0' }),
+      taskChecklistItemFixture({ id: 'item-b', title: 'Second', order_key: 'a1' }),
+      taskChecklistItemFixture({ id: 'item-c', title: 'Third', order_key: 'a2' }),
+      taskChecklistItemFixture({ id: 'item-d', title: 'Fourth', order_key: 'a3' }),
+    ];
+    mockUseTaskChecklist.mockReturnValue(checklistModel(items));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      act(() => inputs[0].focus());
+      const rows = container.querySelectorAll<HTMLElement>('[data-checklist-item-id]');
+      await act(async () => {
+        rows[2].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          metaKey: true,
+          button: 0,
+        }));
+      });
+      expect(rows[0].dataset.selected).toBe('true');
+      expect(rows[1].dataset.selected).toBeUndefined();
+      expect(rows[2].dataset.selected).toBe('true');
+      expect(document.activeElement).not.toBe(inputs[0]);
+      expect(
+        container.querySelector('[data-checklist-selection-active="true"]'),
+      ).toBeTruthy();
+
+      const typedKey = new KeyboardEvent('keydown', {
+        key: 'x',
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => document.dispatchEvent(typedKey));
+      expect(typedKey.defaultPrevented).toBe(true);
+      expect(inputs[0]).toHaveValue('First');
+      expect(inputs[2]).toHaveValue('Third');
+
+      await act(async () => {
+        rows[3].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          shiftKey: true,
+          button: 0,
+        }));
+      });
+      expect([...rows].map((row) => row.dataset.selected)).toEqual([
+        'true',
+        'true',
+        'true',
+        'true',
+      ]);
+      expect(document.activeElement).not.toBe(inputs[0]);
+
+      await act(async () => {
+        rows[1].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          metaKey: true,
+          button: 0,
+        }));
+      });
+      expect(rows[1].dataset.selected).toBeUndefined();
+      expect(rows[0].dataset.selected).toBe('true');
+      expect(rows[2].dataset.selected).toBe('true');
+      expect(rows[3].dataset.selected).toBe('true');
+      expect(document.activeElement).not.toBe(inputs[0]);
+    } finally {
+      platform.mockRestore();
+      cleanup(root, container);
+    }
+  });
+
+  it('clears additive and range checklist selection with Escape without mutating items', async () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    const items = [
+      taskChecklistItemFixture({ id: 'item-a', title: 'First', order_key: 'a0' }),
+      taskChecklistItemFixture({ id: 'item-b', title: 'Second', order_key: 'a1' }),
+      taskChecklistItemFixture({ id: 'item-c', title: 'Third', order_key: 'a2' }),
+    ];
+    mockUseTaskChecklist.mockReturnValue(checklistModel(items));
+    const outerKeyDown = vi.fn();
+    window.addEventListener('keydown', outerKeyDown);
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      const rows = container.querySelectorAll<HTMLElement>('[data-checklist-item-id]');
+
+      act(() => inputs[0].focus());
+      await act(async () => {
+        rows[2].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          metaKey: true,
+          button: 0,
+        }));
+      });
+      expect(rows[0].dataset.selected).toBe('true');
+      expect(rows[2].dataset.selected).toBe('true');
+
+      const additiveEscape = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => document.dispatchEvent(additiveEscape));
+      expect(additiveEscape.defaultPrevented).toBe(true);
+      expect([...rows].every((row) => row.dataset.selected === undefined)).toBe(true);
+      expect(container.querySelector('[data-checklist-selection-active="true"]')).toBeNull();
+      expect(document.activeElement).not.toBe(inputs[0]);
+      expect(outerKeyDown).not.toHaveBeenCalled();
+
+      act(() => inputs[0].focus());
+      await act(async () => {
+        rows[2].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          shiftKey: true,
+          button: 0,
+        }));
+      });
+      expect([...rows].map((row) => row.dataset.selected)).toEqual([
+        'true',
+        'true',
+        'true',
+      ]);
+
+      const rangeEscape = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => document.dispatchEvent(rangeEscape));
+      expect(rangeEscape.defaultPrevented).toBe(true);
+      expect([...rows].every((row) => row.dataset.selected === undefined)).toBe(true);
+      expect(container.querySelectorAll('input[aria-label="Checklist Item"]')).toHaveLength(3);
+      expect(document.activeElement).not.toBe(inputs[0]);
+      expect(deleteItems).not.toHaveBeenCalled();
+      expect(deleteItem).not.toHaveBeenCalled();
+      expect(reorderItems).not.toHaveBeenCalled();
+      expect(setCompleted).not.toHaveBeenCalled();
+      expect(outerKeyDown).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('keydown', outerKeyDown);
+      platform.mockRestore();
+      cleanup(root, container);
+    }
+  });
+
+  it('clears checklist selection on an ordinary click while preserving the clicked control', async () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      act(() => inputs[0].focus());
+      const rows = container.querySelectorAll<HTMLElement>('[data-checklist-item-id]');
+      await act(async () => {
+        rows[1].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          metaKey: true,
+          button: 0,
+        }));
+      });
+      expect(rows[0].dataset.selected).toBe('true');
+      expect(rows[1].dataset.selected).toBe('true');
+
+      const secondInput = rows[1].querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      secondInput.setSelectionRange(3, 3);
+      await act(async () => {
+        secondInput.dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        secondInput.dispatchEvent(new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+      });
+      expect(rows[0].dataset.selected).toBeUndefined();
+      expect(rows[1].dataset.selected).toBeUndefined();
+      expect(secondInput).not.toBeDisabled();
+      expect(document.activeElement).toBe(secondInput);
+      expect(secondInput.selectionStart).toBe(3);
+    } finally {
+      platform.mockRestore();
+      cleanup(root, container);
+    }
+  });
+
+  it('replaces completion controls with selection circles and preserves completion styling', async () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second',
+      order_key: 'a1',
+      completed: true,
+    });
+    const third = taskChecklistItemFixture({
+      id: 'item-c',
+      title: 'Third',
+      order_key: 'a2',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second, third]));
+    const { container, root } = renderEditor();
+    try {
+      const firstInput = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      act(() => firstInput.focus());
+      const rows = container.querySelectorAll<HTMLElement>('[data-checklist-item-id]');
+      await act(async () => {
+        rows[1].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          metaKey: true,
+          button: 0,
+        }));
+      });
+
+      expect(rows[0].querySelector('svg.lucide-circle-check')).toBeTruthy();
+      expect(rows[1].querySelector('svg.lucide-circle-check')).toBeTruthy();
+      expect(rows[2].querySelector('svg.lucide-circle')).toBeTruthy();
+      expect(rows[1].querySelector('input[aria-label="Checklist Item"]'))
+        .toHaveClass('line-through');
+
+      const secondSelectionControl = rows[1].querySelector<HTMLButtonElement>(
+        'button[aria-label="Deselect Second"]',
+      )!;
+      await act(async () => {
+        secondSelectionControl.dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        secondSelectionControl.click();
+        await Promise.resolve();
+      });
+
+      expect(rows[0].dataset.selected).toBe('true');
+      expect(rows[1].dataset.selected).toBeUndefined();
+      expect(rows[0].querySelector('svg.lucide-circle-check')).toBeTruthy();
+      expect(rows[1].querySelector('svg.lucide-circle')).toBeTruthy();
+      expect(rows[1].querySelector('input[aria-label="Checklist Item"]'))
+        .toHaveClass('line-through');
+      expect(setCompleted).not.toHaveBeenCalled();
+
+      const firstSelectionControl = rows[0].querySelector<HTMLButtonElement>(
+        'button[aria-label="Deselect First"]',
+      )!;
+      await act(async () => {
+        firstSelectionControl.dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        firstSelectionControl.click();
+        await Promise.resolve();
+      });
+
+      expect(container.querySelector('[data-checklist-selection-active="true"]')).toBeNull();
+      expect(rows[0].querySelector('button[aria-label="Complete First"]')).toBeTruthy();
+      expect(rows[1].querySelector('button[aria-label="Reopen Second"]')).toBeTruthy();
+    } finally {
+      platform.mockRestore();
+      cleanup(root, container);
+    }
+  });
+
+  it('drags selected checklist items as one visual-order group and keeps them selected', async () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    const items = [
+      taskChecklistItemFixture({ id: 'item-a', title: 'First', order_key: 'a0' }),
+      taskChecklistItemFixture({ id: 'item-b', title: 'Second', order_key: 'a1' }),
+      taskChecklistItemFixture({ id: 'item-c', title: 'Third', order_key: 'a2' }),
+    ];
+    mockUseTaskChecklist.mockReturnValue(checklistModel(items));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      act(() => inputs[0].focus());
+      const rows = container.querySelectorAll<HTMLElement>('[data-checklist-item-id]');
+      await act(async () => {
+        rows[2].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          metaKey: true,
+          button: 0,
+        }));
+      });
+
+      expect(rows[0].draggable).toBe(true);
+      expect(rows[1].draggable).toBe(true);
+      expect(rows[2].draggable).toBe(true);
+      const dataTransfer = {
+        effectAllowed: '',
+        setData: vi.fn(),
+      };
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      await act(async () => rows[0].dispatchEvent(dragStart));
+
+      expect(dataTransfer.effectAllowed).toBe('move');
+      expect(dataTransfer.setData).toHaveBeenCalledWith(
+        'application/x-bathos-checklist-item',
+        'item-a',
+      );
+      expect(rows[0].dataset.selected).toBe('true');
+      expect(rows[2].dataset.selected).toBe('true');
+
+      const end = container.querySelector<HTMLElement>('[data-checklist-drop-end]')!;
+      const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragOver, 'dataTransfer', { value: dataTransfer });
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+      await act(async () => {
+        end.dispatchEvent(dragOver);
+        document.body.dispatchEvent(drop);
+        await Promise.resolve();
+      });
+      expect(drop.defaultPrevented).toBe(true);
+      expect(reorderItems).toHaveBeenCalledWith(['item-a', 'item-c'], 3);
+      expect(reorderItems).toHaveBeenCalledTimes(1);
+      expect(rows[0].dataset.selected).toBe('true');
+      expect(rows[2].dataset.selected).toBe('true');
+    } finally {
+      platform.mockRestore();
+      cleanup(root, container);
+    }
+  });
+
+  it('removes input focus when a selected-row drag begins from that input', async () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    const first = taskChecklistItemFixture({ id: 'item-a', title: 'First' });
+    const second = taskChecklistItemFixture({
+      id: 'item-b',
+      title: 'Second',
+      order_key: 'a1',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      act(() => inputs[0].focus());
+      const rows = container.querySelectorAll<HTMLElement>('[data-checklist-item-id]');
+      await act(async () => {
+        rows[1].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          metaKey: true,
+          button: 0,
+        }));
+      });
+      expect(rows[0].dataset.selected).toBe('true');
+      expect(rows[1].dataset.selected).toBe('true');
+      expect(inputs[0].draggable).toBe(true);
+      expect(inputs[1].draggable).toBe(true);
+
+      act(() => {
+        inputs[1].focus();
+        inputs[1].setSelectionRange(2, 2);
+      });
+      expect(document.activeElement).toBe(inputs[1]);
+
+      await act(async () => {
+        inputs[1].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          clientX: 20,
+          clientY: 20,
+        }));
+        document.dispatchEvent(new MouseEvent('mousemove', {
+          bubbles: true,
+          cancelable: true,
+          buttons: 1,
+          clientX: 28,
+          clientY: 20,
+        }));
+      });
+      expect(document.activeElement).not.toBe(inputs[1]);
+
+      const dataTransfer = {
+        effectAllowed: '',
+        setData: vi.fn(),
+      };
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      await act(async () => inputs[1].dispatchEvent(dragStart));
+
+      expect(document.activeElement).not.toBe(inputs[1]);
+      expect(rows[0].dataset.selected).toBe('true');
+      expect(rows[1].dataset.selected).toBe('true');
+
+      const dragEnd = new Event('dragend', { bubbles: true, cancelable: true });
+      await act(async () => {
+        inputs[1].dispatchEvent(dragEnd);
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+        inputs[1].click();
+      });
+      expect(document.activeElement).not.toBe(inputs[1]);
+      expect(rows[0].dataset.selected).toBe('true');
+      expect(rows[1].dataset.selected).toBe('true');
+
+      await act(async () => {
+        inputs[1].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        inputs[1].click();
+      });
+      expect(document.activeElement).toBe(inputs[1]);
+      expect(rows[0].dataset.selected).toBeUndefined();
+      expect(rows[1].dataset.selected).toBeUndefined();
+    } finally {
+      platform.mockRestore();
+      cleanup(root, container);
+    }
+  });
+
+  it('deletes every selected checklist item with Backspace and clears the selection', async () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    const items = [
+      taskChecklistItemFixture({ id: 'item-a', title: 'First', order_key: 'a0' }),
+      taskChecklistItemFixture({ id: 'item-b', title: 'Second', order_key: 'a1' }),
+      taskChecklistItemFixture({ id: 'item-c', title: 'Third', order_key: 'a2' }),
+    ];
+    mockUseTaskChecklist.mockReturnValue(checklistModel(items));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      act(() => inputs[0].focus());
+      const rows = container.querySelectorAll<HTMLElement>('[data-checklist-item-id]');
+      await act(async () => {
+        rows[2].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          metaKey: true,
+          button: 0,
+        }));
+      });
+
+      const deletion = new KeyboardEvent('keydown', {
+        key: 'Backspace',
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => {
+        document.dispatchEvent(deletion);
+        await Promise.resolve();
+      });
+      expect(deletion.defaultPrevented).toBe(true);
+      expect(deleteItems).toHaveBeenCalledWith(['item-a', 'item-c']);
+      expect(rows[0].dataset.selected).toBeUndefined();
+      expect(rows[2].dataset.selected).toBeUndefined();
+      expect(deleteItem).not.toHaveBeenCalled();
+    } finally {
+      platform.mockRestore();
       cleanup(root, container);
     }
   });

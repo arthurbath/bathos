@@ -72,7 +72,7 @@ Outside DataGrids, text, number, currency, percentage, URL, email, password, and
 - **THEN** it retains its native accepted-character, parsing, masking, input-mode, and validation behavior
 
 ### Requirement: Single-line Return submits ordinary forms
-Unmodified Return in an ordinary single-line text-entry control SHALL submit its nearest owning form by default outside active composition. Textareas and field-owned composite interactions SHALL retain Return for their native or declared field behavior, Command+Return SHALL remain available for form submission, and an exceptional form MAY explicitly opt out of unmodified Return submission.
+Unmodified Return in an ordinary single-line text-entry control SHALL submit its nearest owning form by default outside active composition. Textareas and field-owned composite or list-editor interactions SHALL retain Return for their native or declared field behavior, Command+Return SHALL remain available for form submission, and an exceptional form MAY explicitly opt out of unmodified Return submission.
 
 #### Scenario: Submit an ordinary form
 - **WHEN** a user presses unmodified Return in a single-line text-entry control whose field does not own Return and whose form has not opted out
@@ -83,8 +83,8 @@ Unmodified Return in an ordinary single-line text-entry control SHALL submit its
 - **THEN** the control retains its native newline behavior and does not submit the form
 
 #### Scenario: Preserve composite Return
-- **WHEN** a user presses Return on or within a dropdown, date picker, time parser, or another control that explicitly owns Return
-- **THEN** the field performs its declared open, selection, parsing, or confirmation action without submitting the form
+- **WHEN** a user presses Return on or within a dropdown, date picker, time parser, checklist list editor, or another control that explicitly owns Return
+- **THEN** the field performs its declared open, selection, parsing, row-creation, or confirmation action without submitting the form
 
 #### Scenario: Preserve explicit form command
 - **WHEN** a user invokes the platform form-submit command from within a declared form scope

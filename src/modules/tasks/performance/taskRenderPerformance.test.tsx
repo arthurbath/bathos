@@ -92,6 +92,7 @@ describePerformance('Tasks rendered-view performance', () => {
     const searchTasks = Array.from({ length: 10_000 }, (_, index) => syntheticTask(index));
     mockTaskList.mockReturnValue({
       tasks: viewTasks,
+      checklistTaskIds: new Set<string>(),
       loading: false,
       error: null,
       createTask: vi.fn(),
@@ -123,9 +124,11 @@ describePerformance('Tasks rendered-view performance', () => {
       container.querySelector<HTMLElement>('[data-task-title-control]')?.focus();
       const searchStartedAt = performance.now();
       act(() => {
-        container.querySelector<HTMLButtonElement>(
-          '[aria-label="Quick Find Tasks and Areas"]',
-        )?.click();
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 's',
+          bubbles: true,
+          cancelable: true,
+        }));
       });
       const searchOpenMs = performance.now() - searchStartedAt;
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]');

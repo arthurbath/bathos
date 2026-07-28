@@ -91,7 +91,7 @@ describe('getTaskKeyboardCommand', () => {
       g: 'set-someday',
       x: 'toggle-completion',
       c: 'open-checklist',
-      v: 'open-organization',
+      v: 'cycle-area',
       b: 'focus-reminder',
     };
     for (const [key, command] of Object.entries(bindings)) {

@@ -29,7 +29,7 @@ const originalTask: TaskTodo = taskTodoFixture({
 });
 
 let latest: ReturnType<typeof useTaskList>;
-let queryData: TaskTodo[];
+let queryData: Array<TaskTodo & { has_checklist_items?: number }>;
 let harnessView: TaskListView;
 let harnessRetainedTaskId: string | null;
 let harnessForwardMutation: ReturnType<typeof vi.fn>;
@@ -127,6 +127,32 @@ describe('useTaskList optimistic display', () => {
       queryData = [savedTask];
       rerender(root);
       expect(latest.tasks[0]).toEqual(savedTask);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('projects checklist presence from the existing task-list query', () => {
+    queryData = [{
+      ...originalTask,
+      has_checklist_items: 1,
+    }];
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.checklistTaskIds).toEqual(new Set(['task-a']));
+      expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain(
+        'FROM tasks_checklist_items AS checklist',
+      );
+      expect(mocks.useQuery.mock.calls.at(-1)?.[0]).toContain(
+        "checklist.disposition = 'present'",
+      );
     } finally {
       cleanup(root, container);
     }

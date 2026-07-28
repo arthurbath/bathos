@@ -21,9 +21,9 @@ export type TaskKeyboardCommand =
   | 'set-someday'
   | 'cycle-horizon'
   | 'cycle-actionability'
+  | 'cycle-area'
   | 'focus-reminder'
   | 'open-deadline'
-  | 'open-organization'
   | 'open-checklist'
   | 'open-previous'
   | 'open-next';
@@ -47,7 +47,7 @@ const taskControlCommands: Record<string, TaskKeyboardCommand> = {
   z: 'undo',
   x: 'toggle-completion',
   c: 'open-checklist',
-  v: 'open-organization',
+  v: 'cycle-area',
   b: 'focus-reminder',
 };
 

@@ -260,7 +260,7 @@ export function TaskKeyboardHelpDialog({
         ['Set Start to Someday', '⌃G', '⌥⇧G'],
         ['Toggle Done', '⌃X', '⌥⇧X'],
         ['Edit Checklist', '⌃C', '⌥⇧C'],
-        ['Choose Area', '⌃V', '⌥⇧V'],
+        ['Cycle Area', '⌃V', '⌥⇧V'],
         ['Edit Reminder Time', '⌃B', '⌥⇧B'],
       ],
     },

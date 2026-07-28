@@ -28,6 +28,9 @@ import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
 
 export type TaskListView = TaskDestination | 'today' | 'upcoming' | 'done';
 export type TodayTaskSection = 'inbox' | 'now' | 'next' | 'later';
+type TaskListQueryRow = TaskTodo & {
+  has_checklist_items?: number;
+};
 export type RetainedTaskViewPlacement = Pick<
   TaskTodo,
   | 'destination'
@@ -46,6 +49,16 @@ export type TaskListCreateInput = Omit<
   atTop?: boolean;
 };
 
+const TASK_LIST_SELECT = `SELECT todo.*,
+         EXISTS (
+           SELECT 1
+           FROM tasks_checklist_items AS checklist
+           WHERE checklist.owner_id = todo.owner_id
+             AND checklist.task_id = todo.id
+             AND checklist.disposition = 'present'
+         ) AS has_checklist_items
+         FROM tasks_todos AS todo`;
+
 export function useTaskList(
   ownerId: string,
   view: TaskListView,
@@ -58,17 +71,15 @@ export function useTaskList(
   const { repository, planningTimeZone } = useTasksRuntime();
   const planningDate = useTaskPlanningDate(planningTimeZone);
   const [optimisticTasks, setOptimisticTasks] = useState<Record<string, TaskTodo | null>>({});
-  const query = useQuery<TaskTodo>(
+  const query = useQuery<TaskListQueryRow>(
     view === 'done'
-      ? `SELECT *
-         FROM tasks_todos
+      ? `${TASK_LIST_SELECT}
          WHERE owner_id = ?
            AND ((disposition = 'deleted' AND deletion_root_id = id)
              OR (disposition = 'present' AND lifecycle IN ('completed', 'canceled')))
          ORDER BY COALESCE(deleted_at, completed_at, canceled_at) DESC, id`
       : view === 'upcoming'
-          ? `SELECT *
-             FROM tasks_todos
+          ? `${TASK_LIST_SELECT}
              WHERE owner_id = ?
                AND destination = 'anytime'
                AND lifecycle = 'open'
@@ -82,8 +93,7 @@ export function useTaskList(
                deadline
              ), order_key, id`
           : view === 'today'
-            ? `SELECT *
-         FROM tasks_todos
+            ? `${TASK_LIST_SELECT}
          WHERE owner_id = ?
            AND destination = 'anytime'
            AND lifecycle = 'open'
@@ -91,8 +101,7 @@ export function useTaskList(
            AND today_section IS NOT NULL
            AND (start_date IS NULL OR start_date <= ?)
          ORDER BY order_key, id`
-            : `SELECT *
-         FROM tasks_todos
+            : `${TASK_LIST_SELECT}
          WHERE owner_id = ?
            AND destination = ?
            AND lifecycle = 'open'
@@ -105,8 +114,13 @@ export function useTaskList(
         ? [ownerId, planningDate, planningDate, planningDate, planningDate]
         : view === 'today'
           ? [ownerId, planningDate]
-          : [ownerId, view, view, planningDate],
+        : [ownerId, view, view, planningDate],
   );
+  const checklistTaskIds = useMemo(() => new Set(
+    query.data
+      .filter(({ has_checklist_items }) => Boolean(has_checklist_items))
+      .map(({ id }) => id),
+  ), [query.data]);
 
   useEffect(() => {
     setOptimisticTasks((current) => {
@@ -599,6 +613,7 @@ export function useTaskList(
 
   return {
     tasks,
+    checklistTaskIds,
     loading: query.isLoading,
     error: query.error,
     createTask,

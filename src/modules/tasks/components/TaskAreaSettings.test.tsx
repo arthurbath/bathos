@@ -62,12 +62,12 @@ describe('TaskAreaSettings', () => {
       fireEvent.submit(areaInput.closest('form')!);
       expect(model.createArea).toHaveBeenCalledWith('Health');
 
-      const workButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
-        .find((button) => button.textContent?.trim() === 'Work')!;
-      await userEvent.click(workButton);
-      const renameInput = screen.getByRole('textbox', { name: 'Rename Work' });
+      const renameInput = container.querySelector<HTMLInputElement>(
+        'input[data-row-id="area-work"][data-col="0"]',
+      )!;
+      await userEvent.click(renameInput);
       fireEvent.change(renameInput, { target: { value: 'Professional' } });
-      fireEvent.submit(renameInput.closest('form')!);
+      fireEvent.keyDown(renameInput, { key: 'Enter' });
       expect(model.updateArea).toHaveBeenCalledWith('area-work', { title: 'Professional' });
     } finally {
       cleanup(root, container);
@@ -79,10 +79,12 @@ describe('TaskAreaSettings', () => {
     const { container, root } = renderSettings(model);
 
     try {
-      await userEvent.click(screen.getByRole('button', { name: 'Move Personal Up' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Actions for Personal' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Move Up' }));
       expect(model.reorderArea).toHaveBeenCalledWith('area-personal', 'up');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Delete Work' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Actions for Work' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
       expect(screen.getByRole('alertdialog', { name: 'Delete Area' })).toBeTruthy();
       expect(screen.getByText(
         'Work, its tasks, and checklist items will move to Done together.',

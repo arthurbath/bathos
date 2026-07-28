@@ -1,4 +1,7 @@
 import {
+  Circle,
+  CircleCheck,
+  Lasso,
   Layers3,
   ListChecks,
   ListTree,
@@ -33,6 +36,8 @@ describe('Tasks iconography', () => {
     expect(TASK_ICONS.OpenTask).toBe(Square);
     expect(TASK_ICONS.SomedayTask).toBe(SquareDashed);
     expect(TASK_ICONS.CompletedTask).toBe(SquareCheck);
+    expect(TASK_ICONS.Selection).toBe(Circle);
+    expect(TASK_ICONS.Selected).toBe(CircleCheck);
     expect(TASK_ICONS.Area).toBe(Layers3);
     expect(TASK_ICONS.TaskChecklist).toBe(ListTree);
     expect(TASK_ICONS.Attachment).toBe(Paperclip);
@@ -41,6 +46,7 @@ describe('Tasks iconography', () => {
     expect(TASK_ICONS.Today).toBe(Star);
     expect(TASK_ICONS.AddTask).toBe(Plus);
     expect(TASK_ICONS.AddArea).toBe(Plus);
+    expect(TASK_ICONS.MultiSelect).toBe(Lasso);
   });
 
   it('records every registered concept in the human iconography reference', () => {

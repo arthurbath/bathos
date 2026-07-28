@@ -26,3 +26,31 @@ export function getTaskTodayShortcutHorizon(
     && (task.start_date === null || task.start_date <= planningDate);
   return isToday ? cycleTaskShortcutHorizon(task.today_section) : 'now';
 }
+
+function getCurrentTaskShortcutHorizon(
+  task: Pick<TaskTodo, 'destination' | 'start_date' | 'today_section'>,
+  planningDate: string,
+): TaskShortcutHorizon | null {
+  const isCycleHorizon = task.today_section === 'now'
+    || task.today_section === 'next'
+    || task.today_section === 'later';
+  const isToday = task.destination === 'anytime'
+    && isCycleHorizon
+    && (task.start_date === null || task.start_date <= planningDate);
+  if (!isToday) return null;
+  return task.today_section as TaskShortcutHorizon;
+}
+
+export function getBulkTaskTodayShortcutHorizon(
+  tasks: ReadonlyArray<Pick<TaskTodo, 'destination' | 'start_date' | 'today_section'>>,
+  planningDate: string,
+): TaskShortcutHorizon {
+  const first = tasks[0] === undefined
+    ? null
+    : getCurrentTaskShortcutHorizon(tasks[0], planningDate);
+  if (
+    first === null
+    || tasks.some((task) => getCurrentTaskShortcutHorizon(task, planningDate) !== first)
+  ) return 'now';
+  return cycleTaskShortcutHorizon(first);
+}

@@ -10,12 +10,11 @@ import {
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
 } from 'react';
 import {
-  CheckCircle2,
-  Circle,
   MoreHorizontal,
   X,
   type LucideIcon,
@@ -39,9 +38,7 @@ import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -160,6 +157,7 @@ import {
   applyTaskSelectionGesture,
   isMacLikeTaskPlatform,
 } from '@/modules/tasks/domain/taskSelection';
+import { isTaskTouchSelectionSwipe } from '@/modules/tasks/domain/taskTouchSelection';
 import {
   getTaskKeyboardCommand,
   type TaskKeyboardCommand,
@@ -171,9 +169,10 @@ import {
   type TaskClipboardSnapshot,
 } from '@/modules/tasks/domain/taskClipboard';
 import {
-  getTaskTodayShortcutHorizon,
+  getBulkTaskTodayShortcutHorizon,
 } from '@/modules/tasks/domain/taskShortcutPlanning';
 import { getNextTaskActionability } from '@/modules/tasks/domain/taskActionability';
+import { getNextTaskAreaId } from '@/modules/tasks/domain/taskAreaCycle';
 import { formatTaskReminderTimeDisplay } from '@/modules/tasks/domain/taskReminderTimeInput';
 import {
   sanitizeTaskQuickFilter,
@@ -350,6 +349,9 @@ function taskNestedSurfaceOwnsEscape(target: EventTarget | null): boolean {
 
 function taskNestedSurfaceOwnsTypeToSearch(target: EventTarget | null): boolean {
   if (isTaskEditableTarget(target)) return true;
+  if (document.querySelector(
+    '[data-task-checklist][data-checklist-selection-active="true"]',
+  )) return true;
   if (target instanceof Element && target.closest(
     '[data-radix-popper-content-wrapper], [role="dialog"], [role="menu"], '
       + '[role="listbox"], [role="option"], [role="combobox"]',
@@ -446,6 +448,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     transitionTask,
     planningDate,
     retainedTaskPlacement,
+    checklistTaskIds,
   } = useTaskList(
     userId,
     taskListView,
@@ -893,6 +896,37 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setBulkMode(false);
   }, []);
 
+  const enterEmptyTaskSelectionMode = useCallback(async () => {
+    const closed = await setOpenTask(null);
+    if (!closed) return;
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    focusedTaskIdRef.current = null;
+    setFocusedTaskId(null);
+    setBulkSelection(new Set());
+    setBulkSelectionAnchorId(null);
+    setBulkMode(true);
+  }, [setOpenTask]);
+
+  const enterTaskSelectionFromTouchSwipe = useCallback(async (taskId: string) => {
+    if (
+      !bulkEligible
+      || bulkMode
+      || taskId === NEW_TASK_DRAFT_ID
+    ) return;
+    const closed = await setOpenTask(null);
+    if (!closed) return;
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    focusedTaskIdRef.current = null;
+    setFocusedTaskId(null);
+    setBulkSelection(new Set([taskId]));
+    setBulkSelectionAnchorId(taskId);
+    setBulkMode(true);
+  }, [bulkEligible, bulkMode, setOpenTask]);
+
   const applyTaskQuickFilter = useCallback(async (nextFilter: TaskQuickFilter) => {
     if (nextFilter === taskQuickFilter) return;
     const closed = await setOpenTask(null);
@@ -1121,7 +1155,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         ? current
         : Array.from(bulkSelection).find((taskId) => visibleIds.has(taskId)) ?? null
     ));
-    if (bulkMode && remainingSelection.size === 0) {
+    if (
+      bulkMode
+      && bulkSelection.size > 0
+      && remainingSelection.size === 0
+    ) {
       clearTaskSelection();
     } else {
       const currentFocusedId = focusedTaskIdRef.current;
@@ -1268,36 +1306,23 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const targets = getTaskCommandTargets();
     if (targets.length === 0) return;
     try {
-      const groups = new Map<string, {
-        todaySection: TaskTodaySection;
-        tasks: TaskTodo[];
-      }>();
-      for (const task of targets) {
-        const horizon = getTaskTodayShortcutHorizon(task, planningDate);
-        const key = horizon;
-        const group = groups.get(key);
-        if (group) group.tasks.push(task);
-        else groups.set(key, { todaySection: horizon, tasks: [task] });
+      const todaySection = getBulkTaskTodayShortcutHorizon(targets, planningDate);
+      if (targets.some((task) => task.id === NEW_TASK_DRAFT_ID)) {
+        await saveCreationDraftPatch({
+          destination: 'anytime',
+          today_section: todaySection,
+          start_date: null,
+        });
       }
-      for (const group of groups.values()) {
-        const draftInGroup = group.tasks.some((task) => task.id === NEW_TASK_DRAFT_ID);
-        if (draftInGroup) {
-          await saveCreationDraftPatch({
-            destination: 'anytime',
-            today_section: group.todaySection,
-            start_date: null,
-          });
-        }
-        const persistedIds = group.tasks
-          .filter((task) => task.id !== NEW_TASK_DRAFT_ID)
-          .map(({ id }) => id);
-        if (persistedIds.length > 0) {
-          await moveTasks(persistedIds, {
-            destination: 'anytime',
-            todaySection: group.todaySection,
-            startDate: null,
-          });
-        }
+      const persistedIds = targets
+        .filter((task) => task.id !== NEW_TASK_DRAFT_ID)
+        .map(({ id }) => id);
+      if (persistedIds.length > 0) {
+        await moveTasks(persistedIds, {
+          destination: 'anytime',
+          todaySection,
+          startDate: null,
+        });
       }
     } catch (shortcutError) {
       showTaskError('Task Command Could Not Be Applied', shortcutError);
@@ -1486,6 +1511,32 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       showTaskError('Task Actionability Could Not Be Changed', cycleError);
     }
   }, [getTaskCommandTargets, saveCreationDraftPatch, updateTask]);
+
+  const runCycleAreaShortcut = useCallback(async () => {
+    const targets = getTaskCommandTargets();
+    if (targets.length === 0) return;
+    const areaId = getNextTaskAreaId(
+      hierarchy.areas.map((area) => area.id),
+      targets.map((task) => task.area_id),
+    );
+    if (areaId === undefined) return;
+    try {
+      for (const task of targets) {
+        if (task.id === NEW_TASK_DRAFT_ID) {
+          await saveCreationDraftPatch({ area_id: areaId });
+        } else if (task.lifecycle === 'open' && task.disposition === 'present') {
+          await updateTask(task.id, { area_id: areaId });
+        }
+      }
+    } catch (cycleError) {
+      showTaskError('Task Area Could Not Be Changed', cycleError);
+    }
+  }, [
+    getTaskCommandTargets,
+    hierarchy.areas,
+    saveCreationDraftPatch,
+    updateTask,
+  ]);
 
   const openTaskCommandField = useCallback(async (
     mode: TaskBulkCommandMode,
@@ -1887,8 +1938,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         void openTaskCommandField('deadline');
         return;
       }
-      if (command === 'open-organization') {
-        void openTaskCommandField('organization');
+      if (command === 'cycle-area') {
+        void runCycleAreaShortcut();
         return;
       }
       if (command === 'focus-reminder') {
@@ -1956,6 +2007,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     openTaskCommandField,
     openRelativeTask,
     runDuplicateShortcut,
+    runCycleAreaShortcut,
     runCycleActionabilityShortcut,
     runDeleteShortcut,
     runDirectStartShortcut,
@@ -2172,6 +2224,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const handleTaskPointerSelection = (
     event: MouseEvent<HTMLElement>,
     taskId: string,
+    source: 'activation' | 'selection-control' = 'activation',
   ) => {
     const platformModifier = macLikePlatform ? event.metaKey : event.ctrlKey;
     const openTaskId = selectedTaskIdRef.current;
@@ -2195,9 +2248,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const next = applyTaskSelectionGesture(selectionState, {
       taskId,
       visibleTaskIds: selectableTasks.map(({ id }) => id),
-      metaKey: event.metaKey,
-      ctrlKey: event.ctrlKey,
-      shiftKey: event.shiftKey,
+      metaKey: source === 'selection-control' ? false : event.metaKey,
+      ctrlKey: source === 'selection-control' ? false : event.ctrlKey,
+      shiftKey: source === 'selection-control' ? false : event.shiftKey,
       macLikePlatform,
     });
     if (!bulkEligible || next === null) {
@@ -2209,6 +2262,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       return;
     }
     event.preventDefault();
+    if (source === 'activation' && document.activeElement === event.currentTarget) {
+      event.currentTarget.blur();
+    }
     void setOpenTask(null).then((closed) => {
       if (!closed) return;
       focusedTaskIdRef.current = next.focusedId;
@@ -2223,6 +2279,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const handleDoneTaskPointerSelection = (
     event: MouseEvent<HTMLElement>,
     taskId: string,
+    source: 'activation' | 'selection-control' = 'activation',
   ) => {
     const next = applyTaskSelectionGesture({
       active: bulkMode,
@@ -2232,9 +2289,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }, {
       taskId,
       visibleTaskIds: selectableTasks.map(({ id }) => id),
-      metaKey: event.metaKey,
-      ctrlKey: event.ctrlKey,
-      shiftKey: event.shiftKey,
+      metaKey: source === 'selection-control' ? false : event.metaKey,
+      ctrlKey: source === 'selection-control' ? false : event.ctrlKey,
+      shiftKey: source === 'selection-control' ? false : event.shiftKey,
       macLikePlatform,
     });
     if (next === null) {
@@ -2246,6 +2303,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       return;
     }
     event.preventDefault();
+    if (source === 'activation' && document.activeElement === event.currentTarget) {
+      event.currentTarget.blur();
+    }
     focusedTaskIdRef.current = next.focusedId;
     setFocusedTaskId(next.focusedId);
     setBulkMode(next.active);
@@ -2454,6 +2514,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <TaskRow
         key={task.id}
         task={task}
+        hasChecklistItems={checklistTaskIds.has(persistedDraftTaskId ?? task.id)}
         checklistTaskId={persistedDraftTaskId ?? (
           task.id === NEW_TASK_DRAFT_ID ? null : task.id
         )}
@@ -2461,6 +2522,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         selected={selectedTaskId === task.id}
         focused={focusedTaskId === task.id}
         onSelect={(event) => handleTaskPointerSelection(event, task.id)}
+        onTouchSwipeSelect={() => {
+          void enterTaskSelectionFromTouchSwipe(task.id);
+        }}
         onActivate={() => toggleTaskFromKeyboard(task.id)}
         onCloseEditor={closeOpenTaskToFocus}
         onFocusTask={() => {
@@ -2478,7 +2542,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         bulkSelection={bulkMode && !isCreationDraft ? {
           selected: bulkSelection.has(task.id),
           onKeyboardToggle: () => toggleTaskFromKeyboard(task.id),
-          onToggle: (event) => handleTaskPointerSelection(event, task.id),
+          onToggle: (event) => handleTaskPointerSelection(
+            event,
+            task.id,
+            'selection-control',
+          ),
         } : undefined}
         onUpdate={async (patch) => {
           try {
@@ -2532,6 +2600,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           )}
         dragPlacement={taskDragPlacement}
         onTaskDragStart={() => {
+          const openTaskId = selectedTaskIdRef.current;
+          if (openTaskId !== null && openTaskId !== task.id) {
+            void setOpenTask(null);
+          }
           const draggedIds = bulkMode && bulkSelection.has(task.id)
             ? tasks.filter((candidate) => bulkSelection.has(candidate.id)).map(({ id }) => id)
             : [task.id];
@@ -2604,10 +2676,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         planningDate={planningDate}
         todayMarker={view === 'anytime'
           ? getTaskTodayMembershipSection(task, planningDate) ?? undefined
-          : view === 'upcoming' && task.today_section !== null
-            ? task.today_section
-            : undefined}
-        todayMarkerContext={view === 'upcoming' ? 'Day Horizon' : 'Today'}
+          : undefined}
+        todayMarkerContext="Today"
         reminder={reminders.byRootId.get(persistedDraftTaskId ?? task.id) ?? null}
         reminderMode={reminderAvailability}
         reminderTimeZone={reminders.planningTimeZone}
@@ -2673,11 +2743,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <TaskRow
         key={task.id}
         task={task}
+        hasChecklistItems={checklistTaskIds.has(task.id)}
         checklistTaskId={task.id}
         hierarchy={hierarchy}
         selected={selectedTaskId === task.id}
         focused={focusedTaskId === task.id}
         onSelect={(event) => handleDoneTaskPointerSelection(event, task.id)}
+        onTouchSwipeSelect={() => {
+          void enterTaskSelectionFromTouchSwipe(task.id);
+        }}
         onActivate={() => toggleTaskFromKeyboard(task.id)}
         onCloseEditor={closeOpenTaskToFocus}
         onFocusTask={() => {
@@ -2693,7 +2767,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         bulkSelection={bulkMode ? {
           selected: bulkSelection.has(task.id),
           onKeyboardToggle: () => toggleTaskFromKeyboard(task.id),
-          onToggle: (event) => handleDoneTaskPointerSelection(event, task.id),
+          onToggle: (event) => handleDoneTaskPointerSelection(
+            event,
+            task.id,
+            'selection-control',
+          ),
         } : undefined}
         onUpdate={async (patch) => {
           try {
@@ -2846,29 +2924,29 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             >
               {getTaskViewLabel(view)}
             </h2>
-            <div className="flex items-center gap-1">
-              {bulkEligible ? (
+            {bulkEligible ? (
+              <div className="flex items-center gap-1">
+                {!bulkMode ? (
+                  <Button
+                    type="button"
+                    variant="clear"
+                    size="icon"
+                    aria-label="Select Tasks"
+                    className="h-9 w-9 text-muted-foreground"
+                    onClick={() => void enterEmptyTaskSelectionMode()}
+                    data-task-selection-entry
+                  >
+                    <TASK_ICONS.MultiSelect className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                ) : null}
                 <TaskQuickFilterControl
                   value={taskQuickFilter}
                   onChange={(nextFilter) => {
                     void applyTaskQuickFilter(nextFilter);
                   }}
                 />
-              ) : null}
-              <Button
-                type="button"
-                variant="clear"
-                size="icon"
-                aria-label="Quick Find Tasks and Areas"
-                onClick={() => {
-                  setQuickFindInitialQuery('');
-                  openCommandSurface(setQuickFindOpen);
-                }}
-                className="h-9 w-9 text-muted-foreground"
-              >
-                <TASK_ICONS.Search className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            </div>
+              </div>
+            ) : null}
           </div>
 
           {reminders.dueItems.length > 0 ? (
@@ -2931,6 +3009,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               : view === 'config' ? (
                 <TaskConfigView
                   keyboardHelpShortcut={macLikePlatform ? '⌘/' : '⌃/'}
+                  userId={userId}
                   hierarchy={hierarchy}
                   automaticListSorting={automaticListSorting}
                   webPush={reminders.webPush}
@@ -3195,8 +3274,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           planningAvailable={view !== 'done'}
           onSelectAll={() => {
             const ids = selectableTasks.map(({ id }) => id);
-            if (ids.length === 1) focusTaskRow(ids[0]);
-            else setBulkSelection(new Set(ids));
+            focusedTaskIdRef.current = null;
+            setFocusedTaskId(null);
+            setBulkSelection(new Set(ids));
+            setBulkSelectionAnchorId((current) => current ?? ids[0] ?? null);
           }}
           onClear={clearTaskSelection}
           onPlan={() => openCommandSurface(setBulkWhenOpen)}
@@ -3388,7 +3469,7 @@ function TaskBulkToolbar({
         disabled={pending || selectedCount === 0}
         onClick={onClear}
       >
-        Select None
+        Cancel
       </Button>
       {planningAvailable ? (
         <Button
@@ -3554,6 +3635,7 @@ function TaskDesktopNavigation({
 
 function TaskConfigView({
   keyboardHelpShortcut,
+  userId,
   hierarchy,
   automaticListSorting,
   webPush,
@@ -3566,6 +3648,7 @@ function TaskConfigView({
   replaceUnavailableReason,
 }: {
   keyboardHelpShortcut: string;
+  userId: string;
   hierarchy: TaskHierarchyModel;
   automaticListSorting: ReturnType<typeof useTaskAutomaticListSorting>;
   webPush: TaskWebPushModel | null;
@@ -3588,7 +3671,7 @@ function TaskConfigView({
         {' '}to view all keyboard commands.
       </p>
 
-      <TaskAreaSettings hierarchy={hierarchy} />
+      <TaskAreaSettings hierarchy={hierarchy} userId={userId} />
 
       <TaskConfigSection title="List Sorting" icon={TASK_ICONS.Anytime}>
         <div className="flex items-center gap-3">
@@ -3844,8 +3927,8 @@ function DoneTaskRow({
         }
       }}
       className={[
-        'flex h-11 items-center gap-2 overflow-hidden pl-1 pr-1.5 focus-visible:rounded-md focus-visible:bg-foreground/[0.05] focus-visible:outline-none',
-        focused || bulkSelection.selected ? 'rounded-md bg-foreground/[0.05]' : '',
+        'flex h-11 items-center gap-2 overflow-hidden pl-1 pr-1.5 focus-visible:rounded-md focus-visible:bg-info/20 focus-visible:outline-none',
+        focused || bulkSelection.selected ? 'rounded-md bg-info/20' : '',
       ].filter(Boolean).join(' ')}
       data-task-row-header
     >
@@ -4017,8 +4100,8 @@ function DeletedTaskRow({
         }
       }}
       className={[
-        'flex h-11 items-center gap-2 overflow-hidden pl-1 pr-1.5 focus-visible:rounded-md focus-visible:bg-foreground/[0.05] focus-visible:outline-none',
-        focused || bulkSelection.selected ? 'rounded-md bg-foreground/[0.05]' : '',
+        'flex h-11 items-center gap-2 overflow-hidden pl-1 pr-1.5 focus-visible:rounded-md focus-visible:bg-info/20 focus-visible:outline-none',
+        focused || bulkSelection.selected ? 'rounded-md bg-info/20' : '',
       ].filter(Boolean).join(' ')}
       data-task-row-header
     >
@@ -4319,6 +4402,7 @@ function UpcomingTaskSections({
             {sectionDropPlacement ? (
               <span
                 aria-hidden="true"
+                data-task-drop-indicator
                 className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 bg-info ${
                   sectionDropPlacement === 'before' ? 'top-0' : 'bottom-0'
                 }`}
@@ -4359,11 +4443,13 @@ function UpcomingTaskSections({
 
 function TaskRow({
   task,
+  hasChecklistItems,
   checklistTaskId,
   hierarchy,
   selected,
   focused,
   onSelect,
+  onTouchSwipeSelect,
   onActivate,
   onCloseEditor,
   onFocusTask,
@@ -4395,11 +4481,13 @@ function TaskRow({
   terminalState,
 }: {
   task: TaskTodo;
+  hasChecklistItems: boolean;
   checklistTaskId: string | null;
   hierarchy: TaskHierarchyModel;
   selected: boolean;
   focused: boolean;
   onSelect: (event: MouseEvent<HTMLElement>) => void;
+  onTouchSwipeSelect: () => void;
   onActivate: () => void;
   onCloseEditor: () => Promise<boolean>;
   onFocusTask: () => void;
@@ -4454,6 +4542,15 @@ function TaskRow({
   const editorUnmountTimerRef = useRef<number | null>(null);
   const titleButtonRef = useRef<HTMLButtonElement>(null);
   const suppressClickUntilRef = useRef(0);
+  const touchSelectionGestureRef = useRef<{
+    pointerId: number;
+    pointerType: string;
+    startX: number;
+    startY: number;
+    latestX: number;
+    latestY: number;
+    viewportWidth: number;
+  } | null>(null);
   const pendingRef = useRef(false);
   const inBulkSelection = bulkSelection !== undefined;
   const areaLabel = getTaskAreaLabel(task, hierarchy);
@@ -4696,6 +4793,109 @@ function TaskRow({
       today_section: null,
     });
   };
+  const setSummaryDragPreview = (event: DragEvent<HTMLButtonElement>) => {
+    if (typeof event.dataTransfer.setDragImage !== 'function') return;
+    const summary = articleRef.current?.querySelector<HTMLElement>('[data-task-row-header]')
+      ?? event.currentTarget;
+    const bounds = summary.getBoundingClientRect();
+    const preview = summary.cloneNode(true) as HTMLElement;
+    preview.querySelectorAll('[data-task-drop-indicator]').forEach((indicator) => {
+      indicator.remove();
+    });
+    preview.setAttribute('aria-hidden', 'true');
+    preview.setAttribute('data-task-drag-preview', 'true');
+    Object.assign(preview.style, {
+      position: 'fixed',
+      inset: 'auto',
+      left: '-10000px',
+      top: '-10000px',
+      width: `${bounds.width}px`,
+      height: `${bounds.height}px`,
+      pointerEvents: 'none',
+    });
+    document.body.append(preview);
+    const offsetX = Math.min(Math.max(event.clientX - bounds.left, 0), bounds.width);
+    const offsetY = Math.min(Math.max(event.clientY - bounds.top, 0), bounds.height);
+    try {
+      event.dataTransfer.setDragImage(preview, offsetX, offsetY);
+    } catch {
+      // Keep the native browser preview when a partial drag-image implementation rejects.
+    } finally {
+      window.setTimeout(() => preview.remove(), 0);
+    }
+  };
+  const handleSummaryDragStart = (event: DragEvent<HTMLButtonElement>) => {
+    if (!draggableTask || pending) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-bathos-task-id', task.id);
+    event.dataTransfer.setData('text/plain', task.id);
+    setSummaryDragPreview(event);
+    suppressClickUntilRef.current = Date.now() + 1_000;
+    if (selected) {
+      setEditorExpanded(false);
+      void onCloseEditor().then((closed) => {
+        if (closed) return;
+        setEditorMounted(true);
+        setEditorExpanded(true);
+      });
+    }
+    onTaskDragStart();
+  };
+  const handleTouchSelectionPointerDown = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    if (
+      inBulkSelection
+      || event.pointerType !== 'touch'
+      || event.isPrimary === false
+    ) return;
+    touchSelectionGestureRef.current = {
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      startX: event.clientX,
+      startY: event.clientY,
+      latestX: event.clientX,
+      latestY: event.clientY,
+      viewportWidth: window.innerWidth,
+    };
+  };
+  const handleTouchSelectionPointerMove = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    const gesture = touchSelectionGestureRef.current;
+    if (gesture === null || gesture.pointerId !== event.pointerId) return;
+    gesture.latestX = event.clientX;
+    gesture.latestY = event.clientY;
+  };
+  const handleTouchSelectionPointerUp = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    const gesture = touchSelectionGestureRef.current;
+    if (gesture === null || gesture.pointerId !== event.pointerId) return;
+    touchSelectionGestureRef.current = null;
+    if (!isTaskTouchSelectionSwipe({
+      pointerType: gesture.pointerType,
+      startX: gesture.startX,
+      startY: gesture.startY,
+      endX: event.clientX ?? gesture.latestX,
+      endY: event.clientY ?? gesture.latestY,
+      viewportWidth: gesture.viewportWidth,
+    })) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressClickUntilRef.current = Date.now() + 500;
+    onTouchSwipeSelect();
+  };
+  const handleTouchSelectionPointerCancel = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    if (touchSelectionGestureRef.current?.pointerId === event.pointerId) {
+      touchSelectionGestureRef.current = null;
+    }
+  };
 
   return (
     <article
@@ -4746,20 +4946,8 @@ function TaskRow({
           else onActivate();
         }
       }}
-      draggable={draggableTask && !pending}
       data-task-draggable={draggableTask ? 'true' : undefined}
       data-drag-placement={dragPlacement ?? undefined}
-      onDragStart={(event) => {
-        if (!draggableTask || pending) {
-          event.preventDefault();
-          return;
-        }
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('application/x-bathos-task-id', task.id);
-        event.dataTransfer.setData('text/plain', task.id);
-        suppressClickUntilRef.current = Date.now() + 1_000;
-        onTaskDragStart();
-      }}
       onDragOver={(event) => {
         if (!draggableTask || pending) return;
         event.preventDefault();
@@ -4769,15 +4957,13 @@ function TaskRow({
           event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after',
         );
       }}
-      onDragEnd={() => {
-        onTaskDragEnd();
-        suppressClickUntilRef.current = Date.now() + 250;
-      }}
       className={[
-        'relative grid overflow-hidden transition-[grid-template-rows,opacity,background-color,border-radius] ease-out focus:outline-none focus-visible:rounded-md focus-visible:bg-foreground/[0.05] focus-visible:outline-none motion-reduce:transition-none',
+        'relative grid overflow-hidden transition-[grid-template-rows,opacity,background-color,border-radius] ease-out focus:outline-none focus-visible:rounded-md focus-visible:bg-info/20 focus-visible:outline-none motion-reduce:transition-none',
         terminalExiting ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100',
-        focused || selected || bulkSelection?.selected
+        selected
           ? 'rounded-md bg-foreground/[0.05]'
+          : focused || bulkSelection?.selected
+            ? 'rounded-md bg-info/20'
           : '',
       ].filter(Boolean).join(' ') || undefined}
       style={{ transitionDuration: `${TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS}ms` }}
@@ -4788,13 +4974,26 @@ function TaskRow({
       {dragPlacement ? (
         <span
           aria-hidden="true"
+          data-task-drop-indicator
           className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 bg-info ${
             dragPlacement === 'before' ? 'top-0' : 'bottom-0'
           }`}
         />
       ) : null}
       <div className="min-h-0 overflow-hidden">
-      <div className="flex h-11 items-center gap-2 overflow-hidden pl-1 pr-1.5" data-task-row-header>
+      <div
+        className="flex h-11 touch-pan-y items-center gap-2 overflow-hidden pl-1 pr-1.5"
+        data-task-row-header
+        onPointerDown={handleTouchSelectionPointerDown}
+        onPointerMove={handleTouchSelectionPointerMove}
+        onPointerUp={handleTouchSelectionPointerUp}
+        onPointerCancel={handleTouchSelectionPointerCancel}
+        onClickCapture={(event) => {
+          if (Date.now() > suppressClickUntilRef.current) return;
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+      >
         {bulkSelection ? (
           <button
             type="button"
@@ -4805,9 +5004,9 @@ function TaskRow({
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-info transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {bulkSelection.selected ? (
-              <TASK_ICONS.Ready className="h-5 w-5" aria-hidden="true" />
+              <TASK_ICONS.Selected className="h-5 w-5" aria-hidden="true" />
             ) : (
-              <Circle className="h-5 w-5" aria-hidden="true" />
+              <TASK_ICONS.Selection className="h-5 w-5" aria-hidden="true" />
             )}
           </button>
         ) : (
@@ -4888,29 +5087,24 @@ function TaskRow({
           aria-keyshortcuts={bulkSelection
             ? 'Enter'
             : 'Enter'}
+          draggable={draggableTask && !pending}
+          data-task-drag-handle={draggableTask ? 'true' : undefined}
           data-task-title-control
           data-task-id={task.id}
-          className={`flex h-full min-w-0 flex-1 flex-col justify-center overflow-hidden text-left text-[15px] font-normal leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draggableTask ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          onDragStart={handleSummaryDragStart}
+          onDragEnd={() => {
+            onTaskDragEnd();
+            suppressClickUntilRef.current = Date.now() + 250;
+          }}
+          className={`flex h-full min-w-0 flex-1 flex-col justify-center overflow-hidden text-left text-[15px] font-normal leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draggableTask && !pending ? 'cursor-grab active:cursor-grabbing' : ''}`}
         >
           <span className="flex min-w-0 items-center gap-2">
-            {todayMarker && TodayMarkerIcon && todayMarkerPresentation ? (
-              <span
-                className={`inline-flex shrink-0 ${todayMarkerPresentation.colorClass}`}
-                aria-label={`${todayMarkerContext} ${todayMarker[0].toUpperCase()}${todayMarker.slice(1)}`}
-                title={`${todayMarkerContext} ${todayMarker[0].toUpperCase()}${todayMarker.slice(1)}`}
-              >
-                <TodayMarkerIcon
-                  className="h-3.5 w-3.5"
-                  data-task-horizon-symbol={todayMarker}
-                  data-task-horizon-surface="row"
-                  aria-hidden="true"
-                />
-              </span>
-            ) : null}
             <span className="truncate" data-task-row-title>{task.title}</span>
           </span>
           {(
             areaLabel
+            || todayMarker
+            || hasChecklistItems
             || task.actionability !== 'actionable'
             || task.deadline
             || (reminder && (task.start_date || task.today_section))
@@ -4921,11 +5115,26 @@ function TaskRow({
             >
               {areaLabel ? (
                 <span
-                  className="min-w-0 shrink truncate text-info"
+                  className="min-w-0 shrink truncate"
                   title={areaLabel}
                   data-task-metadata-kind="area"
                 >
                   {areaLabel}
+                </span>
+              ) : null}
+              {todayMarker && TodayMarkerIcon && todayMarkerPresentation ? (
+                <span
+                  className={`inline-flex shrink-0 ${todayMarkerPresentation.colorClass}`}
+                  aria-label={`${todayMarkerContext} ${todayMarker[0].toUpperCase()}${todayMarker.slice(1)}`}
+                  title={`${todayMarkerContext} ${todayMarker[0].toUpperCase()}${todayMarker.slice(1)}`}
+                  data-task-metadata-kind="horizon"
+                >
+                  <TodayMarkerIcon
+                    className="h-3.5 w-3.5"
+                    data-task-horizon-symbol={todayMarker}
+                    data-task-horizon-surface="row"
+                    aria-hidden="true"
+                  />
                 </span>
               ) : null}
               {reminder && (task.start_date || task.today_section) ? (
@@ -4936,6 +5145,23 @@ function TaskRow({
                 >
                   <TASK_ICONS.Reminder className="h-3.5 w-3.5" aria-hidden="true" />
                   {formatReminderRowTime(reminder)}
+                </span>
+              ) : null}
+              {task.actionability === 'waiting' ? (
+                <span
+                  className="inline-flex shrink-0 items-center text-admin"
+                  aria-label="Waiting"
+                  data-task-metadata-kind="actionability"
+                >
+                  <TASK_ICONS.Waiting className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+              ) : task.actionability === 'rechecking' ? (
+                <span
+                  className="inline-flex shrink-0 items-center text-admin"
+                  aria-label="Rechecking"
+                  data-task-metadata-kind="actionability"
+                >
+                  <TASK_ICONS.Rechecking className="h-3.5 w-3.5" aria-hidden="true" />
                 </span>
               ) : null}
               {task.deadline ? (
@@ -4963,35 +5189,17 @@ function TaskRow({
                   </span>
                 </span>
               ) : null}
-              {task.actionability === 'waiting' ? (
+              {hasChecklistItems ? (
                 <span
-                  className="inline-flex shrink-0 items-center sm:gap-1"
-                  aria-label="Waiting"
-                  data-task-metadata-kind="actionability"
+                  className="inline-flex shrink-0 items-center"
+                  aria-label="Checklist"
+                  title="Checklist"
+                  data-task-metadata-kind="checklist"
                 >
-                  <TASK_ICONS.Waiting className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span
-                    className="hidden sm:inline"
+                  <TASK_ICONS.TaskChecklist
+                    className="h-3.5 w-3.5"
                     aria-hidden="true"
-                    data-task-actionability-label
-                  >
-                    Waiting
-                  </span>
-                </span>
-              ) : task.actionability === 'rechecking' ? (
-                <span
-                  className="inline-flex shrink-0 items-center sm:gap-1"
-                  aria-label="Rechecking"
-                  data-task-metadata-kind="actionability"
-                >
-                  <TASK_ICONS.Rechecking className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span
-                    className="hidden sm:inline"
-                    aria-hidden="true"
-                    data-task-actionability-label
-                  >
-                    Rechecking
-                  </span>
+                  />
                 </span>
               ) : null}
             </span>
@@ -5219,7 +5427,12 @@ function TaskEditor({
   const [reminderTime, setReminderTime] = useState(reminder?.local_time.slice(0, 5) ?? '');
   const acceptedOrganization = taskOrganizationValue(task);
   const [organization, setOrganization] = useState(acceptedOrganization);
+  const [primaryLinkDisclosed, setPrimaryLinkDisclosed] = useState(
+    () => (task.primary_link?.length ?? 0) > 0,
+  );
+  const [focusPrimaryLink, setFocusPrimaryLink] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const primaryLinkInputRef = useRef<HTMLInputElement>(null);
   const operationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const lastOperationRef = useRef<Promise<void>>(Promise.resolve());
   const pendingTextPatchRef = useRef<EditableTaskPatch>({});
@@ -5252,6 +5465,15 @@ function TaskEditor({
     input.focus({ preventScroll: true });
     input.setSelectionRange(input.value.length, input.value.length);
   }, [task.id]);
+
+  useLayoutEffect(() => {
+    if (!focusPrimaryLink) return;
+    const input = primaryLinkInputRef.current;
+    if (input === null) return;
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(input.value.length, input.value.length);
+    setFocusPrimaryLink(false);
+  }, [focusPrimaryLink, primaryLinkDisclosed]);
 
   const enqueueOperation = useCallback((operation: () => Promise<void>) => {
     const run = operationQueueRef.current.then(operation);
@@ -5442,16 +5664,10 @@ function TaskEditor({
           disabled={false}
         />
       </Suspense>
-      {checklistTaskId !== null ? (
-        <TaskChecklistEditor
-          ownerId={task.owner_id}
-          taskId={checklistTaskId}
-          focusRequestTaskId={task.id}
-        />
-      ) : null}
-      <div>
+      {primaryLinkDisclosed ? (
         <div className="flex gap-2">
           <Input
+            ref={primaryLinkInputRef}
             id={`task-primary-link-${task.id}`}
             type="url"
             value={primaryLink}
@@ -5490,7 +5706,27 @@ function TaskEditor({
             </Button>
           ) : null}
         </div>
-      </div>
+      ) : (
+        <button
+          type="button"
+          aria-label="Add Primary Link"
+          className="inline-flex h-9 w-fit items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => {
+            setPrimaryLinkDisclosed(true);
+            setFocusPrimaryLink(true);
+          }}
+        >
+          <TASK_ICONS.PrimaryLink className="h-4 w-4" aria-hidden="true" />
+          Add Primary Link
+        </button>
+      )}
+      {checklistTaskId !== null ? (
+        <TaskChecklistEditor
+          ownerId={task.owner_id}
+          taskId={checklistTaskId}
+          focusRequestTaskId={task.id}
+        />
+      ) : null}
       <div data-task-editor-temporal-grid className="grid grid-cols-2 gap-3">
         <div className="min-w-0">
           <TaskStartPickerField
@@ -5533,7 +5769,32 @@ function TaskEditor({
           />
         </div>
       </div>
-      <div data-task-editor-identity-grid className="grid grid-cols-2 gap-3">
+      <div
+        data-task-editor-identity-grid
+        className={`grid gap-3 ${hierarchy.areas.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}
+      >
+        {hierarchy.areas.length > 0 ? (
+          <div className="min-w-0">
+            <Select
+              value={organization}
+              onValueChange={(nextOrganization) => {
+                setOrganization(nextOrganization);
+                void persistImmediateTaskPatch(parseTaskOrganization(nextOrganization));
+              }}
+              disabled={hierarchy.loading}
+            >
+              <SelectTrigger id={`task-organization-${task.id}`} aria-label="Area">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent data-task-editor-owned-surface="true">
+                <SelectItem value="none">No Area</SelectItem>
+                {hierarchy.areas.map((area) => (
+                  <SelectItem key={area.id} value={`area:${area.id}`}>{area.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
         <div className="min-w-0">
           <Select
             value={actionability}
@@ -5550,31 +5811,6 @@ function TaskEditor({
               <SelectItem value="actionable">Ready</SelectItem>
               <SelectItem value="rechecking">Rechecking</SelectItem>
               <SelectItem value="waiting">Waiting</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="min-w-0">
-          <Select
-            value={organization}
-            onValueChange={(nextOrganization) => {
-              setOrganization(nextOrganization);
-              void persistImmediateTaskPatch(parseTaskOrganization(nextOrganization));
-            }}
-            disabled={hierarchy.loading}
-          >
-            <SelectTrigger id={`task-organization-${task.id}`} aria-label="Organization">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent data-task-editor-owned-surface="true">
-              <SelectItem value="none">No Area</SelectItem>
-              {hierarchy.areas.length > 0 ? (
-                <SelectGroup>
-                  <SelectLabel>Areas</SelectLabel>
-                  {hierarchy.areas.map((area) => (
-                    <SelectItem key={area.id} value={`area:${area.id}`}>{area.title}</SelectItem>
-                  ))}
-                </SelectGroup>
-              ) : null}
             </SelectContent>
           </Select>
         </div>

@@ -12,6 +12,7 @@ export type GridKey =
   | 'config_categories'
   | 'config_payment_methods'
   | 'config_backups'
+  | 'tasks_areas'
   | 'wardrobe_items'
   | 'garage_vehicles'
   | 'garage_services'
@@ -76,6 +77,11 @@ export const CONFIG_PAYMENT_METHODS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
 export const CONFIG_BACKUPS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
   timestamp: 240,
   notes: 420,
+  [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
+};
+
+export const TASKS_AREAS_GRID_DEFAULT_WIDTHS: ColumnWidthMap = {
+  name: 460,
   [GRID_ACTIONS_COLUMN_ID]: GRID_ACTIONS_COLUMN_WIDTH,
 };
 
@@ -154,6 +160,7 @@ export const GRID_FIXED_COLUMNS: Record<GridKey, string[]> = {
   config_categories: [GRID_ACTIONS_COLUMN_ID],
   config_payment_methods: [GRID_ACTIONS_COLUMN_ID],
   config_backups: [GRID_ACTIONS_COLUMN_ID],
+  tasks_areas: [GRID_ACTIONS_COLUMN_ID],
   wardrobe_items: [GRID_ACTIONS_COLUMN_ID],
   garage_vehicles: [GRID_ACTIONS_COLUMN_ID],
   garage_services: [GRID_ACTIONS_COLUMN_ID],

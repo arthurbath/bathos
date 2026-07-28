@@ -120,6 +120,21 @@ Tasks SHALL make the accepted result of its horizon-cycle command visible immedi
 - **WHEN** planning or other metadata changes for a task that remains in the Anytime destination
 - **THEN** Tasks preserves its manual order key before, during, and after editing rather than ranking it by Start, Today horizon, Someday intent, actionability, or other metadata
 
+### Requirement: Uniform Bulk Horizon Cycle
+Tasks SHALL assign one shared Today horizon target to every task affected by one multi-target horizon command.
+
+#### Scenario: Normalize mixed horizons
+- **WHEN** the horizon command targets tasks whose effective horizon states differ
+- **THEN** Tasks assigns every target to Today Now
+
+#### Scenario: Advance a uniform horizon
+- **WHEN** every target is already in Today Now, Today Next, or Today Later
+- **THEN** Tasks advances every target together from Now to Next, Next to Later, or Later to Now
+
+#### Scenario: Normalize non-cycle planning
+- **WHEN** the horizon command targets only Inbox, unplanned, Someday, or future-start tasks
+- **THEN** Tasks clears incompatible planning and assigns every target to Today Now
+
 ### Requirement: Someday Start Selection
 The Tasks unified Start picker SHALL expose Someday as an explicit planning choice alongside clearing Start.
 
@@ -146,17 +161,49 @@ The system SHALL organize active work through Anytime, Someday, Areas, tasks, an
 - **WHEN** a user opens a task with or without an existing checklist
 - **THEN** the expanded drawer permits adding, viewing, editing, checking, unchecking, deleting, focusing, and keyboard-traversing plain-text checklist items without an explicit Save action
 
+#### Scenario: Present an empty checklist item
+- **WHEN** a checklist item has no text
+- **THEN** its input shows the placeholder `Item`, exposes the complete row and input surface for direct reordering, and remains removable when the task closes
+
+#### Scenario: Split a checklist item with Return
+- **WHEN** a user presses unmodified Return in a checklist-item input outside active composition
+- **THEN** Tasks saves the text before the caret or selection, inserts and focuses one checklist-item input immediately below containing the text after the caret or selection, removes selected text as the line-break replacement, places the caret at the beginning of the new item, and keeps the task editor open
+
+#### Scenario: Traverse checklist items with vertical arrows
+- **WHEN** a user presses Down Arrow or Up Arrow in a checklist-item input that has an adjacent item in that direction
+- **THEN** Tasks focuses the adjacent checklist input and places its caret at the end of that item's value regardless of the original caret position
+
+#### Scenario: Preserve vertical-arrow boundary behavior
+- **WHEN** a user presses Up Arrow in the first checklist item or Down Arrow in the final checklist item
+- **THEN** Tasks does not move focus outside the checklist and leaves the input's native boundary behavior intact
+
+#### Scenario: Join a checklist item backward
+- **WHEN** the caret is at the beginning of a checklist-item input and the user presses Backspace
+- **THEN** Tasks appends the current item's text to the preceding item, removes the current item, and places the caret at the former boundary in the preceding input
+
+#### Scenario: Remove the first empty checklist item
+- **WHEN** the first checklist-item input is empty and the user presses Backspace
+- **THEN** Tasks removes that item because no preceding checklist line exists to receive it
+
+#### Scenario: Join a checklist item forward
+- **WHEN** the caret is at the end of a checklist-item input and the user presses forward Delete
+- **THEN** Tasks appends the following item's text to the current item, removes the following item, and leaves the caret at the former boundary in the current input
+
+#### Scenario: Keep selection local to one checklist input
+- **WHEN** a user presses Command+A or Control+A while editing a checklist item
+- **THEN** the browser selects only the text in that active input
+
 #### Scenario: Open a checklist with the control shortcut
 - **WHEN** a focused or open task receives the checklist keyboard command
-- **THEN** Tasks opens the task if necessary, creates the first checklist row when none exists, and moves editing focus into the first available checklist item
+- **THEN** Tasks opens the task if necessary and focuses the end of the final unchecked checklist item, or creates and focuses one empty checklist row when no unchecked item exists
 
-#### Scenario: Remove an empty checklist row
-- **WHEN** a checklist item's text is already empty and the user presses Backspace again
-- **THEN** Tasks removes that item and moves editing focus to the preceding checklist row when one exists
-
-#### Scenario: Clean empty checklist rows on close
+#### Scenario: Remove empty checklist rows on close
 - **WHEN** a task drawer closes with one or more empty checklist items
 - **THEN** Tasks removes every empty checklist item regardless of completion state
+
+#### Scenario: Present checklist insertion and deletion without motion
+- **WHEN** a checklist item is created or removed
+- **THEN** Tasks updates the checklist without sliding, translating, or otherwise animating the affected rows
 
 #### Scenario: Move a completed checklist item
 - **WHEN** a user checks an incomplete checklist item
@@ -170,13 +217,149 @@ The system SHALL organize active work through Anytime, Someday, Areas, tasks, an
 - **WHEN** a user undoes or redoes a checklist edit, completion, deletion, creation, or reorder
 - **THEN** Tasks restores or reapplies the exact prior checklist content, state, and order as one guarded history action
 
-#### Scenario: Reorder checklist items manually
-- **WHEN** a user drags one checklist item by its handle and drops it at another checklist position
-- **THEN** Tasks updates its manual order and preserves that order across sessions and devices
+#### Scenario: Edit or reorder from the checklist input
+- **WHEN** a user presses and releases a checklist-item input without beginning a drag
+- **THEN** Tasks focuses the input and permits ordinary text editing at the clicked caret position
+
+#### Scenario: Reorder checklist items directly
+- **WHEN** a user drags a persisted or empty checklist item from its row or text-input surface and drops it at another checklist position
+- **THEN** Tasks updates its visible order, persists that order for nonempty items across sessions and devices, and does not require or display a dedicated reorder handle
+
+#### Scenario: Avoid redundant checklist append controls
+- **WHEN** a checklist already contains an item or an empty editing row
+- **THEN** Tasks does not show a separate Add Checklist Item button because Return provides the append interaction
+
+### Requirement: Checklist Multi-Selection
+Tasks SHALL let users temporarily select persisted checklist items within one open task for grouped reordering and deletion without presenting task-style bulk controls, retaining text-entry focus, or applying group completion changes. Every persisted checklist row SHALL distinguish an ordinary click from a native drag so the same row surface can begin item editing, reorder one item, or reorder the selected group without requiring a dedicated handle. While checklist multi-selection is active, every persisted checklist item SHALL replace its completion control with the canonical circular selection control without changing the item's persisted completion state or completed-text treatment.
+
+#### Scenario: Begin additive selection from a focused item
+- **WHEN** keyboard focus is inside one checklist-item input and the user Command-clicks another checklist item
+- **THEN** Tasks selects and visibly highlights both the focused item and the modified-clicked item, relinquishes text-entry focus, and removes the visible text caret
+
+#### Scenario: Extend additive selection
+- **WHEN** one or more checklist items are selected and the user Command-clicks another persisted checklist item
+- **THEN** Tasks toggles that item in the selection while retaining the other selected items and keeping text-entry focus absent
+
+#### Scenario: Select an anchored range
+- **WHEN** a checklist item is focused or is the current selection anchor and the user Shift-clicks another persisted checklist item
+- **THEN** Tasks selects and visibly highlights the contiguous visual range between the anchor and the clicked item, relinquishes text-entry focus, and removes the visible text caret
+
+#### Scenario: Keep text and completion actions item-local
+- **WHEN** checklist items are selected
+- **THEN** Tasks presents no bulk-action bar, has no active text-entry target, and does not apply an edit, completion, or reopening action to the group
+
+#### Scenario: Present checklist selection controls
+- **WHEN** checklist multi-selection is active
+- **THEN** every persisted item shows a blue Lucide `CircleCheck` when selected or a blue Lucide `Circle` when unselected in place of its ordinary completion checkbox
+
+#### Scenario: Toggle selection from a checklist selection control
+- **WHEN** checklist multi-selection is active and the user clicks one checklist item's circular selection control
+- **THEN** Tasks toggles only that item's transient selection state, preserves selection mode while any item remains selected, and does not change the item's completion state
+
+#### Scenario: Preserve completed-item treatment during selection
+- **WHEN** a completed checklist item is selected or unselected while checklist multi-selection remains active
+- **THEN** its text remains struck through and muted so its completion state stays visible independently of selection
+
+#### Scenario: Return to editing with an ordinary input click
+- **WHEN** checklist items are selected and the user single-clicks a selected checklist-item input without moving far enough to begin a native drag
+- **THEN** Tasks clears checklist multi-selection, focuses that input, preserves the clicked caret position, and permits ordinary text editing
+
+#### Scenario: Return to editing from selected row space
+- **WHEN** checklist items are selected and the user single-clicks the non-checkbox surface of a selected checklist row without moving far enough to begin a native drag
+- **THEN** Tasks clears checklist multi-selection and focuses that row's checklist input for editing
+
+#### Scenario: Deselect from elsewhere in the drawer
+- **WHEN** checklist items are selected and the user single-clicks elsewhere in the task drawer
+- **THEN** Tasks clears checklist multi-selection while allowing the clicked control's ordinary action to continue
+
+#### Scenario: Cancel checklist selection with Escape
+- **WHEN** one or more checklist items are selected through Command-click or Shift-click and the user presses unmodified Escape outside active text composition
+- **THEN** Tasks clears checklist selection, consumes the Escape action, keeps the task editor open, leaves keyboard focus absent, and changes no checklist content, completion, or order
+
+#### Scenario: Reorder a selected checklist group by its row
+- **WHEN** the user presses and drags any selected persisted checklist row or its text input far enough to begin a native drag and drops it at another checklist position
+- **THEN** Tasks moves every selected item as one visual-order group, persists the resulting order for nonempty items, and keeps the moved items selected
+
+#### Scenario: Do not convert an input-originated row drag into editing
+- **WHEN** a selected checklist row begins a native drag from its checklist text input
+- **THEN** Tasks preserves checklist selection, relinquishes input focus, removes the visible text caret, and does not restore input focus through the ordinary click path
+
+#### Scenario: Preserve ordinary single-item drag
+- **WHEN** the user drags an unselected checklist item from its row or text-input surface
+- **THEN** Tasks reorders only that item without adding selection styling or entering checklist multi-selection
+
+#### Scenario: Delete a selected checklist group
+- **WHEN** checklist items are selected and the user presses Delete or Backspace outside active text composition
+- **THEN** Tasks removes every selected checklist item, clears checklist multi-selection, and prevents ordinary character or line-join deletion behavior
+
+#### Scenario: Reconcile selection with checklist changes
+- **WHEN** selected checklist items disappear because of deletion, task closure, or a synchronized update
+- **THEN** Tasks removes unavailable item identifiers from the transient selection and clears the anchor when it no longer exists
 
 #### Scenario: Capture new work for triage
 - **WHEN** a user or supported integration creates a task without an explicit planning placement
 - **THEN** the system creates one open present Anytime task with no Start and the Today Next horizon
+
+### Requirement: Checklist Drag Finalization
+Tasks SHALL retain the most recent valid checklist insertion position throughout a native checklist drag and SHALL use that position when the user drops the dragged item or selected group elsewhere inside the BathOS document.
+
+#### Scenario: Drop a single checklist item outside the checklist
+- **WHEN** a user drags one checklist item across a valid checklist insertion position and releases it elsewhere inside BathOS
+- **THEN** Tasks moves the item to the last valid indicated checklist position
+
+#### Scenario: Drop a selected checklist group outside the checklist
+- **WHEN** a user drags multiple selected checklist items across a valid checklist insertion position and releases them elsewhere inside BathOS
+- **THEN** Tasks moves the complete selected group to the last valid indicated checklist position as one reorder and keeps the items selected
+
+#### Scenario: Drop an empty checklist draft outside the checklist
+- **WHEN** a user drags an empty checklist draft across a valid checklist insertion position and releases it elsewhere inside BathOS
+- **THEN** Tasks moves the draft editing row to the last valid indicated checklist position without persisting an empty item
+
+#### Scenario: Preserve local drop ownership
+- **WHEN** a user releases a checklist drag over a checklist-owned drop target
+- **THEN** Tasks applies the reorder exactly once through the checklist-owned drop interaction
+
+#### Scenario: Ignore an outside drop without a valid position
+- **WHEN** a checklist drag has not crossed a valid insertion position and the user releases it outside the checklist
+- **THEN** Tasks leaves the checklist order unchanged
+
+#### Scenario: Cancel a drag outside the browser
+- **WHEN** a native checklist drag ends without a drop inside the BathOS document
+- **THEN** Tasks leaves the checklist order unchanged and clears the transient drag state
+
+### Requirement: Nested Checklist Drag Ownership
+Tasks SHALL treat a checklist-item drag as owned exclusively by the checklist within the open task and SHALL NOT expose task-list placement feedback for that nested drag.
+
+#### Scenario: Drag a checklist item across task rows
+- **WHEN** a user drags a checklist item or selected checklist-item group over other task rows
+- **THEN** Tasks preserves the last valid checklist insertion position without showing a task-list placement bar or registering a task reorder
+
+#### Scenario: Preserve native checklist drop finalization
+- **WHEN** a checklist drag crosses a valid checklist insertion position and is released elsewhere inside BathOS
+- **THEN** Tasks commits the checklist reorder at that retained position without activating the enclosing task drag system
+
+### Requirement: Checklist Horizontal Boundary Traversal
+The system SHALL treat adjacent checklist-item inputs as continuous lines for plain horizontal caret movement and macOS Option-modified horizontal caret movement while preserving native text-input and browser behavior away from eligible item boundaries.
+
+#### Scenario: Move left into the preceding checklist item
+- **WHEN** a checklist-item input has a collapsed caret at the beginning of its value, an adjacent preceding checklist item exists, and a user on a Mac-like platform presses Left Arrow either without a modifier or with Option as the only modifier
+- **THEN** Tasks focuses the preceding checklist input and places the caret at the end of its value
+
+#### Scenario: Move right into the following checklist item
+- **WHEN** a checklist-item input has a collapsed caret at the end of its value, an adjacent following checklist item exists, and a user on a Mac-like platform presses Right Arrow either without a modifier or with Option as the only modifier
+- **THEN** Tasks focuses the following checklist input and places the caret at the beginning of its value
+
+#### Scenario: Preserve native Option word navigation inside an item
+- **WHEN** a user on a Mac-like platform presses Option+Left Arrow or Option+Right Arrow while the collapsed caret is away from the applicable string boundary
+- **THEN** Tasks leaves the event to the checklist input's native word-navigation behavior
+
+#### Scenario: Preserve horizontal input behavior outside eligible gestures
+- **WHEN** a user presses Left Arrow or Right Arrow with a non-collapsed selection, Command, Control, Shift, a modifier combination, non-macOS Alt, or a caret away from the applicable string boundary
+- **THEN** Tasks leaves the event to the native text-input or browser behavior
+
+#### Scenario: Preserve the outer checklist boundaries
+- **WHEN** the caret is at the beginning of the first checklist item and the user presses eligible Left Arrow, or at the end of the final checklist item and the user presses eligible Right Arrow
+- **THEN** Tasks keeps focus in the current checklist input and leaves the event to native boundary behavior
 
 ### Requirement: Readable Markdown Task Notes
 The system SHALL retain task notes as plain text while presenting one complete, directly editable, live-styled Markdown source surface in an expanded to-do without separate editing and preview modes.
@@ -369,8 +552,39 @@ The system SHALL represent workflow meaning through explicit structured concepts
 - **WHEN** the interface displays a task whose origin has a configured indicator
 - **THEN** the interface derives that presentation from origin metadata rather than parsing the task Summary
 
+### Requirement: Touch Task Selection
+Tasks SHALL let a touch user enter task selection by deliberately swiping left on an eligible task summary, SHALL select the swiped task as part of that transition, and SHALL preserve browser-owned scrolling and navigation gestures that do not qualify.
+
+#### Scenario: Enter selection with a touch swipe
+- **WHEN** selection mode is inactive and an actual touch pointer completes a leftward task-summary swipe of at least 48 CSS pixels whose horizontal displacement is at least 1.25 times its vertical displacement
+- **THEN** Tasks safely closes any open editor, clears lightweight focus, enters selection mode, selects the swiped task, establishes it as the range anchor, and prevents the completed swipe from also activating a row control
+
+#### Scenario: Preserve vertical touch scrolling
+- **WHEN** a touch movement on a task summary is predominantly vertical or does not reach the qualifying leftward distance
+- **THEN** Tasks does not change selection and leaves native vertical page scrolling available
+
+#### Scenario: Preserve browser edge gestures
+- **WHEN** a touch begins within 24 CSS pixels of either viewport edge
+- **THEN** Tasks does not interpret that contact as task selection
+
+#### Scenario: Ignore non-touch pointers
+- **WHEN** a mouse, trackpad, or pen performs equivalent pointer movement across a task summary
+- **THEN** Tasks does not enter selection through the swipe gesture
+
+#### Scenario: Cancel interrupted touch selection
+- **WHEN** the browser cancels the active touch pointer before a qualifying release
+- **THEN** Tasks clears transient gesture state without changing task selection
+
+#### Scenario: Keep Done touch-selectable but fixed
+- **WHEN** a user swipes a task in Done
+- **THEN** Tasks selects that task through the same touch gesture while continuing to prohibit Done-list reordering
+
+#### Scenario: Reorder a touch-selected group natively
+- **WHEN** the active browser begins a native drag from the summary of one selected task after touch selection
+- **THEN** Tasks moves the complete selected group through its existing native grouped drag transaction without introducing custom pointer dragging or custom scrolling
+
 ### Requirement: Bulk Task Planning
-The system SHALL provide an accessible task-row selection mode for visible to-dos, SHALL treat selection as a temporary context bounded by to-do rows and selection-owned surfaces, SHALL expose its controls as a fixed bottom overlay that does not move list content, and SHALL apply only lifecycle-appropriate planning or clipboard actions to selected records.
+The system SHALL provide an accessible task-row selection mode for visible tasks, SHALL treat selection as a temporary context bounded by task rows and selection-owned surfaces, SHALL expose its controls as a fixed bottom overlay that does not move list content, and SHALL apply only lifecycle-appropriate planning or clipboard actions to selected records.
 
 #### Scenario: Enter selection with the platform modifier
 - **WHEN** a user Command-clicks a visible task on Mac or Control-clicks a visible task on Windows while selection is inactive
@@ -385,33 +599,43 @@ The system SHALL provide an accessible task-row selection mode for visible to-do
 - **THEN** the interface replaces the previous range with the new contiguous range from the original anchor
 
 #### Scenario: Toggle selection after entry
-- **WHEN** selection is active and a user ordinarily clicks, Command-clicks on Mac, or Control-clicks on Windows on a visible task
-- **THEN** the interface toggles that task's selected state without opening its editor
+- **WHEN** selection is active and a user ordinarily activates, Command-clicks on Mac, Control-clicks on Windows, or Shift-clicks a visible task summary
+- **THEN** the interface updates that task's direct, additive, or anchored-range selection without opening its editor
+
+#### Scenario: Toggle selection through its dedicated control
+- **WHEN** selection is active and a user activates a task's circular selection control
+- **THEN** the interface toggles only that task's selected state without opening its editor
+
+#### Scenario: Deselect the final task from its summary
+- **WHEN** exactly one task remains selected and the user ordinarily activates that task's summary
+- **THEN** Tasks deselects the task, exits selection mode, removes the selection toolbar, and does not open the task editor
 
 #### Scenario: Preserve ordinary task expansion
-- **WHEN** selection is inactive and a user ordinarily clicks a task
+- **WHEN** selection is inactive and a user ordinarily clicks a task without performing the touch-selection gesture
 - **THEN** the interface opens or closes that task's editor exactly as before
 
 #### Scenario: Operate selection accessibly
-- **WHEN** one or more visible to-dos are selected in Today, Upcoming, Anytime, Someday, or Done
-- **THEN** the fixed bottom selection overlay reports the selected count, exposes Select All and Select None, communicates each selected state to keyboard and assistive-technology users without shifting list content, and withholds planning actions that are illegal for terminal Done records
+- **WHEN** selection mode is active in Today, Upcoming, Anytime, Someday, or Done
+- **THEN** the fixed bottom selection overlay reports the selected count, exposes Select All and Cancel, communicates each selected state to keyboard and assistive-technology users without shifting list content, disables selection-dependent actions at zero selected tasks, and withholds planning actions that are illegal for terminal Done records
+
 #### Scenario: Preserve native text selection
 - **WHEN** a text input, textarea, or contenteditable region owns Command+A on Mac or Control+A on Windows
 - **THEN** the interface leaves the gesture available to that editable control and does not change task selection
-#### Scenario: Dismiss selection outside a to-do
-- **WHEN** bulk selection is active and the user presses the pointer outside every to-do row and outside the controls that operate the active selection
+
+#### Scenario: Dismiss selection outside a task
+- **WHEN** bulk selection is active and the user presses the pointer outside every task row and outside the controls that operate the active selection
 - **THEN** the interface clears the selection and range anchor and returns to ordinary task interaction
 
 #### Scenario: Retain selection for owned interactions
-- **WHEN** bulk selection is active and the user interacts with a title or other control inside a to-do row, the bulk toolbar, or its planning, calendar, organization, or reminder surface
-- **THEN** the interface leaves selection active until the owned interaction applies its selection or planning behavior
+- **WHEN** bulk selection is active and the user interacts with a task summary, circular task-selection control, the bulk toolbar, or its planning, calendar, organization, or reminder surface
+- **THEN** the interface leaves selection active until the owned interaction changes the selected membership or explicitly exits selection
 
 #### Scenario: Preserve access to the final task
 - **WHEN** the fixed selection overlay is visible above the list
 - **THEN** the list retains enough bottom scroll space for its final task and controls to move fully above the overlay
 
 #### Scenario: Exit selection directly
-- **WHEN** a user presses Escape, activates Done, changes views, or clicks outside a to-do and outside a selection-owned surface
+- **WHEN** a user presses Escape, activates Cancel, activates Done, changes views, or clicks outside a task and outside a selection-owned surface
 - **THEN** the client clears selection and its stable range anchor and returns to ordinary editing
 
 #### Scenario: Plan selected tasks
@@ -419,7 +643,7 @@ The system SHALL provide an accessible task-row selection mode for visible to-do
 - **THEN** the system updates every selected task's destination, start date, selected day horizon, dependent reminder, mutation metadata, revision, and relevant order in one local transaction while preserving selected order
 
 #### Scenario: Apply a focused bulk value
-- **WHEN** a selected-task keyboard command requires a start date, due date, organization, or reminder time
+- **WHEN** a selected-task keyboard command requires a start date, deadline, organization, or reminder time
 - **THEN** the interface opens a centered selection-owned surface, moves focus to its primary date or selection control, and applies the chosen value to every eligible selected task
 
 #### Scenario: Clear bulk horizons while scheduling
@@ -439,8 +663,35 @@ The system SHALL provide an accessible task-row selection mode for visible to-do
 - **THEN** the client clears selection and its range anchor and returns to ordinary editing without adding bulk completion, deletion, or hierarchy mutation
 
 #### Scenario: Select terminal Done tasks for nondestructive actions
-- **WHEN** the user selects one or more to-dos in Done
+- **WHEN** the user selects one or more tasks in Done
 - **THEN** Tasks permits Copy and Duplicate, rejects Cut and open-task planning, and does not select deleted hierarchy records
+
+### Requirement: Explicit Task Selection Entry
+Tasks SHALL expose a point-and-click entry into task selection mode on every selection-capable task list, SHALL permit that explicit entry to begin with zero selected tasks, and SHALL keep every selection-dependent action unavailable until its minimum selection requirement is met.
+
+#### Scenario: Enter empty selection mode from a list
+- **WHEN** a user activates Select Tasks from Today, Upcoming, Anytime, Someday, or Done while selection mode is inactive
+- **THEN** Tasks closes any open task editor, clears lightweight task focus and the range anchor, enters selection mode with zero selected tasks, shows circular selection controls, and presents the fixed toolbar reporting `0 Tasks Selected`
+
+#### Scenario: Omit selection entry from non-list surfaces
+- **WHEN** a user views Config, Templates, Search, or an Area-detail surface
+- **THEN** Tasks does not present the Select Tasks action
+
+#### Scenario: Keep zero-selection actions safe
+- **WHEN** selection mode is active with zero selected tasks
+- **THEN** Cancel and Plan Selected are disabled, selection-dependent dialogs cannot open, Done remains available to exit selection mode, and Select All is enabled only when at least one selectable task is visible
+
+#### Scenario: Select one task after empty entry
+- **WHEN** the user activates one task's summary or circular selection control after entering empty selection mode
+- **THEN** Tasks selects that task, establishes the selection anchor, keeps selection mode active, and enables actions that require at least one eligible selected task
+
+#### Scenario: Exit after returning to zero
+- **WHEN** the user deselects the final selected task after the selection has contained one or more tasks
+- **THEN** Tasks automatically exits selection mode and removes the fixed selection toolbar
+
+#### Scenario: Select all from an empty one-task list
+- **WHEN** selection mode is active with zero selected tasks, exactly one selectable task is visible, and the user activates Select All
+- **THEN** Tasks selects that task within selection mode rather than converting it to lightweight whole-task focus
 
 ### Requirement: Native Templates
 The system SHALL support reusable, revisioned tasks template definitions that are separate from active task records and contain no heading layer.
@@ -474,15 +725,19 @@ The system SHALL support reusable, revisioned tasks template definitions that ar
 - **THEN** the client assigns the already authenticated owner to the parsed result without requiring the server to echo an owner identifier
 
 ### Requirement: Compact Task Date Controls
-The Tasks expanded task editor SHALL present Start and Deadline as a matched two-column pair and Actionability and Organization as a second matched two-column pair at every supported viewport width while retaining each field's independent autosave semantics.
+The Tasks expanded task editor SHALL present Start and Deadline as a matched two-column pair and SHALL present Actionability beside Area only when at least one Area exists, while retaining each field's independent autosave semantics.
 
 #### Scenario: Present Start and Deadline together
 - **WHEN** an expanded task editor renders at a supported desktop or mobile viewport width
 - **THEN** Start and Deadline appear on the same row with equal-width triggers, the same ordinary task-input text size, and the same muted right-aligned calendar symbol
 
-#### Scenario: Present Actionability and Organization together
-- **WHEN** an expanded task editor renders at a supported desktop or mobile viewport width
-- **THEN** Actionability and Organization appear on the same row with equal-width triggers and one-line values that truncate rather than expanding the grid
+#### Scenario: Present Actionability and Area together
+- **WHEN** an expanded task editor renders at a supported desktop or mobile viewport width for an owner with at least one Area
+- **THEN** Actionability and Area appear on the same row with equal-width triggers and one-line values that truncate rather than expanding the grid
+
+#### Scenario: Omit Area when no Areas exist
+- **WHEN** an expanded task editor renders for an owner with no defined Areas
+- **THEN** the Area selector is absent and Actionability occupies the full row width
 
 #### Scenario: Clear Deadline inside its picker
 - **WHEN** a task has a Deadline and the user activates Clear inside the Deadline picker
@@ -922,6 +1177,14 @@ The system SHALL preserve intentional manual ordering across direct drag, keyboa
 #### Scenario: Reorder active work by drag
 - **WHEN** a user drags an active task before or after another task in a supported ordered scope
 - **THEN** the system saves the new fractional order and displays the committed placement without opening the dragged task's editor
+
+#### Scenario: Limit task drag initiation to the summary row
+- **WHEN** a task supports pointer reordering
+- **THEN** only its summary row is a task-level drag source, and no pointer drag beginning in its expanded metadata editor initiates task reordering
+
+#### Scenario: Collapse an open task at drag start
+- **WHEN** a user begins dragging an open task from its summary row
+- **THEN** Tasks begins collapsing the metadata editor, completes the ordinary autosave-aware close path, and continues the task reorder with the collapsed row
 
 #### Scenario: Move into another visible Today horizon
 - **WHEN** a user drops a Today to-do before or after a target to-do in another currently visible Inbox, Now, Next, or Later section
@@ -1872,9 +2135,9 @@ The Tasks expanded editor SHALL reflect accepted changes to its current task whi
 - **WHEN** an editable text control owns Command+X, Command+C, or Command+V on Mac, or Control+X, Control+C, or Control+V on Windows
 - **THEN** Tasks preserves native text Cut, Copy, or Paste and does not invoke the task-object clipboard
 
-#### Scenario: Open Deadline, actionability, or organization
+#### Scenario: Open Deadline and cycle task metadata
 - **WHEN** the user invokes Control+D, Control+F, or Control+V on Mac, or the corresponding Alt+Shift chord on Windows, with an eligible task target
-- **THEN** Tasks respectively opens Deadline, cycles actionability, or opens organization without changing unrelated task fields
+- **THEN** Tasks respectively opens Deadline, cycles actionability, or cycles Area without changing unrelated task fields
 
 #### Scenario: Invoke the checklist command before checklist editing exists
 - **WHEN** the user invokes Control+C on Mac or Alt+Shift+C on Windows before the expanded task checklist editor exists
@@ -1944,11 +2207,11 @@ The Tasks module SHALL offer exactly four predefined actionability quick filters
 - **THEN** Tasks safely treats it as All Tasks
 
 ### Requirement: Global Task Quick Find
-The system SHALL provide Quick Find as the primary Tasks search entry point across to-dos, and areas and SHALL retain a live full task-results route for exhaustive continuation.
+The system SHALL provide typing-only Quick Find as the primary Tasks search entry point across tasks and Areas, SHALL omit visible Quick Find trigger controls from Tasks routes, and SHALL retain a live full task-results route for exhaustive continuation.
 
-#### Scenario: Open Quick Find from persistent search
-- **WHEN** a user activates the persistent magnifying-glass search action on any Tasks route
-- **THEN** Tasks opens Quick Find rather than an advanced filter dialog
+#### Scenario: Omit visible Quick Find controls
+- **WHEN** a user visits a Tasks list, Config, or another Tasks route
+- **THEN** the persistent header exposes no magnifying-glass or other clickable Quick Find trigger
 
 #### Scenario: Open Quick Find by typing
 - **WHEN** a user presses one nonrepeated printable character from an eligible non-editable Tasks surface without Command, Control, or Alt held
@@ -1968,11 +2231,11 @@ The system SHALL provide Quick Find as the primary Tasks search entry point acro
 
 #### Scenario: Continue a search
 - **WHEN** the user activates Continue Search
-- **THEN** the module navigates through a real in-app link to `/tasks/search` with the current query and lists every matching to-do from every planning and lifecycle view
+- **THEN** the module navigates through a real in-app link to `/tasks/search` with the current query and lists every matching task from every planning and lifecycle view
 
 #### Scenario: Refine full results
 - **WHEN** the user edits the query on the search-results page
-- **THEN** the URL query and full to-do results update with each keystroke
+- **THEN** the URL query and full task results update with each keystroke
 
 ### Requirement: Task Duplication
 The system SHALL duplicate present or Done to-dos from an open task or multi-selection by reconstructing supported user-authored state with fresh identity and open lifecycle.
@@ -1993,15 +2256,23 @@ The system SHALL duplicate present or Done to-dos from an open task or multi-sel
 - **THEN** the new task is open and present while the source remains unchanged in Done
 
 ### Requirement: Task Row Temporal Metadata
-The system SHALL present Deadline metadata in task rows with the semantic Lucide FlagTriangleRight icon, numeric time-direction copy, and destructive emphasis for deadlines due today or earlier, and SHALL omit Start metadata from collapsed task summaries.
+The system SHALL present Deadline metadata in task rows with the semantic Lucide FlagTriangleRight icon, numeric time-direction copy, and destructive emphasis for deadlines due today or earlier, SHALL omit Start-date copy from collapsed task summaries, and SHALL present a Today horizon symbol only in Anytime secondary metadata.
 
-#### Scenario: Omit Start from collapsed summaries
-- **WHEN** a collapsed task has a Start date or Today horizon in any Tasks list
-- **THEN** the task summary presents no Start date, Start-relative copy, Today horizon copy, or Lucide Play icon
+#### Scenario: Omit Start dates from collapsed summaries
+- **WHEN** a collapsed task has a Start date in any Tasks list
+- **THEN** the task summary presents no Start date, Start-relative copy, or Lucide Play icon
 
-#### Scenario: Let list structure communicate Start
-- **WHEN** Upcoming groups a task by its Start date or Today groups it by horizon
-- **THEN** the list bucket or section communicates that planning context without repeating it in the task's secondary metadata line
+#### Scenario: Present an Anytime horizon in secondary metadata
+- **WHEN** an Anytime task belongs to Inbox, Now, Next, or Later
+- **THEN** its canonical secondary metadata line presents the horizon's semantic icon and color after Area without repeating the icon in the Summary line
+
+#### Scenario: Let other list structure communicate horizons
+- **WHEN** Today groups a task by horizon or another list presents the same task
+- **THEN** the row omits the secondary horizon marker because that marker is exclusive to Anytime
+
+#### Scenario: Let list structure communicate future Start
+- **WHEN** Upcoming groups a task by its Start date
+- **THEN** the list bucket communicates that planning context without repeating it in the task's secondary metadata line
 
 #### Scenario: Use a numeral for a one-day deadline offset
 - **WHEN** a task row presents a Deadline one day before the owner-local planning date
@@ -2131,16 +2402,16 @@ The system SHALL keep infrequent Tasks settings, capability state, diagnostics, 
 ### Requirement: Concise Task View Presentation
 The Tasks module SHALL keep Today, Upcoming, Anytime, Someday, Done, and Area views task-focused and compact while presenting full metadata only when it is needed.
 
-#### Scenario: Mark a resolved day horizon
-- **WHEN** an active Anytime or deferred Upcoming row has an Inbox, Now, Next, or Later horizon
-- **THEN** the row displays compact Lucide iconography with a nonempty accessible name identifying that horizon without repeating a verbose sentence
+#### Scenario: Mark an Anytime day horizon
+- **WHEN** an active Anytime row has an Inbox, Now, Next, or Later horizon
+- **THEN** the secondary metadata line displays compact Lucide iconography with a nonempty accessible name identifying that horizon without repeating a verbose sentence
 
 #### Scenario: Omit an unavailable day-horizon marker
-- **WHEN** an undated Anytime row has a null day horizon
-- **THEN** the row does not reserve empty marker space or show a decorative icon
+- **WHEN** an Anytime row has a null day horizon or the user is viewing another list
+- **THEN** the row does not reserve empty marker space or show a decorative horizon icon
 
 #### Scenario: Summarize nearby calendar dates relatively
-- **WHEN** a task row displays a Start or Deadline that differs from the owner-local planning date by no more than 10 days
+- **WHEN** a task row displays a Deadline that differs from the owner-local planning date by no more than 10 days
 - **THEN** the row uses Today, Tomorrow, `1 day ago`, N days ago, or N days left as appropriate
 
 #### Scenario: Summarize a reminder by time
@@ -2156,12 +2427,12 @@ The Tasks module SHALL keep Today, Upcoming, Anytime, Someday, Done, and Area vi
 - **THEN** the control retains its ordinary input background while preserving its focus, keyboard, and popover behavior
 
 #### Scenario: Summarize distant calendar dates compactly
-- **WHEN** a displayed Start or Deadline is more than 10 days before or after the owner-local planning date
+- **WHEN** a displayed Deadline is more than 10 days before or after the owner-local planning date
 - **THEN** the row uses a short month and numeric day such as Aug 27
 
 #### Scenario: Arrange the open editor compactly
 - **WHEN** a task editor is open
-- **THEN** the card presents its summary row followed by Summary, Notes, Primary Link, Start, Deadline, Actionability, and Organization controls in DOM, visual, and keyboard order, with each responsive pair preserving that sequence
+- **THEN** the card presents its summary row followed by Summary, Notes, Primary Link disclosure or input, Checklist disclosure or items, Start, Deadline, Area when available, and Actionability in DOM, visual, and keyboard order
 
 #### Scenario: Identify drawer fields without visible labels
 - **WHEN** the expanded metadata drawer presents its editable controls
@@ -2172,12 +2443,20 @@ The Tasks module SHALL keep Today, Upcoming, Anytime, Someday, Done, and Area vi
 - **THEN** the form has no redundant top rule or checkbox-column indentation, uses only a small top gap, follows the card's ordinary responsive horizontal padding, and lets its controls fill the resulting content width
 
 #### Scenario: Use shared BathOS form controls
-- **WHEN** the expanded editor presents Notes, Actionability, or Organization
+- **WHEN** the expanded editor presents Notes, Area, or Actionability
 - **THEN** Notes matches the standard Input and date-control border and focus treatment while both dropdowns use the shared BathOS Select trigger, popover, selection, and keyboard conventions
 
-#### Scenario: Present the Primary Link as a URL control
-- **WHEN** the expanded editor presents Primary Link
-- **THEN** it uses a standard full-size URL input without a dedicated one-click clear button, hides the adjacent activation control while the input is empty, reveals that control as soon as any character is present, and enables activation only for a resolvable supported destination
+#### Scenario: Disclose an absent Primary Link
+- **WHEN** an expanded task has no Primary Link
+- **THEN** the editor presents an Add Primary Link action with the canonical Primary Link icon instead of an empty URL input
+
+#### Scenario: Begin editing an absent Primary Link
+- **WHEN** the user activates Add Primary Link
+- **THEN** the editor reveals the standard full-size URL input above Checklist and places the text cursor in that input
+
+#### Scenario: Present an existing Primary Link as a URL control
+- **WHEN** the expanded task has a Primary Link or the user has disclosed its input
+- **THEN** the editor uses a standard full-size URL input without a dedicated one-click clear button, hides the adjacent activation control while the input is empty, reveals that control as soon as any character is present, and enables activation only for a resolvable supported destination
 
 #### Scenario: Browse Done without archive ceremony
 - **WHEN** a user opens Done
@@ -2214,10 +2493,10 @@ The Tasks module SHALL render ordinary task rows directly in Anytime, Someday, a
 - **THEN** the route retains its named view landmark and the task rows remain inside an accessible task-list region
 
 ### Requirement: Consistent Tasks list density
-The interface SHALL present Tasks list and grouping headings without item-count adornments, SHALL keep every collapsed task at a dense uniform height, and SHALL present optional task metadata in the stable order Area, Reminder, Deadline, and Actionability as flat inline content without resting card or chip decoration or bold typography.
+The interface SHALL present Tasks list and grouping headings without item-count adornments, SHALL keep every collapsed task at a dense uniform height, and SHALL present optional task metadata in the stable order Area, Anytime horizon, Reminder, Actionability, Deadline, and Checklist as flat inline content without resting card or chip decoration or bold typography.
 
 #### Scenario: Keep closed rows uniform
-- **WHEN** a list contains collapsed tasks with different combinations of hierarchy, actionability, deadline, reminder, or other secondary details
+- **WHEN** a list contains collapsed tasks with different combinations of hierarchy, checklist content, actionability, deadline, reminder, or other secondary details
 - **THEN** every collapsed task row occupies the same 44-pixel height
 
 #### Scenario: Keep secondary details compact
@@ -2228,9 +2507,25 @@ The interface SHALL present Tasks list and grouping headings without item-count 
 - **WHEN** any canonical secondary metadata item is unavailable or not applicable to a task
 - **THEN** the item is absent without a placeholder and the remaining items preserve their relative canonical order
 
-#### Scenario: Compress actionability on mobile
-- **WHEN** a mobile task row presents Waiting or Rechecking actionability
-- **THEN** the flat metadata line presents that state's established symbol without its written label while preserving the complete actionability name for assistive technology
+#### Scenario: Present Area quietly
+- **WHEN** a task is assigned to an Area
+- **THEN** its Area name is first in the metadata line and uses the ordinary secondary gray text color rather than informational blue
+
+#### Scenario: Place actionability between Reminder and Deadline
+- **WHEN** a task has Reminder, non-Ready actionability, and Deadline metadata
+- **THEN** the metadata line presents Actionability immediately after Reminder and immediately before Deadline
+
+#### Scenario: Present checklist presence
+- **WHEN** a task contains at least one checklist item
+- **THEN** its metadata line presents the established Task checklist icon after Deadline without a count or written label
+
+#### Scenario: Omit an empty checklist indicator
+- **WHEN** a task has no checklist items
+- **THEN** its metadata line does not present the Task checklist icon
+
+#### Scenario: Present non-ready actionability as an icon
+- **WHEN** a task is Waiting or Rechecking at any viewport width
+- **THEN** the flat metadata line presents only that state's established symbol in semantic purple while preserving the complete actionability name for assistive technology
 
 #### Scenario: Preserve actionable silence
 - **WHEN** a task is Ready
@@ -2240,9 +2535,9 @@ The interface SHALL present Tasks list and grouping headings without item-count 
 - **WHEN** a mobile task row presents a Deadline
 - **THEN** the flat metadata line presents the Deadline symbol, uses `Today` for a zero owner-planning calendar-day offset, and otherwise presents the signed offset followed by the correctly singular or plural `day` label, including `1 day`, `-1 day`, `4 days`, and `-4 days`
 
-#### Scenario: Preserve complete desktop metadata
+#### Scenario: Preserve desktop deadline metadata
 - **WHEN** the task row renders at or above the standard small breakpoint
-- **THEN** Waiting, Rechecking, and Deadline metadata retain their complete established labels and relative-date phrasing while remaining visually flat
+- **THEN** Deadline metadata retains its complete relative-date phrasing while remaining visually flat
 
 #### Scenario: Use quiet task summaries
 - **WHEN** an active, Done, or Trash task row renders its Summary
@@ -2420,7 +2715,7 @@ The system SHALL support durable, versioned task-object Copy, Cut, and Paste thr
 - **THEN** Tasks applies the same task-object behavior as the documented keyboard command
 
 ### Requirement: Area-Aware Task Planning
-The Tasks module SHALL use name-only Areas to organize ongoing responsibilities through direct optional task assignment and SHALL keep Area organization separate from temporal planning.
+The Tasks module SHALL use name-only Areas to organize ongoing responsibilities through direct optional task assignment, SHALL keep Area organization separate from temporal planning, and SHALL present Area choices without obsolete Project-era grouping.
 
 #### Scenario: Keep Areas name-only
 - **WHEN** a user creates or edits an Area
@@ -2446,13 +2741,36 @@ The Tasks module SHALL use name-only Areas to organize ongoing responsibilities 
 - **WHEN** a user activates the floating New Task action in Anytime
 - **THEN** Tasks opens one unassigned Anytime task at the top of the unlabelled region
 
+#### Scenario: Present Area choices directly
+- **WHEN** the expanded task editor presents an Area selector
+- **THEN** its choices are No Area followed by the owner's ordered Areas without an Areas section heading
+
 #### Scenario: Manage Areas in Config
 - **WHEN** a user opens Tasks Config
-- **THEN** one Areas section allows the user to add, rename, reorder, or recoverably delete Areas
+- **THEN** one Areas card DataGrid allows the user to add Areas, edit names in its single Name column, and use each row's ellipsis menu to move or recoverably delete the Area when those actions are eligible
 
 #### Scenario: Return from an Area detail
 - **WHEN** an Area detail presents a return breadcrumb
 - **THEN** the breadcrumb returns to Config and Area renaming remains available only in Config
+
+### Requirement: Cyclic Task Area Command
+BathOS Tasks SHALL let the platform-specific Control+V task command cycle Area assignment for one or more eligible task targets without opening an Area selector.
+
+#### Scenario: Cycle one task through Areas
+- **WHEN** Control+V on Mac or Alt+Shift+V on Windows targets one eligible task
+- **THEN** Tasks advances the task through No Area and each owner Area in configured order, wraps after the final Area, and preserves unrelated metadata
+
+#### Scenario: Normalize a mixed bulk selection
+- **WHEN** the Area command targets multiple tasks whose Area values differ
+- **THEN** Tasks first assigns every target to No Area
+
+#### Scenario: Advance a unified bulk selection
+- **WHEN** the Area command targets multiple tasks that all share No Area or the same Area
+- **THEN** Tasks advances every target together to the next value in the ordered Area cycle
+
+#### Scenario: Cycle with no defined Areas
+- **WHEN** the Area command targets tasks while the owner has no defined Areas
+- **THEN** Tasks performs no mutation because No Area is the only available value
 
 ### Requirement: Optional Automatic Planning Order
 The Tasks module SHALL provide one synchronized, owner-scoped preference that optionally applies deterministic automatic ordering to Anytime and Someday while preserving manual order among exact automatic-sort peers.
@@ -2557,7 +2875,7 @@ The Tasks module SHALL permit manual task ordering inside each visible Upcoming 
 - **THEN** Tasks reschedules the reminder against the task's newly assigned Start
 
 ### Requirement: Bulk Task Drag Group
-On Today, Upcoming, Anytime, and Someday, the system SHALL allow a pointer drag that begins on a selected task to move the complete current task selection. The system SHALL derive group order from the tasks' current visual order rather than selection order.
+On Today, Upcoming, Anytime, and Someday, the system SHALL allow a pointer drag that begins on a selected task to move the complete current task selection. The system SHALL derive group order from the tasks' current visual order rather than selection order and SHALL close a different open task through the safe autosave boundary when dragging begins.
 
 #### Scenario: Non-contiguous selection moves in visual order
 - **WHEN** the user selects non-contiguous tasks and begins dragging any selected task
@@ -2567,9 +2885,28 @@ On Today, Upcoming, Anytime, and Someday, the system SHALL allow a pointer drag 
 - **WHEN** the user begins dragging a task that is not part of the current multi-selection
 - **THEN** the system treats only that task as the drag subject
 
+#### Scenario: Close another open task when dragging begins
+- **WHEN** one task is open and the user begins dragging a different task on Today, Upcoming, Anytime, or Someday
+- **THEN** Tasks safely flushes pending edits, closes the open task without redirecting focus to it, and continues the native drag with the reclaimed list space
+
+#### Scenario: Preserve an editor when safe close fails
+- **WHEN** pending edits for the open task cannot be flushed after a drag begins on another task
+- **THEN** Tasks preserves the open editor and its unsaved state rather than discarding work
+
 #### Scenario: Scope is limited to planning lists
 - **WHEN** the user visits a Tasks surface other than Today, Upcoming, Anytime, or Someday
 - **THEN** the system does not offer bulk task drag reordering on that surface
+
+### Requirement: Task Drag Preview
+Tasks SHALL keep task-list placement feedback anchored to the list and SHALL NOT include a task drop-position indicator in the native drag preview that follows the pointer.
+
+#### Scenario: Drag a task while a placement marker is available
+- **WHEN** a user begins dragging a task whose list can render a blue drop-position indicator
+- **THEN** the native drag preview contains the task's summary content without the blue indicator while the list remains free to show the indicator at the current legal drop position
+
+#### Scenario: Preserve native drag fallback
+- **WHEN** the active browser does not expose a programmable native drag-image API
+- **THEN** Tasks continues the native task drag without blocking reordering or changing persisted task data
 
 ### Requirement: Bulk Visible-Bucket Projection
 The system SHALL interpret a bulk drop as one desired visible boundary after the selected tasks are removed. A drop into a different visible Today horizon, Upcoming date section, or Anytime or Someday Area region SHALL apply the metadata required for every selected task to belong to that visible bucket.
@@ -2697,6 +3034,14 @@ The Tasks module SHALL represent no task target, one whole-task-focused closed t
 - **WHEN** the user repeats the platform-modifier click on the only explicitly selected task
 - **THEN** Tasks clears selection mode and the range anchor without opening the task
 
+#### Scenario: Toggle one task from its selection control
+- **WHEN** explicit selection mode is active and the user ordinarily clicks a task's circular selection control
+- **THEN** Tasks toggles that task's selected state and preserves selection mode whenever at least one task remains selected
+
+#### Scenario: Open one task from explicit selection
+- **WHEN** explicit selection mode is active and the user ordinarily clicks a task's activation surface
+- **THEN** Tasks clears the explicit selection and range anchor, closes the bulk toolbar, opens the clicked task, and focuses its Summary without reopening any formerly selected task
+
 #### Scenario: Begin selection from keyboard focus
 - **WHEN** one closed task has lightweight whole-task keyboard focus and the user modifier-clicks or Shift-clicks a task activation surface
 - **THEN** Tasks enters explicit selection mode with the keyboard-focused task as the selected anchor; selects the clicked task or anchored range as applicable; clears lightweight whole-task focus; and shows the fixed bulk toolbar
@@ -2785,15 +3130,53 @@ The Tasks module SHALL represent no task target, one whole-task-focused closed t
 
 #### Scenario: Keep the focus treatment consistent across navigation methods
 - **WHEN** whole-task focus is established or moved by Space, Shift+Space, ArrowUp, or ArrowDown
-- **THEN** the focused task uses the same thick white inset outline without an additional browser-native focus color
+- **THEN** the focused task uses the shared info-blue background highlight without an additional browser-native focus color
 
 #### Scenario: Present granular row focus without whole-task focus
 - **WHEN** native Tab traversal focuses a closed task row without promoting it into whole-task focus
-- **THEN** the row exposes a visible white keyboard focus outline while task commands do not retain a stale whole-task target after granular traversal continues
+- **THEN** the row exposes the shared info-blue keyboard focus background while task commands do not retain a stale whole-task target after granular traversal continues
 
 #### Scenario: Describe the toggle command
 - **WHEN** the Keyboard Commands reference presents the former Close Task action
 - **THEN** it labels the action Open/Close Task and documents its focused-closed and open-task behavior for Mac and Windows
+
+### Requirement: Pointer Selection Focus Discipline
+Tasks SHALL keep pointer-driven selection membership separate from keyboard task focus and SHALL not retain incidental DOM focus on a task summary control after a modified-click selection gesture.
+
+#### Scenario: Clear focus after platform-modifier selection
+- **WHEN** a user Command-clicks a task on Mac or Control-clicks a task on Windows to enter or alter selection mode
+- **THEN** Tasks updates selection membership and its stable anchor without retaining DOM focus on the clicked summary control
+
+#### Scenario: Clear focus after range selection
+- **WHEN** a user Shift-clicks a task to establish or replace an anchored selection range
+- **THEN** Tasks updates the selected range without retaining DOM focus on the clicked summary control
+
+#### Scenario: Ignore a bare modifier after pointer selection
+- **WHEN** pointer-driven selection is active and the user presses or releases Shift without another key
+- **THEN** Tasks leaves selection unchanged and does not reveal keyboard focus on any task summary
+
+#### Scenario: Preserve genuine keyboard focus
+- **WHEN** a user intentionally navigates tasks through Space, arrow keys, Tab, or another declared keyboard traversal
+- **THEN** Tasks continues to expose its ordinary accessible whole-task focus indication
+
+### Requirement: Unified Task And Checklist Selection Presentation
+Tasks SHALL use canonical Lucide `Circle` and `CircleCheck` selection indicators with the semantic info-blue color and SHALL use the checklist selection blue as the shared background treatment for closed task focus, explicit task selection, and checklist item selection.
+
+#### Scenario: Highlight a focused closed task
+- **WHEN** a closed task receives whole-task keyboard focus
+- **THEN** its row uses the same blue background highlight used by a selected checklist item
+
+#### Scenario: Highlight explicitly selected tasks
+- **WHEN** one or more tasks are in explicit selection mode
+- **THEN** every selected task uses the shared blue background highlight and a blue Lucide `CircleCheck`, while unselected tasks expose a blue Lucide `Circle`
+
+#### Scenario: Open a blue-highlighted task
+- **WHEN** a blue-highlighted focused or explicitly selected task is opened
+- **THEN** its background transitions to the existing gray expanded-task surface while the editor opens
+
+#### Scenario: Use selection presentation in Done
+- **WHEN** a Done-list task receives whole-task focus or explicit selection
+- **THEN** it uses the same blue task-selection presentation as an active-list task
 
 ### Requirement: Revised Control task-command layout
 BathOS Tasks SHALL expose the revised Control-based task-command layout, SHALL remove the displaced task-command assignments, and SHALL preserve platform-standard Undo and Redo behavior.

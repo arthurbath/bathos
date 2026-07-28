@@ -68,6 +68,10 @@ type ProjectionReceiptTable =
   | 'tasks_reminder_deliveries'
   | 'tasks_reminder_claims';
 
+type SynchronizedTasksTable =
+  | ProjectionReceiptTable
+  | 'tasks_recurrence_occurrences';
+
 const projectionReceiptTables: ProjectionReceiptTable[] = [
   'tasks_recurrence_evaluations',
   'tasks_recurrence_status_events',
@@ -331,21 +335,21 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       title: 'Synthetic Rich Recurrence Task',
       notes: 'Disposable production acceptance only',
       destination: 'anytime',
-      entry_channel: 'web',
+      entry_channel: 'mcp',
     }, auth);
     const completedTask = await createTaskData({
       idempotency_key: crypto.randomUUID(),
       title: 'Synthetic Done Editing Task',
       notes: 'Disposable production acceptance only',
       destination: 'anytime',
-      entry_channel: 'web',
+      entry_channel: 'mcp',
     }, auth);
     const deletedTask = await createTaskData({
       idempotency_key: crypto.randomUUID(),
       title: 'Synthetic Deleted Editing Task',
       notes: 'Disposable production acceptance only',
       destination: 'anytime',
-      entry_channel: 'web',
+      entry_channel: 'mcp',
     }, auth);
     await Promise.all([
       waitForLocalTask(primary.database, recurrenceTask.task.id, (task) => task.revision === 1),
@@ -1449,7 +1453,7 @@ async function localTaskCount(database: PowerSyncDatabase): Promise<number> {
 
 async function waitForLocalTableCount(
   database: PowerSyncDatabase,
-  table: ProjectionReceiptTable,
+  table: SynchronizedTasksTable,
   expectedCount: number,
 ): Promise<void> {
   const deadline = Date.now() + 45_000;
@@ -1462,7 +1466,7 @@ async function waitForLocalTableCount(
 
 async function localTableCount(
   database: PowerSyncDatabase,
-  table: ProjectionReceiptTable,
+  table: SynchronizedTasksTable,
 ): Promise<number> {
   const row = await database.getOptional<{ count: number }>(
     `SELECT COUNT(*) AS count FROM ${table}`,

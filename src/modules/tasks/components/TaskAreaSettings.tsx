@@ -1,5 +1,17 @@
-import { useRef, useState, type FormEvent } from 'react';
-import { ArrowDown, ArrowUp } from 'lucide-react';
+import {
+  forwardRef,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+  type FormEvent,
+  type KeyboardEventHandler,
+  type MouseEventHandler,
+  type PointerEventHandler,
+} from 'react';
+import { ArrowDown, ArrowUp, MoreHorizontal } from 'lucide-react';
+import { createColumnHelper, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 
 import {
   AlertDialog,
@@ -13,6 +25,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DataGrid,
+  GridEditableCell,
+  gridMenuTriggerProps,
+  useDataGrid,
+} from '@/components/ui/data-grid';
 import {
   Dialog,
   DialogBody,
@@ -21,17 +40,88 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { useGridColumnWidths } from '@/hooks/useGridColumnWidths';
 import { toast } from '@/hooks/use-toast';
 import {
-  TaskHierarchyEditableTitle,
-  TaskHierarchyOrderButton,
-} from '@/modules/tasks/components/TaskHierarchyControls';
+  GRID_ACTIONS_COLUMN_ID,
+  GRID_FIXED_COLUMNS,
+  GRID_MIN_COLUMN_WIDTH,
+  TASKS_AREAS_GRID_DEFAULT_WIDTHS,
+} from '@/lib/gridColumnWidths';
 import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
+import type { TaskArea } from '@/modules/tasks/types/tasks';
 
-export function TaskAreaSettings({ hierarchy }: { hierarchy: TaskHierarchyModel }) {
+const taskAreaColumnHelper = createColumnHelper<TaskArea>();
+const TASK_AREAS_GRID_HISTORY_KEY = 'tasks_areas_config';
+const GRID_CONTROL_FOCUS_CLASS = 'focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0';
+
+type TaskAreaActionsTriggerProps = ComponentPropsWithoutRef<typeof Button> & {
+  navCol: number;
+  ariaLabel: string;
+};
+
+const TaskAreaActionsTrigger = forwardRef<HTMLButtonElement, TaskAreaActionsTriggerProps>(
+  function TaskAreaActionsTrigger({
+    navCol,
+    ariaLabel,
+    onKeyDown,
+    onMouseDown,
+    onPointerDown,
+    ...props
+  }, ref) {
+    const grid = useDataGrid();
+    const navProps = gridMenuTriggerProps(grid, navCol) as ComponentPropsWithoutRef<typeof Button>;
+
+    const handleKeyDown: KeyboardEventHandler<HTMLButtonElement> = (event) => {
+      (navProps.onKeyDown as KeyboardEventHandler<HTMLButtonElement> | undefined)?.(event);
+      if (!event.defaultPrevented) onKeyDown?.(event);
+    };
+    const handleMouseDown: MouseEventHandler<HTMLButtonElement> = (event) => {
+      (navProps.onMouseDown as MouseEventHandler<HTMLButtonElement> | undefined)?.(event);
+      if (!event.defaultPrevented) onMouseDown?.(event);
+    };
+    const handlePointerDown: PointerEventHandler<HTMLButtonElement> = (event) => {
+      (navProps.onPointerDown as PointerEventHandler<HTMLButtonElement> | undefined)?.(event);
+      if (!event.defaultPrevented) onPointerDown?.(event);
+    };
+
+    return (
+      <Button
+        ref={ref}
+        type="button"
+        variant="outline"
+        size="icon"
+        className={`float-right mr-[5px] h-7 w-7 ${GRID_CONTROL_FOCUS_CLASS}`}
+        aria-label={ariaLabel}
+        {...props}
+        {...navProps}
+        onKeyDown={handleKeyDown}
+        onMouseDown={handleMouseDown}
+        onPointerDown={handlePointerDown}
+      >
+        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+      </Button>
+    );
+  },
+);
+
+export function TaskAreaSettings({
+  hierarchy,
+  userId,
+}: {
+  hierarchy: TaskHierarchyModel;
+  userId?: string;
+}) {
   const [newAreaTitle, setNewAreaTitle] = useState('');
   const [creatingArea, setCreatingArea] = useState(false);
   const [areaDialogOpen, setAreaDialogOpen] = useState(false);
@@ -39,6 +129,18 @@ export function TaskAreaSettings({ hierarchy }: { hierarchy: TaskHierarchyModel 
   const [deletingArea, setDeletingArea] = useState(false);
   const addAreaButtonRef = useRef<HTMLButtonElement>(null);
   const deletingAreaRecord = hierarchy.areas.find(({ id }) => id === deletingAreaId);
+  const {
+    columnSizing,
+    columnSizingInfo,
+    columnResizingEnabled,
+    onColumnSizingChange,
+    onColumnSizingInfoChange,
+  } = useGridColumnWidths({
+    userId,
+    gridKey: 'tasks_areas',
+    defaults: TASKS_AREAS_GRID_DEFAULT_WIDTHS,
+    fixedColumnIds: GRID_FIXED_COLUMNS.tasks_areas,
+  });
 
   const createArea = async (event: FormEvent) => {
     event.preventDefault();
@@ -55,6 +157,33 @@ export function TaskAreaSettings({ hierarchy }: { hierarchy: TaskHierarchyModel 
     }
   };
 
+  const renameArea = useCallback(async (area: TaskArea, nextValue: string) => {
+    const title = nextValue.trim();
+    if (title === area.title) return;
+    if (!title) {
+      const error = new Error('Name is required.');
+      showError('Area Could Not Be Renamed', error);
+      throw error;
+    }
+    try {
+      await hierarchy.updateArea(area.id, { title });
+    } catch (error) {
+      showError('Area Could Not Be Renamed', error);
+      throw error;
+    }
+  }, [hierarchy]);
+
+  const reorderArea = useCallback(async (
+    area: TaskArea,
+    direction: 'up' | 'down',
+  ) => {
+    try {
+      await hierarchy.reorderArea(area.id, direction);
+    } catch (error) {
+      showError('Area Could Not Be Moved', error);
+    }
+  }, [hierarchy]);
+
   const deleteArea = async () => {
     if (!deletingAreaId || deletingArea) return;
     setDeletingArea(true);
@@ -68,80 +197,126 @@ export function TaskAreaSettings({ hierarchy }: { hierarchy: TaskHierarchyModel 
     }
   };
 
+  const columns = useMemo(() => [
+    taskAreaColumnHelper.accessor('title', {
+      id: 'name',
+      header: 'Name',
+      size: TASKS_AREAS_GRID_DEFAULT_WIDTHS.name,
+      minSize: GRID_MIN_COLUMN_WIDTH,
+      meta: { containsEditableInput: true },
+      cell: ({ row }) => (
+        <GridEditableCell
+          value={row.original.title}
+          navCol={0}
+          onChange={(nextValue) => renameArea(row.original, nextValue)}
+        />
+      ),
+    }),
+    taskAreaColumnHelper.display({
+      id: GRID_ACTIONS_COLUMN_ID,
+      header: '',
+      enableSorting: false,
+      enableResizing: false,
+      size: TASKS_AREAS_GRID_DEFAULT_WIDTHS[GRID_ACTIONS_COLUMN_ID],
+      minSize: TASKS_AREAS_GRID_DEFAULT_WIDTHS[GRID_ACTIONS_COLUMN_ID],
+      maxSize: TASKS_AREAS_GRID_DEFAULT_WIDTHS[GRID_ACTIONS_COLUMN_ID],
+      meta: { headerClassName: 'px-0', cellClassName: 'px-0', containsButton: true },
+      cell: ({ row }) => {
+        const area = row.original;
+        const index = hierarchy.areas.findIndex(({ id }) => id === area.id);
+        const canMoveUp = index > 0;
+        const canMoveDown = index >= 0 && index < hierarchy.areas.length - 1;
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <TaskAreaActionsTrigger
+                navCol={1}
+                ariaLabel={`Actions for ${area.title}`}
+              />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-popover">
+              {canMoveUp ? (
+                <DropdownMenuItem onSelect={() => void reorderArea(area, 'up')}>
+                  <ArrowUp className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Move Up
+                </DropdownMenuItem>
+              ) : null}
+              {canMoveDown ? (
+                <DropdownMenuItem onSelect={() => void reorderArea(area, 'down')}>
+                  <ArrowDown className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Move Down
+                </DropdownMenuItem>
+              ) : null}
+              {canMoveUp || canMoveDown ? <DropdownMenuSeparator /> : null}
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onSelect={() => setDeletingAreaId(area.id)}
+              >
+                <TASK_ICONS.Delete className="mr-2 h-4 w-4" aria-hidden="true" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
+    }),
+  ], [hierarchy.areas, renameArea, reorderArea]);
+
+  const table = useReactTable({
+    data: hierarchy.areas,
+    columns,
+    defaultColumn: { minSize: GRID_MIN_COLUMN_WIDTH },
+    state: { columnSizing, columnSizingInfo },
+    enableColumnResizing: columnResizingEnabled,
+    onColumnSizingChange,
+    onColumnSizingInfoChange,
+    columnResizeMode: 'onChange',
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
   return (
     <>
-      <section
-        aria-labelledby="task-config-areas"
-        className="rounded-md border border-[hsl(var(--grid-sticky-line))] p-4"
-      >
-        <div className="flex min-h-8 items-center gap-3">
-          <TASK_ICONS.Area
-            className="h-4 w-4 shrink-0 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <h3 id="task-config-areas" className="text-sm font-semibold text-foreground">
-            Areas
-          </h3>
-          <Button
-            ref={addAreaButtonRef}
-            type="button"
-            variant="outline-success"
-            size="sm"
-            className="ml-auto h-8 w-8 p-0"
-            aria-label="Add Area"
-            title="Add Area"
-            disabled={hierarchy.loading || hierarchy.error !== null}
-            onClick={() => setAreaDialogOpen(true)}
-          >
-            <TASK_ICONS.AddArea className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        </div>
-
-        {hierarchy.loading ? (
-          <div className="flex min-h-16 items-center justify-center">
-            <LoadingSpinner />
+      <Card aria-labelledby="task-config-areas">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle id="task-config-areas">Areas</CardTitle>
+            <Button
+              ref={addAreaButtonRef}
+              type="button"
+              variant="outline-success"
+              size="sm"
+              className="h-8 w-8 p-0"
+              aria-label="Add Area"
+              title="Add Area"
+              disabled={hierarchy.loading || hierarchy.error !== null}
+              onClick={() => setAreaDialogOpen(true)}
+            >
+              <TASK_ICONS.AddArea className="h-4 w-4" aria-hidden="true" />
+            </Button>
           </div>
-        ) : hierarchy.error ? (
-          <p role="alert" className="pt-4 text-sm text-destructive">
-            Areas Could Not Be Loaded
-          </p>
-        ) : hierarchy.areas.length === 0 ? (
-          <p className="pt-4 text-sm text-muted-foreground">No areas</p>
-        ) : (
-          <div className="mt-4 divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-            {hierarchy.areas.map((area, index) => (
-              <div key={area.id} className="flex min-h-12 items-center gap-1 px-1 sm:px-2">
-                <TaskHierarchyEditableTitle
-                  value={area.title}
-                  onSave={(title) => hierarchy.updateArea(area.id, { title })}
-                />
-                <TaskHierarchyOrderButton
-                  label={`Move ${area.title} Up`}
-                  icon={ArrowUp}
-                  action={index > 0 ? () => hierarchy.reorderArea(area.id, 'up') : undefined}
-                />
-                <TaskHierarchyOrderButton
-                  label={`Move ${area.title} Down`}
-                  icon={ArrowDown}
-                  action={index < hierarchy.areas.length - 1
-                    ? () => hierarchy.reorderArea(area.id, 'down')
-                    : undefined}
-                />
-                <Button
-                  type="button"
-                  variant="clear"
-                  size="icon"
-                  className="h-9 w-9 text-destructive hover:text-destructive"
-                  aria-label={`Delete ${area.title}`}
-                  onClick={() => setDeletingAreaId(area.id)}
-                >
-                  <TASK_ICONS.Delete className="h-4 w-4" aria-hidden="true" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+        </CardHeader>
+        <CardContent className="px-0 pb-2.5">
+          {hierarchy.loading ? (
+            <div className="flex min-h-16 items-center justify-center">
+              <LoadingSpinner />
+            </div>
+          ) : hierarchy.error ? (
+            <p role="alert" className="py-4 text-center text-sm text-destructive">
+              Areas Could Not Be Loaded
+            </p>
+          ) : hierarchy.areas.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">No areas</p>
+          ) : (
+            <DataGrid
+              table={table}
+              historyKey={TASK_AREAS_GRID_HISTORY_KEY}
+              maxHeight="none"
+              stickyFirstColumn={false}
+            />
+          )}
+        </CardContent>
+      </Card>
 
       <Dialog
         open={areaDialogOpen}
