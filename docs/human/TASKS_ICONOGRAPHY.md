@@ -42,7 +42,7 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 | Reminder | `Bell` | A scheduled task reminder |
 | DueReminder | `BellRing` | A reminder that is ready for acknowledgement |
 | Deadline | `FlagTriangleRight` | A task deadline |
-| PrimaryLink | `ExternalLink` | A task's Primary Link |
+| PrimaryLink | `ExternalLink` | A generic task Primary Link action; recognized protocols such as Mail retain their protocol-specific icon |
 | Ready | `CircleCheckBig` | Ready actionability |
 | Waiting | `Hourglass` | Waiting actionability |
 | Rechecking | `RotateCcw` | Rechecking actionability |

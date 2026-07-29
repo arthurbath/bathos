@@ -256,6 +256,7 @@ describe('Calendar keyboard navigation', () => {
       <Calendar
         mode="single"
         month={new Date(2026, 6, 1)}
+        today={new Date(2030, 0, 1)}
         fromDate={new Date(2026, 6, 24)}
         selected={new Date(2026, 6, 24)}
         onSelect={() => {}}
@@ -290,6 +291,7 @@ describe('Calendar keyboard navigation', () => {
       <Calendar
         mode="single"
         month={new Date(2026, 6, 1)}
+        today={new Date(2030, 0, 1)}
         fromDate={new Date(2026, 6, 24)}
         selected={new Date(2026, 6, 24)}
         onSelect={() => {}}

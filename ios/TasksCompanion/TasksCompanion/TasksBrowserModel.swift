@@ -8,6 +8,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     typealias InPageNavigator = (WKWebView, URL) -> Void
 
     static let newTaskSummaryFocusMessageType = "focus-new-task-summary"
+    static let webTextInputEngagedMessageType = "web-text-input-engaged"
     static let newTaskSummaryInputIdentifier = "task-title-task-draft:new"
     static let newTaskSummaryFocusJavaScript = """
     (() => {
@@ -16,6 +17,48 @@ final class TasksBrowserModel: NSObject, ObservableObject {
       input.focus({ preventScroll: true });
       input.setSelectionRange(input.value.length, input.value.length);
       return document.activeElement === input;
+    })();
+    """
+    static let newTaskSummaryValueJavaScript = """
+    (() => {
+      const input = document.getElementById("task-title-task-draft:new");
+      return input instanceof HTMLInputElement ? input.value : null;
+    })();
+    """
+    static func updateNewTaskSummaryJavaScript(_ value: String) -> String? {
+        guard let data = try? JSONEncoder().encode(value),
+              let literal = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return """
+        (() => {
+          const input = document.getElementById("task-title-task-draft:new");
+          if (!(input instanceof HTMLInputElement)) return false;
+          const setter = Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            "value"
+          )?.set;
+          if (!setter) return false;
+          setter.call(input, \(literal));
+          input.dispatchEvent(new InputEvent("input", {
+            bubbles: true,
+            inputType: "insertText"
+          }));
+          input.setSelectionRange(input.value.length, input.value.length);
+          return true;
+        })();
+        """
+    }
+    static let submitNewTaskSummaryJavaScript = """
+    (() => {
+      const input = document.getElementById("task-title-task-draft:new");
+      if (!(input instanceof HTMLInputElement)) return false;
+      return !input.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+        cancelable: true
+      }));
     })();
     """
 
@@ -31,6 +74,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
 
     weak var webView: WKWebView?
     var presentSummaryKeyboard: ((WKWebView) -> Bool)?
+    var dismissSummaryKeyboard: (() -> Void)?
 
     private let coldStartRecoveryDelayNanoseconds: UInt64
     private let inPageNavigator: InPageNavigator
@@ -242,6 +286,18 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             }
             focusNewTaskSummary(in: webView)
             Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
+            return
+        }
+        if envelope.type == Self.webTextInputEngagedMessageType {
+            guard let webView else {
+                Self.recordBridgeDiagnostic("Rejected: web view unavailable for text input")
+                return
+            }
+            dismissSummaryKeyboard?()
+            let activated = webView.becomeFirstResponder()
+            Self.recordBridgeDiagnostic(
+                "Accepted: \(envelope.type); responder activated: \(activated)"
+            )
             return
         }
         guard let store = TaskWidgetStore() else {

@@ -81,12 +81,13 @@ export function MobileBottomNav({
   const hasOverflow = overflowItems.length > 0;
   const overflowActive = overflowItems.some(({ path }) => isActive(path));
   const itemClassName = (active: boolean) => (
-    `inline-flex min-w-0 flex-col items-center justify-center gap-1 rounded-md px-1 py-1.5 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-primary/20 hover:text-foreground'}`
+    `inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? 'bg-foreground/[0.12] text-foreground' : 'text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground'}`
   );
 
   const nav = (
     <div
-      className="fixed bottom-0 left-0 z-40 border-t border-[hsl(var(--grid-sticky-line))] bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/90 md:hidden"
+      data-mobile-bottom-nav-viewport
+      className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+0.5rem)] left-0 z-40 md:hidden"
       style={viewportStyle ? {
         left: `${viewportStyle.left}px`,
         width: `${viewportStyle.width}px`,
@@ -96,7 +97,7 @@ export function MobileBottomNav({
     >
       <nav
         aria-label="Mobile navigation"
-        className="mx-auto grid max-w-5xl gap-1 px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)]"
+        className="pointer-events-auto mx-auto grid w-[calc(100%-2rem)] max-w-[calc(64rem-2rem)] gap-1 rounded-[1.75rem] border border-[hsl(var(--grid-sticky-line))] bg-secondary p-1.5"
         style={{ gridTemplateColumns: `repeat(${items.length + (hasOverflow ? 1 : 0)}, minmax(0, 1fr))` }}
       >
         {items.map(({ path, label, icon: Icon }) => {

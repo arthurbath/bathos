@@ -4,8 +4,8 @@
   "description": "Track vehicle maintenance schedules, shop visits, and due services",
   "start_url": "/garage/due",
   "display": "standalone",
-  "background_color": "#fcfcfc",
-  "theme_color": "#1f1f1f",
+  "background_color": "#0d0d0d",
+  "theme_color": "#0d0d0d",
   "icons": [
     {
       "src": "/module-garage.png",

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getTaskTouchSwipeDirection,
+  getTaskTouchSwipeOffset,
   isTaskTouchSelectionSwipe,
   TASK_TOUCH_SELECTION_SWIPE_DISTANCE_PX,
   TASK_TOUCH_SELECTION_VIEWPORT_EDGE_PX,
@@ -18,6 +20,14 @@ const qualifyingGesture = {
 describe('task touch selection gesture', () => {
   it('accepts a qualifying leftward touch swipe', () => {
     expect(isTaskTouchSelectionSwipe(qualifyingGesture)).toBe(true);
+    expect(getTaskTouchSwipeDirection(qualifyingGesture)).toBe('left');
+  });
+
+  it('recognizes the symmetric rightward scheduling swipe', () => {
+    expect(getTaskTouchSwipeDirection({
+      ...qualifyingGesture,
+      endX: qualifyingGesture.startX + TASK_TOUCH_SELECTION_SWIPE_DISTANCE_PX,
+    })).toBe('right');
   });
 
   it.each(['mouse', 'pen'])('ignores %s pointer movement', (pointerType) => {
@@ -27,14 +37,10 @@ describe('task touch selection gesture', () => {
     })).toBe(false);
   });
 
-  it('rejects short, rightward, and vertically dominant touch movement', () => {
+  it('rejects short and vertically dominant touch movement', () => {
     expect(isTaskTouchSelectionSwipe({
       ...qualifyingGesture,
       endX: qualifyingGesture.startX - TASK_TOUCH_SELECTION_SWIPE_DISTANCE_PX + 1,
-    })).toBe(false);
-    expect(isTaskTouchSelectionSwipe({
-      ...qualifyingGesture,
-      endX: qualifyingGesture.startX + TASK_TOUCH_SELECTION_SWIPE_DISTANCE_PX,
     })).toBe(false);
     expect(isTaskTouchSelectionSwipe({
       ...qualifyingGesture,
@@ -54,5 +60,11 @@ describe('task touch selection gesture', () => {
         - TASK_TOUCH_SELECTION_VIEWPORT_EDGE_PX,
       endX: 250,
     })).toBe(false);
+  });
+
+  it('damps and clamps responsive row translation after horizontal intent wins', () => {
+    expect(getTaskTouchSwipeOffset(40, 2)).toBeCloseTo(31.2);
+    expect(getTaskTouchSwipeOffset(-200, 2)).toBe(-76);
+    expect(getTaskTouchSwipeOffset(20, 30)).toBe(0);
   });
 });

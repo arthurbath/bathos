@@ -99,3 +99,14 @@ An installed module SHALL retain same-module and required account/auth navigatio
 #### Scenario: Follow an unrelated external destination
 - **WHEN** a user activates an HTTP, HTTPS, or application-protocol destination outside the installed module
 - **THEN** the operating system or external browser handles the destination instead of replacing the installed module
+
+### Requirement: Installed module navigation uses the shared floating mobile presentation
+Installed BathOS modules SHALL retain their module-local mobile destinations inside the shared floating-pill bottom navigation, including safe-area spacing and overflow access, while the platform top navigation remains absent.
+
+#### Scenario: Use an installed module on a rounded mobile viewport
+- **WHEN** a module runs in native or standalone installed mode on a mobile viewport
+- **THEN** its local navigation floats above the bottom safe area inside the shared rounded outer pill without touching the viewport edges
+
+#### Scenario: Open an overflow destination
+- **WHEN** a module has more direct destinations than the floating navigation presents
+- **THEN** the shared overflow control remains keyboard- and touch-accessible from its nested pill

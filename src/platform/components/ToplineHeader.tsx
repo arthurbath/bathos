@@ -51,7 +51,7 @@ export function ToplineHeader({
   return (
     <header
       data-topline-header
-      className="sticky top-0 z-[45] isolate border-b border-[hsl(var(--grid-sticky-line))] bg-card"
+      className="sticky top-0 z-[45] isolate border-b border-[hsl(var(--grid-sticky-line))] bg-background"
     >
       <div className={`mx-auto flex ${maxWidthClassName} items-center justify-between gap-2 px-4 py-3`}>
         <div className="flex min-w-0 flex-1 items-center gap-2">

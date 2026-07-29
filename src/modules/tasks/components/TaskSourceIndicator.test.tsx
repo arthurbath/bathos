@@ -37,6 +37,7 @@ describe('TaskSourceIndicator', () => {
       expect(link?.rel).toBe('noopener noreferrer');
       expect(link?.getAttribute('aria-label')).toBe('Open Primary Link for Read the brief');
       expect(link?.title).toBe('https://example.test/brief');
+      expect(link?.querySelector('svg')).toHaveClass('lucide-external-link');
     } finally {
       cleanup(root, container);
     }
@@ -73,6 +74,7 @@ describe('TaskSourceIndicator', () => {
       expect(link?.getAttribute('href')).toBe('message://synthetic-message');
       expect(link?.hasAttribute('target')).toBe(false);
       expect(link?.getAttribute('aria-label')).toBe('Open Mail Link for Follow up');
+      expect(link?.querySelector('svg')).toHaveClass('lucide-mail');
     } finally {
       cleanup(root, container);
     }

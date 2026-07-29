@@ -26,6 +26,7 @@ Split shared expenses fairly between two partners. Combines per-expense benefit 
 - **Colors are semantic**: `primary` (near-black), `success` (green), `warning` (gold), `destructive` (red), `info` (blue), `admin` (purple). Never use color purely for decoration.
 - **Typography**: Inter with system-ui fallback. No custom display fonts.
 - **Icons**: Lucide React only. Inline SVGs, no image files, no emoji. Use sparingly.
+- **External-link icons**: Use Lucide `ExternalLink` for generic actions that open an external destination. Retain established protocol-specific icons when they convey more useful meaning. Native system surfaces use the closest platform rendering of the same northeast-arrow-from-square concept.
 - **Voice**: Pragmatic and neutral. No exclamation points. No marketing language. Prefer self-evident UI over helper text.
 - **UI phrase casing**: Use Title Case for toast titles, button labels, input labels, input placeholders, module names, page titles, modal titles, card titles, dropdown options, and section headings (`h1` through `h6`). Use sentence case for empty-state "No data" messages and toast message bodies. Preserve user-authored casing, proper nouns, acronyms, and canonical product spellings.
 - **Modal headers**: Form-style modals use a title-only header by default. Do not add modal header subtext unless the task explicitly asks for it.

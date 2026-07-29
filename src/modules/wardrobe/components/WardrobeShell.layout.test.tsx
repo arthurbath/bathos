@@ -75,7 +75,7 @@ describe('WardrobeShell layout', () => {
       const main = container.querySelector('main') as HTMLElement | null;
       expect(main).toHaveClass('pt-0');
       expect(main?.className).not.toContain('md:pt-6');
-      expect(main?.className).toContain('pb-[calc(env(safe-area-inset-bottom)+3.75rem+4px)]');
+      expect(main?.className).toContain('pb-[calc(env(safe-area-inset-bottom)+5.75rem)]');
       expect(container.querySelector('[data-testid="wardrobe-grid"]')?.getAttribute('data-full-view-top-border')).toBe('false');
 
       const mobileNav = document.body.querySelector('nav[aria-label="Mobile navigation"]') as HTMLElement | null;

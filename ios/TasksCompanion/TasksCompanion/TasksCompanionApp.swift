@@ -9,6 +9,7 @@ struct TasksCompanionApp: App {
     var body: some Scene {
         WindowGroup {
             TasksWebView(model: browserModel)
+                .background(Color(uiColor: TasksCompanionAppearance.applicationBackground))
                 .ignoresSafeArea(.container, edges: .bottom)
                 .onOpenURL(perform: handleURL)
                 .onAppear {

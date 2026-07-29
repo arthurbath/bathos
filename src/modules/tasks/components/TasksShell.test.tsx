@@ -832,6 +832,43 @@ describe('TasksShell', () => {
     }
   });
 
+  it('collapses a persisted creation draft without applying the empty-draft exit animation', async () => {
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'a', altKey: true, shiftKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      const title = container.querySelector<HTMLInputElement>(
+        '#task-title-task-draft\\:new',
+      )!;
+      await act(async () => {
+        setInputValue(title, 'Persisted creation draft');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 425));
+      });
+      expect(taskList.createTask).toHaveBeenCalled();
+
+      await act(async () => {
+        title.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true,
+        }));
+      });
+      await waitFor(() => {
+        expect(container.querySelector('[data-task-editor-region]'))
+          .toHaveAttribute('data-state', 'closing');
+      });
+      expect(container.querySelector('[data-task-row-id="task-draft:new"]'))
+        .not.toHaveAttribute('data-draft-exiting');
+      await waitForTaskEditorExit(container, 'task-draft:new');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('persists a titled creation draft before opening its checklist editor', async () => {
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
@@ -870,7 +907,9 @@ describe('TasksShell', () => {
       expect(taskList.createTask).toHaveBeenCalledWith(expect.objectContaining({
         title: 'New task with checklist',
       }));
-      expect(focusRequests).toEqual(['task-draft:new']);
+      await waitFor(() => {
+        expect(focusRequests).toEqual(['task-draft:new']);
+      });
     } finally {
       document.removeEventListener('bathos:task-checklist-focus', recordFocusRequest);
       cleanup(root, container);
@@ -920,7 +959,9 @@ describe('TasksShell', () => {
       expect(taskList.createTask).toHaveBeenCalledWith(expect.objectContaining({
         title: 'Task with a checklist',
       }));
-      expect(focusRequests).toEqual(['task-draft:new']);
+      await waitFor(() => {
+        expect(focusRequests).toEqual(['task-draft:new']);
+      });
     } finally {
       document.removeEventListener('bathos:task-checklist-focus', recordFocusRequest);
       cleanup(root, container);
@@ -1253,6 +1294,14 @@ describe('TasksShell', () => {
       await act(async () => {
         title.dispatchEvent(submitClose);
       });
+      await waitFor(() => {
+        expect(container.querySelector('[data-task-editor-region]'))
+          .toHaveAttribute('data-state', 'closing');
+      });
+      await waitFor(() => {
+        expect(container.querySelector('[data-task-row-id="task-draft:new"]'))
+          .toHaveAttribute('data-draft-exiting', 'true');
+      });
       await waitForTaskEditorExit(container, 'task-draft:new');
       expect(submitClose.defaultPrevented).toBe(true);
       expect(taskList.createTask).not.toHaveBeenCalled();
@@ -1346,9 +1395,11 @@ describe('TasksShell', () => {
         }));
         await new Promise<void>((resolve) => window.setTimeout(resolve, 420));
       });
-      expect(mockToast).toHaveBeenCalledWith({
-        title: 'Task Saved',
-        description: 'The task is not visible in the current list.',
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Task Saved',
+          description: 'The task is not visible in the current list.',
+        });
       });
     } finally {
       cleanup(root, container);
@@ -2619,6 +2670,80 @@ describe('TasksShell', () => {
       expect(container.querySelector('[aria-label="Deselect Existing task"]'))
         .toHaveAttribute('aria-checked', 'true');
       expect(container.querySelector('#task-title-task-a')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('translates with a touch drag and opens Start after a qualifying right swipe', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+    try {
+      const header = container.querySelector<HTMLElement>(
+        '[data-task-row-id="task-a"] [data-task-row-header]',
+      )!;
+
+      await act(async () => {
+        header.dispatchEvent(taskPointerEvent('pointerdown', {
+          clientX: 120,
+          clientY: 100,
+        }));
+        header.dispatchEvent(taskPointerEvent('pointermove', {
+          clientX: 175,
+          clientY: 103,
+        }));
+      });
+
+      expect(header).toHaveAttribute('data-task-swipe-direction', 'right');
+      expect(header.style.transform).toMatch(/translate3d\([1-9]/);
+      expect(Number.parseFloat(
+        container.querySelector<HTMLElement>(
+          '[data-task-swipe-affordance="start"]',
+        )!.style.opacity,
+      )).toBeCloseTo(0.89375);
+
+      await act(async () => {
+        header.dispatchEvent(taskPointerEvent('pointerup', {
+          clientX: 175,
+          clientY: 103,
+        }));
+        await Promise.resolve();
+      });
+
+      expect(document.querySelector('[data-task-start-picker]')).toBeTruthy();
+      expect(header.style.transform).toBe('translate3d(0px, 0, 0)');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('moves from the end of Summary to the start of Notes with Arrow Right', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      const summary = container.querySelector<HTMLInputElement>('#task-title-task-a')!;
+      await waitFor(() => {
+        expect(container.querySelector('#task-notes-task-a')).toBeTruthy();
+      });
+      const notes = container.querySelector<HTMLElement>('#task-notes-task-a')!;
+      summary.focus();
+      summary.setSelectionRange(summary.value.length, summary.value.length);
+
+      await act(async () => {
+        summary.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+
+      expect(document.activeElement).toBe(notes);
+      const selection = window.getSelection();
+      expect(selection?.isCollapsed).toBe(true);
+      expect(selection?.anchorOffset).toBe(0);
     } finally {
       cleanup(root, container);
     }
@@ -5393,11 +5518,8 @@ describe('TasksShell', () => {
       }
 
       await act(async () => {
-        document.body.dispatchEvent(new MouseEvent('pointerdown', {
-          bubbles: true,
-          cancelable: true,
-        }));
-        document.body.dispatchEvent(new MouseEvent('click', {
+        listbox!.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape',
           bubbles: true,
           cancelable: true,
         }));
@@ -6336,9 +6458,11 @@ describe('TasksShell', () => {
         requestTaskStartPickerOpenForTest(container, 'task-a');
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
-      expect(document.activeElement).toBe(
-        document.querySelector('[data-task-start-horizon="inbox"]'),
-      );
+      await waitFor(() => {
+        expect(document.activeElement).toBe(
+          document.querySelector('[data-task-start-horizon="inbox"]'),
+        );
+      });
     } finally {
       cleanup(root, container);
     }

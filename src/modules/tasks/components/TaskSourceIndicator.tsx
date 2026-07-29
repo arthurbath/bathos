@@ -35,7 +35,7 @@ export function TaskSourceIndicator({
   if (primaryLinkKind !== null && href !== null) {
     const Icon = primaryLinkKind === 'mail'
       ? TASK_ICONS.MailSource
-      : TASK_ICONS.OtherSource;
+      : TASK_ICONS.PrimaryLink;
     const label = primaryLinkKind === 'mail'
       ? `Open Mail Link for ${task.title}`
       : `Open Primary Link for ${task.title}`;

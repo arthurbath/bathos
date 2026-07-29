@@ -32,10 +32,27 @@ describe('MobileBottomNav', () => {
     );
 
     const nav = await screen.findByRole('navigation', { name: 'Mobile navigation' });
+    const viewport = nav.parentElement;
+    expect(viewport).toHaveAttribute('data-mobile-bottom-nav-viewport');
+    expect(viewport).toHaveClass(
+      'pointer-events-none',
+      'bottom-[calc(env(safe-area-inset-bottom)+0.5rem)]',
+    );
+    expect(nav).toHaveClass(
+      'w-[calc(100%-2rem)]',
+      'rounded-[1.75rem]',
+      'bg-secondary',
+      'pointer-events-auto',
+    );
+    expect(nav.className).not.toContain('backdrop');
     const links = within(nav).getAllByRole('link');
     expect(links).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Today' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Today' })).toHaveClass(
+      'rounded-full',
+      'bg-foreground/[0.12]',
+    );
 
     fireEvent.click(screen.getByRole('link', { name: 'Inbox' }));
     expect(onNavigate).toHaveBeenCalledWith('/inbox');

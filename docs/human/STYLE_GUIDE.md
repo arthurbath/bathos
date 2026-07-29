@@ -70,6 +70,7 @@ A system-authored accessible name or tooltip title that labels a button or input
 - All iconography uses Lucide React (`lucide-react`)
 - Icons are inline SVGs — no image files, no emoji
 - Use sparingly. Not every element needs an icon.
+- Use Lucide `ExternalLink` for generic actions that open an external destination. Preserve an established protocol-specific icon, such as Mail, when that protocol communicates more useful meaning than a generic external-link glyph. Native platform surfaces use the closest system rendering of the same northeast-arrow-from-square concept.
 
 ## Spacing and Sizing
 

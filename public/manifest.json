@@ -4,8 +4,8 @@
   "description": "A bunch of hyper-specific apps for Art and his friends",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fcfcfc",
-  "theme_color": "#1f1f1f",
+  "background_color": "#0d0d0d",
+  "theme_color": "#0d0d0d",
   "icons": [
     {
       "src": "/icon-192.png",

@@ -2,6 +2,15 @@ import SwiftUI
 import UIKit
 import WebKit
 
+enum TasksCompanionAppearance {
+    static let applicationBackground = UIColor(
+        red: 13.0 / 255.0,
+        green: 13.0 / 255.0,
+        blue: 13.0 / 255.0,
+        alpha: 1
+    )
+}
+
 enum TasksWebViewPolicy {
     static func apply(to configuration: WKWebViewConfiguration) {
         configuration.websiteDataStore = .default()
@@ -54,7 +63,7 @@ struct TasksWebView: View {
     var body: some View {
         ZStack {
             TasksWebViewRepresentable(model: model)
-                .background(Color.black)
+                .background(Color(uiColor: TasksCompanionAppearance.applicationBackground))
 
             if model.isLoading && !model.hasLoadedContent {
                 ProgressView()
@@ -79,7 +88,7 @@ struct TasksWebView: View {
                 }
                 .padding(24)
                 .foregroundStyle(.white)
-                .background(Color.black)
+                .background(Color(uiColor: TasksCompanionAppearance.applicationBackground))
                 .accessibilityElement(children: .contain)
             }
         }
@@ -105,6 +114,16 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
           schemaVersion: 1,
           moduleId: "tasks"
         });
+        document.addEventListener("pointerdown", (event) => {
+          const target = event.target instanceof Element
+            ? event.target.closest("input, textarea, [contenteditable]:not([contenteditable='false'])")
+            : null;
+          if (!target) return;
+          window.webkit?.messageHandlers?.\(TaskCompanionConstants.webBridgeHandler)?.postMessage({
+            type: "\(TasksBrowserModel.webTextInputEngagedMessageType)",
+            schemaVersion: 2
+          });
+        }, true);
         """
         if let installationID = try? TaskWidgetInstallationStore()?.identifier() {
             nativeContextScript += """
@@ -130,9 +149,9 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
         webView.scrollView.contentInsetAdjustmentBehavior = .automatic
-        webView.isOpaque = true
-        webView.backgroundColor = .black
-        webView.scrollView.backgroundColor = .black
+        webView.isOpaque = false
+        webView.backgroundColor = TasksCompanionAppearance.applicationBackground
+        webView.scrollView.backgroundColor = TasksCompanionAppearance.applicationBackground
         context.coordinator.attachSummaryKeyboardPresenter(to: webView)
         model.attach(webView)
         return webView
@@ -164,10 +183,14 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
             model.presentSummaryKeyboard = { [weak summaryKeyboardPresenter] webView in
                 summaryKeyboardPresenter?.present(in: webView) == true
             }
+            model.dismissSummaryKeyboard = { [weak summaryKeyboardPresenter] in
+                summaryKeyboardPresenter?.dismiss()
+            }
         }
 
         func detachSummaryKeyboardPresenter() {
             model.presentSummaryKeyboard = nil
+            model.dismissSummaryKeyboard = nil
             summaryKeyboardPresenter.detach()
         }
 
@@ -246,16 +269,14 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
 }
 
 @MainActor
-final class TasksSummaryKeyboardPresenter: NSObject {
-    private static let transferDelay: TimeInterval = 0.75
+final class TasksSummaryKeyboardPresenter: NSObject, UITextFieldDelegate {
     private static let activationRetryDelay: TimeInterval = 0.05
     private static let maximumActivationAttempts = 20
 
     private weak var webView: WKWebView?
     private weak var captureField: UITextField?
-    private var isTransferPending = false
     private var activationWorkItem: DispatchWorkItem?
-    private var transferWorkItem: DispatchWorkItem?
+    private var isSynchronizingText = false
 
     func attach(to webView: WKWebView) {
         detach()
@@ -269,6 +290,12 @@ final class TasksSummaryKeyboardPresenter: NSObject {
         captureField.spellCheckingType = .no
         captureField.textContentType = nil
         captureField.returnKeyType = .done
+        captureField.delegate = self
+        captureField.addTarget(
+            self,
+            action: #selector(captureTextChanged),
+            for: .editingChanged
+        )
 
         webView.addSubview(captureField)
         NSLayoutConstraint.activate([
@@ -286,12 +313,6 @@ final class TasksSummaryKeyboardPresenter: NSObject {
 
         self.webView = webView
         self.captureField = captureField
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(keyboardDidShow),
-            name: UIResponder.keyboardDidShowNotification,
-            object: nil
-        )
     }
 
     func present(in webView: WKWebView) -> Bool {
@@ -301,29 +322,63 @@ final class TasksSummaryKeyboardPresenter: NSObject {
         }
 
         activationWorkItem?.cancel()
-        transferWorkItem?.cancel()
-        requestKeyboardActivation(
-            in: webView,
-            remainingAttempts: Self.maximumActivationAttempts
-        )
+        webView.evaluateJavaScript(
+            TasksBrowserModel.newTaskSummaryValueJavaScript
+        ) { @MainActor [weak self, weak webView] result, _ in
+            guard let self, let webView,
+                  self.webView === webView,
+                  let captureField = self.captureField else {
+                return
+            }
+            self.isSynchronizingText = true
+            captureField.text = result as? String ?? ""
+            captureField.selectedTextRange = captureField.textRange(
+                from: captureField.endOfDocument,
+                to: captureField.endOfDocument
+            )
+            self.isSynchronizingText = false
+            self.requestKeyboardActivation(
+                in: webView,
+                remainingAttempts: Self.maximumActivationAttempts
+            )
+        }
         return true
     }
 
-    func detach() {
-        NotificationCenter.default.removeObserver(self)
+    func dismiss() {
         activationWorkItem?.cancel()
         activationWorkItem = nil
-        transferWorkItem?.cancel()
-        transferWorkItem = nil
-        isTransferPending = false
         captureField?.resignFirstResponder()
+    }
+
+    func detach() {
+        dismiss()
+        captureField?.removeTarget(
+            self,
+            action: #selector(captureTextChanged),
+            for: .editingChanged
+        )
+        captureField?.delegate = nil
         captureField?.removeFromSuperview()
         captureField = nil
         webView = nil
     }
 
-    @objc private func keyboardDidShow() {
-        transferToWebSummary()
+    @objc private func captureTextChanged() {
+        guard !isSynchronizingText,
+              let value = captureField?.text,
+              let script = TasksBrowserModel.updateNewTaskSummaryJavaScript(value) else {
+            return
+        }
+        webView?.evaluateJavaScript(script)
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        webView?.evaluateJavaScript(
+            TasksBrowserModel.submitNewTaskSummaryJavaScript
+        )
+        textField.resignFirstResponder()
+        return false
     }
 
     private func requestKeyboardActivation(
@@ -357,41 +412,6 @@ final class TasksSummaryKeyboardPresenter: NSObject {
 
         activationWorkItem?.cancel()
         activationWorkItem = nil
-        isTransferPending = true
-        guard captureField.becomeFirstResponder() else {
-            isTransferPending = false
-            return
-        }
-
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.transferToWebSummary()
-        }
-        transferWorkItem = workItem
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + Self.transferDelay,
-            execute: workItem
-        )
-    }
-
-    private func transferToWebSummary() {
-        guard isTransferPending,
-              let webView,
-              let captureField,
-              captureField.isFirstResponder else {
-            return
-        }
-        isTransferPending = false
-        transferWorkItem?.cancel()
-        transferWorkItem = nil
-
-        webView.evaluateJavaScript(
-            TasksBrowserModel.newTaskSummaryFocusJavaScript
-        ) { @MainActor result, _ in
-            let focused = (result as? Bool) == true
-            let activated = focused && webView.becomeFirstResponder()
-            if !activated {
-                captureField.resignFirstResponder()
-            }
-        }
+        _ = captureField.becomeFirstResponder()
     }
 }

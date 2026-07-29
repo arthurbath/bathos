@@ -4,8 +4,8 @@
   "description": "Track your expenses, plan a monthly budget, and split costs fairly with housemates",
   "start_url": "/budget/summary",
   "display": "standalone",
-  "background_color": "#fcfcfc",
-  "theme_color": "#1f1f1f",
+  "background_color": "#0d0d0d",
+  "theme_color": "#0d0d0d",
   "icons": [
     {
       "src": "/module-budget.png",

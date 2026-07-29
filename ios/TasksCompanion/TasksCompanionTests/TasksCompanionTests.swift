@@ -695,6 +695,10 @@ final class TasksCompanionTests: XCTestCase {
             "focus-new-task-summary"
         )
         XCTAssertEqual(
+            TasksBrowserModel.webTextInputEngagedMessageType,
+            "web-text-input-engaged"
+        )
+        XCTAssertEqual(
             TasksBrowserModel.newTaskSummaryInputIdentifier,
             "task-title-task-draft:new"
         )
@@ -708,6 +712,48 @@ final class TasksCompanionTests: XCTestCase {
                 "input.focus({ preventScroll: true })"
             )
         )
+        XCTAssertTrue(
+            TasksBrowserModel.newTaskSummaryValueJavaScript.contains(
+                "input.value"
+            )
+        )
+        XCTAssertTrue(
+            TasksBrowserModel.submitNewTaskSummaryJavaScript.contains(
+                #"key: "Enter""#
+            )
+        )
+    }
+
+    @MainActor
+    func testNewTaskSummaryNativeKeyboardBridgeEscapesTextAsJavaScriptData() {
+        let value = #"One "quoted" task \ line"#
+        let script = TasksBrowserModel.updateNewTaskSummaryJavaScript(value)
+
+        XCTAssertNotNil(script)
+        XCTAssertTrue(script?.contains(#"One \"quoted\" task \\ line"#) == true)
+        XCTAssertTrue(script?.contains("new InputEvent") == true)
+        XCTAssertTrue(script?.contains("setSelectionRange") == true)
+    }
+
+    @MainActor
+    func testCompanionBackgroundMatchesTheCanonicalBathOSSurface() {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+
+        XCTAssertTrue(
+            TasksCompanionAppearance.applicationBackground.getRed(
+                &red,
+                green: &green,
+                blue: &blue,
+                alpha: &alpha
+            )
+        )
+        XCTAssertEqual(red, 13.0 / 255.0, accuracy: 0.0001)
+        XCTAssertEqual(green, 13.0 / 255.0, accuracy: 0.0001)
+        XCTAssertEqual(blue, 13.0 / 255.0, accuracy: 0.0001)
+        XCTAssertEqual(alpha, 1, accuracy: 0.0001)
     }
 
     @MainActor

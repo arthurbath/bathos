@@ -161,7 +161,7 @@ describe("AppShell full-view layout", () => {
       expect(shell).toHaveClass("overflow-y-hidden");
       expect(main).toHaveClass("w-full");
       expect(main).toHaveClass("flex-1");
-      expect(main?.className).toContain("pb-[calc(env(safe-area-inset-bottom)+3.75rem+4px)]");
+      expect(main?.className).toContain("pb-[calc(env(safe-area-inset-bottom)+5.75rem)]");
       expect(main).not.toHaveClass("max-w-5xl");
     } finally {
       unmountShell(root, container);
@@ -193,7 +193,7 @@ describe("AppShell full-view layout", () => {
       expect(shell).toHaveClass("min-h-screen");
       expect(shell).not.toHaveClass("overflow-x-visible");
       expect(main).not.toHaveClass("overflow-x-visible");
-      expect(main?.className).toContain("pb-[calc(env(safe-area-inset-bottom)+5.25rem)]");
+      expect(main?.className).toContain("pb-[calc(env(safe-area-inset-bottom)+5.75rem)]");
     } finally {
       unmountShell(root, container);
     }

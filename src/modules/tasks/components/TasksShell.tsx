@@ -166,7 +166,10 @@ import {
   applyTaskSelectionGesture,
   isMacLikeTaskPlatform,
 } from '@/modules/tasks/domain/taskSelection';
-import { isTaskTouchSelectionSwipe } from '@/modules/tasks/domain/taskTouchSelection';
+import {
+  getTaskTouchSwipeDirection,
+  getTaskTouchSwipeOffset,
+} from '@/modules/tasks/domain/taskTouchSelection';
 import {
   getTaskKeyboardCommand,
   type TaskKeyboardCommand,
@@ -281,6 +284,20 @@ function alignOpenedTaskToVisibleContent(
     left: 0,
     behavior,
   });
+}
+
+function focusTaskNotesAtStart(taskId: string): boolean {
+  const notes = document.getElementById(`task-notes-${taskId}`);
+  if (!(notes instanceof HTMLElement)) return false;
+  notes.focus({ preventScroll: true });
+  const selection = window.getSelection();
+  if (selection === null) return true;
+  const range = document.createRange();
+  range.selectNodeContents(notes);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return true;
 }
 
 function taskPlacementChanged(
@@ -852,6 +869,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       document.activeElement.blur();
     }
     const closingCreationDraft = currentTaskId === NEW_TASK_DRAFT_ID;
+    const exitingEmptyCreationDraft = closingCreationDraft
+      && creationDraftRef.current?.persistedTaskId === null;
     const completingCreationDraft = closingCreationDraft
       && deferredCompletionTaskIdsRef.current.has(NEW_TASK_DRAFT_ID);
     const completingCurrentTask = currentTaskId !== null
@@ -877,7 +896,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       shouldSettleBeforeProjection && !closingCreationDraft ? currentTaskId : null,
     );
     if (currentTaskId !== null) finalizeDeferredCompletion(currentTaskId);
-    if (shouldSettleBeforeProjection) {
+    if (closingCreationDraft) {
+      await waitForTaskMotion(TASK_EDITOR_EXPANSION_DURATION_MS);
+      if (openTaskSequenceRef.current !== sequence) return false;
+      if (exitingEmptyCreationDraft) {
+        setClosingTaskId(currentTaskId);
+        await waitForTaskMotion(TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS);
+        if (openTaskSequenceRef.current !== sequence) return false;
+      }
+    } else if (shouldSettleBeforeProjection) {
       await waitForTaskMotion(
         TASK_EDITOR_EXPANSION_DURATION_MS + TASK_POST_CLOSE_SETTLE_DELAY_MS,
       );
@@ -2584,6 +2611,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <TaskRow
         key={task.id}
         task={task}
+        draftExiting={isCreationDraft && closingTaskId === task.id}
         hasChecklistItems={checklistTaskIds.has(persistedDraftTaskId ?? task.id)}
         checklistTaskId={persistedDraftTaskId ?? (
           task.id === NEW_TASK_DRAFT_ID ? null : task.id
@@ -2828,6 +2856,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <TaskRow
         key={task.id}
         task={task}
+        draftExiting={false}
         hasChecklistItems={checklistTaskIds.has(task.id)}
         checklistTaskId={task.id}
         hierarchy={hierarchy}
@@ -4540,6 +4569,7 @@ function UpcomingTaskSections({
 
 function TaskRow({
   task,
+  draftExiting,
   hasChecklistItems,
   checklistTaskId,
   onRequestChecklist,
@@ -4579,6 +4609,7 @@ function TaskRow({
   terminalState,
 }: {
   task: TaskTodo;
+  draftExiting: boolean;
   hasChecklistItems: boolean;
   checklistTaskId: string | null;
   onRequestChecklist?: () => Promise<void>;
@@ -4631,6 +4662,8 @@ function TaskRow({
   const [repeatOpen, setRepeatOpen] = useState(false);
   const [terminalSettling, setTerminalSettling] = useState(false);
   const [terminalExiting, setTerminalExiting] = useState(false);
+  const [touchSwipeOffset, setTouchSwipeOffset] = useState(0);
+  const [touchSwipeActive, setTouchSwipeActive] = useState(false);
   const [editorMounted, setEditorMounted] = useState(selected);
   const [editorExpanded, setEditorExpanded] = useState(selected);
   const [visibleTitle, setVisibleTitle] = useState(task.title);
@@ -4973,6 +5006,33 @@ function TaskRow({
     if (gesture === null || gesture.pointerId !== event.pointerId) return;
     gesture.latestX = event.clientX;
     gesture.latestY = event.clientY;
+    const horizontalDistance = gesture.latestX - gesture.startX;
+    const verticalDistance = gesture.latestY - gesture.startY;
+    if (
+      Math.abs(verticalDistance) > 10
+      && Math.abs(verticalDistance) > Math.abs(horizontalDistance)
+    ) {
+      touchSelectionGestureRef.current = null;
+      setTouchSwipeActive(false);
+      setTouchSwipeOffset(0);
+      try {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      } catch {
+        // A partial touch-pointer implementation may not expose pointer capture.
+      }
+      return;
+    }
+    const nextOffset = getTaskTouchSwipeOffset(horizontalDistance, verticalDistance);
+    if (nextOffset === 0) return;
+    setTouchSwipeActive(true);
+    setTouchSwipeOffset(nextOffset);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // A partial touch-pointer implementation may not expose pointer capture.
+    }
   };
   const handleTouchSelectionPointerUp = (
     event: ReactPointerEvent<HTMLDivElement>,
@@ -4980,24 +5040,33 @@ function TaskRow({
     const gesture = touchSelectionGestureRef.current;
     if (gesture === null || gesture.pointerId !== event.pointerId) return;
     touchSelectionGestureRef.current = null;
-    if (!isTaskTouchSelectionSwipe({
+    setTouchSwipeActive(false);
+    setTouchSwipeOffset(0);
+    const direction = getTaskTouchSwipeDirection({
       pointerType: gesture.pointerType,
       startX: gesture.startX,
       startY: gesture.startY,
       endX: event.clientX ?? gesture.latestX,
       endY: event.clientY ?? gesture.latestY,
       viewportWidth: gesture.viewportWidth,
-    })) return;
+    });
+    if (direction === null) return;
     event.preventDefault();
     event.stopPropagation();
     suppressClickUntilRef.current = Date.now() + 500;
-    onTouchSwipeSelect();
+    if (direction === 'left') {
+      onTouchSwipeSelect();
+    } else {
+      setStartOpen(true);
+    }
   };
   const handleTouchSelectionPointerCancel = (
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
     if (touchSelectionGestureRef.current?.pointerId === event.pointerId) {
       touchSelectionGestureRef.current = null;
+      setTouchSwipeActive(false);
+      setTouchSwipeOffset(0);
     }
   };
 
@@ -5063,7 +5132,9 @@ function TaskRow({
       }}
       className={[
         'relative grid overflow-hidden transition-[grid-template-rows,opacity,background-color,border-radius] ease-out focus:outline-none focus-visible:rounded-md focus-visible:bg-info/20 focus-visible:outline-none motion-reduce:transition-none',
-        terminalExiting ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100',
+        terminalExiting || draftExiting
+          ? 'grid-rows-[0fr] opacity-0'
+          : 'grid-rows-[1fr] opacity-100',
         selected
           ? 'rounded-md bg-foreground/[0.05]'
           : focused || bulkSelection?.selected
@@ -5074,6 +5145,7 @@ function TaskRow({
       data-task-planning-card
       data-terminal-settling={terminalSettling ? 'true' : undefined}
       data-terminal-exiting={terminalExiting ? 'true' : undefined}
+      data-draft-exiting={draftExiting ? 'true' : undefined}
     >
       {dragPlacement ? (
         <span
@@ -5084,10 +5156,34 @@ function TaskRow({
           }`}
         />
       ) : null}
-      <div className="min-h-0 overflow-hidden">
+      <div className="relative min-h-0 overflow-hidden bg-inherit">
+      <span
+        aria-hidden="true"
+        data-task-swipe-affordance="start"
+        className="pointer-events-none absolute inset-y-0 left-3 z-0 inline-flex items-center text-info"
+        style={{ opacity: touchSwipeOffset > 0 ? Math.min(1, touchSwipeOffset / 48) : 0 }}
+      >
+        <TASK_ICONS.Upcoming className="h-5 w-5" />
+      </span>
+      <span
+        aria-hidden="true"
+        data-task-swipe-affordance="selection"
+        className="pointer-events-none absolute inset-y-0 right-3 z-0 inline-flex items-center text-info"
+        style={{ opacity: touchSwipeOffset < 0 ? Math.min(1, -touchSwipeOffset / 48) : 0 }}
+      >
+        <TASK_ICONS.MultiSelect className="h-5 w-5" />
+      </span>
       <div
-        className="flex h-11 touch-pan-y items-center gap-2 overflow-hidden pl-1 pr-1.5"
+        className={`relative z-[1] flex h-11 touch-pan-y items-center gap-2 overflow-hidden bg-inherit pl-1 pr-1.5 ${
+          touchSwipeActive ? '' : 'transition-transform duration-200 ease-out'
+        }`}
         data-task-row-header
+        data-task-swipe-direction={touchSwipeOffset < 0
+          ? 'left'
+          : touchSwipeOffset > 0
+            ? 'right'
+            : undefined}
+        style={{ transform: `translate3d(${touchSwipeOffset}px, 0, 0)` }}
         onPointerDown={handleTouchSelectionPointerDown}
         onPointerMove={handleTouchSelectionPointerMove}
         onPointerUp={handleTouchSelectionPointerUp}
@@ -5788,6 +5884,21 @@ function TaskEditor({
           const normalizedTitle = nextTitle.trim();
           if (normalizedTitle) scheduleTextPatch({ title: normalizedTitle });
           else removePendingTextField('title');
+        }}
+        onKeyDown={(event) => {
+          if (
+            event.key !== 'ArrowRight'
+            || event.shiftKey
+            || event.metaKey
+            || event.ctrlKey
+            || event.altKey
+            || event.nativeEvent.isComposing
+            || event.currentTarget.selectionStart !== event.currentTarget.value.length
+            || event.currentTarget.selectionEnd !== event.currentTarget.value.length
+          ) {
+            return;
+          }
+          if (focusTaskNotesAtStart(task.id)) event.preventDefault();
         }}
       />
       <Suspense fallback={<div className="min-h-28" aria-label="Loading Task Notes" />}>
