@@ -707,6 +707,18 @@ describe('TasksShell', () => {
         'task-title-task-draft:new',
       ) as HTMLInputElement;
       expect(document.activeElement).toBe(title);
+      const rowTitle = container.querySelector<HTMLElement>(
+        '[data-task-row-id="task-draft:new"] [data-task-row-title]',
+      );
+      expect(rowTitle).toHaveTextContent('New Task');
+      expect(rowTitle).toHaveAttribute('data-task-row-title-placeholder', 'true');
+      expect(rowTitle).toHaveClass('italic', 'text-muted-foreground');
+
+      await act(async () => {
+        setInputValue(title, 'Captured from Control Center');
+      });
+      expect(rowTitle).toHaveTextContent('Captured from Control Center');
+      expect(rowTitle).not.toHaveAttribute('data-task-row-title-placeholder');
       expect(document.getElementById('task-start-task-draft:new'))
         .toHaveTextContent('Today · Inbox');
       expect(container.querySelectorAll('[data-task-row-id="task-draft:new"]'))
@@ -5430,7 +5442,7 @@ describe('TasksShell', () => {
       await act(async () => {
         setInputValue(title, 'Complete after autosave');
         container.querySelector<HTMLButtonElement>(
-          'button[aria-label="Complete Existing task"]',
+          '[data-task-completion-control]',
         )?.click();
         title.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'q', altKey: true, shiftKey: true, bubbles: true, cancelable: true,

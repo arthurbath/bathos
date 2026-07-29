@@ -29,11 +29,13 @@ The widget extension will add a `ControlWidget` backed by `StaticControlConfigur
 
 A configurable control was rejected because the user requested one precise capture destination. A toggle was rejected because task creation is a momentary action, not persistent binary state.
 
-### Use an OpenIntent with a URL-representable target
+### Use an OpenIntent with a private single-use handoff
 
-The button action will be an `OpenIntent` whose single target maps to `bathostasks://new`. The target will conform to the App Intents URL representation contract so iOS opens the containing app through its existing URL scene path. The intent source will belong to both the app and widget extension.
+The button action will be an `OpenIntent` with one static Today Inbox target. The intent source will belong to both the app and widget extension, as required by ControlWidget app-launch actions.
 
-This is preferred to storing pending navigation in the App Group because the URL is explicit, testable, and delivered by the system as part of opening the app. It is preferred to executing a task mutation in the extension because the existing web editor remains authoritative.
+Before iOS opens the containing app, the intent will atomically write one opaque UUID marker into the existing private App Group. The app will consume and remove that marker on appearance or foreground activation and invoke the same fixed new-task route used by `bathostasks://new`. The marker carries no task content, owner, identifiers, placement choice, or arbitrary URL.
+
+An App Intents URL representation was rejected after physical acceptance because Apple requires a universal HTTP(S) link and the user's Apple Personal Team cannot provision Associated Domains. A generic foreground AppIntent was rejected because the OpenIntent contract is the supported ControlWidget mechanism for launching a containing app on iOS 18. The bounded App Group marker uses a capability already provisioned for both native targets and still leaves the web editor authoritative.
 
 ### Map the Lucide concept to the native system symbol
 
@@ -53,10 +55,24 @@ The Tasks shell will recognize only the exact `native_new_task=1` signal. After 
 
 Removing the signal before invoking creation prevents a render, reload, back navigation, or WebKit recovery from opening duplicate drafts. If one unsaved draft is already open, the existing no-data-loss behavior remains authoritative and focuses that draft rather than replacing it.
 
+Warm native launches will reuse the loaded Tasks document through the existing in-page navigator. That navigator will encode the relative destination with Swift's JSON encoder before interpolating it into JavaScript. Foundation's JSON serialization API rejects a top-level string unless fragment handling is explicitly enabled and can terminate the app with an Objective-C exception, so it is not a safe string-literal encoder for this boundary.
+
+### Keep capture focus and empty-draft presentation local
+
+The existing Summary input remains the authoritative editor. A new Today Inbox draft requests native autofocus and retains the explicit cursor-at-end focus behavior so the standard iOS keyboard can appear as soon as WebKit presents the editor. This uses only public HTML and WebKit focus behavior. BathOS does not use private WebKit keyboard APIs, so iOS remains the final authority over software-keyboard presentation.
+
+While Summary edits are waiting inside the existing autosave debounce, the task row mirrors the editor's local display value. An empty value renders `New Task` in subdued italic text, and the first typed character replaces it immediately without introducing another persistence path or changing autosave cadence.
+
 ## Risks / Trade-offs
 
 - **A system control is unavailable on iOS 17** -> Availability-gate the control and retain the current iOS 17 app and widgets unchanged.
+- **The intent and app run in separate processes** -> Persist one opaque request atomically in their already-shared App Group and consume it on both cold appearance and foreground activation.
+- **A malformed or stale request marker could trigger creation** -> Accept only a bounded UUID marker, clear malformed content, and delete a valid marker before opening the editor.
+- **A Personal Team cannot provision Associated Domains** -> Keep the launch handoff inside the existing App Group and avoid universal-link entitlements or hosting dependencies.
 - **A URL signal could replay after navigation recovery** -> Remove it through replace navigation before beginning the draft workflow and cover idempotence in tests.
+- **A warm control launch could crash while encoding the in-page destination** -> Use a top-level-string-safe JSON encoder and exercise the real new-task route through the production navigator in native tests.
 - **The web shell may require authentication or network recovery before it can create** -> Preserve the query through existing authentication redirects and let the installed offline shell handle creation when available.
+- **The native app and public web bundle could implement different halves of the handoff** -> Publish the matching web release before physical acceptance so the production web shell recognizes the native signal.
+- **iOS may decline a programmatic software-keyboard request** -> Use the public autofocus and explicit focus contracts, keep the text cursor in Summary, and verify keyboard presentation on the physical device without relying on private WebKit behavior.
 - **A custom Lucide asset may render inconsistently in Control Center** -> Use Apple's adaptive `plus.square` symbol as the native expression of the requested icon concept.
 - **An existing unsaved draft may already be open** -> Focus it instead of silently destroying its pending metadata or creating a second draft.

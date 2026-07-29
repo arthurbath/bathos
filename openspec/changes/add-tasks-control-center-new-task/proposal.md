@@ -7,7 +7,7 @@ The native Tasks companion has no Control Center entry point for fast capture, r
 - Add one nonconfigurable Tasks control for Control Center, the Lock Screen controls gallery, and supported Action button surfaces.
 - Represent the add-task action with the native square-plus symbol treatment used by Apple system controls.
 - Open the native companion directly to a new task draft in the Today list's Inbox horizon.
-- Extend the allowlisted native deep-link boundary and web task shell with one single-use Today Inbox creation signal.
+- Extend the allowlisted native routing boundary and web task shell with one single-use Today Inbox creation signal delivered through the existing private App Group.
 - Preserve ordinary app launches, list and task deep links, authentication, offline behavior, and existing widgets.
 
 ## Capabilities
@@ -23,7 +23,7 @@ None.
 ## Impact
 
 - **Tasks widget extension:** One WidgetKit `ControlWidget`, one shared App Intent, and widget-bundle registration on supported iOS versions.
-- **Native routing:** One allowlisted new-task route mapped to the production Today page with a bounded single-use query signal.
+- **Native routing:** One allowlisted new-task route mapped to the production Today page with a bounded single-use query signal and an opaque App Group request marker.
 - **Tasks web module:** Consume that signal once, open the existing creation draft at the top of Today Inbox, focus Summary, and remove the signal from the address.
 - **Tests and documentation:** Native routing, widget registration, web signal parsing, task-creation behavior, and companion README coverage.
 - **Backend and sync:** No database, Edge Function, PowerSync, credential, projection, or migration change.

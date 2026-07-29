@@ -18,5 +18,8 @@
 - [x] 3.3 Update the companion README with Control Center installation and behavior
 - [x] 3.4 Run focused and full tests, signed and unsigned builds, lint, build, and strict OpenSpec validation
 - [x] 3.5 Rebuild, sign, install, and launch the matching companion and control on the user's iPhone
-- [ ] 3.6 Verify the physical Control Center control launches one focused Today Inbox draft
-- [ ] 3.7 Synchronize and archive the OpenSpec change, commit, push, and prove repository synchronization
+- [x] 3.6 Replace the rejected custom-scheme URL representation with an OpenIntent plus single-use private App Group handoff, and harden warm in-page routing against top-level JSON string crashes
+- [x] 3.7 Verify the physical Control Center control launches one focused Today Inbox draft
+- [x] 3.8 Keep Summary actively focused on capture launch and show the visible empty-row `New Task` placeholder
+- [ ] 3.9 Publish the matching web release and physically verify keyboard presentation and placeholder replacement
+- [ ] 3.10 Synchronize and archive the OpenSpec change, commit, push, and prove repository synchronization

@@ -50,6 +50,8 @@ On iOS 18 or later, open Control Center editing, choose **Add a Control**, find 
 
 The control uses Apple's adaptive `plus.square` symbol and opens the native companion to one new task in Today Inbox with Summary focused. It does not create task data inside the widget extension. The authoritative web editor retains autosave, offline, synchronization, undo, and close behavior. If one unsaved draft is already open, the control returns focus to that draft instead of replacing it.
 
+The shared OpenIntent writes one bounded, opaque request marker into the existing private App Group before iOS opens the containing app. The app atomically consumes that marker and invokes the allowlisted `bathostasks://new` route behavior once. This avoids Associated Domains, which Apple Personal Teams cannot provision, while preserving the same private capability boundary as the existing widgets.
+
 The control is unavailable on iOS 17. The containing app and existing widgets remain available there.
 
 ## Privacy Boundary

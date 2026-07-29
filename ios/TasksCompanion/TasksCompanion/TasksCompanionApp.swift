@@ -3,22 +3,41 @@ import UIKit
 
 @main
 struct TasksCompanionApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var browserModel = TasksBrowserModel()
 
     var body: some Scene {
         WindowGroup {
             TasksWebView(model: browserModel)
                 .ignoresSafeArea(.container, edges: .bottom)
-                .onOpenURL { url in
-                    switch TaskCompanionURLAction.resolve(url) {
-                    case .task(let route):
-                        browserModel.open(route)
-                    case .external(let destination):
-                        UIApplication.shared.open(destination)
-                    case .ignore:
-                        break
+                .onOpenURL(perform: handleURL)
+                .onAppear {
+                    consumeNewTaskControlRequest()
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .active {
+                        consumeNewTaskControlRequest()
                     }
                 }
         }
+    }
+
+    private func handleURL(_ url: URL) {
+        switch TaskCompanionURLAction.resolve(url) {
+        case .task(let route):
+            browserModel.open(route)
+        case .external(let destination):
+            UIApplication.shared.open(destination)
+        case .ignore:
+            break
+        }
+    }
+
+    private func consumeNewTaskControlRequest() {
+        guard let store = NewTaskControlRequestStore(),
+              (try? store.consume()) == true else {
+            return
+        }
+        browserModel.open(.newTask)
     }
 }

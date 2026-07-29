@@ -9,7 +9,13 @@ The Tasks companion SHALL provide one nonconfigurable system control on supporte
 
 #### Scenario: Start a task from Control Center
 - **WHEN** the user activates the New Task control
-- **THEN** iOS opens the Tasks companion to the Today list, opens the existing new-task editor, assigns the draft to Inbox, and focuses Summary
+- **THEN** iOS opens the Tasks companion to the Today list, opens the existing new-task editor, assigns the draft to Inbox, focuses Summary with its text cursor ready for entry, and requests the standard iOS software keyboard
+
+#### Scenario: Identify an empty task draft
+- **WHEN** a task's Summary is empty
+- **THEN** its summary row displays `New Task` in subdued italic text
+- **AND WHEN** the user enters the first Summary character
+- **THEN** the placeholder is immediately replaced by the entered Summary without waiting for autosave
 
 #### Scenario: Preserve the authoritative creation workflow
 - **WHEN** the user enters a Summary or changes any draft metadata after activating the control

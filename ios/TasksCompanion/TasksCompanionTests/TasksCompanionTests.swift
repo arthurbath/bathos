@@ -409,11 +409,39 @@ final class TasksCompanionTests: XCTestCase {
             let intent = OpenNewTaskIntent(target: .todayInbox)
 
             XCTAssertEqual(intent.target, .todayInbox)
-            XCTAssertEqual(
-                intent.target.urlRepresentation?.absoluteString,
-                "bathostasks://new"
-            )
         }
+    }
+
+    func testNewTaskControlRequestStoreConsumesOneValidRequestOnce() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        let store = NewTaskControlRequestStore(directoryURL: directoryURL)
+        let identifier = UUID(uuidString: "53a4b5c1-3a4e-4fab-a5bf-4c1b114fc690")!
+
+        XCTAssertFalse(try store.consume())
+        try store.record(identifier: identifier)
+        XCTAssertEqual(
+            try String(contentsOf: store.fileURL, encoding: .utf8),
+            identifier.uuidString.lowercased()
+        )
+        XCTAssertTrue(try store.consume())
+        XCTAssertFalse(try store.consume())
+    }
+
+    func testNewTaskControlRequestStoreRejectsAndClearsMalformedData() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        let store = NewTaskControlRequestStore(directoryURL: directoryURL)
+        try FileManager.default.createDirectory(
+            at: directoryURL,
+            withIntermediateDirectories: true
+        )
+        try Data("not-a-control-request".utf8).write(to: store.fileURL)
+
+        XCTAssertThrowsError(try store.consume())
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.fileURL.path))
     }
 
     func testWidgetConfigurationExcludesDoneAndRejectsLegacyDoneSelection() {
@@ -591,6 +619,14 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertEqual(model.requestedURL, route.webURL)
         XCTAssertTrue(model.hasLoadedContent)
         XCTAssertFalse(model.isLoading)
+    }
+
+    @MainActor
+    func testInPageNavigationAcceptsNativeNewTaskRouteWithoutCrashing() {
+        TasksBrowserModel.navigateInPage(
+            WKWebView(),
+            to: TaskNativeRoute.newTask.webURL
+        )
     }
 
     @MainActor

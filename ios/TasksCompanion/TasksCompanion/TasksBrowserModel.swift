@@ -143,9 +143,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         components.path = url.path
         components.query = url.query
         let destination = components.string ?? url.path
-        guard let encoded = try? JSONSerialization.data(
-            withJSONObject: destination
-        ),
+        guard let encoded = try? JSONEncoder().encode(destination),
         let literal = String(data: encoded, encoding: .utf8) else {
             return
         }

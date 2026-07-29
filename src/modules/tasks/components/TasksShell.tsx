@@ -4609,6 +4609,7 @@ function TaskRow({
   const [terminalExiting, setTerminalExiting] = useState(false);
   const [editorMounted, setEditorMounted] = useState(selected);
   const [editorExpanded, setEditorExpanded] = useState(selected);
+  const [visibleTitle, setVisibleTitle] = useState(task.title);
   const articleRef = useRef<HTMLElement>(null);
   const editorRegionRef = useRef<HTMLDivElement>(null);
   const editorAnimationFrameRef = useRef<number | null>(null);
@@ -4629,7 +4630,7 @@ function TaskRow({
   const pendingRef = useRef(false);
   const inBulkSelection = bulkSelection !== undefined;
   const areaLabel = getTaskAreaLabel(task, hierarchy);
-  const taskLabel = task.title || 'New Task';
+  const taskLabel = visibleTitle || 'New Task';
   const todayMarkerPresentation = todayMarker
     ? getTaskHorizonPresentation(todayMarker)
     : null;
@@ -4638,6 +4639,10 @@ function TaskRow({
     && isTaskCalendarDate(task.deadline)
     && isTaskCalendarDate(planningDate)
     && task.deadline <= planningDate;
+
+  useEffect(() => {
+    setVisibleTitle(task.title);
+  }, [task.title]);
 
   useEffect(() => {
     const cancelScheduledMotion = () => {
@@ -5157,7 +5162,7 @@ function TaskRow({
             }
           }}
           aria-expanded={bulkSelection ? undefined : selected}
-          aria-label={task.title ? undefined : 'New Task'}
+          aria-label={visibleTitle ? undefined : 'New Task'}
           aria-pressed={bulkSelection ? bulkSelection.selected : undefined}
           aria-keyshortcuts={bulkSelection
             ? 'Enter'
@@ -5174,7 +5179,15 @@ function TaskRow({
           className={`flex h-full min-w-0 flex-1 flex-col justify-center overflow-hidden text-left text-[15px] font-normal leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${draggableTask && !pending ? 'cursor-grab active:cursor-grabbing' : ''}`}
         >
           <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate" data-task-row-title>{task.title}</span>
+            <span
+              className={visibleTitle
+                ? 'truncate'
+                : 'truncate italic text-muted-foreground'}
+              data-task-row-title
+              data-task-row-title-placeholder={visibleTitle ? undefined : 'true'}
+            >
+              {taskLabel}
+            </span>
           </span>
           {(
             areaLabel
@@ -5406,6 +5419,7 @@ function TaskRow({
               onSaveReminder={onSaveReminder}
               onCancelReminder={onCancelReminder}
               onRegisterAutosave={onRegisterAutosave}
+              onTitleChange={setVisibleTitle}
             />
             <button
               type="button"
@@ -5489,6 +5503,7 @@ function TaskEditor({
   onSaveReminder,
   onCancelReminder,
   onRegisterAutosave,
+  onTitleChange,
 }: {
   task: TaskTodo;
   checklistTaskId: string | null;
@@ -5504,6 +5519,7 @@ function TaskEditor({
   }) => Promise<void>;
   onCancelReminder: () => Promise<void>;
   onRegisterAutosave: (taskId: string, flush: () => Promise<void>) => void;
+  onTitleChange: (title: string) => void;
 }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes);
@@ -5730,6 +5746,7 @@ function TaskEditor({
         ref={titleInputRef}
         id={`task-title-${task.id}`}
         data-task-editor-title
+        autoFocus={task.id === NEW_TASK_DRAFT_ID}
         aria-label="Summary"
         placeholder="Summary"
         aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Q Alt+Shift+Q"
@@ -5737,6 +5754,7 @@ function TaskEditor({
         onChange={(event) => {
           const nextTitle = event.target.value;
           setTitle(nextTitle);
+          onTitleChange(nextTitle);
           const normalizedTitle = nextTitle.trim();
           if (normalizedTitle) scheduleTextPatch({ title: normalizedTitle });
           else removePendingTextField('title');
