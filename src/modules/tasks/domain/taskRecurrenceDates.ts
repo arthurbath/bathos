@@ -50,7 +50,7 @@ function recurrenceDateForStep(
     return addTaskCalendarDays(input.startDate, input.intervalCount * step);
   }
   if (input.frequency === 'yearly') {
-    return addMonthsClamped(input.startDate, input.intervalCount * step * 12);
+    return yearlyDateForStep(input, step);
   }
   if (input.frequency === 'monthly') {
     const config = input.ruleConfig ?? {};
@@ -86,6 +86,38 @@ function recurrenceDateForStep(
       found += 1;
       if (found === step) return candidate;
     }
+  }
+  return null;
+}
+
+function yearlyDateForStep(
+  input: TaskRecurrencePreviewInput,
+  step: number,
+): string | null {
+  const config = input.ruleConfig ?? {};
+  const startYear = Number(input.startDate.slice(0, 4));
+  let found = -1;
+  for (let yearStep = 0; yearStep < 1_200; yearStep += 1) {
+    const year = startYear + (input.intervalCount * yearStep);
+    const month = config.month ?? Number(input.startDate.slice(5, 7));
+    let candidate: string | null;
+    if (config.yearly_kind === 'ordinal_weekday') {
+      candidate = ordinalWeekdayInMonth(
+        formatDate(year, month, 1),
+        config.ordinal ?? 1,
+        config.weekday ?? isoWeekday(input.startDate),
+      );
+    } else if (config.yearly_kind === 'last_day') {
+      candidate = setClampedMonthDay(formatDate(year, month, 1), 31);
+    } else {
+      candidate = setClampedMonthDay(
+        formatDate(year, month, 1),
+        config.month_day ?? Number(input.startDate.slice(8, 10)),
+      );
+    }
+    if (!candidate || candidate < input.startDate) continue;
+    found += 1;
+    if (found === step) return candidate;
   }
   return null;
 }

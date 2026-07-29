@@ -220,6 +220,48 @@ describe('TaskRepeatDialog', () => {
     }
   });
 
+  it('uses shared BathOS Select controls for yearly ordinal-weekday cadence', async () => {
+    const task = taskTodoFixture({
+      id: 'task-yearly-repeat',
+      title: 'Annual Review',
+      start_date: '2026-01-01',
+      deadline: null,
+    });
+    const { container, root } = renderDialog(task);
+    try {
+      await selectBathosOption('Frequency', 'Years');
+      await selectBathosOption('Yearly Pattern', 'Weekday Position');
+      await selectBathosOption('Yearly Month', 'May');
+      await selectBathosOption('Yearly Ordinal', 'Second');
+      await selectBathosOption('Yearly Weekday', 'Sunday');
+
+      const preview = document.querySelector('[aria-label="Next Three Occurrences"]')!;
+      expect(preview).toHaveTextContent('May 10, 2026');
+      expect(preview).toHaveTextContent('May 9, 2027');
+      expect(preview).toHaveTextContent('May 14, 2028');
+
+      await act(async () => {
+        document.querySelector<HTMLButtonElement>(
+          `button[form="task-repeat-form-${task.id}"]`,
+        )?.click();
+        await Promise.resolve();
+      });
+
+      expect(createFromTask).toHaveBeenCalledWith(expect.objectContaining({
+        scheduleDate: '2026-05-10',
+        frequency: 'yearly',
+        ruleConfig: {
+          yearly_kind: 'ordinal_weekday',
+          month: 5,
+          ordinal: 2,
+          weekday: 7,
+        },
+      }));
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('uses the Deadline as the schedule and derives Start by the chosen offset', async () => {
     const task = taskTodoFixture({
       id: 'task-deadline-repeat',

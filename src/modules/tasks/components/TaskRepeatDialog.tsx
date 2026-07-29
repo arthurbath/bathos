@@ -63,8 +63,24 @@ const monthlyOrdinals = [
   [-1, 'Last'],
 ] as const;
 
+const months = [
+  [1, 'January'],
+  [2, 'February'],
+  [3, 'March'],
+  [4, 'April'],
+  [5, 'May'],
+  [6, 'June'],
+  [7, 'July'],
+  [8, 'August'],
+  [9, 'September'],
+  [10, 'October'],
+  [11, 'November'],
+  [12, 'December'],
+] as const;
+
 type MonthlyPattern = 'date' | 'weekday_position' | 'day_type_position';
 type MonthlyOrdinal = -1 | 1 | 2 | 3 | 4 | 5;
+type YearlyPattern = 'date' | 'last_day' | 'weekday_position';
 
 export function TaskRepeatDialog({
   task,
@@ -98,6 +114,13 @@ export function TaskRepeatDialog({
   const [monthlyDayType, setMonthlyDayType] = useState<'weekday' | 'weekend_day'>(
     'weekday',
   );
+  const [yearlyPattern, setYearlyPattern] = useState<YearlyPattern>('date');
+  const [yearlyMonth, setYearlyMonth] = useState(Number(scheduleDate.slice(5, 7)));
+  const [yearlyDate, setYearlyDate] = useState(Number(scheduleDate.slice(8, 10)));
+  const [yearlyOrdinal, setYearlyOrdinal] = useState<MonthlyOrdinal>(
+    ordinalInMonth(scheduleDate),
+  );
+  const [yearlyWeekday, setYearlyWeekday] = useState(isoWeekday(scheduleDate));
   const [endMode, setEndMode] = useState<TaskRecurrenceEndMode>('never');
   const [endAfterCount, setEndAfterCount] = useState(10);
   const [endOnDate, setEndOnDate] = useState(scheduleDate);
@@ -126,6 +149,24 @@ export function TaskRepeatDialog({
                 ordinal: monthlyOrdinal,
                 day_type: monthlyDayType,
               }
+        : frequency === 'yearly'
+          ? yearlyPattern === 'date'
+            ? {
+                yearly_kind: 'fixed_date',
+                month: yearlyMonth,
+                month_day: yearlyDate,
+              }
+            : yearlyPattern === 'last_day'
+              ? {
+                  yearly_kind: 'last_day',
+                  month: yearlyMonth,
+                }
+              : {
+                  yearly_kind: 'ordinal_weekday',
+                  month: yearlyMonth,
+                  ordinal: yearlyOrdinal,
+                  weekday: yearlyWeekday,
+                }
         : {}
   ), [
     frequency,
@@ -135,6 +176,11 @@ export function TaskRepeatDialog({
     monthlyPattern,
     monthlyWeekday,
     selectedWeekdays,
+    yearlyDate,
+    yearlyMonth,
+    yearlyOrdinal,
+    yearlyPattern,
+    yearlyWeekday,
   ]);
   const preview = getTaskRecurrencePreviewDates({
     startDate: scheduleDate,
@@ -146,8 +192,8 @@ export function TaskRepeatDialog({
     endOnDate,
     limit: 3,
   });
-  const alignedMonthlyDate = useMemo(() => (
-    ruleMode === 'calendar' && frequency === 'monthly'
+  const alignedCadenceDate = useMemo(() => (
+    ruleMode === 'calendar' && (frequency === 'monthly' || frequency === 'yearly')
       ? getTaskRecurrencePreviewDates({
           startDate: scheduleDate,
           frequency,
@@ -157,7 +203,7 @@ export function TaskRepeatDialog({
         })[0] ?? null
       : null
   ), [frequency, intervalCount, ruleConfig, ruleMode, scheduleDate]);
-  const effectiveScheduleDate = alignedMonthlyDate ?? scheduleDate;
+  const effectiveScheduleDate = alignedCadenceDate ?? scheduleDate;
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -280,6 +326,7 @@ export function TaskRepeatDialog({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="date">Calendar Date</SelectItem>
+                        <SelectItem value="last_day">Last Day</SelectItem>
                         <SelectItem value="weekday_position">Weekday Position</SelectItem>
                         <SelectItem value="day_type_position">Day-Type Position</SelectItem>
                       </SelectContent>
@@ -355,6 +402,99 @@ export function TaskRepeatDialog({
                       )}
                     </div>
                   )}
+                </div>
+              ) : null}
+              {ruleMode === 'calendar' && frequency === 'yearly' ? (
+                <div className="mt-3 grid gap-3" data-task-yearly-cadence>
+                  <div className="grid grid-cols-[auto_1fr] items-center gap-3">
+                    <span className="text-sm">On</span>
+                    <Select
+                      value={yearlyPattern}
+                      onValueChange={(value) => setYearlyPattern(value as YearlyPattern)}
+                    >
+                      <SelectTrigger aria-label="Yearly Pattern">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="date">Calendar Date</SelectItem>
+                        <SelectItem value="weekday_position">Weekday Position</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select
+                      value={String(yearlyMonth)}
+                      onValueChange={(value) => setYearlyMonth(Number(value))}
+                    >
+                      <SelectTrigger aria-label="Yearly Month">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {months.map(([month, label]) => (
+                          <SelectItem key={month} value={String(month)}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {yearlyPattern === 'date' ? (
+                      <Select
+                        value={String(yearlyDate)}
+                        onValueChange={(value) => setYearlyDate(Number(value))}
+                      >
+                        <SelectTrigger aria-label="Yearly Date">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
+                            <SelectItem key={day} value={String(day)}>
+                              {ordinalNumber(day)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : yearlyPattern === 'last_day' ? (
+                      <div
+                        className="flex min-h-10 items-center px-3 text-sm text-muted-foreground"
+                        aria-label="Yearly Last Day"
+                      >
+                        Last Day
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        <Select
+                          value={String(yearlyOrdinal)}
+                          onValueChange={(value) => setYearlyOrdinal(Number(value) as MonthlyOrdinal)}
+                        >
+                          <SelectTrigger aria-label="Yearly Ordinal">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {monthlyOrdinals.map(([ordinal, label]) => (
+                              <SelectItem key={ordinal} value={String(ordinal)}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={String(yearlyWeekday)}
+                          onValueChange={(value) => setYearlyWeekday(Number(value))}
+                        >
+                          <SelectTrigger aria-label="Yearly Weekday">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {weekdays.map(([day, label]) => (
+                              <SelectItem key={day} value={String(day)}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : null}
             </div>

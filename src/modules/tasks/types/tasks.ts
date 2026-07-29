@@ -306,6 +306,8 @@ export type TaskRecurrenceRuleConfig = {
     | 'last_day'
     | 'ordinal_weekday'
     | 'ordinal_day_type';
+  yearly_kind?: 'fixed_date' | 'last_day' | 'ordinal_weekday';
+  month?: number;
   month_day?: number;
   ordinal?: -1 | 1 | 2 | 3 | 4 | 5;
   weekday?: number;

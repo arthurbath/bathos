@@ -85,6 +85,48 @@ describe('TaskRecurrenceService', () => {
     });
   });
 
+  it('parses explicit yearly calendar, last-day, and ordinal-weekday rules', () => {
+    expect(parseTaskRecurrenceRevision({
+      ...revision,
+      frequency: 'yearly',
+      rule_config: {
+        yearly_kind: 'fixed_date',
+        month: 2,
+        month_day: 29,
+      },
+    }).rule_config).toEqual({
+      yearly_kind: 'fixed_date',
+      month: 2,
+      month_day: 29,
+    });
+    expect(parseTaskRecurrenceRevision({
+      ...revision,
+      frequency: 'yearly',
+      rule_config: {
+        yearly_kind: 'last_day',
+        month: 10,
+      },
+    }).rule_config).toEqual({
+      yearly_kind: 'last_day',
+      month: 10,
+    });
+    expect(parseTaskRecurrenceRevision({
+      ...revision,
+      frequency: 'yearly',
+      rule_config: {
+        yearly_kind: 'ordinal_weekday',
+        month: 5,
+        ordinal: 2,
+        weekday: 7,
+      },
+    }).rule_config).toEqual({
+      yearly_kind: 'ordinal_weekday',
+      month: 5,
+      ordinal: 2,
+      weekday: 7,
+    });
+  });
+
   it('saves a structured rule through the server-authoritative RPC', async () => {
     const { owner_id: _definitionOwner, ...ownerSafeDefinition } = definition;
     const { owner_id: _revisionOwner, ...ownerSafeRevision } = revision;

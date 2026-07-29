@@ -78,6 +78,48 @@ describe('task recurrence previews', () => {
     })).toEqual(['2026-07-26', '2026-08-30', '2026-09-27']);
   });
 
+  it('previews fixed yearly calendar dates with end-of-month clamping', () => {
+    expect(getTaskRecurrencePreviewDates({
+      startDate: '2026-02-28',
+      frequency: 'yearly',
+      intervalCount: 1,
+      ruleConfig: {
+        yearly_kind: 'fixed_date',
+        month: 2,
+        month_day: 29,
+      },
+      limit: 4,
+    })).toEqual(['2026-02-28', '2027-02-28', '2028-02-29', '2029-02-28']);
+  });
+
+  it('previews yearly ordinal weekdays', () => {
+    expect(getTaskRecurrencePreviewDates({
+      startDate: '2026-01-01',
+      frequency: 'yearly',
+      intervalCount: 1,
+      ruleConfig: {
+        yearly_kind: 'ordinal_weekday',
+        month: 5,
+        ordinal: 2,
+        weekday: 7,
+      },
+      limit: 3,
+    })).toEqual(['2026-05-10', '2027-05-09', '2028-05-14']);
+  });
+
+  it('previews the last day of a fixed month every year', () => {
+    expect(getTaskRecurrencePreviewDates({
+      startDate: '2026-01-01',
+      frequency: 'yearly',
+      intervalCount: 1,
+      ruleConfig: {
+        yearly_kind: 'last_day',
+        month: 2,
+      },
+      limit: 3,
+    })).toEqual(['2026-02-28', '2027-02-28', '2028-02-29']);
+  });
+
   it('skips months that do not contain a requested fifth weekday', () => {
     expect(getTaskRecurrencePreviewDates({
       startDate: '2026-07-01',

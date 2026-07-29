@@ -1,10 +1,23 @@
 # Tasks Goal Readiness Audit
 
-**Date:** 2026 Jul 25
+**Date:** 2026 Jul 28
 **Category:** Product / Production / Trust
 **Status:** Complete
 
 ## Outcome
+
+### Accepted Things-To-Tasks Authoritative Cutover
+
+BathOS Tasks is now the authoritative task system. The approved open Things
+corpus was migrated from a private verified snapshot into 129 Tasks, two Areas,
+93 checklist items, and 60 native recurrence graphs. The 2026 Jul 28
+`America/Los_Angeles` Today set entered Today Inbox, while future Starts
+remained date-only calendar values. The final production export matches the
+validated target digest exactly after excluding its generated timestamp.
+Inbox Manager and the canonical Raycast reading capture now create only BathOS
+Tasks, and their disposable production fixtures were reconciled and removed.
+The accepted content-free evidence is recorded in
+`2026-07-28_things_authoritative_cutover.md`.
 
 ### Accepted Checklists, Recurrence, And Terminal Editing Release
 
@@ -53,8 +66,12 @@ The planning and notes refinement is accepted in production. Upcoming now select
 - PowerSync Cloud uses the exact approved 20-table owner-scoped projection. Production topology, restart, conflict, owner-isolation, cleanup, and cross-client convergence gates passed.
 - Safari Web Push subscription, provider acceptance, notification opening, acknowledgement, expired-target revocation, and scheduled reminder dispatch passed in production.
 - Raycast defaults ordinary, current-browser-page, Finder-item, and AI-refined reading capture to Anytime and Today Inbox through OAuth and the MCP function. Production creation and a fresh PowerSync projection passed. Unreliable selected-text capture remains outside the product contract.
-- Inbox Manager creates Things tasks first and persistently mirrors accepted new creations into BathOS Tasks. Existing tasks, edits, completions, historical Mail, Mail rules, and Mail retirement remain outside that handoff.
-- Native Apple surfaces and migration from Things remain deliberate future decisions rather than incomplete V1 obligations.
+- Inbox Manager creates new Mail tasks directly in BathOS Today Inbox through
+  its permanent Tasks-only mode. Things availability, credentials, scripting,
+  and writes are excluded from that authoritative path.
+- Native Apple surfaces are accepted, and the Things-to-Tasks authoritative
+  migration is complete. Things remains only as the untouched historical
+  source and rollback reference.
 
 ## Durable Requirement Audit
 
@@ -87,6 +104,7 @@ The planning and notes refinement is accepted in production. Upcoming now select
 | Deterministic Mail Capture Retry | Archived `fix-tasks-mail-capture-retry` exact-replay, one-task/source/history, and fresh PowerSync-client proof | Accepted |
 | Large-Library Responsiveness | `2026-07-20_tasks_large_library_performance.md` and opt-in performance suite | Accepted |
 | Parallel Use with Things | Accepted seven-task corrected-window trial, exact nine-receipt backend and projection reconciliation, explicit disable, healthy post-disable Mail run, and healthy post-boundary no-work audit | Accepted |
+| Authoritative Things Cutover | Private Things snapshot, deterministic schema-13 migration, exact post-cleanup digest, Tasks-only Mail and Raycast captures, rendered planning counts, and recovery boundary in `2026-07-28_things_authoritative_cutover.md` | Accepted |
 | BathOS Product Expression | `2026-07-20_tasks_product_identity.md`, Lucide icon, dark-only BathOS styling, and tagless Tasks naming | Accepted |
 | Stable Tasks Route Runtime | `2026-07-21_tasks_route_runtime_stability.md` and route-runtime regression suite | Accepted |
 | Module Isolation | Tasks-only source, routes, tables, service-worker interception, MCP namespace, and removal-boundary coverage | Accepted |

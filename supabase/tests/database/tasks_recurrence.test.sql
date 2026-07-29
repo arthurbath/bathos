@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(56);
+SELECT plan(63);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -710,6 +710,127 @@ SELECT is(
   ),
   '2026-08-31'::date,
   'monthly recurrence skips months without the requested fifth weekday'
+);
+
+INSERT INTO public.tasks_recurrence_revisions (
+  id, owner_id, recurrence_id, revision, name, template_id, template_revision,
+  rule_mode, frequency, interval_count, start_date, planning_timezone,
+  missed_policy, catch_up_limit, client_mutation_id, rule_config
+)
+SELECT
+  values.id,
+  '96000000-0000-4000-8000-000000000002'::uuid,
+  '96000000-0000-4000-8000-000000000090'::uuid,
+  values.revision,
+  values.name,
+  template.template_id,
+  template.revision,
+  'calendar',
+  'yearly',
+  1,
+  values.start_date,
+  'UTC',
+  'latest',
+  50,
+  values.client_mutation_id,
+  values.rule_config
+FROM (
+  VALUES
+    (
+      '96000000-0000-4000-8000-000000000102'::uuid,
+      6::bigint,
+      'Leap day',
+      '2026-02-28'::date,
+      '96000000-0000-4000-8000-000000000103'::uuid,
+      '{"yearly_kind":"fixed_date","month":2,"month_day":29}'::jsonb
+    ),
+    (
+      '96000000-0000-4000-8000-000000000104'::uuid,
+      7::bigint,
+      'Second Sunday in May',
+      '2026-01-01'::date,
+      '96000000-0000-4000-8000-000000000105'::uuid,
+      '{"yearly_kind":"ordinal_weekday","month":5,"ordinal":2,"weekday":7}'::jsonb
+    ),
+    (
+      '96000000-0000-4000-8000-000000000106'::uuid,
+      8::bigint,
+      'Last day of February',
+      '2026-01-01'::date,
+      '96000000-0000-4000-8000-000000000107'::uuid,
+      '{"yearly_kind":"last_day","month":2}'::jsonb
+    )
+) AS values(id, revision, name, start_date, client_mutation_id, rule_config)
+CROSS JOIN LATERAL (
+  SELECT revision.template_id, revision.revision
+  FROM public.tasks_template_revisions AS revision
+  WHERE revision.owner_id = '96000000-0000-4000-8000-000000000002'
+  ORDER BY revision.created_at
+  LIMIT 1
+) AS template;
+
+SELECT is(
+  (
+    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
+    FROM public.tasks_recurrence_revisions AS recurrence_revision
+    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000102'
+  ),
+  '2026-02-28'::date,
+  'yearly fixed-date recurrence clamps leap day in a common year'
+);
+SELECT is(
+  (
+    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 2)
+    FROM public.tasks_recurrence_revisions AS recurrence_revision
+    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000102'
+  ),
+  '2028-02-29'::date,
+  'yearly fixed-date recurrence preserves leap day when available'
+);
+SELECT is(
+  (
+    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
+    FROM public.tasks_recurrence_revisions AS recurrence_revision
+    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000104'
+  ),
+  '2026-05-10'::date,
+  'yearly recurrence supports an ordinal weekday'
+);
+SELECT is(
+  (
+    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 1)
+    FROM public.tasks_recurrence_revisions AS recurrence_revision
+    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000104'
+  ),
+  '2027-05-09'::date,
+  'yearly ordinal weekday advances to the next eligible year'
+);
+SELECT is(
+  (
+    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 2)
+    FROM public.tasks_recurrence_revisions AS recurrence_revision
+    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000104'
+  ),
+  '2028-05-14'::date,
+  'yearly ordinal weekday remains calendar-correct across leap years'
+);
+SELECT is(
+  (
+    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
+    FROM public.tasks_recurrence_revisions AS recurrence_revision
+    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000106'
+  ),
+  '2026-02-28'::date,
+  'yearly last-day recurrence uses the common-year month end'
+);
+SELECT is(
+  (
+    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 2)
+    FROM public.tasks_recurrence_revisions AS recurrence_revision
+    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000106'
+  ),
+  '2028-02-29'::date,
+  'yearly last-day recurrence follows leap-year month end'
 );
 
 SELECT * FROM finish();

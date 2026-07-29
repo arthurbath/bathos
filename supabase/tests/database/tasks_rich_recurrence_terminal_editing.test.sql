@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(24);
+SELECT plan(27);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -114,6 +114,14 @@ SELECT is(
   current_setting('test.rich_calendar')::jsonb #>> '{occurrence,template_instantiation_id}',
   NULL,
   'does not duplicate the adopted source through template instantiation'
+);
+SELECT lives_ok(
+  $$
+    SELECT public.tasks_prepare_replace_restore_v13(
+      public.tasks_create_export_v13()
+    )
+  $$,
+  'prepares a schema-thirteen replacement containing an adopted occurrence'
 );
 SELECT is(
   (
@@ -289,6 +297,38 @@ SELECT is(
   ),
   'completed:Edited while Done',
   'does not implicitly recover a terminal task during metadata editing'
+);
+SELECT set_config(
+  'test.rich_replace_export',
+  public.tasks_create_export_v13()::text,
+  false
+);
+SELECT set_config(
+  'test.rich_replace_prepare',
+  public.tasks_prepare_replace_restore_v13(
+    current_setting('test.rich_replace_export')::jsonb
+  )::text,
+  false
+);
+SELECT lives_ok(
+  format(
+    $$SELECT public.tasks_replace_restore_v13(
+      %L::jsonb, %L, '9a000000-0000-4000-8000-000000000026',
+      'REPLACE TASK DATA'
+    )$$,
+    current_setting('test.rich_replace_export'),
+    current_setting('test.rich_replace_prepare')::jsonb ->> 'backup_digest'
+  ),
+  'replaces a schema-thirteen corpus containing immutable recurrence rows'
+);
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.tasks_recurrence_occurrences
+    WHERE owner_id = '9a000000-0000-4000-8000-000000000001'
+  ),
+  5::bigint,
+  'retains adopted and generated recurrence occurrences after replacement'
 );
 SELECT * FROM finish();
 ROLLBACK;

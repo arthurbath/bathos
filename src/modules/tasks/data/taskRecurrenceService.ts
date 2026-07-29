@@ -371,6 +371,14 @@ function parseRuleConfig(value: unknown): TaskRecurrenceRuleConfig {
       ? { monthly_kind: record.monthly_kind }
       : {}
     ),
+    ...(
+      record.yearly_kind === 'fixed_date'
+      || record.yearly_kind === 'last_day'
+      || record.yearly_kind === 'ordinal_weekday'
+      ? { yearly_kind: record.yearly_kind }
+      : {}
+    ),
+    ...(Number.isInteger(record.month) ? { month: Number(record.month) } : {}),
     ...(Number.isInteger(record.month_day) ? { month_day: Number(record.month_day) } : {}),
     ...(Number.isInteger(record.ordinal)
       ? { ordinal: Number(record.ordinal) as -1 | 1 | 2 | 3 | 4 | 5 }
