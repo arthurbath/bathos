@@ -42,6 +42,8 @@ enum TaskWidgetListID: String, Codable, CaseIterable {
 }
 
 enum TaskWidgetPresentationPolicy {
+    static let largeWidgetStandardTaskLimit = 9
+    static let largeWidgetExactFitTaskCount = 10
     static let lockScreenTaskLimit = 3
     static let lockScreenTaskRowMinimumHeight: CGFloat = 16
     static let lockScreenTaskRowSpacing: CGFloat = 4
@@ -52,6 +54,27 @@ enum TaskWidgetPresentationPolicy {
 
     static func lockScreenURL(for listID: TaskWidgetListID) -> URL {
         TaskNativeRoute.list(listID).deepLinkURL
+    }
+
+    static func largeWidgetTaskLimit(totalCount: Int) -> Int {
+        totalCount == largeWidgetExactFitTaskCount
+            ? largeWidgetExactFitTaskCount
+            : largeWidgetStandardTaskLimit
+    }
+
+    static func largeWidgetOverflowCount(
+        totalCount: Int,
+        availableTaskCount: Int
+    ) -> Int {
+        let visibleCount = min(
+            availableTaskCount,
+            largeWidgetTaskLimit(totalCount: totalCount)
+        )
+        return max(0, totalCount - visibleCount)
+    }
+
+    static func largeWidgetNewTaskURL(for listID: TaskWidgetListID) -> URL {
+        TaskNativeRoute.newTaskInList(listID).deepLinkURL
     }
 }
 

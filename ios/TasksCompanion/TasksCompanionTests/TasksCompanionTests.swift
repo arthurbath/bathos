@@ -351,7 +351,15 @@ final class TasksCompanionTests: XCTestCase {
             .newTask
         )
         XCTAssertEqual(
+            TaskNativeRoute.parse(URL(string: "bathostasks://new/upcoming")!),
+            .newTaskInList(.upcoming)
+        )
+        XCTAssertEqual(
             TaskNativeRoute.parse(URL(string: "bathostasks://new/other")!),
+            .list(.today)
+        )
+        XCTAssertEqual(
+            TaskNativeRoute.parse(URL(string: "bathostasks://new/upcoming/other")!),
             .list(.today)
         )
         XCTAssertEqual(
@@ -373,6 +381,14 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertEqual(
             TaskNativeRoute.newTask.deepLinkURL.absoluteString,
             "bathostasks://new"
+        )
+        XCTAssertEqual(
+            TaskNativeRoute.newTaskInList(.someday).webURL.absoluteString,
+            "https://os.bath.garden/tasks/someday?native_new_task=list"
+        )
+        XCTAssertEqual(
+            TaskNativeRoute.newTaskInList(.someday).deepLinkURL.absoluteString,
+            "bathostasks://new/someday"
         )
         XCTAssertEqual(
             TaskCompanionURLAction.resolve(
@@ -522,6 +538,49 @@ final class TasksCompanionTests: XCTestCase {
 
         XCTAssertEqual(url.absoluteString, "bathostasks://list/someday")
         XCTAssertEqual(TaskNativeRoute.parse(url), .list(.someday))
+    }
+
+    func testLargeWidgetUsesAdaptiveNineOrTenTaskCapacity() {
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.largeWidgetTaskLimit(totalCount: 9),
+            9
+        )
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.largeWidgetOverflowCount(
+                totalCount: 9,
+                availableTaskCount: 9
+            ),
+            0
+        )
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.largeWidgetTaskLimit(totalCount: 10),
+            10
+        )
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.largeWidgetOverflowCount(
+                totalCount: 10,
+                availableTaskCount: 10
+            ),
+            0
+        )
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.largeWidgetTaskLimit(totalCount: 11),
+            9
+        )
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.largeWidgetOverflowCount(
+                totalCount: 11,
+                availableTaskCount: 11
+            ),
+            2
+        )
+    }
+
+    func testLargeWidgetNewTaskDeepLinkTargetsConfiguredList() {
+        let url = TaskWidgetPresentationPolicy.largeWidgetNewTaskURL(for: .anytime)
+
+        XCTAssertEqual(url.absoluteString, "bathostasks://new/anytime")
+        XCTAssertEqual(TaskNativeRoute.parse(url), .newTaskInList(.anytime))
     }
 
     func testWebViewUsesPersistentAppBoundConfiguration() {

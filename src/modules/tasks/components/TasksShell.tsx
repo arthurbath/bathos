@@ -118,7 +118,7 @@ import {
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import {
   getNativeTaskDeepLinkId,
-  hasNativeNewTaskSignal,
+  getNativeNewTaskSignal,
   removeNativeNewTaskSignal,
   removeNativeTaskDeepLink,
   requestTaskNativeNewTaskSummaryFocus,
@@ -1103,16 +1103,22 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   ]);
 
   useEffect(() => {
-    if (loading || !hasNativeNewTaskSignal(location.search)) return;
+    const nativeNewTaskSignal = getNativeNewTaskSignal(location.search);
+    if (loading || nativeNewTaskSignal === null) return;
 
     navigate({
       pathname: location.pathname,
       search: removeNativeNewTaskSignal(location.search),
       hash: location.hash,
     }, { replace: true });
-    void beginTaskCreation({ todaySection: 'inbox' });
+    void beginTaskCreation(
+      nativeNewTaskSignal === 'today-inbox'
+        ? { todaySection: 'inbox' }
+        : floatingTaskCreationPlacement,
+    );
   }, [
     beginTaskCreation,
+    floatingTaskCreationPlacement,
     loading,
     location.hash,
     location.pathname,

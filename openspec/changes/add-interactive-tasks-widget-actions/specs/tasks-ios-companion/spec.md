@@ -141,6 +141,19 @@ The Tasks widget SHALL present the four active planning lists with compact, top-
 - **WHEN** a widget renders its list header
 - **THEN** it shows the canonical icon and list name without a task-count badge or number
 
+#### Scenario: Maximize the large-widget task capacity
+- **WHEN** a large widget has nine or fewer projected tasks
+- **THEN** it shows every task without an overflow message
+- **WHEN** the list has exactly ten projected tasks
+- **THEN** it shows all ten tasks without an overflow message
+- **WHEN** the list has more than ten projected tasks
+- **THEN** it shows the first nine tasks followed by a `+X More` message whose count equals the remaining tasks
+
+#### Scenario: Start a task from the configured list
+- **WHEN** the user taps the plus action in the top-right of a large widget
+- **THEN** the companion opens the configured Today, Upcoming, Anytime, or Someday view and begins that view's ordinary new-task workflow
+- **AND** the draft inherits the same placement criteria that the list's floating add action would apply
+
 ### Requirement: Native Completion Credential Boundary
 The system SHALL provision, store, rotate, revoke, and validate a purpose-built native credential whose sole authority is completing an owned present open task.
 

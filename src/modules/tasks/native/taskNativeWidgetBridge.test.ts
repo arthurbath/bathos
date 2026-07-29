@@ -3,6 +3,7 @@ import { taskAreaFixture, taskTodoFixture } from '@/modules/tasks/testing/taskFi
 import {
   buildTaskNativeWidgetSnapshot,
   clearTaskNativeWidgetCache,
+  getNativeNewTaskSignal,
   getNativeTaskDeepLinkId,
   hasNativeNewTaskSignal,
   publishTaskNativeWidgetSnapshot,
@@ -311,9 +312,13 @@ describe('taskNativeWidgetBridge', () => {
 
   it('accepts one exact native-new-task signal and removes only that parameter', () => {
     expect(hasNativeNewTaskSignal('?native_new_task=1')).toBe(true);
+    expect(hasNativeNewTaskSignal('?native_new_task=list')).toBe(true);
+    expect(getNativeNewTaskSignal('?native_new_task=1')).toBe('today-inbox');
+    expect(getNativeNewTaskSignal('?native_new_task=list')).toBe('current-list');
     expect(hasNativeNewTaskSignal('?native_new_task=0')).toBe(false);
     expect(hasNativeNewTaskSignal('?native_new_task=1&native_new_task=1')).toBe(false);
     expect(hasNativeNewTaskSignal('?native_new_task=today')).toBe(false);
+    expect(getNativeNewTaskSignal('?native_new_task=today')).toBeNull();
     expect(removeNativeNewTaskSignal(
       '?native_new_task=1&reminder_delivery=delivery-a',
     )).toBe('?reminder_delivery=delivery-a');

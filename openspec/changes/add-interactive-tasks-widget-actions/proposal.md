@@ -10,6 +10,7 @@ The Tasks widget already exposes the right native surface for quick work, but it
 - Introduce a narrow, owner-bound, revocable native completion credential that cannot read Tasks data or perform arbitrary mutations and is never included in PowerSync.
 - On successful completion, briefly acknowledge the action, remove the task from active widget lists, add it to Done when projected, reload widget timelines, and rely on ordinary synchronization for every other client.
 - Fail closed when completion cannot reach the server, retaining the task in the widget rather than showing an unconfirmed completion.
+- Increase the large-widget task capacity to nine rows plus overflow, with an exact-ten fit, and add a list-aware header capture action.
 - Preserve the exact 20-table PowerSync publication and keep Supabase sessions, refresh tokens, PowerSync credentials, notes, checklist text, and Mail source metadata out of the native cache.
 
 ## Capabilities

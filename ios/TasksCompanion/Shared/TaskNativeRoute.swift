@@ -4,6 +4,7 @@ enum TaskNativeRoute: Equatable {
     case list(TaskWidgetListID)
     case task(UUID, list: TaskWidgetListID)
     case newTask
+    case newTaskInList(TaskWidgetListID)
 
     static let scheme = "bathostasks"
     static let productionOrigin = URL(string: "https://os.bath.garden")!
@@ -12,16 +13,24 @@ enum TaskNativeRoute: Equatable {
         guard url.scheme?.lowercased() == scheme else {
             return .list(.today)
         }
-        let pathComponent = url.pathComponents.dropFirst().first
+        let routePathComponents = Array(url.pathComponents.dropFirst())
+        let pathComponent = routePathComponents.first
         switch url.host?.lowercased() {
         case "new":
-            guard pathComponent == nil,
+            guard routePathComponents.count <= 1,
                   URLComponents(url: url, resolvingAgainstBaseURL: false)?
                     .queryItems?
                     .isEmpty != false else {
                 return .list(.today)
             }
-            return .newTask
+            guard let pathComponent else {
+                return .newTask
+            }
+            guard let listID = TaskWidgetListID(rawValue: pathComponent),
+                  TaskWidgetListID.widgetConfigurationCases.contains(listID) else {
+                return .list(.today)
+            }
+            return .newTaskInList(listID)
         case "list":
             return pathComponent
                 .flatMap(TaskWidgetListID.init(rawValue:))
@@ -52,6 +61,16 @@ enum TaskNativeRoute: Equatable {
             ]
             return components.url ?? Self.productionOrigin.appending(path: "tasks/today")
         }
+        if case .newTaskInList(let listID) = self {
+            var components = URLComponents(
+                url: Self.productionOrigin.appending(path: "tasks/\(listID.rawValue)"),
+                resolvingAgainstBaseURL: false
+            )!
+            components.queryItems = [
+                URLQueryItem(name: "native_new_task", value: "list"),
+            ]
+            return components.url ?? Self.productionOrigin.appending(path: "tasks/\(listID.rawValue)")
+        }
 
         let listID: TaskWidgetListID
         let taskID: UUID?
@@ -63,6 +82,8 @@ enum TaskNativeRoute: Equatable {
             listID = list
             taskID = id
         case .newTask:
+            preconditionFailure("Handled before list route resolution")
+        case .newTaskInList:
             preconditionFailure("Handled before list route resolution")
         }
 
@@ -91,6 +112,8 @@ enum TaskNativeRoute: Equatable {
             return components.url!
         case .newTask:
             return URL(string: "\(Self.scheme)://new")!
+        case .newTaskInList(let list):
+            return URL(string: "\(Self.scheme)://new/\(list.rawValue)")!
         }
     }
 }

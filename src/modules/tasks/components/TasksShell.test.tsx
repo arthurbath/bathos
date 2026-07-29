@@ -729,6 +729,31 @@ describe('TasksShell', () => {
     }
   });
 
+  it('uses the configured list placement for a widget-header new-task capture', async () => {
+    const taskList = { ...defaultTaskList(), tasks: [] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, locations, root } = renderShell(
+      '/tasks/upcoming?native_new_task=list',
+    );
+
+    try {
+      await waitFor(() => {
+        expect(document.getElementById('task-title-task-draft:new')).toBeTruthy();
+      });
+      expect(document.activeElement).toBe(
+        document.getElementById('task-title-task-draft:new'),
+      );
+      expect(document.getElementById('task-start-task-draft:new')).toHaveTextContent(
+        'Tomorrow',
+      );
+      expect(container.querySelectorAll('[data-task-row-id="task-draft:new"]'))
+        .toHaveLength(1);
+      expect(locations.at(-1)).toBe('/tasks/upcoming');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('focuses an existing unsaved draft when native capture arrives', async () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const { container, locations, navigate, root } = renderShell();

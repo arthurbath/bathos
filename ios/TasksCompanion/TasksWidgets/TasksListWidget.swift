@@ -220,17 +220,31 @@ private struct TaskListWidgetView: View {
     }
 
     private var header: some View {
-        Link(destination: TaskNativeRoute.list(entry.listID).deepLinkURL) {
-            HStack(spacing: 8) {
-                TaskWidgetLucideListIcon(listID: entry.listID)
-                    .frame(width: 17, height: 17)
-                Text(entry.listID.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                Spacer()
+        HStack(spacing: 8) {
+            Link(destination: TaskNativeRoute.list(entry.listID).deepLinkURL) {
+                HStack(spacing: 8) {
+                    TaskWidgetLucideListIcon(listID: entry.listID)
+                        .frame(width: 17, height: 17)
+                    Text(entry.listID.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                }
             }
+            .buttonStyle(.plain)
+            Spacer()
+            Link(
+                destination: TaskWidgetPresentationPolicy.largeWidgetNewTaskURL(
+                    for: entry.listID
+                )
+            ) {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add Task to \(entry.listID.title)")
         }
-        .buttonStyle(.plain)
         .padding(.bottom, 9)
     }
 
@@ -240,8 +254,15 @@ private struct TaskListWidgetView: View {
             if list.tasks.isEmpty {
                 emptyState("No tasks")
             } else {
+                let taskLimit = TaskWidgetPresentationPolicy.largeWidgetTaskLimit(
+                    totalCount: list.totalCount
+                )
+                let overflowCount = TaskWidgetPresentationPolicy.largeWidgetOverflowCount(
+                    totalCount: list.totalCount,
+                    availableTaskCount: list.tasks.count
+                )
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(list.tasks.prefix(8)) { task in
+                    ForEach(list.tasks.prefix(taskLimit)) { task in
                         HStack(spacing: 9) {
                             if task.terminalState == nil {
                                 Toggle(
@@ -290,8 +311,8 @@ private struct TaskListWidgetView: View {
                         .frame(maxWidth: .infinity, minHeight: 29, alignment: .leading)
                         .contentShape(Rectangle())
                     }
-                    if list.truncated || list.totalCount > min(list.tasks.count, 8) {
-                        Text("+\(list.totalCount - min(list.totalCount, 8)) More")
+                    if overflowCount > 0 {
+                        Text("+\(overflowCount) More")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.top, 5)
