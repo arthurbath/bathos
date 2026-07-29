@@ -30,6 +30,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     @Published private(set) var loadError: String?
 
     weak var webView: WKWebView?
+    var presentSummaryKeyboard: ((WKWebView) -> Bool)?
 
     private let coldStartRecoveryDelayNanoseconds: UInt64
     private let inPageNavigator: InPageNavigator
@@ -165,19 +166,47 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         """)
     }
 
-    static func focusNewTaskSummary(in webView: WKWebView) {
-        webView.becomeFirstResponder()
-        webView.evaluateJavaScript(newTaskSummaryFocusJavaScript) { result, error in
-            if let error {
-                recordBridgeDiagnostic(
-                    "Summary focus failed: \(String(describing: error))"
-                )
+    func focusNewTaskSummary(in webView: WKWebView) {
+        webView.evaluateJavaScript(Self.newTaskSummaryFocusJavaScript) {
+            @MainActor [weak self] result,
+            error in
+            guard let self else {
                 return
             }
-            recordBridgeDiagnostic(
-                "Summary focus completed: \((result as? Bool) == true)"
+            Self.finishNewTaskSummaryFocus(
+                result: result,
+                error: error,
+                activateFirstResponder: {
+                    if let presentSummaryKeyboard = self.presentSummaryKeyboard {
+                        return presentSummaryKeyboard(webView)
+                    }
+                    return webView.becomeFirstResponder()
+                }
             )
         }
+    }
+
+    @discardableResult
+    static func finishNewTaskSummaryFocus(
+        result: Any?,
+        error: Error?,
+        activateFirstResponder: () -> Bool
+    ) -> Bool {
+        if let error {
+            recordBridgeDiagnostic(
+                "Summary focus failed: \(String(describing: error))"
+            )
+            return false
+        }
+        guard (result as? Bool) == true else {
+            recordBridgeDiagnostic("Summary focus completed: false")
+            return false
+        }
+        let activated = activateFirstResponder()
+        recordBridgeDiagnostic(
+            "Summary focus completed: true; responder activated: \(activated)"
+        )
+        return activated
     }
 
     func acceptBridgeMessage(_ message: WKScriptMessage) {
@@ -211,7 +240,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
                 Self.recordBridgeDiagnostic("Rejected: web view unavailable for Summary focus")
                 return
             }
-            Self.focusNewTaskSummary(in: webView)
+            focusNewTaskSummary(in: webView)
             Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
             return
         }

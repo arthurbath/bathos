@@ -711,6 +711,52 @@ final class TasksCompanionTests: XCTestCase {
     }
 
     @MainActor
+    func testNewTaskSummaryFocusActivatesWebKitOnlyAfterDOMFocusSucceeds() {
+        var didActivateFirstResponder = false
+
+        let activated = TasksBrowserModel.finishNewTaskSummaryFocus(
+            result: true,
+            error: nil,
+            activateFirstResponder: {
+                didActivateFirstResponder = true
+                return true
+            }
+        )
+
+        XCTAssertTrue(activated)
+        XCTAssertTrue(didActivateFirstResponder)
+    }
+
+    @MainActor
+    func testNewTaskSummaryFocusDoesNotActivateWebKitWhenDOMFocusFails() {
+        var didActivateFirstResponder = false
+
+        let activated = TasksBrowserModel.finishNewTaskSummaryFocus(
+            result: false,
+            error: nil,
+            activateFirstResponder: {
+                didActivateFirstResponder = true
+                return true
+            }
+        )
+
+        XCTAssertFalse(activated)
+        XCTAssertFalse(didActivateFirstResponder)
+    }
+
+    @MainActor
+    func testSummaryKeyboardPresenterRejectsAnotherWebViewAndWaitsForItsOwnWindow() {
+        let presenter = TasksSummaryKeyboardPresenter()
+        let attachedWebView = WKWebView()
+        let unrelatedWebView = WKWebView()
+
+        presenter.attach(to: attachedWebView)
+
+        XCTAssertFalse(presenter.present(in: unrelatedWebView))
+        XCTAssertTrue(presenter.present(in: attachedWebView))
+    }
+
+    @MainActor
     func testCancelledReplacementNavigationDoesNotStartRecovery() {
         let model = TasksBrowserModel(
             coldStartRecoveryDelayNanoseconds: 60_000_000_000

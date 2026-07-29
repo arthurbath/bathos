@@ -14,7 +14,10 @@ The Tasks companion SHALL provide one nonconfigurable system control on supporte
 #### Scenario: Present the native software keyboard
 - **WHEN** the new-task Summary input has mounted inside the native companion
 - **THEN** the web module requests focus through the bounded native bridge
-- **AND** the native companion makes its WebKit view first responder and focuses the known Summary input through public WebKit APIs
+- **AND** the native companion focuses the known Summary input through a fixed public WebKit script
+- **AND** only after WebKit confirms that DOM focus, the companion waits within a bounded interval for its window to become key and primes the standard software keyboard through an empty native text responder in the active view hierarchy
+- **AND** once UIKit presents that keyboard, the companion reconfirms the known Summary input and transfers the active responder session to WebKit
+- **AND** the native primer never accepts, stores, mirrors, or persists task text
 
 #### Scenario: Add a checklist during creation
 - **WHEN** a new task draft is open

@@ -133,6 +133,7 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
         webView.isOpaque = true
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
+        context.coordinator.attachSummaryKeyboardPresenter(to: webView)
         model.attach(webView)
         return webView
     }
@@ -142,6 +143,7 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        coordinator.detachSummaryKeyboardPresenter()
         webView.configuration.userContentController.removeScriptMessageHandler(
             forName: TaskCompanionConstants.webBridgeHandler
         )
@@ -151,9 +153,22 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         private let model: TasksBrowserModel
+        private let summaryKeyboardPresenter = TasksSummaryKeyboardPresenter()
 
         init(model: TasksBrowserModel) {
             self.model = model
+        }
+
+        func attachSummaryKeyboardPresenter(to webView: WKWebView) {
+            summaryKeyboardPresenter.attach(to: webView)
+            model.presentSummaryKeyboard = { [weak summaryKeyboardPresenter] webView in
+                summaryKeyboardPresenter?.present(in: webView) == true
+            }
+        }
+
+        func detachSummaryKeyboardPresenter() {
+            model.presentSummaryKeyboard = nil
+            summaryKeyboardPresenter.detach()
         }
 
         func userContentController(
@@ -226,6 +241,157 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
                 UIApplication.shared.open(url)
             }
             return nil
+        }
+    }
+}
+
+@MainActor
+final class TasksSummaryKeyboardPresenter: NSObject {
+    private static let transferDelay: TimeInterval = 0.75
+    private static let activationRetryDelay: TimeInterval = 0.05
+    private static let maximumActivationAttempts = 20
+
+    private weak var webView: WKWebView?
+    private weak var captureField: UITextField?
+    private var isTransferPending = false
+    private var activationWorkItem: DispatchWorkItem?
+    private var transferWorkItem: DispatchWorkItem?
+
+    func attach(to webView: WKWebView) {
+        detach()
+
+        let captureField = UITextField(frame: .zero)
+        captureField.translatesAutoresizingMaskIntoConstraints = false
+        captureField.alpha = 0.01
+        captureField.isAccessibilityElement = false
+        captureField.accessibilityElementsHidden = true
+        captureField.autocorrectionType = .no
+        captureField.spellCheckingType = .no
+        captureField.textContentType = nil
+        captureField.returnKeyType = .done
+
+        webView.addSubview(captureField)
+        NSLayoutConstraint.activate([
+            captureField.widthAnchor.constraint(equalToConstant: 1),
+            captureField.heightAnchor.constraint(equalToConstant: 1),
+            captureField.trailingAnchor.constraint(
+                equalTo: webView.trailingAnchor,
+                constant: -1
+            ),
+            captureField.bottomAnchor.constraint(
+                equalTo: webView.bottomAnchor,
+                constant: -1
+            ),
+        ])
+
+        self.webView = webView
+        self.captureField = captureField
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(keyboardDidShow),
+            name: UIResponder.keyboardDidShowNotification,
+            object: nil
+        )
+    }
+
+    func present(in webView: WKWebView) -> Bool {
+        guard self.webView === webView,
+              captureField != nil else {
+            return false
+        }
+
+        activationWorkItem?.cancel()
+        transferWorkItem?.cancel()
+        requestKeyboardActivation(
+            in: webView,
+            remainingAttempts: Self.maximumActivationAttempts
+        )
+        return true
+    }
+
+    func detach() {
+        NotificationCenter.default.removeObserver(self)
+        activationWorkItem?.cancel()
+        activationWorkItem = nil
+        transferWorkItem?.cancel()
+        transferWorkItem = nil
+        isTransferPending = false
+        captureField?.resignFirstResponder()
+        captureField?.removeFromSuperview()
+        captureField = nil
+        webView = nil
+    }
+
+    @objc private func keyboardDidShow() {
+        transferToWebSummary()
+    }
+
+    private func requestKeyboardActivation(
+        in webView: WKWebView,
+        remainingAttempts: Int
+    ) {
+        guard self.webView === webView,
+              let captureField else {
+            return
+        }
+        guard captureField.window?.isKeyWindow == true else {
+            guard remainingAttempts > 0 else {
+                return
+            }
+            let workItem = DispatchWorkItem { [weak self, weak webView] in
+                guard let self, let webView else {
+                    return
+                }
+                self.requestKeyboardActivation(
+                    in: webView,
+                    remainingAttempts: remainingAttempts - 1
+                )
+            }
+            activationWorkItem = workItem
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + Self.activationRetryDelay,
+                execute: workItem
+            )
+            return
+        }
+
+        activationWorkItem?.cancel()
+        activationWorkItem = nil
+        isTransferPending = true
+        guard captureField.becomeFirstResponder() else {
+            isTransferPending = false
+            return
+        }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.transferToWebSummary()
+        }
+        transferWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.transferDelay,
+            execute: workItem
+        )
+    }
+
+    private func transferToWebSummary() {
+        guard isTransferPending,
+              let webView,
+              let captureField,
+              captureField.isFirstResponder else {
+            return
+        }
+        isTransferPending = false
+        transferWorkItem?.cancel()
+        transferWorkItem = nil
+
+        webView.evaluateJavaScript(
+            TasksBrowserModel.newTaskSummaryFocusJavaScript
+        ) { @MainActor result, _ in
+            let focused = (result as? Bool) == true
+            let activated = focused && webView.becomeFirstResponder()
+            if !activated {
+                captureField.resignFirstResponder()
+            }
         }
     }
 }

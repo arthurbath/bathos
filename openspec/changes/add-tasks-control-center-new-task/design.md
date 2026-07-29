@@ -59,9 +59,11 @@ Warm native launches will reuse the loaded Tasks document through the existing i
 
 ### Complete capture focus through a bounded native handshake
 
-The existing Summary input remains the authoritative editor. A new Today Inbox draft first applies ordinary DOM focus and cursor-at-end behavior. Once that exact input exists, the web module sends a fixed `focus-new-task-summary` message through the existing trusted native bridge. The companion makes its persistent WebKit view first responder and evaluates one constant script that focuses only `task-title-task-draft:new`.
+The existing Summary input remains the authoritative editor. A new Today Inbox draft first applies ordinary DOM focus and cursor-at-end behavior. Once that exact input exists, the web module sends a fixed `focus-new-task-summary` message through the existing trusted native bridge. The companion evaluates one constant script that focuses only `task-title-task-draft:new` and confirms that the input became the active DOM element.
 
-This closes a WebKit embedding gap discovered on the physical device: DOM focus could expose only the input accessory controls without presenting the software keyboard. The handshake contains no user data, selector, route, task identifier, or arbitrary script and still uses only public WebKit APIs. Private keyboard APIs were rejected.
+Physical acceptance proved that an asynchronous DOM focus plus `WKWebView.becomeFirstResponder()` can still leave a visible cursor without granting WebKit permission to present the software keyboard. After the fixed DOM focus succeeds, the companion therefore waits for its window to become key within a bounded one-second interval and primes the standard software keyboard with a one-pixel transparent native `UITextField` in the active WebKit hierarchy. Once UIKit reports that keyboard onscreen, the companion repeats the fixed DOM-focus check and transfers the active responder session to WebKit. The primer never accepts, stores, mirrors, or persists task text.
+
+This bounded native handoff uses only public WebKit and UIKit responder APIs. Private WebKit keyboard flags, private responder classes, method swizzling, and native duplicate task editors were rejected.
 
 While Summary edits are waiting inside the existing autosave debounce, the task row mirrors the editor's local display value. An empty value renders `New Task` in subdued italic text, and the first typed character replaces it immediately without introducing another persistence path or changing autosave cadence.
 
@@ -81,7 +83,7 @@ A separate client-only checklist draft model was rejected because it would dupli
 - **A warm control launch could crash while encoding the in-page destination** -> Use a top-level-string-safe JSON encoder and exercise the real new-task route through the production navigator in native tests.
 - **The web shell may require authentication or network recovery before it can create** -> Preserve the query through existing authentication redirects and let the installed offline shell handle creation when available.
 - **The native app and public web bundle could implement different halves of the handoff** -> Publish the matching web release before physical acceptance so the production web shell recognizes the native signal.
-- **WebKit DOM focus may expose only the input accessory strip** -> Complete focus through a fixed native bridge message, make the WebKit view first responder, and evaluate a constant Summary-focus script through the embedding client.
+- **WebKit may reject an asynchronous web focus as keyboard authority** -> Confirm the fixed Summary focus, prime the keyboard through an empty native text responder, then transfer that active session to the reconfirmed WebKit Summary input.
 - **A blank draft has no identifier for checklist rows** -> Show the ordinary Add Checklist control, persist only after Summary is valid, and then reuse the existing checklist editor.
 - **A custom Lucide asset may render inconsistently in Control Center** -> Use Apple's adaptive `plus.square` symbol as the native expression of the requested icon concept.
 - **An existing unsaved draft may already be open** -> Focus it instead of silently destroying its pending metadata or creating a second draft.
