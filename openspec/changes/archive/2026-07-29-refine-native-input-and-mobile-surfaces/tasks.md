@@ -29,4 +29,4 @@
 - [x] 5.1 Run focused tests, the full web suite, TypeScript, lint, build, and strict OpenSpec validation
 - [x] 5.2 Run native tests and signed builds, install the matching companion, and physically verify keyboard and widget behavior
 - [x] 5.3 Compare the rendered floating navigation and gesture states against the supplied reference geometry
-- [ ] 5.4 Publish the matching web release, synchronize and archive completed OpenSpec changes, commit, push, and prove repository parity
+- [x] 5.4 Publish the matching web release, synchronize and archive completed OpenSpec changes, commit, push, and prove repository parity
