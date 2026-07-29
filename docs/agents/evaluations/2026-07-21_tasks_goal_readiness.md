@@ -70,8 +70,9 @@ The planning and notes refinement is accepted in production. Upcoming now select
   its permanent Tasks-only mode. Things availability, credentials, scripting,
   and writes are excluded from that authoritative path.
 - Native Apple surfaces are accepted, and the Things-to-Tasks authoritative
-  migration is complete. Things remains only as the untouched historical
-  source and rollback reference.
+  migration is complete. Things is no longer an active task-creation
+  destination; the separately specified Logbook-retention workflow remains
+  outside this cutover.
 
 ## Durable Requirement Audit
 
