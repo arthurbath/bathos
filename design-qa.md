@@ -60,6 +60,48 @@ None required for this change.
 
 final result: passed
 
+# Design QA: Tasks Lock Screen Widget
+
+## Comparison Target
+
+- Source visual truth: `/Users/Art/Desktop/Screenshot 2026-07-28 at 5.27.12 PM.png`
+- Implemented surface: WidgetKit `accessoryRectangular` presentation in `ios/TasksCompanion/TasksWidgets/TasksListWidget.swift`
+- Target device: Art's Phone
+- State: Configurable Today, Upcoming, Anytime, or Someday list with up to three task summaries
+
+## Implemented Visual Contract
+
+- The compact widget omits the Home Screen widget header and count so the available height belongs to task summaries.
+- Each task is one line with a quiet square status symbol and a single-line truncated summary.
+- One- and two-task states remain top-aligned.
+- The three-task state uses the same 16-point row height and 4-point separation as the shorter states, nearly fills the accessory height, and centers the complete trio vertically.
+- Someday uses the established dashed-square treatment.
+- The widget uses system Lock Screen foreground and vibrancy rather than decorative color.
+- Empty and unavailable states retain the same compact top-aligned composition.
+
+## Interaction Contract
+
+- The entire rectangular surface opens the configured list in the native Tasks app.
+- The existing App Intent configuration continues to offer Today, Upcoming, Anytime, and Someday.
+- The Lock Screen presentation is intentionally non-interactive at the individual task level.
+
+## Verification Evidence
+
+- The WidgetKit target compiled in unsigned simulator and signed physical-device builds.
+- The dedicated simulator suite passed all 24 tests, including the three-item limit and configured-list deep link.
+- The signed app and widget extension installed and launched on Art's Phone.
+- Art confirmed on the physical iPhone that the original Lock Screen widget rendered and deep-linked successfully.
+- The revised row geometry passed all 24 simulator tests and strict OpenSpec validation, then built, signed, installed, and launched on the physical iPhone.
+- The revised three-task spacing and alignment remain pending direct physical inspection.
+
+## Required Final Check
+
+- Confirm the revised three-task state fits without clipping.
+- Confirm its first and second lines align approximately with their positions in the one- and two-task states.
+- Confirm the complete trio feels vertically centered.
+
+final result: blocked
+
 # Design QA: Task Metadata Chips And Markdown Source Treatment
 
 ## Comparison Target

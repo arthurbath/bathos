@@ -1,7 +1,12 @@
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import {
+  MemoryRouter,
+  useLocation,
+  useNavigate,
+  type NavigateFunction,
+} from 'react-router-dom';
 import { waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -394,14 +399,42 @@ function FormInteractionsHarness({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function NavigationCapture({
+  onNavigate,
+  onLocation,
+}: {
+  onNavigate: (navigate: NavigateFunction) => void;
+  onLocation: (location: string) => void;
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  React.useLayoutEffect(() => {
+    onNavigate(navigate);
+    onLocation(`${location.pathname}${location.search}${location.hash}`);
+  }, [location.hash, location.pathname, location.search, navigate, onLocation, onNavigate]);
+  return null;
+}
+
 function renderShell(initialEntry = '/tasks/today') {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
+  let capturedNavigate: NavigateFunction | null = null;
+  const locations: string[] = [];
+  const captureNavigate = (navigate: NavigateFunction) => {
+    capturedNavigate = navigate;
+  };
+  const captureLocation = (location: string) => {
+    locations.push(location);
+  };
   const render = () => {
     root.render(
       <FormInteractionsHarness>
         <MemoryRouter initialEntries={[initialEntry]}>
+          <NavigationCapture
+            onNavigate={captureNavigate}
+            onLocation={captureLocation}
+          />
           <TasksShell
             userId="owner-a"
             displayName="Owner"
@@ -418,6 +451,11 @@ function renderShell(initialEntry = '/tasks/today') {
 
   return {
     container,
+    locations,
+    navigate: (to: string) => {
+      if (capturedNavigate === null) throw new Error('Router navigation was not captured');
+      act(() => capturedNavigate?.(to));
+    },
     root,
     rerender: render,
   };
@@ -650,6 +688,66 @@ describe('TasksShell', () => {
       });
       expect(container.querySelector(`#task-title-${nativeTask.id}`)).toBeNull();
       expect(container.querySelector('[data-task-editor-region]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('consumes native new-task capture once into a focused Today Inbox draft', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, locations, root } = renderShell(
+      '/tasks/today?native_new_task=1',
+    );
+
+    try {
+      await waitFor(() => {
+        expect(document.getElementById('task-title-task-draft:new')).toBeTruthy();
+      });
+      const title = document.getElementById(
+        'task-title-task-draft:new',
+      ) as HTMLInputElement;
+      expect(document.activeElement).toBe(title);
+      expect(document.getElementById('task-start-task-draft:new'))
+        .toHaveTextContent('Today · Inbox');
+      expect(container.querySelectorAll('[data-task-row-id="task-draft:new"]'))
+        .toHaveLength(1);
+      expect(locations.at(-1)).toBe('/tasks/today');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('focuses an existing unsaved draft when native capture arrives', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, locations, navigate, root } = renderShell();
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'a',
+          altKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      const title = document.getElementById(
+        'task-title-task-draft:new',
+      ) as HTMLInputElement;
+      await act(async () => {
+        setInputValue(title, 'Existing unsaved draft');
+      });
+      title.blur();
+
+      navigate('/tasks/today?native_new_task=1');
+
+      await waitFor(() => {
+        expect(locations.at(-1)).toBe('/tasks/today');
+        expect(document.activeElement).toBe(title);
+      });
+      expect(title).toHaveValue('Existing unsaved draft');
+      expect(container.querySelectorAll('[data-task-row-id="task-draft:new"]'))
+        .toHaveLength(1);
     } finally {
       cleanup(root, container);
     }

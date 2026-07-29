@@ -41,6 +41,20 @@ enum TaskWidgetListID: String, Codable, CaseIterable {
     }
 }
 
+enum TaskWidgetPresentationPolicy {
+    static let lockScreenTaskLimit = 3
+    static let lockScreenTaskRowMinimumHeight: CGFloat = 16
+    static let lockScreenTaskRowSpacing: CGFloat = 4
+
+    static func verticallyCentersLockScreenTasks(taskCount: Int) -> Bool {
+        taskCount >= lockScreenTaskLimit
+    }
+
+    static func lockScreenURL(for listID: TaskWidgetListID) -> URL {
+        TaskNativeRoute.list(listID).deepLinkURL
+    }
+}
+
 struct TaskWidgetPrimaryLink: Codable, Equatable {
     enum Kind: String, Codable {
         case mail

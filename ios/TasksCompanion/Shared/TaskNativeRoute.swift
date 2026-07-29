@@ -3,6 +3,7 @@ import Foundation
 enum TaskNativeRoute: Equatable {
     case list(TaskWidgetListID)
     case task(UUID, list: TaskWidgetListID)
+    case newTask
 
     static let scheme = "bathostasks"
     static let productionOrigin = URL(string: "https://os.bath.garden")!
@@ -13,6 +14,14 @@ enum TaskNativeRoute: Equatable {
         }
         let pathComponent = url.pathComponents.dropFirst().first
         switch url.host?.lowercased() {
+        case "new":
+            guard pathComponent == nil,
+                  URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                    .queryItems?
+                    .isEmpty != false else {
+                return .list(.today)
+            }
+            return .newTask
         case "list":
             return pathComponent
                 .flatMap(TaskWidgetListID.init(rawValue:))
@@ -33,6 +42,17 @@ enum TaskNativeRoute: Equatable {
     }
 
     var webURL: URL {
+        if case .newTask = self {
+            var components = URLComponents(
+                url: Self.productionOrigin.appending(path: "tasks/today"),
+                resolvingAgainstBaseURL: false
+            )!
+            components.queryItems = [
+                URLQueryItem(name: "native_new_task", value: "1"),
+            ]
+            return components.url ?? Self.productionOrigin.appending(path: "tasks/today")
+        }
+
         let listID: TaskWidgetListID
         let taskID: UUID?
         switch self {
@@ -42,6 +62,8 @@ enum TaskNativeRoute: Equatable {
         case .task(let id, let list):
             listID = list
             taskID = id
+        case .newTask:
+            preconditionFailure("Handled before list route resolution")
         }
 
         var components = URLComponents(
@@ -67,6 +89,8 @@ enum TaskNativeRoute: Equatable {
             components.path = "/\(id.uuidString.lowercased())"
             components.queryItems = [URLQueryItem(name: "list", value: list.rawValue)]
             return components.url!
+        case .newTask:
+            return URL(string: "\(Self.scheme)://new")!
         }
     }
 }

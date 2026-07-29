@@ -29,6 +29,7 @@ export const TASK_NATIVE_WIDGET_SCHEMA_VERSION = 2;
 export const TASK_NATIVE_WIDGET_LIST_LIMIT = 50;
 export const TASK_NATIVE_WIDGET_BRIDGE_HANDLER = TASKS_NATIVE_BRIDGE_HANDLER;
 export const TASK_NATIVE_TASK_QUERY_PARAMETER = 'native_task';
+export const TASK_NATIVE_NEW_TASK_QUERY_PARAMETER = 'native_new_task';
 
 export const taskNativeWidgetListIds = [
   'today',
@@ -212,6 +213,20 @@ export function getNativeTaskDeepLinkId(search: string): string | null {
 export function removeNativeTaskDeepLink(search: string): string {
   const parameters = new URLSearchParams(search);
   parameters.delete(TASK_NATIVE_TASK_QUERY_PARAMETER);
+  const next = parameters.toString();
+  return next ? `?${next}` : '';
+}
+
+export function hasNativeNewTaskSignal(search: string): boolean {
+  const values = new URLSearchParams(search).getAll(
+    TASK_NATIVE_NEW_TASK_QUERY_PARAMETER,
+  );
+  return values.length === 1 && values[0] === '1';
+}
+
+export function removeNativeNewTaskSignal(search: string): string {
+  const parameters = new URLSearchParams(search);
+  parameters.delete(TASK_NATIVE_NEW_TASK_QUERY_PARAMETER);
   const next = parameters.toString();
   return next ? `?${next}` : '';
 }

@@ -118,6 +118,8 @@ import {
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import {
   getNativeTaskDeepLinkId,
+  hasNativeNewTaskSignal,
+  removeNativeNewTaskSignal,
   removeNativeTaskDeepLink,
 } from '@/modules/tasks/native/taskNativeWidgetBridge';
 import type {
@@ -1097,6 +1099,24 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setOpenTask,
     userId,
     view,
+  ]);
+
+  useEffect(() => {
+    if (loading || !hasNativeNewTaskSignal(location.search)) return;
+
+    navigate({
+      pathname: location.pathname,
+      search: removeNativeNewTaskSignal(location.search),
+      hash: location.hash,
+    }, { replace: true });
+    void beginTaskCreation({ todaySection: 'inbox' });
+  }, [
+    beginTaskCreation,
+    loading,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
   ]);
 
   useEffect(() => {

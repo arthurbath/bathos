@@ -13,6 +13,7 @@
 		AA0000000000000000001004 /* TaskWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000301 /* TaskWidgetSnapshot.swift */; };
 		AA0000000000000000001005 /* TaskNativeRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000302 /* TaskNativeRoute.swift */; };
 		AA0000000000000000001006 /* TaskCompanionConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000303 /* TaskCompanionConstants.swift */; };
+		AA0000000000000000001008 /* NewTaskControlIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000304 /* NewTaskControlIntent.swift */; };
 		AA0000000000000000001007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000106 /* Assets.xcassets */; };
 		AA0000000000000000001101 /* TaskWidgetIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000201 /* TaskWidgetIntent.swift */; };
 		AA0000000000000000001102 /* TasksListWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000202 /* TasksListWidget.swift */; };
@@ -20,6 +21,8 @@
 		AA0000000000000000001104 /* TaskWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000301 /* TaskWidgetSnapshot.swift */; };
 		AA0000000000000000001105 /* TaskNativeRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000302 /* TaskNativeRoute.swift */; };
 		AA0000000000000000001106 /* TaskCompanionConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000303 /* TaskCompanionConstants.swift */; };
+		AA0000000000000000001107 /* NewTaskControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000206 /* NewTaskControl.swift */; };
+		AA0000000000000000001108 /* NewTaskControlIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000304 /* NewTaskControlIntent.swift */; };
 		AA0000000000000000001201 /* TasksCompanionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000401 /* TasksCompanionTests.swift */; };
 		AA0000000000000000001301 /* TasksWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000009 /* TasksWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -70,9 +73,11 @@
 		AA0000000000000000000203 /* TasksWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksWidgetsBundle.swift; sourceTree = "<group>"; };
 		AA0000000000000000000204 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA0000000000000000000205 /* TasksWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TasksWidgets.entitlements; sourceTree = "<group>"; };
+		AA0000000000000000000206 /* NewTaskControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewTaskControl.swift; sourceTree = "<group>"; };
 		AA0000000000000000000301 /* TaskWidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskWidgetSnapshot.swift; sourceTree = "<group>"; };
 		AA0000000000000000000302 /* TaskNativeRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskNativeRoute.swift; sourceTree = "<group>"; };
 		AA0000000000000000000303 /* TaskCompanionConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCompanionConstants.swift; sourceTree = "<group>"; };
+		AA0000000000000000000304 /* NewTaskControlIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewTaskControlIntent.swift; sourceTree = "<group>"; };
 		AA0000000000000000000401 /* TasksCompanionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksCompanionTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -125,6 +130,7 @@
 				AA0000000000000000000203 /* TasksWidgetsBundle.swift */,
 				AA0000000000000000000204 /* Info.plist */,
 				AA0000000000000000000205 /* TasksWidgets.entitlements */,
+				AA0000000000000000000206 /* NewTaskControl.swift */,
 			);
 			path = TasksWidgets;
 			sourceTree = "<group>";
@@ -135,6 +141,7 @@
 				AA0000000000000000000301 /* TaskWidgetSnapshot.swift */,
 				AA0000000000000000000302 /* TaskNativeRoute.swift */,
 				AA0000000000000000000303 /* TaskCompanionConstants.swift */,
+				AA0000000000000000000304 /* NewTaskControlIntent.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -245,6 +252,7 @@
 				AA0000000000000000001004 /* TaskWidgetSnapshot.swift in Sources */,
 				AA0000000000000000001005 /* TaskNativeRoute.swift in Sources */,
 				AA0000000000000000001006 /* TaskCompanionConstants.swift in Sources */,
+				AA0000000000000000001008 /* NewTaskControlIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,6 +266,8 @@
 				AA0000000000000000001104 /* TaskWidgetSnapshot.swift in Sources */,
 				AA0000000000000000001105 /* TaskNativeRoute.swift in Sources */,
 				AA0000000000000000001106 /* TaskCompanionConstants.swift in Sources */,
+				AA0000000000000000001107 /* NewTaskControl.swift in Sources */,
+				AA0000000000000000001108 /* NewTaskControlIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

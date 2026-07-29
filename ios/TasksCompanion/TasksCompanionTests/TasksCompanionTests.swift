@@ -347,12 +347,32 @@ final class TasksCompanionTests: XCTestCase {
             .list(.today)
         )
         XCTAssertEqual(
+            TaskNativeRoute.parse(URL(string: "bathostasks://new")!),
+            .newTask
+        )
+        XCTAssertEqual(
+            TaskNativeRoute.parse(URL(string: "bathostasks://new/other")!),
+            .list(.today)
+        )
+        XCTAssertEqual(
+            TaskNativeRoute.parse(URL(string: "bathostasks://new?placement=next")!),
+            .list(.today)
+        )
+        XCTAssertEqual(
             TaskNativeRoute.parse(URL(string: "https://example.com/tasks/done")!),
             .list(.today)
         )
         XCTAssertEqual(
             TaskNativeRoute.task(taskID, list: .done).webURL.absoluteString,
             "https://os.bath.garden/tasks/done?native_task=\(taskID.uuidString.lowercased())"
+        )
+        XCTAssertEqual(
+            TaskNativeRoute.newTask.webURL.absoluteString,
+            "https://os.bath.garden/tasks/today?native_new_task=1"
+        )
+        XCTAssertEqual(
+            TaskNativeRoute.newTask.deepLinkURL.absoluteString,
+            "bathostasks://new"
         )
         XCTAssertEqual(
             TaskCompanionURLAction.resolve(
@@ -384,6 +404,18 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertFalse(CompleteTaskIntent.openAppWhenRun)
     }
 
+    func testNewTaskControlIntentIsAvailableToTheContainingAppTarget() {
+        if #available(iOS 18.0, *) {
+            let intent = OpenNewTaskIntent(target: .todayInbox)
+
+            XCTAssertEqual(intent.target, .todayInbox)
+            XCTAssertEqual(
+                intent.target.urlRepresentation?.absoluteString,
+                "bathostasks://new"
+            )
+        }
+    }
+
     func testWidgetConfigurationExcludesDoneAndRejectsLegacyDoneSelection() {
         XCTAssertEqual(
             TaskWidgetListID.widgetConfigurationCases.map(\.title),
@@ -392,6 +424,76 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertEqual(TaskWidgetListID.widgetConfigurationValue("Upcoming"), .upcoming)
         XCTAssertEqual(TaskWidgetListID.widgetConfigurationValue("Done"), .today)
         XCTAssertEqual(TaskWidgetListID.widgetConfigurationValue(nil), .today)
+    }
+
+    func testLockScreenPresentationUsesThreeLeadingTasks() {
+        let tasks = [
+            TaskWidgetTask(
+                id: UUID(),
+                summary: "First",
+                deadline: nil,
+                todaySection: nil,
+                actionability: "actionable",
+                terminalState: nil
+            ),
+            TaskWidgetTask(
+                id: UUID(),
+                summary: "Second",
+                deadline: nil,
+                todaySection: nil,
+                actionability: "actionable",
+                terminalState: nil
+            ),
+            TaskWidgetTask(
+                id: UUID(),
+                summary: "Third",
+                deadline: nil,
+                todaySection: nil,
+                actionability: "actionable",
+                terminalState: nil
+            ),
+            TaskWidgetTask(
+                id: UUID(),
+                summary: "Fourth",
+                deadline: nil,
+                todaySection: nil,
+                actionability: "actionable",
+                terminalState: nil
+            ),
+        ]
+
+        XCTAssertEqual(TaskWidgetPresentationPolicy.lockScreenTaskLimit, 3)
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.lockScreenTaskRowMinimumHeight,
+            16
+        )
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.lockScreenTaskRowSpacing,
+            4
+        )
+        XCTAssertEqual(
+            tasks.prefix(
+                TaskWidgetPresentationPolicy.lockScreenTaskLimit
+            ).map(\.summary),
+            ["First", "Second", "Third"]
+        )
+        XCTAssertTrue(
+            TaskWidgetPresentationPolicy.verticallyCentersLockScreenTasks(
+                taskCount: 3
+            )
+        )
+        XCTAssertFalse(
+            TaskWidgetPresentationPolicy.verticallyCentersLockScreenTasks(
+                taskCount: 2
+            )
+        )
+    }
+
+    func testLockScreenDeepLinkTargetsConfiguredList() {
+        let url = TaskWidgetPresentationPolicy.lockScreenURL(for: .someday)
+
+        XCTAssertEqual(url.absoluteString, "bathostasks://list/someday")
+        XCTAssertEqual(TaskNativeRoute.parse(url), .list(.someday))
     }
 
     func testWebViewUsesPersistentAppBoundConfiguration() {

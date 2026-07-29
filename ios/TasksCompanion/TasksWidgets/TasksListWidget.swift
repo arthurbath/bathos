@@ -74,9 +74,9 @@ struct TaskListWidgetProvider: AppIntentTimelineProvider {
             summary: summary,
             deadline: nil,
             todaySection: nil,
-                        actionability: "actionable",
-                        terminalState: nil,
-                        primaryLink: nil
+            actionability: "actionable",
+            terminalState: nil,
+            primaryLink: nil
         )
     }
 }
@@ -88,13 +88,117 @@ struct TaskListWidget: Widget {
             intent: TaskListSelectionIntent.self,
             provider: TaskListWidgetProvider()
         ) { entry in
-            TaskListWidgetView(entry: entry)
-                .containerBackground(Color.black, for: .widget)
+            TaskListWidgetRootView(entry: entry)
         }
         .configurationDisplayName("Tasks List")
         .description("Show a selected BathOS task list.")
-        .supportedFamilies([.systemLarge])
+        .supportedFamilies([.systemLarge, .accessoryRectangular])
         .contentMarginsDisabled()
+    }
+}
+
+private struct TaskListWidgetRootView: View {
+    @Environment(\.widgetFamily) private var family
+
+    let entry: TaskListWidgetEntry
+
+    @ViewBuilder
+    var body: some View {
+        switch family {
+        case .accessoryRectangular:
+            TaskListLockScreenWidgetView(entry: entry)
+                .containerBackground(for: .widget) {
+                    Color.clear
+                }
+        default:
+            TaskListWidgetView(entry: entry)
+                .containerBackground(Color.black, for: .widget)
+        }
+    }
+}
+
+private struct TaskListLockScreenWidgetView: View {
+    let entry: TaskListWidgetEntry
+
+    var body: some View {
+        Group {
+            if let list = entry.list {
+                if list.tasks.isEmpty {
+                    emptyState("No tasks")
+                } else {
+                    let visibleTasks = Array(
+                        list.tasks.prefix(
+                            TaskWidgetPresentationPolicy.lockScreenTaskLimit
+                        )
+                    )
+                    let centersTasks = TaskWidgetPresentationPolicy
+                        .verticallyCentersLockScreenTasks(
+                            taskCount: visibleTasks.count
+                        )
+
+                    VStack(
+                        alignment: .leading,
+                        spacing: TaskWidgetPresentationPolicy
+                            .lockScreenTaskRowSpacing
+                    ) {
+                        ForEach(
+                            visibleTasks
+                        ) { task in
+                            HStack(spacing: 5) {
+                                Image(systemName: entry.listID == .someday
+                                    ? "square.dashed"
+                                    : "square"
+                                )
+                                .font(.system(size: 10, weight: .regular))
+                                Text(task.summary)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .lineLimit(1)
+                                    .privacySensitive()
+                                Spacer(minLength: 0)
+                            }
+                            .frame(
+                                maxWidth: .infinity,
+                                minHeight: TaskWidgetPresentationPolicy
+                                    .lockScreenTaskRowMinimumHeight,
+                                alignment: .leading
+                            )
+                        }
+                    }
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: centersTasks ? .leading : .topLeading
+                    )
+                }
+            } else {
+                emptyState("Open Tasks")
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: .topLeading
+        )
+        .foregroundStyle(.primary)
+        .widgetURL(
+            TaskWidgetPresentationPolicy.lockScreenURL(for: entry.listID)
+        )
+    }
+
+    private func emptyState(_ message: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: entry.snapshot == nil
+                ? "rectangle.and.hand.point.up.left"
+                : "checkmark"
+            )
+            .font(.system(size: 11, weight: .regular))
+            Text(message)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+                .privacySensitive()
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
 
@@ -256,6 +360,82 @@ private struct TaskListWidgetView: View {
         return .secondary
     }
 }
+
+#if DEBUG
+private struct TaskListLockScreenWidgetViewPreviews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            preview(
+                name: "Three Tasks",
+                entry: entry(
+                    tasks: [
+                        task("Review Today"),
+                        task("Plan Next"),
+                        task("Read Later"),
+                    ]
+                )
+            )
+            preview(
+                name: "One Task",
+                entry: entry(tasks: [task("Review Today")])
+            )
+            preview(
+                name: "Empty",
+                entry: entry(tasks: [])
+            )
+            preview(
+                name: "Unavailable",
+                entry: TaskListWidgetEntry(
+                    date: Date(),
+                    listID: .today,
+                    snapshot: nil,
+                    list: nil
+                )
+            )
+        }
+    }
+
+    private static func preview(
+        name: String,
+        entry: TaskListWidgetEntry
+    ) -> some View {
+        TaskListWidgetRootView(entry: entry)
+            .previewContext(
+                WidgetPreviewContext(family: .accessoryRectangular)
+            )
+            .previewDisplayName(name)
+    }
+
+    private static func entry(
+        tasks: [TaskWidgetTask]
+    ) -> TaskListWidgetEntry {
+        TaskListWidgetEntry(
+            date: Date(),
+            listID: .today,
+            snapshot: nil,
+            list: TaskWidgetList(
+                id: .today,
+                title: "Today",
+                totalCount: tasks.count,
+                truncated: false,
+                tasks: tasks
+            )
+        )
+    }
+
+    private static func task(_ summary: String) -> TaskWidgetTask {
+        TaskWidgetTask(
+            id: UUID(),
+            summary: summary,
+            deadline: nil,
+            todaySection: nil,
+            actionability: "actionable",
+            terminalState: nil,
+            primaryLink: nil
+        )
+    }
+}
+#endif
 
 private struct TaskWidgetCompletionToggleStyle: ToggleStyle {
     let someday: Bool

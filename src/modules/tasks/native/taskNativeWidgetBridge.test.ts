@@ -4,8 +4,10 @@ import {
   buildTaskNativeWidgetSnapshot,
   clearTaskNativeWidgetCache,
   getNativeTaskDeepLinkId,
+  hasNativeNewTaskSignal,
   publishTaskNativeWidgetSnapshot,
   publishTaskNativeWidgetCredential,
+  removeNativeNewTaskSignal,
   removeNativeTaskDeepLink,
   resetTaskNativeWidgetPublisherForTests,
 } from './taskNativeWidgetBridge';
@@ -292,5 +294,15 @@ describe('taskNativeWidgetBridge', () => {
     expect(getNativeTaskDeepLinkId('?native_task=not-a-task')).toBeNull();
     expect(removeNativeTaskDeepLink(`?native_task=${taskA}&reminder_delivery=delivery-a`))
       .toBe('?reminder_delivery=delivery-a');
+  });
+
+  it('accepts one exact native-new-task signal and removes only that parameter', () => {
+    expect(hasNativeNewTaskSignal('?native_new_task=1')).toBe(true);
+    expect(hasNativeNewTaskSignal('?native_new_task=0')).toBe(false);
+    expect(hasNativeNewTaskSignal('?native_new_task=1&native_new_task=1')).toBe(false);
+    expect(hasNativeNewTaskSignal('?native_new_task=today')).toBe(false);
+    expect(removeNativeNewTaskSignal(
+      '?native_new_task=1&reminder_delivery=delivery-a',
+    )).toBe('?reminder_delivery=delivery-a');
   });
 });
