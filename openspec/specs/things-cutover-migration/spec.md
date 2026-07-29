@@ -44,8 +44,24 @@ The migration SHALL map supported Things meaning into native BathOS fields witho
 - **THEN** its target actionability is respectively Waiting, Rechecking, or Ready
 
 #### Scenario: Preserve personal content
-- **WHEN** a source task has a title, leading emoji, notes, supported link, deadline, reminder, area, or meaningful manual order
+- **WHEN** a source task has a title, leading emoji, notes, supported link, deadline, reminder, area, native checklist, or meaningful manual order
 - **THEN** the target preserves that supported value in the corresponding native field
+
+#### Scenario: Preserve native checklist meaning
+- **WHEN** an approved source task has native Things checklist rows
+- **THEN** the target preserves each nonempty title verbatim, source order, checked state, and completion time under the exact deterministic task target
+
+#### Scenario: Preserve recurrence checklist structure
+- **WHEN** an approved live recurrence has native checklist rows
+- **THEN** its current adopted task receives the current occurrence state and its native template snapshot receives unchecked checklist blueprints for future occurrences
+
+#### Scenario: Reject an ambiguous checklist repair
+- **WHEN** deterministic task identity and exact title do not both agree, an expected target already has unexpected checklist content, or a source checklist row has an unsupported state
+- **THEN** reconciliation stops without mutating Tasks
+
+#### Scenario: Exclude unrepresentable nested checklist rows
+- **WHEN** a native checklist belongs to a former Things project-child task that was intentionally collapsed into a BathOS checklist item
+- **THEN** the migration reports the bounded exclusion and does not flatten or discard the row silently
 
 #### Scenario: Preserve extensible manual order
 - **WHEN** source tasks, Areas, or checklist items are assigned deterministic target order

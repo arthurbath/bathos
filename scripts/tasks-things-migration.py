@@ -74,6 +74,16 @@ REQUIRED_SCHEMA = {
     "TMArea": {"uuid", "title", "index"},
     "TMTag": {"uuid", "title"},
     "TMTaskTag": {"tasks", "tags"},
+    "TMChecklistItem": {
+        "uuid",
+        "userModificationDate",
+        "creationDate",
+        "title",
+        "status",
+        "stopDate",
+        "index",
+        "task",
+    },
 }
 
 MIGRATION_NAMESPACE = uuid.UUID("c195e06d-b24b-5f55-8acd-e20f458c55e5")
@@ -696,7 +706,7 @@ def make_baseline_history_record(task: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def make_checklist_records(
+def make_project_child_checklist_records(
     connection: sqlite3.Connection,
     project: sqlite3.Row,
     task_id: str,
@@ -734,6 +744,76 @@ def make_checklist_records(
             "template_node_id": None,
         })
     return records, dropped_notes
+
+
+def load_native_checklist_items(
+    connection: sqlite3.Connection,
+    source_task_id: str,
+) -> list[sqlite3.Row]:
+    rows = connection.execute(
+        """
+        SELECT *
+        FROM TMChecklistItem
+        WHERE task = ?
+        ORDER BY "index", uuid
+        """,
+        (source_task_id,),
+    ).fetchall()
+    for row in rows:
+        if int(row["status"]) not in (0, 3):
+            raise MigrationError("A native checklist item has an unsupported status")
+        if not str(row["title"] or "").strip():
+            raise MigrationError("A native checklist item has an empty title")
+        if int(row["status"]) == 3 and row["stopDate"] is None:
+            raise MigrationError(
+                "A completed native checklist item has no completion date"
+            )
+    return rows
+
+
+def make_native_checklist_records(
+    connection: sqlite3.Connection,
+    source_task_id: str,
+    task_id: str,
+    migration_timestamp: str,
+    *,
+    start_position: int = 0,
+) -> list[dict[str, Any]]:
+    records = []
+    for offset, item in enumerate(
+        load_native_checklist_items(connection, source_task_id)
+    ):
+        identity = str(item["uuid"])
+        created_at = iso_timestamp(item["creationDate"], migration_timestamp)
+        updated_at = iso_timestamp(item["userModificationDate"], created_at)
+        completed = int(item["status"]) == 3
+        records.append({
+            **base_record(
+                source_id=f"native-checklist:{identity}",
+                created_at=created_at,
+                updated_at=updated_at,
+            ),
+            "id": stable_uuid("native-checklist", identity),
+            "task_id": task_id,
+            "title": str(item["title"]),
+            "completed": completed,
+            "completed_at": (
+                iso_timestamp(item["stopDate"], updated_at)
+                if completed
+                else None
+            ),
+            "order_key": order_key(start_position + offset),
+            "entry_channel": "import",
+            "revision": 1,
+            "disposition": "present",
+            "deleted_at": None,
+            "deletion_root_id": None,
+            "template_definition_id": None,
+            "template_revision": None,
+            "template_instantiation_id": None,
+            "template_node_id": None,
+        })
+    return records
 
 
 def load_project_children(
@@ -948,6 +1028,39 @@ def build_migration(
         for project in projects
         for child in load_project_children(connection, project)
     ]
+    native_checklist_by_source = {
+        str(source["uuid"]): load_native_checklist_items(
+            connection,
+            str(source["uuid"]),
+        )
+        for source in [*one_off, *projects, *linked_instances.values()]
+    }
+    for template in templates:
+        native_checklist_by_source.setdefault(
+            str(template["uuid"]),
+            load_native_checklist_items(connection, str(template["uuid"])),
+        )
+    mapped_native_checklist_items = [
+        item
+        for source_id, items in native_checklist_by_source.items()
+        if (
+            source_id in {
+                str(source["uuid"])
+                for source in [*one_off, *projects, *linked_instances.values()]
+            }
+            or source_id in {
+                str(template["uuid"])
+                for template in templates
+                if str(template["uuid"]) not in linked_instances
+            }
+        )
+        for item in items
+    ]
+    recurrence_template_checklist_items = [
+        item
+        for template in templates
+        for item in native_checklist_by_source[str(template["uuid"])]
+    ]
     mapped_planning: Counter[str] = Counter()
     mapped_actionability: Counter[str] = Counter()
     mapped_content: Counter[str] = Counter()
@@ -1050,6 +1163,29 @@ def build_migration(
             "project_children": len(project_children),
             "project_children_with_intentionally_omitted_notes": (
                 dropped_project_child_notes
+            ),
+            "native_checklist_items": len(mapped_native_checklist_items),
+            "native_checklist_items_completed": sum(
+                int(item["status"]) == 3
+                for item in mapped_native_checklist_items
+            ),
+            "native_checklist_tasks": sum(
+                bool(items)
+                for source_id, items in native_checklist_by_source.items()
+                if (
+                    source_id in {
+                        str(source["uuid"])
+                        for source in [*one_off, *projects, *linked_instances.values()]
+                    }
+                    or source_id in {
+                        str(template["uuid"])
+                        for template in templates
+                        if str(template["uuid"]) not in linked_instances
+                    }
+                )
+            ),
+            "recurrence_template_checklist_items": len(
+                recurrence_template_checklist_items
             ),
             "recurrence_templates": len(templates),
             "open_linked_recurrence_occurrences": recurrence_with_open_occurrence,
@@ -1158,15 +1294,24 @@ def build_migration(
             actionability=actionability_for(tags.get(identity, set())),
         )
         tasks.append(task)
+        project_item_count = 0
         if source["type"] == 1:
-            children, dropped_notes = make_checklist_records(
+            children, dropped_notes = make_project_child_checklist_records(
                 connection,
                 source,
                 task["id"],
                 migration_timestamp,
             )
             checklist_items.extend(children)
+            project_item_count = len(children)
             built_dropped_project_child_notes += dropped_notes
+        checklist_items.extend(make_native_checklist_records(
+            connection,
+            identity,
+            task["id"],
+            migration_timestamp,
+            start_position=project_item_count,
+        ))
 
     for template in sorted_source_rows(templates):
         template_identity = str(template["uuid"])
@@ -1217,6 +1362,19 @@ def build_migration(
             force_someday=False,
         )
         tasks.append(task)
+        current_checklist = make_native_checklist_records(
+            connection,
+            str(source["uuid"]),
+            task["id"],
+            migration_timestamp,
+        )
+        checklist_items.extend(current_checklist)
+        template_checklist = make_native_checklist_records(
+            connection,
+            template_identity,
+            task["id"],
+            migration_timestamp,
+        )
 
         template_id = stable_uuid("template", template_identity)
         template_revision_id = stable_uuid("template-revision", template_identity)
@@ -1247,7 +1405,7 @@ def build_migration(
             "snapshot": template_snapshot(
                 task,
                 schedule_date,
-                [],
+                template_checklist,
                 converted.deadline_offset_days,
             ),
             "client_mutation_id": stable_uuid(
@@ -1316,10 +1474,11 @@ def build_migration(
         })
 
     if (
-        len(checklist_items) != len(project_children)
+        len(checklist_items)
+        != len(project_children) + len(mapped_native_checklist_items)
         or built_dropped_project_child_notes != dropped_project_child_notes
     ):
-        raise MigrationError("Project checklist extraction did not reconcile")
+        raise MigrationError("Checklist extraction did not reconcile")
     data["tasks_areas"] = sorted(
         data["tasks_areas"],
         key=lambda record: str(record["id"]),

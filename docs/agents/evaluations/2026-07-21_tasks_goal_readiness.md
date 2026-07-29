@@ -10,14 +10,17 @@
 
 BathOS Tasks is now the authoritative task system. The approved open Things
 corpus was migrated from a private verified snapshot into 129 Tasks, two Areas,
-93 checklist items, and 60 native recurrence graphs. The 2026 Jul 28
+93 project-child checklist items, and 60 native recurrence graphs. The omitted
+229 native Things checklist items were subsequently reconciled into 41 exact
+Task targets, bringing production to 322 checklist items. The 2026 Jul 28
 `America/Los_Angeles` Today set entered Today Inbox, while future Starts
 remained date-only calendar values. The final production export matches the
 validated target digest exactly after excluding its generated timestamp.
 Inbox Manager and the canonical Raycast reading capture now create only BathOS
 Tasks, and their disposable production fixtures were reconciled and removed.
 The accepted content-free evidence is recorded in
-`2026-07-28_things_authoritative_cutover.md`.
+`2026-07-28_things_authoritative_cutover.md` and
+`2026-07-29_things_checklist_reconciliation.md`.
 
 ### Accepted Checklists, Recurrence, And Terminal Editing Release
 
@@ -105,7 +108,7 @@ The planning and notes refinement is accepted in production. Upcoming now select
 | Deterministic Mail Capture Retry | Archived `fix-tasks-mail-capture-retry` exact-replay, one-task/source/history, and fresh PowerSync-client proof | Accepted |
 | Large-Library Responsiveness | `2026-07-20_tasks_large_library_performance.md` and opt-in performance suite | Accepted |
 | Parallel Use with Things | Accepted seven-task corrected-window trial, exact nine-receipt backend and projection reconciliation, explicit disable, healthy post-disable Mail run, and healthy post-boundary no-work audit | Accepted |
-| Authoritative Things Cutover | Private Things snapshot, deterministic schema-13 migration, exact post-cleanup digest, Tasks-only Mail and Raycast captures, rendered planning counts, and recovery boundary in `2026-07-28_things_authoritative_cutover.md` | Accepted |
+| Authoritative Things Cutover | Private Things snapshot, deterministic schema-13 migration, exact post-cleanup digest, Tasks-only Mail and Raycast captures, rendered planning counts, recovery boundary, and exact native-checklist reconciliation in `2026-07-28_things_authoritative_cutover.md` and `2026-07-29_things_checklist_reconciliation.md` | Accepted |
 | BathOS Product Expression | `2026-07-20_tasks_product_identity.md`, Lucide icon, dark-only BathOS styling, and tagless Tasks naming | Accepted |
 | Stable Tasks Route Runtime | `2026-07-21_tasks_route_runtime_stability.md` and route-runtime regression suite | Accepted |
 | Module Isolation | Tasks-only source, routes, tables, service-worker interception, MCP namespace, and removal-boundary coverage | Accepted |
@@ -226,7 +229,7 @@ The BathOS connector catalog attached to this long-running Codex task still expo
 
 ## Completion Status
 
-The Tasks V1 replacement goal is complete. Today is an Anytime projection with Inbox, Now, Next, and Later day horizons, including direct movement among visible horizons. Inbox remains retired as a standalone planning destination. Upcoming follows the future Start / Deadline controlling-date and day/month/year grouping contract. Future work stores a future Start without a horizon and enters Today Inbox when eligible. The hierarchy is optional Area to task, with checklist items inside tasks and no Project or heading layer. Primary Link, Rechecking, source-visible live Markdown editing, immediate autosave, modifier-only keyboard operation, legible completion and selection controls, recoverable terminal motion, and projection-safe undo/redo are active in production. Done replaces Logbook and Trash, owner-local day-31 retention is active, and companion capture surfaces resolve to Today Inbox. Inbox Manager persistently mirrors newly accepted Mail creations to both Things and BathOS without backfill or duplicate AI work. Things remains authoritative for personal work til the user chooses otherwise. Native Apple surfaces and Things migration remain deliberate future decisions.
+The Tasks V1 replacement goal is complete. Today is an Anytime projection with Inbox, Now, Next, and Later day horizons, including direct movement among visible horizons. Inbox remains retired as a standalone planning destination. Upcoming follows the future Start / Deadline controlling-date and day/month/year grouping contract. Future work stores a future Start without a horizon and enters Today Inbox when eligible. The hierarchy is optional Area to task, with checklist items inside tasks and no Project or heading layer. Primary Link, Rechecking, source-visible live Markdown editing, immediate autosave, modifier-only keyboard operation, legible completion and selection controls, recoverable terminal motion, and projection-safe undo/redo are active in production. Done replaces Logbook and Trash, owner-local day-31 retention is active, and companion capture surfaces resolve to Today Inbox. BathOS Tasks is the authoritative source for personal tasks, including Mail and reading-list capture, and the Things corpus has been cut over with the accepted native-checklist reconciliation. Native Apple surfaces are accepted.
 
 ## Specification Impact
 

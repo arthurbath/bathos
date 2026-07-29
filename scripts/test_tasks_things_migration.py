@@ -88,6 +88,18 @@ def create_schema(connection: sqlite3.Connection, *, include_heading: bool = Tru
         CREATE TABLE TMArea (uuid TEXT PRIMARY KEY, title TEXT, "index" INTEGER);
         CREATE TABLE TMTag (uuid TEXT PRIMARY KEY, title TEXT);
         CREATE TABLE TMTaskTag (tasks TEXT, tags TEXT);
+        CREATE TABLE TMChecklistItem (
+          uuid TEXT PRIMARY KEY,
+          userModificationDate REAL,
+          creationDate REAL,
+          title TEXT,
+          status INTEGER,
+          stopDate REAL,
+          "index" INTEGER,
+          task TEXT,
+          leavesTombstone INTEGER,
+          experimental BLOB
+        );
     """)
 
 
@@ -140,6 +152,35 @@ def insert_task(
             repeating_template,
             rule,
             packed_date(next_start),
+        ),
+    )
+
+
+def insert_checklist_item(
+    connection: sqlite3.Connection,
+    identity: str,
+    task: str,
+    title: str,
+    *,
+    index: int,
+    completed: bool = False,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO TMChecklistItem (
+          uuid, userModificationDate, creationDate, title, status, stopDate,
+          "index", task, leavesTombstone, experimental
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)
+        """,
+        (
+            identity,
+            UPDATED_AT,
+            CREATED_AT,
+            title,
+            3 if completed else 0,
+            UPDATED_AT if completed else None,
+            index,
+            task,
         ),
     )
 
@@ -348,6 +389,43 @@ class ThingsMigrationTest(unittest.TestCase):
             "INSERT INTO TMTaskTag (tasks, tags) VALUES (?, ?)",
             ("weekly-calendar", "tag-rechecking"),
         )
+        insert_checklist_item(
+            self.connection,
+            "today-native-open",
+            "today-task",
+            "  Verbatim native item  ",
+            index=2,
+        )
+        insert_checklist_item(
+            self.connection,
+            "today-native-completed",
+            "today-task",
+            "Completed native item",
+            index=4,
+            completed=True,
+        )
+        insert_checklist_item(
+            self.connection,
+            "linked-native-completed",
+            "daily-after-completion-instance",
+            "Current occurrence item",
+            index=0,
+            completed=True,
+        )
+        insert_checklist_item(
+            self.connection,
+            "linked-template-native",
+            "daily-after-completion",
+            "Future occurrence item",
+            index=0,
+        )
+        insert_checklist_item(
+            self.connection,
+            "waiting-template-native",
+            "weekly-calendar",
+            "Waiting recurrence item",
+            index=0,
+        )
         self.connection.commit()
 
     def build(self) -> tuple[dict[str, object], dict[str, object]]:
@@ -373,6 +451,10 @@ class ThingsMigrationTest(unittest.TestCase):
         self.assertEqual(report["source"]["selected_rows"], 11)
         self.assertEqual(report["source"]["expected_target_tasks"], 10)
         self.assertEqual(report["source"]["project_children"], 2)
+        self.assertEqual(report["source"]["native_checklist_items"], 4)
+        self.assertEqual(report["source"]["native_checklist_items_completed"], 2)
+        self.assertEqual(report["source"]["native_checklist_tasks"], 3)
+        self.assertEqual(report["source"]["recurrence_template_checklist_items"], 2)
         self.assertEqual(
             report["source"]["project_children_with_intentionally_omitted_notes"],
             1,
@@ -385,7 +467,7 @@ class ThingsMigrationTest(unittest.TestCase):
         data = envelope["data"]
         self.assertEqual(len(data["tasks_todos"]), 10)
         self.assertEqual(len(data["tasks_history_events"]), 10)
-        self.assertEqual(len(data["tasks_checklist_items"]), 2)
+        self.assertEqual(len(data["tasks_checklist_items"]), 6)
         self.assertEqual(len(data["tasks_recurrence_definitions"]), 8)
         self.assertEqual(len(data["tasks_recurrence_revisions"]), 8)
         self.assertEqual(len(data["tasks_recurrence_occurrences"]), 8)
@@ -405,11 +487,57 @@ class ThingsMigrationTest(unittest.TestCase):
             [
                 item["title"]
                 for item in sorted(
-                    data["tasks_checklist_items"],
+                    [
+                        item
+                        for item in data["tasks_checklist_items"]
+                        if item["task_id"] == project["id"]
+                    ],
                     key=lambda item: item["order_key"],
                 )
             ],
             ["Direct Checklist Item", "Nested Checklist Item"],
+        )
+        today_items = sorted(
+            [
+                item
+                for item in data["tasks_checklist_items"]
+                if item["task_id"] == today["id"]
+            ],
+            key=lambda item: item["order_key"],
+        )
+        self.assertEqual(
+            [item["title"] for item in today_items],
+            ["  Verbatim native item  ", "Completed native item"],
+        )
+        self.assertEqual(
+            [item["completed"] for item in today_items],
+            [False, True],
+        )
+        self.assertIsNone(today_items[0]["completed_at"])
+        self.assertIsNotNone(today_items[1]["completed_at"])
+        daily_revision = next(
+            revision
+            for revision in data["tasks_template_revisions"]
+            if revision["name"] == "Synthetic Instance daily-after-completion"
+        )
+        self.assertEqual(
+            [
+                item["title"]
+                for item in daily_revision["snapshot"]["root"]["checklist"]
+            ],
+            ["Future occurrence item"],
+        )
+        weekly_revision = next(
+            revision
+            for revision in data["tasks_template_revisions"]
+            if revision["name"] == "Synthetic Recurrence weekly-calendar"
+        )
+        self.assertEqual(
+            [
+                item["title"]
+                for item in weekly_revision["snapshot"]["root"]["checklist"]
+            ],
+            ["Waiting recurrence item"],
         )
         self.assertEqual(
             {

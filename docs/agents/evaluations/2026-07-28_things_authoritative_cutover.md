@@ -99,6 +99,18 @@ The relevant remediation references remain the Supabase
 and
 [performance advisor guidance](https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys).
 
+## Native Checklist Reconciliation
+
+The original extractor did not read Things' native `TMChecklistItem` table.
+The 2026 Jul 29 reconciliation added the omitted 229 native checklist items to
+41 exact deterministic Task targets, including 70 checked items, without
+changing any Task row. Production now contains 322 owner checklist items.
+Exact source hashes, order, checked state, completion timestamps, the unchanged
+Task digest, fresh PowerSync projection, rendered behavior, scheduling, and the
+20-table publication boundary passed. The content-free evidence and bounded
+nested-project and immutable-recurrence-template exceptions are recorded in
+`2026-07-29_things_checklist_reconciliation.md`.
+
 ## Capture Cutover Acceptance
 
 Inbox Manager is installed in persistent `bathos-only` mode with no expiry. Its
