@@ -108,6 +108,40 @@ older clients never call them. If removal is later required, first prove no
 installed widget uses snapshot reads, then remove them through a separately
 approved forward migration. Do not rewrite migration history.
 
+## Production Evidence
+
+The authorized July 29, 2026 rollout completed with the following
+content-free evidence:
+
+- Private backup:
+  `2026-07-29T151608-0700-pre-widget-background-refresh.sql`, mode `0600`,
+  PostgreSQL completion marker present, expected public and private Tasks COPY
+  sections present, and stable SHA-256
+  `174698180b115f3d2915167bbb800102312a858993f8a3376a22193c58a42d0e`.
+- Release source: commit `36471fead8f2799c123a9303ee54b5c8fbb6d640`
+  pushed to and matched by `origin/main`.
+- Migration ledger: fully paired through
+  `20260729212429_add_tasks_widget_background_snapshot_authority.sql`.
+- Edge Function: `tasks-widget-actions` version `2`, active with platform JWT
+  verification disabled and the custom credential boundary intact.
+- Web release: Lovable published the exact `36471fe` source.
+- Native release: the companion and widget built with Xcode 27 beta, passed
+  strict signature verification for `garden.bath.tasks` under team
+  `SPJYXE7ZA3`, and installed on the connected physical iPhone.
+- Disposable production acceptance: owner-scoped snapshot, completion,
+  idempotent retry, revocation, Primary Link, PowerSync convergence, and cleanup
+  passed; zero synthetic fixture users remained.
+- PowerSync: exactly 20 approved Tasks publication tables and 20
+  `tasks_powersync_role` SELECT grants; zero private tables published.
+- Cron: activation, reminder dispatch, and Done purge jobs remained active at
+  once per minute, with the latest run of each succeeding.
+- Advisors: the release added only the expected authenticated
+  `tasks_edit_recurrence` SECURITY DEFINER notice and the newly created
+  recurrence-projection index's initial unused-index notice.
+- Rendered production smoke test: Tasks loaded without a blank state,
+  framework overlay, or console warning/error; Control+2 navigated from Today
+  to the rendered Upcoming view.
+
 ## Approval Request
 
 After the migration ledger is reconciled and any genuinely pending preceding
