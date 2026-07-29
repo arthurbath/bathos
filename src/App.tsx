@@ -17,6 +17,7 @@ import { BROWSER_ROUTER_FUTURE } from "@/platform/routingCompatibility";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import TermsGate from "@/platform/components/TermsGate";
 import AuthCallbackToasts from "@/platform/components/AuthCallbackToasts";
+import { InstalledAppNavigationBoundary } from "@/platform/components/InstalledAppNavigationBoundary";
 import { useDocumentHead } from "@/platform/hooks/useDocumentHead";
 import { useBathosFormInteractions } from "@/platform/hooks/useCommandEnterSubmit";
 import { isLikelyNetworkError } from "@/lib/networkErrors";
@@ -110,6 +111,7 @@ export function AppRoutes() {
   return (
     <PullToRefresh>
       <GlobalFormInteractions />
+      <InstalledAppNavigationBoundary />
       <ScrollToTopOnPathnameChange />
       <Routes>
         <Route path="/" element={<LauncherPage />} />
@@ -151,6 +153,7 @@ export function AppRoutes() {
         {/* Wardrobe module */}
         <Route path="/wardrobe" element={<Navigate to="/wardrobe/items" replace />} />
         <Route path="/wardrobe/items" element={<WardrobeIndex />} />
+        <Route path="/wardrobe/config" element={<WardrobeIndex />} />
 
         {/* Tasks module */}
         <Route path="/tasks" element={<Navigate to="/tasks/today" replace />} />

@@ -16,6 +16,8 @@ import type { SnakeHouseholdData } from '@/modules/snake/types/snake';
 import { useSnakeData, useSnakeWeightRecords } from '@/modules/snake/hooks/useSnakeData';
 import { SnakeConfigView } from '@/modules/snake/components/SnakeConfigView';
 import { SnakeWeightRecordsGrid } from '@/modules/snake/components/SnakeWeightRecordsGrid';
+import { InstalledAppAccountCard } from '@/platform/components/InstalledAppAccountCard';
+import { useInstalledAppMode } from '@/platform/installedApp';
 
 interface SnakeShellProps {
   household: SnakeHouseholdData;
@@ -59,6 +61,7 @@ export function SnakeShell({
   const navigate = useNavigate();
   const location = useLocation();
   const basePath = useModuleBasePath();
+  const installed = useInstalledAppMode();
   const [selectedSnakeId, setSelectedSnakeId] = useState<string | null>(null);
 
   const navItems = [
@@ -216,6 +219,28 @@ export function SnakeShell({
       </div>
 
       <main className={isFullViewGridRoute ? `flex w-full flex-1 min-h-0 flex-col gap-4 pt-0 md:pt-6 ${FULL_VIEW_PAGE_BOTTOM_PADDING_CLASS}` : `mx-auto max-w-5xl space-y-4 px-4 pt-4 md:pt-6 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
+        {installed && snakes.length > 0 ? (
+          <div className={isFullViewGridRoute ? 'mx-auto w-full max-w-5xl px-4' : ''}>
+            <Select
+              value={selectedSnake?.id ?? ''}
+              onValueChange={(value) => {
+                void handleSetActiveSnake(value);
+              }}
+            >
+              <SelectTrigger aria-label="Active Snake" className="h-9 w-full max-w-xs">
+                <SelectValue placeholder="Select Snake" />
+              </SelectTrigger>
+              <SelectContent>
+                {snakes
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((snake) => (
+                    <SelectItem key={snake.id} value={snake.id}>{snake.name}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
         {!selectedSnake && !isConfigRoute ? (
           <div className={isFullViewGridRoute ? 'mx-auto w-full max-w-5xl px-4' : ''}>
             <Card>
@@ -250,27 +275,34 @@ export function SnakeShell({
               </div>
             )}
             {isConfigRoute && (
-              <SnakeConfigView
-                userId={userId}
-                snakes={snakes}
-                household={household}
-                userEmail={userEmail}
-                householdMembers={householdMembers}
-                householdMembersLoading={householdMembersLoading}
-                householdMembersError={householdMembersError}
-                pendingHouseholdMemberId={pendingHouseholdMemberId}
-                rotatingHouseholdInviteCode={rotatingHouseholdInviteCode}
-                leavingHousehold={leavingHousehold}
-                deletingHousehold={deletingHousehold}
-                autoOpenAddSnake={snakes.length === 0}
-                onAddSnake={addSnake}
-                onUpdateSnake={updateSnake}
-                onRemoveSnake={removeSnake}
-                onRotateHouseholdInviteCode={onRotateHouseholdInviteCode}
-                onRemoveHouseholdMember={onRemoveHouseholdMember}
-                onLeaveHousehold={onLeaveHousehold}
-                onDeleteHousehold={onDeleteHousehold}
-              />
+              <>
+                <SnakeConfigView
+                  userId={userId}
+                  snakes={snakes}
+                  household={household}
+                  userEmail={userEmail}
+                  householdMembers={householdMembers}
+                  householdMembersLoading={householdMembersLoading}
+                  householdMembersError={householdMembersError}
+                  pendingHouseholdMemberId={pendingHouseholdMemberId}
+                  rotatingHouseholdInviteCode={rotatingHouseholdInviteCode}
+                  leavingHousehold={leavingHousehold}
+                  deletingHousehold={deletingHousehold}
+                  autoOpenAddSnake={snakes.length === 0}
+                  onAddSnake={addSnake}
+                  onUpdateSnake={updateSnake}
+                  onRemoveSnake={removeSnake}
+                  onRotateHouseholdInviteCode={onRotateHouseholdInviteCode}
+                  onRemoveHouseholdMember={onRemoveHouseholdMember}
+                  onLeaveHousehold={onLeaveHousehold}
+                  onDeleteHousehold={onDeleteHousehold}
+                />
+                <InstalledAppAccountCard
+                  userId={userId}
+                  displayName={displayName}
+                  onSignOut={onSignOut}
+                />
+              </>
             )}
           </>
         )}

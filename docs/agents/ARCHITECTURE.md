@@ -19,6 +19,8 @@ BathOS is a multi-module platform where each module is a self-contained applicat
 
 5. **Group entity isolation**: Each module has its own concept of a "group" (e.g., Budget has "households"). Group IDs are module-specific — sharing a group in one module does not grant access in another.
 
+6. **Installed module containment**: An installed PWA or native host represents one module, not the complete BathOS platform. Installed contexts hide platform-level navigation, keep the module's own navigation, and open destinations outside that module through the operating system or default browser.
+
 ## File Structure
 
 ```
@@ -55,6 +57,16 @@ ios/
 ## Adding a Module
 
 See `/docs/agents/MODULE_GUIDE.md`.
+
+## Installed Module Shell
+
+`src/platform/installedApp.ts` is the shared authority for detecting standalone PWAs and native module hosts. Native hosts declare their module through `window.__bathosNativeApp`; standalone PWAs derive and retain the installed module from their route. Admin is not an installable public module.
+
+Installed modules omit the platform `ToplineHeader` controls while preserving top safe-area clearance. Each module's Config view ends with the shared installed-only Account card, which exposes the signed-in identity, Account, Feedback, and Sign Out. Modules whose normal header contains module-specific controls must provide an installed placement in their page content.
+
+`InstalledAppNavigationBoundary` preserves same-module and required platform routes, including Account and authentication. Same-origin routes to another module, the platform launcher, external HTTP(S) destinations, and non-web protocols are treated as external. The Tasks iOS companion enforces the same boundary at the `WKWebView` navigation-delegate layer so script navigation and redirects cannot bypass the React boundary.
+
+Wardrobe has an installed-only Config route because it otherwise has no Config surface. Ordinary web navigation neither advertises nor renders that route.
 
 ## Tasks iOS Companion
 

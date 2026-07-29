@@ -407,6 +407,54 @@ final class TasksCompanionTests: XCTestCase {
         )
     }
 
+    func testWebNavigationPolicyKeepsTasksAndRequiredPlatformRoutesInternal() {
+        let internalURLs = [
+            "https://os.bath.garden/tasks/today",
+            "https://os.bath.garden/tasks/config?source=native",
+            "https://os.bath.garden/account",
+            "https://os.bath.garden/signin",
+            "https://os.bath.garden/signup",
+            "https://os.bath.garden/forgot-password",
+            "https://os.bath.garden/reset-password",
+            "https://os.bath.garden/terms",
+            "https://os.bath.garden/help",
+            "https://os.bath.garden/.lovable/oauth/consent",
+            "about:blank",
+        ]
+
+        for urlString in internalURLs {
+            XCTAssertEqual(
+                TasksWebNavigationPolicy.disposition(for: URL(string: urlString)!),
+                .allow,
+                urlString
+            )
+        }
+    }
+
+    func testWebNavigationPolicyEjectsLauncherModulesAdminAndExternalDestinations() {
+        let externalURLs = [
+            "https://os.bath.garden/",
+            "https://os.bath.garden/budget/summary",
+            "https://os.bath.garden/drawers/plan",
+            "https://os.bath.garden/garage/due",
+            "https://os.bath.garden/snake/weights",
+            "https://os.bath.garden/wardrobe/items",
+            "https://os.bath.garden/admin",
+            "https://example.test/read",
+            "http://os.bath.garden/tasks/today",
+            "message://synthetic-message",
+            "mailto:person@example.test",
+        ]
+
+        for urlString in externalURLs {
+            XCTAssertEqual(
+                TasksWebNavigationPolicy.disposition(for: URL(string: urlString)!),
+                .openExternally,
+                urlString
+            )
+        }
+    }
+
     @MainActor
     func testFinishedContentIgnoresAStaleFailureAndRecoversAfterTermination() {
         let model = TasksBrowserModel()

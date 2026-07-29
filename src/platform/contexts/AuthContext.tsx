@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { supabase } from '@/integrations/supabase/client';
 import type { AuthError, Session, User } from '@supabase/supabase-js';
 import { unsubscribeUserBoundBrowserPush } from '@/platform/push/userBoundBrowserPush';
+import { getSignOutDestination } from '@/platform/installedApp';
 
 interface AuthContextValue {
   user: User | null;
@@ -63,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           // Ignore startup SIGNED_OUT events when no authenticated session has been observed.
           if (isSigningOut || hadAuthenticatedSession) {
-            window.location.href = '/';
+            window.location.href = getSignOutDestination();
           }
           return;
         }
@@ -176,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       isSigningOutRef.current = false;
       setIsSigningOut(false);
-      window.location.href = '/';
+      window.location.href = getSignOutDestination();
     }
   };
 

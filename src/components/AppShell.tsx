@@ -8,6 +8,7 @@ import { useExpenses } from '@/hooks/useExpenses';
 import { useCategories } from '@/hooks/useCategories';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
+import { InstalledAppAccountCard } from '@/platform/components/InstalledAppAccountCard';
 
 import { useLinkedAccounts } from '@/hooks/useLinkedAccounts';
 import { useRestorePoints } from '@/hooks/useRestorePoints';
@@ -326,50 +327,57 @@ export function AppShell({
             />
           )}
           {isConfigRoute && (
-            <ConfigurationTab
-              userId={userId}
-              categories={categories}
-              linkedAccounts={linkedAccounts}
-              expenses={expenses}
-              partnerX={household.partnerX}
-              partnerY={household.partnerY}
-              wageGapAdjustmentEnabled={household.wageGapAdjustmentEnabled}
-              partnerXWageCentsPerDollar={household.partnerXWageCentsPerDollar}
-              partnerYWageCentsPerDollar={household.partnerYWageCentsPerDollar}
-              userEmail={userEmail}
-              inviteCode={household.inviteCode}
-              householdMembers={householdMembers}
-              householdMembersLoading={householdMembersLoading}
-              householdMembersError={householdMembersError}
-              pendingHouseholdMemberId={pendingHouseholdMemberId}
-              rotatingHouseholdInviteCode={rotatingHouseholdInviteCode}
-              leavingHousehold={leavingHousehold}
-              deletingHousehold={deletingHousehold}
-              onUpdatePartnerSettings={onUpdatePartnerSettings}
-              onRotateHouseholdInviteCode={onRotateHouseholdInviteCode}
-              onRemoveHouseholdMember={onRemoveHouseholdMember}
-              onLeaveHousehold={onLeaveHousehold}
-              onDeleteHousehold={onDeleteHousehold}
-              onAddCategory={addCategory}
-              onUpdateCategory={updateCategory}
-              onRemoveCategory={removeCategory}
-              onReassignCategory={handleReassignCategory}
-              onUpdateCategoryColor={updateCategoryColor}
-              categoryPendingById={categoryPendingById}
-              onAddLinkedAccount={addLinkedAccount}
-              onUpdateLinkedAccount={updateLinkedAccount}
-              onRemoveLinkedAccount={removeLinkedAccount}
-              onReassignLinkedAccount={handleReassignLinkedAccount}
-              onUpdateLinkedAccountColor={updateLinkedAccountColor}
-              linkedAccountPendingById={linkedAccountPendingById}
-              points={points}
-              restorePointPendingById={restorePointPendingById}
-              incomes={incomes}
-              onSaveRestorePoint={savePoint}
-              onRemoveRestorePoint={removePoint}
-              onUpdateRestorePointNotes={updateRestorePointNotes}
-              onRestore={handleRestore}
-            />
+            <>
+              <ConfigurationTab
+                userId={userId}
+                categories={categories}
+                linkedAccounts={linkedAccounts}
+                expenses={expenses}
+                partnerX={household.partnerX}
+                partnerY={household.partnerY}
+                wageGapAdjustmentEnabled={household.wageGapAdjustmentEnabled}
+                partnerXWageCentsPerDollar={household.partnerXWageCentsPerDollar}
+                partnerYWageCentsPerDollar={household.partnerYWageCentsPerDollar}
+                userEmail={userEmail}
+                inviteCode={household.inviteCode}
+                householdMembers={householdMembers}
+                householdMembersLoading={householdMembersLoading}
+                householdMembersError={householdMembersError}
+                pendingHouseholdMemberId={pendingHouseholdMemberId}
+                rotatingHouseholdInviteCode={rotatingHouseholdInviteCode}
+                leavingHousehold={leavingHousehold}
+                deletingHousehold={deletingHousehold}
+                onUpdatePartnerSettings={onUpdatePartnerSettings}
+                onRotateHouseholdInviteCode={onRotateHouseholdInviteCode}
+                onRemoveHouseholdMember={onRemoveHouseholdMember}
+                onLeaveHousehold={onLeaveHousehold}
+                onDeleteHousehold={onDeleteHousehold}
+                onAddCategory={addCategory}
+                onUpdateCategory={updateCategory}
+                onRemoveCategory={removeCategory}
+                onReassignCategory={handleReassignCategory}
+                onUpdateCategoryColor={updateCategoryColor}
+                categoryPendingById={categoryPendingById}
+                onAddLinkedAccount={addLinkedAccount}
+                onUpdateLinkedAccount={updateLinkedAccount}
+                onRemoveLinkedAccount={removeLinkedAccount}
+                onReassignLinkedAccount={handleReassignLinkedAccount}
+                onUpdateLinkedAccountColor={updateLinkedAccountColor}
+                linkedAccountPendingById={linkedAccountPendingById}
+                points={points}
+                restorePointPendingById={restorePointPendingById}
+                incomes={incomes}
+                onSaveRestorePoint={savePoint}
+                onRemoveRestorePoint={removePoint}
+                onUpdateRestorePointNotes={updateRestorePointNotes}
+                onRestore={handleRestore}
+              />
+              <InstalledAppAccountCard
+                userId={userId}
+                displayName={displayName}
+                onSignOut={onSignOut}
+              />
+            </>
           )}
         </main>
       )}

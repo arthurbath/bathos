@@ -79,6 +79,10 @@ describe('AccountPage', () => {
       setDisplayName: vi.fn(),
     });
     mockIsAdmin.mockReturnValue({ isAdmin: false });
+    Object.defineProperty(window.navigator, 'standalone', {
+      configurable: true,
+      value: false,
+    });
   });
 
   it('opens the change email dialog from the inline email pencil trigger', () => {
@@ -98,6 +102,36 @@ describe('AccountPage', () => {
       expect(document.body.textContent).toContain('Change Email');
       const currentEmailInput = document.body.querySelector('input[value="art@example.com"]') as HTMLInputElement | null;
       expect(currentEmailInput).toBeTruthy();
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('provides a page-local Back action in an installed app', () => {
+    Object.defineProperty(window.navigator, 'standalone', {
+      configurable: true,
+      value: true,
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={[{
+          pathname: '/account',
+          state: { fromPath: '/tasks/config' },
+        }]}>
+          <AccountPage />
+        </MemoryRouter>,
+      );
+    });
+
+    try {
+      const back = Array.from(container.querySelectorAll('a'))
+        .find((anchor) => anchor.textContent?.includes('Back'));
+      expect(back).toBeTruthy();
+      expect(back).toHaveAttribute('href', '/tasks/config');
     } finally {
       unmount(root, container);
     }

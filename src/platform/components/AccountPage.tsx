@@ -10,21 +10,30 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { AlertDialog, AlertDialogAction, AlertDialogBody, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Pencil } from 'lucide-react';
+import { ArrowLeft, Pencil } from 'lucide-react';
 import { isWeakOrLeakedPasswordError, WEAK_PASSWORD_MESSAGE } from '@/lib/authErrors';
 import { isPasswordValid } from '@/lib/passwordValidation';
 import { PasswordRequirements } from '@/components/PasswordRequirements';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  getInstalledModuleLaunchPath,
+  getSignOutDestination,
+  useInstalledAppMode,
+} from '@/platform/installedApp';
+import { handleClientSideLinkNavigation } from '@/lib/navigation';
 
 interface AccountPageLocationState {
   fromPath?: string;
 }
 
-function resolveBackHref(state: AccountPageLocationState | null): string {
-  if (!state?.fromPath || !state.fromPath.startsWith('/')) return '/';
+function resolveBackHref(
+  state: AccountPageLocationState | null,
+  fallbackHref: string,
+): string {
+  if (!state?.fromPath || !state.fromPath.startsWith('/')) return fallbackHref;
   if (state.fromPath === '/account' || state.fromPath.startsWith('/account?') || state.fromPath.startsWith('/account#')) {
-    return '/';
+    return fallbackHref;
   }
   return state.fromPath;
 }
@@ -37,6 +46,8 @@ export default function AccountPage() {
   const { isAdmin } = useIsAdmin(user?.id);
   const { toast } = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
+  const installed = useInstalledAppMode();
 
   const [displayName, setDisplayName] = useState('');
   const [editingName, setEditingName] = useState(false);
@@ -182,7 +193,7 @@ export default function AccountPage() {
       if (error) throw new Error(error.message || 'Failed to delete account');
       if (!data?.success) throw new Error(data?.error || 'Account deletion failed');
       await signOut();
-      window.location.href = '/';
+      window.location.href = getSignOutDestination();
     } catch (error) {
       toast({
         title: 'Deletion Failed',
@@ -202,7 +213,10 @@ export default function AccountPage() {
   }
 
   if (!user) return null;
-  const backHref = resolveBackHref(location.state as AccountPageLocationState | null);
+  const backHref = resolveBackHref(
+    location.state as AccountPageLocationState | null,
+    installed ? getInstalledModuleLaunchPath() : '/',
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -216,6 +230,17 @@ export default function AccountPage() {
       />
 
       <main className="mx-auto max-w-lg px-4 py-6">
+        {installed ? (
+          <Button asChild variant="clear" size="sm" className="mb-3 -ml-2 gap-1.5">
+            <a
+              href={backHref}
+              onClick={(event) => handleClientSideLinkNavigation(event, navigate, backHref)}
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Back
+            </a>
+          </Button>
+        ) : null}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle>Account</CardTitle>

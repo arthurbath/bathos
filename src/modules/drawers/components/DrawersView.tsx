@@ -20,6 +20,7 @@ import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import { HouseholdManagementPanel, type HouseholdMember } from '@/platform/households';
 import { CARD_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
+import { InstalledAppAccountCard } from '@/platform/components/InstalledAppAccountCard';
 
 interface DrawersViewProps {
   household: DrawersHouseholdData;
@@ -741,7 +742,7 @@ export function DrawersView({
       )}
 
       {isConfigRoute && (
-      <main className={`mx-auto max-w-5xl px-4 pt-6 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
+      <main className={`mx-auto max-w-5xl space-y-4 px-4 pt-6 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
         <HouseholdManagementPanel
           moduleName="Drawers"
           userEmail={userEmail}
@@ -757,6 +758,11 @@ export function DrawersView({
           onRemoveMember={onRemoveHouseholdMember}
           onLeaveHousehold={onLeaveHousehold}
           onDeleteHousehold={onDeleteHousehold}
+        />
+        <InstalledAppAccountCard
+          userId={userId}
+          displayName={displayName}
+          onSignOut={onSignOut}
         />
       </main>
       )}

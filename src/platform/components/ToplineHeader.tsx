@@ -6,6 +6,7 @@ import { HeaderUserControls } from '@/platform/components/HeaderUserControls';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import type { PlatformModuleId } from '@/platform/modules';
 import { getModuleById } from '@/platform/modules';
+import { useInstalledAppMode } from '@/platform/installedApp';
 
 interface ToplineHeaderProps {
   title: string;
@@ -19,10 +20,6 @@ interface ToplineHeaderProps {
   titleAccessory?: ReactNode;
   actionsAccessory?: ReactNode;
 }
-
-type StandaloneNavigator = Navigator & {
-  standalone?: boolean;
-};
 
 export function ToplineHeader({
   title,
@@ -39,21 +36,22 @@ export function ToplineHeader({
   const navigate = useNavigate();
   const moduleConfig = moduleId ? getModuleById(moduleId) : undefined;
   const ModuleIcon = moduleConfig?.icon;
-  const standaloneNavigator = window.navigator as StandaloneNavigator;
-  const isIosStandalone =
-    (
-      standaloneNavigator.standalone === true ||
-      (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches)
-    ) &&
-    (
-      /iPad|iPhone|iPod/.test(window.navigator.userAgent) ||
-      (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1)
+  const installed = useInstalledAppMode();
+
+  if (installed) {
+    return (
+      <div
+        data-installed-app-safe-area
+        aria-hidden="true"
+        className="h-[env(safe-area-inset-top)] shrink-0 bg-background"
+      />
     );
+  }
 
   return (
     <header
       data-topline-header
-      className={`sticky top-0 z-[45] isolate border-b border-[hsl(var(--grid-sticky-line))] bg-card ${isIosStandalone ? 'pt-[env(safe-area-inset-top)]' : ''}`}
+      className="sticky top-0 z-[45] isolate border-b border-[hsl(var(--grid-sticky-line))] bg-card"
     >
       <div className={`mx-auto flex ${maxWidthClassName} items-center justify-between gap-2 px-4 py-3`}>
         <div className="flex min-w-0 flex-1 items-center gap-2">

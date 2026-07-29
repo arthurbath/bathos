@@ -146,6 +146,7 @@ import {
 } from '@/modules/tasks/components/taskReminderAvailability';
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
+import { InstalledAppAccountCard } from '@/platform/components/InstalledAppAccountCard';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import {
   deriveTaskAreaSections,
@@ -3052,6 +3053,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 <TaskConfigView
                   keyboardHelpShortcut={macLikePlatform ? '⌘/' : '⌃/'}
                   userId={userId}
+                  displayName={displayName}
+                  onSignOut={handleSignOut}
                   hierarchy={hierarchy}
                   automaticListSorting={automaticListSorting}
                   webPush={reminders.webPush}
@@ -3678,6 +3681,8 @@ function TaskDesktopNavigation({
 function TaskConfigView({
   keyboardHelpShortcut,
   userId,
+  displayName,
+  onSignOut,
   hierarchy,
   automaticListSorting,
   webPush,
@@ -3691,6 +3696,8 @@ function TaskConfigView({
 }: {
   keyboardHelpShortcut: string;
   userId: string;
+  displayName: string;
+  onSignOut: () => Promise<void> | void;
   hierarchy: TaskHierarchyModel;
   automaticListSorting: ReturnType<typeof useTaskAutomaticListSorting>;
   webPush: TaskWebPushModel | null;
@@ -3764,6 +3771,12 @@ function TaskConfigView({
           triggerVariant="config"
         />
       </TaskConfigSection>
+
+      <InstalledAppAccountCard
+        userId={userId}
+        displayName={displayName}
+        onSignOut={onSignOut}
+      />
     </div>
   );
 }

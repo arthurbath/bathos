@@ -7,7 +7,7 @@ Define the thin native iOS host, owner-scoped widget projection, configurable Wi
 ## Requirements
 
 ### Requirement: Thin Native Tasks Host
-The iOS companion SHALL house the authoritative BathOS Tasks web application without recreating task editing, synchronization, recurrence, reminder, or offline-mutation behavior natively.
+The iOS companion SHALL house the authoritative BathOS Tasks web application without recreating task editing, synchronization, recurrence, reminder, or offline-mutation behavior natively, and SHALL prevent unrelated BathOS modules from replacing Tasks inside its WebKit container.
 
 #### Scenario: Launch the companion
 - **WHEN** the user launches the iOS companion without a pending deep link
@@ -17,8 +17,16 @@ The iOS companion SHALL house the authoritative BathOS Tasks web application wit
 - **WHEN** the web application navigates among trusted BathOS Tasks routes
 - **THEN** the companion keeps that navigation inside the WebKit container
 
+#### Scenario: Follow a required platform route
+- **WHEN** Tasks navigates to Account, sign-in, sign-up, password recovery, terms, or help
+- **THEN** the companion may keep that required platform route inside the WebKit container
+
+#### Scenario: Follow another BathOS module
+- **WHEN** the user activates a trusted-origin link to the platform launcher, Administration, or a BathOS module other than Tasks
+- **THEN** the companion opens that URL through the operating system and leaves its Tasks WebKit route unchanged
+
 #### Scenario: Follow an unrelated external link
-- **WHEN** the user activates a link outside the trusted BathOS origin
+- **WHEN** the user activates a link outside the trusted Tasks and required platform routes
 - **THEN** the companion opens that URL through the operating system rather than granting it access to the Tasks bridge
 
 #### Scenario: Continue without native data services

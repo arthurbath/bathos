@@ -127,7 +127,7 @@ describe('ToplineHeader administration access placement', () => {
   });
 });
 
-describe('ToplineHeader iOS standalone safe area', () => {
+describe('ToplineHeader installed presentation', () => {
   beforeEach(() => {
     mockNavigate.mockReset();
     mockIsAdmin.mockReset();
@@ -136,7 +136,7 @@ describe('ToplineHeader iOS standalone safe area', () => {
     mockIsMobile.mockReturnValue(true);
   });
 
-  it('adds top safe-area padding in iOS standalone mode', () => {
+  it('removes platform controls and retains only safe-area clearance in standalone mode', () => {
     mockStandaloneMode(true);
     Object.defineProperty(window.navigator, 'userAgent', {
       configurable: true,
@@ -148,9 +148,11 @@ describe('ToplineHeader iOS standalone safe area', () => {
     );
 
     try {
-      const header = container.querySelector('header');
-      expect(header).toBeTruthy();
-      expect(header?.className).toContain('pt-[env(safe-area-inset-top)]');
+      expect(container.querySelector('header')).toBeNull();
+      const safeArea = container.querySelector('[data-installed-app-safe-area]');
+      expect(safeArea).toBeTruthy();
+      expect(safeArea?.className).toContain('h-[env(safe-area-inset-top)]');
+      expect(container.textContent).not.toContain('Budget');
     } finally {
       unmount(root, container);
     }

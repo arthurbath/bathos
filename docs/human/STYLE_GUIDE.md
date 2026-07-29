@@ -205,6 +205,16 @@ For dotted-underline tooltip text triggers, use the persistent interaction model
   - Plain left click uses client-side navigation.
 - Implement navigational UI using real anchors (`<a href="...">`) and intercept only plain left clicks for SPA routing.
 
+## Installed Module Shell
+
+- The platform topnav appears in ordinary web browsing and is hidden in standalone PWAs and native module hosts.
+- Installed modules preserve safe-area clearance and their complete module navigation.
+- Account, Feedback, and Sign Out appear in an Account card at the bottom of the module's Config view only while installed.
+- Header-only module controls require an in-page installed placement.
+- An installed module contains only its own module and required Account/authentication routes.
+- Links to another BathOS module, the platform launcher, an external website, or a non-web protocol open through the device browser or operating system.
+- A module without an ordinary Config view may expose an installed-only Config destination for the Account card. Do not show that destination in ordinary web navigation.
+
 ## Shadows and Borders
 
 - Borders: 1px, using `border` token

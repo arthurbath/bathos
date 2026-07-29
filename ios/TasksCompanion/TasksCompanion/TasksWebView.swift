@@ -9,6 +9,45 @@ enum TasksWebViewPolicy {
     }
 }
 
+enum TasksWebNavigationDisposition: Equatable {
+    case allow
+    case openExternally
+    case cancel
+}
+
+enum TasksWebNavigationPolicy {
+    private static let internalPlatformPaths: Set<String> = [
+        "/account",
+        "/signin",
+        "/signup",
+        "/forgot-password",
+        "/reset-password",
+        "/terms",
+        "/help",
+        "/.lovable/oauth/consent",
+    ]
+
+    static func disposition(for url: URL) -> TasksWebNavigationDisposition {
+        let scheme = url.scheme?.lowercased()
+        if scheme == "about" {
+            return .allow
+        }
+        guard scheme == "https",
+              url.host?.lowercased() == TaskCompanionConstants.trustedWebHost else {
+            return .openExternally
+        }
+
+        let path = url.path
+        if path == "/tasks"
+            || path.hasPrefix("/tasks/")
+            || internalPlatformPaths.contains(path) {
+            return .allow
+        }
+
+        return .openExternally
+    }
+}
+
 struct TasksWebView: View {
     @ObservedObject var model: TasksBrowserModel
 
@@ -61,19 +100,25 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
             context.coordinator,
             name: TaskCompanionConstants.webBridgeHandler
         )
+        var nativeContextScript = """
+        window.__bathosNativeApp = Object.freeze({
+          schemaVersion: 1,
+          moduleId: "tasks"
+        });
+        """
         if let installationID = try? TaskWidgetInstallationStore()?.identifier() {
-            let script = """
+            nativeContextScript += """
             window.__bathosTasksNative = Object.freeze({
               schemaVersion: 2,
               installationId: "\(installationID.uuidString.lowercased())"
             });
             """
-            userContentController.addUserScript(WKUserScript(
-                source: script,
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: true
-            ))
         }
+        userContentController.addUserScript(WKUserScript(
+            source: nativeContextScript,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
 
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = userContentController
@@ -132,19 +177,15 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
                 decisionHandler(.cancel)
                 return
             }
-            if url.scheme == "about" {
+            switch TasksWebNavigationPolicy.disposition(for: url) {
+            case .allow:
                 decisionHandler(.allow)
-                return
-            }
-            if url.scheme?.lowercased() == "https",
-               url.host?.lowercased() == TaskCompanionConstants.trustedWebHost {
-                decisionHandler(.allow)
-                return
-            }
-            if ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            case .openExternally:
                 UIApplication.shared.open(url)
+                decisionHandler(.cancel)
+            case .cancel:
+                decisionHandler(.cancel)
             }
-            decisionHandler(.cancel)
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {

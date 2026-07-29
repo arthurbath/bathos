@@ -20,6 +20,8 @@ import type { GarageReceiptUpload } from '@/modules/garage/types/garage';
 import { GarageConfigView } from '@/modules/garage/components/GarageConfigView';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import { CARD_PAGE_BOTTOM_PADDING_CLASS, FULL_VIEW_PAGE_BOTTOM_PADDING_CLASS } from '@/lib/pageLayout';
+import { InstalledAppAccountCard } from '@/platform/components/InstalledAppAccountCard';
+import { useInstalledAppMode } from '@/platform/installedApp';
 
 interface GarageShellProps {
   userId: string;
@@ -33,6 +35,7 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
   const navigate = useNavigate();
   const location = useLocation();
   const basePath = useModuleBasePath();
+  const installed = useInstalledAppMode();
 
   const navItems = [
     { path: '/due', label: 'Due', icon: ListChecks },
@@ -242,6 +245,28 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
       </div>
 
       <main className={isFullViewGridRoute ? `flex w-full flex-1 min-h-0 flex-col gap-4 pt-0 md:pt-6 ${FULL_VIEW_PAGE_BOTTOM_PADDING_CLASS}` : `mx-auto max-w-5xl space-y-4 px-4 pt-4 md:pt-6 ${CARD_PAGE_BOTTOM_PADDING_CLASS}`}>
+        {installed && vehicles.length > 1 ? (
+          <div className={isFullViewGridRoute ? 'mx-auto w-full max-w-5xl px-4' : ''}>
+            <Select
+              value={selectedVehicle?.id ?? ''}
+              onValueChange={(value) => {
+                void handleSetActiveVehicle(value);
+              }}
+            >
+              <SelectTrigger aria-label="Active Vehicle" className="h-9 w-full max-w-xs">
+                <SelectValue placeholder="Select Vehicle" />
+              </SelectTrigger>
+              <SelectContent>
+                {vehicles
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((vehicle) => (
+                    <SelectItem key={vehicle.id} value={vehicle.id}>{vehicle.name}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
         {!selectedVehicle && !isConfigRoute ? (
           <div className={isFullViewGridRoute ? 'mx-auto w-full max-w-5xl px-4' : ''}>
             <Card>
@@ -304,13 +329,20 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
               </div>
             )}
             {isConfigRoute && (
-              <GarageConfigView
-                vehicles={vehicles}
-                autoOpenAddVehicle={vehicles.length === 0}
-                onAddVehicle={addVehicle}
-                onUpdateVehicle={updateVehicle}
-                onRemoveVehicle={removeVehicle}
-              />
+              <>
+                <GarageConfigView
+                  vehicles={vehicles}
+                  autoOpenAddVehicle={vehicles.length === 0}
+                  onAddVehicle={addVehicle}
+                  onUpdateVehicle={updateVehicle}
+                  onRemoveVehicle={removeVehicle}
+                />
+                <InstalledAppAccountCard
+                  userId={userId}
+                  displayName={displayName}
+                  onSignOut={onSignOut}
+                />
+              </>
             )}
           </>
         )}

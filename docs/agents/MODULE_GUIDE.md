@@ -72,6 +72,15 @@ Add path-based fallback routes in the platform root section:
 <Route path="/tracker/*" element={...} />
 ```
 
+If the module can run as a standalone PWA or inside a native host:
+
+- Declare the native module identifier through `window.__bathosNativeApp`
+- Keep module-specific navigation and controls usable without `ToplineHeader`
+- Put `InstalledAppAccountCard` at the bottom of the module's Config view
+- Add an installed-only Config route when the module does not otherwise have one
+- Keep cross-module and external destinations as real links so the shared installed navigation boundary can open them outside the installed module
+- Add tests for ordinary web, standalone PWA, and native-host behavior
+
 ## 5. Register in the launcher
 
 Add the module to the `MODULES` array in `LauncherPage.tsx`.
