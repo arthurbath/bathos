@@ -82,6 +82,7 @@ export function createTaskCreationDraft(
       recurrence_revision: null,
       recurrence_occurrence_id: null,
       recurrence_logical_key: null,
+      recurrence_superseded_at: null,
       undo_source_event_id: null,
       entry_channel: 'web',
       last_mutation_channel: 'web',

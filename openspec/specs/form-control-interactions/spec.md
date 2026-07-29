@@ -171,7 +171,7 @@ Arbitrary non-DataGrid forms SHALL use Tab and Shift+Tab as their only shared in
 - **THEN** the field commits its current accepted or staged state, closes, and moves to the next or previous containing-form control
 
 ### Requirement: Date pickers are arrow-navigable and Tab-exiting
-Shared date pickers SHALL use Space, Return, pointer input, and arrow navigation internally. Space, Return, and pointer activation SHALL be equivalent when they activate a final selection, including when the activated legal date is already the committed value, internal controls SHALL NOT become a multi-stop segment of the containing form's Tab order, and hovering an empty closed field SHALL NOT change its placeholder text color.
+Shared date pickers SHALL use Monday as the first weekday, SHALL render exactly six seven-day rows for every displayed month, and SHALL use Space, Return, pointer input, and arrow navigation internally. Space, Return, and pointer activation SHALL be equivalent when they activate a final selection, including when the activated legal date is already the committed value, internal controls SHALL NOT become a multi-stop segment of the containing form's Tab order, and hovering an empty closed field SHALL NOT change its placeholder text color.
 
 #### Scenario: Present an empty date placeholder
 - **WHEN** a closed date field has no committed value
@@ -185,9 +185,17 @@ Shared date pickers SHALL use Space, Return, pointer input, and arrow navigation
 - **WHEN** a focused date-picker trigger receives Space, Return, or pointer activation
 - **THEN** the picker opens with focus on the selected legal date, otherwise today when legal, otherwise the first legal date
 
+#### Scenario: Present a Monday-first six-week calendar
+- **WHEN** a shared date picker displays any month
+- **THEN** its weekday columns run from Monday through Sunday and its day grid contains exactly six rows, using adjacent-month dates to fill cells outside the displayed month
+
 #### Scenario: Navigate a date picker
 - **WHEN** a user presses arrow keys inside an open date picker outside a text-entry subcontrol
 - **THEN** focus moves among enabled calendar, caption, paging, month, year, and picker-specific controls without changing the committed date merely because focus moved
+
+#### Scenario: Retain keyboard navigation at the earliest month
+- **WHEN** keyboard focus is on Previous Month and the user activates it to reach the earliest legal month
+- **THEN** the unavailable previous action becomes invisible and keyboard focus moves to the month-and-year control
 
 #### Scenario: Confirm a final date-picker selection
 - **WHEN** a user activates a focused legal date, Clear action, or other final-selection action with Space, Return, or pointer input

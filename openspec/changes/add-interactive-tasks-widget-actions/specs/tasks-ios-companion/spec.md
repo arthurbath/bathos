@@ -12,8 +12,8 @@ The Tasks web application SHALL provide the native companion with one versioned,
 - **THEN** the projection includes the total count, includes only the bounded leading rows in authoritative list order, and marks the list as truncated
 
 #### Scenario: Project an actionable Primary Link
-- **WHEN** a projected task has a nonblank Primary Link that normalizes to a supported HTTP, HTTPS, or Mail-message URL
-- **THEN** the row includes only the normalized href and its Mail-or-link kind needed for direct activation
+- **WHEN** a projected task has a nonblank Primary Link that normalizes to a supported HTTP, HTTPS, Mail-message, Jira, or Obsidian URL
+- **THEN** the row includes only the normalized href and its backward-compatible Mail-or-link transport kind needed for direct activation, while presentation derives protocol-specific iconography from the href
 
 #### Scenario: Withhold sensitive fields
 - **WHEN** the web module creates a native projection
@@ -99,12 +99,20 @@ The Tasks widget SHALL let the user complete a visible open task from its checkb
 The Tasks widget SHALL expose a separate direct Primary Link action for a visible task without changing the task-summary deep link or completion control.
 
 #### Scenario: Open a web Primary Link
-- **WHEN** a widget task has a validated HTTP or HTTPS Primary Link and the user taps its trailing link icon
+- **WHEN** a widget task has a validated HTTP or HTTPS Primary Link and the user taps its trailing protocol-specific or generic link icon
 - **THEN** the operating system opens that URL in the configured browser without first opening BathOS Tasks
 
 #### Scenario: Open a Mail Primary Link
 - **WHEN** a widget task has a validated `message://` Primary Link and the user taps its trailing Mail icon
 - **THEN** the operating system routes the URL to the application registered for that protocol without first opening BathOS Tasks
+
+#### Scenario: Open a Jira Primary Link
+- **WHEN** a widget task has a validated `jira:` Primary Link or a recognized Jira HTTP or HTTPS URL
+- **THEN** the widget uses the native counterpart to Lucide `Zap` and the operating system opens the Jira application or configured browser as appropriate without first presenting BathOS Tasks
+
+#### Scenario: Open an Obsidian Primary Link
+- **WHEN** a widget task has a validated `obsidian:` Primary Link
+- **THEN** the widget uses the native counterpart to Lucide `FileText` and the operating system routes the URL to Obsidian without first presenting BathOS Tasks
 
 #### Scenario: Open the task independently
 - **WHEN** the user taps the task summary rather than its checkbox or Primary Link icon
@@ -142,20 +150,18 @@ The Tasks widget SHALL present the four active planning lists with compact, top-
 - **THEN** it shows the canonical icon and list name without a task-count badge or number
 
 #### Scenario: Maximize the large-widget task capacity
-- **WHEN** a large widget has nine or fewer projected tasks
+- **WHEN** a large widget has ten or fewer projected tasks
 - **THEN** it shows every task without an overflow message
-- **WHEN** the list has exactly ten projected tasks
-- **THEN** it shows all ten tasks without an overflow message
 - **WHEN** the list has more than ten projected tasks
-- **THEN** it shows the first nine tasks followed by a `+X More` message whose count equals the remaining tasks
+- **THEN** it shows only the first ten tasks in authoritative list order without an overflow message or other indication that additional tasks exist
 
 #### Scenario: Start a task from the configured list
 - **WHEN** the user taps the plus action in the top-right of a large widget
 - **THEN** the companion opens the configured Today, Upcoming, Anytime, or Someday view and begins that view's ordinary new-task workflow
 - **AND** the draft inherits the same placement criteria that the list's floating add action would apply
 
-### Requirement: Native Completion Credential Boundary
-The system SHALL provision, store, rotate, revoke, and validate a purpose-built native credential whose sole authority is completing an owned present open task.
+### Requirement: Native Widget Credential Boundary
+The system SHALL provision, store, rotate, revoke, and validate a purpose-built native credential whose only authorities are reading its owner's final bounded widget projection and completing an owned present open task.
 
 #### Scenario: Provision after authenticated companion use
 - **WHEN** a trusted native companion session proves the current Supabase user and supplies its stable installation identifier
@@ -163,7 +169,7 @@ The system SHALL provision, store, rotate, revoke, and validate a purpose-built 
 
 #### Scenario: Keep the credential out of projections
 - **WHEN** the web module publishes task data or the widget renders a timeline
-- **THEN** the completion credential is absent from the task snapshot, visible UI, logs, browser persistence, PowerSync, and source control
+- **THEN** the widget credential is absent from the task snapshot, visible UI, logs, browser persistence, PowerSync, and source control
 
 #### Scenario: Revoke native authority
 - **WHEN** the user signs out, the owner changes, or the credential is explicitly revoked

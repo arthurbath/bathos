@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { Layers3 } from "lucide-react";
 
 import {
   Select,
@@ -65,6 +66,35 @@ function SelectFormHarness({
 }
 
 describe("Select interaction contract", () => {
+  it("renders a noninteractive leading decoration without replacing the accessible name", () => {
+    const { container, root } = mount(
+      <Select defaultValue="alpha">
+        <SelectTrigger
+          id="decorated-select"
+          aria-label="Area"
+          decoration={<Layers3 />}
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="alpha">Alpha</SelectItem>
+        </SelectContent>
+      </Select>,
+    );
+
+    try {
+      const trigger = container.querySelector("#decorated-select");
+      const decoration = trigger?.querySelector("[data-control-decoration]");
+      expect(trigger).toHaveAttribute("aria-label", "Area");
+      expect(decoration).toHaveAttribute("aria-hidden", "true");
+      expect(decoration).toHaveClass("pointer-events-none", "shrink-0");
+      expect(decoration?.querySelector("svg")).toHaveClass("lucide-layers");
+      expect(trigger?.querySelector(".min-w-0.flex-1.truncate")).toHaveTextContent("Alpha");
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it("uses Delete only when the caller declares a legal reset", () => {
     const onReset = vi.fn();
     const { container, root } = mount(<SelectFormHarness onReset={onReset} />);

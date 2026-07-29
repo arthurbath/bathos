@@ -1,4 +1,10 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 
 import { Button } from '@/components/ui/button';
 import { DatePickerField } from '@/components/ui/date-picker-field';
@@ -27,8 +33,14 @@ import {
 } from '@/modules/tasks/domain/taskDates';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type {
+  TaskRecurrenceEditInput,
+  TaskRecurrenceSaveResult,
+} from '@/modules/tasks/data/taskRecurrenceService';
+import type {
+  TaskRecurrenceDefinition,
   TaskRecurrenceEndMode,
   TaskRecurrenceFrequency,
+  TaskRecurrenceRevision,
   TaskRecurrenceRuleConfig,
   TaskRecurrenceRuleMode,
   TaskTodo,
@@ -87,48 +99,123 @@ export function TaskRepeatDialog({
   planningDate,
   open,
   onOpenChange,
+  definition = null,
+  revision = null,
+  onEdit,
 }: {
-  task: TaskTodo;
+  task: TaskTodo | null;
   planningDate: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  definition?: TaskRecurrenceDefinition | null;
+  revision?: TaskRecurrenceRevision | null;
+  onEdit?: (input: TaskRecurrenceEditInput) => Promise<TaskRecurrenceSaveResult>;
 }) {
   const { mode, recurrenceService } = useTasksRuntime();
+  const editing = definition !== null && revision !== null;
+  const initialScheduleDate = revision?.start_date
+    ?? task?.deadline
+    ?? task?.start_date
+    ?? planningDate;
   const [ruleMode, setRuleMode] = useState<TaskRecurrenceRuleMode>('calendar');
   const [frequency, setFrequency] = useState<TaskRecurrenceFrequency>('weekly');
   const [intervalCount, setIntervalCount] = useState(1);
-  const [scheduleDate, setScheduleDate] = useState(
-    task.deadline ?? task.start_date ?? planningDate,
-  );
+  const [scheduleDate, setScheduleDate] = useState(initialScheduleDate);
   const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([
-    isoWeekday(task.deadline ?? task.start_date ?? planningDate),
+    isoWeekday(initialScheduleDate),
   ]);
   const [monthlyPattern, setMonthlyPattern] = useState<MonthlyPattern>('date');
   const [monthlyDate, setMonthlyDate] = useState<number | 'last'>(
-    Number(scheduleDate.slice(8, 10)),
+    Number(initialScheduleDate.slice(8, 10)),
   );
   const [monthlyOrdinal, setMonthlyOrdinal] = useState<MonthlyOrdinal>(
-    ordinalInMonth(scheduleDate),
+    ordinalInMonth(initialScheduleDate),
   );
-  const [monthlyWeekday, setMonthlyWeekday] = useState(isoWeekday(scheduleDate));
+  const [monthlyWeekday, setMonthlyWeekday] = useState(isoWeekday(initialScheduleDate));
   const [monthlyDayType, setMonthlyDayType] = useState<'weekday' | 'weekend_day'>(
     'weekday',
   );
   const [yearlyPattern, setYearlyPattern] = useState<YearlyPattern>('date');
-  const [yearlyMonth, setYearlyMonth] = useState(Number(scheduleDate.slice(5, 7)));
-  const [yearlyDate, setYearlyDate] = useState(Number(scheduleDate.slice(8, 10)));
+  const [yearlyMonth, setYearlyMonth] = useState(Number(initialScheduleDate.slice(5, 7)));
+  const [yearlyDate, setYearlyDate] = useState(Number(initialScheduleDate.slice(8, 10)));
   const [yearlyOrdinal, setYearlyOrdinal] = useState<MonthlyOrdinal>(
-    ordinalInMonth(scheduleDate),
+    ordinalInMonth(initialScheduleDate),
   );
-  const [yearlyWeekday, setYearlyWeekday] = useState(isoWeekday(scheduleDate));
+  const [yearlyWeekday, setYearlyWeekday] = useState(isoWeekday(initialScheduleDate));
   const [endMode, setEndMode] = useState<TaskRecurrenceEndMode>('never');
   const [endAfterCount, setEndAfterCount] = useState(10);
-  const [endOnDate, setEndOnDate] = useState(scheduleDate);
+  const [endOnDate, setEndOnDate] = useState(initialScheduleDate);
   const [addReminder, setAddReminder] = useState(false);
   const [reminderTime, setReminderTime] = useState('12:00');
-  const [addDeadline, setAddDeadline] = useState(task.deadline !== null);
+  const [addDeadline, setAddDeadline] = useState(task?.deadline != null);
   const [deadlineOffsetDays, setDeadlineOffsetDays] = useState(0);
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const date = revision?.start_date
+      ?? task?.deadline
+      ?? task?.start_date
+      ?? planningDate;
+    const config = recurrenceRuleConfigRecord(revision?.rule_config);
+    const monthlyKind = config.monthly_kind;
+    const yearlyKind = config.yearly_kind;
+    setRuleMode(revision?.rule_mode ?? 'calendar');
+    setFrequency(revision?.frequency ?? 'weekly');
+    setIntervalCount(revision?.interval_count ?? 1);
+    setScheduleDate(date);
+    setSelectedWeekdays(
+      Array.isArray(config.weekdays)
+        ? config.weekdays.filter((day): day is number => (
+            typeof day === 'number' && day >= 1 && day <= 7
+          ))
+        : [isoWeekday(date)],
+    );
+    setMonthlyPattern(
+      monthlyKind === 'ordinal_weekday'
+        ? 'weekday_position'
+        : monthlyKind === 'ordinal_day_type'
+          ? 'day_type_position'
+          : 'date',
+    );
+    setMonthlyDate(
+      monthlyKind === 'last_day'
+        ? 'last'
+        : typeof config.month_day === 'number'
+          ? config.month_day
+          : Number(date.slice(8, 10)),
+    );
+    setMonthlyOrdinal(recurrenceOrdinal(config.ordinal, date));
+    setMonthlyWeekday(recurrenceWeekday(config.weekday, date));
+    setMonthlyDayType(config.day_type === 'weekend_day' ? 'weekend_day' : 'weekday');
+    setYearlyPattern(
+      yearlyKind === 'ordinal_weekday'
+        ? 'weekday_position'
+        : yearlyKind === 'last_day'
+          ? 'last_day'
+          : 'date',
+    );
+    setYearlyMonth(
+      typeof config.month === 'number' ? config.month : Number(date.slice(5, 7)),
+    );
+    setYearlyDate(
+      typeof config.month_day === 'number'
+        ? config.month_day
+        : Number(date.slice(8, 10)),
+    );
+    setYearlyOrdinal(recurrenceOrdinal(config.ordinal, date));
+    setYearlyWeekday(recurrenceWeekday(config.weekday, date));
+    setEndMode(revision?.end_mode ?? 'never');
+    setEndAfterCount(revision?.end_after_count ?? 10);
+    setEndOnDate(revision?.end_on_date ?? date);
+    setAddReminder(revision?.reminder_local_time !== null && revision !== null);
+    setReminderTime(revision?.reminder_local_time?.slice(0, 5) ?? '12:00');
+    setAddDeadline(revision
+      ? revision.deadline_offset_days !== null
+      : task?.deadline != null);
+    setDeadlineOffsetDays(revision?.deadline_offset_days ?? 0);
+    setPending(false);
+  }, [open, planningDate, revision, task]);
 
   const ruleConfig = useMemo<TaskRecurrenceRuleConfig>(() => (
     frequency === 'weekly'
@@ -210,20 +297,39 @@ export function TaskRepeatDialog({
     if (pending || mode !== 'connected') return;
     setPending(true);
     try {
-      const result = await recurrenceService.createFromTask({
-        taskId: task.id,
-        name: task.title,
-        ruleMode,
-        frequency,
-        intervalCount,
-        scheduleDate: effectiveScheduleDate,
-        ruleConfig,
-        endMode,
-        endAfterCount: endMode === 'after' ? endAfterCount : null,
-        endOnDate: endMode === 'on_date' ? endOnDate : null,
-        reminderLocalTime: addReminder ? reminderTime : null,
-        deadlineOffsetDays: addDeadline ? deadlineOffsetDays : null,
-      });
+      const result = editing
+        ? await (onEdit ?? recurrenceService.edit.bind(recurrenceService))({
+            definition,
+            revision,
+            name: definition.name,
+            ruleMode,
+            frequency,
+            intervalCount,
+            scheduleDate: effectiveScheduleDate,
+            ruleConfig,
+            endMode,
+            endAfterCount: endMode === 'after' ? endAfterCount : null,
+            endOnDate: endMode === 'on_date' ? endOnDate : null,
+            reminderLocalTime: addReminder ? reminderTime : null,
+            deadlineOffsetDays: addDeadline ? deadlineOffsetDays : null,
+          })
+        : task
+          ? await recurrenceService.createFromTask({
+              taskId: task.id,
+              name: task.title,
+              ruleMode,
+              frequency,
+              intervalCount,
+              scheduleDate: effectiveScheduleDate,
+              ruleConfig,
+              endMode,
+              endAfterCount: endMode === 'after' ? endAfterCount : null,
+              endOnDate: endMode === 'on_date' ? endOnDate : null,
+              reminderLocalTime: addReminder ? reminderTime : null,
+              deadlineOffsetDays: addDeadline ? deadlineOffsetDays : null,
+            })
+          : null;
+      if (!result) throw new Error('The recurrence is unavailable');
       if (ruleMode === 'calendar') {
         for (const offset of [90, 180, 270, 365]) {
           await recurrenceService.evaluate(
@@ -232,7 +338,7 @@ export function TaskRepeatDialog({
           );
         }
       }
-      toast({ title: 'Repeat Saved' });
+      toast({ title: editing ? 'Repeat Updated' : 'Repeat Saved' });
       onOpenChange(false);
     } catch (error) {
       toast({
@@ -248,9 +354,13 @@ export function TaskRepeatDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
-        <DialogHeader><DialogTitle>Repeat Task</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{editing ? 'Edit Repeat' : 'Repeat Task'}</DialogTitle></DialogHeader>
         <DialogBody>
-          <form id={`task-repeat-form-${task.id}`} onSubmit={save} className="space-y-4">
+          <form
+            id={`task-repeat-form-${task?.id ?? definition?.id ?? 'unavailable'}`}
+            onSubmit={save}
+            className="space-y-4"
+          >
             <div className="grid grid-cols-[auto_1fr] items-center gap-3">
               <span className="text-sm font-medium">Repeat</span>
               <Select
@@ -500,7 +610,13 @@ export function TaskRepeatDialog({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-sm">
-                <span>{addDeadline ? 'Next Deadline' : 'Next Start'}</span>
+                <span>
+                  {ruleMode === 'after_completion'
+                    ? 'Next Occurrence'
+                    : addDeadline
+                      ? 'Next Deadline'
+                      : 'Next Start'}
+                </span>
                 <DatePickerField
                   value={effectiveScheduleDate}
                   onValueChange={setScheduleDate}
@@ -615,7 +731,7 @@ export function TaskRepeatDialog({
           </Button>
           <Button
             type="submit"
-            form={`task-repeat-form-${task.id}`}
+            form={`task-repeat-form-${task?.id ?? definition?.id ?? 'unavailable'}`}
             data-bathos-form-submit="true"
             disabled={pending || mode !== 'connected'}
           >
@@ -625,6 +741,25 @@ export function TaskRepeatDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function recurrenceRuleConfigRecord(
+  value: TaskRecurrenceRuleConfig | null | undefined,
+): Record<string, unknown> {
+  return value && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function recurrenceOrdinal(value: unknown, date: string): MonthlyOrdinal {
+  return value === -1 || value === 1 || value === 2 || value === 3
+    || value === 4 || value === 5
+    ? value
+    : ordinalInMonth(date);
+}
+
+function recurrenceWeekday(value: unknown, date: string): number {
+  return typeof value === 'number' && value >= 1 && value <= 7
+    ? value
+    : isoWeekday(date);
 }
 
 function OptionSwitch({

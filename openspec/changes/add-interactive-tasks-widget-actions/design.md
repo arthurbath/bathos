@@ -11,7 +11,7 @@ iOS 17 interactive widgets can run an `AppIntent` without presenting the contain
 - Complete an open widget task without launching the containing app.
 - Preserve the same authoritative lifecycle, history, recurrence, and synchronization effects as ordinary completion.
 - Keep the checkbox, task-summary deep link, and optional Primary Link as independent row actions.
-- Open normalized HTTP, HTTPS, and Mail-message Primary Links directly through the operating system.
+- Open normalized HTTP, HTTPS, Mail-message, Jira, and Obsidian Primary Links directly through the operating system.
 - Use a revocable credential that can only complete open tasks owned by one authenticated user.
 - Briefly acknowledge successful completion and then remove the task from active cached lists with the system's widget animation.
 - Keep the existing 20-table PowerSync publication unchanged.
@@ -43,15 +43,15 @@ execution contract. Keeping the intent only in the widget view source can render
 the button without making the action discoverable to the system on a physical
 device.
 
-### Add one purpose-built completion credential rather than reusing Supabase authentication
+### Add one purpose-built widget credential rather than reusing Supabase authentication
 
 The authenticated web companion requests a credential from a dedicated Edge Function after it has a trusted native installation identifier. The function validates the ordinary Supabase bearer token, rotates one credential for that owner and installation, stores only a SHA-256 hash in `tasks_private`, and returns the raw value once. The web page passes it through memory to the trusted native bridge, and the companion stores it in a separate App Group file protected until first device unlock.
 
 The credential:
 
 - is owner- and installation-bound
-- authorizes only idempotent completion of an owned, present, open task
-- cannot read task data or call another mutation
+- authorizes only the final bounded owner widget projection and idempotent completion of an owned, present, open task
+- cannot read raw task rows, select another owner, or call another mutation
 - expires after 90 days and is rotated whenever the authenticated companion reprovisions it
 - is revoked best-effort when the native cache is cleared or the user signs out
 - is never written to the widget snapshot, logs, source control, PowerSync, or a browser persistence store
@@ -63,6 +63,7 @@ A copied Supabase session was rejected because it would create a second full aut
 `tasks-widget-actions` has JWT verification disabled at the platform layer because it accepts two different credential classes:
 
 - `issue` validates the supplied Supabase access token with Auth before rotating an owner-bound credential
+- `snapshot` validates the widget credential before invoking the bounded projection function
 - `complete` validates the widget credential before invoking the database completion function
 - `revoke` validates the widget credential before revoking it
 
@@ -81,7 +82,7 @@ primaryLink: {
 }
 ```
 
-The web projection uses the same Primary Link normalization as the Tasks row. Nonblank `message://` values remain Mail links, HTTP(S) values remain web links, and bare hosts receive HTTPS. Values that cannot form an approved absolute URL are omitted. The native validator caps each href at 8,000 characters and rejects unsupported schemes.
+The web projection uses the same Primary Link normalization as the Tasks row. Nonblank `message://` values remain Mail links, `jira:` and `obsidian:` values remain application links, HTTP(S) values remain web links, and bare hosts receive HTTPS. Values that cannot form an approved absolute URL are omitted. The native validator caps each href at 8,000 characters and rejects unsupported schemes. Jira web destinations are recognized only for Jira-specific paths on Atlassian Cloud or explicitly Jira-named hosts, so Confluence links retain generic external-link iconography.
 
 Schema version 2 also covers `credential` bridge messages and the injected installation identifier. During rollout, the web bridge detects an older companion by the absence of that identifier and continues sending its schema-version-1 snapshot and clear messages without Primary Links. The matching new companion receives schema version 2 and the credential. This preserves the installed read-only widget while the web and signed native releases are being coordinated, while each native build still rejects messages it does not understand.
 
@@ -122,16 +123,16 @@ WidgetKit cannot render the React components used by the web module. The widget 
 
 Only Today, Upcoming, Anytime, and Someday are configurable widget lists. Done remains in the bounded snapshot because successful completion reconciliation and the companion's privacy-safe projection still require it, but it is not offered as a widget destination. Legacy Done configuration values fail safely to Today. The header omits the redundant total count, open-task controls use neutral gray, and an outer flexible spacer keeps short list contents pinned to the top of the large widget.
 
-The large widget uses an adaptive capacity boundary: lists with exactly ten tasks render all ten rows, while longer lists render nine rows plus the remaining-count message. The separate plus action in the list header uses a bounded `bathostasks://new/<list>` route. The companion translates that route to the matching web list with a one-use `native_new_task=list` signal, and the web module reuses the list's existing floating-add placement rather than duplicating Today, Upcoming, Anytime, or Someday placement rules in Swift.
+The large widget renders at most the first ten tasks in authoritative list order. Longer lists silently omit subsequent rows because the configured list and visible leading tasks already communicate the widget's bounded nature, and an overflow message would consume space that can display the tenth task. The separate plus action in the list header uses a bounded `bathostasks://new/<list>` route. The companion translates that route to the matching web list with a one-use `native_new_task=list` signal, and the web module reuses the list's existing floating-add placement rather than duplicating Today, Upcoming, Anytime, or Someday placement rules in Swift.
 
 ### Keep Primary Link activation entirely separate from completion and task opening
 
-The trailing icon uses `envelope` for Mail-message links and `arrow.up.right.square` for ordinary links. It appears only when a validated Primary Link exists, is visually right-aligned, has a distinct accessibility label, and passes the URL through WidgetKit's `Link`. WidgetKit activates the containing app process for `Link` and delivers the URL to its scene. The companion therefore classifies the incoming URL before touching the web view: BathOS deep links open the requested task, validated HTTP(S) and `message://` Primary Links are immediately delegated to the operating system, and unsupported schemes are ignored. This system-mediated handoff avoids navigating or presenting Tasks content as the link destination even though iOS activates the containing process. The summary continues opening the task. Tapping either link never invokes completion.
+The trailing icon uses `envelope` for Mail-message links, `bolt` as the native counterpart to Lucide `Zap` for Jira links, `doc.text` as the native counterpart to Lucide `FileText` for Obsidian links, and `arrow.up.right.square` for ordinary links. It appears only when a validated Primary Link exists, is visually right-aligned, has a distinct accessibility label, and passes the URL through WidgetKit's `Link`. WidgetKit activates the containing app process for `Link` and delivers the URL to its scene. The companion therefore classifies the incoming URL before touching the web view: BathOS deep links open the requested task, validated HTTP(S), `message:`, `jira:`, and `obsidian:` Primary Links are immediately delegated to the operating system, and unsupported schemes are ignored. This system-mediated handoff avoids navigating or presenting Tasks content as the link destination even though iOS activates the containing process. The summary continues opening the task. Tapping either link never invokes completion.
 
 ## Risks / Trade-offs
 
-- **A copied widget credential can complete the owner's tasks** -> Scope it to completion only, store only its hash centrally, bind it to one owner and installation, rotate it on authenticated use, expire it, and never log it.
-- **Sign-out can happen offline before revocation reaches the server** -> Clear local task and credential files immediately, attempt revocation first when possible, and bound any unreachable credential by expiry and completion-only authority.
+- **A copied widget credential can read the owner's widget projection or complete tasks** -> Scope reads to the final bounded projection and mutations to completion only, store only its hash centrally, bind it to one owner and installation, rotate it on authenticated use, expire it, and never log it.
+- **Sign-out can happen offline before revocation reaches the server** -> Clear local task and credential files immediately, attempt revocation first when possible, and bound any unreachable credential by expiry and narrow widget authority.
 - **A completion succeeds remotely but the response is lost** -> Repeating the same idempotency identifier is safe, and the next authoritative projection reconciles the widget. The UI retains the row rather than falsely claiming completion.
 - **The local Done projection can be temporarily imperfect** -> Treat the transform only as immediate presentation; the next web projection replaces it with the authoritative Done ordering and retention state.
 - **Interactive widget network execution is system-budgeted** -> Keep one small request with a short timeout and no nested calls or background loop.

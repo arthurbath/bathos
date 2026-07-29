@@ -32,6 +32,10 @@ const handler = createTasksWidgetActionsHandler({
         _client_mutation_id: input.clientMutationId,
         _operation_id: input.operationId,
       }),
+      snapshot: async (rawToken) => client.rpc(
+        'tasks_read_widget_snapshot',
+        { _raw_token: rawToken },
+      ),
       revoke: async (rawToken) => client.rpc(
         'tasks_revoke_widget_completion_credential',
         { _raw_token: rawToken },

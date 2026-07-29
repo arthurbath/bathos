@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   formatTaskReminderTimeDisplay,
+  listTaskReminderHourOptions,
   parseTaskReminderTimeInput,
   resolveTaskReminderTimeInput,
 } from './taskReminderTimeInput';
@@ -139,5 +140,54 @@ describe('task reminder time input', () => {
     expect(formatTaskReminderTimeDisplay('09:30:00.123456789')).toBe('9:30 am');
     expect(formatTaskReminderTimeDisplay('13:30')).toBe('1:30 pm');
     expect(formatTaskReminderTimeDisplay('25:00')).toBeNull();
+  });
+
+  it('offers every whole hour in chronological order for a future Start', () => {
+    const options = listTaskReminderHourOptions({
+      today: false,
+      timeZone: 'America/Los_Angeles',
+      now: new Date('2026-07-20T20:54:00Z'),
+    });
+
+    expect(options).toHaveLength(24);
+    expect(options[0]).toEqual({ localTime: '00:00', displayTime: '12:00 am' });
+    expect(options.at(-1)).toEqual({ localTime: '23:00', displayTime: '11:00 pm' });
+  });
+
+  it('offers only whole hours after the current owner-local moment for Today', () => {
+    const options = listTaskReminderHourOptions({
+      today: true,
+      timeZone: 'America/Los_Angeles',
+      now: new Date('2026-07-20T20:54:00Z'),
+    });
+
+    expect(options.map(({ localTime }) => localTime)).toEqual([
+      '14:00',
+      '15:00',
+      '16:00',
+      '17:00',
+      '18:00',
+      '19:00',
+      '20:00',
+      '21:00',
+      '22:00',
+      '23:00',
+    ]);
+  });
+
+  it('offers no whole hour after 11 pm Today', () => {
+    expect(listTaskReminderHourOptions({
+      today: true,
+      timeZone: 'America/Los_Angeles',
+      now: new Date('2026-07-21T06:00:00Z'),
+    })).toEqual([]);
+  });
+
+  it('fails closed for Today when the planning time zone is invalid', () => {
+    expect(listTaskReminderHourOptions({
+      today: true,
+      timeZone: 'Not/A-Time-Zone',
+      now: new Date('2026-07-20T20:54:00Z'),
+    })).toEqual([]);
   });
 });

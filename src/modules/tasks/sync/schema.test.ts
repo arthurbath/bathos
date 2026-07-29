@@ -72,6 +72,9 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain(
       'recurrence_occurrence_id',
     );
+    expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain(
+      'recurrence_superseded_at',
+    );
     expect(tables.tasks_todos.columns.map(({ name }) => name)).not.toContain('project_id');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('deletion_root_id');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain(

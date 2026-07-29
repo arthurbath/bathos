@@ -37,6 +37,7 @@ const taskTodos = new Table(
     recurrence_revision: column.integer,
     recurrence_occurrence_id: column.text,
     recurrence_logical_key: column.text,
+    recurrence_superseded_at: column.text,
     revision: column.integer,
     client_mutation_id: column.text,
     created_at: column.text,

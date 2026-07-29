@@ -128,6 +128,14 @@ final class TasksCompanionTests: XCTestCase {
             href: "https://example.test/read",
             kind: .link
         ).url)
+        XCTAssertNotNil(TaskWidgetPrimaryLink(
+            href: "jira://issue/PF-766",
+            kind: .link
+        ).url)
+        XCTAssertNotNil(TaskWidgetPrimaryLink(
+            href: "obsidian://open?vault=Personal",
+            kind: .link
+        ).url)
         XCTAssertNil(TaskWidgetPrimaryLink(
             href: "javascript:alert(1)",
             kind: .link
@@ -136,6 +144,39 @@ final class TasksCompanionTests: XCTestCase {
             href: "https://example.test/read",
             kind: .mail
         ).url)
+    }
+
+    func testPrimaryLinkUsesProtocolSpecificWidgetIconography() {
+        let mail = TaskWidgetPrimaryLink(
+            href: "message://synthetic-message",
+            kind: .mail
+        )
+        let jiraProtocol = TaskWidgetPrimaryLink(
+            href: "jira://issue/PF-766",
+            kind: .link
+        )
+        let jiraURL = TaskWidgetPrimaryLink(
+            href: "https://usgbc.atlassian.net/browse/PF-766",
+            kind: .link
+        )
+        let confluenceURL = TaskWidgetPrimaryLink(
+            href: "https://usgbc.atlassian.net/wiki/spaces/PF",
+            kind: .link
+        )
+        let obsidian = TaskWidgetPrimaryLink(
+            href: "obsidian://open?vault=Personal",
+            kind: .link
+        )
+
+        XCTAssertEqual(mail.iconKind, .mail)
+        XCTAssertEqual(mail.systemImageName, "envelope")
+        XCTAssertEqual(jiraProtocol.iconKind, .jira)
+        XCTAssertEqual(jiraURL.iconKind, .jira)
+        XCTAssertEqual(jiraURL.systemImageName, "bolt")
+        XCTAssertEqual(confluenceURL.iconKind, .link)
+        XCTAssertEqual(confluenceURL.systemImageName, "link")
+        XCTAssertEqual(obsidian.iconKind, .obsidian)
+        XCTAssertEqual(obsidian.systemImageName, "doc.text")
     }
 
     func testCredentialStorePersistsOnlyAValidUnexpiredCapability() throws {
@@ -157,6 +198,173 @@ final class TasksCompanionTests: XCTestCase {
             now: Date(timeIntervalSince1970: 4_102_444_800)
         ))
         XCTAssertTrue(try store.clear())
+    }
+
+    func testSnapshotClientUsesTheNarrowCredentialAndValidatesTheOwner() async throws {
+        let ownerID = UUID(uuidString: "9b000000-0000-4000-8000-000000000001")!
+        let credential = TaskWidgetCredential(
+            schemaVersion: TaskWidgetCredential.schemaVersion,
+            ownerId: ownerID,
+            installationId: UUID(),
+            credential: "twc_" + String(repeating: "A", count: 43),
+            expiresAt: "2099-10-26T12:00:00.123Z"
+        )
+        let expected = makeSnapshot(
+            ownerID: ownerID,
+            generatedAt: "2026-07-29T21:00:00.123Z"
+        )
+        var capturedRequest: URLRequest?
+        let client = TaskWidgetSnapshotClient { request in
+            capturedRequest = request
+            return (
+                try JSONEncoder().encode(expected),
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+            )
+        }
+
+        let result = await client.fetch(credential: credential)
+
+        XCTAssertEqual(result, expected)
+        XCTAssertEqual(capturedRequest?.timeoutInterval, 8)
+        XCTAssertEqual(
+            capturedRequest?.value(forHTTPHeaderField: "Authorization"),
+            "Widget \(credential.credential)"
+        )
+        let body = try XCTUnwrap(capturedRequest?.httpBody)
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: body) as? [String: String],
+            ["action": "snapshot"]
+        )
+
+        let foreignClient = TaskWidgetSnapshotClient { request in
+            (
+                try JSONEncoder().encode(self.makeSnapshot(ownerID: UUID())),
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+            )
+        }
+        let foreignResult = await foreignClient.fetch(credential: credential)
+        XCTAssertNil(foreignResult)
+    }
+
+    func testBackgroundRefresherPersistsFreshContentAndFallsBackToCache() async throws {
+        let directory = temporaryDirectory()
+        let snapshotStore = TaskWidgetStore(directoryURL: directory)
+        let credentialStore = TaskWidgetCredentialStore(directoryURL: directory)
+        let ownerID = UUID(uuidString: "9b000000-0000-4000-8000-000000000001")!
+        let credential = TaskWidgetCredential(
+            schemaVersion: TaskWidgetCredential.schemaVersion,
+            ownerId: ownerID,
+            installationId: UUID(),
+            credential: "twc_" + String(repeating: "A", count: 43),
+            expiresAt: "2099-10-26T12:00:00.123Z"
+        )
+        try credentialStore.store(credential)
+        let cached = makeSnapshot(ownerID: ownerID)
+        _ = try snapshotStore.store(cached)
+
+        var refreshed = makeSnapshot(
+            ownerID: ownerID,
+            generatedAt: "2026-07-29T21:00:00.123Z"
+        )
+        let refreshedTask = TaskWidgetTask(
+            id: refreshed.lists[0].tasks[0].id,
+            summary: "Refreshed task summary",
+            deadline: "2026-07-29",
+            todaySection: "inbox",
+            actionability: "waiting",
+            terminalState: nil
+        )
+        refreshed.lists[0] = TaskWidgetList(
+            id: .today,
+            title: "Today",
+            totalCount: 1,
+            truncated: false,
+            tasks: [refreshedTask]
+        )
+        let response = HTTPURLResponse(
+            url: TaskCompanionConstants.widgetActionsURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        let successful = TaskWidgetBackgroundRefresher(
+            credentialStore: credentialStore,
+            snapshotStore: snapshotStore,
+            client: TaskWidgetSnapshotClient { _ in
+                (try JSONEncoder().encode(refreshed), response)
+            }
+        )
+
+        let successfulResult = await successful.refresh()
+        XCTAssertEqual(successfulResult, refreshed)
+        XCTAssertEqual(try snapshotStore.load(), refreshed)
+
+        let offline = TaskWidgetBackgroundRefresher(
+            credentialStore: credentialStore,
+            snapshotStore: snapshotStore,
+            client: TaskWidgetSnapshotClient { _ in
+                throw URLError(.notConnectedToInternet)
+            }
+        )
+        let offlineResult = await offline.refresh()
+        XCTAssertEqual(offlineResult, refreshed)
+    }
+
+    func testSnapshotClientRetriesTransientFailureButNotMalformedContent() async {
+        let ownerID = UUID(uuidString: "9b000000-0000-4000-8000-000000000001")!
+        let credential = TaskWidgetCredential(
+            schemaVersion: TaskWidgetCredential.schemaVersion,
+            ownerId: ownerID,
+            installationId: UUID(),
+            credential: "twc_" + String(repeating: "A", count: 43),
+            expiresAt: "2099-10-26T12:00:00.123Z"
+        )
+        let snapshot = makeSnapshot(ownerID: ownerID)
+        var retryCount = 0
+        let retrying = TaskWidgetSnapshotClient { request in
+            retryCount += 1
+            let statusCode = retryCount == 1 ? 503 : 200
+            return (
+                try JSONEncoder().encode(snapshot),
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: statusCode,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+            )
+        }
+
+        let retryResult = await retrying.fetch(credential: credential)
+        XCTAssertEqual(retryResult, snapshot)
+        XCTAssertEqual(retryCount, 2)
+
+        var malformedCount = 0
+        let malformed = TaskWidgetSnapshotClient { request in
+            malformedCount += 1
+            return (
+                Data(#"{"type":"snapshot","schemaVersion":2}"#.utf8),
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+            )
+        }
+        let malformedResult = await malformed.fetch(credential: credential)
+        XCTAssertNil(malformedResult)
+        XCTAssertEqual(malformedCount, 1)
     }
 
     func testCompletionClientUsesTheNarrowCredentialAndBoundedRequest() async throws {
@@ -405,6 +613,14 @@ final class TasksCompanionTests: XCTestCase {
             .external(URL(string: "message://synthetic-message")!)
         )
         XCTAssertEqual(
+            TaskCompanionURLAction.resolve(URL(string: "jira://issue/PF-766")!),
+            .external(URL(string: "jira://issue/PF-766")!)
+        )
+        XCTAssertEqual(
+            TaskCompanionURLAction.resolve(URL(string: "obsidian://open?vault=Personal")!),
+            .external(URL(string: "obsidian://open?vault=Personal")!)
+        )
+        XCTAssertEqual(
             TaskCompanionURLAction.resolve(URL(string: "javascript:alert(1)")!),
             .ignore
         )
@@ -540,39 +756,10 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertEqual(TaskNativeRoute.parse(url), .list(.someday))
     }
 
-    func testLargeWidgetUsesAdaptiveNineOrTenTaskCapacity() {
+    func testLargeWidgetAlwaysCapsVisibleTasksAtTen() {
         XCTAssertEqual(
-            TaskWidgetPresentationPolicy.largeWidgetTaskLimit(totalCount: 9),
-            9
-        )
-        XCTAssertEqual(
-            TaskWidgetPresentationPolicy.largeWidgetOverflowCount(
-                totalCount: 9,
-                availableTaskCount: 9
-            ),
-            0
-        )
-        XCTAssertEqual(
-            TaskWidgetPresentationPolicy.largeWidgetTaskLimit(totalCount: 10),
+            TaskWidgetPresentationPolicy.largeWidgetTaskLimit,
             10
-        )
-        XCTAssertEqual(
-            TaskWidgetPresentationPolicy.largeWidgetOverflowCount(
-                totalCount: 10,
-                availableTaskCount: 10
-            ),
-            0
-        )
-        XCTAssertEqual(
-            TaskWidgetPresentationPolicy.largeWidgetTaskLimit(totalCount: 11),
-            9
-        )
-        XCTAssertEqual(
-            TaskWidgetPresentationPolicy.largeWidgetOverflowCount(
-                totalCount: 11,
-                availableTaskCount: 11
-            ),
-            2
         )
     }
 

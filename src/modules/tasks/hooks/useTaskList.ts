@@ -75,12 +75,14 @@ export function useTaskList(
     view === 'done'
       ? `${TASK_LIST_SELECT}
          WHERE owner_id = ?
+           AND recurrence_superseded_at IS NULL
            AND ((disposition = 'deleted' AND deletion_root_id = id)
              OR (disposition = 'present' AND lifecycle IN ('completed', 'canceled')))
          ORDER BY COALESCE(deleted_at, completed_at, canceled_at) DESC, id`
       : view === 'upcoming'
           ? `${TASK_LIST_SELECT}
              WHERE owner_id = ?
+               AND recurrence_superseded_at IS NULL
                AND destination = 'anytime'
                AND lifecycle = 'open'
                AND disposition = 'present'
@@ -95,6 +97,7 @@ export function useTaskList(
           : view === 'today'
             ? `${TASK_LIST_SELECT}
          WHERE owner_id = ?
+           AND recurrence_superseded_at IS NULL
            AND destination = 'anytime'
            AND lifecycle = 'open'
            AND disposition = 'present'
@@ -103,6 +106,7 @@ export function useTaskList(
          ORDER BY order_key, id`
             : `${TASK_LIST_SELECT}
          WHERE owner_id = ?
+           AND recurrence_superseded_at IS NULL
            AND destination = ?
            AND lifecycle = 'open'
            AND disposition = 'present'
@@ -615,6 +619,7 @@ export function useTaskList(
     tasks,
     checklistTaskIds,
     loading: query.isLoading,
+    fetching: query.isFetching,
     error: query.error,
     createTask,
     updateTask,

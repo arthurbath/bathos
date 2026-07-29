@@ -7,6 +7,7 @@ export function useTaskSearch(ownerId: string, active = true) {
     `SELECT *
      FROM tasks_todos
      WHERE owner_id = ?
+       AND recurrence_superseded_at IS NULL
        AND ? = 1
        AND (
          disposition = 'present'

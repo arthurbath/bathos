@@ -11,6 +11,7 @@ export type WidgetActionRpcClient = {
     clientMutationId: string;
     operationId: string;
   }) => Promise<{ data: unknown; error: unknown | null }>;
+  snapshot: (rawToken: string) => Promise<{ data: unknown; error: unknown | null }>;
   revoke: (rawToken: string) => Promise<{ data: unknown; error: unknown | null }>;
 };
 
@@ -132,7 +133,7 @@ export function createTasksWidgetActionsHandler(dependencies: HandlerDependencie
 
     const body = await parseBody(request);
     const action = body?.action;
-    if (!body || !['issue', 'complete', 'revoke'].includes(String(action))) {
+    if (!body || !['issue', 'complete', 'snapshot', 'revoke'].includes(String(action))) {
       return response(400, { error: 'Invalid request' });
     }
 
@@ -208,6 +209,40 @@ export function createTasksWidgetActionsHandler(dependencies: HandlerDependencie
         return response(500, { error: 'Credential could not be revoked' });
       }
       return response(200, parseRpcData(result.data) ?? { outcome: 'revoked' });
+    }
+
+    if (action === 'snapshot') {
+      const result = await rpc.snapshot(rawToken);
+      if (result.error) {
+        logError('Widget snapshot read failed');
+        return response(500, { error: 'Widget could not be refreshed' });
+      }
+      const snapshot = parseRpcData(result.data);
+      if (!snapshot) {
+        return response(500, { error: 'Widget could not be refreshed' });
+      }
+      if (snapshot.outcome === 'rejected') {
+        return response(401, {
+          error: 'Widget could not be refreshed',
+          code: snapshot.code,
+        });
+      }
+      if (
+        snapshot.type !== 'snapshot'
+        || snapshot.schemaVersion !== 2
+        || typeof snapshot.ownerId !== 'string'
+        || !uuidPattern.test(snapshot.ownerId)
+        || !Array.isArray(snapshot.lists)
+        || snapshot.lists.length !== 5
+      ) {
+        return response(500, { error: 'Widget could not be refreshed' });
+      }
+      const serialized = JSON.stringify(snapshot);
+      if (new TextEncoder().encode(serialized).byteLength > 512 * 1024) {
+        logError('Widget snapshot response exceeded the bounded payload size');
+        return response(500, { error: 'Widget could not be refreshed' });
+      }
+      return response(200, snapshot);
     }
 
     const taskId = body.taskId;

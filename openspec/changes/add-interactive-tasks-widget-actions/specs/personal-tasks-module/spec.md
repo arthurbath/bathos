@@ -1,5 +1,24 @@
 ## ADDED Requirements
 
+### Requirement: Protocol-Specific Primary Link Iconography
+Tasks SHALL derive Primary Link iconography consistently for the task row, metadata-editor activation control, and native widget while preserving real-link activation behavior.
+
+#### Scenario: Present a Jira Primary Link
+- **WHEN** a task has a `jira:` Primary Link or a recognized Jira HTTP or HTTPS URL
+- **THEN** its task row and metadata-editor activation control use Lucide `Zap`, and web URLs open in a new browser context while the Jira protocol is handed to its registered application
+
+#### Scenario: Present an Obsidian Primary Link
+- **WHEN** a task has an `obsidian:` Primary Link
+- **THEN** its task row and metadata-editor activation control use Lucide `FileText` and hand activation to Obsidian
+
+#### Scenario: Preserve other Primary Link iconography
+- **WHEN** a task has a Mail message Primary Link or another supported destination
+- **THEN** Mail retains its Mail icon and other destinations retain the canonical generic external-link icon
+
+#### Scenario: Keep the editor and row in parity
+- **WHEN** a nonblank Primary Link is visible in an expanded task
+- **THEN** the activation control beside the Primary Link input uses the same derived icon as the task summary row
+
 ### Requirement: Widget Completion Lifecycle Parity
 The Tasks domain SHALL treat an accepted native widget completion as an ordinary idempotent task completion with the same lifecycle, history, recurrence, and convergence guarantees as completion from the web interface.
 

@@ -108,8 +108,8 @@ export function formatTaskRelativeCalendarDate(
   if (offset === 0) return 'Today';
   if (offset === 1) return 'Tomorrow';
   if (offset === -1) return '1 day ago';
-  if (offset > 1 && offset <= 10) return `${offset} days left`;
-  if (offset < -1 && offset >= -10) return `${Math.abs(offset)} days ago`;
+  if (offset > 1 && offset <= 9) return `${offset} days left`;
+  if (offset < -1 && offset >= -9) return `${Math.abs(offset)} days ago`;
 
   return formatTaskCalendarDate(value, locale, false);
 }
@@ -117,11 +117,13 @@ export function formatTaskRelativeCalendarDate(
 export function formatTaskCompactCalendarDayOffset(
   value: string,
   planningDate: string,
+  locale?: string,
 ): string {
   if (!isTaskCalendarDate(value) || !isTaskCalendarDate(planningDate)) return value;
   const offset = calendarEpochDay(value) - calendarEpochDay(planningDate);
 
   if (offset === 0) return 'Today';
+  if (Math.abs(offset) > 9) return formatTaskCalendarDate(value, locale, false);
 
   return `${offset} ${Math.abs(offset) === 1 ? 'day' : 'days'}`;
 }

@@ -42,7 +42,9 @@ xcodebuild \
 
 Run the `TasksCompanion` scheme from Xcode to perform interactive sign-in and widget acceptance. A physical device and eligible Apple team are required to prove production App Group provisioning and Home Screen behavior.
 
-The large Home Screen widget shows the configured list with interactive task completion and Primary Link actions. The rectangular Lock Screen widget shows up to three leading task summaries from the configured list. Tapping the Lock Screen widget opens that list in the native companion.
+The large Home Screen widget shows up to ten leading tasks from the configured list with interactive task completion and Primary Link actions. Generic Primary Links use the native chain-link symbol, while recognized Mail, Jira, and Obsidian destinations retain protocol-specific symbols. Additional tasks remain implicit rather than consuming a row with an overflow message. The rectangular Lock Screen widget shows up to three leading task summaries from the configured list. Tapping the Lock Screen widget opens that list in the native companion.
+
+WidgetKit timeline generation independently requests the current bounded owner projection and schedules another refresh after 30 minutes. iOS ultimately controls when the timeline request runs and may defer it according to system budgets. A successful response is validated and atomically cached. Offline, timed-out, rejected, malformed, oversized, cross-owner, or unpersistable responses leave the last valid cache untouched, so the widget remains useful without instructing the user to open the app merely to refresh it.
 
 ## Control Center
 
@@ -58,4 +60,4 @@ The control is unavailable on iOS 17. The containing app and existing widgets re
 
 The companion accepts widget snapshots only from the main frame at `https://os.bath.garden/tasks/*`. The versioned decoder enforces list, row, string, date, and enum bounds before atomically replacing the App Group cache.
 
-The cache intentionally omits authentication material, notes, checklist text, Mail source metadata, and raw errors. It contains only the bounded list information rendered by the widget, including an optional normalized Primary Link action for approved HTTP, HTTPS, or Mail-message URLs. Signing out clears the cache and the separate completion-only native credential.
+The cache intentionally omits authentication material, notes, checklist text, Mail source metadata, and raw errors. It contains only the bounded list information rendered by the widget, including an optional normalized Primary Link action for approved HTTP, HTTPS, Mail-message, Jira, and Obsidian URLs. The separate widget credential can read only that final bounded projection and complete an owned open task. Signing out clears both the cache and credential.

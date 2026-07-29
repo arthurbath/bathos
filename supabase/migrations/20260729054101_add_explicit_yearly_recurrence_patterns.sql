@@ -1,4 +1,5 @@
 -- Explicit yearly recurrence patterns.
+-- Canonicalized to the production migration ledger version.
 -- No table is added, so the exact 20-table PowerSync publication is unchanged.
 
 CREATE OR REPLACE FUNCTION tasks_private.recurrence_date_for_step(

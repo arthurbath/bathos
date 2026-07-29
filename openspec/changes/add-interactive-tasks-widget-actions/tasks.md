@@ -23,10 +23,10 @@
 - [x] 4.1 Add protected App Group credential and installation-identity storage with strict schema and size validation
 - [x] 4.2 Add an App Intent completion client that never opens the app, uses a short timeout and idempotency key, and fails closed
 - [x] 4.3 Reconcile successful completion into the local snapshot after a brief pause and reload WidgetKit timelines
-- [x] 4.4 Split widget rows into independent completion, task-summary, and optional direct Primary Link actions with accessible Mail and link iconography
+- [x] 4.4 Split widget rows into independent completion, task-summary, and optional direct Primary Link actions with accessible Mail, Jira, Obsidian, and generic link iconography
 - [x] 4.5 Add native tests for credential persistence, URL validation, independent action routing, successful reconciliation, retry, and failure retention
 - [x] 4.6 Harden physical Toggle invocation, transient retry, and resident companion deep-link runtime continuity
-- [x] 4.7 Add adaptive nine-or-ten large-widget capacity and a bounded list-aware header capture route
+- [x] 4.7 Add a fixed ten-task large-widget cap without overflow messaging and a bounded list-aware header capture route
 
 ## 5. Validation and Controlled Rollout
 
@@ -36,4 +36,4 @@
 - [ ] 5.4 After explicit approval, refresh and verify the private backup, apply the migration, deploy the Edge Function, publish the web release, reinstall the signed companion, and run and clean up the owner-scoped fixture
 - [ ] 5.5 Prove physical checkbox completion, direct Primary Link activation, cross-client convergence, PowerSync, cron, advisors, production parity, and repository synchronization
 - [x] 5.6 Reinstall the incident-hardened companion and prove failed/retried completion cannot strand the app on an indefinite spinner
-- [ ] 5.7 Reinstall the refined companion and physically verify the exact-ten layout, nine-plus-overflow layout, and configured-list header capture action
+- [ ] 5.7 Reinstall the refined companion and physically verify the ten-task cap without overflow messaging and the configured-list header capture action

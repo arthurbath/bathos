@@ -2,6 +2,7 @@ import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 
+import { ControlDecoration } from "@/components/ui/control-decoration";
 import { cn } from "@/lib/utils";
 import { focusAdjacentFormControl } from "@/platform/formInteractions";
 
@@ -12,17 +13,19 @@ const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 
 interface SelectTriggerProps extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> {
+  decoration?: React.ReactNode;
+  decorationClassName?: string;
   onReset?: () => void;
 }
 
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
   SelectTriggerProps
->(({ className, children, onKeyDown, onReset, ...props }, ref) => (
+>(({ className, children, decoration, decorationClassName, onKeyDown, onReset, ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-10 w-full cursor-pointer items-center justify-between rounded-md border border-[hsl(var(--grid-sticky-line))] bg-background px-3 py-2 text-sm text-left placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 data-[grid-select-trigger=true]:!text-xs [&>span]:line-clamp-1 [&>span]:text-left",
+      "flex h-10 w-full cursor-pointer items-center gap-2 rounded-md border border-[hsl(var(--grid-sticky-line))] bg-background px-3 py-2 text-sm text-left placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 data-[grid-select-trigger=true]:!text-xs",
       className,
     )}
     onKeyDown={(event) => {
@@ -37,9 +40,16 @@ const SelectTrigger = React.forwardRef<
     }}
     {...props}
   >
-    {children}
+    {decoration ? (
+      <ControlDecoration className={decorationClassName}>
+        {decoration}
+      </ControlDecoration>
+    ) : null}
+    <span className="min-w-0 flex-1 truncate text-left [&>span]:block [&>span]:truncate">
+      {children}
+    </span>
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-50" />
+      <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));

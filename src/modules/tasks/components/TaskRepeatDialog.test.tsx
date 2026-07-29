@@ -19,10 +19,17 @@ vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
 }));
 
 const createFromTask = vi.fn();
+const edit = vi.fn();
 const evaluate = vi.fn();
 const onOpenChange = vi.fn();
 
-function renderDialog(task = taskTodoFixture()) {
+function renderDialog(
+  task = taskTodoFixture(),
+  recurrence?: {
+    definition: ReturnType<typeof taskRecurrenceDefinitionFixture>;
+    revision: ReturnType<typeof taskRecurrenceRevisionFixture>;
+  },
+) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -32,6 +39,9 @@ function renderDialog(task = taskTodoFixture()) {
       planningDate="2026-07-27"
       open
       onOpenChange={onOpenChange}
+      definition={recurrence?.definition}
+      revision={recurrence?.revision}
+      onEdit={edit}
     />,
   ));
   return { container, root };
@@ -104,9 +114,14 @@ describe('TaskRepeatDialog', () => {
       occurrence_ids: ['occurrence-a'],
       definition: taskRecurrenceDefinitionFixture(),
     });
+    edit.mockResolvedValue({
+      outcome: 'accepted',
+      definition: taskRecurrenceDefinitionFixture({ current_revision: 2 }),
+      revision: taskRecurrenceRevisionFixture({ revision: 2 }),
+    });
     mocks.useTasksRuntime.mockReturnValue({
       mode: 'connected',
-      recurrenceService: { createFromTask, evaluate },
+      recurrenceService: { createFromTask, edit, evaluate },
     });
   });
 
@@ -164,6 +179,58 @@ describe('TaskRepeatDialog', () => {
         ruleMode: 'after_completion',
         frequency: 'weekly',
       }));
+      expect(evaluate).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('hydrates and revises an after-completion schedule as Next Occurrence', async () => {
+    const task = taskTodoFixture({ id: 'task-after-edit', title: 'Water Plants' });
+    const definition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-after-edit',
+      name: task.title,
+      current_revision: 3,
+      record_revision: 4,
+    });
+    const revision = taskRecurrenceRevisionFixture({
+      recurrence_id: definition.id,
+      revision: 3,
+      rule_mode: 'after_completion',
+      frequency: 'monthly',
+      interval_count: 2,
+      start_date: '2026-08-15',
+      end_mode: 'after',
+      end_after_count: 8,
+      rule_config: {},
+    });
+    const { container, root } = renderDialog(task, { definition, revision });
+    try {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(document.body).toHaveTextContent('Edit Repeat');
+      expect(document.body).toHaveTextContent('Next Occurrence');
+      expect(document.body).not.toHaveTextContent('Next Start');
+
+      await act(async () => {
+        document.querySelector<HTMLButtonElement>(
+          `button[form="task-repeat-form-${task.id}"]`,
+        )?.click();
+        await Promise.resolve();
+      });
+
+      expect(edit).toHaveBeenCalledWith(expect.objectContaining({
+        definition,
+        revision,
+        ruleMode: 'after_completion',
+        frequency: 'monthly',
+        intervalCount: 2,
+        scheduleDate: '2026-08-15',
+        endMode: 'after',
+        endAfterCount: 8,
+      }));
+      expect(createFromTask).not.toHaveBeenCalled();
       expect(evaluate).not.toHaveBeenCalled();
     } finally {
       cleanup(root, container);

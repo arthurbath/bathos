@@ -1,8 +1,10 @@
 import {
+  AlarmClock,
   CalendarIcon,
   X,
 } from 'lucide-react';
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -11,6 +13,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { ControlDecoration } from '@/components/ui/control-decoration';
 import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import {
   parseDatePickerFieldValue,
@@ -23,7 +26,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@/components/ui/input-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -34,7 +50,9 @@ import {
 } from '@/modules/tasks/domain/taskDates';
 import {
   formatTaskReminderTimeDisplay,
+  listTaskReminderHourOptions,
   resolveTaskReminderTimeInput,
+  type TaskReminderHourOption,
 } from '@/modules/tasks/domain/taskReminderTimeInput';
 import type {
   TaskReminder,
@@ -46,6 +64,7 @@ import {
   type TaskStartPickerFocusTarget,
 } from './taskStartPickerEvents';
 import {
+  getTaskHorizonPresentation,
   taskHorizonPresentations,
 } from './taskHorizonPresentation';
 
@@ -91,7 +110,9 @@ function TaskStartPickerPanel({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const reminderRef = useRef<HTMLInputElement>(null);
+  const reminderHourButtonRef = useRef<HTMLButtonElement>(null);
   const firstHorizonRef = useRef<HTMLButtonElement>(null);
+  const initialFocusTimerRef = useRef<number | null>(null);
   const selectedDate = parseDatePickerFieldValue(task.start_date ?? undefined);
   const minimumDateValue = addTaskCalendarDays(planningDate, 1);
   const minimumDate = parseDatePickerFieldValue(minimumDateValue);
@@ -102,8 +123,21 @@ function TaskStartPickerPanel({
     || task.today_section !== null;
   const committedReminderDisplay = formatTaskReminderTimeDisplay(reminderTime) ?? '';
   const [reminderInput, setReminderInput] = useState(committedReminderDisplay);
+  const [reminderHourMenuOpen, setReminderHourMenuOpen] = useState(false);
+  const [reminderHourNow, setReminderHourNow] = useState(() => new Date());
   const reminderInputConfirmedRef = useRef(true);
   const reminderCommitRef = useRef<Promise<boolean> | null>(null);
+  const reminderUsesTodayRules = task.start_date === null
+    || task.start_date === planningDate;
+  const reminderHourOptions = useMemo(
+    () => listTaskReminderHourOptions({
+      today: reminderUsesTodayRules,
+      timeZone: reminderTimeZone,
+      now: reminderHourNow,
+    }),
+    [reminderHourNow, reminderTimeZone, reminderUsesTodayRules],
+  );
+  const reminderHourMenuDisabled = reminderDisabled || reminderHourOptions.length === 0;
 
   useEffect(() => {
     if (document.activeElement === reminderRef.current) return;
@@ -112,10 +146,27 @@ function TaskStartPickerPanel({
   }, [committedReminderDisplay]);
 
   useEffect(() => {
+    if (!active) return undefined;
+    setReminderHourNow(new Date());
+    const timer = window.setInterval(() => setReminderHourNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [active]);
+
+  const focusReminderInput = useCallback(() => {
+    const input = reminderRef.current;
+    if (!input || input.disabled) return false;
+    input.focus();
+    const end = input.value.length;
+    input.setSelectionRange(end, end);
+    return true;
+  }, []);
+
+  useEffect(() => {
     if (!active) return;
     const timer = window.setTimeout(() => {
+      initialFocusTimerRef.current = null;
       if (focusTarget === 'reminder') {
-        reminderRef.current?.focus();
+        focusReminderInput();
         return;
       }
       const selectedHorizon = panelRef.current?.querySelector<HTMLButtonElement>(
@@ -129,8 +180,16 @@ function TaskStartPickerPanel({
       );
       (selectedHorizon ?? selectedDay ?? selectedSomeday ?? firstHorizonRef.current)?.focus();
     }, 0);
-    return () => window.clearTimeout(timer);
-  }, [active, focusTarget]);
+    initialFocusTimerRef.current = timer;
+    return () => {
+      window.clearTimeout(timer);
+      if (initialFocusTimerRef.current === timer) initialFocusTimerRef.current = null;
+    };
+  }, [active, focusReminderInput, focusTarget]);
+
+  useEffect(() => {
+    if (reminderHourMenuDisabled) setReminderHourMenuOpen(false);
+  }, [reminderHourMenuDisabled]);
 
   const focusSelectedHorizon = () => {
     const selectedHorizon = panelRef.current?.querySelector<HTMLButtonElement>(
@@ -147,10 +206,11 @@ function TaskStartPickerPanel({
     (selectedDay ?? (position === 'first' ? days[0] : days.at(-1)))?.focus();
   };
 
-  const focusFooterAction = () => {
-    const footerAction = panelRef.current?.querySelector<HTMLButtonElement>(
+  const focusFooterAction = (position: 'first' | 'last' = 'first') => {
+    const footerActions = Array.from(panelRef.current?.querySelectorAll<HTMLButtonElement>(
       '[data-task-start-footer-action]:not(:disabled)',
-    );
+    ) ?? []);
+    const footerAction = position === 'first' ? footerActions[0] : footerActions.at(-1);
     footerAction?.focus();
     return Boolean(footerAction);
   };
@@ -173,6 +233,13 @@ function TaskStartPickerPanel({
   };
 
   const handlePanelKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (initialFocusTimerRef.current !== null) {
+      window.clearTimeout(initialFocusTimerRef.current);
+      initialFocusTimerRef.current = null;
+    }
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (!target) return;
+    if (target.closest('[data-task-reminder-hour-menu]')) return;
     if (event.key === 'Tab') {
       event.preventDefault();
       event.stopPropagation();
@@ -193,8 +260,6 @@ function TaskStartPickerPanel({
     ) {
       return;
     }
-    const target = event.target instanceof HTMLElement ? event.target : null;
-    if (!target) return;
 
     const horizon = target.closest<HTMLButtonElement>('[data-task-start-horizon]');
     if (horizon) {
@@ -214,6 +279,27 @@ function TaskStartPickerPanel({
     if (target === reminderRef.current) {
       if (event.key === 'ArrowUp') focusCalendarDay('last');
       else if (event.key === 'ArrowDown') focusFooterAction();
+      else if (
+        event.key === 'ArrowRight'
+        && reminderRef.current.selectionStart === reminderInput.length
+        && reminderRef.current.selectionEnd === reminderInput.length
+        && !reminderHourButtonRef.current?.disabled
+      ) {
+        reminderHourButtonRef.current?.focus();
+      }
+      else return;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    const reminderHourButton = target.closest<HTMLButtonElement>(
+      '[data-task-reminder-hour-trigger]',
+    );
+    if (reminderHourButton) {
+      if (event.key === 'ArrowLeft') focusReminderInput();
+      else if (event.key === 'ArrowUp') focusCalendarDay('last');
+      else if (event.key === 'ArrowDown') focusFooterAction('last');
       else return;
       event.preventDefault();
       event.stopPropagation();
@@ -230,8 +316,15 @@ function TaskStartPickerPanel({
       else if (event.key === 'ArrowRight' && index < footerActions.length - 1) {
         footerActions[index + 1]?.focus();
       } else if (event.key === 'ArrowUp') {
-        if (reminderRef.current?.disabled) focusCalendarDay('last');
-        else reminderRef.current?.focus();
+        if (
+          index === footerActions.length - 1
+          && footerActions.length > 1
+          && !reminderHourButtonRef.current?.disabled
+        ) {
+          reminderHourButtonRef.current?.focus();
+        } else if (!focusReminderInput()) {
+          focusCalendarDay('last');
+        }
       }
       else return;
       event.preventDefault();
@@ -256,8 +349,7 @@ function TaskStartPickerPanel({
       ) ?? []);
       const index = months.indexOf(monthButton);
       if (index >= Math.max(0, months.length - 3)) {
-        if (reminderRef.current?.disabled) focusFooterAction();
-        else reminderRef.current?.focus();
+        if (!focusReminderInput()) focusFooterAction();
         event.preventDefault();
         event.stopPropagation();
       }
@@ -316,12 +408,29 @@ function TaskStartPickerPanel({
     return commit;
   };
 
+  const applyReminderHour = async (option: TaskReminderHourOption) => {
+    reminderInputConfirmedRef.current = true;
+    setReminderInput(option.displayTime);
+    try {
+      if (option.localTime !== reminderTime.slice(0, 5)) {
+        await onReminderChange(option.localTime);
+      }
+    } catch {
+      setReminderInput(committedReminderDisplay);
+    }
+  };
+
   return (
     <div
       ref={panelRef}
       className="mx-auto w-[min(20rem,calc(100vw-2rem))]"
       data-task-start-picker
       onKeyDownCapture={handlePanelKeyDownCapture}
+      onPointerDownCapture={() => {
+        if (initialFocusTimerRef.current === null) return;
+        window.clearTimeout(initialFocusTimerRef.current);
+        initialFocusTimerRef.current = null;
+      }}
     >
       <div className="space-y-2 p-3">
         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -374,11 +483,9 @@ function TaskStartPickerPanel({
           fromDate={minimumDate}
           defaultMonth={visibleMonth}
           today={planningToday}
-          initialFocusDate={selectedDate ?? minimumDate}
           onDayGridExitDown={() => {
-            if (reminderRef.current?.disabled) return focusFooterAction();
-            reminderRef.current?.focus();
-            return Boolean(reminderRef.current);
+            if (!focusReminderInput()) return focusFooterAction();
+            return true;
           }}
           onSelect={(date) => {
             if (!date) return;
@@ -394,12 +501,8 @@ function TaskStartPickerPanel({
       </div>
 
       <div className="space-y-3 border-t border-[hsl(var(--grid-sticky-line))] p-3">
-        <div className="flex items-center gap-2">
-          <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
-            <TASK_ICONS.Reminder className="h-4 w-4 shrink-0" aria-hidden />
-            <label htmlFor={`task-start-reminder-${task.id}`}>Reminder</label>
-          </div>
-          <Input
+        <InputGroup data-disabled={reminderDisabled ? 'true' : undefined}>
+          <InputGroupInput
             ref={reminderRef}
             id={`task-start-reminder-${task.id}`}
             type="text"
@@ -408,9 +511,9 @@ function TaskStartPickerPanel({
             value={reminderInput}
             placeholder="No Reminder"
             aria-label="Reminder Time"
+            decoration={<TASK_ICONS.Reminder />}
             data-bathos-field-return-owned="true"
             disabled={reminderDisabled}
-            className="ml-auto w-32 shrink-0"
             onChange={(event) => {
               reminderInputConfirmedRef.current = false;
               setReminderInput(event.target.value);
@@ -429,7 +532,56 @@ function TaskStartPickerPanel({
               void commitReminderInput();
             }}
           />
-        </div>
+          <InputGroupAddon align="inline-end">
+            <DropdownMenu
+              open={reminderHourMenuOpen}
+              onOpenChange={(nextOpen) => {
+                if (nextOpen && reminderHourMenuDisabled) return;
+                if (nextOpen) setReminderHourNow(new Date());
+                setReminderHourMenuOpen(nextOpen);
+              }}
+            >
+              <DropdownMenuTrigger asChild>
+                <InputGroupButton
+                  ref={reminderHourButtonRef}
+                  size="icon-sm"
+                  aria-label="Choose Reminder Hour"
+                  data-task-reminder-hour-trigger
+                  disabled={reminderHourMenuDisabled}
+                >
+                  <AlarmClock aria-hidden />
+                </InputGroupButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="max-h-[min(20rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto"
+                data-task-reminder-hour-menu
+                onEscapeKeyDown={(event) => event.stopPropagation()}
+              >
+                <DropdownMenuGroup>
+                  <DropdownMenuRadioGroup
+                    value={reminderTime.slice(0, 5)}
+                    onValueChange={(localTime) => {
+                      const option = reminderHourOptions.find(
+                        (candidate) => candidate.localTime === localTime,
+                      );
+                      if (option) void applyReminderHour(option);
+                    }}
+                  >
+                    {reminderHourOptions.map((option) => (
+                      <DropdownMenuRadioItem
+                        key={option.localTime}
+                        value={option.localTime}
+                      >
+                        {option.displayTime}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </InputGroupAddon>
+        </InputGroup>
         {reminderUnavailableMessage ? (
           <p className="text-xs text-warning">{reminderUnavailableMessage}</p>
         ) : null}
@@ -449,7 +601,7 @@ function TaskStartPickerPanel({
           variant="clear"
           data-task-start-clear
           data-task-start-footer-action
-          className="w-full justify-start gap-2 text-muted-foreground"
+          className="relative w-full justify-center gap-2 text-muted-foreground"
           disabled={!planned && !reminderTime}
           onClick={() => {
             void onClear().then(onRequestClose);
@@ -465,7 +617,7 @@ function TaskStartPickerPanel({
           data-task-start-someday
           data-task-start-footer-action
           className={cn(
-            'w-full justify-start gap-2',
+            'relative w-full justify-center gap-2',
             task.destination === 'someday'
               ? 'bg-accent text-accent-foreground'
               : 'text-muted-foreground',
@@ -522,6 +674,10 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
       props.task.today_section,
     ],
   );
+  const horizonPresentation = props.task.today_section
+    ? getTaskHorizonPresentation(props.task.today_section)
+    : null;
+  const StartDecorationIcon = horizonPresentation?.icon ?? TASK_ICONS.Start;
 
   useEffect(() => {
     const trigger = triggerRef.current;
@@ -558,7 +714,10 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
               && 'text-muted-foreground',
           )}
         >
-          <span className="truncate">{summary}</span>
+          <ControlDecoration className={horizonPresentation?.colorClass}>
+            <StartDecorationIcon />
+          </ControlDecoration>
+          <span className="ml-2 min-w-0 flex-1 truncate">{summary}</span>
           {props.reminderTime ? (
             <TASK_ICONS.Reminder
               className="ml-auto h-4 w-4 shrink-0 text-info"

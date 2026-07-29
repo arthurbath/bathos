@@ -70,6 +70,15 @@ const applicationCommands: Record<string, TaskKeyboardCommand> = {
   escape: 'close-task',
 };
 
+const viewNavigationCommands: Record<string, TaskKeyboardCommand> = {
+  '1': 'view-today',
+  '2': 'view-upcoming',
+  '3': 'view-anytime',
+  '4': 'view-someday',
+  '5': 'view-done',
+  '6': 'view-config',
+};
+
 export function getTaskKeyboardCommand(
   gesture: TaskKeyboardGesture,
   macLikePlatform: boolean,
@@ -90,6 +99,13 @@ export function getTaskKeyboardCommand(
 
   if (applicationModifier && !gesture.altKey && gesture.shiftKey && key === 'z') {
     return 'redo';
+  }
+  if (
+    macLikePlatform
+    && taskControlModifier
+    && viewNavigationCommands[key]
+  ) {
+    return viewNavigationCommands[key];
   }
   if (taskControlModifier) return taskControlCommands[key] ?? null;
 

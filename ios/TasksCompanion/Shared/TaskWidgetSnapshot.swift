@@ -42,8 +42,7 @@ enum TaskWidgetListID: String, Codable, CaseIterable {
 }
 
 enum TaskWidgetPresentationPolicy {
-    static let largeWidgetStandardTaskLimit = 9
-    static let largeWidgetExactFitTaskCount = 10
+    static let largeWidgetTaskLimit = 10
     static let lockScreenTaskLimit = 3
     static let lockScreenTaskRowMinimumHeight: CGFloat = 16
     static let lockScreenTaskRowSpacing: CGFloat = 4
@@ -54,23 +53,6 @@ enum TaskWidgetPresentationPolicy {
 
     static func lockScreenURL(for listID: TaskWidgetListID) -> URL {
         TaskNativeRoute.list(listID).deepLinkURL
-    }
-
-    static func largeWidgetTaskLimit(totalCount: Int) -> Int {
-        totalCount == largeWidgetExactFitTaskCount
-            ? largeWidgetExactFitTaskCount
-            : largeWidgetStandardTaskLimit
-    }
-
-    static func largeWidgetOverflowCount(
-        totalCount: Int,
-        availableTaskCount: Int
-    ) -> Int {
-        let visibleCount = min(
-            availableTaskCount,
-            largeWidgetTaskLimit(totalCount: totalCount)
-        )
-        return max(0, totalCount - visibleCount)
     }
 
     static func largeWidgetNewTaskURL(for listID: TaskWidgetListID) -> URL {
@@ -84,6 +66,13 @@ struct TaskWidgetPrimaryLink: Codable, Equatable {
         case link
     }
 
+    enum IconKind: Equatable {
+        case mail
+        case jira
+        case obsidian
+        case link
+    }
+
     let href: String
     let kind: Kind
 
@@ -92,10 +81,74 @@ struct TaskWidgetPrimaryLink: Codable, Equatable {
               let url = URL(string: href),
               let scheme = url.scheme?.lowercased(),
               (kind == .mail && scheme == "message")
-                || (kind == .link && ["http", "https"].contains(scheme)) else {
+                || (kind == .link && ["http", "https", "jira", "obsidian"].contains(scheme)) else {
             return nil
         }
         return url
+    }
+
+    var iconKind: IconKind {
+        guard let url, let scheme = url.scheme?.lowercased() else {
+            return .link
+        }
+        switch scheme {
+        case "message":
+            return .mail
+        case "jira":
+            return .jira
+        case "obsidian":
+            return .obsidian
+        case "http", "https":
+            return Self.isJiraWebURL(url) ? .jira : .link
+        default:
+            return .link
+        }
+    }
+
+    var systemImageName: String {
+        switch iconKind {
+        case .mail:
+            return "envelope"
+        case .jira:
+            return "bolt"
+        case .obsidian:
+            return "doc.text"
+        case .link:
+            return "link"
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch iconKind {
+        case .mail:
+            return "Open Message"
+        case .jira:
+            return "Open Jira Link"
+        case .obsidian:
+            return "Open Obsidian Link"
+        case .link:
+            return "Open Primary Link"
+        }
+    }
+
+    private static func isJiraWebURL(_ url: URL) -> Bool {
+        guard let hostname = url.host?.lowercased() else {
+            return false
+        }
+        if hostname == "jira.com"
+            || hostname.hasPrefix("jira.")
+            || hostname.contains(".jira.") {
+            return true
+        }
+        guard hostname == "atlassian.net"
+                || hostname.hasSuffix(".atlassian.net") else {
+            return false
+        }
+        let firstPathComponent = url.pathComponents
+            .dropFirst()
+            .first?
+            .lowercased()
+        return ["browse", "issues", "jira", "secure"].contains(firstPathComponent)
     }
 }
 
@@ -595,6 +648,96 @@ struct TaskWidgetCompletionClient {
 
     private static func isRetryable(_ statusCode: Int) -> Bool {
         [408, 425, 429].contains(statusCode) || (500...599).contains(statusCode)
+    }
+}
+
+struct TaskWidgetSnapshotClient {
+    typealias Transport = (URLRequest) async throws -> (Data, URLResponse)
+
+    let endpoint: URL
+    let transport: Transport
+
+    init(
+        endpoint: URL = TaskCompanionConstants.widgetActionsURL,
+        transport: @escaping Transport = { request in
+            try await URLSession.shared.data(for: request)
+        }
+    ) {
+        self.endpoint = endpoint
+        self.transport = transport
+    }
+
+    func fetch(credential: TaskWidgetCredential) async -> TaskWidgetSnapshot? {
+        do {
+            try credential.validate()
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 8
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(
+                "Widget \(credential.credential)",
+                forHTTPHeaderField: "Authorization"
+            )
+            request.httpBody = try JSONSerialization.data(withJSONObject: [
+                "action": "snapshot",
+            ])
+
+            for attempt in 0..<2 {
+                let data: Data
+                let response: URLResponse
+                do {
+                    (data, response) = try await transport(request)
+                } catch {
+                    if attempt == 0 {
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        continue
+                    }
+                    return nil
+                }
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    return nil
+                }
+                if httpResponse.statusCode != 200 {
+                    if attempt == 0, Self.isRetryable(httpResponse.statusCode) {
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        continue
+                    }
+                    return nil
+                }
+                guard let snapshot = try? TaskWidgetSnapshot.decodeAndValidate(data),
+                      snapshot.ownerId == credential.ownerId else {
+                    return nil
+                }
+                return snapshot
+            }
+            return nil
+        } catch {
+            return nil
+        }
+    }
+
+    private static func isRetryable(_ statusCode: Int) -> Bool {
+        [408, 425, 429].contains(statusCode) || (500...599).contains(statusCode)
+    }
+}
+
+struct TaskWidgetBackgroundRefresher {
+    let credentialStore: TaskWidgetCredentialStore
+    let snapshotStore: TaskWidgetStore
+    let client: TaskWidgetSnapshotClient
+
+    func refresh(now: Date = Date()) async -> TaskWidgetSnapshot? {
+        let cachedSnapshot = try? snapshotStore.load()
+        guard let credential = try? credentialStore.load(now: now),
+              let refreshedSnapshot = await client.fetch(credential: credential) else {
+            return cachedSnapshot
+        }
+        do {
+            _ = try snapshotStore.store(refreshedSnapshot)
+            return refreshedSnapshot
+        } catch {
+            return cachedSnapshot
+        }
     }
 }
 

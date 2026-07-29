@@ -6,6 +6,7 @@ import {
   parseTaskRecurrenceOccurrence,
   parseTaskRecurrenceRevision,
   type TaskRecurrenceCreateFromTaskInput,
+  type TaskRecurrenceEditInput,
   type TaskRecurrenceSaveInput,
 } from '@/modules/tasks/data/taskRecurrenceService';
 import { taskCalendarDateInTimeZone } from '@/modules/tasks/domain/taskDates';
@@ -15,6 +16,16 @@ import type {
   TaskRecurrenceOccurrence,
   TaskRecurrenceRevision,
 } from '@/modules/tasks/types/tasks';
+
+type OpenTaskRecurrenceOccurrence = {
+  recurrence_id: string;
+  root_id: string;
+  scheduled_date: string;
+  destination: string;
+  today_section: string | null;
+  start_date: string | null;
+  deadline: string | null;
+};
 
 export function useTaskRecurrences(ownerId: string) {
   const { mode, planningTimeZone, recurrenceService } = useTasksRuntime();
@@ -41,15 +52,23 @@ export function useTaskRecurrences(ownerId: string) {
      ORDER BY scheduled_date DESC, generated_at DESC, id DESC`,
     [ownerId],
   );
-  const openOccurrencesQuery = useQuery<{ recurrence_id: string }>(
-    `SELECT DISTINCT occurrence.recurrence_id
+  const openOccurrencesQuery = useQuery<OpenTaskRecurrenceOccurrence>(
+    `SELECT occurrence.recurrence_id,
+            occurrence.root_id,
+            occurrence.scheduled_date,
+            task.destination,
+            task.today_section,
+            task.start_date,
+            task.deadline
      FROM tasks_recurrence_occurrences occurrence
      JOIN tasks_todos task
        ON task.id = occurrence.root_id
       AND task.owner_id = occurrence.owner_id
      WHERE occurrence.owner_id = ?
        AND task.lifecycle = 'open'
-       AND task.disposition = 'present'`,
+       AND task.disposition = 'present'
+       AND task.recurrence_superseded_at IS NULL
+     ORDER BY occurrence.generated_at DESC, occurrence.id DESC`,
     [ownerId],
   );
   const [optimisticDefinitions, setOptimisticDefinitions] = useState<
@@ -80,9 +99,21 @@ export function useTaskRecurrences(ownerId: string) {
     )),
     [occurrencesQuery.data],
   );
-  const openOccurrenceDefinitionIds = useMemo(
-    () => new Set(openOccurrencesQuery.data.map(({ recurrence_id }) => recurrence_id)),
+  const openOccurrenceByDefinitionId = useMemo(
+    () => {
+      const rows = new Map<string, OpenTaskRecurrenceOccurrence>();
+      for (const occurrence of openOccurrencesQuery.data) {
+        if (!rows.has(occurrence.recurrence_id)) {
+          rows.set(occurrence.recurrence_id, occurrence);
+        }
+      }
+      return rows;
+    },
     [openOccurrencesQuery.data],
+  );
+  const openOccurrenceDefinitionIds = useMemo(
+    () => new Set(openOccurrenceByDefinitionId.keys()),
+    [openOccurrenceByDefinitionId],
   );
 
   useEffect(() => {
@@ -229,6 +260,28 @@ export function useTaskRecurrences(ownerId: string) {
     return result;
   }, [clearEvaluationFailure, mode, recurrenceService]);
 
+  const edit = useCallback(async (input: TaskRecurrenceEditInput) => {
+    if (mode !== 'connected') {
+      throw new Error('Recurrence changes require connected task storage');
+    }
+    const result = await recurrenceService.edit(input);
+    if (result.outcome === 'conflict') {
+      throw new Error('The recurrence changed before it could be saved');
+    }
+    setOptimisticDefinitions((current) => ({
+      ...current,
+      [result.definition.id]: result.definition,
+    }));
+    if (result.revision) {
+      setOptimisticRevisions((current) => ({
+        ...current,
+        [result.definition.id]: result.revision!,
+      }));
+    }
+    clearEvaluationFailure(result.definition.id);
+    return result;
+  }, [clearEvaluationFailure, mode, recurrenceService]);
+
   const setStatus = useCallback(async (
     definition: TaskRecurrenceDefinition,
     status: 'active' | 'paused' | 'archived',
@@ -254,6 +307,7 @@ export function useTaskRecurrences(ownerId: string) {
     revisions,
     occurrences,
     openOccurrenceDefinitionIds,
+    openOccurrenceByDefinitionId,
     evaluationFailures,
     planningDate,
     mode,
@@ -267,6 +321,7 @@ export function useTaskRecurrences(ownerId: string) {
       ?? openOccurrencesQuery.error,
     save,
     createFromTask,
+    edit,
     setStatus,
     evaluate,
   };

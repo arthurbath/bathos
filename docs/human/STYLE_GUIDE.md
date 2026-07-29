@@ -70,7 +70,14 @@ A system-authored accessible name or tooltip title that labels a button or input
 - All iconography uses Lucide React (`lucide-react`)
 - Icons are inline SVGs — no image files, no emoji
 - Use sparingly. Not every element needs an icon.
-- Use Lucide `ExternalLink` for generic actions that open an external destination. Preserve an established protocol-specific icon, such as Mail, when that protocol communicates more useful meaning than a generic external-link glyph. Native platform surfaces use the closest system rendering of the same northeast-arrow-from-square concept.
+- Use Lucide `ExternalLink` for generic actions that open an external destination. Use Lucide `Link2` when the icon identifies a generic stored link rather than the action of leaving the current context. Preserve an established protocol-specific icon, such as Mail, when that protocol communicates more useful meaning than a generic link glyph. Native platform surfaces use the closest system rendering of the same concept.
+
+## Input Decorations
+
+- Shared single-line Inputs, Select triggers, and date-picker triggers may include an optional leading Lucide decoration when a compact context does not use visible labels.
+- Decorations identify the control's concept. They are muted, noninteractive, hidden from assistive technology, and never replace the control's programmatic name or useful placeholder.
+- Shared controls reserve a fixed leading content area for decorations. Long values may truncate, clip, or scroll inside the remaining content area, but must never render underneath or displace the decoration.
+- Decoration support is shared, but modules adopt it intentionally. A decoration is not required on every control.
 
 ## Spacing and Sizing
 

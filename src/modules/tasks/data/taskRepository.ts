@@ -272,6 +272,7 @@ export class TaskRepository {
         recurrence_revision: null,
         recurrence_occurrence_id: null,
         recurrence_logical_key: null,
+        recurrence_superseded_at: null,
         revision: 1,
         client_mutation_id: clientMutationId,
         created_at: timestamp,

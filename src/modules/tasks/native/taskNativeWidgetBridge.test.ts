@@ -115,6 +115,11 @@ describe('taskNativeWidgetBridge', () => {
       tasks: [
         taskTodoFixture({ id: taskA, owner_id: ownerId, primary_link: 'message://mail-a' }),
         taskTodoFixture({ id: taskB, owner_id: ownerId, primary_link: 'example.test/read' }),
+        taskTodoFixture({
+          id: taskC,
+          owner_id: ownerId,
+          primary_link: 'obsidian://open?vault=Personal&file=Tasks',
+        }),
       ],
     });
     const tasks = snapshot.lists.find(({ id }) => id === 'anytime')?.tasks;
@@ -122,6 +127,11 @@ describe('taskNativeWidgetBridge', () => {
       .toEqual({ href: 'message://mail-a', kind: 'mail' });
     expect(tasks?.find(({ id }) => id === taskB)?.primaryLink)
       .toEqual({ href: 'https://example.test/read', kind: 'link' });
+    expect(tasks?.find(({ id }) => id === taskC)?.primaryLink)
+      .toEqual({
+        href: 'obsidian://open?vault=Personal&file=Tasks',
+        kind: 'link',
+      });
   });
 
   it('flattens areas in configured order and applies automatic ordering inside them', () => {

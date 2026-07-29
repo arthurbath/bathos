@@ -19,6 +19,8 @@ export type ResolvedTaskReminderTimeInput = TaskReminderTimeCandidate & {
   interpretation: ParsedTaskReminderTimeInput['interpretation'];
 };
 
+export type TaskReminderHourOption = TaskReminderTimeCandidate;
+
 const inputPattern = /^(\d{1,4})(?::(\d{1,2}))?([ap](?:m)?)?$/;
 
 export function parseTaskReminderTimeInput(
@@ -100,6 +102,18 @@ export function formatTaskReminderTimeDisplay(localTime: string): string | null 
   const match = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d(?:\.\d{1,9})?)?$/.exec(localTime);
   if (!match) return null;
   return makeCandidate(Number(match[1]), Number(match[2])).displayTime;
+}
+
+export function listTaskReminderHourOptions(
+  options: ResolveTaskReminderTimeInputOptions,
+): TaskReminderHourOption[] {
+  let currentSeconds = -1;
+  if (options.today) {
+    currentSeconds = getTimeOfDaySeconds(options.now ?? new Date(), options.timeZone) ?? Infinity;
+  }
+
+  return Array.from({ length: 24 }, (_, hour) => makeCandidate(hour, 0))
+    .filter(({ localTime }) => localTimeSeconds(localTime) > currentSeconds);
 }
 
 function parseColonTime(

@@ -29,6 +29,7 @@ export function useTaskNativeWidgetBridge({
     `SELECT *
      FROM tasks_todos
      WHERE owner_id = ?
+       AND recurrence_superseded_at IS NULL
        AND (
          (disposition = 'present' AND lifecycle IN ('open', 'completed', 'canceled'))
          OR (disposition = 'deleted' AND deletion_root_id = id)

@@ -92,8 +92,8 @@ The companion SHALL provide a configurable large Home Screen widget that lets th
 - **THEN** the widget prompts the user to open BathOS Tasks and does not show sample or prior-owner task content
 
 #### Scenario: Render a truncated list
-- **WHEN** the cached projection reports more tasks than its bounded rows contain
-- **THEN** the widget indicates that additional tasks exist without attempting to display them all
+- **WHEN** the cached projection reports more tasks than the large widget can display
+- **THEN** the widget shows only the first ten tasks in authoritative list order without an overflow message or other indication that additional tasks exist
 
 #### Scenario: Respect widget privacy
 - **WHEN** iOS redacts widget content for device privacy

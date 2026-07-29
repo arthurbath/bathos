@@ -44,6 +44,21 @@ describe('getTaskKeyboardCommand', () => {
       .toBe('view-config');
   });
 
+  it('maps Mac Control-number view navigation as the reliable web shortcut', () => {
+    expect(getTaskKeyboardCommand(gesture({ key: '1', ctrlKey: true }), true))
+      .toBe('view-today');
+    expect(getTaskKeyboardCommand(gesture({ key: '2', ctrlKey: true }), true))
+      .toBe('view-upcoming');
+    expect(getTaskKeyboardCommand(gesture({ key: '3', ctrlKey: true }), true))
+      .toBe('view-anytime');
+    expect(getTaskKeyboardCommand(gesture({ key: '4', ctrlKey: true }), true))
+      .toBe('view-someday');
+    expect(getTaskKeyboardCommand(gesture({ key: '5', ctrlKey: true }), true))
+      .toBe('view-done');
+    expect(getTaskKeyboardCommand(gesture({ key: '6', ctrlKey: true }), true))
+      .toBe('view-config');
+  });
+
   it('maps Windows application commands without colliding redo and close', () => {
     expect(getTaskKeyboardCommand(gesture({ key: 'n', ctrlKey: true }), false)).toBeNull();
     expect(getTaskKeyboardCommand(gesture({ key: 'Enter', ctrlKey: true }), false))

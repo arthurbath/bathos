@@ -126,6 +126,27 @@ describe.skipIf(!integrationEnabled)('Tasks production widget actions', () => {
     const credential = issued.credential;
     if (!credential) throw new Error('Widget credential was not issued');
 
+    const snapshotResponse = await readSnapshot(environment.supabaseUrl, credential);
+    expect(snapshotResponse.status).toBe(200);
+    expect(snapshotResponse.body).toMatchObject({
+      type: 'snapshot',
+      schemaVersion: 2,
+      ownerId: owner.id,
+    });
+    expect(snapshotResponse.body.lists).toHaveLength(5);
+    const anytimeList = snapshotResponse.body.lists?.find((list) => list.id === 'anytime');
+    expect(anytimeList?.tasks).toContainEqual(expect.objectContaining({
+      id: task.task.id,
+      summary: 'Synthetic Widget Completion Acceptance',
+      primaryLink: {
+        href: 'https://example.test/tasks-widget-acceptance',
+        kind: 'link',
+      },
+    }));
+    expect(JSON.stringify(snapshotResponse.body)).not.toContain(
+      'Disposable production acceptance fixture',
+    );
+
     const accepted = await completeTask(environment.supabaseUrl, credential, task.task.id, {
       mutation: fixedIdentifiers.completeMutation,
       operation: fixedIdentifiers.completeOperation,
@@ -193,6 +214,11 @@ describe.skipIf(!integrationEnabled)('Tasks production widget actions', () => {
       operation: fixedIdentifiers.revokedOperation,
     });
     expect(rejected).toMatchObject({ status: 401, error: 'Task could not be completed' });
+    const rejectedSnapshot = await readSnapshot(environment.supabaseUrl, credential);
+    expect(rejectedSnapshot).toMatchObject({
+      status: 401,
+      body: { error: 'Widget could not be refreshed' },
+    });
 
     await database.disconnectAndClear();
     await database.close();
@@ -260,6 +286,32 @@ async function completeTask(
   });
   const body = await response.json() as { outcome?: string; error?: string };
   return { status: response.status, ...body };
+}
+
+async function readSnapshot(supabaseUrl: string, credential: string) {
+  const response = await fetch(`${supabaseUrl}/functions/v1/tasks-widget-actions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Widget ${credential}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'snapshot' }),
+  });
+  const body = await response.json() as {
+    error?: string;
+    type?: string;
+    schemaVersion?: number;
+    ownerId?: string;
+    lists?: Array<{
+      id?: string;
+      tasks?: Array<{
+        id?: string;
+        summary?: string;
+        primaryLink?: { href?: string; kind?: string } | null;
+      }>;
+    }>;
+  };
+  return { status: response.status, body };
 }
 
 async function waitForLocalTask(

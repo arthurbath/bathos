@@ -1,4 +1,5 @@
 -- Let schema-thirteen validation project adopted recurrence occurrences into
+-- Canonicalized to the production migration ledger version.
 -- the legacy schema-twelve graph without requiring a real template
 -- instantiation for work that was intentionally adopted in place.
 --

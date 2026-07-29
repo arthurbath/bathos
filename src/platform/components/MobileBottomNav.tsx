@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { shouldHandleWithBrowser } from '@/lib/navigation';
+import { isInstalledApp } from '@/platform/installedApp';
 
 interface MobileBottomNavItem {
   path: string;
@@ -24,6 +25,12 @@ interface MobileBottomNavProps {
   overflowItems?: readonly MobileBottomNavItem[];
   overflowLabel?: string;
   overflowIcon?: LucideIcon;
+}
+
+function isIosDevice(targetWindow: Window): boolean {
+  const { maxTouchPoints, platform, userAgent } = targetWindow.navigator;
+  return /iPhone|iPad|iPod/i.test(`${platform} ${userAgent}`)
+    || (platform === 'MacIntel' && maxTouchPoints > 1);
 }
 
 export function MobileBottomNav({
@@ -80,6 +87,7 @@ export function MobileBottomNav({
 
   const hasOverflow = overflowItems.length > 0;
   const overflowActive = overflowItems.some(({ path }) => isActive(path));
+  const installedIos = isInstalledApp(window) && isIosDevice(window);
   const itemClassName = (active: boolean) => (
     `inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? 'bg-foreground/[0.12] text-foreground' : 'text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground'}`
   );
@@ -87,7 +95,12 @@ export function MobileBottomNav({
   const nav = (
     <div
       data-mobile-bottom-nav-viewport
-      className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+0.5rem)] left-0 z-40 md:hidden"
+      data-installed-ios={installedIos ? 'true' : undefined}
+      className={`pointer-events-none fixed left-0 z-40 md:hidden ${
+        installedIos
+          ? 'bottom-[calc(env(safe-area-inset-bottom)+0.25rem)]'
+          : 'bottom-[calc(env(safe-area-inset-bottom)+0.5rem)]'
+      }`}
       style={viewportStyle ? {
         left: `${viewportStyle.left}px`,
         width: `${viewportStyle.width}px`,
@@ -97,7 +110,7 @@ export function MobileBottomNav({
     >
       <nav
         aria-label="Mobile navigation"
-        className="pointer-events-auto mx-auto grid w-[calc(100%-2rem)] max-w-[calc(64rem-2rem)] gap-1 rounded-[1.75rem] border border-[hsl(var(--grid-sticky-line))] bg-secondary p-1.5"
+        className="pointer-events-auto mx-auto grid w-[calc(100%-2rem)] max-w-[calc(64rem-2rem)] gap-1 rounded-full border border-secondary bg-secondary/90 p-1.5 backdrop-blur-sm supports-[backdrop-filter]:bg-secondary/85"
         style={{ gridTemplateColumns: `repeat(${items.length + (hasOverflow ? 1 : 0)}, minmax(0, 1fr))` }}
       >
         {items.map(({ path, label, icon: Icon }) => {

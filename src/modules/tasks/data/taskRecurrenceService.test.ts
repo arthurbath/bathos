@@ -237,6 +237,78 @@ describe('TaskRecurrenceService', () => {
     );
   });
 
+  it('edits the complete recurrence rule through one revision-checked RPC', async () => {
+    const currentDefinition = parseTaskRecurrenceDefinition(definition);
+    const currentRevision = parseTaskRecurrenceRevision({
+      ...revision,
+      rule_config: { weekdays: [1] },
+      end_mode: 'never',
+      end_after_count: null,
+      end_on_date: null,
+      reminder_local_time: null,
+      deadline_offset_days: null,
+    });
+    const nextDefinition = {
+      ...definition,
+      current_revision: 2,
+      record_revision: 2,
+    };
+    const nextRevision = {
+      ...revision,
+      revision: 2,
+      rule_mode: 'after_completion',
+      start_date: '2026-08-03',
+      rule_config: {},
+      end_mode: 'after',
+      end_after_count: 12,
+      end_on_date: null,
+      reminder_local_time: '09:30:00',
+      deadline_offset_days: 2,
+    };
+    const rpc = vi.fn().mockResolvedValue({
+      data: {
+        outcome: 'accepted',
+        definition: nextDefinition,
+        revision: nextRevision,
+      },
+      error: null,
+    });
+    const service = new TaskRecurrenceService({ rpc } as never, definition.owner_id);
+
+    await expect(service.edit({
+      definition: currentDefinition,
+      revision: currentRevision,
+      name: definition.name,
+      ruleMode: 'after_completion',
+      frequency: 'weekly',
+      intervalCount: 1,
+      scheduleDate: '2026-08-03',
+      ruleConfig: {},
+      endMode: 'after',
+      endAfterCount: 12,
+      reminderLocalTime: '09:30',
+      deadlineOffsetDays: 2,
+      mutationId: '90000000-0000-4000-8000-000000000001',
+    })).resolves.toMatchObject({
+      outcome: 'accepted',
+      definition: { current_revision: 2 },
+      revision: {
+        revision: 2,
+        rule_mode: 'after_completion',
+        start_date: '2026-08-03',
+      },
+    });
+    expect(rpc).toHaveBeenCalledWith('tasks_edit_recurrence', expect.objectContaining({
+      _recurrence_id: definition.id,
+      _expected_record_revision: 1,
+      _template_id: revision.template_id,
+      _rule_mode: 'after_completion',
+      _start_date: '2026-08-03',
+      _end_mode: 'after',
+      _end_after_count: 12,
+    }));
+  });
+
   it('evaluates with an explicit calendar date and parses the authoritative result', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: {

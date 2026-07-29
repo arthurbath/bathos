@@ -2259,6 +2259,7 @@ export type Database = {
           recurrence_logical_key: string | null
           recurrence_occurrence_id: string | null
           recurrence_revision: number | null
+          recurrence_superseded_at: string | null
           revision: number
           source_external_id: string | null
           source_kind: string | null
@@ -2301,6 +2302,7 @@ export type Database = {
           recurrence_logical_key?: string | null
           recurrence_occurrence_id?: string | null
           recurrence_revision?: number | null
+          recurrence_superseded_at?: string | null
           revision?: number
           source_external_id?: string | null
           source_kind?: string | null
@@ -2343,6 +2345,7 @@ export type Database = {
           recurrence_logical_key?: string | null
           recurrence_occurrence_id?: string | null
           recurrence_revision?: number | null
+          recurrence_superseded_at?: string | null
           revision?: number
           source_external_id?: string | null
           source_kind?: string | null
@@ -2841,6 +2844,33 @@ export type Database = {
           _recurrence_id: string
           _request_id: string
           _through_date: string
+        }
+        Returns: Json
+      }
+      tasks_edit_recurrence: {
+        Args: {
+          _actor_type?: string
+          _catch_up_limit: number
+          _deadline_offset_days: number
+          _end_after_count: number
+          _end_mode: string
+          _end_on_date: string
+          _expected_record_revision: number
+          _frequency: string
+          _interval_count: number
+          _missed_policy: string
+          _mutation_channel?: string
+          _mutation_id: string
+          _name: string
+          _planning_timezone: string
+          _recurrence_id: string
+          _reminder_local_time: string
+          _rule_config: Json
+          _rule_mode: string
+          _start_date: string
+          _target_area_id: string
+          _template_id: string
+          _template_revision: number
         }
         Returns: Json
       }

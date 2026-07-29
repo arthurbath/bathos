@@ -77,6 +77,7 @@ function task(overrides: Partial<Tables['tasks_todos']['Row']> = {}): Tables['ta
     recurrence_revision: null,
     recurrence_occurrence_id: null,
     recurrence_logical_key: null,
+    recurrence_superseded_at: null,
     revision: 1,
     client_mutation_id: '60000000-0000-4000-8000-000000000001',
     created_at: '2026-07-20T08:00:00.000Z',

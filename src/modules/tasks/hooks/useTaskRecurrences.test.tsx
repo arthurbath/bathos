@@ -30,7 +30,15 @@ const planningTimeZone = 'America/Los_Angeles';
 let definitionRows: TaskRecurrenceDefinition[];
 let revisionRows: TaskRecurrenceRevision[];
 let occurrenceRows: TaskRecurrenceOccurrence[];
-let openOccurrenceRows: Array<{ recurrence_id: string }>;
+let openOccurrenceRows: Array<{
+  recurrence_id: string;
+  root_id: string;
+  scheduled_date: string;
+  destination: string;
+  today_section: string | null;
+  start_date: string | null;
+  deadline: string | null;
+}>;
 
 describe('useTaskRecurrences', () => {
   beforeEach(() => {
@@ -41,7 +49,7 @@ describe('useTaskRecurrences', () => {
     occurrenceRows = [];
     openOccurrenceRows = [];
     mocks.useQuery.mockReset().mockImplementation((query: string) => ({
-      data: query.includes('SELECT DISTINCT occurrence.recurrence_id')
+      data: query.includes('SELECT occurrence.recurrence_id')
         ? openOccurrenceRows
         : query.includes('tasks_recurrence_revisions')
         ? revisionRows
@@ -253,7 +261,15 @@ describe('useTaskRecurrences', () => {
       recurrence_id: outstanding.id,
       rule_mode: 'after_completion',
     })];
-    openOccurrenceRows = [{ recurrence_id: outstanding.id }];
+    openOccurrenceRows = [{
+      recurrence_id: outstanding.id,
+      root_id: '53a4b5c1-3a4e-4fab-a5bf-4c1b114fc690',
+      scheduled_date: '2026-07-20',
+      destination: 'anytime',
+      today_section: 'inbox',
+      start_date: null,
+      deadline: null,
+    }];
     mocks.useTasksRuntime.mockReturnValue({
       mode: 'local',
       planningTimeZone,
@@ -267,5 +283,7 @@ describe('useTaskRecurrences', () => {
     const { result } = renderHook(() => useTaskRecurrences('owner-a'));
 
     expect(result.current.openOccurrenceDefinitionIds).toEqual(new Set([outstanding.id]));
+    expect(result.current.openOccurrenceByDefinitionId.get(outstanding.id)?.root_id)
+      .toBe('53a4b5c1-3a4e-4fab-a5bf-4c1b114fc690');
   });
 });

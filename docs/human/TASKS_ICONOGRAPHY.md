@@ -41,9 +41,12 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 |---|---|---|
 | Reminder | `Bell` | A scheduled task reminder |
 | DueReminder | `BellRing` | A reminder that is ready for acknowledgement |
-| Deadline | `FlagTriangleRight` | A task deadline |
-| PrimaryLink | `ExternalLink` | A generic task Primary Link action; recognized protocols such as Mail retain their protocol-specific icon |
-| Ready | `CircleCheckBig` | Ready actionability |
+| Start | `Play` | An empty or future task Start control |
+| Deadline | `Flag` | A task deadline |
+| PrimaryLink | `Link2` | A generic task Primary Link identity; recognized protocols such as Mail retain their protocol-specific icon |
+| JiraLink | `Zap` | A Jira protocol or recognized Jira web Primary Link |
+| ObsidianLink | `FileText` | An Obsidian protocol Primary Link |
+| Ready | `ArrowBigRightDash` | Ready actionability |
 | Waiting | `Hourglass` | Waiting actionability |
 | Rechecking | `RotateCcw` | Rechecking actionability |
 | Canceled | `CircleSlash2` | A canceled task |

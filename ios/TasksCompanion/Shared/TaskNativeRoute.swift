@@ -127,7 +127,7 @@ enum TaskCompanionURLAction: Equatable {
         switch url.scheme?.lowercased() {
         case TaskNativeRoute.scheme:
             return .task(TaskNativeRoute.parse(url))
-        case "http", "https", "message":
+        case "http", "https", "message", "jira", "obsidian":
             return .external(url)
         default:
             return .ignore

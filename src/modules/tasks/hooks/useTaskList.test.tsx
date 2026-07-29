@@ -83,8 +83,32 @@ describe('useTaskList optimistic display', () => {
     mocks.useQuery.mockReset().mockImplementation(() => ({
       data: queryData,
       isLoading: false,
+      isFetching: false,
       error: null,
     }));
+  });
+
+  it('exposes watched-query fetching separately from initial loading', () => {
+    mocks.useQuery.mockReturnValue({
+      data: queryData,
+      isLoading: false,
+      isFetching: true,
+      error: null,
+    });
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      transitionTask: vi.fn(),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.loading).toBe(false);
+      expect(latest.fetching).toBe(true);
+    } finally {
+      cleanup(root, container);
+    }
   });
 
   it('keeps a committed edit visible until the reactive query catches up', async () => {

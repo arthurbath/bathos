@@ -1,18 +1,24 @@
 import {
+  ArrowBigRightDash,
   Circle,
   CircleCheck,
+  FileText,
+  Flag,
   Lasso,
   Layers3,
+  Link2,
   ListChecks,
   ListTree,
   NotepadText,
   Paperclip,
   Plus,
+  Play,
   Square,
   SquareCheck,
   SquareCheckBig,
   SquareDashed,
   Star,
+  Zap,
 } from 'lucide-react';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -49,6 +55,12 @@ describe('Tasks iconography', () => {
     expect(TASK_ICONS.AddTask).toBe(Plus);
     expect(TASK_ICONS.AddArea).toBe(Plus);
     expect(TASK_ICONS.MultiSelect).toBe(Lasso);
+    expect(TASK_ICONS.JiraLink).toBe(Zap);
+    expect(TASK_ICONS.ObsidianLink).toBe(FileText);
+    expect(TASK_ICONS.PrimaryLink).toBe(Link2);
+    expect(TASK_ICONS.Start).toBe(Play);
+    expect(TASK_ICONS.Deadline).toBe(Flag);
+    expect(TASK_ICONS.Ready).toBe(ArrowBigRightDash);
   });
 
   it('records every registered concept in the human iconography reference', () => {

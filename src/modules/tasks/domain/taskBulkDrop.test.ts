@@ -45,6 +45,7 @@ function task(
     recurrence_revision: null,
     recurrence_occurrence_id: null,
     recurrence_logical_key: null,
+    recurrence_superseded_at: null,
     revision: 1,
     client_mutation_id: `mutation-${id}`,
     created_at: '2026-07-26T00:00:00.000Z',

@@ -15,9 +15,28 @@ const overflowItems = [
   { path: '/config', label: 'Config', icon: Settings },
 ] as const;
 
+type NativeAppWindow = Window & {
+  __bathosNativeApp?: {
+    schemaVersion: number;
+    moduleId: string;
+  };
+};
+
+function setNavigatorProperty(name: string, value: unknown) {
+  Object.defineProperty(window.navigator, name, {
+    configurable: true,
+    value,
+  });
+}
+
 describe('MobileBottomNav', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+    delete (window as NativeAppWindow).__bathosNativeApp;
+    setNavigatorProperty('platform', 'MacIntel');
+    setNavigatorProperty('userAgent', 'Mozilla/5.0');
+    setNavigatorProperty('maxTouchPoints', 0);
+    setNavigatorProperty('standalone', false);
   });
 
   it('preserves the existing direct-link path when no overflow is supplied', async () => {
@@ -40,11 +59,13 @@ describe('MobileBottomNav', () => {
     );
     expect(nav).toHaveClass(
       'w-[calc(100%-2rem)]',
-      'rounded-[1.75rem]',
-      'bg-secondary',
+      'rounded-full',
+      'border-secondary',
+      'bg-secondary/90',
+      'backdrop-blur-sm',
+      'supports-[backdrop-filter]:bg-secondary/85',
       'pointer-events-auto',
     );
-    expect(nav.className).not.toContain('backdrop');
     const links = within(nav).getAllByRole('link');
     expect(links).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
@@ -62,6 +83,59 @@ describe('MobileBottomNav', () => {
     inboxLink.addEventListener('click', (event) => event.preventDefault(), { once: true });
     fireEvent.click(inboxLink, { metaKey: true });
     expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it('sits closer to the complete safe area in a native iOS app', async () => {
+    (window as NativeAppWindow).__bathosNativeApp = {
+      schemaVersion: 1,
+      moduleId: 'tasks',
+    };
+    setNavigatorProperty('platform', 'iPhone');
+    setNavigatorProperty(
+      'userAgent',
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+    );
+
+    render(
+      <MobileBottomNav
+        items={primaryItems}
+        isActive={(path) => path === '/today'}
+        onNavigate={vi.fn()}
+      />,
+    );
+
+    const viewport = (await screen.findByRole('navigation', {
+      name: 'Mobile navigation',
+    })).parentElement;
+    expect(viewport).toHaveAttribute('data-installed-ios', 'true');
+    expect(viewport).toHaveClass(
+      'bottom-[calc(env(safe-area-inset-bottom)+0.25rem)]',
+    );
+    expect(viewport).not.toHaveClass(
+      'bottom-[calc(env(safe-area-inset-bottom)+0.5rem)]',
+    );
+  });
+
+  it('uses the same lower placement in a standalone iPadOS PWA', async () => {
+    setNavigatorProperty('platform', 'MacIntel');
+    setNavigatorProperty('maxTouchPoints', 5);
+    setNavigatorProperty('standalone', true);
+
+    render(
+      <MobileBottomNav
+        items={primaryItems}
+        isActive={(path) => path === '/today'}
+        onNavigate={vi.fn()}
+      />,
+    );
+
+    const viewport = (await screen.findByRole('navigation', {
+      name: 'Mobile navigation',
+    })).parentElement;
+    expect(viewport).toHaveAttribute('data-installed-ios', 'true');
+    expect(viewport).toHaveClass(
+      'bottom-[calc(env(safe-area-inset-bottom)+0.25rem)]',
+    );
   });
 
   it('renders four direct destinations plus one keyboard-accessible More control', async () => {

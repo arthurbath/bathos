@@ -2,6 +2,7 @@ import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
+import { Flag } from 'lucide-react';
 import { DatePickerField } from '@/components/ui/date-picker-field';
 
 function mount(ui: React.ReactElement) {
@@ -28,6 +29,32 @@ async function flushUi() {
 }
 
 describe('DatePickerField', () => {
+  it('renders a pinned leading decoration while retaining its accessible name', () => {
+    const { container, root } = mount(
+      <DatePickerField
+        id="decorated-date"
+        aria-label="Deadline"
+        value=""
+        placeholder="Deadline"
+        decoration={<Flag />}
+        onValueChange={vi.fn()}
+      />,
+    );
+
+    try {
+      const trigger = container.querySelector('#decorated-date');
+      const decoration = trigger?.querySelector('[data-control-decoration]');
+      expect(trigger).toHaveAttribute('aria-label', 'Deadline');
+      expect(trigger).toHaveTextContent('Deadline');
+      expect(decoration).toHaveAttribute('aria-hidden', 'true');
+      expect(decoration).toHaveClass('pointer-events-none', 'shrink-0');
+      expect(decoration?.querySelector('svg')).toHaveClass('lucide-flag');
+      expect(trigger?.querySelector('.min-w-0.flex-1.truncate')).toBeTruthy();
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it('closes on Tab and moves to the adjacent form control', async () => {
     const { container, root } = mount(
       <form>
@@ -429,18 +456,18 @@ describe('DatePickerField', () => {
         container.querySelector<HTMLButtonElement>('#deadline-boundary')?.click();
       });
       await flushUi();
-      const julyThirtyFirst = Array.from(document.body.querySelectorAll<HTMLButtonElement>(
+      const finalVisibleDay = Array.from(document.body.querySelectorAll<HTMLButtonElement>(
         'button[name="day"]',
       )).find((button) => (
-        button.textContent?.trim() === '31'
-        && !button.className.includes('day-outside')
+        button.textContent?.trim() === '7'
+        && button.className.includes('day-outside')
       ));
       const clear = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button'))
         .find((button) => button.textContent?.trim() === 'Clear');
 
       act(() => {
-        julyThirtyFirst?.focus();
-        julyThirtyFirst?.dispatchEvent(new KeyboardEvent('keydown', {
+        finalVisibleDay?.focus();
+        finalVisibleDay?.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'ArrowDown',
           bubbles: true,
           cancelable: true,

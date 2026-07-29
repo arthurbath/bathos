@@ -1,12 +1,12 @@
 import {
   Archive,
+  ArrowBigRightDash,
   Bell,
   BellRing,
   BookOpen,
   CalendarRange,
   Circle,
   CircleCheck,
-  CircleCheckBig,
   CircleSlash2,
   Clock2,
   Clock5,
@@ -14,10 +14,10 @@ import {
   Cloud,
   DatabaseBackup,
   Download,
-  ExternalLink,
   File,
+  FileText,
   Filter,
-  FlagTriangleRight,
+  Flag,
   Globe2,
   HardDrive,
   Hourglass,
@@ -48,8 +48,10 @@ import {
   TextQuote,
   Trash2,
   Upload,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
+import type { TaskPrimaryLinkIconKind } from '@/modules/tasks/domain/taskPrimaryLink';
 
 /**
  * Canonical Lucide choices for durable Tasks concepts.
@@ -84,9 +86,12 @@ export const TASK_ICONS = {
 
   Reminder: Bell,
   DueReminder: BellRing,
-  Deadline: FlagTriangleRight,
-  PrimaryLink: ExternalLink,
-  Ready: CircleCheckBig,
+  Start: Play,
+  Deadline: Flag,
+  PrimaryLink: Link2,
+  JiraLink: Zap,
+  ObsidianLink: FileText,
+  Ready: ArrowBigRightDash,
   Waiting: Hourglass,
   Rechecking: RotateCcw,
   Canceled: CircleSlash2,
@@ -149,9 +154,12 @@ export const TASK_ICON_NAMES = {
 
   Reminder: 'Bell',
   DueReminder: 'BellRing',
-  Deadline: 'FlagTriangleRight',
-  PrimaryLink: 'ExternalLink',
-  Ready: 'CircleCheckBig',
+  Start: 'Play',
+  Deadline: 'Flag',
+  PrimaryLink: 'Link2',
+  JiraLink: 'Zap',
+  ObsidianLink: 'FileText',
+  Ready: 'ArrowBigRightDash',
   Waiting: 'Hourglass',
   Rechecking: 'RotateCcw',
   Canceled: 'CircleSlash2',
@@ -184,3 +192,17 @@ export const TASK_ICON_NAMES = {
   CloudSync: 'Cloud',
   LocalStorage: 'HardDrive',
 } as const satisfies Record<TaskIconConcept, string>;
+
+export const TASK_PRIMARY_LINK_ICONS = {
+  mail: TASK_ICONS.MailSource,
+  jira: TASK_ICONS.JiraLink,
+  obsidian: TASK_ICONS.ObsidianLink,
+  link: TASK_ICONS.PrimaryLink,
+} as const satisfies Record<TaskPrimaryLinkIconKind, LucideIcon>;
+
+export const TASK_PRIMARY_LINK_LABELS = {
+  mail: 'Mail Link',
+  jira: 'Jira Link',
+  obsidian: 'Obsidian Link',
+  link: 'Primary Link',
+} as const satisfies Record<TaskPrimaryLinkIconKind, string>;

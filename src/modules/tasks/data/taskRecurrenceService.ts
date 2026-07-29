@@ -82,6 +82,23 @@ export type TaskRecurrenceCreateFromTaskResult = TaskRecurrenceSaveResult & {
   occurrence: TaskRecurrenceOccurrence;
 };
 
+export type TaskRecurrenceEditInput = {
+  definition: TaskRecurrenceDefinition;
+  revision: TaskRecurrenceRevision;
+  name: string;
+  ruleMode: TaskRecurrenceRuleMode;
+  frequency: TaskRecurrenceFrequency;
+  intervalCount: number;
+  scheduleDate: string;
+  ruleConfig: TaskRecurrenceRuleConfig;
+  endMode: TaskRecurrenceEndMode;
+  endAfterCount?: number | null;
+  endOnDate?: string | null;
+  reminderLocalTime?: string | null;
+  deadlineOffsetDays?: number | null;
+  mutationId?: string;
+};
+
 export class InvalidTaskRecurrenceError extends Error {
   constructor(message: string) {
     super(message);
@@ -193,6 +210,63 @@ export class TaskRecurrenceService {
       definition: parseTaskRecurrenceDefinition(result.definition, this.ownerId),
       revision: parseTaskRecurrenceRevision(result.revision, this.ownerId),
       occurrence: parseTaskRecurrenceOccurrence(result.occurrence, this.ownerId),
+    };
+  }
+
+  async edit(input: TaskRecurrenceEditInput): Promise<TaskRecurrenceSaveResult> {
+    const name = input.name.trim();
+    if (
+      !name
+      || !isTaskCalendarDate(input.scheduleDate)
+      || input.intervalCount < 1
+      || (
+        input.endMode === 'after'
+        && (!Number.isInteger(input.endAfterCount) || Number(input.endAfterCount) < 1)
+      )
+      || (
+        input.endMode === 'on_date'
+        && !isTaskCalendarDate(input.endOnDate ?? '')
+      )
+    ) {
+      throw new InvalidTaskRecurrenceError('A valid recurrence definition is required');
+    }
+    const { data, error } = await this.client.rpc('tasks_edit_recurrence', {
+      _recurrence_id: input.definition.id,
+      _expected_record_revision: input.definition.record_revision,
+      _name: name,
+      _template_id: input.revision.template_id,
+      _template_revision: input.revision.template_revision,
+      _rule_mode: input.ruleMode,
+      _frequency: input.frequency,
+      _interval_count: input.intervalCount,
+      _start_date: input.scheduleDate,
+      _planning_timezone: input.revision.planning_timezone,
+      _missed_policy: input.revision.missed_policy,
+      _catch_up_limit: input.revision.catch_up_limit,
+      _target_area_id: input.revision.target_area_id as unknown as string,
+      _rule_config: input.ruleConfig as unknown as Database['public']['Functions']['tasks_edit_recurrence']['Args']['_rule_config'],
+      _end_mode: input.endMode,
+      _end_after_count: input.endMode === 'after' ? input.endAfterCount ?? null : null,
+      _end_on_date: input.endMode === 'on_date' ? input.endOnDate ?? null : null,
+      _reminder_local_time: input.reminderLocalTime ?? null,
+      _deadline_offset_days: input.deadlineOffsetDays ?? null,
+      _mutation_id: input.mutationId ?? crypto.randomUUID(),
+      _mutation_channel: 'web',
+      _actor_type: 'user',
+    });
+    if (error) throw error;
+    const result = requireRecord(data, 'Recurrence edit returned an invalid result');
+    const outcome = requireEnum(
+      result.outcome,
+      ['accepted', 'already_applied', 'conflict'] as const,
+      'recurrence edit outcome',
+    );
+    return {
+      outcome,
+      definition: parseTaskRecurrenceDefinition(result.definition, this.ownerId),
+      ...(outcome === 'conflict'
+        ? {}
+        : { revision: parseTaskRecurrenceRevision(result.revision, this.ownerId) }),
     };
   }
 

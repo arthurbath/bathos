@@ -237,12 +237,12 @@ export function TaskKeyboardHelpDialog({
     {
       label: 'View Navigation',
       commands: [
-        ['Open Today', '⌘1', '⌃1'],
-        ['Open Upcoming', '⌘2', '⌃2'],
-        ['Open Anytime', '⌘3', '⌃3'],
-        ['Open Someday', '⌘4', '⌃4'],
-        ['Open Done', '⌘5', '⌃5'],
-        ['Open Config', '⌘6', '⌃6'],
+        ['Open Today', '⌃1', '⌃1'],
+        ['Open Upcoming', '⌃2', '⌃2'],
+        ['Open Anytime', '⌃3', '⌃3'],
+        ['Open Someday', '⌃4', '⌃4'],
+        ['Open Done', '⌃5', '⌃5'],
+        ['Open Config', '⌃6', '⌃6'],
       ],
     },
     {

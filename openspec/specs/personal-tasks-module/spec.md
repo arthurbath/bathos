@@ -558,7 +558,7 @@ The system SHALL represent workflow meaning through explicit structured concepts
 
 #### Scenario: Activate a Primary Link
 - **WHEN** a to-do has a nonblank Primary Link
-- **THEN** `message://` uses a Mail icon and operating-system dispatch, HTTP(S) uses a Link icon and new browser context, and another value uses a Link icon and an HTTPS destination formed by prepending `https://`
+- **THEN** `message:` uses a Mail icon and operating-system dispatch, `jira:` and recognized Jira web URLs use Lucide `Zap`, `obsidian:` uses Lucide `FileText`, generic HTTP(S) uses the external-link icon and a new browser context, and another value uses the external-link icon and an HTTPS destination formed by prepending `https://`
 
 #### Scenario: Reopen a structured task source
 - **WHEN** the interface displays present active or terminal work whose typed source contains a supported HTTP(S), Mail-message, or originating-Mac file reference
@@ -1932,7 +1932,7 @@ The Tasks module SHALL expose pointer and touch creation affordances on active p
 
 #### Scenario: Present the primary floating creation action
 - **WHEN** a user views Today, Upcoming, Anytime, or Someday outside bulk selection mode
-- **THEN** Tasks presents one large circular New Task button fixed near the bottom-right edge of the bounded Tasks list with a two-pixel green outline, green plus, and fully opaque dark background at rest and on hover, clear of mobile navigation and safe-area insets, and does not present the former New Task action in the view header
+- **THEN** Tasks presents one compact circular New Task button fixed near the bottom-right edge of the bounded Tasks list with a slightly translucent solid-green surface, backdrop blur where supported, a thin opaque green border, and a white Plus at rest and on hover, clear of mobile navigation and safe-area insets, and does not present the former New Task action in the view header
 
 #### Scenario: Create in the first Today bucket
 - **WHEN** a user invokes the floating action from Today
@@ -2470,8 +2470,9 @@ The Tasks module SHALL keep Today, Upcoming, Anytime, Someday, Done, and Area vi
 - **THEN** the row does not reserve empty marker space or show a decorative horizon icon
 
 #### Scenario: Summarize nearby calendar dates relatively
-- **WHEN** a task row displays a Deadline that differs from the owner-local planning date by no more than 10 days
-- **THEN** the row uses Today, Tomorrow, `1 day ago`, N days ago, or N days left as appropriate
+- **WHEN** a task row displays a Deadline that differs from the owner-local planning date by no more than 9 days
+- **THEN** the wider row uses Today, Tomorrow, `1 day ago`, N days ago, or N days left as appropriate
+- **AND** the compact mobile row uses Today or a signed singular or plural day count as appropriate
 
 #### Scenario: Summarize a reminder by time
 - **WHEN** a task row has an active reminder and valid Start planning
@@ -2486,8 +2487,8 @@ The Tasks module SHALL keep Today, Upcoming, Anytime, Someday, Done, and Area vi
 - **THEN** the control retains its ordinary input background while preserving its focus, keyboard, and popover behavior
 
 #### Scenario: Summarize distant calendar dates compactly
-- **WHEN** a displayed Deadline is more than 10 days before or after the owner-local planning date
-- **THEN** the row uses a short month and numeric day such as Aug 27
+- **WHEN** a displayed Deadline is more than 9 days before or after the owner-local planning date
+- **THEN** both wider and compact mobile task rows use a short month and numeric day such as Aug 27
 
 #### Scenario: Arrange the open editor compactly
 - **WHEN** a task editor is open
@@ -3493,3 +3494,32 @@ Tasks SHALL use the canonical generic external-link icon for Primary Link action
 #### Scenario: Show a Mail message link
 - **WHEN** a task Primary Link uses the recognized Mail message protocol
 - **THEN** the task may retain the established Mail message icon rather than the generic external-link icon
+
+#### Scenario: Show a Jira link
+- **WHEN** a task Primary Link uses the Jira protocol or a recognized Jira HTTP or HTTPS URL
+- **THEN** every actionable task-row and metadata-editor representation uses Lucide `Zap`, the iOS widget uses the closest native system rendering, and activation opens the configured browser or registered Jira application as appropriate
+
+#### Scenario: Show an Obsidian link
+- **WHEN** a task Primary Link uses the Obsidian protocol
+- **THEN** every actionable task-row and metadata-editor representation uses Lucide `FileText`, the iOS widget uses the closest native system rendering, and activation opens the registered Obsidian application
+
+#### Scenario: Keep the expanded editor in icon parity
+- **WHEN** a nonblank Primary Link appears in an expanded task
+- **THEN** the activation control beside the Primary Link input uses the same derived icon as the task summary row
+
+### Requirement: Settled Task List Transitions
+The system SHALL conceal stale or partially projected task rows while navigating from one Tasks planning list to another and SHALL reveal the destination list only after its watched query has settled.
+
+#### Scenario: Navigate between planning lists
+- **WHEN** a user navigates from Today, Upcoming, Anytime, Someday, or Done to a different one of those planning lists
+- **THEN** the destination route and navigation state update immediately
+- **AND** the list content presents a brief loading state instead of rows derived from the previous list's query result
+- **AND** the destination rows appear together after the destination query settles
+
+#### Scenario: Use any navigation input
+- **WHEN** a user changes planning lists by a navigation link, pointer action, or supported keyboard shortcut
+- **THEN** the same route-driven settled transition behavior applies
+
+#### Scenario: Refresh the current planning list
+- **WHEN** PowerSync re-evaluates the watched query without a planning-list route change
+- **THEN** the currently rendered rows remain visible unless the query enters its existing initial-loading or error state

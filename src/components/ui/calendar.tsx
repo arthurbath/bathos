@@ -46,7 +46,7 @@ function CalendarDay({ date, displayMonth }: DayProps) {
   const dayContent = isCurrentDate ? (
     <Star
       aria-hidden="true"
-      className="h-3.5 w-3.5"
+      className="h-3.5 w-3.5 text-warning"
       data-calendar-current-date-icon="true"
     />
   ) : dayRender.buttonProps.children;
@@ -413,7 +413,7 @@ function MonthPicker({
                 {isCurrentMonth ? (
                   <Star
                     aria-hidden="true"
-                    className="h-3.5 w-3.5"
+                    className="h-3.5 w-3.5 text-warning"
                     data-calendar-current-month-icon="true"
                   />
                 ) : null}
@@ -459,6 +459,7 @@ function Calendar({
   const [monthPickerYear, setMonthPickerYear] = React.useState<number>(displayMonth.getFullYear());
   const [monthPickerActiveMonth, setMonthPickerActiveMonth] = React.useState<number | null>(displayMonth.getMonth());
   const [pendingDayFocusDate, setPendingDayFocusDate] = React.useState<Date | null>(null);
+  const pendingPreviousMonthFocusRef = React.useRef(false);
   const initialFocusTime = initialFocusDate?.valueOf();
 
   React.useEffect(() => {
@@ -484,6 +485,25 @@ function Calendar({
     return () => window.clearTimeout(timer);
   }, [initialFocusTime, viewMode]);
 
+  React.useEffect(() => {
+    if (!pendingPreviousMonthFocusRef.current || viewMode !== "day") return;
+    const timer = window.setTimeout(() => {
+      const previousMonthButton = rootRef.current?.querySelector<HTMLButtonElement>(
+        'button[name="previous-month"]',
+      );
+      const captionButton = rootRef.current?.querySelector<HTMLButtonElement>(
+        'button[name="caption-month-year"]',
+      );
+      if (previousMonthButton?.disabled) {
+        captionButton?.focus();
+      } else {
+        previousMonthButton?.focus();
+      }
+      pendingPreviousMonthFocusRef.current = false;
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [displayMonth, viewMode]);
+
   const commitMonthChange = React.useCallback((nextMonth: Date) => {
     const normalized = clampMonthToMinimum(nextMonth, fromDate);
     if (!isControlledMonth) {
@@ -496,6 +516,14 @@ function Calendar({
     if (event.key === "Tab" && !allowTabExit) {
       event.preventDefault();
       event.stopPropagation();
+    }
+    if (
+      viewMode === "day"
+      && (event.key === "Enter" || event.key === " ")
+      && event.target instanceof HTMLButtonElement
+      && event.target.getAttribute("name") === "previous-month"
+    ) {
+      pendingPreviousMonthFocusRef.current = true;
     }
     if (
       viewMode === "day"
@@ -543,7 +571,10 @@ function Calendar({
         />
       ) : (
         <DayPicker
+          {...props}
           showOutsideDays={showOutsideDays}
+          fixedWeeks
+          weekStartsOn={1}
           month={displayMonth}
           defaultMonth={displayMonth}
           fromDate={fromDate}
@@ -604,7 +635,6 @@ function Calendar({
             ),
             ...components,
           }}
-          {...props}
           required={props.mode === "single" ? props.required ?? true : props.required}
         />
       )}

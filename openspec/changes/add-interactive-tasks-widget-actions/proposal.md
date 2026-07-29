@@ -6,11 +6,11 @@ The Tasks widget already exposes the right native surface for quick work, but it
 
 - Make the checkbox area of each open widget task an interactive completion control that updates the authoritative Tasks database without opening the app.
 - Keep the task summary as an independent deep link into the Tasks companion.
-- Project a bounded, normalized Primary Link for widget rows and render a separate Mail or external-link action that opens through the operating system.
-- Introduce a narrow, owner-bound, revocable native completion credential that cannot read Tasks data or perform arbitrary mutations and is never included in PowerSync.
+- Project a bounded, normalized Primary Link for widget rows and render a separate Mail, Jira, Obsidian, or generic external-link action that opens through the operating system.
+- Introduce a narrow, owner-bound, revocable native widget credential that can read only the final bounded widget projection and complete owned open tasks, cannot read raw Tasks data or perform arbitrary mutations, and is never included in PowerSync.
 - On successful completion, briefly acknowledge the action, remove the task from active widget lists, add it to Done when projected, reload widget timelines, and rely on ordinary synchronization for every other client.
 - Fail closed when completion cannot reach the server, retaining the task in the widget rather than showing an unconfirmed completion.
-- Increase the large-widget task capacity to nine rows plus overflow, with an exact-ten fit, and add a list-aware header capture action.
+- Increase the large-widget task capacity to ten rows, omit overflow messaging for additional tasks, and add a list-aware header capture action.
 - Preserve the exact 20-table PowerSync publication and keep Supabase sessions, refresh tokens, PowerSync credentials, notes, checklist text, and Mail source metadata out of the native cache.
 
 ## Capabilities
@@ -21,7 +21,7 @@ None.
 
 ### Modified Capabilities
 
-- `tasks-ios-companion`: Replace the read-only widget boundary with narrowly scoped completion and direct Primary Link actions while preserving the thin-host, cache, privacy, and deep-link contracts.
+- `tasks-ios-companion`: Replace the read-only widget boundary with narrowly scoped projection reads, completion, and direct Primary Link actions while preserving the thin-host, cache, privacy, and deep-link contracts.
 - `personal-tasks-module`: Accept widget completion as an ordinary idempotent lifecycle transition with authoritative history, recurrence, and cross-client synchronization.
 
 ## Impact

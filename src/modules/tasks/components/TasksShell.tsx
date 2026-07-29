@@ -15,6 +15,7 @@ import {
   type RefObject,
 } from 'react';
 import {
+  ExternalLink,
   MoreHorizontal,
   X,
   type LucideIcon,
@@ -50,7 +51,11 @@ import type {
 } from '@/modules/tasks/data/taskRepository';
 import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import { TaskClipboardService } from '@/modules/tasks/data/taskClipboardService';
-import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
+import {
+  TASK_ICONS,
+  TASK_PRIMARY_LINK_ICONS,
+  TASK_PRIMARY_LINK_LABELS,
+} from '@/modules/tasks/components/taskIconography';
 import {
   addTaskCalendarDays,
   formatTaskCompactCalendarDayOffset,
@@ -124,6 +129,8 @@ import {
   requestTaskNativeNewTaskSummaryFocus,
 } from '@/modules/tasks/native/taskNativeWidgetBridge';
 import type {
+  TaskRecurrenceDefinition,
+  TaskRecurrenceRevision,
   TaskReminder,
   TaskTodaySection,
   TaskTodo,
@@ -131,7 +138,8 @@ import type {
 import { normalizeTaskEditorPlanningPatch } from '@/modules/tasks/components/taskEditorPlanning';
 import {
   getTaskPrimaryLinkHref,
-  getTaskPrimaryLinkKind,
+  getTaskPrimaryLinkIconKind,
+  taskPrimaryLinkOpensBrowserTab,
 } from '@/modules/tasks/domain/taskPrimaryLink';
 import { TaskAreaDetailView } from '@/modules/tasks/components/TaskAreaDetailView';
 import { TaskAreaSettings } from '@/modules/tasks/components/TaskAreaSettings';
@@ -230,6 +238,7 @@ const TASK_POST_CLOSE_SETTLE_DELAY_MS = 180;
 const TASK_PLACEMENT_ANIMATION_DURATION_MS = 240;
 const TASK_TERMINAL_SETTLE_DELAY_MS = 180;
 const TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS = 220;
+const TASK_VIEW_TRANSITION_MINIMUM_MS = 120;
 const TASK_LIST_BOTTOM_CLEARANCE_CLASS = 'pb-[calc(env(safe-area-inset-bottom)+11rem)] md:pb-36';
 
 const todayTaskSectionDefinitions = taskHorizonPresentations;
@@ -464,6 +473,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const {
     tasks: projectedTasks,
     loading,
+    fetching,
     error,
     createTask,
     updateTask,
@@ -482,6 +492,45 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     registerForwardMutation,
     reserveForwardMutation,
   );
+  const [taskListTransition, setTaskListTransition] = useState<{
+    id: number;
+    view: TaskListView;
+    startedAt: number;
+  } | null>(null);
+  const previousTaskRouteViewRef = useRef<TaskShellView>(view);
+  const taskListTransitionIdRef = useRef(0);
+  useLayoutEffect(() => {
+    if (previousTaskRouteViewRef.current === view) return;
+    previousTaskRouteViewRef.current = view;
+    if (!bulkEligible) {
+      setTaskListTransition(null);
+      return;
+    }
+
+    taskListTransitionIdRef.current += 1;
+    setTaskListTransition({
+      id: taskListTransitionIdRef.current,
+      view: taskListView,
+      startedAt: performance.now(),
+    });
+  }, [bulkEligible, taskListView, view]);
+  useEffect(() => {
+    if (
+      taskListTransition === null
+      || taskListTransition.view !== taskListView
+      || loading
+      || fetching
+    ) return;
+
+    const elapsed = performance.now() - taskListTransition.startedAt;
+    const timeout = window.setTimeout(() => {
+      setTaskListTransition((current) => (
+        current?.id === taskListTransition.id ? null : current
+      ));
+    }, Math.max(0, TASK_VIEW_TRANSITION_MINIMUM_MS - elapsed));
+    return () => window.clearTimeout(timeout);
+  }, [fetching, loading, taskListTransition, taskListView]);
+  const taskListRouteSettling = taskListTransition?.view === taskListView;
   useTaskNativeWidgetBridge({
     ownerId: userId,
     planningDate,
@@ -523,9 +572,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     ? creationDraft
     : null;
   const selectableTasks = useMemo(
-    () => filteredTasks.filter((task) => view === 'done'
-      ? task.disposition === 'deleted' || task.lifecycle !== 'open'
-      : task.disposition === 'present' && task.lifecycle === 'open'),
+    () => filteredTasks.filter((task) => (
+      view === 'done'
+        ? task.disposition === 'deleted' || task.lifecycle !== 'open'
+        : task.disposition === 'present'
+          && task.lifecycle === 'open'
+          && (view !== 'upcoming' || task.recurrence_definition_id === null)
+    )),
     [filteredTasks, view],
   );
   const taskClipboardService = useMemo(() => new TaskClipboardService(
@@ -561,15 +614,28 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const reminders = useTaskReminders(userId);
   const recurrences = useTaskRecurrences(userId);
   const waitingRecurrences = useMemo(() => recurrences.definitions.filter(
-    (definition) => (
-      definition.status === 'active'
-      && recurrences.revisions.get(definition.id)?.rule_mode === 'after_completion'
-      && recurrences.openOccurrenceDefinitionIds.has(definition.id)
-    ),
+    (definition) => {
+      const occurrence = recurrences.openOccurrenceByDefinitionId.get(definition.id);
+      const occurrenceIsAlreadyDatedInUpcoming = occurrence !== undefined && (
+        (occurrence.start_date !== null && occurrence.start_date > planningDate)
+        || (
+          (occurrence.start_date === null || occurrence.start_date <= planningDate)
+          && occurrence.deadline !== null
+          && occurrence.deadline > planningDate
+        )
+      );
+      return (
+        definition.status === 'active'
+        && recurrences.revisions.get(definition.id)?.rule_mode === 'after_completion'
+        && occurrence !== undefined
+        && !occurrenceIsAlreadyDatedInUpcoming
+      );
+    },
   ), [
     recurrences.definitions,
-    recurrences.openOccurrenceDefinitionIds,
+    recurrences.openOccurrenceByDefinitionId,
     recurrences.revisions,
+    planningDate,
   ]);
   const reminderAvailability = getTaskReminderAvailability(
     reminders.mode,
@@ -2082,7 +2148,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         }
       }
     };
-
     window.addEventListener('keydown', handleKeyDown, true);
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
@@ -2599,6 +2664,22 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     targetUpcomingSection?: { key: string; startDate: string },
   ) => {
     const isCreationDraft = task.id === NEW_TASK_DRAFT_ID;
+    const recurrenceDefinition = task.recurrence_definition_id
+      ? recurrences.definitions.find(({ id }) => id === task.recurrence_definition_id) ?? null
+      : null;
+    const recurrenceRevision = task.recurrence_definition_id
+      ? recurrences.revisions.get(task.recurrence_definition_id) ?? null
+      : null;
+    const isRecurrenceProjection = view === 'upcoming'
+      && task.recurrence_definition_id !== null;
+    const recurrenceProjection = recurrenceDefinition !== null
+      && recurrenceRevision !== null
+      ? {
+          definition: recurrenceDefinition,
+          revision: recurrenceRevision,
+          onEdit: recurrences.edit,
+        }
+      : null;
     const persistedDraftTaskId = isCreationDraft
       ? creationDraftRef.current?.persistedTaskId ?? null
       : null;
@@ -2632,8 +2713,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           }, 0);
         } : undefined}
         hierarchy={hierarchy}
-        selected={selectedTaskId === task.id}
-        focused={focusedTaskId === task.id}
+        showAreaMetadata={view !== 'anytime'}
+        selected={!isRecurrenceProjection && selectedTaskId === task.id}
+        focused={!isRecurrenceProjection && focusedTaskId === task.id}
+        recurrenceProjection={isRecurrenceProjection
+          ? recurrenceProjection
+          : undefined}
         onSelect={(event) => handleTaskPointerSelection(event, task.id)}
         onTouchSwipeSelect={() => {
           void enterTaskSelectionFromTouchSwipe(task.id);
@@ -2652,7 +2737,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         reserveTerminalMutation={() => (
           isCreationDraft ? undefined : reserveForwardMutation(task)
         )}
-        bulkSelection={bulkMode && !isCreationDraft ? {
+        bulkSelection={bulkMode && !isCreationDraft && !isRecurrenceProjection ? {
           selected: bulkSelection.has(task.id),
           onKeyboardToggle: () => toggleTaskFromKeyboard(task.id),
           onToggle: (event) => handleTaskPointerSelection(
@@ -2696,6 +2781,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         }}
         planningActions={planningActionsForTask(task)}
         draggableTask={!isCreationDraft
+          && !isRecurrenceProjection
           && (
             view === 'today'
             || view === 'upcoming'
@@ -2860,6 +2946,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         hasChecklistItems={checklistTaskIds.has(task.id)}
         checklistTaskId={task.id}
         hierarchy={hierarchy}
+        showAreaMetadata
         selected={selectedTaskId === task.id}
         focused={focusedTaskId === task.id}
         onSelect={(event) => handleDoneTaskPointerSelection(event, task.id)}
@@ -3153,9 +3240,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 />
               )
               : <section aria-label={getTaskSectionLabel(taskListView)}>
-            {loading || hierarchy.loading || (view === 'done' && deletedHierarchyRoots.loading) ? (
-              <div className="flex min-h-40 items-center justify-center">
-                <LoadingSpinner />
+            {loading
+            || taskListRouteSettling
+            || hierarchy.loading
+            || (view === 'done' && deletedHierarchyRoots.loading) ? (
+              <div
+                className="flex min-h-40 items-center justify-center"
+                data-task-view-transition-loading={taskListRouteSettling ? 'true' : undefined}
+              >
+                <LoadingSpinner label="Loading Tasks" />
               </div>
             ) : error || hierarchy.error || (view === 'done' && deletedHierarchyRoots.error) ? (
               <p role="alert" className="py-12 text-center text-sm text-destructive">
@@ -3269,22 +3362,36 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                           Repeating Tasks
                         </h3>
                         <div className={TASK_PLANNING_LIST_CLASS}>
-                          {waitingRecurrences.map((definition) => (
-                            <article
-                              key={definition.id}
-                              className="flex h-11 items-center gap-2 px-2 text-[15px] text-foreground"
-                              data-task-waiting-recurrence
-                            >
-                              <TASK_ICONS.Recurrence
-                                className="h-5 w-5 shrink-0 text-muted-foreground"
-                                aria-hidden="true"
+                          {waitingRecurrences.map((definition) => {
+                            const revision = recurrences.revisions.get(definition.id);
+                            const occurrence = recurrences.openOccurrenceByDefinitionId.get(
+                              definition.id,
+                            );
+                            if (!revision || !occurrence) return null;
+                            return (
+                              <WaitingRecurrenceRow
+                                key={definition.id}
+                                definition={definition}
+                                revision={revision}
+                                planningDate={planningDate}
+                                onEdit={recurrences.edit}
+                                onGoToInstance={() => {
+                                  const targetView = occurrence.start_date
+                                    && occurrence.start_date > planningDate
+                                    ? 'upcoming'
+                                    : occurrence.destination === 'someday'
+                                      ? 'someday'
+                                      : occurrence.today_section
+                                        ? 'today'
+                                        : 'anytime';
+                                  const parameters = new URLSearchParams({
+                                    native_task: occurrence.root_id,
+                                  });
+                                  navigate(`${basePath}/${targetView}?${parameters.toString()}`);
+                                }}
                               />
-                              <span className="rounded bg-foreground/[0.08] px-1.5 py-0.5 text-xs text-muted-foreground">
-                                Waiting
-                              </span>
-                              <span className="truncate">{definition.name}</span>
-                            </article>
-                          ))}
+                            );
+                          })}
                         </div>
                       </section>
                     ) : null}
@@ -3371,11 +3478,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           >
             <Button
               type="button"
-              variant="outline-success"
+              variant="success"
               aria-label="New Task"
               data-task-floating-create
               onClick={() => void beginTaskCreation(floatingTaskCreationPlacement)}
-              className="pointer-events-auto h-14 w-14 rounded-full border-2 p-0 enabled:hover:!bg-accent [&_svg]:size-6"
+              className="pointer-events-auto h-12 w-12 rounded-full border border-success bg-success/85 p-0 text-success-foreground backdrop-blur-sm supports-[backdrop-filter]:bg-success/75 enabled:hover:bg-success/90 [&_svg]:size-6"
             >
               <TASK_ICONS.AddTask aria-hidden="true" />
             </Button>
@@ -4567,6 +4674,87 @@ function UpcomingTaskSections({
   );
 }
 
+function WaitingRecurrenceRow({
+  definition,
+  revision,
+  planningDate,
+  onEdit,
+  onGoToInstance,
+}: {
+  definition: TaskRecurrenceDefinition;
+  revision: TaskRecurrenceRevision;
+  planningDate: string;
+  onEdit: NonNullable<Parameters<typeof TaskRepeatDialog>[0]['onEdit']>;
+  onGoToInstance: () => void;
+}) {
+  const [repeatOpen, setRepeatOpen] = useState(false);
+
+  return (
+    <>
+      <article
+        className="flex h-11 items-center gap-2 px-1 pr-1.5 text-[15px] text-foreground"
+        data-task-waiting-recurrence
+      >
+        <span
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground"
+          aria-label="Repeating Schedule"
+        >
+          <TASK_ICONS.Recurrence className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <button
+          type="button"
+          className="flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setRepeatOpen(true)}
+          aria-label={`Edit Repeat for ${definition.name}`}
+        >
+          <span className="truncate">{definition.name}</span>
+          <span
+            className="mt-px flex items-center text-xs leading-4 text-muted-foreground"
+            data-task-row-metadata
+          >
+            <span
+              className="rounded bg-foreground/[0.08] px-1.5 py-0.5"
+              data-task-metadata-kind="recurrence-waiting"
+            >
+              Waiting
+            </span>
+          </span>
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="clear"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              aria-label={`Actions for ${definition.name}`}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => setRepeatOpen(true)}>
+              Edit Repeat
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onGoToInstance}>
+              Go to Instance
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </article>
+      <TaskRepeatDialog
+        task={null}
+        definition={definition}
+        revision={revision}
+        planningDate={planningDate}
+        open={repeatOpen}
+        onOpenChange={setRepeatOpen}
+        onEdit={onEdit}
+      />
+    </>
+  );
+}
+
 function TaskRow({
   task,
   draftExiting,
@@ -4574,8 +4762,10 @@ function TaskRow({
   checklistTaskId,
   onRequestChecklist,
   hierarchy,
+  showAreaMetadata,
   selected,
   focused,
+  recurrenceProjection,
   onSelect,
   onTouchSwipeSelect,
   onActivate,
@@ -4614,8 +4804,14 @@ function TaskRow({
   checklistTaskId: string | null;
   onRequestChecklist?: () => Promise<void>;
   hierarchy: TaskHierarchyModel;
+  showAreaMetadata: boolean;
   selected: boolean;
   focused: boolean;
+  recurrenceProjection?: {
+    definition: TaskRecurrenceDefinition;
+    revision: TaskRecurrenceRevision;
+    onEdit: Parameters<typeof TaskRepeatDialog>[0]['onEdit'];
+  } | null;
   onSelect: (event: MouseEvent<HTMLElement>) => void;
   onTouchSwipeSelect: () => void;
   onActivate: () => void;
@@ -4686,7 +4882,10 @@ function TaskRow({
   } | null>(null);
   const pendingRef = useRef(false);
   const inBulkSelection = bulkSelection !== undefined;
-  const areaLabel = getTaskAreaLabel(task, hierarchy);
+  const isRecurrenceProjection = recurrenceProjection !== undefined;
+  const recurrenceProjectionReady = recurrenceProjection !== null
+    && recurrenceProjection !== undefined;
+  const areaLabel = showAreaMetadata ? getTaskAreaLabel(task, hierarchy) : null;
   const taskLabel = visibleTitle || 'New Task';
   const todayMarkerPresentation = todayMarker
     ? getTaskHorizonPresentation(todayMarker)
@@ -4985,6 +5184,8 @@ function TaskRow({
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
     if (
+      isRecurrenceProjection
+      ||
       inBulkSelection
       || event.pointerType !== 'touch'
       || event.isPrimary === false
@@ -5087,6 +5288,10 @@ function TaskRow({
             'button, a, input, textarea, select, [role="button"], [data-task-editor-region]',
           )
         ) return;
+        if (isRecurrenceProjection) {
+          if (recurrenceProjectionReady) setRepeatOpen(true);
+          return;
+        }
         onSelect(event);
       }}
       onKeyDown={(event: ReactKeyboardEvent<HTMLElement>) => {
@@ -5116,6 +5321,9 @@ function TaskRow({
         if (event.key === 'Enter') {
           event.preventDefault();
           if (bulkSelection) bulkSelection.onKeyboardToggle();
+          else if (isRecurrenceProjection) {
+            if (recurrenceProjectionReady) setRepeatOpen(true);
+          }
           else onActivate();
         }
       }}
@@ -5174,7 +5382,7 @@ function TaskRow({
         <TASK_ICONS.MultiSelect className="h-5 w-5" />
       </span>
       <div
-        className={`relative z-[1] flex h-11 touch-pan-y items-center gap-2 overflow-hidden bg-inherit pl-1 pr-1.5 ${
+        className={`relative z-[1] flex h-11 touch-pan-y items-center gap-2 overflow-hidden pl-1 pr-1.5 ${
           touchSwipeActive ? '' : 'transition-transform duration-200 ease-out'
         }`}
         data-task-row-header
@@ -5209,6 +5417,14 @@ function TaskRow({
               <TASK_ICONS.Selection className="h-5 w-5" aria-hidden="true" />
             )}
           </button>
+        ) : isRecurrenceProjection ? (
+          <span
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground"
+            aria-label="Repeating Schedule"
+            data-task-recurrence-projection-control
+          >
+            <TASK_ICONS.Recurrence className="h-5 w-5" aria-hidden="true" />
+          </span>
         ) : (
           <button
             type="button"
@@ -5271,6 +5487,10 @@ function TaskRow({
               event.preventDefault();
               return;
             }
+            if (isRecurrenceProjection) {
+              if (recurrenceProjectionReady) setRepeatOpen(true);
+              return;
+            }
             onSelect(event);
           }}
           onKeyDown={(event) => {
@@ -5281,7 +5501,7 @@ function TaskRow({
               return;
             }
           }}
-          aria-expanded={bulkSelection ? undefined : selected}
+          aria-expanded={bulkSelection || isRecurrenceProjection ? undefined : selected}
           aria-label={visibleTitle ? undefined : 'New Task'}
           aria-pressed={bulkSelection ? bulkSelection.selected : undefined}
           aria-keyshortcuts={bulkSelection
@@ -5319,7 +5539,7 @@ function TaskRow({
             || (reminder && (task.start_date || task.today_section))
           ) ? (
             <span
-              className="mt-0.5 flex min-w-0 items-center gap-x-2.5 overflow-hidden whitespace-nowrap text-xs font-normal leading-4 text-muted-foreground"
+              className="mt-px flex min-w-0 items-center gap-x-2.5 overflow-hidden whitespace-nowrap text-xs font-normal leading-4 text-muted-foreground"
               data-task-row-metadata
             >
               {areaLabel ? (
@@ -5450,6 +5670,15 @@ function TaskRow({
                   onClearTaskFocus();
                 }}
               >
+            {isRecurrenceProjection ? (
+              <DropdownMenuItem
+                disabled={!recurrenceProjectionReady}
+                onSelect={() => setRepeatOpen(true)}
+              >
+                Edit Repeat
+              </DropdownMenuItem>
+            ) : (
+              <>
             <DropdownMenuItem
               disabled={task.actionability === 'actionable'}
               onSelect={() => void run(() => onUpdate({ actionability: 'actionable' }))}
@@ -5484,12 +5713,11 @@ function TaskRow({
             }}>
               Start...
             </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={task.recurrence_definition_id !== null}
-              onSelect={() => setRepeatOpen(true)}
-            >
-              Repeat...
-            </DropdownMenuItem>
+            {task.recurrence_definition_id === null ? (
+              <DropdownMenuItem onSelect={() => setRepeatOpen(true)}>
+                Repeat...
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuSeparator />
             {terminalState ? (
               <DropdownMenuItem
@@ -5505,12 +5733,14 @@ function TaskRow({
                 Delete
               </DropdownMenuItem>
             )}
+              </>
+            )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         ) : null}
       </div>
-      {editorMounted && !bulkSelection ? (
+      {editorMounted && !bulkSelection && !isRecurrenceProjection ? (
         <div
           ref={editorRegionRef}
           data-bathos-form-scope="true"
@@ -5563,7 +5793,7 @@ function TaskRow({
           </div>
         </div>
       ) : null}
-      {!bulkSelection ? <TaskMoveDialog
+      {!bulkSelection && !isRecurrenceProjection ? <TaskMoveDialog
         open={moveOpen}
         task={task}
         hierarchy={hierarchy}
@@ -5573,7 +5803,7 @@ function TaskRow({
         onCloseAutoFocus={onClearTaskFocus}
         onMove={(patch) => runMovementAction(() => onUpdate(patch))}
       /> : null}
-      {!bulkSelection ? <TaskDoDialog
+      {!bulkSelection && !isRecurrenceProjection ? <TaskDoDialog
         open={doOpen}
         task={task}
         actions={movementPlanningActions}
@@ -5582,7 +5812,7 @@ function TaskRow({
         }}
         onCloseAutoFocus={onClearTaskFocus}
       /> : null}
-      {!bulkSelection ? <TaskStartDialog
+      {!bulkSelection && !isRecurrenceProjection ? <TaskStartDialog
         open={startOpen}
         onOpenChange={setStartOpen}
         onCloseAutoFocus={onClearTaskFocus}
@@ -5599,12 +5829,15 @@ function TaskRow({
         onReminderChange={applyStartReminder}
         onClear={clearStart}
       /> : null}
-      {!bulkSelection ? (
+      {!bulkSelection && (!isRecurrenceProjection || recurrenceProjectionReady) ? (
         <TaskRepeatDialog
-          task={task}
+          task={isRecurrenceProjection ? null : task}
           planningDate={planningDate}
           open={repeatOpen}
           onOpenChange={setRepeatOpen}
+          definition={recurrenceProjection?.definition}
+          revision={recurrenceProjection?.revision}
+          onEdit={recurrenceProjection?.onEdit}
         />
       ) : null}
       </div>
@@ -5861,7 +6094,19 @@ function TaskEditor({
   };
 
   const primaryLinkHref = getTaskPrimaryLinkHref(primaryLink);
-  const primaryLinkOpensBrowserTab = getTaskPrimaryLinkKind(primaryLink) === 'link';
+  const primaryLinkIconKind = getTaskPrimaryLinkIconKind(primaryLink);
+  const PrimaryLinkIcon = primaryLinkIconKind === null
+    ? TASK_ICONS.PrimaryLink
+    : TASK_PRIMARY_LINK_ICONS[primaryLinkIconKind];
+  const primaryLinkLabel = primaryLinkIconKind === null
+    ? 'Primary Link'
+    : TASK_PRIMARY_LINK_LABELS[primaryLinkIconKind];
+  const primaryLinkOpensBrowserTab = taskPrimaryLinkOpensBrowserTab(primaryLink);
+  const ActionabilityIcon = actionability === 'waiting'
+    ? TASK_ICONS.Waiting
+    : actionability === 'rechecking'
+      ? TASK_ICONS.Rechecking
+      : TASK_ICONS.Ready;
 
   return (
     <div
@@ -5921,6 +6166,7 @@ function TaskEditor({
             value={primaryLink}
             aria-label="Primary Link"
             placeholder="Primary Link"
+            decoration={<PrimaryLinkIcon />}
             inputMode="url"
             onChange={(event) => {
               const nextPrimaryLink = event.target.value;
@@ -5935,22 +6181,26 @@ function TaskEditor({
           />
           {primaryLink.length > 0 ? (
             <Button
-              type="button"
+              asChild={primaryLinkHref !== null}
+              type={primaryLinkHref === null ? 'button' : undefined}
               variant="outline"
               size="icon"
               className="h-10 w-10 shrink-0 border-[hsl(var(--grid-sticky-line))] bg-background"
-              aria-label="Open Primary Link"
+              aria-label={`Open ${primaryLinkLabel}`}
               disabled={primaryLinkHref === null}
-              onClick={() => {
-                if (primaryLinkHref === null) return;
-                window.open(
-                  primaryLinkHref,
-                  primaryLinkOpensBrowserTab ? '_blank' : '_self',
-                  'noopener,noreferrer',
-                );
-              }}
             >
-              <TASK_ICONS.PrimaryLink className="h-4 w-4" aria-hidden="true" />
+              {primaryLinkHref === null ? (
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <a
+                  href={primaryLinkHref}
+                  target={primaryLinkOpensBrowserTab ? '_blank' : undefined}
+                  rel={primaryLinkOpensBrowserTab ? 'noopener noreferrer' : undefined}
+                  title={primaryLink}
+                >
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                </a>
+              )}
             </Button>
           ) : null}
         </div>
@@ -6020,6 +6270,7 @@ function TaskEditor({
             }}
             placeholder="Deadline"
             aria-label="Deadline"
+            decoration={<TASK_ICONS.Deadline />}
             className="text-sm"
             todayDate={planningDate}
             clearable
@@ -6041,7 +6292,11 @@ function TaskEditor({
               }}
               disabled={hierarchy.loading}
             >
-              <SelectTrigger id={`task-organization-${task.id}`} aria-label="Area">
+              <SelectTrigger
+                id={`task-organization-${task.id}`}
+                aria-label="Area"
+                decoration={<TASK_ICONS.Area />}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent data-task-editor-owned-surface="true">
@@ -6062,7 +6317,11 @@ function TaskEditor({
               void persistImmediateTaskPatch({ actionability: nextActionability });
             }}
           >
-            <SelectTrigger id={`task-actionability-${task.id}`} aria-label="Actionability">
+            <SelectTrigger
+              id={`task-actionability-${task.id}`}
+              aria-label="Actionability"
+              decoration={<ActionabilityIcon />}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent data-task-editor-owned-surface="true">

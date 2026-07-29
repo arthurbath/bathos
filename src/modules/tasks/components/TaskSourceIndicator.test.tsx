@@ -37,7 +37,7 @@ describe('TaskSourceIndicator', () => {
       expect(link?.rel).toBe('noopener noreferrer');
       expect(link?.getAttribute('aria-label')).toBe('Open Primary Link for Read the brief');
       expect(link?.title).toBe('https://example.test/brief');
-      expect(link?.querySelector('svg')).toHaveClass('lucide-external-link');
+      expect(link?.querySelector('svg')).toHaveClass('lucide-link-2');
     } finally {
       cleanup(root, container);
     }
@@ -75,6 +75,48 @@ describe('TaskSourceIndicator', () => {
       expect(link?.hasAttribute('target')).toBe(false);
       expect(link?.getAttribute('aria-label')).toBe('Open Mail Link for Follow up');
       expect(link?.querySelector('svg')).toHaveClass('lucide-mail');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('uses Jira iconography for Jira protocols and recognized Jira URLs', () => {
+    const jiraProtocol = renderIndicator(taskTodoFixture({
+      title: 'Open PF-766',
+      primary_link: 'jira://issue/PF-766',
+    }));
+    const jiraUrl = renderIndicator(taskTodoFixture({
+      title: 'Open PF-767',
+      primary_link: 'https://usgbc.atlassian.net/browse/PF-767',
+    }));
+
+    try {
+      const protocolLink = jiraProtocol.container.querySelector<HTMLAnchorElement>('a');
+      const webLink = jiraUrl.container.querySelector<HTMLAnchorElement>('a');
+      expect(protocolLink?.getAttribute('href')).toBe('jira://issue/PF-766');
+      expect(protocolLink?.hasAttribute('target')).toBe(false);
+      expect(protocolLink?.getAttribute('aria-label')).toBe('Open Jira Link for Open PF-766');
+      expect(protocolLink?.querySelector('svg')).toHaveClass('lucide-zap');
+      expect(webLink?.target).toBe('_blank');
+      expect(webLink?.querySelector('svg')).toHaveClass('lucide-zap');
+    } finally {
+      cleanup(jiraProtocol.root, jiraProtocol.container);
+      cleanup(jiraUrl.root, jiraUrl.container);
+    }
+  });
+
+  it('uses file-text iconography for Obsidian protocols', () => {
+    const { container, root } = renderIndicator(taskTodoFixture({
+      title: 'Open the note',
+      primary_link: 'obsidian://open?vault=Personal&file=Tasks',
+    }));
+
+    try {
+      const link = container.querySelector<HTMLAnchorElement>('a');
+      expect(link?.getAttribute('href')).toBe('obsidian://open?vault=Personal&file=Tasks');
+      expect(link?.hasAttribute('target')).toBe(false);
+      expect(link?.getAttribute('aria-label')).toBe('Open Obsidian Link for Open the note');
+      expect(link?.querySelector('svg')).toHaveClass('lucide-file-text');
     } finally {
       cleanup(root, container);
     }

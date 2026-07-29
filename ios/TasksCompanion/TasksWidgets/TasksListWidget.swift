@@ -46,7 +46,7 @@ struct TaskListWidgetProvider: AppIntentTimelineProvider {
         for configuration: TaskListSelectionIntent,
         in context: Context
     ) async -> Timeline<TaskListWidgetEntry> {
-        let entry = entry(for: configuration)
+        let entry = await refreshedEntry(for: configuration)
         return Timeline(
             entries: [entry],
             policy: .after(Date().addingTimeInterval(30 * 60))
@@ -60,6 +60,31 @@ struct TaskListWidgetProvider: AppIntentTimelineProvider {
             "Resolved widget list parameter \(configuredValue, privacy: .public) as \(listID.rawValue, privacy: .public)"
         )
         let snapshot = try? TaskWidgetStore()?.load()
+        return TaskListWidgetEntry(
+            date: Date(),
+            listID: listID,
+            snapshot: snapshot,
+            list: snapshot?.list(listID)
+        )
+    }
+
+    private func refreshedEntry(
+        for configuration: TaskListSelectionIntent
+    ) async -> TaskListWidgetEntry {
+        guard let credentialStore = TaskWidgetCredentialStore(),
+              let snapshotStore = TaskWidgetStore() else {
+            return entry(for: configuration)
+        }
+        let snapshot = await TaskWidgetBackgroundRefresher(
+            credentialStore: credentialStore,
+            snapshotStore: snapshotStore,
+            client: TaskWidgetSnapshotClient()
+        ).refresh()
+        let configuredValue = configuration.list ?? TaskWidgetListID.today.title
+        let listID = TaskWidgetListID.widgetConfigurationValue(configuration.list)
+        taskWidgetLogger.notice(
+            "Refreshed widget list parameter \(configuredValue, privacy: .public) as \(listID.rawValue, privacy: .public)"
+        )
         return TaskListWidgetEntry(
             date: Date(),
             listID: listID,
@@ -254,15 +279,8 @@ private struct TaskListWidgetView: View {
             if list.tasks.isEmpty {
                 emptyState("No tasks")
             } else {
-                let taskLimit = TaskWidgetPresentationPolicy.largeWidgetTaskLimit(
-                    totalCount: list.totalCount
-                )
-                let overflowCount = TaskWidgetPresentationPolicy.largeWidgetOverflowCount(
-                    totalCount: list.totalCount,
-                    availableTaskCount: list.tasks.count
-                )
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(list.tasks.prefix(taskLimit)) { task in
+                    ForEach(list.tasks.prefix(TaskWidgetPresentationPolicy.largeWidgetTaskLimit)) { task in
                         HStack(spacing: 9) {
                             if task.terminalState == nil {
                                 Toggle(
@@ -301,27 +319,11 @@ private struct TaskListWidgetView: View {
                                     primaryLinkLabel(primaryLink)
                                 }
                                 .buttonStyle(.plain)
-                                .accessibilityLabel(
-                                    primaryLink.kind == .mail
-                                        ? "Open Message"
-                                        : "Open Primary Link"
-                                )
+                                .accessibilityLabel(primaryLink.accessibilityLabel)
                             }
                         }
                         .frame(maxWidth: .infinity, minHeight: 29, alignment: .leading)
                         .contentShape(Rectangle())
-                    }
-                    if overflowCount > 0 {
-                        Text("+\(overflowCount) More")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 5)
-                    }
-                    if isStale {
-                        Label("Open Tasks to Refresh", systemImage: "arrow.clockwise")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 5)
                     }
                 }
             }
@@ -331,10 +333,7 @@ private struct TaskListWidgetView: View {
     }
 
     private func primaryLinkLabel(_ primaryLink: TaskWidgetPrimaryLink) -> some View {
-        Image(systemName: primaryLink.kind == .mail
-            ? "envelope"
-            : "arrow.up.right.square"
-        )
+        Image(systemName: primaryLink.systemImageName)
         .font(.system(size: 13))
         .foregroundStyle(.secondary)
         .frame(width: 28, height: 28)
@@ -352,13 +351,6 @@ private struct TaskListWidgetView: View {
         }
         .frame(maxWidth: .infinity, alignment: .top)
         .padding(.top, 8)
-    }
-
-    private var isStale: Bool {
-        guard let date = entry.snapshot?.generatedDate else {
-            return false
-        }
-        return entry.date.timeIntervalSince(date) > 4 * 60 * 60
     }
 
     private func taskSymbol(_ task: TaskWidgetTask) -> String {

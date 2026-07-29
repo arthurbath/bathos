@@ -55,7 +55,7 @@ the migration tool initially generated order keys outside the application's
 fractional-indexing language, and schema-13 replacement attempted to delete
 immutable recurrence rows outside the private restore context. The final
 envelope uses the same fractional key sequence as ordinary Tasks mutations.
-Migration `20260729060000_restore_recurrence_replace_deletions.sql` establishes
+Migration `20260729060532_restore_recurrence_replace_deletions.sql` establishes
 the private restore context before dependency-ordered deletion and keeps
 ordinary user deletion blocked. Local pgTAP passed 711 assertions after that
 correction.

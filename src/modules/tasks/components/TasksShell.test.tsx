@@ -290,6 +290,7 @@ function defaultTaskList() {
     tasks: [task],
     checklistTaskIds: new Set<string>(),
     loading: false,
+    fetching: false,
     error: null,
     createTask: vi.fn().mockImplementation(async (input: {
       title: string;
@@ -629,6 +630,7 @@ describe('TasksShell', () => {
       revisions: new Map(),
       occurrences: [],
       openOccurrenceDefinitionIds: new Set(),
+      openOccurrenceByDefinitionId: new Map(),
       evaluationFailures: new Set(),
       planningDate: '2026-07-20',
       mode: 'local',
@@ -636,6 +638,7 @@ describe('TasksShell', () => {
       error: null,
       save: vi.fn(),
       createFromTask: vi.fn(),
+      edit: vi.fn(),
       setStatus: vi.fn(),
       evaluate: vi.fn(),
     });
@@ -991,14 +994,16 @@ describe('TasksShell', () => {
         'bottom-[calc(5.25rem+env(safe-area-inset-bottom))]',
       );
       expect(newTaskButtons[0]).toHaveClass(
-        'h-14',
-        'w-14',
+        'h-12',
+        'w-12',
         'rounded-full',
-        'border-2',
+        'border',
         'border-success',
-        'bg-background',
-        'text-success',
-        'enabled:hover:!bg-accent',
+        'bg-success/85',
+        'text-success-foreground',
+        'backdrop-blur-sm',
+        'supports-[backdrop-filter]:bg-success/75',
+        'enabled:hover:bg-success/90',
       );
     } finally {
       cleanup(today.root, today.container);
@@ -1161,7 +1166,9 @@ describe('TasksShell', () => {
         await Promise.resolve();
       });
       expect(container.querySelector('[data-task-view-heading]')).toHaveTextContent('Today');
-      expect(document.getElementById('task-title-task-draft:new')).toBeTruthy();
+      await waitFor(() => {
+        expect(document.getElementById('task-title-task-draft:new')).toBeTruthy();
+      });
       expect(document.activeElement).toBe(document.getElementById('task-title-task-draft:new'));
     } finally {
       cleanup(root, container);
@@ -1432,6 +1439,96 @@ describe('TasksShell', () => {
     }
   });
 
+  it('navigates task views with Mac Control-number when Safari reserves Command-number', async () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      const upcomingEvent = new KeyboardEvent('keydown', {
+        key: '2', ctrlKey: true, bubbles: true, cancelable: true,
+      });
+      await act(async () => {
+        window.dispatchEvent(upcomingEvent);
+      });
+      expect(container.querySelector('a[aria-current="page"]')?.textContent).toContain('Upcoming');
+      expect(mockTaskList).toHaveBeenLastCalledWith(
+        'owner-a',
+        'upcoming',
+        null,
+        expect.any(Function),
+        expect.any(Function),
+      );
+      expect(upcomingEvent.defaultPrevented).toBe(true);
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        configurable: true,
+        value: originalPlatform,
+      });
+      cleanup(root, container);
+    }
+  });
+
+  it('conceals task rows until a destination planning query settles', async () => {
+    const upcomingTask = taskTodoFixture({
+      id: 'task-upcoming',
+      title: 'Settled upcoming task',
+      destination: 'anytime',
+      today_section: null,
+      start_date: '2026-07-21',
+    });
+    let upcomingFetching = true;
+    mockTaskList.mockImplementation((_ownerId, currentView) => ({
+      ...defaultTaskList(),
+      tasks: currentView === 'upcoming' ? [upcomingTask] : [task],
+      fetching: currentView === 'upcoming' && upcomingFetching,
+    }));
+    const { container, navigate, rerender, root } = renderShell();
+
+    try {
+      expect(container.textContent).toContain('Existing task');
+
+      navigate('/tasks/upcoming');
+      expect(
+        container.querySelector('[data-task-view-transition-loading="true"]'),
+      ).not.toBeNull();
+      expect(container.textContent).not.toContain('Existing task');
+      expect(container.textContent).not.toContain('Settled upcoming task');
+
+      upcomingFetching = false;
+      act(() => rerender());
+      await waitFor(() => {
+        expect(
+          container.querySelector('[data-task-view-transition-loading="true"]'),
+        ).toBeNull();
+      });
+      expect(container.textContent).toContain('Settled upcoming task');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('keeps current-view rows visible during a same-view query refresh', () => {
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      fetching: true,
+    });
+    const { container, root } = renderShell();
+
+    try {
+      expect(container.textContent).toContain('Existing task');
+      expect(
+        container.querySelector('[data-task-view-transition-loading="true"]'),
+      ).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('opens Quick Find by typing without exposing a visible search control', async () => {
     const mailTask = {
       ...task,
@@ -1544,7 +1641,9 @@ describe('TasksShell', () => {
         expect.any(Function),
         expect.any(Function),
       );
-      expect(container.querySelector('#task-title-task-future')).toBeTruthy();
+      await waitFor(() => {
+        expect(container.querySelector('#task-title-task-future')).toBeTruthy();
+      });
     } finally {
       cleanup(root, container);
     }
@@ -1672,7 +1771,8 @@ describe('TasksShell', () => {
       expect(dialog.textContent).toContain('⌃/');
       expect(dialog.textContent).toContain('Open Next');
       expect(dialog.textContent).toContain('Toggle Done');
-      expect(dialog.textContent).toContain('⌘1');
+      expect(dialog.textContent).not.toContain('⌘1');
+      expect(dialog.textContent).toContain('⌃1');
       expect(dialog.textContent).toContain('⌃6');
       expect(dialog.textContent).toContain('Clear Start');
       expect(dialog.textContent).toContain('Set Start to Someday');
@@ -5031,8 +5131,8 @@ describe('TasksShell', () => {
         return control!;
       });
       const primaryLink = container.querySelector<HTMLInputElement>('#task-primary-link-task-a')!;
-      const openPrimaryLink = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Open Primary Link"]',
+      const openPrimaryLink = container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Open Primary Link"]',
       )!;
       const actionability = container.querySelector<HTMLButtonElement>('#task-actionability-task-a')!;
       const organization = container.querySelector<HTMLButtonElement>('#task-organization-task-a')!;
@@ -5061,7 +5161,12 @@ describe('TasksShell', () => {
       expect(editorTitle).toHaveAttribute('placeholder', 'Summary');
       expect(primaryLink).toHaveAttribute('aria-label', 'Primary Link');
       expect(primaryLink).toHaveAttribute('placeholder', 'Primary Link');
+      expect(primaryLink.closest('[data-decorated-control]')?.querySelector(
+        '[data-control-decoration] svg',
+      )).toHaveClass('lucide-link-2');
       expect(deadline).toHaveTextContent('Deadline');
+      expect(start.querySelector('[data-control-decoration] svg')).toBeTruthy();
+      expect(deadline.querySelector('[data-control-decoration] svg')).toHaveClass('lucide-flag');
       expect(notes).toHaveClass(
         'border-[hsl(var(--grid-sticky-line))]',
         'focus:border-ring',
@@ -5069,6 +5174,10 @@ describe('TasksShell', () => {
       );
       expect(actionability).toHaveAttribute('role', 'combobox');
       expect(organization).toHaveAttribute('role', 'combobox');
+      expect(actionability.querySelector('[data-control-decoration] svg'))
+        .toHaveClass('lucide-arrow-big-right-dash');
+      expect(organization.querySelector('[data-control-decoration] svg'))
+        .toHaveClass('lucide-layers');
       expect(actionability).toHaveClass('border-[hsl(var(--grid-sticky-line))]');
       expect(organization).toHaveClass('border-[hsl(var(--grid-sticky-line))]');
       expect(Array.from(editor.querySelectorAll<HTMLElement>([
@@ -5694,13 +5803,13 @@ describe('TasksShell', () => {
         'pl-1',
         'pr-1.5',
       );
-      expect(rowHeader).not.toHaveClass('px-1.5');
+      expect(rowHeader).not.toHaveClass('px-1.5', 'bg-inherit');
       expect(metadata).toHaveClass(
         'gap-x-2.5',
         'leading-4',
         'overflow-hidden',
         'whitespace-nowrap',
-        'mt-0.5',
+        'mt-px',
       );
       expect(row).toHaveClass(
         'overflow-hidden',
@@ -5734,6 +5843,7 @@ describe('TasksShell', () => {
       await act(async () => titleButton.click());
       expect(row).toHaveClass('rounded-md', 'bg-foreground/[0.05]');
       expect(row).not.toHaveClass('bg-info/20');
+      expect(rowHeader).not.toHaveClass('bg-inherit');
       expect(row?.querySelector('[data-task-editor-region]')).not.toBeNull();
       const organization = container.querySelector<HTMLButtonElement>(
         '#task-organization-task-a',
@@ -5809,7 +5919,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('orders optional task-row metadata and omits Start from collapsed summaries', () => {
+  it('orders optional task-row metadata while omitting redundant Anytime Area labels and Start', () => {
     const completeTask = taskTodoFixture({
       ...task,
       id: 'task-complete-metadata',
@@ -5879,7 +5989,6 @@ describe('TasksShell', () => {
           item.getAttribute('data-task-metadata-kind')
         )),
       ).toEqual([
-        'area',
         'horizon',
         'reminder',
         'actionability',
@@ -5887,10 +5996,9 @@ describe('TasksShell', () => {
         'notes',
         'checklist',
       ]);
-      expect(completeMetadata).toHaveTextContent('Home');
       expect(
         completeMetadata?.querySelector('[data-task-metadata-kind="area"]'),
-      ).not.toHaveClass('text-info');
+      ).toBeNull();
       expect(
         completeMetadata?.querySelector('[data-task-metadata-kind="horizon"]'),
       ).toHaveClass('text-task-horizon-next');
@@ -5917,29 +6025,46 @@ describe('TasksShell', () => {
         completeMetadata?.querySelector('[data-task-metadata-kind="checklist"]'),
       ).toHaveAccessibleName('Checklist');
 
-      expect(
-        Array.from(partialMetadata?.children ?? [], (item) => (
-          item.getAttribute('data-task-metadata-kind')
-        )),
-      ).toEqual(['area']);
-      expect(partialMetadata).toHaveTextContent('Home');
-      expect(
-        partialMetadata?.querySelector('[data-task-metadata-kind="notes"]'),
-      ).toBeNull();
-      expect(
-        partialMetadata?.querySelector('[data-task-metadata-kind="checklist"]'),
-      ).toBeNull();
+      expect(partialMetadata).toBeNull();
 
       expect(container.querySelector('[aria-label^="Starts "]')).toBeNull();
       expect(container.querySelector('[data-task-row-metadata] svg.lucide-play')).toBeNull();
       expect(completeMetadata).not.toHaveTextContent('In 2 days');
-      expect(partialMetadata).not.toHaveTextContent('In 3 days');
     } finally {
       cleanup(root, container);
     }
   });
 
-  it('uses Today and singular signed offsets in mobile Deadline copy while preserving desktop and input wording', async () => {
+  it('preserves Area metadata on task views that do not use Area buckets', () => {
+    const areaTask = taskTodoFixture({
+      ...task,
+      id: 'task-area-metadata',
+      title: 'Area metadata',
+      area_id: 'area-home',
+    });
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [areaTask],
+    });
+    mockTaskHierarchy.mockReturnValue({
+      areas: [taskAreaFixture({ id: 'area-home', title: 'Home' })],
+      loading: false,
+      error: null,
+    });
+    const { container, root } = renderShell('/tasks/today');
+
+    try {
+      const areaMetadata = container.querySelector(
+        '[data-task-id="task-area-metadata"] [data-task-metadata-kind="area"]',
+      );
+      expect(areaMetadata).toHaveTextContent('Home');
+      expect(areaMetadata).not.toHaveClass('text-info');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('uses signed nearby offsets and short distant dates in mobile Deadline copy while preserving full wording', async () => {
     const overdueTask = taskTodoFixture({
       ...task,
       id: 'task-overdue',
@@ -5964,9 +6089,31 @@ describe('TasksShell', () => {
       today_section: null,
       deadline: '2026-07-21',
     });
+    const distantOverdueTask = taskTodoFixture({
+      ...task,
+      id: 'task-distant-overdue',
+      title: 'Distant overdue task',
+      start_date: null,
+      today_section: null,
+      deadline: '2026-07-10',
+    });
+    const distantFutureTask = taskTodoFixture({
+      ...task,
+      id: 'task-distant-future',
+      title: 'Distant future task',
+      start_date: null,
+      today_section: null,
+      deadline: '2026-07-30',
+    });
     mockTaskList.mockReturnValue({
       ...defaultTaskList(),
-      tasks: [overdueTask, dueTodayTask, futureTask],
+      tasks: [
+        overdueTask,
+        dueTodayTask,
+        futureTask,
+        distantOverdueTask,
+        distantFutureTask,
+      ],
     });
     const { container, root } = renderShell('/tasks/anytime');
 
@@ -5980,6 +6127,14 @@ describe('TasksShell', () => {
         .toHaveTextContent('Today');
       expect(container.querySelector('[aria-label="Deadline Tomorrow"] [data-task-deadline-compact]'))
         .toHaveTextContent('1 day');
+      expect(container.querySelector('[aria-label="Deadline Jul 10"] [data-task-deadline-compact]'))
+        .toHaveTextContent('Jul 10');
+      expect(container.querySelector('[aria-label="Deadline Jul 10"] [data-task-deadline-full]'))
+        .toHaveTextContent('Jul 10');
+      expect(container.querySelector('[aria-label="Deadline Jul 30"] [data-task-deadline-compact]'))
+        .toHaveTextContent('Jul 30');
+      expect(container.querySelector('[aria-label="Deadline Jul 30"] [data-task-deadline-full]'))
+        .toHaveTextContent('Jul 30');
       expect(container.querySelector('[aria-label="Deadline Today"]'))
         .not.toHaveAttribute('data-task-metadata-chip');
       expect(container.querySelector('[aria-label="Deadline Today"]')).not.toHaveClass(
@@ -6426,6 +6581,12 @@ describe('TasksShell', () => {
         expect(field).toHaveClass('min-w-0');
       });
       expect(temporalGrid?.querySelectorAll('svg.lucide-calendar')).toHaveLength(2);
+      expect(container.querySelector('#task-start-task-a [data-control-decoration] svg'))
+        .toBeTruthy();
+      expect(container.querySelector('#task-deadline-task-a [data-control-decoration] svg'))
+        .toHaveClass('lucide-flag');
+      expect(container.querySelector('#task-actionability-task-a [data-control-decoration] svg'))
+        .toHaveClass('lucide-arrow-big-right-dash');
       expect(container.querySelector('button[aria-label="Clear Deadline"]')).toBeNull();
       expect(container.querySelector('#task-start-task-a')).toHaveClass(
         'enabled:hover:bg-background',
@@ -6552,6 +6713,239 @@ describe('TasksShell', () => {
     }
   });
 
+  it('offers only remaining whole hours from the grouped Reminder control for Today', async () => {
+    const user = userEvent.setup();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-20T20:54:00.000Z'));
+    const todayTask = taskTodoFixture({
+      ...task,
+      start_date: '2026-07-20',
+      today_section: 'next',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [todayTask] });
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), dueItems: [],
+      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: null, save: vi.fn(), cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
+      const group = time.closest<HTMLElement>('[data-slot="input-group"]');
+      const hourButton = group?.querySelector<HTMLButtonElement>(
+        '[data-task-reminder-hour-trigger]',
+      );
+      expect(group).toBeTruthy();
+      expect(hourButton).toBeEnabled();
+      expect(hourButton?.querySelector('svg')).toHaveClass('lucide-alarm-clock');
+
+      await user.click(hourButton!);
+      await waitFor(() => {
+        expect(document.querySelector('[data-task-reminder-hour-menu]')).toBeTruthy();
+      });
+      expect(Array.from(document.querySelectorAll<HTMLElement>('[role="menuitemradio"]'))
+        .map((item) => item.textContent?.trim())).toEqual([
+        '2:00 pm',
+        '3:00 pm',
+        '4:00 pm',
+        '5:00 pm',
+        '6:00 pm',
+        '7:00 pm',
+        '8:00 pm',
+        '9:00 pm',
+        '10:00 pm',
+        '11:00 pm',
+      ]);
+      expect(document.querySelector('[data-task-reminder-hour-menu]'))
+        .toHaveClass('overflow-y-auto');
+      expect(document.querySelector('[data-task-start-picker]')).toBeTruthy();
+    } finally {
+      cleanup(root, container);
+      vi.useRealTimers();
+    }
+  });
+
+  it('disables the whole-hour action after 11 pm Today without disabling typed Reminder', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-21T06:00:00.000Z'));
+    const todayTask = taskTodoFixture({
+      ...task,
+      start_date: '2026-07-20',
+      today_section: 'next',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [todayTask] });
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), dueItems: [],
+      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: null, save: vi.fn(), cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      expect(document.querySelector<HTMLInputElement>('#task-start-reminder-task-a'))
+        .toBeEnabled();
+      expect(document.querySelector<HTMLButtonElement>('[data-task-reminder-hour-trigger]'))
+        .toBeDisabled();
+    } finally {
+      cleanup(root, container);
+      vi.useRealTimers();
+    }
+  });
+
+  it('selects a canonical reminder hour without closing Start', async () => {
+    const user = userEvent.setup();
+    const saveReminder = vi.fn().mockResolvedValue(undefined);
+    const futureTask = taskTodoFixture({
+      ...task,
+      start_date: '2026-07-24',
+      today_section: null,
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [futureTask] });
+    mockTaskReminders.mockReturnValue({
+      reminders: [], byRootId: new Map(), dueItems: [],
+      mode: 'connected', planningTimeZone: 'America/Los_Angeles', loading: false,
+      error: null, save: saveReminder, cancel: vi.fn(), acknowledge: vi.fn(), claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      await user.click(
+        document.querySelector<HTMLButtonElement>('[data-task-reminder-hour-trigger]')!,
+      );
+      const twoPm = await waitFor(() => {
+        const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitemradio"]'))
+          .find((candidate) => candidate.textContent?.trim() === '2:00 pm');
+        expect(item).toBeTruthy();
+        return item!;
+      });
+      await user.click(twoPm);
+
+      expect(saveReminder).toHaveBeenCalledWith(expect.objectContaining({
+        rootType: 'todo',
+        rootId: 'task-a',
+        localTime: '14:00',
+      }));
+      expect(document.querySelector<HTMLInputElement>('#task-start-reminder-task-a'))
+        .toHaveValue('2:00 pm');
+      expect(document.querySelector('[data-task-reminder-hour-menu]')).toBeNull();
+      expect(document.querySelector('[data-task-start-picker]')).toBeTruthy();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('moves from the end of Reminder to its hour action and keeps nested menu keys local', async () => {
+    const user = userEvent.setup();
+    const futureTask = taskTodoFixture({
+      ...task,
+      start_date: '2026-07-24',
+      today_section: null,
+    });
+    const activeReminder = taskReminderFixture({
+      root_type: 'todo',
+      task_id: 'task-a',
+      local_time: '09:00:00',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [futureTask] });
+    mockTaskReminders.mockReturnValue({
+      reminders: [activeReminder],
+      byRootId: new Map([['task-a', activeReminder]]),
+      dueItems: [],
+      mode: 'connected',
+      planningTimeZone: 'America/Los_Angeles',
+      loading: false,
+      error: null,
+      save: vi.fn(),
+      cancel: vi.fn(),
+      acknowledge: vi.fn(),
+      claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
+      const hourButton = document.querySelector<HTMLButtonElement>(
+        '[data-task-reminder-hour-trigger]',
+      )!;
+
+      time.setSelectionRange(2, 2);
+      await act(async () => {
+        time.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      expect(document.activeElement).toBe(time);
+
+      time.setSelectionRange(time.value.length, time.value.length);
+      await act(async () => {
+        time.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      expect(document.activeElement).toBe(hourButton);
+
+      await user.keyboard('{Enter}');
+      await waitFor(() => {
+        expect(document.querySelector('[data-task-reminder-hour-menu]')).toBeTruthy();
+      });
+      expect(document.querySelector('[data-task-start-picker]')).toBeTruthy();
+
+      await user.keyboard('{Escape}');
+      await waitFor(() => {
+        expect(document.querySelector('[data-task-reminder-hour-menu]')).toBeNull();
+        expect(document.activeElement).toBe(hourButton);
+      });
+      expect(document.querySelector('[data-task-start-picker]')).toBeTruthy();
+
+      await act(async () => {
+        hourButton.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      expect(document.activeElement).toBe(time);
+      expect(time.selectionStart).toBe(time.value.length);
+      expect(time.selectionEnd).toBe(time.value.length);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('restores the committed reminder and reports malformed input as not allowed', async () => {
     const saveReminder = vi.fn().mockResolvedValue(undefined);
     const activeReminder = taskReminderFixture({
@@ -6667,7 +7061,7 @@ describe('TasksShell', () => {
 
       const enabledDays = Array.from(document.querySelectorAll<HTMLButtonElement>(
         'button[name="day"]:not(:disabled)',
-      )).filter((button) => !button.className.includes('day-outside'));
+      ));
       const finalDay = enabledDays.at(-1)!;
       await act(async () => {
         finalDay.focus();
@@ -7230,9 +7624,20 @@ describe('TasksShell', () => {
       const footer = document.querySelector('[data-task-start-footer]');
       const clear = footer?.querySelector<HTMLButtonElement>('[data-task-start-clear]');
       const someday = footer?.querySelector<HTMLButtonElement>('[data-task-start-someday]');
+      const reminderInput = document.querySelector<HTMLInputElement>(
+        '#task-start-reminder-task-a',
+      );
       expect(clear).toBeTruthy();
       expect(someday).toBeTruthy();
       expect(clear?.parentElement).toBe(someday?.parentElement);
+      expect(clear).toHaveClass('justify-center');
+      expect(someday).toHaveClass('justify-center');
+      expect(reminderInput).toHaveAttribute('placeholder', 'No Reminder');
+      expect(reminderInput).toHaveClass('w-full', 'pl-9');
+      expect(reminderInput?.closest('[data-decorated-control]')?.querySelector(
+        '[data-control-decoration] svg',
+      )).toHaveClass('lucide-bell');
+      expect(document.querySelector(`label[for="${reminderInput?.id}"]`)).toBeNull();
 
       await act(async () => {
         clear?.focus();
@@ -7572,7 +7977,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('shows outstanding after-completion recurrence definitions below dated Upcoming work', () => {
+  it('shows outstanding after-completion recurrence definitions below dated Upcoming work', async () => {
     const definition = taskRecurrenceDefinitionFixture({
       id: 'recurrence-waiting',
       name: 'Water Plants',
@@ -7590,6 +7995,18 @@ describe('TasksShell', () => {
       ]]),
       occurrences: [],
       openOccurrenceDefinitionIds: new Set([definition.id]),
+      openOccurrenceByDefinitionId: new Map([[
+        definition.id,
+        {
+          recurrence_id: definition.id,
+          root_id: '53a4b5c1-3a4e-4fab-a5bf-4c1b114fc690',
+          scheduled_date: '2026-07-20',
+          destination: 'anytime',
+          today_section: 'inbox',
+          start_date: null,
+          deadline: null,
+        },
+      ]]),
       evaluationFailures: new Set(),
       planningDate: '2026-07-20',
       mode: 'connected',
@@ -7597,10 +8014,11 @@ describe('TasksShell', () => {
       error: null,
       save: vi.fn(),
       createFromTask: vi.fn(),
+      edit: vi.fn(),
       setStatus: vi.fn(),
       evaluate: vi.fn(),
     });
-    const { container, root } = renderShell('/tasks/upcoming');
+    const { container, locations, root } = renderShell('/tasks/upcoming');
 
     try {
       const waiting = container.querySelector<HTMLElement>(
@@ -7611,8 +8029,100 @@ describe('TasksShell', () => {
       expect(waiting).toHaveTextContent('Water Plants');
       expect(waiting).not.toHaveAttribute('draggable');
       expect(container.textContent).not.toContain('No upcoming tasks');
+
+      await act(async () => {
+        const actions = container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Actions for Water Plants"]',
+        );
+        actions?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+        actions?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      const goToInstance = Array.from(
+        document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+      ).find((item) => item.textContent?.trim() === 'Go to Instance');
+      expect(goToInstance).toBeTruthy();
+      expect(document.body).toHaveTextContent('Edit Repeat');
+
+      await act(async () => {
+        goToInstance?.click();
+        await Promise.resolve();
+      });
+      expect(locations).toContain(
+        '/tasks/today?native_task=53a4b5c1-3a4e-4fab-a5bf-4c1b114fc690',
+      );
     } finally {
       cleanup(root, container);
+    }
+  });
+
+  it('presents Upcoming recurrence projections as editable schedules instead of tasks', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    const definition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-projection',
+      name: 'Quarterly Review',
+    });
+    const revision = taskRecurrenceRevisionFixture({
+      recurrence_id: definition.id,
+      rule_mode: 'calendar',
+      frequency: 'monthly',
+      start_date: '2026-08-01',
+      rule_config: { monthly_kind: 'day_of_month', month_day: 1 },
+    });
+    const projection = taskTodoFixture({
+      id: 'task-recurrence-projection',
+      title: definition.name,
+      start_date: '2026-08-01',
+      recurrence_definition_id: definition.id,
+      recurrence_revision: revision.revision,
+      recurrence_occurrence_id: 'occurrence-projection',
+      recurrence_logical_key: 'calendar:2026-08-01',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [projection] });
+    mockTaskRecurrences.mockReturnValue({
+      definitions: [definition],
+      revisions: new Map([[definition.id, revision]]),
+      occurrences: [],
+      openOccurrenceDefinitionIds: new Set(),
+      openOccurrenceByDefinitionId: new Map(),
+      evaluationFailures: new Set(),
+      planningDate: '2026-07-20',
+      mode: 'connected',
+      loading: false,
+      error: null,
+      save: vi.fn(),
+      createFromTask: vi.fn(),
+      edit: vi.fn().mockResolvedValue({
+        outcome: 'accepted',
+        definition,
+        revision,
+      }),
+      setStatus: vi.fn(),
+      evaluate: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      const row = container.querySelector<HTMLElement>(
+        '[data-task-row-id="task-recurrence-projection"]',
+      )!;
+      expect(row.querySelector('[data-task-recurrence-projection-control]')).toBeTruthy();
+      expect(row.querySelector('[data-task-completion-control]')).toBeNull();
+      expect(row.querySelector('[data-task-drag-handle]')).toBeNull();
+
+      await act(async () => {
+        row.querySelector<HTMLButtonElement>('[data-task-title-control]')?.click();
+        await Promise.resolve();
+      });
+      expect(document.querySelector('[role="dialog"]')).toHaveTextContent('Edit Repeat');
+      expect(row.querySelector('[data-task-editor-region]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+      vi.unstubAllGlobals();
     }
   });
 
@@ -9066,27 +9576,71 @@ describe('TasksShell', () => {
       tasks: [taskTodoFixture({ ...task, primary_link: 'https://example.test' })],
     };
     mockTaskList.mockReturnValue(taskList);
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     const { container, root } = renderShell();
     try {
       await act(async () => {
         container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
       });
       const input = container.querySelector<HTMLInputElement>('#task-primary-link-task-a')!;
-      const openLink = container.querySelector<HTMLButtonElement>('[aria-label="Open Primary Link"]')!;
+      const openLink = container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Open Primary Link"]',
+      )!;
       expect(input).toHaveAttribute('type', 'url');
       expect(input).toHaveClass('border-[hsl(var(--grid-sticky-line))]');
       expect(container.querySelector('[aria-label="Clear Primary Link"]')).toBeNull();
-      await act(async () => {
-        openLink.click();
-      });
-      expect(open).toHaveBeenCalledWith(
-        'https://example.test',
-        '_blank',
-        'noopener,noreferrer',
-      );
+      expect(openLink).toHaveAttribute('href', 'https://example.test');
+      expect(openLink).toHaveAttribute('target', '_blank');
+      expect(openLink).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(openLink.querySelector('svg')).toHaveClass('lucide-external-link');
     } finally {
-      open.mockRestore();
+      cleanup(root, container);
+    }
+  });
+
+  it('uses protocol identity inside Primary Link while keeping External Link on its action', async () => {
+    const taskList = {
+      ...defaultTaskList(),
+      tasks: [taskTodoFixture({
+        ...task,
+        primary_link: 'https://usgbc.atlassian.net/browse/PF-766',
+      })],
+    };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      const jiraLink = container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Open Jira Link"]',
+      )!;
+      expect(jiraLink).toHaveAttribute(
+        'href',
+        'https://usgbc.atlassian.net/browse/PF-766',
+      );
+      expect(jiraLink).toHaveAttribute('target', '_blank');
+      expect(jiraLink.querySelector('svg')).toHaveClass('lucide-external-link');
+
+      const input = container.querySelector<HTMLInputElement>('#task-primary-link-task-a')!;
+      expect(input.closest('[data-decorated-control]')?.querySelector(
+        '[data-control-decoration] svg',
+      )).toHaveClass('lucide-zap');
+      await act(async () => {
+        setInputValue(input, 'obsidian://open?vault=Personal&file=Tasks');
+      });
+      const obsidianLink = container.querySelector<HTMLAnchorElement>(
+        'a[aria-label="Open Obsidian Link"]',
+      )!;
+      expect(obsidianLink).toHaveAttribute(
+        'href',
+        'obsidian://open?vault=Personal&file=Tasks',
+      );
+      expect(obsidianLink).not.toHaveAttribute('target');
+      expect(obsidianLink.querySelector('svg')).toHaveClass('lucide-external-link');
+      expect(input.closest('[data-decorated-control]')?.querySelector(
+        '[data-control-decoration] svg',
+      )).toHaveClass('lucide-file-text');
+    } finally {
       cleanup(root, container);
     }
   });

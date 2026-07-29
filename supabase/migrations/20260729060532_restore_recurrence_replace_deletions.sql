@@ -1,4 +1,5 @@
 -- Keep schema-13 replacement restore compatible with immutable derived rows.
+-- Canonicalized to the production migration ledger version.
 
 CREATE OR REPLACE FUNCTION tasks_private.reject_template_immutable_write()
 RETURNS trigger

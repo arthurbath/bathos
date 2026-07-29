@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { CalendarIcon, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { ControlDecoration } from '@/components/ui/control-decoration';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { focusAdjacentFormControl } from '@/platform/formInteractions';
@@ -36,6 +37,8 @@ interface DatePickerFieldProps extends Omit<React.ButtonHTMLAttributes<HTMLButto
   todayDate?: string;
   clearable?: boolean;
   clearLabel?: string;
+  decoration?: React.ReactNode;
+  decorationClassName?: string;
 }
 
 export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFieldProps>(({
@@ -49,6 +52,8 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   todayDate,
   clearable = false,
   clearLabel = 'Clear',
+  decoration,
+  decorationClassName,
   className,
   disabled,
   ...props
@@ -101,7 +106,12 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
             onValueChange('');
           }}
         >
-          <span className="truncate">
+          {decoration ? (
+            <ControlDecoration className={decorationClassName}>
+              {decoration}
+            </ControlDecoration>
+          ) : null}
+          <span className={cn('min-w-0 flex-1 truncate', decoration && 'ml-2')}>
             {selectedDate ? displayValue ?? format(selectedDate, displayFormat) : placeholder}
           </span>
           <CalendarIcon className="ml-auto h-4 w-4 shrink-0 text-foreground opacity-50" />
