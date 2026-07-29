@@ -21,5 +21,7 @@
 - [x] 3.6 Replace the rejected custom-scheme URL representation with an OpenIntent plus single-use private App Group handoff, and harden warm in-page routing against top-level JSON string crashes
 - [x] 3.7 Verify the physical Control Center control launches one focused Today Inbox draft
 - [x] 3.8 Keep Summary actively focused on capture launch and show the visible empty-row `New Task` placeholder
-- [ ] 3.9 Publish the matching web release and physically verify keyboard presentation and placeholder replacement
-- [ ] 3.10 Synchronize and archive the OpenSpec change, commit, push, and prove repository synchronization
+- [x] 3.9 Add the bounded native Summary-focus handshake and expose checklist creation in the new-task editor
+- [x] 3.10 Run focused and full web/native validation, rebuild the signed companion, and install it on the user's iPhone
+- [ ] 3.11 Publish the matching web release and physically verify keyboard presentation, checklist creation, and placeholder replacement
+- [ ] 3.12 Synchronize and archive the OpenSpec change, commit, push, and prove repository synchronization

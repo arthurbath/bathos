@@ -7,6 +7,18 @@ import WidgetKit
 final class TasksBrowserModel: NSObject, ObservableObject {
     typealias InPageNavigator = (WKWebView, URL) -> Void
 
+    static let newTaskSummaryFocusMessageType = "focus-new-task-summary"
+    static let newTaskSummaryInputIdentifier = "task-title-task-draft:new"
+    static let newTaskSummaryFocusJavaScript = """
+    (() => {
+      const input = document.getElementById("task-title-task-draft:new");
+      if (!(input instanceof HTMLInputElement)) return false;
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(input.value.length, input.value.length);
+      return document.activeElement === input;
+    })();
+    """
+
     private static let logger = Logger(
         subsystem: "garden.bath.tasks",
         category: "WidgetBridge"
@@ -153,6 +165,21 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         """)
     }
 
+    static func focusNewTaskSummary(in webView: WKWebView) {
+        webView.becomeFirstResponder()
+        webView.evaluateJavaScript(newTaskSummaryFocusJavaScript) { result, error in
+            if let error {
+                recordBridgeDiagnostic(
+                    "Summary focus failed: \(String(describing: error))"
+                )
+                return
+            }
+            recordBridgeDiagnostic(
+                "Summary focus completed: \((result as? Bool) == true)"
+            )
+        }
+    }
+
     func acceptBridgeMessage(_ message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame else {
             Self.recordBridgeDiagnostic("Rejected: non-main frame")
@@ -177,6 +204,15 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         guard let envelope = try? JSONDecoder().decode(TaskBridgeEnvelope.self, from: data),
               envelope.schemaVersion == TaskWidgetSnapshot.schemaVersion else {
             Self.recordBridgeDiagnostic("Rejected: invalid envelope")
+            return
+        }
+        if envelope.type == Self.newTaskSummaryFocusMessageType {
+            guard let webView else {
+                Self.recordBridgeDiagnostic("Rejected: web view unavailable for Summary focus")
+                return
+            }
+            Self.focusNewTaskSummary(in: webView)
+            Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
             return
         }
         guard let store = TaskWidgetStore() else {

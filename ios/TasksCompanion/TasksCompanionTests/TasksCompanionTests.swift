@@ -630,6 +630,28 @@ final class TasksCompanionTests: XCTestCase {
     }
 
     @MainActor
+    func testNewTaskSummaryFocusTargetsOnlyTheKnownDraftInput() {
+        XCTAssertEqual(
+            TasksBrowserModel.newTaskSummaryFocusMessageType,
+            "focus-new-task-summary"
+        )
+        XCTAssertEqual(
+            TasksBrowserModel.newTaskSummaryInputIdentifier,
+            "task-title-task-draft:new"
+        )
+        XCTAssertTrue(
+            TasksBrowserModel.newTaskSummaryFocusJavaScript.contains(
+                #"getElementById("task-title-task-draft:new")"#
+            )
+        )
+        XCTAssertTrue(
+            TasksBrowserModel.newTaskSummaryFocusJavaScript.contains(
+                "input.focus({ preventScroll: true })"
+            )
+        )
+    }
+
+    @MainActor
     func testCancelledReplacementNavigationDoesNotStartRecovery() {
         let model = TasksBrowserModel(
             coldStartRecoveryDelayNanoseconds: 60_000_000_000

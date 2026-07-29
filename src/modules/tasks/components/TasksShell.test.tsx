@@ -783,6 +783,7 @@ describe('TasksShell', () => {
       expect(input).toHaveValue('');
       expect(document.activeElement).toBe(input);
       expect(container.querySelector('[aria-label="Add Primary Link"]')).toBeTruthy();
+      expect(container.querySelector('button[aria-label="Add Checklist"]')).toBeTruthy();
       expect(document.getElementById('task-primary-link-task-draft:new')).toBeNull();
       const draftRow = container.querySelector('[data-task-row-id="task-draft:new"]')!;
       const existingRow = container.querySelector('[data-task-row-id="task-a"]')!;
@@ -802,6 +803,51 @@ describe('TasksShell', () => {
         atTop: true,
       }));
     } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('persists a titled creation draft before opening its checklist editor', async () => {
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+    const focusRequests: string[] = [];
+    const recordFocusRequest = (event: Event) => {
+      if (event instanceof CustomEvent && typeof event.detail?.taskId === 'string') {
+        focusRequests.push(event.detail.taskId);
+      }
+    };
+    document.addEventListener('bathos:task-checklist-focus', recordFocusRequest);
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'a',
+          altKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      const title = container.querySelector<HTMLInputElement>(
+        '#task-title-task-draft\\:new',
+      )!;
+      const addChecklist = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Add Checklist"]',
+      )!;
+
+      await act(async () => {
+        setInputValue(title, 'New task with checklist');
+        addChecklist.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      expect(taskList.createTask).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'New task with checklist',
+      }));
+      expect(focusRequests).toEqual(['task-draft:new']);
+    } finally {
+      document.removeEventListener('bathos:task-checklist-focus', recordFocusRequest);
       cleanup(root, container);
     }
   });

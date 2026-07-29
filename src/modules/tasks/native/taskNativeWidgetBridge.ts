@@ -85,6 +85,11 @@ export type TaskNativeWidgetCredentialMessage = {
   expiresAt: string;
 };
 
+export type TaskNativeNewTaskSummaryFocusMessage = {
+  type: 'focus-new-task-summary';
+  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
+};
+
 type BuildTaskNativeWidgetSnapshotInput = {
   ownerId: string;
   planningDate: string;
@@ -202,6 +207,18 @@ export function publishTaskNativeWidgetCredential(
     schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
     ...message,
   } satisfies TaskNativeWidgetCredentialMessage);
+  return true;
+}
+
+export function requestTaskNativeNewTaskSummaryFocus(
+  target: Window = window,
+): boolean {
+  const handler = getTasksNativeMessageHandler(target);
+  if (!handler || getTasksNativeInstallationId(target) === null) return false;
+  handler.postMessage({
+    type: 'focus-new-task-summary',
+    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
+  } satisfies TaskNativeNewTaskSummaryFocusMessage);
   return true;
 }
 

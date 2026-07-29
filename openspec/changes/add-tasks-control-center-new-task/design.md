@@ -57,11 +57,19 @@ Removing the signal before invoking creation prevents a render, reload, back nav
 
 Warm native launches will reuse the loaded Tasks document through the existing in-page navigator. That navigator will encode the relative destination with Swift's JSON encoder before interpolating it into JavaScript. Foundation's JSON serialization API rejects a top-level string unless fragment handling is explicitly enabled and can terminate the app with an Objective-C exception, so it is not a safe string-literal encoder for this boundary.
 
-### Keep capture focus and empty-draft presentation local
+### Complete capture focus through a bounded native handshake
 
-The existing Summary input remains the authoritative editor. A new Today Inbox draft requests native autofocus and retains the explicit cursor-at-end focus behavior so the standard iOS keyboard can appear as soon as WebKit presents the editor. This uses only public HTML and WebKit focus behavior. BathOS does not use private WebKit keyboard APIs, so iOS remains the final authority over software-keyboard presentation.
+The existing Summary input remains the authoritative editor. A new Today Inbox draft first applies ordinary DOM focus and cursor-at-end behavior. Once that exact input exists, the web module sends a fixed `focus-new-task-summary` message through the existing trusted native bridge. The companion makes its persistent WebKit view first responder and evaluates one constant script that focuses only `task-title-task-draft:new`.
+
+This closes a WebKit embedding gap discovered on the physical device: DOM focus could expose only the input accessory controls without presenting the software keyboard. The handshake contains no user data, selector, route, task identifier, or arbitrary script and still uses only public WebKit APIs. Private keyboard APIs were rejected.
 
 While Summary edits are waiting inside the existing autosave debounce, the task row mirrors the editor's local display value. An empty value renders `New Task` in subdued italic text, and the first typed character replaces it immediately without introducing another persistence path or changing autosave cadence.
+
+### Bootstrap a checklist through the ordinary task editor
+
+A creation draft exposes the same Add Checklist control used by an existing task. Because the database requires a nonblank Summary before a task and its checklist rows can exist, invoking the control flushes the existing autosave queue. If Summary is valid, the normal task-creation path supplies the persisted identifier and the existing checklist editor opens. If Summary is still empty, focus remains on Summary and no placeholder task is written.
+
+A separate client-only checklist draft model was rejected because it would duplicate checklist editing, ordering, undo, and persistence logic and could diverge from the existing editor.
 
 ## Risks / Trade-offs
 
@@ -73,6 +81,7 @@ While Summary edits are waiting inside the existing autosave debounce, the task 
 - **A warm control launch could crash while encoding the in-page destination** -> Use a top-level-string-safe JSON encoder and exercise the real new-task route through the production navigator in native tests.
 - **The web shell may require authentication or network recovery before it can create** -> Preserve the query through existing authentication redirects and let the installed offline shell handle creation when available.
 - **The native app and public web bundle could implement different halves of the handoff** -> Publish the matching web release before physical acceptance so the production web shell recognizes the native signal.
-- **iOS may decline a programmatic software-keyboard request** -> Use the public autofocus and explicit focus contracts, keep the text cursor in Summary, and verify keyboard presentation on the physical device without relying on private WebKit behavior.
+- **WebKit DOM focus may expose only the input accessory strip** -> Complete focus through a fixed native bridge message, make the WebKit view first responder, and evaluate a constant Summary-focus script through the embedding client.
+- **A blank draft has no identifier for checklist rows** -> Show the ordinary Add Checklist control, persist only after Summary is valid, and then reuse the existing checklist editor.
 - **A custom Lucide asset may render inconsistently in Control Center** -> Use Apple's adaptive `plus.square` symbol as the native expression of the requested icon concept.
 - **An existing unsaved draft may already be open** -> Focus it instead of silently destroying its pending metadata or creating a second draft.

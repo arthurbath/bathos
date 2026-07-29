@@ -7,6 +7,7 @@ import {
   hasNativeNewTaskSignal,
   publishTaskNativeWidgetSnapshot,
   publishTaskNativeWidgetCredential,
+  requestTaskNativeNewTaskSummaryFocus,
   removeNativeNewTaskSignal,
   removeNativeTaskDeepLink,
   resetTaskNativeWidgetPublisherForTests,
@@ -287,6 +288,18 @@ describe('taskNativeWidgetBridge', () => {
       schemaVersion: 2,
       ...message,
     })]);
+  });
+
+  it('requests native Summary focus only from the current companion bridge', () => {
+    const messages: unknown[] = [];
+
+    expect(requestTaskNativeNewTaskSummaryFocus({} as Window)).toBe(false);
+    expect(requestTaskNativeNewTaskSummaryFocus(bridgeWindow(messages, 1))).toBe(false);
+    expect(requestTaskNativeNewTaskSummaryFocus(bridgeWindow(messages))).toBe(true);
+    expect(messages).toEqual([{
+      type: 'focus-new-task-summary',
+      schemaVersion: 2,
+    }]);
   });
 
   it('accepts only UUID native-task links and removes just that parameter', () => {

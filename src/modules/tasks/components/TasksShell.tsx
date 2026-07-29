@@ -121,6 +121,7 @@ import {
   hasNativeNewTaskSignal,
   removeNativeNewTaskSignal,
   removeNativeTaskDeepLink,
+  requestTaskNativeNewTaskSummaryFocus,
 } from '@/modules/tasks/native/taskNativeWidgetBridge';
 import type {
   TaskReminder,
@@ -2581,6 +2582,21 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         checklistTaskId={persistedDraftTaskId ?? (
           task.id === NEW_TASK_DRAFT_ID ? null : task.id
         )}
+        onRequestChecklist={isCreationDraft ? async () => {
+          if (taskEditorAutosaveRef.current?.taskId === NEW_TASK_DRAFT_ID) {
+            await taskEditorAutosaveRef.current.flush();
+          }
+          if (creationDraftRef.current?.persistedTaskId === null) {
+            document.getElementById(`task-title-${NEW_TASK_DRAFT_ID}`)?.focus();
+            requestTaskNativeNewTaskSummaryFocus();
+            return;
+          }
+          window.setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('bathos:task-checklist-focus', {
+              detail: { taskId: NEW_TASK_DRAFT_ID },
+            }));
+          }, 0);
+        } : undefined}
         hierarchy={hierarchy}
         selected={selectedTaskId === task.id}
         focused={focusedTaskId === task.id}
@@ -4520,6 +4536,7 @@ function TaskRow({
   task,
   hasChecklistItems,
   checklistTaskId,
+  onRequestChecklist,
   hierarchy,
   selected,
   focused,
@@ -4558,6 +4575,7 @@ function TaskRow({
   task: TaskTodo;
   hasChecklistItems: boolean;
   checklistTaskId: string | null;
+  onRequestChecklist?: () => Promise<void>;
   hierarchy: TaskHierarchyModel;
   selected: boolean;
   focused: boolean;
@@ -5410,6 +5428,7 @@ function TaskRow({
             <TaskEditor
               task={task}
               checklistTaskId={checklistTaskId}
+              onRequestChecklist={onRequestChecklist}
               hierarchy={hierarchy}
               onSave={onUpdate}
               reminder={reminder}
@@ -5494,6 +5513,7 @@ function TaskRow({
 function TaskEditor({
   task,
   checklistTaskId,
+  onRequestChecklist,
   hierarchy,
   onSave,
   reminder,
@@ -5507,6 +5527,7 @@ function TaskEditor({
 }: {
   task: TaskTodo;
   checklistTaskId: string | null;
+  onRequestChecklist?: () => Promise<void>;
   hierarchy: TaskHierarchyModel;
   onSave: (patch: EditableTaskPatch) => Promise<void>;
   reminder: TaskReminder | null;
@@ -5569,6 +5590,9 @@ function TaskEditor({
     if (input === null) return;
     input.focus({ preventScroll: true });
     input.setSelectionRange(input.value.length, input.value.length);
+    if (task.id === NEW_TASK_DRAFT_ID) {
+      requestTaskNativeNewTaskSummaryFocus();
+    }
   }, [task.id]);
 
   useLayoutEffect(() => {
@@ -5833,6 +5857,16 @@ function TaskEditor({
           taskId={checklistTaskId}
           focusRequestTaskId={task.id}
         />
+      ) : onRequestChecklist ? (
+        <button
+          type="button"
+          aria-label="Add Checklist"
+          className="inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => void onRequestChecklist()}
+        >
+          <TASK_ICONS.TaskChecklist className="h-4 w-4" aria-hidden="true" />
+          Add Checklist
+        </button>
       ) : null}
       <div data-task-editor-temporal-grid className="grid grid-cols-2 gap-3">
         <div className="min-w-0">

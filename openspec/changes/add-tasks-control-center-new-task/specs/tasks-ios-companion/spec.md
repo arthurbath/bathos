@@ -11,6 +11,17 @@ The Tasks companion SHALL provide one nonconfigurable system control on supporte
 - **WHEN** the user activates the New Task control
 - **THEN** iOS opens the Tasks companion to the Today list, opens the existing new-task editor, assigns the draft to Inbox, focuses Summary with its text cursor ready for entry, and requests the standard iOS software keyboard
 
+#### Scenario: Present the native software keyboard
+- **WHEN** the new-task Summary input has mounted inside the native companion
+- **THEN** the web module requests focus through the bounded native bridge
+- **AND** the native companion makes its WebKit view first responder and focuses the known Summary input through public WebKit APIs
+
+#### Scenario: Add a checklist during creation
+- **WHEN** a new task draft is open
+- **THEN** the editor offers the same Add Checklist control as an existing task
+- **AND WHEN** the user invokes that control after entering a Summary
+- **THEN** Tasks persists the draft through the existing creation path and opens the ordinary checklist editor without closing the task
+
 #### Scenario: Identify an empty task draft
 - **WHEN** a task's Summary is empty
 - **THEN** its summary row displays `New Task` in subdued italic text
