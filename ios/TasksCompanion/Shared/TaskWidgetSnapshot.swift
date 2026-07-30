@@ -43,6 +43,13 @@ enum TaskWidgetListID: String, Codable, CaseIterable {
 
 enum TaskWidgetPresentationPolicy {
     static let largeWidgetTaskLimit = 10
+    static var largeWidgetTaskRowMinimumHeight: CGFloat {
+#if os(macOS)
+        28
+#else
+        29
+#endif
+    }
     static let lockScreenTaskLimit = 3
     static let lockScreenTaskRowMinimumHeight: CGFloat = 16
     static let lockScreenTaskRowSpacing: CGFloat = 4
@@ -57,6 +64,45 @@ enum TaskWidgetPresentationPolicy {
 
     static func largeWidgetNewTaskURL(for listID: TaskWidgetListID) -> URL {
         TaskNativeRoute.newTaskInList(listID).deepLinkURL
+    }
+
+    static func upcomingDateLabel(
+        upcomingDate: String?,
+        planningDate: String,
+        locale: Locale = .current
+    ) -> String? {
+        guard let upcomingDate,
+              let upcoming = parseCalendarDate(upcomingDate),
+              let planning = parseCalendarDate(planningDate) else {
+            return nil
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        guard let dayOffset = calendar.dateComponents(
+            [.day],
+            from: planning,
+            to: upcoming
+        ).day, dayOffset > 0 else {
+            return nil
+        }
+
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = locale
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = dayOffset < 7 ? "EEE" : "MMM d"
+        return formatter.string(from: upcoming)
+    }
+
+    private static func parseCalendarDate(_ value: String) -> Date? {
+        guard value.count == 10 else { return nil }
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.isLenient = false
+        return formatter.date(from: value)
     }
 }
 
@@ -171,6 +217,8 @@ struct TaskWidgetTask: Codable, Equatable, Identifiable {
     let todaySection: String?
     let actionability: String
     let terminalState: String?
+    let upcomingDate: String?
+    let isRecurrenceProjection: Bool?
     let primaryLink: TaskWidgetPrimaryLink?
 
     init(
@@ -180,6 +228,8 @@ struct TaskWidgetTask: Codable, Equatable, Identifiable {
         todaySection: String?,
         actionability: String,
         terminalState: String?,
+        upcomingDate: String? = nil,
+        isRecurrenceProjection: Bool? = nil,
         primaryLink: TaskWidgetPrimaryLink? = nil
     ) {
         self.id = id
@@ -188,6 +238,8 @@ struct TaskWidgetTask: Codable, Equatable, Identifiable {
         self.todaySection = todaySection
         self.actionability = actionability
         self.terminalState = terminalState
+        self.upcomingDate = upcomingDate
+        self.isRecurrenceProjection = isRecurrenceProjection
         self.primaryLink = primaryLink
     }
 }
@@ -248,10 +300,20 @@ struct TaskWidgetSnapshot: Codable, Equatable {
                 guard !task.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                       task.summary.count <= Self.maximumSummaryCharacters,
                       task.deadline.map(Self.isCalendarDate) ?? true,
+                      task.upcomingDate.map(Self.isCalendarDate) ?? true,
                       Self.allowedTodaySections.contains(task.todaySection),
                       Self.allowedActionability.contains(task.actionability),
                       Self.allowedTerminalStates.contains(task.terminalState),
-                      task.primaryLink?.url != nil || task.primaryLink == nil else {
+                      task.primaryLink?.url != nil || task.primaryLink == nil,
+                      task.isRecurrenceProjection != true
+                        || (
+                          list.id == .upcoming
+                          && task.upcomingDate != nil
+                          && task.terminalState == nil
+                        ),
+                      list.id == .upcoming || task.upcomingDate == nil,
+                      list.id == .upcoming
+                        || task.isRecurrenceProjection != true else {
                     throw TaskWidgetSnapshotError.invalidTask
                 }
             }
@@ -302,6 +364,8 @@ struct TaskWidgetSnapshot: Codable, Equatable {
                 todaySection: sourceTask.todaySection,
                 actionability: sourceTask.actionability,
                 terminalState: "completed",
+                upcomingDate: nil,
+                isRecurrenceProjection: false,
                 primaryLink: sourceTask.primaryLink
             )
             let withoutDuplicate = list.tasks.filter { $0.id != taskID }

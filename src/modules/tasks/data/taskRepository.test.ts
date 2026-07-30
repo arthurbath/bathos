@@ -41,6 +41,7 @@ function createHarness(queryResult: unknown | null) {
   const repository = new TaskRepository(database, {
     createId: () => ids.shift() ?? 'mutation-fallback',
     now: () => timestamp,
+    transientWriteRetryDelaysMs: [0, 0, 0],
   });
 
   return { database, repository, transaction };
@@ -489,6 +490,64 @@ describe('task repository', () => {
     expect(moved[1].order_key).toBe(secondTask.order_key);
     expect(transaction.execute).toHaveBeenCalledTimes(2);
     expect(transaction.getOptional).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a transient OPFS access-handle conflict while changing task planning', async () => {
+    const { database, repository, transaction } = createHarness(existingTask);
+    vi.mocked(database.writeTransaction).mockRejectedValueOnce(
+      new Error(
+        "Failed to execute 'createSyncAccessHandle' on 'FileSystemFileHandle': "
+        + 'Access Handles cannot be created if there is another open Access Handle '
+        + 'or Writable stream associated with the same file.',
+      ),
+    );
+
+    await expect(repository.moveTask('owner-a', 'task-a', {
+      destination: 'anytime',
+      todaySection: null,
+      startDate: null,
+    })).resolves.toMatchObject({
+      id: 'task-a',
+      today_section: null,
+      start_date: null,
+      revision: 2,
+    });
+
+    expect(database.writeTransaction).toHaveBeenCalledTimes(2);
+    expect(transaction.execute).toHaveBeenCalledOnce();
+  });
+
+  it('does not retry unrelated task-planning failures', async () => {
+    const { database, repository } = createHarness(existingTask);
+    vi.mocked(database.writeTransaction).mockRejectedValueOnce(
+      new Error('Planning write failed'),
+    );
+
+    await expect(repository.moveTask('owner-a', 'task-a', {
+      destination: 'anytime',
+      todaySection: null,
+      startDate: null,
+    })).rejects.toThrow('Planning write failed');
+
+    expect(database.writeTransaction).toHaveBeenCalledOnce();
+  });
+
+  it('stops retrying and preserves a persistent OPFS access-handle failure', async () => {
+    const conflict = new Error(
+      "Failed to execute 'createSyncAccessHandle' on 'FileSystemFileHandle': "
+      + 'Access Handles cannot be created if there is another open Access Handle '
+      + 'or Writable stream associated with the same file.',
+    );
+    const { database, repository } = createHarness(existingTask);
+    vi.mocked(database.writeTransaction).mockRejectedValue(conflict);
+
+    await expect(repository.moveTask('owner-a', 'task-a', {
+      destination: 'anytime',
+      todaySection: null,
+      startDate: null,
+    })).rejects.toBe(conflict);
+
+    expect(database.writeTransaction).toHaveBeenCalledTimes(4);
   });
 
   it('rejects an invalid bulk member before writing any selected task', async () => {

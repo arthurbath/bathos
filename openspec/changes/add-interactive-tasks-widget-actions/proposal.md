@@ -11,6 +11,8 @@ The Tasks widget already exposes the right native surface for quick work, but it
 - On successful completion, briefly acknowledge the action, remove the task from active widget lists, add it to Done when projected, reload widget timelines, and rely on ordinary synchronization for every other client.
 - Fail closed when completion cannot reach the server, retaining the task in the widget rather than showing an unconfirmed completion.
 - Increase the large-widget task capacity to ten rows, omit overflow messaging for additional tasks, and add a list-aware header capture action.
+- Add list-specific row context to the shared iOS and macOS widget: colored Today horizon symbols, compact Upcoming start chips, and a noninteractive recurrence symbol for Upcoming schedule projections.
+- Tighten only the macOS large-widget row spacing by one point so ten-row lists retain comfortable outer padding.
 - Preserve the exact 20-table PowerSync publication and keep Supabase sessions, refresh tokens, PowerSync credentials, notes, checklist text, and Mail source metadata out of the native cache.
 
 ## Capabilities
@@ -22,12 +24,14 @@ None.
 ### Modified Capabilities
 
 - `tasks-ios-companion`: Replace the read-only widget boundary with narrowly scoped projection reads, completion, and direct Primary Link actions while preserving the thin-host, cache, privacy, and deep-link contracts.
+- `tasks-macos-companion`: Ensure the shared Mac widget receives the same narrow completion credential even when its first authenticated issuance attempt is transiently unavailable.
 - `personal-tasks-module`: Accept widget completion as an ordinary idempotent lifecycle transition with authoritative history, recurrence, and cross-client synchronization.
 
 ## Impact
 
 - **Tasks web module:** Native projection schema, Primary Link normalization, credential provisioning, sign-out clearing, and bridge tests.
 - **iOS companion and widget:** Shared cache schema, secure credential storage, App Intent completion action, row layout, direct external links, timeline reloads, and signed project capabilities.
+- **macOS companion and widget:** Resilient credential provisioning for the shared interactive widget action without broadening its authority.
 - **Supabase:** One private credential table, narrow privileged functions, one Edge Function boundary, database tests, and generated types where applicable.
 - **PowerSync:** No new replicated table and no publication change. The approved set remains exactly 20 Tasks tables.
 - **Production:** A later controlled migration, Edge Function deployment, Lovable release, signed companion reinstall, and owner-scoped acceptance fixture will require explicit rollout evidence.

@@ -91,10 +91,20 @@ describe('taskNativeWidgetBridge', () => {
       'done',
     ]);
     expect(snapshot.lists.find(({ id }) => id === 'today')?.tasks).toEqual([
-      expect.objectContaining({ id: taskA, summary: 'Today Task' }),
+      expect.objectContaining({
+        id: taskA,
+        summary: 'Today Task',
+        todaySection: 'inbox',
+        upcomingDate: null,
+        isRecurrenceProjection: false,
+      }),
     ]);
     expect(snapshot.lists.find(({ id }) => id === 'upcoming')?.tasks).toEqual([
-      expect.objectContaining({ id: taskB }),
+      expect.objectContaining({
+        id: taskB,
+        upcomingDate: '2026-07-28',
+        isRecurrenceProjection: false,
+      }),
     ]);
     expect(snapshot.lists.find(({ id }) => id === 'someday')?.tasks).toEqual([
       expect.objectContaining({ id: taskC }),
@@ -103,6 +113,52 @@ describe('taskNativeWidgetBridge', () => {
     expect(snapshot.lists.find(({ id }) => id === 'today')?.tasks[0]?.primaryLink)
       .toEqual({ href: 'https://private.example', kind: 'link' });
     expect(JSON.stringify(snapshot)).not.toContain('Other Owner');
+  });
+
+  it('projects authoritative Upcoming dates and protects recurrence projections', () => {
+    const recurrenceId = '40000000-0000-4000-8000-000000000001';
+    const snapshot = buildTaskNativeWidgetSnapshot({
+      ownerId,
+      planningDate: '2026-07-27',
+      generatedAt: '2026-07-27T12:00:00.000Z',
+      quickFilter: 'all',
+      automaticListSorting: false,
+      areas: [],
+      tasks: [
+        taskTodoFixture({
+          id: taskA,
+          owner_id: ownerId,
+          title: 'Deadline-only Upcoming Task',
+          start_date: null,
+          deadline: '2026-08-01',
+          today_section: null,
+        }),
+        taskTodoFixture({
+          id: taskB,
+          owner_id: ownerId,
+          title: 'Repeating Schedule Projection',
+          start_date: '2026-08-31',
+          today_section: null,
+          recurrence_definition_id: recurrenceId,
+          recurrence_revision: 1,
+          recurrence_occurrence_id: '50000000-0000-4000-8000-000000000001',
+          recurrence_logical_key: 'calendar:2026-08-31',
+        }),
+      ],
+    });
+
+    expect(snapshot.lists.find(({ id }) => id === 'upcoming')?.tasks).toEqual([
+      expect.objectContaining({
+        id: taskA,
+        upcomingDate: '2026-08-01',
+        isRecurrenceProjection: false,
+      }),
+      expect.objectContaining({
+        id: taskB,
+        upcomingDate: '2026-08-31',
+        isRecurrenceProjection: true,
+      }),
+    ]);
   });
 
   it('normalizes only supported Primary Link protocols for native widget actions', () => {
@@ -262,6 +318,8 @@ describe('taskNativeWidgetBridge', () => {
     expect(clearTaskNativeWidgetCache(target)).toBe(true);
     expect(messages[0]).toMatchObject({ type: 'snapshot', schemaVersion: 1 });
     expect(JSON.stringify(messages[0])).not.toContain('primaryLink');
+    expect(JSON.stringify(messages[0])).not.toContain('upcomingDate');
+    expect(JSON.stringify(messages[0])).not.toContain('isRecurrenceProjection');
     expect(messages[1]).toEqual({ type: 'clear', schemaVersion: 1 });
   });
 

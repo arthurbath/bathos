@@ -60,11 +60,12 @@ export class TaskHierarchyOperationsRepository {
       }
       await assertRestorableStructuralRoot(transaction, input);
 
-      const requestedAt = this.now();
+      const requestedAt = input.context?.occurredAt ?? this.now();
       const operationId = this.createId();
       const context = {
         channel: input.context?.channel ?? 'web',
         actorType: input.context?.actorType ?? 'user',
+        operationId: input.context?.operationId ?? operationId,
       };
       const expectedRevisions = Object.fromEntries(
         candidates.map((candidate) => [candidate.id, candidate.revision]),
@@ -182,11 +183,12 @@ async function applyOptimisticOperation(
         `UPDATE ${tableFor(candidate.entity_type)}
          SET disposition = 'deleted', deleted_at = ?, deletion_root_id = ?,
            revision = revision + 1, client_mutation_id = ?,
-           last_mutation_channel = ?, last_actor_type = ?, updated_at = ?
+           last_mutation_channel = ?, last_actor_type = ?,
+           last_operation_id = ?, updated_at = ?
          WHERE id = ? AND owner_id = ?`,
         [
           occurredAt, input.rootId, createId(), context.channel, context.actorType,
-          occurredAt, candidate.id, input.ownerId,
+          context.operationId, occurredAt, candidate.id, input.ownerId,
         ],
       );
     }
@@ -219,12 +221,13 @@ async function restoreOptimistically(
           ${restorationColumns}
           disposition = 'present', deleted_at = NULL, deletion_root_id = NULL,
           revision = revision + 1, client_mutation_id = ?,
-          last_mutation_channel = ?, last_actor_type = ?, updated_at = ?
+          last_mutation_channel = ?, last_actor_type = ?,
+          last_operation_id = ?, updated_at = ?
          WHERE id = ? AND owner_id = ?`,
         [
           ...columns.map((column) => patch[column]),
-          createId(), context.channel, context.actorType, occurredAt,
-          candidate.id, input.ownerId,
+          createId(), context.channel, context.actorType, context.operationId,
+          occurredAt, candidate.id, input.ownerId,
         ],
       );
     }
@@ -300,6 +303,7 @@ function assertRequest(input: TaskHierarchyOperationRequest): void {
 type TaskOperationContext = {
   channel: NonNullable<TaskMutationContext['channel']>;
   actorType: NonNullable<TaskMutationContext['actorType']>;
+  operationId: string;
 };
 
 function createUuid(): string {

@@ -1,17 +1,29 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { waitFor } from '@testing-library/dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  serializeTaskChecklistClipboard,
+  TASK_CHECKLIST_CLIPBOARD_KIND,
+} from '@/modules/tasks/domain/taskChecklistClipboard';
 import { taskChecklistItemFixture } from '@/modules/tasks/testing/taskFixtures';
 import { TaskChecklistEditor } from './TaskChecklistEditor';
 
+const { mockToast } = vi.hoisted(() => ({ mockToast: vi.fn() }));
 const mockUseTaskChecklist = vi.fn();
+
+vi.mock('@/hooks/use-toast', () => ({
+  toast: mockToast,
+}));
 
 vi.mock('@/modules/tasks/hooks/useTaskChecklist', () => ({
   useTaskChecklist: (...args: unknown[]) => mockUseTaskChecklist(...args),
 }));
 
 const createItem = vi.fn();
+const createItems = vi.fn();
+const createItemCopies = vi.fn();
 const updateItem = vi.fn();
 const setCompleted = vi.fn();
 const deleteItem = vi.fn();
@@ -26,6 +38,8 @@ function checklistModel(items = [
     items,
     loading: false,
     createItem,
+    createItems,
+    createItemCopies,
     updateItem,
     setCompleted,
     deleteItem,
@@ -73,6 +87,34 @@ function setInput(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function pasteEvent(text: string, html = ''): ClipboardEvent {
+  const event = new Event('paste', {
+    bubbles: true,
+    cancelable: true,
+  }) as ClipboardEvent;
+  Object.defineProperty(event, 'clipboardData', {
+    configurable: true,
+    value: {
+      getData: vi.fn((type: string) => (type === 'text/html' ? html : text)),
+      types: html ? ['text/plain', 'text/html'] : ['text/plain'],
+    },
+  });
+  return event;
+}
+
+function clipboardWriteEvent(type: 'copy' | 'cut') {
+  const setData = vi.fn();
+  const event = new Event(type, {
+    bubbles: true,
+    cancelable: true,
+  }) as ClipboardEvent;
+  Object.defineProperty(event, 'clipboardData', {
+    configurable: true,
+    value: { setData },
+  });
+  return { event, setData };
+}
+
 function waitForAnimationFrames(count = 3): Promise<void> {
   return new Promise((resolve) => {
     const advance = (remaining: number) => {
@@ -90,6 +132,8 @@ describe('TaskChecklistEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     createItem.mockResolvedValue(taskChecklistItemFixture({ id: 'created-item' }));
+    createItems.mockResolvedValue([]);
+    createItemCopies.mockResolvedValue([]);
     updateItem.mockResolvedValue(taskChecklistItemFixture());
     setCompleted.mockResolvedValue(taskChecklistItemFixture({ completed: true }));
     deleteItem.mockResolvedValue(undefined);
@@ -223,6 +267,162 @@ describe('TaskChecklistEditor', () => {
       expect(draft.placeholder).toBe('Item');
       expect(document.activeElement).toBe(draft);
       expect(draft.selectionStart).toBe(0);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('pastes rich multiline text into a persisted item as adjacent checklist items', async () => {
+    const item = taskChecklistItemFixture({
+      id: 'item-existing',
+      title: 'Prefix selected suffix',
+    });
+    createItems.mockResolvedValue([
+      taskChecklistItemFixture({ id: 'item-middle', title: 'Middle' }),
+      taskChecklistItemFixture({ id: 'item-final', title: 'Last suffix' }),
+    ]);
+    mockUseTaskChecklist.mockReturnValue(checklistModel([item]));
+    const { container, root } = renderEditor();
+
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      input.setSelectionRange(7, 15);
+      const paste = pasteEvent(
+        'First\r\nMiddle\rLast',
+        '<p>First</p><p>Middle</p><p>Last</p>',
+      );
+
+      await act(async () => {
+        input.dispatchEvent(paste);
+        await Promise.resolve();
+      });
+
+      expect(paste.defaultPrevented).toBe(true);
+      expect(updateItem).toHaveBeenCalledWith(
+        item.id,
+        { title: 'Prefix First' },
+        {
+          occurredAt: expect.any(String),
+          operationId: expect.any(String),
+        },
+      );
+      expect(createItems).toHaveBeenCalledWith(
+        ['Middle', 'Last suffix'],
+        1,
+        {
+          occurredAt: expect.any(String),
+          operationId: expect.any(String),
+        },
+      );
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('pastes multiline text into a draft and focuses the final line at the pasted boundary', async () => {
+    mockUseTaskChecklist.mockReturnValue(checklistModel([]));
+    const created = [
+      taskChecklistItemFixture({ id: 'item-first', title: 'First' }),
+      taskChecklistItemFixture({ id: 'item-middle', title: 'Middle' }),
+    ];
+    createItems.mockResolvedValue(created);
+    const { container, root } = renderEditor();
+
+    try {
+      act(() => {
+        container.querySelector<HTMLButtonElement>(
+          '[data-task-checklist-disclosure]',
+        )?.click();
+      });
+      const draft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      setInput(draft, 'Prefix suffix');
+      draft.setSelectionRange(7, 7);
+      const paste = pasteEvent('First\nMiddle\nLast');
+
+      await act(async () => {
+        draft.dispatchEvent(paste);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(createItems).toHaveBeenCalled());
+      await act(async () => {
+        await Promise.resolve();
+      });
+      mockUseTaskChecklist.mockReturnValue(checklistModel(created));
+      await act(async () => {
+        root.render(
+          <TaskChecklistEditor ownerId="owner-a" taskId="task-a" />,
+        );
+        await waitForAnimationFrames();
+      });
+
+      const focusedDraft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      expect(paste.defaultPrevented).toBe(true);
+      expect(createItems).toHaveBeenCalledWith(
+        ['Prefix First', 'Middle'],
+        0,
+        { occurredAt: expect.any(String) },
+      );
+      expect(focusedDraft.value).toBe('Lastsuffix');
+      expect(document.activeElement).toBe(focusedDraft);
+      expect(focusedDraft.selectionStart).toBe(4);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('leaves a single-line checklist paste to the native input', () => {
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      const paste = pasteEvent(' one line');
+      input.dispatchEvent(paste);
+
+      expect(paste.defaultPrevented).toBe(false);
+      expect(createItems).not.toHaveBeenCalled();
+      expect(updateItem).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('keeps open and completed checklist boxes neutral without a green hover state', () => {
+    mockUseTaskChecklist.mockReturnValue(checklistModel([
+      taskChecklistItemFixture({
+        id: 'item-open',
+        title: 'Open Step',
+        completed: false,
+        order_key: 'a0',
+      }),
+      taskChecklistItemFixture({
+        id: 'item-completed',
+        title: 'Completed Step',
+        completed: true,
+        order_key: 'a1',
+      }),
+    ]));
+    const { container, root } = renderEditor();
+
+    try {
+      const openControl = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Complete Open Step"]',
+      );
+      const completedControl = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Reopen Completed Step"]',
+      );
+      expect(openControl).toHaveClass('text-muted-foreground');
+      expect(completedControl).toHaveClass('text-muted-foreground');
+      expect(openControl).not.toHaveClass('hover:text-success');
+      expect(completedControl).not.toHaveClass('hover:text-success');
+      expect(completedControl?.querySelector('svg.lucide-square-check'))
+        .not.toHaveClass('text-success');
     } finally {
       cleanup(root, container);
     }
@@ -1795,6 +1995,325 @@ describe('TaskChecklistEditor', () => {
       expect(rows[1].dataset.selected).toBeUndefined();
     } finally {
       platform.mockRestore();
+      cleanup(root, container);
+    }
+  });
+
+  it('copies selected checklist items in visual order with completion state', async () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    const items = [
+      taskChecklistItemFixture({
+        id: 'item-a',
+        title: 'First',
+        order_key: 'a0',
+        completed: 0 as unknown as boolean,
+      }),
+      taskChecklistItemFixture({
+        id: 'item-b',
+        title: 'Second',
+        order_key: 'a1',
+        completed: 1 as unknown as boolean,
+      }),
+      taskChecklistItemFixture({ id: 'item-c', title: 'Third', order_key: 'a2' }),
+    ];
+    mockUseTaskChecklist.mockReturnValue(checklistModel(items));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      act(() => inputs[0].focus());
+      const rows = container.querySelectorAll<HTMLElement>('[data-checklist-item-id]');
+      await act(async () => {
+        rows[1].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          metaKey: true,
+          button: 0,
+        }));
+      });
+      const { event, setData } = clipboardWriteEvent('copy');
+      await act(async () => {
+        window.dispatchEvent(event);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(setData).toHaveBeenCalled());
+
+      expect(JSON.parse(setData.mock.calls[0][1] as string)).toEqual({
+        kind: TASK_CHECKLIST_CLIPBOARD_KIND,
+        version: 1,
+        operation: 'copy',
+        items: [
+          { title: 'First', completed: false },
+          { title: 'Second', completed: true },
+        ],
+      });
+      expect(event.defaultPrevented).toBe(true);
+      expect(deleteItems).not.toHaveBeenCalled();
+      expect(rows[0].dataset.selected).toBe('true');
+      expect(rows[1].dataset.selected).toBe('true');
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Checklist Items Copied',
+        description: '2 checklist items copied.',
+      });
+    } finally {
+      platform.mockRestore();
+      cleanup(root, container);
+    }
+  });
+
+  it('cuts selected checklist items only after the clipboard write succeeds', async () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    const items = [
+      taskChecklistItemFixture({ id: 'item-a', title: 'First', order_key: 'a0' }),
+      taskChecklistItemFixture({ id: 'item-b', title: 'Second', order_key: 'a1' }),
+      taskChecklistItemFixture({ id: 'item-c', title: 'Third', order_key: 'a2' }),
+    ];
+    mockUseTaskChecklist.mockReturnValue(checklistModel(items));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      act(() => inputs[0].focus());
+      const rows = container.querySelectorAll<HTMLElement>('[data-checklist-item-id]');
+      await act(async () => {
+        rows[2].dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          metaKey: true,
+          button: 0,
+        }));
+      });
+      const { event, setData } = clipboardWriteEvent('cut');
+      await act(async () => {
+        window.dispatchEvent(event);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(deleteItems).toHaveBeenCalled());
+
+      expect(JSON.parse(setData.mock.calls[0][1] as string)).toMatchObject({
+        operation: 'cut',
+        items: [
+          { title: 'First', completed: false },
+          { title: 'Third', completed: false },
+        ],
+      });
+      expect(deleteItems).toHaveBeenCalledWith(['item-a', 'item-c']);
+      expect(rows[0].dataset.selected).toBeUndefined();
+      expect(rows[2].dataset.selected).toBeUndefined();
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Checklist Items Cut',
+        description: '2 checklist items cut.',
+      });
+    } finally {
+      platform.mockRestore();
+      cleanup(root, container);
+    }
+  });
+
+  it('keeps selected checklist items when a cut cannot write to the clipboard', async () => {
+    const platform = vi.spyOn(window.navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    const item = taskChecklistItemFixture({ id: 'item-a', title: 'First' });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([item]));
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      act(() => input.focus());
+      const row = container.querySelector<HTMLElement>('[data-checklist-item-id]')!;
+      await act(async () => {
+        row.dispatchEvent(new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          metaKey: true,
+          button: 0,
+        }));
+      });
+      const event = new Event('cut', {
+        bubbles: true,
+        cancelable: true,
+      }) as ClipboardEvent;
+      await act(async () => {
+        window.dispatchEvent(event);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Checklist Items Could Not Be Cut',
+        variant: 'destructive',
+      })));
+
+      expect(deleteItems).not.toHaveBeenCalled();
+      expect(row.dataset.selected).toBe('true');
+    } finally {
+      platform.mockRestore();
+      cleanup(root, container);
+    }
+  });
+
+  it('pastes copied checklist items after the focused saved item', async () => {
+    const modelItems = [
+      taskChecklistItemFixture({ id: 'item-a', title: 'First', order_key: 'a0' }),
+      taskChecklistItemFixture({ id: 'item-b', title: 'Second', order_key: 'a1' }),
+    ];
+    const created = [
+      taskChecklistItemFixture({ id: 'item-copy-a', title: 'Copied Open', order_key: 'a2' }),
+      taskChecklistItemFixture({
+        id: 'item-copy-b',
+        title: 'Copied Done',
+        completed: true,
+        order_key: 'a3',
+      }),
+    ];
+    createItemCopies.mockImplementation(async (
+      _items: unknown,
+      destinationIndex: number,
+    ) => {
+      modelItems.splice(destinationIndex, 0, ...created);
+      return created;
+    });
+    mockUseTaskChecklist.mockImplementation(() => checklistModel(modelItems));
+    const { container, root } = renderEditor();
+    try {
+      const inputs = container.querySelectorAll<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      );
+      const paste = pasteEvent(serializeTaskChecklistClipboard('copy', [
+        { title: 'Copied Open', completed: false },
+        { title: 'Copied Done', completed: true },
+      ]));
+      await act(async () => {
+        inputs[0].dispatchEvent(paste);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(createItemCopies).toHaveBeenCalled());
+      await act(async () => {
+        root.render(<TaskChecklistEditor ownerId="owner-a" taskId="task-a" />);
+        await waitForAnimationFrames();
+      });
+
+      expect(paste.defaultPrevented).toBe(true);
+      expect(createItemCopies).toHaveBeenCalledWith([
+        { title: 'Copied Open', completed: false },
+        { title: 'Copied Done', completed: true },
+      ], 1, { occurredAt: expect.any(String) });
+      expect(document.activeElement).toBe(
+        container.querySelector<HTMLInputElement>(
+          '[data-checklist-item-id="item-copy-b"] input',
+        ),
+      );
+      expect(mockToast).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('pastes copied checklist items at a focused draft and shifts the draft down', async () => {
+    const modelItems = [
+      taskChecklistItemFixture({ id: 'item-a', title: 'First', order_key: 'a0' }),
+    ];
+    const created = [
+      taskChecklistItemFixture({ id: 'item-copy-a', title: 'Copied Open', order_key: 'a1' }),
+      taskChecklistItemFixture({ id: 'item-copy-b', title: 'Copied Done', order_key: 'a2' }),
+    ];
+    createItemCopies.mockImplementation(async (
+      _items: unknown,
+      destinationIndex: number,
+    ) => {
+      modelItems.splice(destinationIndex, 0, ...created);
+      return created;
+    });
+    createItem.mockImplementation(async (title: string, destinationIndex: number) => {
+      const committedDraft = taskChecklistItemFixture({
+        id: 'item-draft',
+        title,
+        order_key: 'a3',
+      });
+      modelItems.splice(destinationIndex, 0, committedDraft);
+      return committedDraft;
+    });
+    mockUseTaskChecklist.mockImplementation(() => checklistModel(modelItems));
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      await act(async () => {
+        input.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+      const draft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      setInput(draft, 'Keep Draft');
+      const paste = pasteEvent(serializeTaskChecklistClipboard('cut', [
+        { title: 'Copied Open', completed: false },
+        { title: 'Copied Done', completed: true },
+      ]));
+      await act(async () => {
+        draft.dispatchEvent(paste);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(createItemCopies).toHaveBeenCalled());
+      await act(async () => {
+        root.render(<TaskChecklistEditor ownerId="owner-a" taskId="task-a" />);
+        await waitForAnimationFrames();
+      });
+
+      expect(createItemCopies).toHaveBeenCalledWith([
+        { title: 'Copied Open', completed: false },
+        { title: 'Copied Done', completed: true },
+      ], 1, { occurredAt: expect.any(String) });
+      const rows = container.querySelectorAll<HTMLElement>('[data-checklist-item-id]');
+      expect([...rows].map(({ dataset }) => dataset.checklistItemId)).toEqual([
+        'item-a',
+        'item-copy-a',
+        'item-copy-b',
+        'item-draft',
+      ]);
+      expect(container.querySelector<HTMLInputElement>(
+        '[data-checklist-item-id="item-draft"] input',
+      )).toHaveValue('Keep Draft');
+      expect(document.activeElement).toBe(
+        container.querySelector<HTMLInputElement>(
+          '[data-checklist-item-id="item-copy-b"] input',
+        ),
+      );
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('rejects a malformed internal checklist payload without changing the checklist', () => {
+    const { container, root } = renderEditor();
+    try {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      const paste = pasteEvent(JSON.stringify({
+        kind: TASK_CHECKLIST_CLIPBOARD_KIND,
+        version: 1,
+        operation: 'copy',
+        items: [{ title: '', completed: false }],
+      }));
+      input.dispatchEvent(paste);
+
+      expect(paste.defaultPrevented).toBe(true);
+      expect(createItemCopies).not.toHaveBeenCalled();
+      expect(createItems).not.toHaveBeenCalled();
+      expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Checklist Items Could Not Be Pasted',
+        variant: 'destructive',
+      }));
+    } finally {
       cleanup(root, container);
     }
   });

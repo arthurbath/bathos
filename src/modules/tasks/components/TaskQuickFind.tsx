@@ -1,28 +1,46 @@
-import { useDeferredValue, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
+import {
+  useDeferredValue,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+} from 'react';
 
-import { Button } from '@/components/ui/button';
-import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import {
   Dialog,
-  DialogBody,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+  DialogOverlay,
+  DialogPortal,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { useModalViewportStyle } from '@/components/ui/modal-viewport';
 import { shouldHandleWithBrowser } from '@/lib/navigation';
+import { cn } from '@/lib/utils';
+import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import {
   createTaskSearchDocuments,
   filterTaskSearchDocuments,
+  rankTaskSearchDocuments,
 } from '@/modules/tasks/domain/taskSearch';
 import { getTaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
 type QuickFindResult =
-  | { kind: 'todo'; id: string; title: string; detail: string; href: string; task: TaskTodo }
-  | { kind: 'area'; id: string; title: string; detail: string; href: string };
+  | {
+      kind: 'todo';
+      id: string;
+      title: string;
+      detail: string;
+      href: string;
+      task: TaskTodo;
+      activation: 'open' | 'focus-recurrence';
+    };
 
 function normalize(value: string): string {
   return value.trim().toLocaleLowerCase();
@@ -43,40 +61,29 @@ function createQuickFindResults(
 ): QuickFindResult[] {
   const normalizedQuery = normalize(query);
   if (!normalizedQuery) return [];
-  const taskResults: QuickFindResult[] = filterTaskSearchDocuments(
-    createTaskSearchDocuments(tasks, hierarchy),
+  const taskResults: QuickFindResult[] = rankTaskSearchDocuments(
+    filterTaskSearchDocuments(
+      createTaskSearchDocuments(tasks, hierarchy),
+      normalizedQuery,
+    ),
     normalizedQuery,
   )
-    .map(({ task, hierarchyLabel }) => ({
-      kind: 'todo',
-      id: task.id,
-      title: task.title,
-      detail: taskDetail(task, hierarchyLabel),
-      href: `${basePath}/${getTaskPlanningRoute(task, planningDate)}`,
-      task,
-    }));
-  const areaResults: QuickFindResult[] = hierarchy.areas
-    .filter(({ title }) => title.toLocaleLowerCase().includes(normalizedQuery))
-    .map((area) => ({
-      kind: 'area',
-      id: area.id,
-      title: area.title,
-      detail: 'Area',
-      href: `${basePath}/areas/${encodeURIComponent(area.id)}`,
-    }));
-  return [...taskResults, ...areaResults]
-    .sort((left, right) => {
-      const leftExact = left.title.toLocaleLowerCase() === normalizedQuery ? 0 : 1;
-      const rightExact = right.title.toLocaleLowerCase() === normalizedQuery ? 0 : 1;
-      return leftExact - rightExact || left.title.localeCompare(right.title) || left.id.localeCompare(right.id);
-    })
-    .slice(0, 3);
+    .map(({ task, hierarchyLabel }) => {
+      const route = getTaskPlanningRoute(task, planningDate);
+      const recurrenceProjection = task.recurrence_definition_id !== null
+        && route === 'upcoming';
+      return {
+        kind: 'todo',
+        id: task.id,
+        title: task.title,
+        detail: taskDetail(task, hierarchyLabel),
+        href: `${basePath}/${recurrenceProjection ? 'upcoming' : route}`,
+        task,
+        activation: recurrenceProjection ? 'focus-recurrence' : 'open',
+      };
+    });
+  return taskResults.slice(0, 3);
 }
-
-const resultIcons = {
-  todo: TASK_ICONS.Task,
-  area: TASK_ICONS.Area,
-} as const;
 
 export function TaskQuickFindDialog({
   open,
@@ -103,24 +110,87 @@ export function TaskQuickFindDialog({
   onOpenChange: (open: boolean) => void;
   onCloseAutoFocus: () => void;
   onNavigate: (path: string) => void;
-  onSelectTask: (task: TaskTodo, path: string) => void;
+  onSelectTask: (
+    task: TaskTodo,
+    path: string,
+    activation: 'open' | 'focus-recurrence',
+  ) => void;
 }) {
   const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listboxId = useId();
+  const viewportStyle = useModalViewportStyle();
   useEffect(() => {
-    if (open) setQuery(initialQuery);
+    if (!open) return;
+    setQuery(initialQuery);
+    setActiveIndex(0);
+    const frame = window.requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+      const input = inputRef.current;
+      if (input) input.setSelectionRange(input.value.length, input.value.length);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [initialQuery, open]);
   const deferredQuery = useDeferredValue(query);
   const results = useMemo(
     () => createQuickFindResults(deferredQuery, basePath, tasks, hierarchy, planningDate),
     [basePath, deferredQuery, hierarchy, planningDate, tasks],
   );
+  const resultIdentity = results.map(({ id, activation }) => `${id}:${activation}`).join('|');
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [deferredQuery, resultIdentity]);
   const continueHref = `${basePath}/search?q=${encodeURIComponent(query.trim())}`;
+  const optionCount = results.length + 1;
+  const activeOptionId = activeIndex < results.length
+    ? `${listboxId}-result-${activeIndex}`
+    : `${listboxId}-continue`;
+  const close = () => {
+    onOpenChange(false);
+    setQuery('');
+  };
 
   const activate = (event: MouseEvent<HTMLAnchorElement>, result: QuickFindResult) => {
     if (shouldHandleWithBrowser(event)) return;
     event.preventDefault();
-    if (result.kind === 'todo') onSelectTask(result.task, result.href);
-    else onNavigate(result.href);
+    onSelectTask(result.task, result.href, result.activation);
+  };
+
+  const activateIndex = (index: number) => {
+    const result = results[index];
+    if (result) {
+      onSelectTask(result.task, result.href, result.activation);
+      return;
+    }
+    if (normalize(query)) onNavigate(continueHref);
+  };
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      setActiveIndex((current) => (current + direction + optionCount) % optionCount);
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      activateIndex(activeIndex);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    }
+  };
+
+  const dismissFromOverlay = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
   };
 
   return (
@@ -128,60 +198,96 @@ export function TaskQuickFindDialog({
       onOpenChange(nextOpen);
       if (!nextOpen) setQuery('');
     }}>
-      <DialogContent
-        footerless
-        className="shadow-none sm:max-w-lg"
-        aria-describedby={undefined}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          onCloseAutoFocus();
-        }}
-      >
-        <DialogHeader><DialogTitle>Quick Find</DialogTitle></DialogHeader>
-        <DialogBody className="space-y-4 pt-4">
+      <DialogPortal>
+        <DialogOverlay
+          className="bg-transparent"
+          onPointerDown={dismissFromOverlay}
+          data-task-quick-find-dismiss-layer
+        />
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            onCloseAutoFocus();
+          }}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            inputRef.current?.focus({ preventScroll: true });
+          }}
+          onEscapeKeyDown={(event) => {
+            event.preventDefault();
+            close();
+          }}
+          className="fixed left-1/2 z-50 flex max-h-[calc(var(--bathos-modal-vv-height,100dvh)-2rem)] w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-2 overflow-hidden rounded-xl border border-border bg-popover p-2 focus:outline-none"
+          style={{
+            ...viewportStyle,
+            top: 'calc(var(--bathos-modal-vv-top, 0px) + (var(--bathos-modal-vv-height, 100dvh) / 2))',
+          }}
+          data-task-quick-find
+        >
+          <DialogPrimitive.Title className="sr-only">
+            Quick Find
+          </DialogPrimitive.Title>
           <div className="relative">
             <TASK_ICONS.Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
+              ref={inputRef}
               autoFocus
+              role="combobox"
+              aria-autocomplete="list"
+              aria-controls={listboxId}
+              aria-expanded="true"
+              aria-activedescendant={activeOptionId}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              aria-label="Find Tasks and Areas"
-              placeholder="Find Tasks and Areas"
-              className="pl-9"
+              onKeyDown={handleInputKeyDown}
+              aria-label="Find Tasks"
+              placeholder="Find Tasks"
+              className="h-11 pl-9"
             />
           </div>
-          {loading ? (
-            <div className="flex min-h-24 items-center justify-center"><LoadingSpinner /></div>
-          ) : error ? (
-            <p role="alert" className="py-6 text-center text-sm text-destructive">Tasks Could Not Be Searched</p>
-          ) : normalize(query) && results.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No matches</p>
-          ) : results.length > 0 ? (
-            <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-              {results.map((result) => {
-                const Icon = resultIcons[result.kind];
-                return (
-                  <a
-                    key={`${result.kind}:${result.id}`}
-                    href={result.href}
-                    onClick={(event) => activate(event, result)}
-                    className="flex h-16 items-center gap-3 overflow-hidden px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                    data-task-compact-row
-                  >
-                    <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-foreground">{result.title}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{result.detail}</span>
-                    </span>
-                  </a>
-                );
-              })}
-            </div>
-          ) : null}
-          <Button asChild variant="outline" className="w-full">
+          <div id={listboxId} role="listbox" aria-label="Quick Find Results" className="space-y-0.5">
+            {loading ? (
+              <div className="flex min-h-20 items-center justify-center"><LoadingSpinner /></div>
+            ) : error ? (
+              <p role="alert" className="px-3 py-4 text-center text-sm text-destructive">Tasks Could Not Be Searched</p>
+            ) : normalize(query) && results.length === 0 ? (
+              <p className="px-3 py-4 text-center text-sm text-muted-foreground">No matches</p>
+            ) : results.map((result, index) => (
+              <a
+                key={`${result.kind}:${result.id}`}
+                id={`${listboxId}-result-${index}`}
+                role="option"
+                aria-selected={activeIndex === index}
+                href={result.href}
+                onPointerMove={() => setActiveIndex(index)}
+                onClick={(event) => activate(event, result)}
+                className={cn(
+                  'flex min-h-12 items-center gap-2 overflow-hidden rounded-lg px-3 py-2 outline-none',
+                  activeIndex === index && 'bg-info/10',
+                )}
+                data-task-compact-row
+                data-task-quick-find-result-kind={result.activation}
+              >
+                {result.activation === 'focus-recurrence' ? (
+                  <TASK_ICONS.Recurrence
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm text-foreground">{result.title}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{result.detail}</span>
+                </span>
+              </a>
+            ))}
             <a
+              id={`${listboxId}-continue`}
+              role="option"
+              aria-selected={activeIndex === results.length}
               href={continueHref}
               aria-disabled={!normalize(query)}
+              onPointerMove={() => setActiveIndex(results.length)}
               onClick={(event) => {
                 if (!normalize(query)) {
                   event.preventDefault();
@@ -191,12 +297,18 @@ export function TaskQuickFindDialog({
                 event.preventDefault();
                 onNavigate(continueHref);
               }}
+              className={cn(
+                'flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-foreground outline-none',
+                activeIndex === results.length && 'bg-info/10',
+                !normalize(query) && 'pointer-events-none text-muted-foreground',
+              )}
             >
+              <TASK_ICONS.Search className="h-4 w-4 shrink-0" aria-hidden="true" />
               Continue Search
             </a>
-          </Button>
-        </DialogBody>
-      </DialogContent>
+          </div>
+        </DialogPrimitive.Content>
+      </DialogPortal>
     </Dialog>
   );
 }

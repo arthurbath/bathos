@@ -5,6 +5,7 @@ import type {
   CreateTaskInput,
   EditableTaskPatch,
   TaskBulkPatchInput,
+  TaskMutationContext,
   TaskPlanningMoveInput,
 } from '@/modules/tasks/data/taskRepository';
 import {
@@ -28,6 +29,10 @@ import type { TaskDestination, TaskTodo } from '@/modules/tasks/types/tasks';
 
 export type TaskListView = TaskDestination | 'today' | 'upcoming' | 'done';
 export type TodayTaskSection = 'inbox' | 'now' | 'next' | 'later';
+export type TaskMetadataMutation = {
+  before: TaskTodo;
+  after: TaskTodo;
+};
 type TaskListQueryRow = TaskTodo & {
   has_checklist_items?: number;
 };
@@ -67,6 +72,9 @@ export function useTaskList(
   reserveForwardMutation?: (
     source: TaskForwardMutationSource,
   ) => TaskForwardMutationReservation,
+  onMetadataMutation?: (
+    mutations: readonly TaskMetadataMutation[],
+  ) => void,
 ) {
   const { repository, planningTimeZone } = useTasksRuntime();
   const planningDate = useTaskPlanningDate(planningTimeZone);
@@ -239,9 +247,10 @@ export function useTaskList(
         } : {}),
       });
       setOptimisticTask(createdTask.id, createdTask);
+      onForwardMutation?.(createdTask);
       return createdTask;
     },
-    [allTasks, ownerId, repository, setOptimisticTask, view],
+    [allTasks, onForwardMutation, ownerId, repository, setOptimisticTask, view],
   );
   const updateTask = useCallback(
     async (taskId: string, patch: EditableTaskPatch) => {
@@ -269,6 +278,9 @@ export function useTaskList(
         const updatedTask = await repository.updateTask(ownerId, taskId, patch);
         reservation?.commit(updatedTask);
         onForwardMutation?.(updatedTask);
+        if (currentTask) {
+          onMetadataMutation?.([{ before: currentTask, after: updatedTask }]);
+        }
         setOptimisticTask(
           taskId,
           retainedTaskId === taskId || taskIsVisible(updatedTask, ownerId, view, planningDate)
@@ -285,6 +297,7 @@ export function useTaskList(
     [
       allTasks,
       onForwardMutation,
+      onMetadataMutation,
       ownerId,
       planningDate,
       repository,
@@ -299,6 +312,7 @@ export function useTaskList(
       taskId: string,
       transition: TaskStateTransition,
       reservedMutation?: TaskForwardMutationReservation,
+      context?: TaskMutationContext,
     ) => {
       const currentTask = allTasks.find((task) => task.id === taskId);
       const reservation = reservedMutation ?? (
@@ -313,7 +327,12 @@ export function useTaskList(
       }
 
       try {
-        const transitionedTask = await repository.transitionTask(ownerId, taskId, transition);
+        const transitionedTask = await repository.transitionTask(
+          ownerId,
+          taskId,
+          transition,
+          context,
+        );
         reservation?.commit(transitionedTask);
         onForwardMutation?.(transitionedTask);
         setOptimisticTask(
@@ -402,6 +421,9 @@ export function useTaskList(
         const movedTask = await repository.moveTask(ownerId, taskId, input);
         reservation?.commit(movedTask);
         onForwardMutation?.(movedTask);
+        if (currentTask) {
+          onMetadataMutation?.([{ before: currentTask, after: movedTask }]);
+        }
         setOptimisticTask(
           taskId,
           retainedTaskId === taskId || taskIsVisible(movedTask, ownerId, view, planningDate)
@@ -418,6 +440,7 @@ export function useTaskList(
     [
       allTasks,
       onForwardMutation,
+      onMetadataMutation,
       ownerId,
       planningDate,
       repository,
@@ -474,6 +497,12 @@ export function useTaskList(
         for (const [taskId, reservation] of reservations) {
           if (!movedTaskIds.has(taskId)) reservation?.cancel();
         }
+        const currentTaskById = new Map(currentTasks.map((task) => [task.id, task]));
+        const mutations = movedTasks.flatMap((after) => {
+          const before = currentTaskById.get(after.id);
+          return before ? [{ before, after }] : [];
+        });
+        if (mutations.length > 0) onMetadataMutation?.(mutations);
         return movedTasks;
       } catch (error) {
         for (const reservation of reservations.values()) reservation?.cancel();
@@ -484,6 +513,7 @@ export function useTaskList(
     [
       allTasks,
       onForwardMutation,
+      onMetadataMutation,
       ownerId,
       planningDate,
       repository,
@@ -520,6 +550,12 @@ export function useTaskList(
           taskIsVisible(updatedTask, ownerId, view, planningDate) ? updatedTask : null,
         );
       }
+      const currentTaskById = new Map(currentTasks.map((task) => [task.id, task]));
+      const mutations = updatedTasks.flatMap((after) => {
+        const before = currentTaskById.get(after.id);
+        return before ? [{ before, after }] : [];
+      });
+      if (mutations.length > 0) onMetadataMutation?.(mutations);
       return updatedTasks;
     } catch (error) {
       for (const reservation of reservations.values()) reservation?.cancel();
@@ -529,6 +565,7 @@ export function useTaskList(
   }, [
     allTasks,
     onForwardMutation,
+    onMetadataMutation,
     ownerId,
     planningDate,
     repository,

@@ -27,6 +27,8 @@ type CreateHierarchyInput = {
   orderKey?: string;
   entryChannel?: TaskEntryChannel;
   actorType?: TaskMutationContext['actorType'];
+  operationId?: string;
+  occurredAt?: string;
 };
 
 export type CreateTaskAreaInput = CreateHierarchyInput;
@@ -171,16 +173,19 @@ export class TaskHierarchyRepository {
 
   private createMetadata(input: CreateHierarchyInput) {
     assertOwner(input.ownerId);
-    const timestamp = this.now();
+    const timestamp = input.occurredAt ?? this.now();
     const entryChannel = input.entryChannel ?? 'web';
+    const id = this.createId();
+    const clientMutationId = this.createId();
     return {
-      id: this.createId(),
+      id,
       owner_id: input.ownerId,
       entry_channel: entryChannel,
       last_mutation_channel: entryChannel,
       last_actor_type: input.actorType ?? 'user' as const,
+      last_operation_id: input.operationId ?? clientMutationId,
       revision: 1,
-      client_mutation_id: this.createId(),
+      client_mutation_id: clientMutationId,
       created_at: timestamp,
       updated_at: timestamp,
     };
@@ -207,20 +212,23 @@ export class TaskHierarchyRepository {
       if (Object.keys(patch).length === 0) return current;
 
       const mutationContext = normalizeContext(context);
+      const clientMutationId = this.createId();
       const next = {
         ...current,
         ...patch,
         last_mutation_channel: mutationContext.channel,
         last_actor_type: mutationContext.actorType,
+        last_operation_id: mutationContext.operationId || clientMutationId,
         revision: current.revision + 1,
-        client_mutation_id: this.createId(),
-        updated_at: this.now(),
+        client_mutation_id: clientMutationId,
+        updated_at: context?.occurredAt ?? this.now(),
       } as T;
       await validate?.(next, transaction);
       const columns = [
         ...Object.keys(patch),
         'last_mutation_channel',
         'last_actor_type',
+        'last_operation_id',
         'revision',
         'client_mutation_id',
         'updated_at',
@@ -346,6 +354,7 @@ function normalizeContext(
     channel: context?.channel ?? 'web',
     actorType: context?.actorType ?? 'user',
     operationId: context?.operationId ?? '',
+    occurredAt: context?.occurredAt ?? '',
   };
 }
 

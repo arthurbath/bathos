@@ -27,7 +27,7 @@ type TaskNoteSourceToken = {
 type TaskNoteSourceLine = {
   source: string;
   headingIndicator: string | null;
-  bulletIndicator: string | null;
+  bulletIndicator: TaskNoteBulletIndicator | null;
   tokens: TaskNoteSourceToken[];
 };
 
@@ -43,6 +43,7 @@ type EditorHistory = {
 };
 
 type TaskNotePresentation = 'source' | 'semantic';
+type TaskNoteBulletIndicator = '* ' | '- ';
 
 const taskNoteTokenPattern = /(\[[^\]\n]+\]\([A-Za-z][A-Za-z0-9]*:\/\/[^)\s]+\)|https?:\/\/[^\s<]+|[A-Za-z][A-Za-z0-9]*:\/\/[^\s<]+|\*\*[^*\n]+\*\*|`[^`\n]+`|\*[^*\n]+\*)/giu;
 const blockedTaskNoteSchemes = new Set(['javascript', 'data', 'vbscript']);
@@ -210,9 +211,10 @@ export function TaskMarkdownNotes({
       || inputEvent.inputType === 'insertLineBreak'
     ) {
       const lineStart = currentNotes.lastIndexOf('\n', Math.max(0, selection.start - 1)) + 1;
-      replacement = currentNotes.slice(lineStart, selection.start).startsWith('* ')
-        ? '\n* '
-        : '\n';
+      const bulletIndicator = taskNoteBulletIndicator(
+        currentNotes.slice(lineStart, selection.start),
+      );
+      replacement = bulletIndicator === null ? '\n' : `\n${bulletIndicator}`;
     } else if (inputEvent.inputType === 'deleteContentBackward') {
       if (selectionStart === selectionEnd && selectionStart > 0) {
         selectionStart = previousCharacterOffset(currentNotes, selectionStart);
@@ -276,9 +278,10 @@ export function TaskMarkdownNotes({
     if (selection === null) return;
     const source = readTaskNotesEditor(editor);
     const lineStart = source.lastIndexOf('\n', Math.max(0, selection.start - 1)) + 1;
-    if (!source.slice(lineStart).startsWith('* ')) return;
+    const bulletIndicator = taskNoteBulletIndicator(source.slice(lineStart));
+    if (bulletIndicator === null) return;
     event.preventDefault();
-    replaceCurrentSelection('\n* ');
+    replaceCurrentSelection(`\n${bulletIndicator}`);
   };
 
   const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
@@ -531,7 +534,9 @@ function renderTaskNoteToken(
 function tokenizeTaskNoteSourceLine(source: string): TaskNoteSourceLine {
   const headingMatch = source.match(/^(#{1,6} )/u);
   const headingIndicator = headingMatch?.[1] ?? null;
-  const bulletIndicator = headingIndicator === null && source.startsWith('* ') ? '* ' : null;
+  const bulletIndicator = headingIndicator === null
+    ? taskNoteBulletIndicator(source)
+    : null;
   let cursor = headingIndicator?.length ?? bulletIndicator?.length ?? 0;
   const tokens: TaskNoteSourceToken[] = [];
 
@@ -566,6 +571,12 @@ function tokenizeTaskNoteSourceLine(source: string): TaskNoteSourceLine {
 
   if (cursor < source.length) tokens.push({ kind: 'plain', text: source.slice(cursor) });
   return { source, headingIndicator, bulletIndicator, tokens };
+}
+
+function taskNoteBulletIndicator(source: string): TaskNoteBulletIndicator | null {
+  if (source.startsWith('* ')) return '* ';
+  if (source.startsWith('- ')) return '- ';
+  return null;
 }
 
 function decorateTaskNotesEditor(

@@ -15,6 +15,7 @@ type StoredChecklistHistoryEvent = Omit<
 > & {
   before_state: unknown;
   after_state: unknown;
+  operation_events?: StoredChecklistHistoryEvent[];
 };
 
 type ChecklistHistoryCursor = {
@@ -29,13 +30,13 @@ export function useTaskChecklistUndo(ownerId: string) {
   const query = useQuery<StoredChecklistHistoryEvent>(
     `SELECT * FROM tasks_hierarchy_history_events
      WHERE owner_id = ? AND entity_type = 'checklist_item'
-     ORDER BY occurred_at, id`,
+     ORDER BY occurred_at, action_id, id`,
     [ownerId],
   );
   const events = useMemo(
-    () => query.data.map(parseEvent).filter(
+    () => collapseChecklistOperations(query.data.map(parseEvent).filter(
       (event): event is StoredChecklistHistoryEvent => event !== null,
-    ),
+    )),
     [query.data],
   );
   const projectedCursor = useMemo(() => replayChecklistHistory(events), [events]);
@@ -56,45 +57,63 @@ export function useTaskChecklistUndo(ownerId: string) {
     if (pendingRef.current) return null;
     pendingRef.current = true;
     try {
-      const sourceSnapshot = direction === 'undo'
-        ? snapshot(event.before_state)
-        : snapshot(event.after_state);
-      const shouldDelete = (
-        direction === 'undo'
-        && (event.transition === 'create' || event.transition === 'restore')
-      ) || (
-        direction === 'redo'
-        && event.transition === 'delete'
-      );
-      const shouldRestore = (
-        direction === 'undo'
-        && event.transition === 'delete'
-      ) || (
-        direction === 'redo'
-        && (event.transition === 'create' || event.transition === 'restore')
-      );
-      if (sourceSnapshot === null || shouldDelete) {
-        await hierarchyOperationsRepository.request({
-          ownerId,
-          rootType: 'checklist_item',
-          rootId: event.entity_id,
-          operation: 'delete',
-          descendantPolicy: 'reject',
-        });
-      } else if (shouldRestore) {
-        await hierarchyOperationsRepository.request({
-          ownerId,
-          rootType: 'checklist_item',
-          rootId: event.entity_id,
-          operation: 'restore',
-          descendantPolicy: 'reject',
-        });
-      } else {
-        await hierarchyRepository.updateChecklistItem(
-          ownerId,
-          event.entity_id,
-          mutablePatch(sourceSnapshot),
+      const occurredAt = new Date().toISOString();
+      const operationId = globalThis.crypto.randomUUID();
+      const context = { occurredAt, operationId };
+      const operationEvents = checklistOperationEvents(event);
+      const replayOrder = direction === 'undo'
+        ? [...operationEvents].reverse()
+        : operationEvents;
+      for (const operationEvent of replayOrder) {
+        const sourceSnapshot = direction === 'undo'
+          ? snapshot(operationEvent.before_state)
+          : snapshot(operationEvent.after_state);
+        const shouldDelete = (
+          direction === 'undo'
+          && (
+            operationEvent.transition === 'create'
+            || operationEvent.transition === 'restore'
+          )
+        ) || (
+          direction === 'redo'
+          && operationEvent.transition === 'delete'
         );
+        const shouldRestore = (
+          direction === 'undo'
+          && operationEvent.transition === 'delete'
+        ) || (
+          direction === 'redo'
+          && (
+            operationEvent.transition === 'create'
+            || operationEvent.transition === 'restore'
+          )
+        );
+        if (sourceSnapshot === null || shouldDelete) {
+          await hierarchyOperationsRepository.request({
+            ownerId,
+            rootType: 'checklist_item',
+            rootId: operationEvent.entity_id,
+            operation: 'delete',
+            descendantPolicy: 'reject',
+            context,
+          });
+        } else if (shouldRestore) {
+          await hierarchyOperationsRepository.request({
+            ownerId,
+            rootType: 'checklist_item',
+            rootId: operationEvent.entity_id,
+            operation: 'restore',
+            descendantPolicy: 'reject',
+            context,
+          });
+        } else {
+          await hierarchyRepository.updateChecklistItem(
+            ownerId,
+            operationEvent.entity_id,
+            mutablePatch(sourceSnapshot),
+            context,
+          );
+        }
       }
       cursorRef.current = direction === 'undo'
         ? {
@@ -124,6 +143,8 @@ export function useTaskChecklistUndo(ownerId: string) {
   return {
     event: cursorRef.current.undo.at(-1) ?? null,
     redoEvent: cursorRef.current.redo.at(-1) ?? null,
+    available: cursorRef.current.undo.length > 0 && !pendingRef.current,
+    redoAvailable: cursorRef.current.redo.length > 0 && !pendingRef.current,
     pending: pendingRef.current,
     loading: query.isLoading,
     error: query.error,
@@ -159,6 +180,21 @@ function isInverse(
   candidate: StoredChecklistHistoryEvent,
   source: StoredChecklistHistoryEvent,
 ): boolean {
+  const candidateEvents = checklistOperationEvents(candidate);
+  const sourceEvents = checklistOperationEvents(source);
+  if (candidateEvents.length !== sourceEvents.length) return false;
+  return sourceEvents.every((sourceEvent) => {
+    const candidateEvent = candidateEvents.find(
+      ({ entity_id }) => entity_id === sourceEvent.entity_id,
+    );
+    return candidateEvent !== undefined && singleEventIsInverse(candidateEvent, sourceEvent);
+  });
+}
+
+function singleEventIsInverse(
+  candidate: StoredChecklistHistoryEvent,
+  source: StoredChecklistHistoryEvent,
+): boolean {
   if (candidate.entity_id !== source.entity_id) return false;
   if (source.transition === 'create') return candidate.transition === 'delete';
   if (source.transition === 'delete') return candidate.transition === 'restore';
@@ -168,6 +204,21 @@ function isInverse(
 }
 
 function isReplay(
+  candidate: StoredChecklistHistoryEvent,
+  source: StoredChecklistHistoryEvent,
+): boolean {
+  const candidateEvents = checklistOperationEvents(candidate);
+  const sourceEvents = checklistOperationEvents(source);
+  if (candidateEvents.length !== sourceEvents.length) return false;
+  return sourceEvents.every((sourceEvent) => {
+    const candidateEvent = candidateEvents.find(
+      ({ entity_id }) => entity_id === sourceEvent.entity_id,
+    );
+    return candidateEvent !== undefined && singleEventIsReplay(candidateEvent, sourceEvent);
+  });
+}
+
+function singleEventIsReplay(
   candidate: StoredChecklistHistoryEvent,
   source: StoredChecklistHistoryEvent,
 ): boolean {
@@ -192,6 +243,46 @@ function parseEvent(
   event: StoredChecklistHistoryEvent,
 ): StoredChecklistHistoryEvent | null {
   return snapshot(event.after_state) === null ? null : event;
+}
+
+function collapseChecklistOperations(
+  events: readonly StoredChecklistHistoryEvent[],
+): StoredChecklistHistoryEvent[] {
+  const result: StoredChecklistHistoryEvent[] = [];
+  for (const event of events) {
+    const previous = result.at(-1);
+    if (
+      previous !== undefined
+      && previous.action_id === event.action_id
+      && previous.actor_type === event.actor_type
+      && previous.mutation_channel === event.mutation_channel
+      && checklistTaskId(previous) === checklistTaskId(event)
+    ) {
+      const operationEvents = [...checklistOperationEvents(previous), event];
+      result[result.length - 1] = {
+        ...event,
+        affected_ids: [...new Set(
+          operationEvents.flatMap(({ affected_ids }) => affected_ids),
+        )],
+        operation_events: operationEvents,
+      };
+    } else {
+      result.push(event);
+    }
+  }
+  return result;
+}
+
+function checklistOperationEvents(
+  event: StoredChecklistHistoryEvent,
+): StoredChecklistHistoryEvent[] {
+  return event.operation_events ?? [event];
+}
+
+function checklistTaskId(event: StoredChecklistHistoryEvent): string | null {
+  return snapshot(event.after_state)?.task_id
+    ?? snapshot(event.before_state)?.task_id
+    ?? null;
 }
 
 function snapshot(value: unknown): ChecklistSnapshot | null {

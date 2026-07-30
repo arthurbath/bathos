@@ -121,13 +121,28 @@ export function parseTaskHistoryEvent(row: TaskHistoryStorageRow): TaskHistoryEv
 export function createTaskUndoPatch(
   current: TaskTodo,
   event: TaskHistoryEvent,
+  occurredAt = current.updated_at,
 ): TaskHistorySnapshot {
+  if (
+    event.owner_id === current.owner_id
+    && event.task_id === current.id
+    && event.outcome === 'accepted'
+    && event.transition === 'create'
+    && event.before_state === null
+    && snapshotsEqual(event.after_state, snapshotTask(current))
+  ) {
+    return {
+      ...event.after_state,
+      disposition: 'deleted',
+      deleted_at: occurredAt,
+      deletion_root_id: current.id,
+    };
+  }
   if (
     event.owner_id !== current.owner_id
     || event.task_id !== current.id
     || event.outcome !== 'accepted'
     || event.transition === 'baseline'
-    || event.transition === 'create'
     || event.transition === 'undo'
     || event.transition === 'redo'
     || event.before_state === null
@@ -144,11 +159,20 @@ export function createTaskRedoPatch(
   event: TaskHistoryEvent,
 ): TaskHistorySnapshot {
   if (
+    event.owner_id === current.owner_id
+    && event.task_id === current.id
+    && event.outcome === 'accepted'
+    && event.transition === 'create'
+    && event.before_state === null
+    && deletedCreationSnapshotMatches(snapshotTask(current), event.after_state, current.id)
+  ) {
+    return event.after_state;
+  }
+  if (
     event.owner_id !== current.owner_id
     || event.task_id !== current.id
     || event.outcome !== 'accepted'
     || event.transition === 'baseline'
-    || event.transition === 'create'
     || event.transition === 'undo'
     || event.transition === 'redo'
     || event.before_state === null
@@ -158,6 +182,25 @@ export function createTaskRedoPatch(
   }
 
   return event.after_state;
+}
+
+export function deletedCreationSnapshotMatches(
+  candidate: TaskHistorySnapshot,
+  created: TaskHistorySnapshot,
+  taskId: string,
+): boolean {
+  return candidate.disposition === 'deleted'
+    && candidate.deleted_at !== null
+    && candidate.deletion_root_id === taskId
+    && snapshotsEqual(
+      {
+        ...candidate,
+        disposition: created.disposition,
+        deleted_at: created.deleted_at,
+        deletion_root_id: created.deletion_root_id,
+      },
+      created,
+    );
 }
 
 export function snapshotTask(task: TaskTodo): TaskHistorySnapshot {

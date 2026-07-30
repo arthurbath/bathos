@@ -74,20 +74,43 @@ codesign -d --entitlements :- "$APP"
 codesign -d --entitlements :- "$WIDGET"
 ```
 
-Only after all checks pass, install the verified app:
+Only after all checks pass, stage and verify the app at the system application
+location before replacing the current installation:
 
 ```sh
-ditto "$APP" "$HOME/Applications/Tasks.app"
-open "$HOME/Applications/Tasks.app"
+STAGED_APP='/Applications/.Tasks.installing.app'
+INSTALLED_APP='/Applications/Tasks.app'
+
+ditto "$APP" "$STAGED_APP"
+codesign --verify --deep --strict --verbose=2 "$STAGED_APP"
+codesign --verify --strict --verbose=2 \
+  "$STAGED_APP/Contents/PlugIns/TasksMacWidgets.appex"
+mv "$INSTALLED_APP" "$HOME/.Trash/Tasks.previous.app"
+mv "$STAGED_APP" "$INSTALLED_APP"
+open "$INSTALLED_APP"
 ```
 
 When replacing an existing installation, stage and verify the new output first,
-then preserve or remove the former `BathOS Tasks.app` through a recoverable
-operation before placing the verified `Tasks.app` replacement. A signing or
-entitlement failure must leave the previous installed app untouched.
+then move the former `Tasks.app` or `BathOS Tasks.app` to the Trash through a
+recoverable operation before placing the verified replacement. Never overwrite
+the installed bundle in place. A signing or entitlement failure must leave the
+previous installed app untouched. Do not remove the App Group container or
+WebKit data when replacing or unregistering a prior build.
+
+After installing, inspect LaunchServices and WidgetKit registrations for the
+exact `garden.bath.tasks` app and `garden.bath.tasks.widgets` extension. Remove
+only registrations that resolve to a superseded bundle path or the old
+`BathOS Tasks` display name, then explicitly register
+`/Applications/Tasks.app` and its embedded widget. Do not reset the global
+LaunchServices database or unregister unrelated applications.
 
 ## Native Behavior
 
+- Command+Option+R clears reload-safe WebKit response caches and reloads the
+  current Tasks route from its origin. It preserves authentication, local
+  storage, IndexedDB and OPFS task data, service-worker registrations, and
+  widget data. A future native Windows host uses Control+Alt+R for the same
+  command and preservation boundary.
 - Command+1 through Command+6 route the existing web view to Today, Upcoming,
   Anytime, Someday, Done, and Settings.
 - Unmodified Escape is consumed while the Tasks window is active, forwarded

@@ -18,6 +18,37 @@ enum TasksWebViewPolicy {
     }
 }
 
+enum TasksWebViewScrollPolicy {
+    static func apply(to scrollView: UIScrollView) {
+        scrollView.contentInsetAdjustmentBehavior = .never
+        scrollView.bounces = false
+    }
+}
+
+@MainActor
+final class TasksCommandWebView: WKWebView {
+    var onShake: (() -> Void)?
+
+    @discardableResult
+    func handleCompletedMotion(_ motion: UIEvent.EventSubtype) -> Bool {
+        guard motion == .motionShake else {
+            return false
+        }
+        onShake?()
+        return true
+    }
+
+    override func motionEnded(
+        _ motion: UIEvent.EventSubtype,
+        with event: UIEvent?
+    ) {
+        if handleCompletedMotion(motion) {
+            return
+        }
+        super.motionEnded(motion, with: event)
+    }
+}
+
 enum TasksWebNavigationDisposition: Equatable {
     case allow
     case openExternally
@@ -144,11 +175,14 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         TasksWebViewPolicy.apply(to: configuration)
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = TasksCommandWebView(frame: .zero, configuration: configuration)
+        webView.onShake = { [weak model] in
+            model?.requestTaskUndo()
+        }
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
-        webView.scrollView.contentInsetAdjustmentBehavior = .automatic
+        TasksWebViewScrollPolicy.apply(to: webView.scrollView)
         webView.isOpaque = false
         webView.backgroundColor = TasksCompanionAppearance.applicationBackground
         webView.scrollView.backgroundColor = TasksCompanionAppearance.applicationBackground
@@ -163,6 +197,7 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         coordinator.detachSummaryKeyboardPresenter()
+        (webView as? TasksCommandWebView)?.onShake = nil
         webView.configuration.userContentController.removeScriptMessageHandler(
             forName: TaskCompanionConstants.webBridgeHandler
         )

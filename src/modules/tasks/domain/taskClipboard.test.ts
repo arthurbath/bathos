@@ -54,6 +54,13 @@ describe('task clipboard', () => {
     })).kind).toBe('invalid-task-payload');
   });
 
+  it('keeps multiline ordinary text intact until destination paste planning', () => {
+    expect(parseTaskClipboard('First\r\nSecond')).toEqual({
+      kind: 'text',
+      title: 'First\r\nSecond',
+    });
+  });
+
   it('applies Today planning and preserves future reminder intent', () => {
     const result = planTaskClipboardPaste(snapshot, { kind: 'today' }, {
       planningTimeZone: 'America/Los_Angeles',

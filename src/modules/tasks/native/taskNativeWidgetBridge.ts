@@ -7,6 +7,7 @@ import {
   deriveTaskViewTasks,
   type TaskListView,
 } from '@/modules/tasks/hooks/useTaskList';
+import { getTaskUpcomingDate } from '@/modules/tasks/domain/taskUpcoming';
 import type {
   TaskActionability,
   TaskArea,
@@ -49,6 +50,8 @@ export type TaskNativeWidgetTask = {
   todaySection: TaskTodaySection | null;
   actionability: TaskActionability;
   terminalState: Exclude<TaskLifecycle, 'open'> | 'deleted' | null;
+  upcomingDate: string | null;
+  isRecurrenceProjection: boolean;
   primaryLink: {
     href: string;
     kind: TaskPrimaryLinkKind;
@@ -157,7 +160,9 @@ export function buildTaskNativeWidgetSnapshot({
         title: taskNativeWidgetListTitles[id],
         totalCount: filtered.length,
         truncated: filtered.length > safeLimit,
-        tasks: filtered.slice(0, safeLimit).map(toTaskNativeWidgetTask),
+        tasks: filtered.slice(0, safeLimit).map((task) => (
+          toTaskNativeWidgetTask(task, id, planningDate)
+        )),
       };
     }),
   };
@@ -260,7 +265,11 @@ export function resetTaskNativeWidgetPublisherForTests(): void {
   lastPublishedContent = null;
 }
 
-function toTaskNativeWidgetTask(task: TaskTodo): TaskNativeWidgetTask {
+function toTaskNativeWidgetTask(
+  task: TaskTodo,
+  listId: TaskNativeWidgetListId,
+  planningDate: string,
+): TaskNativeWidgetTask {
   const primaryLinkHref = getTaskPrimaryLinkHref(task.primary_link);
   const primaryLinkKind = getTaskPrimaryLinkKind(task.primary_link);
   return {
@@ -272,6 +281,11 @@ function toTaskNativeWidgetTask(task: TaskTodo): TaskNativeWidgetTask {
     terminalState: task.disposition === 'deleted'
       ? 'deleted'
       : task.lifecycle === 'open' ? null : task.lifecycle,
+    upcomingDate: listId === 'upcoming'
+      ? getTaskUpcomingDate(task, planningDate)
+      : null,
+    isRecurrenceProjection: listId === 'upcoming'
+      && task.recurrence_definition_id !== null,
     primaryLink: primaryLinkHref && primaryLinkKind
       ? { href: primaryLinkHref.slice(0, 8_000), kind: primaryLinkKind }
       : null,
@@ -284,7 +298,12 @@ function toLegacyTaskNativeWidgetSnapshot(snapshot: TaskNativeWidgetSnapshot) {
     schemaVersion: 1,
     lists: snapshot.lists.map((list) => ({
       ...list,
-      tasks: list.tasks.map(({ primaryLink: _primaryLink, ...task }) => task),
+      tasks: list.tasks.map(({
+        primaryLink: _primaryLink,
+        upcomingDate: _upcomingDate,
+        isRecurrenceProjection: _isRecurrenceProjection,
+        ...task
+      }) => task),
     })),
   };
 }

@@ -58,6 +58,16 @@ The credential:
 
 A copied Supabase session was rejected because it would create a second full authenticated client. Per-task signed capabilities were rejected because every projection would need many independently revocable secrets. An App Group credential is accepted over shared Keychain for this private direct-install build because the app and extension already share the signed App Group boundary, the credential is narrow, and file protection keeps it unavailable until first unlock without adding another provisioning capability.
 
+The authenticated web host does not assume that its first credential-issuance
+request will succeed. Native content and the local synchronized projection can
+become ready before the Supabase function client has a usable authenticated
+session, particularly during a macOS companion launch. The host therefore
+retries issuance after bounded delays of one second, five seconds, thirty
+seconds, and then five minutes until the matching owner and installation
+credential is accepted by the native bridge or the companion session ends.
+This recovery loop carries no task content, stops on owner or installation
+replacement, and cannot broaden the resulting credential.
+
 ### Keep privileged database work behind one Edge Function
 
 `tasks-widget-actions` has JWT verification disabled at the platform layer because it accepts two different credential classes:
@@ -124,6 +134,29 @@ WidgetKit cannot render the React components used by the web module. The widget 
 Only Today, Upcoming, Anytime, and Someday are configurable widget lists. Done remains in the bounded snapshot because successful completion reconciliation and the companion's privacy-safe projection still require it, but it is not offered as a widget destination. Legacy Done configuration values fail safely to Today. The header omits the redundant total count, open-task controls use neutral gray, and an outer flexible spacer keeps short list contents pinned to the top of the large widget.
 
 The large widget renders at most the first ten tasks in authoritative list order. Longer lists silently omit subsequent rows because the configured list and visible leading tasks already communicate the widget's bounded nature, and an overflow message would consume space that can display the tenth task. The separate plus action in the list header uses a bounded `bathostasks://new/<list>` route. The companion translates that route to the matching web list with a one-use `native_new_task=list` signal, and the web module reuses the list's existing floating-add placement rather than duplicating Today, Upcoming, Anytime, or Someday placement rules in Swift.
+
+The existing schema-version-2 row gains optional presentation-only fields for
+the authoritative Upcoming display date and whether the row is a recurrence
+schedule projection. The already projected Today horizon remains the source for
+the Today marker. Optional fields keep previously cached schema-version-2
+snapshots valid, let older native builds ignore the additions, and avoid
+projecting notes, checklist content, or recurrence-rule details.
+
+Today rows place the canonical Inbox, Clock2, Clock5, or Clock8 line symbol
+between the completion control and summary, using the matching web horizon
+colors. Upcoming rows instead place a compact native chip there. Dates one
+through six calendar days after the snapshot planning date use the localized
+short weekday; dates seven or more days away use localized abbreviated month
+and day. The web projection supplies the same authoritative Upcoming display
+date used by the web list, including Deadline fallback when no future Start
+controls placement.
+
+An Upcoming recurrence schedule projection uses the native counterpart to
+Lucide Repeat2 instead of an interactive checkbox. This avoids suggesting that
+the future schedule placeholder can be completed while preserving ordinary
+checkbox completion for materialized task instances. The shared widget layout
+remains identical on iOS and macOS except that macOS reduces the ten-row minimum
+height by one point so its outer vertical padding does not look compressed.
 
 ### Keep Primary Link activation entirely separate from completion and task opening
 

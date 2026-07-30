@@ -60,6 +60,66 @@ None required for this change.
 
 final result: passed
 
+# Design QA: Compact Task Quick Find
+
+## Comparison Target
+
+- Source visual truth: `/Users/Art/Desktop/Screenshot 2026-07-30 at 11.38.11 AM.png`
+- Initial rendered implementation: `/private/tmp/bathos-quick-find-mobile.png`
+- Revised rendered implementation: `/private/tmp/bathos-quick-find-mobile-revised.png`
+- Route: `http://localhost:8080/tasks/today`
+- State: Dark-mode Today list with Quick Find open, a populated query, three results, and the second result preliminarily selected
+
+## Viewport and Normalization
+
+- Source pixels: 1179 x 2556 at 3x density, equivalent to a 393 x 852 CSS viewport.
+- Implementation pixels: 393 x 852 at 1x density from a 393 x 852 CSS viewport.
+- Density normalization: The source and implementation were compared at the same 393 x 852 CSS geometry. The source remained at its native 3x pixel density rather than being stretched.
+
+## Full-View Comparison Evidence
+
+- The implementation occupies a small centered region instead of presenting a titled, full-width modal.
+- The input is the palette's only form control and remains visually dominant without taking over the viewport.
+- Three quiet, borderless task rows and one Continue Search row use the same compact vertical rhythm.
+- Ordinary task results omit repeated checkbox chrome. The established repeat icon is reserved for recurrence projections.
+- The underlying task list remains visible without allowing an outside dismissal press to activate it.
+
+## Focused Region Evidence
+
+A separate crop was unnecessary because the Quick Find palette occupies the central, fully legible region of both full-view captures. The input, preliminary selection, result density, icon treatment, and Continue Search row can all be judged directly at equivalent CSS size.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: BathOS retains its established Inter/system stack, normal task-result weight, compact metadata hierarchy, truncation, and line height.
+- Spacing and layout rhythm: The final palette measures 288 x 276 CSS pixels. Its input has approximately 2.8 inches of usable typing width, and the three results remain compact and evenly spaced.
+- Colors and visual tokens: The palette uses existing background, popover, border, muted, foreground, and info-highlight tokens. The transparent dismissal layer avoids a full-screen takeover effect.
+- Image quality and asset fidelity: No raster assets were introduced. The established Lucide Search and Recurrence icons remain vector-sharp.
+- Copy and content: The palette contains only the Find Tasks input, matching task summaries and context, and Continue Search. It has no visible title or Close control.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain.
+
+## Comparison History
+
+- Pass 1: The initial implementation measured 320 CSS pixels wide. This exceeded the requested approximate three-inch typing space and made the palette feel closer to a mobile modal than a compact command surface.
+- Fix: Reduced the palette width from 20rem to 18rem.
+- Pass 2: The revised palette measures 288 CSS pixels wide, preserves three readable result rows, and occupies a distinctly smaller portion of the mobile view. No P0, P1, or P2 findings remain.
+
+## Interactions and Console
+
+- Verified that ordinary typing remains in the Quick Find input.
+- Verified that Arrow Down changes preliminary selection while the DOM focus and text cursor remain in the input.
+- Verified Escape dismissal.
+- Verified outside-press consumption, Continue Search traversal, ordinary-task opening, and recurrence-projection focus through focused component coverage.
+- The browser console contained no errors during the rendered checks.
+
+## Follow-up Polish
+
+None required for this change.
+
+final result: passed
+
 # Design QA: Tasks Lock Screen Widget
 
 ## Comparison Target

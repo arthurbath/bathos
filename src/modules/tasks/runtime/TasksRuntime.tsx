@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -44,30 +45,21 @@ import {
   type TasksOfflineLaunchState,
 } from '@/modules/tasks/pwa/taskServiceWorker';
 import { activateTaskPlanningDate } from '@/modules/tasks/runtime/taskPlanningDate';
-
-export const TASKS_RUNTIME_INITIALIZATION_TIMEOUT_MS = 15_000;
-
-export async function waitForTasksRuntimeInitialization<T>(
-  initialization: Promise<T>,
-  timeoutMs = TASKS_RUNTIME_INITIALIZATION_TIMEOUT_MS,
-  onTimeout?: () => void,
-): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_, reject) => {
-    timeout = setTimeout(() => {
-      onTimeout?.();
-      reject(new Error('Local task data took too long to open'));
-    }, timeoutMs);
-  });
-
-  try {
-    return await Promise.race([initialization, deadline]);
-  } finally {
-    if (timeout !== undefined) {
-      clearTimeout(timeout);
-    }
-  }
-}
+import {
+  reportTasksRuntimeStartupFailure,
+  type TasksRuntimeStartupPhase,
+} from '@/modules/tasks/runtime/taskRuntimeStartupReporting';
+import {
+  createAutomaticTasksRuntimeReplacement,
+  createTasksRuntimeRecoveryController,
+  isClosedTasksRuntimeClientError,
+  isCurrentTasksRuntimeGeneration,
+  normalizeTasksRuntimeError,
+  TASKS_RUNTIME_ERROR_MESSAGE,
+  TASKS_RUNTIME_ERROR_TITLE,
+  TASKS_RUNTIME_INITIALIZATION_TIMEOUT_MS,
+  waitForTasksRuntimeInitialization,
+} from '@/modules/tasks/runtime/taskRuntimeRecovery';
 
 export function TasksRuntimeProvider({
   ownerId,
@@ -79,7 +71,7 @@ export function TasksRuntimeProvider({
   const [state, setState] = useState<
     | { status: 'loading' }
     | { status: 'ready'; mode: 'local' | 'connected'; planningTimeZone: string }
-    | { status: 'error'; error: Error }
+    | { status: 'error' }
   >({ status: 'loading' });
   const [syncState, setSyncState] = useState<TasksSyncState>(
     import.meta.env.VITE_TASKS_POWERSYNC_ENDPOINT?.trim() ? 'connecting' : 'local',
@@ -87,6 +79,9 @@ export function TasksRuntimeProvider({
   const [offlineLaunchState, setOfflineLaunchState] = useState<TasksOfflineLaunchState>('preparing');
   const [pendingUploadCount, setPendingUploadCount] = useState(0);
   const [database, setDatabase] = useState<PowerSyncDatabase>(createTasksPowerSyncDatabase);
+  const [recoveryController] = useState(createTasksRuntimeRecoveryController);
+  const runtimeGenerationRef = useRef(0);
+  const reportedGenerationRef = useRef<number | null>(null);
   const repository = useMemo(() => new TaskRepository(database), [database]);
   const hierarchyRepository = useMemo(
     () => new TaskHierarchyRepository(database),
@@ -130,15 +125,23 @@ export function TasksRuntimeProvider({
   }, []);
 
   useEffect(() => {
+    const generation = runtimeGenerationRef.current + 1;
+    runtimeGenerationRef.current = generation;
     let active = true;
     let initializationExpired = false;
+    let startupPhase: TasksRuntimeStartupPhase = 'owner-binding';
     let disposeStatusListener: (() => void) | undefined;
     let queuePoll: ReturnType<typeof setInterval> | undefined;
     let activationPoll: ReturnType<typeof setInterval> | undefined;
     const endpoint = import.meta.env.VITE_TASKS_POWERSYNC_ENDPOINT?.trim();
     const isBrowserOnline = () => window.navigator.onLine !== false;
+    const isCurrentGeneration = () => isCurrentTasksRuntimeGeneration(
+      active,
+      runtimeGenerationRef.current,
+      generation,
+    );
     const refreshBrowserNetworkState = () => {
-      if (!active || !endpoint) return;
+      if (!isCurrentGeneration() || !endpoint) return;
       setSyncState(resolveTasksSyncState(database.currentStatus, isBrowserOnline()));
     };
 
@@ -147,20 +150,67 @@ export function TasksRuntimeProvider({
 
     const refreshQueueDepth = async () => {
       const queue = await database.getUploadQueueStats();
-      if (active) {
+      if (isCurrentGeneration()) {
         setPendingUploadCount(queue.count);
       }
     };
 
+    const failTerminally = (error: Error, phase: TasksRuntimeStartupPhase) => {
+      if (!isCurrentGeneration()) return;
+      if (reportedGenerationRef.current !== generation) {
+        reportedGenerationRef.current = generation;
+        reportTasksRuntimeStartupFailure(error, {
+          phase,
+          generation,
+          outcome: 'terminal',
+          automaticRecoveryAttempted: recoveryController.attempts > 0,
+          closedClientError: isClosedTasksRuntimeClientError(error),
+          endpointConfigured: Boolean(endpoint),
+          browserOnline: isBrowserOnline(),
+        });
+      }
+      setState({ status: 'error' });
+    };
+
+    const handleInitializationFailure = (
+      caught: unknown,
+      phase: TasksRuntimeStartupPhase,
+    ) => {
+      if (!isCurrentGeneration()) return;
+      const error = normalizeTasksRuntimeError(caught);
+      const nextDatabase = createAutomaticTasksRuntimeReplacement(
+        error,
+        recoveryController,
+        database,
+      );
+      if (nextDatabase) {
+        reportTasksRuntimeStartupFailure(error, {
+          phase,
+          generation,
+          outcome: 'automatic-recovery-started',
+          automaticRecoveryAttempted: true,
+          closedClientError: true,
+          endpointConfigured: Boolean(endpoint),
+          browserOnline: isBrowserOnline(),
+        });
+        setState({ status: 'loading' });
+        setDatabase(nextDatabase);
+        return;
+      }
+      failTerminally(error, phase);
+    };
+
     const initialize = async () => {
       try {
+        startupPhase = 'owner-binding';
         await bindTasksDatabaseOwner(database, ownerId);
-        if (!active || initializationExpired) return;
+        if (!isCurrentGeneration() || initializationExpired) return;
+        startupPhase = 'planning-settings';
         const settings = await repository.ensurePlanningSettings(
           ownerId,
           resolveTaskPlanningTimeZone(),
         );
-        if (!active || initializationExpired) return;
+        if (!isCurrentGeneration() || initializationExpired) return;
         const activateReachedDates = async () => {
           const planningDate = taskCalendarDateInTimeZone(
             settings.planning_timezone,
@@ -173,15 +223,19 @@ export function TasksRuntimeProvider({
             repository,
           });
         };
+        startupPhase = 'planning-date-activation';
         await activateReachedDates();
-        if (!active || initializationExpired) return;
+        if (!isCurrentGeneration() || initializationExpired) return;
         activationPoll = setInterval(() => {
-          void activateReachedDates().catch(() => undefined);
+          if (isCurrentGeneration()) {
+            void activateReachedDates().catch(() => undefined);
+          }
         }, 60_000);
-        if (!active) {
+        if (!isCurrentGeneration()) {
           return;
         }
 
+        recoveryController.reset();
         setState({
           status: 'ready',
           mode: endpoint ? 'connected' : 'local',
@@ -193,7 +247,7 @@ export function TasksRuntimeProvider({
           disposeStatusListener = observeTasksSyncState(
             database,
             (nextSyncState) => {
-              if (!active) {
+              if (!isCurrentGeneration()) {
                 return;
               }
               setSyncState(nextSyncState);
@@ -203,12 +257,14 @@ export function TasksRuntimeProvider({
           );
           await refreshQueueDepth();
           queuePoll = setInterval(() => {
-            void refreshQueueDepth().catch(() => undefined);
+            if (isCurrentGeneration()) {
+              void refreshQueueDepth().catch(() => undefined);
+            }
           }, 1_000);
           try {
             await database.connect(connector);
           } catch {
-            if (active) {
+            if (isCurrentGeneration()) {
               setSyncState('offline');
               setState({
                 status: 'ready',
@@ -222,11 +278,8 @@ export function TasksRuntimeProvider({
           setPendingUploadCount(0);
         }
       } catch (error) {
-        if (active && !initializationExpired) {
-          setState({
-            status: 'error',
-            error: error instanceof Error ? error : new Error('Unable to open local task data'),
-          });
+        if (!initializationExpired) {
+          handleInitializationFailure(error, startupPhase);
         }
       }
     };
@@ -238,13 +291,8 @@ export function TasksRuntimeProvider({
         initializationExpired = true;
       },
     ).catch((error) => {
-      if (active) {
-        setState({
-          status: 'error',
-          error: error instanceof Error
-            ? error
-            : new Error('Unable to open local task data'),
-        });
+      if (isCurrentGeneration()) {
+        handleInitializationFailure(error, 'watchdog');
       }
     });
 
@@ -261,7 +309,7 @@ export function TasksRuntimeProvider({
       }
       void database.close().catch(() => undefined);
     };
-  }, [database, hierarchyRepository, ownerId, repository]);
+  }, [database, hierarchyRepository, ownerId, recoveryController, repository]);
 
   const prepareForSignOut = useCallback(async () => {
     await prepareTasksForSignOut({
@@ -319,14 +367,20 @@ export function TasksRuntimeProvider({
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="w-full max-w-lg space-y-4 text-center">
-          <h1 className="text-2xl font-semibold leading-none tracking-tight">Tasks Could Not Open</h1>
-          <p className="text-sm text-muted-foreground">{state.error.message}</p>
+          <h1 className="text-2xl font-semibold leading-none tracking-tight">
+            {TASKS_RUNTIME_ERROR_TITLE}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {TASKS_RUNTIME_ERROR_MESSAGE}
+          </p>
           <Button type="button" variant="outline" onClick={() => {
+            recoveryController.reset();
             setState({ status: 'loading' });
+            const nextDatabase = createTasksPowerSyncDatabase();
             void database.close()
               .catch(() => undefined)
               .finally(() => {
-                setDatabase(createTasksPowerSyncDatabase());
+                setDatabase(nextDatabase);
               });
           }}>
             Retry

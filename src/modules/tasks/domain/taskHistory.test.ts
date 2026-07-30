@@ -128,11 +128,26 @@ describe('task history', () => {
     expect(() => createTaskRedoPatch(currentTask, event)).toThrow(UnsafeTaskRedoError);
   });
 
-  it('rejects creation, baseline, foreign, and state-mismatched events', () => {
-    expect(() => createTaskUndoPatch(
-      currentTask,
-      parseTaskHistoryEvent(historyRow({ transition: 'create', before_state: null })),
-    )).toThrow(UnsafeTaskUndoError);
+  it('undoes creation through recoverable deletion and restores it on redo', () => {
+    const event = parseTaskHistoryEvent(historyRow({
+      transition: 'create',
+      before_state: null,
+    }));
+    const deleted = {
+      ...currentTask,
+      ...createTaskUndoPatch(currentTask, event, '2026-07-20T04:31:00.000Z'),
+      revision: 3,
+    };
+
+    expect(deleted).toMatchObject({
+      disposition: 'deleted',
+      deleted_at: '2026-07-20T04:31:00.000Z',
+      deletion_root_id: currentTask.id,
+    });
+    expect(createTaskRedoPatch(deleted, event)).toEqual(event.after_state);
+  });
+
+  it('rejects baseline, foreign, and state-mismatched events', () => {
     expect(() => createTaskUndoPatch(
       currentTask,
       parseTaskHistoryEvent(historyRow({ transition: 'redo' })),

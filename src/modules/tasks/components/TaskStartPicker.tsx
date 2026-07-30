@@ -216,14 +216,6 @@ export function TaskStartPickerPanel({
 
     const horizon = activeElement.closest<HTMLButtonElement>('[data-task-start-horizon]');
     if (horizon) {
-      const horizons = Array.from(panel.querySelectorAll<HTMLButtonElement>(
-        '[data-task-start-horizon]:not(:disabled)',
-      ));
-      const index = horizons.indexOf(horizon);
-      if (index >= 0 && index < horizons.length - 1) {
-        horizons[index + 1]?.focus();
-        return;
-      }
       if (minimumDate) focusCalendarDate(minimumDate);
       return;
     }
@@ -793,7 +785,7 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
               && 'text-muted-foreground',
           )}
         >
-          <ControlDecoration>
+          <ControlDecoration className={horizonPresentation?.colorClass}>
             <StartDecorationIcon />
           </ControlDecoration>
           <span className="ml-2 min-w-0 flex-1 truncate">{summary}</span>

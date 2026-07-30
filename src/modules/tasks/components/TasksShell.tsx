@@ -24,7 +24,11 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
-import { DatePickerField, DatePickerPanel } from '@/components/ui/date-picker-field';
+import {
+  DatePickerField,
+  DatePickerPanel,
+  requestDatePickerAdvance,
+} from '@/components/ui/date-picker-field';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +58,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
+import { cn } from '@/lib/utils';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
 import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import { TaskClipboardService } from '@/modules/tasks/data/taskClipboardService';
@@ -101,6 +106,7 @@ import {
   taskIsVisible,
   taskWithRetainedViewPlacement,
   useTaskList,
+  type TaskMetadataMutation,
   type RetainedTaskViewPlacement,
   type TaskListView,
   type TodayTaskSection,
@@ -194,9 +200,16 @@ import {
   type TaskClipboardDestination,
   type TaskClipboardSnapshot,
 } from '@/modules/tasks/domain/taskClipboard';
+import { splitPlainTextTaskTitles } from '@/modules/tasks/domain/taskMultilinePaste';
 import {
   getBulkTaskTodayShortcutHorizon,
 } from '@/modules/tasks/domain/taskShortcutPlanning';
+import {
+  classifyTaskDeparture,
+  getTaskDepartureToast,
+  type TaskDeparture,
+} from '@/modules/tasks/domain/taskDepartureNotice';
+import { getTaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
 import { getNextTaskActionability } from '@/modules/tasks/domain/taskActionability';
 import { getNextTaskAreaId } from '@/modules/tasks/domain/taskAreaCycle';
 import { formatTaskReminderTimeDisplay } from '@/modules/tasks/domain/taskReminderTimeInput';
@@ -244,6 +257,7 @@ const TASK_POST_CLOSE_SETTLE_DELAY_MS = 180;
 const TASK_PLACEMENT_ANIMATION_DURATION_MS = 240;
 const TASK_TERMINAL_SETTLE_DELAY_MS = 180;
 const TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS = 220;
+export const TASK_NATIVE_COMMAND_EVENT = 'bathos:tasks-native-command';
 const TASK_VIEW_TRANSITION_MINIMUM_MS = 120;
 const TASK_LIST_BOTTOM_CLEARANCE_CLASS = 'pb-[calc(env(safe-area-inset-bottom)+11rem)] md:pb-36';
 
@@ -324,6 +338,7 @@ function taskPlacementChanged(
     || task.today_section !== retainedPlacement.today_section
     || task.start_date !== retainedPlacement.start_date
     || task.deadline !== retainedPlacement.deadline
+    || task.actionability !== retainedPlacement.actionability
     || task.order_key !== retainedPlacement.order_key
     || task.area_id !== retainedPlacement.area_id;
 }
@@ -485,6 +500,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     prepareForSignOut,
   } = useTasksRuntime();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const selectedTaskIdRef = useRef<string | null>(null);
+  const latestTaskMetadataRef = useRef(new Map<string, TaskTodo>());
+  const metadataMutationHandlerRef = useRef<(
+    mutations: readonly TaskMetadataMutation[],
+  ) => void>(() => undefined);
+  const reportTaskMetadataMutations = useCallback((
+    mutations: readonly TaskMetadataMutation[],
+  ) => {
+    metadataMutationHandlerRef.current(mutations);
+  }, []);
   const [closingTaskId, setClosingTaskId] = useState<string | null>(null);
   const retainedTaskId = selectedTaskId ?? closingTaskId;
   const hierarchy = useTaskHierarchy(userId);
@@ -511,6 +536,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [updateTaskDropIndicator, view]);
   const deletedHierarchyRoots = useTaskDeletedHierarchyRoots(userId);
   const {
+    available: taskUndoAvailable,
+    redoAvailable: taskRedoAvailable,
     pending: taskUndoPending,
     event: taskUndoEvent,
     redoEvent: taskRedoEvent,
@@ -520,7 +547,30 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     registerForwardMutation,
   } = useTaskUndo(userId);
   const checklistUndo = useTaskChecklistUndo(userId);
+  const taskHistoryPending = taskUndoPending || checklistUndo.pending;
+  const taskHistoryUndoAvailable = taskUndoAvailable || checklistUndo.available;
   const historyRouteRef = useRef<Array<'task' | 'checklist'>>([]);
+  const [historyRedoInvalidated, setHistoryRedoInvalidated] = useState(false);
+  const taskHistoryRedoAvailable = !historyRedoInvalidated
+    && (taskRedoAvailable || checklistUndo.redoAvailable);
+  const invalidateCrossStreamRedo = useCallback(() => {
+    historyRouteRef.current = [];
+    setHistoryRedoInvalidated(true);
+  }, []);
+  const registerTaskForwardMutation = useCallback((task: TaskTodo) => {
+    invalidateCrossStreamRedo();
+    registerForwardMutation(task);
+  }, [invalidateCrossStreamRedo, registerForwardMutation]);
+  useEffect(() => {
+    globalThis.addEventListener(
+      'bathos:task-checklist-forward-mutation',
+      invalidateCrossStreamRedo,
+    );
+    return () => globalThis.removeEventListener(
+      'bathos:task-checklist-forward-mutation',
+      invalidateCrossStreamRedo,
+    );
+  }, [invalidateCrossStreamRedo]);
   const {
     tasks: projectedTasks,
     loading,
@@ -540,8 +590,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     userId,
     taskListView,
     retainedTaskId,
-    registerForwardMutation,
+    registerTaskForwardMutation,
     reserveForwardMutation,
+    reportTaskMetadataMutations,
   );
   const [taskListTransition, setTaskListTransition] = useState<{
     id: number;
@@ -611,6 +662,34 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       )),
     [bulkEligible, retainedTaskId, taskQuickFilter, tasks],
   );
+  const handleTaskMetadataMutations = useCallback((
+    mutations: readonly TaskMetadataMutation[],
+  ) => {
+    const immediateDepartures: TaskDeparture[] = [];
+    for (const { before, after } of mutations) {
+      if (selectedTaskIdRef.current === after.id) {
+        latestTaskMetadataRef.current.set(after.id, after);
+        continue;
+      }
+      const departure = classifyTaskDeparture({
+        wasRendered: taskIsVisible(before, userId, taskListView, planningDate)
+          && taskMatchesQuickFilter(before.actionability, taskQuickFilter),
+        remainsInCurrentList: taskIsVisible(after, userId, taskListView, planningDate),
+        matchesCurrentFilter: taskMatchesQuickFilter(after.actionability, taskQuickFilter),
+        currentFilter: taskQuickFilter,
+        destination: getTaskPlanningRoute(after, planningDate),
+      });
+      if (departure !== null) immediateDepartures.push(departure);
+    }
+    const departureToast = getTaskDepartureToast(immediateDepartures, taskListView);
+    if (departureToast !== null) toast(departureToast);
+  }, [
+    planningDate,
+    taskListView,
+    taskQuickFilter,
+    userId,
+  ]);
+  metadataMutationHandlerRef.current = handleTaskMetadataMutations;
   const renderedPlanningTasks = useMemo(
     () => creationDraft?.view === taskListView
       ? [creationDraft.task, ...filteredTasks]
@@ -659,7 +738,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [quickFindOpen, setQuickFindOpen] = useState(false);
   const [quickFindInitialQuery, setQuickFindInitialQuery] = useState('');
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
-  const [searchTargetTaskId, setSearchTargetTaskId] = useState<string | null>(null);
+  const [searchTarget, setSearchTarget] = useState<{
+    taskId: string;
+    activation: 'open' | 'focus-recurrence';
+  } | null>(null);
   const taskSearch = useTaskSearch(userId, quickFindOpen || view === 'search');
   const reminders = useTaskReminders(userId);
   const recurrences = useTaskRecurrences(userId);
@@ -755,10 +837,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setQuickFindOpen(true);
   }, [resetTouchQuickFindPull]);
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
-  const selectedTaskIdRef = useRef<string | null>(null);
   const previousViewRef = useRef(view);
   const openTaskSequenceRef = useRef(0);
   const focusedTaskIdRef = useRef<string | null>(null);
+  const forcedTaskDomFocusIdRef = useRef<string | null>(null);
   const visibleTaskIdsRef = useRef<string[]>([]);
   const creationDraftRef = useRef<TaskCreationDraft | null>(null);
   const deferredCompletionTaskIdsRef = useRef<Set<string>>(new Set());
@@ -836,19 +918,32 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     view,
   ]);
 
+  const flushOpenTaskEditor = useCallback(async () => {
+    const autosave = taskEditorAutosaveRef.current;
+    if (autosave === null) return;
+    await autosave.flush();
+  }, []);
+
   const runTaskUndo = useCallback(async () => {
     try {
+      await flushOpenTaskEditor();
       const taskEventTime = taskUndoEvent?.occurred_at ?? '';
       const checklistEventTime = checklistUndo.event?.occurred_at ?? '';
       if (checklistEventTime > taskEventTime) {
         const event = await checklistUndo.undo();
         if (event === null) showTaskHistoryBoundaryToast('undo');
-        else historyRouteRef.current.push('checklist');
+        else {
+          setHistoryRedoInvalidated(false);
+          historyRouteRef.current.push('checklist');
+        }
         return;
       }
       const task = await undoLastTaskChange();
       if (task === null) showTaskHistoryBoundaryToast('undo');
-      else historyRouteRef.current.push('task');
+      else {
+        setHistoryRedoInvalidated(false);
+        historyRouteRef.current.push('task');
+      }
     } catch (undoError) {
       if (undoError instanceof UnsafeTaskUndoError) {
         showTaskHistoryBoundaryToast('undo');
@@ -856,10 +951,20 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         showTaskError('Task Change Could Not Be Undone', undoError);
       }
     }
-  }, [checklistUndo, taskUndoEvent?.occurred_at, undoLastTaskChange]);
+  }, [
+    checklistUndo,
+    flushOpenTaskEditor,
+    taskUndoEvent?.occurred_at,
+    undoLastTaskChange,
+  ]);
 
   const runTaskRedo = useCallback(async () => {
     try {
+      await flushOpenTaskEditor();
+      if (historyRedoInvalidated) {
+        showTaskHistoryBoundaryToast('redo');
+        return;
+      }
       const routed = historyRouteRef.current.at(-1) ?? null;
       if (routed === 'checklist') {
         const event = await checklistUndo.redo();
@@ -891,6 +996,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
   }, [
     checklistUndo,
+    flushOpenTaskEditor,
+    historyRedoInvalidated,
     redoLastTaskChange,
     taskRedoEvent?.occurred_at,
   ]);
@@ -976,12 +1083,31 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     replaceCreationDraft(null);
     if (current?.persistedTaskId === null || current === null || skipVisibilityToast) return;
     const persistedTask = { ...current.task, id: current.persistedTaskId };
-    if (taskIsVisible(persistedTask, userId, current.view, planningDate)) return;
-    toast({
-      title: 'Task Saved',
-      description: 'The task is not visible in the current list.',
+    const departure = classifyTaskDeparture({
+      wasRendered: true,
+      remainsInCurrentList: taskIsVisible(
+        persistedTask,
+        userId,
+        current.view,
+        planningDate,
+      ),
+      matchesCurrentFilter: taskMatchesQuickFilter(
+        persistedTask.actionability,
+        taskQuickFilter,
+      ),
+      currentFilter: taskQuickFilter,
+      destination: getTaskPlanningRoute(persistedTask, planningDate),
     });
-  }, [planningDate, replaceCreationDraft, userId]);
+    const departureToast = departure === null
+      ? null
+      : getTaskDepartureToast([departure], current.view);
+    if (departureToast !== null) toast(departureToast);
+  }, [
+    planningDate,
+    replaceCreationDraft,
+    taskQuickFilter,
+    userId,
+  ]);
 
   const setDeferredCompletions = useCallback((next: Set<string>) => {
     deferredCompletionTaskIdsRef.current = next;
@@ -1053,10 +1179,32 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       && deferredCompletionTaskIdsRef.current.has(currentTaskId);
     const currentTask = currentTaskId === null || closingCreationDraft
       ? undefined
-      : projectedTasksRef.current.find((task) => task.id === currentTaskId);
+      : latestTaskMetadataRef.current.get(currentTaskId)
+        ?? projectedTasksRef.current.find((task) => task.id === currentTaskId);
+    const closingDeparture = currentTask === undefined || completingCurrentTask
+      ? null
+      : classifyTaskDeparture({
+          wasRendered: true,
+          remainsInCurrentList: taskIsVisible(
+            currentTask,
+            userId,
+            taskListView,
+            planningDate,
+          ),
+          matchesCurrentFilter: taskMatchesQuickFilter(
+            currentTask.actionability,
+            taskQuickFilter,
+          ),
+          currentFilter: taskQuickFilter,
+          destination: getTaskPlanningRoute(currentTask, planningDate),
+        });
+    const closingDepartureToast = closingDeparture === null
+      ? null
+      : getTaskDepartureToast([closingDeparture], taskListView);
     const shouldSettleBeforeProjection = currentTaskId !== null && (
       closingCreationDraft
       || completingCurrentTask
+      || closingDeparture !== null
       || taskPlacementChanged(currentTask, retainedTaskPlacementRef.current)
     );
     if (taskId !== null) {
@@ -1088,6 +1236,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     setClosingTaskId(null);
     if (closingCreationDraft) finishCreationDraft(completingCreationDraft);
+    if (currentTaskId !== null) latestTaskMetadataRef.current.delete(currentTaskId);
+    if (closingDepartureToast !== null) toast(closingDepartureToast);
     if (shouldSettleBeforeProjection && currentTaskId !== null && closingTaskRect !== null) {
       animateTaskPlacementAfterClose(currentTaskId, {
         left: closingTaskRect.left,
@@ -1096,10 +1246,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     selectedTaskIdRef.current = taskId;
     setSelectedTaskId(taskId);
+    if (taskId !== null) latestTaskMetadataRef.current.delete(taskId);
     return true;
   }, [
     finalizeDeferredCompletion,
     finishCreationDraft,
+    planningDate,
+    taskListView,
+    taskQuickFilter,
+    userId,
   ]);
 
   useEffect(() => {
@@ -1198,12 +1353,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     forceDomFocus = false,
   ) => {
     focusedTaskIdRef.current = taskId;
+    forcedTaskDomFocusIdRef.current = forceDomFocus ? taskId : null;
     setFocusedTaskId(taskId);
     setBulkSelection((current) => current.size === 0 ? current : new Set());
     setBulkSelectionAnchorId(taskId);
     setBulkMode((current) => current ? false : current);
     if (taskId === null) return;
-    window.setTimeout(() => {
+    const focusWhenReady = (attempt = 0) => {
       if (focusedTaskIdRef.current !== taskId) return;
       const activeElement = document.activeElement;
       if (
@@ -1216,8 +1372,28 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       const target = Array.from(document.querySelectorAll<HTMLElement>(
         '[data-task-row-focus-target][data-task-row-id]',
       )).find((row) => row.dataset.taskRowId === taskId);
+      if (
+        attempt < 30
+        && (
+          target === undefined
+          || (forceDomFocus && attempt === 0)
+        )
+      ) {
+        window.requestAnimationFrame(() => focusWhenReady(attempt + 1));
+        return;
+      }
       target?.focus({ preventScroll: true });
       target?.scrollIntoView?.({ block: 'nearest' });
+      if (target && forceDomFocus && attempt < 2) {
+        window.requestAnimationFrame(() => focusWhenReady(attempt + 1));
+        return;
+      }
+      if (target && forcedTaskDomFocusIdRef.current === taskId) {
+        forcedTaskDomFocusIdRef.current = null;
+      }
+    };
+    window.setTimeout(() => {
+      focusWhenReady();
     }, 0);
   }, []);
 
@@ -1412,21 +1588,22 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   useEffect(() => {
     const previousVisibleIds = visibleTaskIdsRef.current;
-    const nextVisibleIds = selectableTasks.map(({ id }) => id);
-    const visibleIds = new Set(selectableTasks.map(({ id }) => id));
+    const nextVisibleIds = renderedPlanningTasks.map(({ id }) => id);
+    const focusableIds = new Set(nextVisibleIds);
+    const selectableIds = new Set(selectableTasks.map(({ id }) => id));
     const remainingSelection = new Set(
-      Array.from(bulkSelection).filter((taskId) => visibleIds.has(taskId)),
+      Array.from(bulkSelection).filter((taskId) => selectableIds.has(taskId)),
     );
     if (remainingSelection.size !== bulkSelection.size) {
       setBulkSelection(remainingSelection);
     }
     setBulkSelectionAnchorId((current) => (
-      current === null || visibleIds.has(current)
+      current === null || selectableIds.has(current)
         ? current
-        : Array.from(bulkSelection).find((taskId) => visibleIds.has(taskId)) ?? null
+        : Array.from(bulkSelection).find((taskId) => selectableIds.has(taskId)) ?? null
     ));
     const currentFocusedId = focusedTaskIdRef.current;
-    if (currentFocusedId !== null && !visibleIds.has(currentFocusedId)) {
+    if (currentFocusedId !== null && !focusableIds.has(currentFocusedId)) {
       if (bulkMode) {
         focusedTaskIdRef.current = null;
         setFocusedTaskId(null);
@@ -1443,6 +1620,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     bulkMode,
     bulkSelection,
     focusTaskRow,
+    renderedPlanningTasks,
     selectableTasks,
   ]);
 
@@ -1451,7 +1629,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const frame = window.requestAnimationFrame(() => {
       if (focusedTaskIdRef.current !== focusedTaskId) return;
       const activeElement = document.activeElement;
+      const forceDomFocus = forcedTaskDomFocusIdRef.current === focusedTaskId;
+      if (forceDomFocus && quickFindOpen) return;
       if (
+        !forceDomFocus
+        &&
         activeElement !== document.body
         && activeElement instanceof Element
         && !activeElement.closest('[data-task-row-id]')
@@ -1464,7 +1646,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       target.scrollIntoView?.({ block: 'nearest' });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [focusedTaskId, selectableTasks]);
+  }, [focusedTaskId, quickFindOpen, renderedPlanningTasks]);
 
   useEffect(() => {
     const parameters = new URLSearchParams(location.search);
@@ -1486,18 +1668,33 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [acknowledgeReminderDelivery, location.hash, location.pathname, location.search, navigate]);
 
   useEffect(() => {
-    if (!searchTargetTaskId) return;
-    const target = tasks.find(({ id }) => id === searchTargetTaskId);
+    if (!searchTarget) return;
+    const target = tasks.find(({ id }) => id === searchTarget.taskId);
     if (!target) return;
-    if (target.lifecycle === 'open') {
-      void setOpenTask(target.id);
-    } else {
-      document.querySelector<HTMLElement>(
-        `[data-task-search-id="${target.id}"]`,
-      )?.focus();
+    if (searchTarget.activation !== 'focus-recurrence') {
+      if (target.lifecycle === 'open') {
+        void setOpenTask(target.id);
+      } else {
+        document.querySelector<HTMLElement>(
+          `[data-task-search-id="${target.id}"]`,
+        )?.focus();
+      }
+      setSearchTarget((current) => (
+        current?.taskId === target.id ? null : current
+      ));
+      return;
     }
-    setSearchTargetTaskId(null);
-  }, [searchTargetTaskId, setOpenTask, tasks]);
+    const timeout = window.setTimeout(() => {
+      void setOpenTask(null).then((closed) => {
+        if (!closed) return;
+        focusTaskRow(target.id, true);
+      });
+      setSearchTarget((current) => (
+        current?.taskId === target.id ? null : current
+      ));
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [focusTaskRow, searchTarget, setOpenTask, tasks]);
 
   const getTaskCommandTargets = useCallback((): TaskTodo[] => {
     if (bulkMode && bulkSelection.size >= 1) {
@@ -1631,6 +1828,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         planningTimeZone,
         atTop: false,
       });
+      duplicated.forEach(registerTaskForwardMutation);
       if (bulkMode) clearTaskSelection();
       if (duplicatesOpenTask && duplicated[0]) await setOpenTask(duplicated[0].id);
       if (duplicatesFocusedTask && duplicated[0]) focusTaskRow(duplicated[0].id);
@@ -1649,6 +1847,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     mode,
     planningDate,
     planningTimeZone,
+    registerTaskForwardMutation,
     setOpenTask,
     taskClipboardService,
   ]);
@@ -1686,7 +1885,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       if (operation === 'cut') {
         setBulkPending(true);
         try {
-          for (const task of targets) await transitionTask(task.id, 'delete');
+          const operationId = globalThis.crypto.randomUUID();
+          for (const task of targets) {
+            await transitionTask(task.id, 'delete', undefined, { operationId });
+          }
           if (bulkMode) clearTaskSelection();
         } finally {
           setBulkPending(false);
@@ -1729,7 +1931,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     const snapshots: TaskClipboardSnapshot[] = parsed.kind === 'tasks'
       ? parsed.envelope.tasks
-      : [createPlainTextTaskSnapshot(parsed.title)];
+      : splitPlainTextTaskTitles(parsed.title).map(createPlainTextTaskSnapshot);
+    if (snapshots.length === 0) return;
     setBulkPending(true);
     try {
       const created = await taskClipboardService.reconstruct(snapshots, {
@@ -1739,11 +1942,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         planningTimeZone,
         atTop: true,
       });
+      created.forEach(registerTaskForwardMutation);
       clearTaskSelection();
-      toast({
-        title: created.length === 1 ? 'Task Pasted' : 'Tasks Pasted',
-        description: `${created.length} ${created.length === 1 ? 'task' : 'tasks'} pasted.`,
-      });
     } catch (pasteError) {
       showTaskError('Tasks Could Not Be Pasted', pasteError);
     } finally {
@@ -1755,6 +1955,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     mode,
     planningDate,
     planningTimeZone,
+    registerTaskForwardMutation,
     taskClipboardService,
   ]);
 
@@ -1766,17 +1967,31 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     );
     if (actionability === null) return;
     try {
-      for (const task of targets) {
-        if (task.id === NEW_TASK_DRAFT_ID) {
-          await saveCreationDraftPatch({ actionability });
-        } else if (task.lifecycle === 'open' && task.disposition === 'present') {
-          await updateTask(task.id, { actionability });
-        }
+      if (targets.some((task) => task.id === NEW_TASK_DRAFT_ID)) {
+        await saveCreationDraftPatch({ actionability });
+      }
+      const persistedTargets = targets.filter((task) => (
+        task.id !== NEW_TASK_DRAFT_ID
+        && task.lifecycle === 'open'
+        && task.disposition === 'present'
+      ));
+      if (persistedTargets.length === 1) {
+        await updateTask(persistedTargets[0].id, { actionability });
+      } else if (persistedTargets.length > 1) {
+        await applyTaskPatches(persistedTargets.map((task) => ({
+          taskId: task.id,
+          patch: { actionability },
+        })));
       }
     } catch (cycleError) {
       showTaskError('Task Actionability Could Not Be Changed', cycleError);
     }
-  }, [getTaskCommandTargets, saveCreationDraftPatch, updateTask]);
+  }, [
+    applyTaskPatches,
+    getTaskCommandTargets,
+    saveCreationDraftPatch,
+    updateTask,
+  ]);
 
   const runCycleAreaShortcut = useCallback(async () => {
     const targets = getTaskCommandTargets();
@@ -1981,10 +2196,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   useEffect(() => {
     const handleCopy = (event: ClipboardEvent) => {
+      if (document.querySelector(
+        '[data-task-checklist][data-checklist-selection-active="true"]',
+      )) return;
       if (isTaskEditableTarget(event.target)) return;
       void runTaskClipboardWrite('copy', event);
     };
     const handleCut = (event: ClipboardEvent) => {
+      if (document.querySelector(
+        '[data-task-checklist][data-checklist-selection-active="true"]',
+      )) return;
       if (isTaskEditableTarget(event.target)) return;
       void runTaskClipboardWrite('cut', event);
     };
@@ -2005,6 +2226,26 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       window.removeEventListener('paste', handlePaste, true);
     };
   }, [runTaskClipboardWrite, runTaskPaste]);
+
+  useEffect(() => {
+    const handleNativeCommand = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail = event.detail as {
+        command?: unknown;
+        schemaVersion?: unknown;
+      } | null;
+      if (
+        detail?.schemaVersion !== 1
+        || detail.command !== 'undo'
+        || taskHistoryPending
+      ) return;
+      void runTaskUndo();
+    };
+    window.addEventListener(TASK_NATIVE_COMMAND_EVENT, handleNativeCommand);
+    return () => {
+      window.removeEventListener(TASK_NATIVE_COMMAND_EVENT, handleNativeCommand);
+    };
+  }, [runTaskUndo, taskHistoryPending]);
 
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -2140,10 +2381,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         && isTaskEditableTarget(event.target)
       ) return;
       if (command === 'copy' || command === 'cut' || command === 'paste') return;
-      if (
-        (command === 'undo' || command === 'redo')
-        && isTaskEditableTarget(event.target)
-      ) return;
+      if ((command === 'undo' || command === 'redo') && event.isComposing) return;
       if (
         command === 'close-task'
         && selectedTaskIdRef.current === null
@@ -2186,11 +2424,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         return;
       }
       if (command === 'undo') {
-        if (!taskUndoPending) void runTaskUndo();
+        if (!taskHistoryPending) void runTaskUndo();
         return;
       }
       if (command === 'redo') {
-        if (!taskUndoPending) void runTaskRedo();
+        if (!taskHistoryPending) void runTaskRedo();
         return;
       }
       if (command === 'capture') {
@@ -2244,6 +2482,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         return;
       }
       if (command === 'open-deadline') {
+        const activeDeadlinePicker = document.querySelector<HTMLElement>(
+          '[data-date-picker-command-scope="task-deadline"]',
+        );
+        if (activeDeadlinePicker) {
+          requestDatePickerAdvance(activeDeadlinePicker);
+          return;
+        }
         void openTaskCommandField('deadline');
         return;
       }
@@ -2323,7 +2568,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     runTaskRedo,
     runTaskUndo,
     setOpenTask,
-    taskUndoPending,
+    taskHistoryPending,
     selectableTasks,
     quickFindOpen,
     updateTaskDropIndicator,
@@ -2682,7 +2927,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         hierarchy={hierarchy}
         showAreaMetadata={view !== 'anytime'}
         selected={!isRecurrenceProjection && selectedTaskId === task.id}
-        focused={!isRecurrenceProjection && focusedTaskId === task.id}
+        focused={focusedTaskId === task.id}
         recurrenceProjection={isRecurrenceProjection
           ? recurrenceProjection
           : undefined}
@@ -3188,11 +3433,25 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   type="button"
                   variant="clear"
                   size="icon"
-                  aria-label="Quick Find Tasks and Areas"
+                  aria-label="Undo Last Task Change"
+                  title="Undo"
                   className="h-9 w-9 text-muted-foreground"
-                  onClick={() => openCommandSurface(setQuickFindOpen)}
+                  disabled={!taskHistoryUndoAvailable || taskHistoryPending}
+                  onClick={() => void runTaskUndo()}
                 >
-                  <TASK_ICONS.Search className="h-4 w-4" aria-hidden="true" />
+                  <TASK_ICONS.Undo className="h-4 w-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="clear"
+                  size="icon"
+                  aria-label="Redo Last Task Change"
+                  title="Redo"
+                  className="h-9 w-9 text-muted-foreground"
+                  disabled={!taskHistoryRedoAvailable || taskHistoryPending}
+                  onClick={() => void runTaskRedo()}
+                >
+                  <TASK_ICONS.Redo className="h-4 w-4" aria-hidden="true" />
                 </Button>
                 {!bulkMode ? (
                   <Button
@@ -3207,6 +3466,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                     <TASK_ICONS.MultiSelect className="h-4 w-4" aria-hidden="true" />
                   </Button>
                 ) : null}
+                <Button
+                  type="button"
+                  variant="clear"
+                  size="icon"
+                  aria-label="Quick Find Tasks"
+                  className="h-9 w-9 text-muted-foreground"
+                  onClick={() => openCommandSurface(setQuickFindOpen)}
+                >
+                  <TASK_ICONS.Search className="h-4 w-4" aria-hidden="true" />
+                </Button>
                 {bulkEligible ? (
                   <TaskQuickFilterControl
                     value={taskQuickFilter}
@@ -3260,7 +3529,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 }, { replace: true });
               }}
               onSelectTask={(task, path) => {
-                setSearchTargetTaskId(task.id);
+                setSearchTarget({ taskId: task.id, activation: 'open' });
                 navigate(path);
               }}
             />
@@ -3271,7 +3540,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               hierarchy={hierarchy}
               planningDate={planningDate}
               onOpenTask={(taskId, href) => {
-                setSearchTargetTaskId(taskId);
+                setSearchTarget({ taskId, activation: 'open' });
                 navigate(href);
               }}
             />
@@ -3544,7 +3813,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           <div
             data-task-floating-create-boundary
             className={[
-              'pointer-events-none fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 mx-auto flex w-full max-w-3xl justify-end px-4 transition-opacity duration-200 ease-out md:bottom-6',
+              'pointer-events-none fixed inset-x-0 bottom-[calc(var(--mobile-bottom-nav-bottom-offset)+4.75rem)] z-30 mx-auto flex w-full max-w-3xl justify-end px-4 transition-opacity duration-200 ease-out md:bottom-6',
               selectedTaskId !== null ? 'opacity-0' : 'opacity-100',
             ].join(' ')}
           >
@@ -3617,11 +3886,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           setQuickFindInitialQuery('');
           navigate(path);
         }}
-        onSelectTask={(task, path) => {
+        onSelectTask={(task, path, activation) => {
           commandReturnFocusRef.current = null;
           setQuickFindOpen(false);
           setQuickFindInitialQuery('');
-          setSearchTargetTaskId(task.id);
+          setSearchTarget({ taskId: task.id, activation });
           navigate(path);
         }}
       />
@@ -3762,7 +4031,7 @@ function TaskBulkToolbar({
     <section
       aria-label="Task Selection"
       data-task-bulk-selection-surface
-      className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 flex-wrap items-center gap-2 rounded-md border border-info/40 bg-background p-3 md:bottom-6"
+      className="fixed bottom-[calc(var(--mobile-bottom-nav-bottom-offset)+4.25rem)] left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 flex-wrap items-center gap-2 rounded-md border border-info/40 bg-background p-3 md:bottom-6"
     >
       <p className="mr-auto text-sm font-medium text-foreground" aria-live="polite">
         {selectedCount} {selectedCount === 1 ? 'Task' : 'Tasks'}
@@ -4307,8 +4576,8 @@ function DoneTaskRow({
         }
       }}
       className={[
-        'flex h-11 items-center gap-2 overflow-hidden pl-1 pr-1.5 focus-visible:rounded-md focus-visible:bg-info/20 focus-visible:outline-none',
-        focused || bulkSelection.selected ? 'rounded-md bg-info/20' : '',
+        'flex h-11 items-center gap-2 overflow-hidden pl-1 pr-1.5 focus-visible:rounded-md focus-visible:bg-info/10 focus-visible:outline-none',
+        focused || bulkSelection.selected ? 'rounded-md bg-info/10' : '',
       ].filter(Boolean).join(' ')}
       data-task-row-header
     >
@@ -4321,7 +4590,7 @@ function DoneTaskRow({
           : `Reopen Canceled ${task.title}`}
         disabled={pending}
         data-task-completion-control={completed ? true : undefined}
-        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-success transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
         onClick={() => void run(onReopen)}
       >
         {completed ? (
@@ -4480,8 +4749,8 @@ function DeletedTaskRow({
         }
       }}
       className={[
-        'flex h-11 items-center gap-2 overflow-hidden pl-1 pr-1.5 focus-visible:rounded-md focus-visible:bg-info/20 focus-visible:outline-none',
-        focused || bulkSelection.selected ? 'rounded-md bg-info/20' : '',
+        'flex h-11 items-center gap-2 overflow-hidden pl-1 pr-1.5 focus-visible:rounded-md focus-visible:bg-info/10 focus-visible:outline-none',
+        focused || bulkSelection.selected ? 'rounded-md bg-info/10' : '',
       ].filter(Boolean).join(' ')}
       data-task-row-header
     >
@@ -5528,14 +5797,14 @@ function TaskRow({
         );
       }}
       className={[
-        'relative grid overflow-hidden transition-[grid-template-rows,opacity,background-color,border-radius] ease-out focus:outline-none focus-visible:rounded-md focus-visible:bg-info/20 focus-visible:outline-none motion-reduce:transition-none',
+        'relative grid overflow-hidden transition-[grid-template-rows,opacity,background-color,border-radius] ease-out focus:outline-none focus-visible:rounded-md focus-visible:bg-info/10 focus-visible:outline-none motion-reduce:transition-none',
         terminalExiting || draftExiting
           ? 'grid-rows-[0fr] opacity-0'
           : 'grid-rows-[1fr] opacity-100',
         selected
-          ? 'rounded-md bg-popover'
+          ? 'rounded-md bg-info/10'
           : focused || bulkSelection?.selected
-            ? 'rounded-md bg-info/20'
+            ? 'rounded-md bg-info/10'
           : '',
       ].filter(Boolean).join(' ') || undefined}
       style={{ transitionDuration: `${TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS}ms` }}
@@ -5642,7 +5911,7 @@ function TaskRow({
               }
               void runTerminalAction(onComplete);
             }}
-            className="group/restore inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className="group/restore inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
             {terminalState === 'deleted' ? (
               <>
@@ -5658,7 +5927,7 @@ function TaskRow({
             ) : terminalState === 'canceled' ? (
               <TASK_ICONS.Canceled className="h-5 w-5" aria-hidden="true" />
             ) : terminalState === 'completed' || completionRequested || terminalSettling ? (
-              <TASK_ICONS.CompletedTask className="h-6 w-6 text-success" aria-hidden="true" />
+              <TASK_ICONS.CompletedTask className="h-6 w-6" aria-hidden="true" />
             ) : (
               task.destination === 'someday' ? (
                 <TASK_ICONS.SomedayTask className="h-6 w-6" aria-hidden="true" />
@@ -6065,6 +6334,7 @@ function TaskRow({
                 todayDate={planningDate}
                 clearable
                 clearLabel="Clear"
+                commandScope="task-deadline"
                 active
               />
             ) : null}
@@ -6360,6 +6630,7 @@ function TaskEditor({
     : actionability === 'rechecking'
       ? TASK_ICONS.Rechecking
       : TASK_ICONS.Ready;
+  const deadlineUrgent = deadline !== '' && deadline <= planningDate;
 
   return (
     <div
@@ -6569,10 +6840,12 @@ function TaskEditor({
             placeholder="Deadline"
             aria-label="Deadline"
             decoration={<TASK_ICONS.Deadline />}
-            className="text-sm"
+            decorationClassName={deadlineUrgent ? 'text-destructive' : undefined}
+            className={cn('text-sm', deadlineUrgent && 'text-destructive')}
             todayDate={planningDate}
             clearable
             clearLabel="Clear"
+            panelCommandScope="task-deadline"
           />
         </div>
       </div>
@@ -6619,6 +6892,7 @@ function TaskEditor({
               id={`task-actionability-${task.id}`}
               aria-label="Actionability"
               decoration={<ActionabilityIcon />}
+              decorationClassName={actionability === 'actionable' ? undefined : 'text-admin'}
             >
               <SelectValue />
             </SelectTrigger>

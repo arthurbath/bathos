@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(23);
+SELECT plan(25);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -230,6 +230,18 @@ SELECT is(
   ),
   'Next area task,Future task',
   'uses future start before deadline and orders Upcoming by date buckets'
+);
+
+SELECT is(
+  (SELECT value #>> '{lists,1,tasks,0,upcomingDate}' FROM widget_snapshot),
+  (CURRENT_DATE + 2)::text,
+  'projects the same authoritative Upcoming date used for list placement'
+);
+
+SELECT is(
+  (SELECT value #>> '{lists,1,tasks,0,isRecurrenceProjection}' FROM widget_snapshot),
+  'false',
+  'identifies an ordinary Upcoming task as completable'
 );
 
 SELECT is(

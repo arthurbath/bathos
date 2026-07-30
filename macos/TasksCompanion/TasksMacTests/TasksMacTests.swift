@@ -1,9 +1,17 @@
 import AppKit
+import WebKit
 import XCTest
 @testable import TasksMac
 
 @MainActor
 final class TasksMacTests: XCTestCase {
+    func testMacWidgetUsesCompactTenRowDensity() {
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.largeWidgetTaskRowMinimumHeight,
+            28
+        )
+    }
+
     func testWindowPolicySupportsNarrowSplitViewPlacement() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1_100, height: 780),
@@ -31,6 +39,16 @@ final class TasksMacTests: XCTestCase {
         XCTAssertEqual(TaskCompanionConstants.widgetKind, "garden.bath.tasks.list-widget")
     }
 
+    func testMacHostUsesTheCompiledModernAppIcon() {
+        XCTAssertEqual(
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleIconName") as? String,
+            "AppIcon"
+        )
+        XCTAssertNotNil(
+            Bundle.main.url(forResource: "AppIcon", withExtension: "icns")
+        )
+    }
+
     func testCommandNumberDestinations() {
         for destination in TasksMacDestination.allCases {
             XCTAssertEqual(
@@ -48,6 +66,52 @@ final class TasksMacTests: XCTestCase {
         XCTAssertNil(TasksMacKeyboardController.destination(
             charactersIgnoringModifiers: "7",
             modifierFlags: [.command]
+        ))
+    }
+
+    func testCacheClearingRefreshUsesTheExactActiveWindowChord() {
+        XCTAssertTrue(TasksMacKeyboardController.shouldPerformCacheClearingRefresh(
+            charactersIgnoringModifiers: "r",
+            modifierFlags: [.command, .option],
+            isRepeat: false,
+            tasksWindowIsKey: true
+        ))
+        XCTAssertFalse(TasksMacKeyboardController.shouldPerformCacheClearingRefresh(
+            charactersIgnoringModifiers: "r",
+            modifierFlags: [.command],
+            isRepeat: false,
+            tasksWindowIsKey: true
+        ))
+        XCTAssertFalse(TasksMacKeyboardController.shouldPerformCacheClearingRefresh(
+            charactersIgnoringModifiers: "r",
+            modifierFlags: [.command, .option],
+            isRepeat: true,
+            tasksWindowIsKey: true
+        ))
+        XCTAssertFalse(TasksMacKeyboardController.shouldPerformCacheClearingRefresh(
+            charactersIgnoringModifiers: "r",
+            modifierFlags: [.command, .option],
+            isRepeat: false,
+            tasksWindowIsKey: false
+        ))
+    }
+
+    func testCacheClearingRefreshPreservesDurableWebStorage() {
+        let clearedTypes = TasksBrowserModel.reloadSafeWebsiteDataTypes
+
+        XCTAssertTrue(clearedTypes.contains(WKWebsiteDataTypeDiskCache))
+        XCTAssertTrue(clearedTypes.contains(WKWebsiteDataTypeFetchCache))
+        XCTAssertTrue(clearedTypes.contains(WKWebsiteDataTypeMemoryCache))
+        XCTAssertTrue(clearedTypes.contains(
+            WKWebsiteDataTypeOfflineWebApplicationCache
+        ))
+        XCTAssertFalse(clearedTypes.contains(WKWebsiteDataTypeCookies))
+        XCTAssertFalse(clearedTypes.contains(WKWebsiteDataTypeLocalStorage))
+        XCTAssertFalse(clearedTypes.contains(
+            WKWebsiteDataTypeIndexedDBDatabases
+        ))
+        XCTAssertFalse(clearedTypes.contains(
+            WKWebsiteDataTypeServiceWorkerRegistrations
         ))
     }
 

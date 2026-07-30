@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createTaskRedoPatch,
   createTaskUndoPatch,
+  deletedCreationSnapshotMatches,
   parseTaskHistoryEvent,
   UnsafeTaskRedoError,
   UnsafeTaskUndoError,
@@ -412,10 +413,9 @@ function projectForwardMutations(
 
 function taskHistoryEventSupportsMovement(event: TaskHistoryEvent): boolean {
   return event.transition !== 'baseline'
-    && event.transition !== 'create'
     && event.transition !== 'undo'
     && event.transition !== 'redo'
-    && event.before_state !== null;
+    && (event.transition === 'create' || event.before_state !== null);
 }
 
 function waitForTaskHistoryProjection(): Promise<void> {
@@ -458,7 +458,10 @@ export function applyTaskHistoryEvent(
     return cursor;
   }
   if (event.transition === 'create') {
-    return { ...cursor, redo: [] };
+    return {
+      undo: [...cursor.undo, event].slice(-TASK_HISTORY_LIMIT),
+      redo: [],
+    };
   }
   if (event.transition === 'undo') {
     const source = cursor.undo.at(-1);
@@ -516,12 +519,26 @@ function inverseMatchesSource(
   const sourceEvents = historyOperationEvents(source);
   if (inverseEvents.length !== sourceEvents.length) return false;
   return sourceEvents.every((sourceEvent) => {
-    if (sourceEvent.before_state === null) return false;
     const inverseEvent = inverseEvents.find((candidate) => (
       candidate.owner_id === sourceEvent.owner_id
       && candidate.task_id === sourceEvent.task_id
     ));
     if (!inverseEvent) return false;
+    if (sourceEvent.transition === 'create' && sourceEvent.before_state === null) {
+      return direction === 'undo'
+        ? snapshotsEqual(inverseEvent.before_state, sourceEvent.after_state)
+          && deletedCreationSnapshotMatches(
+            inverseEvent.after_state,
+            sourceEvent.after_state,
+            sourceEvent.task_id,
+          )
+        : deletedCreationSnapshotMatches(
+          inverseEvent.before_state ?? sourceEvent.after_state,
+          sourceEvent.after_state,
+          sourceEvent.task_id,
+        ) && snapshotsEqual(inverseEvent.after_state, sourceEvent.after_state);
+    }
+    if (sourceEvent.before_state === null) return false;
     return direction === 'undo'
       ? snapshotsEqual(inverseEvent.before_state, sourceEvent.after_state)
         && snapshotsEqual(inverseEvent.after_state, sourceEvent.before_state)

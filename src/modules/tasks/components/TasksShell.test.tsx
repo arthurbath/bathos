@@ -24,9 +24,10 @@ import {
   requestTaskStartPickerOpen,
 } from './taskStartPickerEvents';
 import { getTasksStorageStatusLabel } from './tasksStorageStatus';
-import { TasksShell } from './TasksShell';
+import { TASK_NATIVE_COMMAND_EVENT, TasksShell } from './TasksShell';
 import { useBathosFormInteractions } from '@/platform/hooks/useCommandEnterSubmit';
 import { TASK_CLIPBOARD_KIND } from '@/modules/tasks/domain/taskClipboard';
+import { NEW_TASK_DRAFT_ID } from '@/modules/tasks/domain/taskCreationDraft';
 import {
   UnsafeTaskRedoError,
 } from '@/modules/tasks/domain/taskHistory';
@@ -1121,7 +1122,7 @@ describe('TasksShell', () => {
         'max-w-3xl',
         'justify-end',
         'px-4',
-        'bottom-[calc(5.25rem+env(safe-area-inset-bottom))]',
+        'bottom-[calc(var(--mobile-bottom-nav-bottom-offset)+4.75rem)]',
       );
       expect(newTaskButtons[0]).toHaveClass(
         'h-12',
@@ -1333,7 +1334,7 @@ describe('TasksShell', () => {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', bubbles: true }));
       });
       expect(document.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks and Areas"]',
+        '[aria-label="Find Tasks"]',
       )?.value).toBe('n');
     } finally {
       cleanup(root, container);
@@ -1624,8 +1625,8 @@ describe('TasksShell', () => {
       });
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith({
-          title: 'Task Saved',
-          description: 'The task is not visible in the current list.',
+          title: 'Task Moved',
+          description: 'The task now appears in Anytime.',
         });
       });
     } finally {
@@ -1650,6 +1651,7 @@ describe('TasksShell', () => {
         'owner-a',
         'upcoming',
         null,
+        expect.any(Function),
         expect.any(Function),
         expect.any(Function),
       );
@@ -1680,6 +1682,7 @@ describe('TasksShell', () => {
         'owner-a',
         'upcoming',
         null,
+        expect.any(Function),
         expect.any(Function),
         expect.any(Function),
       );
@@ -1770,7 +1773,7 @@ describe('TasksShell', () => {
 
     try {
       const quickFindAction = container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Quick Find Tasks and Areas"]',
+        'button[aria-label="Quick Find Tasks"]',
       );
       expect(quickFindAction).toBeTruthy();
       await act(async () => quickFindAction?.click());
@@ -1795,13 +1798,146 @@ describe('TasksShell', () => {
       expect(dialog).toHaveAccessibleName('Quick Find');
       expect(dialog.querySelector('[aria-label="Task Search Filters"]')).toBeNull();
       const search = dialog.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks and Areas"]',
+        '[aria-label="Find Tasks"]',
       )!;
       await act(async () => {
         setInputValue(search, 'architect');
       });
       expect(dialog.textContent).toContain('Reply to the architect');
       expect(dialog.textContent).not.toContain('Existing task');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('prioritizes summary matches above ancillary metadata matches in Quick Find', async () => {
+    const searchTasks = [
+      taskTodoFixture({
+        ...task,
+        id: 'task-notes-match',
+        title: 'Save Filters',
+        notes: 'Review the Figma prototype',
+        client_mutation_id: 'mutation-notes-match',
+      }),
+      taskTodoFixture({
+        ...task,
+        id: 'task-url-match',
+        title: 'Meter Source Cert Relevance',
+        source_url: 'https://figma.com/design/example',
+        client_mutation_id: 'mutation-url-match',
+      }),
+      taskTodoFixture({
+        ...task,
+        id: 'task-summary-match',
+        title: 'Review Figma Comment on General Experience',
+        client_mutation_id: 'mutation-summary-match',
+      }),
+    ];
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: searchTasks });
+    mockTaskSearch.mockReturnValue({ tasks: searchTasks, loading: false, error: null });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'f', bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      const dialog = document.querySelector<HTMLElement>('[data-task-quick-find]')!;
+      const search = dialog.querySelector<HTMLInputElement>('[aria-label="Find Tasks"]')!;
+      await act(async () => {
+        setInputValue(search, 'figma');
+      });
+      const results = Array.from(
+        dialog.querySelectorAll<HTMLElement>('[data-task-compact-row]'),
+      );
+
+      expect(results).toHaveLength(3);
+      expect(results[0]).toHaveTextContent('Review Figma Comment on General Experience');
+      expect(results[1]).toHaveTextContent('Save Filters');
+      expect(results[2]).toHaveTextContent('Meter Source Cert Relevance');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('keeps text focus in Quick Find while arrow keys select results and Continue Search', async () => {
+    const matchingTasks = ['Alpha Match', 'Beta Match', 'Gamma Match'].map((title, index) => (
+      taskTodoFixture({
+        ...task,
+        id: `task-match-${index}`,
+        title,
+        client_mutation_id: `mutation-match-${index}`,
+      })
+    ));
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: matchingTasks });
+    mockTaskSearch.mockReturnValue({ tasks: matchingTasks, loading: false, error: null });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'm', bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      const dialog = document.querySelector<HTMLElement>('[data-task-quick-find]')!;
+      const search = dialog.querySelector<HTMLInputElement>('[aria-label="Find Tasks"]')!;
+      await waitFor(() => {
+        expect(dialog.querySelectorAll('[data-task-compact-row]')).toHaveLength(3);
+      });
+      const firstActiveId = search.getAttribute('aria-activedescendant');
+      expect(firstActiveId).toContain('result-0');
+      expect(document.activeElement).toBe(search);
+
+      await act(async () => {
+        search.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowUp', bubbles: true, cancelable: true,
+        }));
+      });
+      expect(search.getAttribute('aria-activedescendant')).toContain('continue');
+      expect(document.activeElement).toBe(search);
+
+      await act(async () => {
+        search.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      expect(container.querySelector('[data-task-view-heading]')).toHaveTextContent('Search');
+      expect(container.querySelector<HTMLInputElement>(
+        '[aria-label="Search All Tasks"]',
+      )?.value).toBe('m');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('dismisses Quick Find from an outside press without activating the page beneath it', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'e', bubbles: true, cancelable: true,
+        }));
+      });
+      const dismissLayer = document.querySelector<HTMLElement>(
+        '[data-task-quick-find-dismiss-layer]',
+      )!;
+      const dismiss = new MouseEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => {
+        dismissLayer.dispatchEvent(dismiss);
+        await Promise.resolve();
+      });
+      expect(dismiss.defaultPrevented).toBe(true);
+      expect(document.querySelector('[data-task-quick-find]')).toBeNull();
+      expect(document.getElementById(`task-title-${NEW_TASK_DRAFT_ID}`)).toBeNull();
     } finally {
       cleanup(root, container);
     }
@@ -1854,7 +1990,7 @@ describe('TasksShell', () => {
       });
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
       const search = dialog.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks and Areas"]',
+        '[aria-label="Find Tasks"]',
       )!;
       await act(async () => {
         setInputValue(search, 'inspection');
@@ -1871,10 +2007,90 @@ describe('TasksShell', () => {
         'task-future',
         expect.any(Function),
         expect.any(Function),
+        expect.any(Function),
       );
       await waitFor(() => {
         expect(container.querySelector('#task-title-task-future')).toBeTruthy();
       });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('focuses an Upcoming recurrence projection from Quick Find without opening repeat management', async () => {
+    const definition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-search',
+    });
+    const revision = taskRecurrenceRevisionFixture({
+      recurrence_id: definition.id,
+      revision: 1,
+      rule_mode: 'calendar',
+    });
+    const recurrenceTask = taskTodoFixture({
+      ...task,
+      id: 'task-recurrence-search',
+      title: 'Review recurring plan',
+      start_date: '2026-07-27',
+      recurrence_definition_id: definition.id,
+      recurrence_revision: revision.revision,
+      recurrence_occurrence_id: 'occurrence-search',
+      recurrence_logical_key: 'calendar:2026-07-27',
+      client_mutation_id: 'mutation-recurrence-search',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [recurrenceTask] });
+    mockTaskSearch.mockReturnValue({
+      tasks: [recurrenceTask],
+      loading: false,
+      error: null,
+    });
+    mockTaskRecurrences.mockReturnValue({
+      definitions: [definition],
+      revisions: new Map([[definition.id, revision]]),
+      occurrences: [],
+      openOccurrenceDefinitionIds: new Set(),
+      openOccurrenceByDefinitionId: new Map(),
+      evaluationFailures: new Set(),
+      planningDate: '2026-07-20',
+      mode: 'local',
+      loading: false,
+      error: null,
+      save: vi.fn(),
+      createFromTask: vi.fn(),
+      edit: vi.fn(),
+      setStatus: vi.fn(),
+      evaluate: vi.fn(),
+    });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'r', bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      const dialog = document.querySelector<HTMLElement>('[data-task-quick-find]')!;
+      const result = dialog.querySelector<HTMLAnchorElement>(
+        '[data-task-quick-find-result-kind="focus-recurrence"]',
+      )!;
+      expect(result).toHaveTextContent('Review recurring plan');
+      expect(result.querySelector('svg')).toBeTruthy();
+
+      await act(async () => {
+        result.dispatchEvent(new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      await waitFor(() => {
+        expect(container.querySelector('[data-task-view-heading]')).toHaveTextContent('Upcoming');
+        expect(document.activeElement).toBe(container.querySelector(
+          '[data-task-row-id="task-recurrence-search"]',
+        ));
+      });
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(container.querySelector('#task-title-task-recurrence-search')).toBeNull();
     } finally {
       cleanup(root, container);
     }
@@ -1895,7 +2111,7 @@ describe('TasksShell', () => {
       });
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
       const search = dialog.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks and Areas"]',
+        '[aria-label="Find Tasks"]',
       )!;
       expect(dialog).toHaveAccessibleName('Quick Find');
       expect(search.value).toBe('e');
@@ -1920,7 +2136,7 @@ describe('TasksShell', () => {
         }));
       });
       expect(document.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks and Areas"]',
+        '[aria-label="Find Tasks"]',
       )?.value).toBe('?');
     } finally {
       cleanup(root, container);
@@ -1940,10 +2156,13 @@ describe('TasksShell', () => {
         }));
       });
       expect(document.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks and Areas"]',
+        '[aria-label="Find Tasks"]',
       )?.value).toBe('c');
       await act(async () => {
-        document.querySelector<HTMLElement>('[data-modal-close="true"]')?.click();
+        document.querySelector<HTMLInputElement>('[aria-label="Find Tasks"]')
+          ?.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape', bubbles: true, cancelable: true,
+          }));
       });
     } finally {
       cleanup(root, container);
@@ -1982,10 +2201,13 @@ describe('TasksShell', () => {
         }));
       });
       expect(document.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks and Areas"]',
+        '[aria-label="Find Tasks"]',
       )?.value).toBe('?');
       await act(async () => {
-        document.querySelector<HTMLButtonElement>('[data-modal-close="true"]')?.click();
+        document.querySelector<HTMLInputElement>('[aria-label="Find Tasks"]')
+          ?.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape', bubbles: true, cancelable: true,
+          }));
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
       const helpEvent = new KeyboardEvent('keydown', {
@@ -2080,13 +2302,13 @@ describe('TasksShell', () => {
     }
   });
 
-  it('leaves undo and redo with editable controls while capturing them outside editors', async () => {
+  it('captures undo and redo inside editable controls and exposes matching list actions', async () => {
     const undo = vi.fn().mockResolvedValue(undefined);
     const redo = vi.fn().mockResolvedValue(undefined);
     const registerForwardMutation = vi.fn();
     mockTaskUndo.mockReturnValue({
-      available: false,
-      redoAvailable: false,
+      available: true,
+      redoAvailable: true,
       pending: false,
       loading: false,
       error: null,
@@ -2103,9 +2325,27 @@ describe('TasksShell', () => {
     const { container, root } = renderShell();
 
     try {
-      expect(mockTaskList.mock.calls[0][3]).toBe(registerForwardMutation);
-      expect(container.querySelector('button[aria-label="Undo Last Task Change"]')).toBeNull();
+      expect(mockTaskList.mock.calls[0][3]).toEqual(expect.any(Function));
+      expect(container.querySelector('button[aria-label="Undo Last Task Change"]')).toBeTruthy();
+      expect(container.querySelector('button[aria-label="Redo Last Task Change"]')).toBeTruthy();
       expect(container.querySelector('button[aria-label="Select Tasks"]')).toBeTruthy();
+      expect(
+        Array.from(
+          container.querySelectorAll<HTMLButtonElement>(
+            'button[aria-label="Undo Last Task Change"], '
+            + 'button[aria-label="Redo Last Task Change"], '
+            + 'button[aria-label="Select Tasks"], '
+            + 'button[aria-label="Quick Find Tasks"], '
+            + 'button[aria-label="Quick Filters"]',
+          ),
+        ).map((button) => button.getAttribute('aria-label')),
+      ).toEqual([
+        'Undo Last Task Change',
+        'Redo Last Task Change',
+        'Select Tasks',
+        'Quick Find Tasks',
+        'Quick Filters',
+      ]);
 
       await act(async () => {
         container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
@@ -2120,9 +2360,9 @@ describe('TasksShell', () => {
       await act(async () => {
         editorTitle.dispatchEvent(undoEvent);
       });
-      expect(undo).not.toHaveBeenCalled();
-      expect(undoEvent.defaultPrevented).toBe(false);
-      expect(downstreamHandler).toHaveBeenCalled();
+      await waitFor(() => expect(undo).toHaveBeenCalledTimes(1));
+      expect(undoEvent.defaultPrevented).toBe(true);
+      expect(downstreamHandler).not.toHaveBeenCalled();
 
       const redoEvent = new KeyboardEvent('keydown', {
         key: 'y', ctrlKey: true, bubbles: true, cancelable: true,
@@ -2130,8 +2370,8 @@ describe('TasksShell', () => {
       await act(async () => {
         editorTitle.dispatchEvent(redoEvent);
       });
-      expect(redo).not.toHaveBeenCalled();
-      expect(redoEvent.defaultPrevented).toBe(false);
+      await waitFor(() => expect(redo).toHaveBeenCalledTimes(1));
+      expect(redoEvent.defaultPrevented).toBe(true);
 
       const shiftedRedoEvent = new KeyboardEvent('keydown', {
         key: 'z', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true,
@@ -2139,8 +2379,8 @@ describe('TasksShell', () => {
       await act(async () => {
         editorTitle.dispatchEvent(shiftedRedoEvent);
       });
-      expect(redo).not.toHaveBeenCalled();
-      expect(shiftedRedoEvent.defaultPrevented).toBe(false);
+      await waitFor(() => expect(redo).toHaveBeenCalledTimes(2));
+      expect(shiftedRedoEvent.defaultPrevented).toBe(true);
 
       const alternateUndoEvent = new KeyboardEvent('keydown', {
         key: 'z', altKey: true, shiftKey: true, bubbles: true, cancelable: true,
@@ -2148,8 +2388,8 @@ describe('TasksShell', () => {
       await act(async () => {
         editorTitle.dispatchEvent(alternateUndoEvent);
       });
-      expect(undo).not.toHaveBeenCalled();
-      expect(alternateUndoEvent.defaultPrevented).toBe(false);
+      await waitFor(() => expect(undo).toHaveBeenCalledTimes(2));
+      expect(alternateUndoEvent.defaultPrevented).toBe(true);
 
       const row = container.querySelector<HTMLElement>('[data-task-row-id="task-a"]')!;
       row.focus();
@@ -2157,7 +2397,7 @@ describe('TasksShell', () => {
         key: 'z', ctrlKey: true, bubbles: true, cancelable: true,
       });
       await act(async () => row.dispatchEvent(globalUndoEvent));
-      expect(undo).toHaveBeenCalledTimes(1);
+      expect(undo).toHaveBeenCalledTimes(3);
       expect(globalUndoEvent.defaultPrevented).toBe(true);
 
       await act(async () => {
@@ -2174,6 +2414,332 @@ describe('TasksShell', () => {
       expect(help).toContain('Traverse Page Controls');
       expect(help).toContain('Mac');
       expect(help).toContain('Windows');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('invokes history from the list toolbar and omits the controls from Settings', async () => {
+    const undo = vi.fn().mockResolvedValue(undefined);
+    const redo = vi.fn().mockResolvedValue(undefined);
+    mockTaskUndo.mockReturnValue({
+      available: true,
+      redoAvailable: true,
+      pending: false,
+      loading: false,
+      error: null,
+      event: { id: 'event-update' },
+      redoEvent: { id: 'event-redo' },
+      undo: vi.fn(),
+      redo: vi.fn(),
+      undoWhenAvailable: undo,
+      redoWhenAvailable: redo,
+      reserveForwardMutation: vi.fn(),
+      registerForwardMutation: vi.fn(),
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const list = renderShell();
+
+    try {
+      await act(async () => {
+        list.container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Undo Last Task Change"]',
+        )?.click();
+      });
+      await waitFor(() => expect(undo).toHaveBeenCalledTimes(1));
+
+      await act(async () => {
+        list.container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Redo Last Task Change"]',
+        )?.click();
+      });
+      await waitFor(() => expect(redo).toHaveBeenCalledTimes(1));
+    } finally {
+      cleanup(list.root, list.container);
+    }
+
+    const settings = renderShell('/tasks/config');
+    try {
+      expect(settings.container.querySelector(
+        'button[aria-label="Undo Last Task Change"]',
+      )).toBeNull();
+      expect(settings.container.querySelector(
+        'button[aria-label="Redo Last Task Change"]',
+      )).toBeNull();
+    } finally {
+      cleanup(settings.root, settings.container);
+    }
+  });
+
+  it('flushes a pending Summary autosave before toolbar Undo traverses history', async () => {
+    const undo = vi.fn().mockResolvedValue(task);
+    const taskList = defaultTaskList();
+    mockTaskUndo.mockReturnValue({
+      available: true,
+      redoAvailable: false,
+      pending: false,
+      loading: false,
+      error: null,
+      event: { id: 'event-update', occurred_at: '2026-07-20T18:00:00.000Z' },
+      redoEvent: null,
+      undo: vi.fn(),
+      redo: vi.fn(),
+      undoWhenAvailable: undo,
+      redoWhenAvailable: vi.fn().mockResolvedValue(null),
+      reserveForwardMutation: vi.fn(),
+      registerForwardMutation: vi.fn(),
+    });
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      const editorTitle = container.querySelector<HTMLInputElement>('#task-title-task-a')!;
+      await act(async () => {
+        setInputValue(editorTitle, 'Edited immediately before undo');
+        container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Undo Last Task Change"]',
+        )?.click();
+      });
+
+      await waitFor(() => {
+        expect(taskList.updateTask).toHaveBeenCalledWith(
+          'task-a',
+          expect.objectContaining({ title: 'Edited immediately before undo' }),
+        );
+        expect(undo).toHaveBeenCalledTimes(1);
+      });
+      expect(taskList.updateTask.mock.invocationCallOrder[0])
+        .toBeLessThan(undo.mock.invocationCallOrder[0]);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('routes a versioned native undo command through the existing task history', async () => {
+    const undo = vi.fn().mockResolvedValue(undefined);
+    mockTaskUndo.mockReturnValue({
+      available: true,
+      redoAvailable: false,
+      pending: false,
+      loading: false,
+      error: null,
+      event: { id: 'event-update' },
+      redoEvent: null,
+      undo: vi.fn(),
+      redo: vi.fn(),
+      undoWhenAvailable: undo,
+      redoWhenAvailable: vi.fn().mockResolvedValue(null),
+      reserveForwardMutation: vi.fn(),
+      registerForwardMutation: vi.fn(),
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new CustomEvent(TASK_NATIVE_COMMAND_EVENT, {
+          detail: { schemaVersion: 1, command: 'undo' },
+        }));
+      });
+      expect(undo).toHaveBeenCalledOnce();
+
+      await act(async () => {
+        window.dispatchEvent(new CustomEvent(TASK_NATIVE_COMMAND_EVENT, {
+          detail: { schemaVersion: 2, command: 'undo' },
+        }));
+      });
+      expect(undo).toHaveBeenCalledOnce();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('describes a metadata change that moves a visible task to another list', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell('/tasks/today');
+
+    try {
+      const reportMetadataMutation = mockTaskList.mock.calls[0][5] as (
+        mutations: Array<{ before: typeof task; after: typeof task }>,
+      ) => void;
+      await act(async () => {
+        reportMetadataMutation([{
+          before: task,
+          after: {
+            ...task,
+            start_date: '2026-07-21',
+            today_section: null,
+          },
+        }]);
+      });
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Task Moved',
+        description: 'The task now appears in Upcoming.',
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('describes a metadata change that hides a task behind the active quick filter', async () => {
+    const waitingTask = taskTodoFixture({
+      ...task,
+      actionability: 'waiting',
+    });
+    mockTaskQuickFilterPreference.mockReturnValue({
+      filter: 'waiting',
+      setFilter: vi.fn().mockResolvedValue(undefined),
+    });
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [waitingTask],
+    });
+    const { container, root } = renderShell('/tasks/anytime');
+
+    try {
+      const reportMetadataMutation = mockTaskList.mock.calls[0][5] as (
+        mutations: Array<{ before: typeof waitingTask; after: typeof waitingTask }>,
+      ) => void;
+      await act(async () => {
+        reportMetadataMutation([{
+          before: waitingTask,
+          after: { ...waitingTask, actionability: 'actionable' },
+        }]);
+      });
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Task Hidden by Quick Filter',
+        description: 'The task no longer matches Only Waiting.',
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('defers a departure notice until an edited task closes', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell('/tasks/today');
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      const reportMetadataMutation = mockTaskList.mock.calls[0][5] as (
+        mutations: Array<{ before: typeof task; after: typeof task }>,
+      ) => void;
+      await act(async () => {
+        reportMetadataMutation([{
+          before: task,
+          after: {
+            ...task,
+            start_date: '2026-07-21',
+            today_section: null,
+          },
+        }]);
+      });
+      expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Task Moved',
+      }));
+
+      const title = container.querySelector<HTMLInputElement>('#task-title-task-a')!;
+      await act(async () => {
+        title.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await waitForTaskEditorExit(container);
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Task Moved',
+          description: 'The task now appears in Upcoming.',
+        });
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('retains an edited task through drawer close before applying a quick-filter departure', async () => {
+    const waitingTask = taskTodoFixture({
+      ...task,
+      id: 'task-filter-retained',
+      title: 'Filtered After Close',
+      actionability: 'waiting',
+    });
+    let acceptedTasks = [waitingTask];
+    const taskList = defaultTaskList();
+    mockTaskQuickFilterPreference.mockReturnValue({
+      filter: 'waiting',
+      setFilter: vi.fn().mockResolvedValue(undefined),
+    });
+    mockTaskList.mockImplementation((
+      _ownerId: string,
+      _view: string,
+      retainedTaskId: string | null,
+    ) => ({
+      ...taskList,
+      tasks: acceptedTasks,
+      retainedTaskPlacement: retainedTaskId === waitingTask.id
+        ? waitingTask
+        : null,
+    }));
+    const { container, root, rerender } = renderShell('/tasks/anytime');
+    const retainedRow = () => container.querySelector(
+      '[data-task-row-id="task-filter-retained"]',
+    );
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(
+          '[data-task-id="task-filter-retained"]',
+        )?.click();
+      });
+      const reportMetadataMutation = mockTaskList.mock.calls[0][5] as (
+        mutations: Array<{ before: typeof waitingTask; after: typeof waitingTask }>,
+      ) => void;
+      const acceptedTask = {
+        ...waitingTask,
+        actionability: 'actionable' as const,
+      };
+      acceptedTasks = [acceptedTask];
+      await act(async () => {
+        reportMetadataMutation([{
+          before: waitingTask,
+          after: acceptedTask,
+        }]);
+        rerender();
+        await Promise.resolve();
+      });
+      expect(retainedRow()).toBeTruthy();
+      expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Task Hidden by Quick Filter',
+      }));
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(
+          '[data-task-id="task-filter-retained"]',
+        )?.click();
+        await Promise.resolve();
+      });
+      expect(retainedRow()).toBeTruthy();
+      expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Task Hidden by Quick Filter',
+      }));
+
+      await act(async () => {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 450));
+        rerender();
+      });
+      expect(retainedRow()).toBeNull();
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Task Hidden by Quick Filter',
+        description: 'The task no longer matches Only Waiting.',
+      });
     } finally {
       cleanup(root, container);
     }
@@ -2360,7 +2926,7 @@ describe('TasksShell', () => {
       });
       expect(taskList.transitionTask).not.toHaveBeenCalled();
       expect(document.querySelector<HTMLInputElement>(
-        '[aria-label="Find Tasks and Areas"]',
+        '[aria-label="Find Tasks"]',
       )?.value).toBe('c');
     } finally {
       cleanup(root, container);
@@ -2434,10 +3000,16 @@ describe('TasksShell', () => {
       const complete = container.querySelector<HTMLButtonElement>(
         'button[aria-label="Complete Existing task"]',
       )!;
+      expect(complete).toHaveClass('text-muted-foreground');
+      expect(complete).not.toHaveClass('hover:text-success');
       await act(async () => complete.click());
       expect(taskList.transitionTask).not.toHaveBeenCalled();
-      expect(container.querySelector('button[aria-label="Mark Incomplete Existing task"]'))
-        .toHaveAttribute('aria-pressed', 'true');
+      const markedIncomplete = container.querySelector(
+        'button[aria-label="Mark Incomplete Existing task"]',
+      );
+      expect(markedIncomplete).toHaveAttribute('aria-pressed', 'true');
+      expect(markedIncomplete?.querySelector('svg.lucide-square-check'))
+        .not.toHaveClass('text-success');
 
       const displacedCloseEvent = new KeyboardEvent('keydown', {
         key: 'q', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true,
@@ -3699,6 +4271,45 @@ describe('TasksShell', () => {
     }
   });
 
+  it('yields task-level Copy and Cut while checklist selection owns the clipboard', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+    const checklistSelection = document.createElement('section');
+    checklistSelection.dataset.taskChecklist = '';
+    checklistSelection.dataset.checklistSelectionActive = 'true';
+    document.body.appendChild(checklistSelection);
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.dispatchEvent(
+          new MouseEvent('click', { ctrlKey: true, bubbles: true, cancelable: true }),
+        );
+      });
+      const copySetData = vi.fn();
+      const copy = clipboardEvent('copy', '', copySetData);
+      const cutSetData = vi.fn();
+      const cut = clipboardEvent('cut', '', cutSetData);
+      await act(async () => {
+        window.dispatchEvent(copy);
+        window.dispatchEvent(cut);
+        await Promise.resolve();
+      });
+
+      expect(copy.defaultPrevented).toBe(false);
+      expect(cut.defaultPrevented).toBe(false);
+      expect(copySetData).not.toHaveBeenCalled();
+      expect(cutSetData).not.toHaveBeenCalled();
+      expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Tasks Copied',
+      }));
+      expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Tasks Cut',
+      }));
+    } finally {
+      checklistSelection.remove();
+      cleanup(root, container);
+    }
+  });
+
   it('pastes ordinary clipboard text as a Today Inbox task at the top', async () => {
     const repository = {
       createTask: vi.fn().mockImplementation(async (input: Record<string, unknown>) => (
@@ -3739,9 +4350,62 @@ describe('TasksShell', () => {
         startDate: null,
       }));
       expect(paste.defaultPrevented).toBe(true);
-      expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({
-        title: 'Task Pasted',
-      }));
+      expect(mockToast).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('pastes each nonempty clipboard line as a separate Today Inbox task', async () => {
+    let createdIndex = 0;
+    const repository = {
+      createTask: vi.fn().mockImplementation(async (input: Record<string, unknown>) => {
+        createdIndex += 1;
+        return taskTodoFixture({
+          id: `task-pasted-${createdIndex}`,
+          title: String(input.title),
+          destination: 'anytime',
+          today_section: 'inbox',
+          order_key: String(input.orderKey),
+        });
+      }),
+      transitionTask: vi.fn(),
+    };
+    mockTasksRuntime.mockReturnValue({
+      ...defaultTasksRuntime(),
+      database: {
+        getAll: vi.fn(),
+        getOptional: vi.fn().mockResolvedValue(null),
+      },
+      repository,
+      hierarchyRepository: {},
+      reminderService: {},
+      recurrenceService: {},
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+    try {
+      const paste = clipboardEvent(
+        'paste',
+        ' First task \r\n\r\nSecond task\r Third task ',
+      );
+      await act(async () => {
+        window.dispatchEvent(paste);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(repository.createTask).toHaveBeenCalledTimes(3));
+
+      expect(repository.createTask.mock.calls.map(([input]) => input.title))
+        .toEqual(['Third task', 'Second task', 'First task']);
+      for (const [input] of repository.createTask.mock.calls) {
+        expect(input).toMatchObject({
+          destination: 'anytime',
+          todaySection: 'inbox',
+          startDate: null,
+        });
+      }
+      expect(paste.defaultPrevented).toBe(true);
+      expect(mockToast).not.toHaveBeenCalled();
     } finally {
       cleanup(root, container);
     }
@@ -4026,10 +4690,10 @@ describe('TasksShell', () => {
       expect(container.querySelector(
         'button[aria-label="Deselect Second task"] svg.lucide-circle-check',
       )).toBeTruthy();
-      expect(title.closest('article')).toHaveClass('rounded-md', 'bg-info/20');
+      expect(title.closest('article')).toHaveClass('rounded-md', 'bg-info/10');
       expect(
         container.querySelector('[data-task-id="task-b"]')?.closest('article'),
-      ).toHaveClass('rounded-md', 'bg-info/20');
+      ).toHaveClass('rounded-md', 'bg-info/10');
     } finally {
       cleanup(root, container);
     }
@@ -5398,7 +6062,7 @@ describe('TasksShell', () => {
       expect(promoteSpace.defaultPrevented).toBe(true);
       await waitFor(() => expect(firstRow).toHaveAttribute('aria-current', 'true'));
       expect(document.activeElement).toBe(firstRow);
-      expect(firstRow).toHaveClass('rounded-md', 'bg-info/20');
+      expect(firstRow).toHaveClass('rounded-md', 'bg-info/10');
       expect(firstRow).not.toHaveClass('ring-2', 'ring-inset', 'ring-ring');
 
       const wholeTaskEscape = new KeyboardEvent('keydown', {
@@ -5639,7 +6303,7 @@ describe('TasksShell', () => {
     expect(document.body).not.toHaveAttribute('data-tasks-motion-scope');
   });
 
-  it('keeps Quick Find inside a named dialog', async () => {
+  it('keeps Quick Find inside a compact named dialog with input-owned selection', async () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const { container, root } = renderShell();
 
@@ -5655,20 +6319,19 @@ describe('TasksShell', () => {
 
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
       const searchInput = dialog.querySelector<HTMLInputElement>(
-        'input[aria-label="Find Tasks and Areas"]',
+        'input[aria-label="Find Tasks"]',
       )!;
       expect(dialog).toHaveAccessibleName('Quick Find');
       expect(document.activeElement).toBe(searchInput);
       expectInteractiveControlsToHaveNames(dialog);
 
+      expect(dialog.querySelector('[data-modal-close="true"]')).toBeNull();
+      expect(dialog.querySelector('[data-dialog-header]')).toBeNull();
+      expect(searchInput).toHaveAttribute('aria-activedescendant');
       await act(async () => {
         searchInput.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'Tab', bubbles: true, cancelable: true,
+          key: 'Escape', bubbles: true, cancelable: true,
         }));
-      });
-      expect(dialog.contains(document.activeElement)).toBe(true);
-      await act(async () => {
-        dialog.querySelector<HTMLButtonElement>('[data-modal-close="true"]')?.click();
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
       expect(dialog.dataset.state).toBe('closed');
@@ -6217,11 +6880,13 @@ describe('TasksShell', () => {
       expect(actionabilityLabel).toBeNull();
       const titleButton = container.querySelector<HTMLButtonElement>('button[data-task-id="task-a"]')!;
       await act(async () => titleButton.click());
-      expect(row).toHaveClass('rounded-md', 'bg-popover');
-      expect(row).not.toHaveClass('bg-info/20');
+      expect(row).toHaveClass('rounded-md', 'bg-info/10');
+      expect(row).not.toHaveClass('bg-popover');
       expect(rowHeader).not.toHaveClass('bg-inherit');
       expect(rowHeader?.parentElement).toHaveClass('bg-inherit');
-      expect(row?.querySelector('[data-task-editor-region]')).not.toBeNull();
+      const editorRegion = row?.querySelector('[data-task-editor-region]');
+      expect(editorRegion).not.toBeNull();
+      expect(editorRegion?.parentElement).toHaveClass('bg-inherit');
       const organization = container.querySelector<HTMLButtonElement>(
         '#task-organization-task-a',
       )!;
@@ -6962,12 +7627,16 @@ describe('TasksShell', () => {
         '#task-start-task-a [data-control-decoration]',
       );
       expect(startDecoration?.querySelector('svg')).toHaveClass('lucide-clock-5');
-      expect(startDecoration).toHaveClass('text-muted-foreground');
-      expect(startDecoration).not.toHaveClass('text-task-horizon-next');
+      expect(startDecoration).toHaveClass('text-task-horizon-next');
+      expect(startDecoration).not.toHaveClass('text-muted-foreground');
       expect(container.querySelector('#task-deadline-task-a [data-control-decoration] svg'))
         .toHaveClass('lucide-flag');
-      expect(container.querySelector('#task-actionability-task-a [data-control-decoration] svg'))
+      const readyDecoration = container.querySelector(
+        '#task-actionability-task-a [data-control-decoration]',
+      );
+      expect(readyDecoration?.querySelector('svg'))
         .toHaveClass('lucide-arrow-big-right-dash');
+      expect(readyDecoration).toHaveClass('text-muted-foreground');
       expect(container.querySelector('button[aria-label="Clear Deadline"]')).toBeNull();
       expect(container.querySelector('#task-start-task-a')).toHaveClass(
         'enabled:hover:bg-background',
@@ -6981,6 +7650,42 @@ describe('TasksShell', () => {
       cleanup(root, container);
     }
   });
+
+  it.each(['waiting', 'rechecking'] as const)(
+    'colors the %s decoration purple and an urgent Deadline decoration and value red',
+    async (actionability) => {
+      const decoratedTask = taskTodoFixture({
+        ...task,
+        actionability,
+        deadline: '2026-07-20',
+      });
+      mockTaskList.mockReturnValue({
+        ...defaultTaskList(),
+        tasks: [decoratedTask],
+      });
+      const { container, root } = renderShell();
+
+      try {
+        await act(async () => {
+          container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+        });
+
+        const actionabilityDecoration = container.querySelector(
+          '#task-actionability-task-a [data-control-decoration]',
+        );
+        expect(actionabilityDecoration).toHaveClass('text-admin');
+        expect(actionabilityDecoration).not.toHaveClass('text-muted-foreground');
+
+        const deadlineTrigger = container.querySelector('#task-deadline-task-a');
+        const deadlineDecoration = deadlineTrigger?.querySelector('[data-control-decoration]');
+        expect(deadlineTrigger).toHaveClass('text-destructive');
+        expect(deadlineDecoration).toHaveClass('text-destructive');
+        expect(deadlineDecoration).not.toHaveClass('text-muted-foreground');
+      } finally {
+        cleanup(root, container);
+      }
+    },
+  );
 
   it('focuses Inbox when Start opens without a planning intent', async () => {
     const unplannedTask = taskTodoFixture({
@@ -7038,7 +7743,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('advances repeated Control+E focus through Today horizons and into future dates', async () => {
+  it('advances repeated Control+E focus from the unplanned Inbox fallback to tomorrow', async () => {
     const originalPlatform = navigator.platform;
     Object.defineProperty(navigator, 'platform', {
       configurable: true,
@@ -7076,13 +7781,6 @@ describe('TasksShell', () => {
         document.querySelector('[data-task-start-horizon="inbox"]'),
       );
 
-      for (const horizon of ['now', 'next', 'later']) {
-        await invokeStartCommand();
-        expect(document.activeElement).toBe(
-          document.querySelector(`[data-task-start-horizon="${horizon}"]`),
-        );
-      }
-
       await invokeStartCommand();
       await waitFor(() => {
         expect(document.activeElement).toBe(
@@ -7098,6 +7796,63 @@ describe('TasksShell', () => {
       cleanup(root, container);
     }
   });
+
+  it.each(['inbox', 'now', 'next', 'later'] as const)(
+    'advances a Today %s task directly to tomorrow without cycling horizons',
+    async (todaySection) => {
+      const originalPlatform = navigator.platform;
+      Object.defineProperty(navigator, 'platform', {
+        configurable: true,
+        value: 'MacIntel',
+      });
+      const todayTask = taskTodoFixture({
+        ...task,
+        destination: 'anytime',
+        start_date: null,
+        today_section: todaySection,
+      });
+      const taskList = { ...defaultTaskList(), tasks: [todayTask] };
+      mockTaskList.mockReturnValue(taskList);
+      const { container, root } = renderShell('/tasks/today');
+
+      const invokeStartCommand = async () => {
+        await act(async () => {
+          window.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'e',
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+          }));
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+        });
+      };
+
+      try {
+        await act(async () => {
+          container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+        });
+
+        await invokeStartCommand();
+        expect(document.activeElement).toBe(
+          document.querySelector(`[data-task-start-horizon="${todaySection}"]`),
+        );
+
+        await invokeStartCommand();
+        await waitFor(() => {
+          expect(document.activeElement).toBe(
+            document.querySelector('button[data-calendar-date="2026-07-21"]'),
+          );
+        });
+        expect(taskList.updateTask).not.toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(navigator, 'platform', {
+          configurable: true,
+          value: originalPlatform,
+        });
+        cleanup(root, container);
+      }
+    },
+  );
 
   it('pages to the next month before repeated Control+E focuses its first date', async () => {
     const originalPlatform = navigator.platform;
@@ -8361,7 +9116,7 @@ describe('TasksShell', () => {
       });
       expect(row).toHaveAttribute('aria-current', 'true');
       expect(document.activeElement).toBe(row);
-      expect(row).toHaveClass('rounded-md', 'bg-info/20');
+      expect(row).toHaveClass('rounded-md', 'bg-info/10');
       expect(row).not.toHaveClass('ring-2', 'ring-inset', 'ring-ring');
       await act(async () => {
         restore?.click();
@@ -8374,6 +9129,7 @@ describe('TasksShell', () => {
         'owner-a',
         'done',
         null,
+        expect.any(Function),
         expect.any(Function),
         expect.any(Function),
       );
@@ -8465,6 +9221,7 @@ describe('TasksShell', () => {
         'owner-a',
         'upcoming',
         null,
+        expect.any(Function),
         expect.any(Function),
         expect.any(Function),
       );
@@ -8715,6 +9472,7 @@ describe('TasksShell', () => {
         null,
         expect.any(Function),
         expect.any(Function),
+        expect.any(Function),
       );
       expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
       expect(container.querySelector('section[aria-label="Anytime Tasks"]')).toBeTruthy();
@@ -8856,6 +9614,15 @@ describe('TasksShell', () => {
           '[data-task-id="task-area-retained"]',
         )?.click();
       });
+      await selectBathosOption(
+        container.querySelector<HTMLButtonElement>(
+          '#task-organization-task-area-retained',
+        )!,
+        'Home',
+      );
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-area-retained', {
+        area_id: 'area-home',
+      });
       acceptedTasks = [{ ...initialTask, area_id: 'area-home' }];
       await act(async () => {
         rerender();
@@ -8869,6 +9636,12 @@ describe('TasksShell', () => {
         container.querySelector<HTMLButtonElement>(
           '[data-task-id="task-area-retained"]',
         )?.click();
+        await Promise.resolve();
+      });
+      expect(sectionContainingTask('area-work')).toBeTruthy();
+      expect(sectionContainingTask('area-home')).toBeNull();
+
+      await act(async () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 450));
         rerender();
       });
@@ -8940,6 +9713,19 @@ describe('TasksShell', () => {
           '[data-task-id="task-ready"]',
         )?.click();
       });
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'f',
+          altKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-ready', {
+        actionability: 'waiting',
+      });
 
       acceptedTasks = [
         { ...initiallyReady, actionability: 'waiting' },
@@ -8955,6 +9741,11 @@ describe('TasksShell', () => {
         container.querySelector<HTMLButtonElement>(
           '[data-task-id="task-ready"]',
         )?.click();
+        await Promise.resolve();
+      });
+      expect(visibleTitles()).toEqual(['Initially Ready', 'Rechecking']);
+
+      await act(async () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 450));
       });
       expect(visibleTitles()).toEqual(['Rechecking', 'Initially Ready']);
@@ -9308,6 +10099,7 @@ describe('TasksShell', () => {
         null,
         expect.any(Function),
         expect.any(Function),
+        expect.any(Function),
       );
       expect(container.querySelector('input[aria-label="Add a Task"]')).toBeNull();
       expect(container.querySelector('section[aria-label="Someday Tasks"]')).toBeTruthy();
@@ -9422,6 +10214,8 @@ describe('TasksShell', () => {
       );
       expect(reopen).toHaveAttribute('role', 'checkbox');
       expect(reopen).toHaveAttribute('aria-checked', 'true');
+      expect(reopen).toHaveClass('text-muted-foreground');
+      expect(reopen).not.toHaveClass('text-success', 'hover:text-success');
       const rowHeader = reopen?.closest('article')
         ?.querySelector<HTMLElement>('[data-task-row-header]') ?? null;
       expect(rowHeader).toHaveClass('h-11');
@@ -9447,6 +10241,7 @@ describe('TasksShell', () => {
         'owner-a',
         'done',
         null,
+        expect.any(Function),
         expect.any(Function),
         expect.any(Function),
       );
@@ -9806,7 +10601,10 @@ describe('TasksShell', () => {
       });
       const toolbar = container.querySelector<HTMLElement>('[aria-label="Task Selection"]')!;
       expect(toolbar.textContent).toContain('Cancel');
-      expect(toolbar.className).toContain('fixed');
+      expect(toolbar).toHaveClass(
+        'fixed',
+        'bottom-[calc(var(--mobile-bottom-nav-bottom-offset)+4.25rem)]',
+      );
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'f',
@@ -9817,12 +10615,10 @@ describe('TasksShell', () => {
         }));
         await Promise.resolve();
       });
-      expect(taskList.updateTask).toHaveBeenNthCalledWith(1, 'task-a', {
-        actionability: 'waiting',
-      });
-      expect(taskList.updateTask).toHaveBeenNthCalledWith(2, 'task-b', {
-        actionability: 'waiting',
-      });
+      expect(taskList.applyTaskPatches).toHaveBeenCalledWith([
+        { taskId: 'task-a', patch: { actionability: 'waiting' } },
+        { taskId: 'task-b', patch: { actionability: 'waiting' } },
+      ]);
       const escape = new KeyboardEvent('keydown', {
         key: 'Escape',
         bubbles: true,
@@ -9911,6 +10707,26 @@ describe('TasksShell', () => {
         '[data-task-row-temporal-picker="deadline"]',
       )).not.toBeNull();
       expect(container.querySelector('#task-title-task-a')).toBeNull();
+      await waitFor(() => {
+        expect(document.activeElement).toBe(
+          document.querySelector('button[data-calendar-date="2026-07-20"]'),
+        );
+      });
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'd', altKey: true, shiftKey: true, bubbles: true, cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      await waitFor(() => {
+        expect(document.activeElement).toBe(
+          document.querySelector('button[data-calendar-date="2026-07-21"]'),
+        );
+      });
+      expect(document.querySelector(
+        '[data-task-row-temporal-picker="deadline"]',
+      )).not.toBeNull();
+      expect(taskList.updateTask).not.toHaveBeenCalled();
       await act(async () => {
         document.querySelector<HTMLElement>(
           '[data-task-row-temporal-picker="deadline"]',
@@ -9934,6 +10750,64 @@ describe('TasksShell', () => {
       });
       expect(document.activeElement).toBe(document.querySelector('#task-start-reminder-task-a'));
     } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('advances Control+D in an open task Deadline picker instead of closing it', async () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    const deadlineTask = taskTodoFixture({
+      ...task,
+      deadline: '2026-07-31',
+    });
+    const taskList = { ...defaultTaskList(), tasks: [deadlineTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    const invokeDeadlineCommand = async () => {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'd',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+    };
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await invokeDeadlineCommand();
+      await waitFor(() => {
+        expect(document.activeElement).toBe(
+          document.querySelector('button[data-calendar-date="2026-07-31"]'),
+        );
+      });
+
+      await invokeDeadlineCommand();
+      await waitFor(() => {
+        expect(document.querySelector('button[name="caption-month-year"]'))
+          .toHaveTextContent('August 2026');
+        expect(document.activeElement).toBe(
+          document.querySelector('button[data-calendar-date="2026-08-01"]'),
+        );
+      });
+      expect(document.querySelector(
+        '[data-date-picker-command-scope="task-deadline"]',
+      )).not.toBeNull();
+      expect(taskList.updateTask).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        configurable: true,
+        value: originalPlatform,
+      });
       cleanup(root, container);
     }
   });

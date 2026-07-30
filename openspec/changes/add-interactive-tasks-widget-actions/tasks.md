@@ -17,6 +17,7 @@
 - [x] 3.2 Inject and validate one stable native installation identifier without affecting ordinary browsers
 - [x] 3.3 Provision and rotate the narrow widget credential only in an authenticated trusted companion session, pass it through memory to the native bridge, and clear it on sign-out
 - [x] 3.4 Extend web tests for supported and unsupported Primary Links, ordinary-browser no-op behavior, credential messages, owner changes, and cache clearing
+- [x] 3.5 Retry transient native credential issuance until the current authenticated companion receives its owner-and-installation-bound credential
 
 ## 4. Native Interactive Widget
 
@@ -27,6 +28,7 @@
 - [x] 4.5 Add native tests for credential persistence, URL validation, independent action routing, successful reconciliation, retry, and failure retention
 - [x] 4.6 Harden physical Toggle invocation, transient retry, and resident companion deep-link runtime continuity
 - [x] 4.7 Add a fixed ten-task large-widget cap without overflow messaging and a bounded list-aware header capture route
+- [x] 4.8 Diagnose and repair missing completion authority in the shared macOS widget without changing its narrow server scope
 
 ## 5. Validation and Controlled Rollout
 
@@ -37,3 +39,12 @@
 - [ ] 5.5 Prove physical checkbox completion, direct Primary Link activation, cross-client convergence, PowerSync, cron, advisors, production parity, and repository synchronization
 - [x] 5.6 Reinstall the incident-hardened companion and prove failed/retried completion cannot strand the app on an indefinite spinner
 - [ ] 5.7 Reinstall the refined companion and physically verify the ten-task cap without overflow messaging and the configured-list header capture action
+
+## 6. List-Specific Widget Row Context
+
+- [x] 6.1 Extend the bounded schema-version-2 projection with optional authoritative Upcoming display-date and recurrence-projection fields while preserving legacy snapshot compatibility
+- [x] 6.2 Render canonical colored Today horizon symbols and compact Upcoming weekday-or-date chips in the shared iOS and macOS widget row
+- [x] 6.3 Replace the Upcoming recurrence projection checkbox with a noninteractive recurrence symbol
+- [x] 6.4 Reduce only the macOS large-widget row minimum height by one point
+- [x] 6.5 Add focused web and native tests for projection, validation, date-label thresholds, recurrence protection, and platform row density
+- [x] 6.6 Run focused tests, TypeScript, lint, production build, native builds/tests, and strict OpenSpec validation

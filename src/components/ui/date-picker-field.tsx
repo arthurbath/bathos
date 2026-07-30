@@ -8,6 +8,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { focusAdjacentFormControl } from '@/platform/formInteractions';
 
+const DATE_PICKER_ADVANCE_EVENT = 'bathos:date-picker-advance';
+
+export function requestDatePickerAdvance(panel: HTMLElement): void {
+  panel.dispatchEvent(new CustomEvent(DATE_PICKER_ADVANCE_EVENT));
+}
+
 export function parseDatePickerFieldValue(value: string | undefined): Date | undefined {
   if (!value) return undefined;
   const parsed = new Date(`${value}T00:00:00`);
@@ -38,6 +44,7 @@ interface DatePickerFieldProps extends Omit<React.ButtonHTMLAttributes<HTMLButto
   clearable?: boolean;
   clearEnabled?: boolean;
   clearLabel?: string;
+  panelCommandScope?: string;
   decoration?: React.ReactNode;
   decorationClassName?: string;
 }
@@ -53,6 +60,7 @@ export interface DatePickerPanelProps {
   clearEnabled?: boolean;
   clearLabel?: string;
   active?: boolean;
+  commandScope?: string;
 }
 
 export function DatePickerPanel({
@@ -66,23 +74,64 @@ export function DatePickerPanel({
   clearEnabled,
   clearLabel = 'Clear',
   active = true,
+  commandScope,
 }: DatePickerPanelProps) {
-  const [visibleMonth, setVisibleMonth] = React.useState<Date>(
-    () => getVisibleMonth(value, todayDate),
-  );
-  const clearButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const selectedDate = parseDatePickerFieldValue(value);
   const minimumDate = parseDatePickerFieldValue(minDate);
   const calendarToday = parseDatePickerFieldValue(todayDate);
+  const defaultFocusDate = selectedDate ?? minimumDate ?? calendarToday;
+  const defaultFocusTime = defaultFocusDate?.valueOf();
+  const [visibleMonth, setVisibleMonth] = React.useState<Date>(
+    () => getVisibleMonth(value, todayDate),
+  );
+  const [focusDate, setFocusDate] = React.useState<Date | undefined>(defaultFocusDate);
+  const [focusRequestKey, setFocusRequestKey] = React.useState(0);
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
+  const clearButtonRef = React.useRef<HTMLButtonElement | null>(null);
 
   React.useEffect(() => {
     if (!active) return;
     setVisibleMonth(getVisibleMonth(value, todayDate));
-  }, [active, todayDate, value]);
+    setFocusDate(defaultFocusTime === undefined ? undefined : new Date(defaultFocusTime));
+    setFocusRequestKey((requestKey) => requestKey + 1);
+  }, [active, defaultFocusTime, todayDate, value]);
+
+  const focusCalendarDate = React.useCallback((date: Date) => {
+    setVisibleMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+    setFocusDate(date);
+    setFocusRequestKey((requestKey) => requestKey + 1);
+  }, []);
+
+  React.useEffect(() => {
+    if (!active) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const handleAdvance = () => {
+      const activeElement = document.activeElement;
+      const focusedDateValue = activeElement instanceof HTMLElement
+        && panel.contains(activeElement)
+        ? activeElement.closest<HTMLButtonElement>(
+          'button[name="day"][data-calendar-date]',
+        )?.dataset.calendarDate
+        : undefined;
+      const currentDate = parseDatePickerFieldValue(focusedDateValue)
+        ?? (defaultFocusTime === undefined ? undefined : new Date(defaultFocusTime));
+      if (!currentDate) return;
+      focusCalendarDate(new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        currentDate.getDate() + 1,
+      ));
+    };
+    panel.addEventListener(DATE_PICKER_ADVANCE_EVENT, handleAdvance);
+    return () => panel.removeEventListener(DATE_PICKER_ADVANCE_EVENT, handleAdvance);
+  }, [active, defaultFocusTime, focusCalendarDate]);
 
   return (
     <div
+      ref={panelRef}
       data-date-picker-panel
+      data-date-picker-command-scope={commandScope}
       onKeyDownCapture={(event) => {
         if (event.key !== 'Tab' || !onTabExit) return;
         event.preventDefault();
@@ -97,7 +146,8 @@ export function DatePickerPanel({
         fromDate={minimumDate}
         month={visibleMonth}
         today={calendarToday}
-        initialFocusDate={selectedDate ?? minimumDate ?? calendarToday}
+        initialFocusDate={focusDate ?? defaultFocusDate}
+        initialFocusRequestKey={focusRequestKey}
         allowTabExit
         onMonthChange={setVisibleMonth}
         onDayGridExitDown={() => {
@@ -145,6 +195,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   clearable = false,
   clearEnabled,
   clearLabel = 'Clear',
+  panelCommandScope,
   decoration,
   decorationClassName,
   className,
@@ -221,6 +272,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
           clearable={clearable}
           clearEnabled={clearEnabled}
           clearLabel={clearLabel}
+          commandScope={panelCommandScope}
           active={open}
           onRequestClose={() => {
             setOpen(false);

@@ -40,6 +40,7 @@ function cleanup(root: Root, container: HTMLElement) {
 
 function historyEvent({
   id = 'event-a',
+  actionId = `action-${id}`,
   transition = 'update',
   before = taskChecklistItemFixture({
     title: 'First title',
@@ -53,6 +54,7 @@ function historyEvent({
   }),
 }: {
   id?: string;
+  actionId?: string;
   transition?: 'create' | 'update' | 'delete' | 'restore';
   before?: ReturnType<typeof taskChecklistItemFixture> | null;
   after?: ReturnType<typeof taskChecklistItemFixture>;
@@ -61,6 +63,7 @@ function historyEvent({
     id,
     owner_id: 'owner-a',
     operation_id: null,
+    action_id: actionId,
     entity_type: 'checklist_item',
     entity_id: after?.id ?? before?.id ?? 'checklist-a',
     transition,
@@ -125,6 +128,10 @@ describe('useTaskChecklistUndo', () => {
           completed_at: null,
           order_key: before.order_key,
         },
+        {
+          occurredAt: expect.any(String),
+          operationId: expect.any(String),
+        },
       );
 
       await act(async () => {
@@ -138,6 +145,10 @@ describe('useTaskChecklistUndo', () => {
           completed: true,
           completed_at: after.completed_at,
           order_key: after.order_key,
+        },
+        {
+          occurredAt: expect.any(String),
+          operationId: expect.any(String),
         },
       );
     } finally {
@@ -168,6 +179,10 @@ describe('useTaskChecklistUndo', () => {
         rootId: created.id,
         operation: 'delete',
         descendantPolicy: 'reject',
+        context: {
+          occurredAt: expect.any(String),
+          operationId: expect.any(String),
+        },
       });
 
       await act(async () => {
@@ -179,7 +194,80 @@ describe('useTaskChecklistUndo', () => {
         rootId: created.id,
         operation: 'restore',
         descendantPolicy: 'reject',
+        context: {
+          occurredAt: expect.any(String),
+          operationId: expect.any(String),
+        },
       });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('treats one multi-item gesture timestamp as one undo and redo step', async () => {
+    const firstBefore = taskChecklistItemFixture({
+      id: 'checklist-a',
+      task_id: 'task-a',
+      title: 'First',
+      order_key: 'a0',
+      revision: 1,
+    });
+    const firstAfter = taskChecklistItemFixture({
+      ...firstBefore,
+      title: 'First moved',
+      order_key: 'z0',
+      revision: 2,
+    });
+    const secondBefore = taskChecklistItemFixture({
+      id: 'checklist-b',
+      task_id: 'task-a',
+      title: 'Second',
+      order_key: 'a1',
+      revision: 1,
+    });
+    const secondAfter = taskChecklistItemFixture({
+      ...secondBefore,
+      title: 'Second moved',
+      order_key: 'z1',
+      revision: 2,
+    });
+    mocks.useQuery.mockReturnValue({
+      data: [
+        historyEvent({
+          id: 'event-a',
+          actionId: 'action-group',
+          before: firstBefore,
+          after: firstAfter,
+        }),
+        historyEvent({
+          id: 'event-b',
+          actionId: 'action-group',
+          before: secondBefore,
+          after: secondAfter,
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    });
+    const { container, root } = renderHarness();
+
+    try {
+      await act(async () => {
+        await latest.undo();
+      });
+      expect(updateChecklistItem).toHaveBeenCalledTimes(2);
+      expect(updateChecklistItem.mock.calls.map((call) => call[1])).toEqual([
+        'checklist-b',
+        'checklist-a',
+      ]);
+
+      await act(async () => {
+        await latest.redo();
+      });
+      expect(updateChecklistItem.mock.calls.slice(2).map((call) => call[1])).toEqual([
+        'checklist-a',
+        'checklist-b',
+      ]);
     } finally {
       cleanup(root, container);
     }

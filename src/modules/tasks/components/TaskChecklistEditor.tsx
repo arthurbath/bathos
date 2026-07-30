@@ -5,15 +5,23 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ClipboardEvent as ReactClipboardEvent,
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 
 import { Input } from '@/components/ui/input';
+import { toast } from '@/hooks/use-toast';
 import { isMacLikePlatform } from '@/lib/platform';
 import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
+import {
+  parseTaskChecklistClipboard,
+  serializeTaskChecklistClipboard,
+  type TaskChecklistClipboardItem,
+} from '@/modules/tasks/domain/taskChecklistClipboard';
 import { applyTaskSelectionGesture } from '@/modules/tasks/domain/taskSelection';
+import { planChecklistMultilinePaste } from '@/modules/tasks/domain/taskMultilinePaste';
 import { useTaskChecklist } from '@/modules/tasks/hooks/useTaskChecklist';
 import type { TaskChecklistItem } from '@/modules/tasks/types/tasks';
 
@@ -344,6 +352,128 @@ export function TaskChecklistEditor({
     }
   };
 
+  const pasteIntoPersistedItem = async (
+    item: TaskChecklistItem,
+    title: string,
+    index: number,
+    selectionStart: number,
+    selectionEnd: number,
+    clipboardText: string,
+  ) => {
+    const plan = planChecklistMultilinePaste(
+      title,
+      selectionStart,
+      selectionEnd,
+      clipboardText,
+    );
+    if (plan === null || pendingInsertRef.current) return;
+
+    pendingInsertRef.current = true;
+    cancelScheduledSave(item.id);
+    const [firstTitle, ...followingTitles] = plan.titles;
+    const mutationContext = {
+      occurredAt: new Date().toISOString(),
+      operationId: globalThis.crypto.randomUUID(),
+    };
+    setEditingTitle(item.id, firstTitle);
+    try {
+      if (firstTitle.trim()) {
+        await checklist.updateItem(
+          item.id,
+          { title: firstTitle.trim() },
+          mutationContext,
+        );
+      }
+      const created = await checklist.createItems(
+        followingTitles,
+        index + 1,
+        mutationContext,
+      );
+      const finalItem = created.at(-1);
+      if (finalItem) requestInputFocus(finalItem.id, plan.finalCaretOffset);
+      else requestInputFocus(item.id, Math.min(firstTitle.length, plan.finalCaretOffset));
+    } finally {
+      pendingInsertRef.current = false;
+    }
+  };
+
+  const pasteIntoDraft = async (
+    index: number,
+    selectionStart: number,
+    selectionEnd: number,
+    clipboardText: string,
+  ) => {
+    const plan = planChecklistMultilinePaste(
+      draftTitle,
+      selectionStart,
+      selectionEnd,
+      clipboardText,
+    );
+    if (plan === null || pendingInsertRef.current) return;
+
+    pendingInsertRef.current = true;
+    const finalTitle = plan.titles.at(-1) ?? '';
+    try {
+      const created = await checklist.createItems(
+        plan.titles.slice(0, -1),
+        index,
+        { occurredAt: new Date().toISOString() },
+      );
+      setDraftTitle(finalTitle);
+      setDraftIndex(index + created.length);
+      requestInputFocus(DRAFT_ID, plan.finalCaretOffset);
+    } finally {
+      pendingInsertRef.current = false;
+    }
+  };
+
+  const pasteChecklistItemsAfterPersisted = async (
+    index: number,
+    copiedItems: readonly TaskChecklistClipboardItem[],
+  ) => {
+    if (pendingInsertRef.current) return;
+    pendingInsertRef.current = true;
+    try {
+      const created = await checklist.createItemCopies(
+        copiedItems,
+        index + 1,
+        { occurredAt: new Date().toISOString() },
+      );
+      const finalItem = created.at(-1);
+      if (finalItem) requestInputFocus(finalItem.id, 'end');
+    } catch (error) {
+      showChecklistError('Checklist Items Could Not Be Pasted', error);
+    } finally {
+      pendingInsertRef.current = false;
+    }
+  };
+
+  const pasteChecklistItemsAtDraft = async (
+    index: number,
+    copiedItems: readonly TaskChecklistClipboardItem[],
+  ) => {
+    if (pendingInsertRef.current) return;
+    pendingInsertRef.current = true;
+    try {
+      const created = await checklist.createItemCopies(
+        copiedItems,
+        index,
+        { occurredAt: new Date().toISOString() },
+      );
+      setDraftIndex(index + created.length);
+      const finalItem = created.at(-1);
+      if (finalItem) requestInputFocus(finalItem.id, 'end');
+    } catch (error) {
+      showChecklistError('Checklist Items Could Not Be Pasted', error);
+    } finally {
+      pendingInsertRef.current = false;
+    }
+  };
+
+  const rejectChecklistPaste = (reason: string) => {
+    showChecklistError('Checklist Items Could Not Be Pasted', new Error(reason));
+  };
+
   const moveInputFocus = useCallback((
     currentId: string,
     direction: -1 | 1,
@@ -547,6 +677,60 @@ export function TaskChecklistEditor({
   ]);
 
   useEffect(() => {
+    const writeSelectedItems = async (
+      operation: 'copy' | 'cut',
+      event: ClipboardEvent,
+    ) => {
+      const selected = checklist.items
+        .filter(({ id }) => selectedItemIds.has(id))
+        .map((item) => ({
+          title: editingTitlesRef.current[item.id] ?? item.title,
+          completed: normalizeChecklistCompletionForClipboard(item.completed),
+        }));
+      if (selected.length === 0) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      try {
+        await writeChecklistClipboardText(
+          Promise.resolve(serializeTaskChecklistClipboard(operation, selected)),
+          event,
+        );
+        if (operation === 'cut') await deleteSelectedItems();
+        toast({
+          title: operation === 'copy'
+            ? 'Checklist Items Copied'
+            : 'Checklist Items Cut',
+          description: `${selected.length} ${
+            selected.length === 1 ? 'checklist item' : 'checklist items'
+          } ${operation === 'copy' ? 'copied' : 'cut'}.`,
+        });
+      } catch (error) {
+        showChecklistError(
+          operation === 'copy'
+            ? 'Checklist Items Could Not Be Copied'
+            : 'Checklist Items Could Not Be Cut',
+          error,
+        );
+      }
+    };
+    const handleCopy = (event: ClipboardEvent) => {
+      if (selectedItemIds.size === 0) return;
+      void writeSelectedItems('copy', event);
+    };
+    const handleCut = (event: ClipboardEvent) => {
+      if (selectedItemIds.size === 0) return;
+      void writeSelectedItems('cut', event);
+    };
+    window.addEventListener('copy', handleCopy, true);
+    window.addEventListener('cut', handleCut, true);
+    return () => {
+      window.removeEventListener('copy', handleCopy, true);
+      window.removeEventListener('cut', handleCut, true);
+    };
+  }, [checklist.items, deleteSelectedItems, selectedItemIds]);
+
+  useEffect(() => {
     const handleMouseDown = (event: globalThis.MouseEvent) => {
       suppressPostDragClickRef.current = false;
       checklistInputPressRef.current = null;
@@ -709,6 +893,13 @@ export function TaskChecklistEditor({
       onReturn={(selectionStart, selectionEnd) => {
         void splitDraft(index, selectionStart, selectionEnd);
       }}
+      onMultilinePaste={(selectionStart, selectionEnd, text) => {
+        void pasteIntoDraft(index, selectionStart, selectionEnd, text);
+      }}
+      onChecklistPaste={(items) => {
+        void pasteChecklistItemsAtDraft(index, items);
+      }}
+      onInvalidChecklistPaste={rejectChecklistPaste}
       onMoveVertical={(direction) => moveInputFocus(DRAFT_ID, direction)}
       onMoveHorizontal={(direction, position) => (
         moveInputFocus(DRAFT_ID, direction, position)
@@ -837,6 +1028,20 @@ export function TaskChecklistEditor({
             onAddAfter={(title, selectionStart, selectionEnd) => {
               splitPersistedItem(item, title, index, selectionStart, selectionEnd);
             }}
+            onMultilinePaste={(title, selectionStart, selectionEnd, text) => {
+              void pasteIntoPersistedItem(
+                item,
+                title,
+                index,
+                selectionStart,
+                selectionEnd,
+                text,
+              );
+            }}
+            onChecklistPaste={(items) => {
+              void pasteChecklistItemsAfterPersisted(index, items);
+            }}
+            onInvalidChecklistPaste={rejectChecklistPaste}
             onMoveVertical={(direction) => moveInputFocus(item.id, direction)}
             onMoveHorizontal={(direction, position) => (
               moveInputFocus(item.id, direction, position)
@@ -920,6 +1125,9 @@ function ChecklistRow({
   onJoinNext,
   onDeleteEmpty,
   onAddAfter,
+  onMultilinePaste,
+  onChecklistPaste,
+  onInvalidChecklistPaste,
   onMoveVertical,
   onMoveHorizontal,
   onToggleSelection,
@@ -948,6 +1156,14 @@ function ChecklistRow({
   onJoinNext: (title: string) => Promise<void>;
   onDeleteEmpty: () => Promise<void>;
   onAddAfter: (title: string, selectionStart: number, selectionEnd: number) => void;
+  onMultilinePaste: (
+    title: string,
+    selectionStart: number,
+    selectionEnd: number,
+    text: string,
+  ) => void;
+  onChecklistPaste: (items: readonly TaskChecklistClipboardItem[]) => void;
+  onInvalidChecklistPaste: (reason: string) => void;
   onMoveVertical: (direction: -1 | 1) => boolean;
   onMoveHorizontal: (
     direction: -1 | 1,
@@ -1026,6 +1242,33 @@ function ChecklistRow({
     }
   };
 
+  const handlePaste = (event: ReactClipboardEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const text = event.clipboardData.getData('text/plain');
+    const parsed = parseTaskChecklistClipboard(text);
+    if (parsed.kind === 'invalid-checklist-payload') {
+      event.preventDefault();
+      event.stopPropagation();
+      onInvalidChecklistPaste(parsed.reason);
+      return;
+    }
+    if (parsed.kind === 'checklist-items') {
+      event.preventDefault();
+      event.stopPropagation();
+      onChecklistPaste(parsed.envelope.items);
+      return;
+    }
+    if (parsed.kind !== 'text' || !/[\r\n]/.test(parsed.text)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onMultilinePaste(
+      title,
+      input.selectionStart ?? 0,
+      input.selectionEnd ?? input.selectionStart ?? 0,
+      parsed.text,
+    );
+  };
+
   return (
     <div
       ref={rowRef}
@@ -1085,11 +1328,11 @@ function ChecklistRow({
           role="checkbox"
           aria-checked={item.completed}
           aria-label={`${item.completed ? 'Reopen' : 'Complete'} ${item.title}`}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => void onComplete(!item.completed)}
         >
           {item.completed ? (
-            <TASK_ICONS.CompletedTask className="h-4 w-4 text-success" aria-hidden="true" />
+            <TASK_ICONS.CompletedTask className="h-4 w-4" aria-hidden="true" />
           ) : (
             <TASK_ICONS.OpenTask className="h-4 w-4" aria-hidden="true" />
           )}
@@ -1110,6 +1353,7 @@ function ChecklistRow({
         onFocus={onFocus}
         onMouseDown={onInputMouseDown}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
       />
     </div>
   );
@@ -1127,6 +1371,9 @@ function DraftChecklistRow({
   onJoinNext,
   onDeleteEmpty,
   onReturn,
+  onMultilinePaste,
+  onChecklistPaste,
+  onInvalidChecklistPaste,
   onMoveVertical,
   onMoveHorizontal,
   onBlur,
@@ -1149,6 +1396,13 @@ function DraftChecklistRow({
   onJoinNext: () => Promise<void>;
   onDeleteEmpty: () => void;
   onReturn: (selectionStart: number, selectionEnd: number) => void;
+  onMultilinePaste: (
+    selectionStart: number,
+    selectionEnd: number,
+    text: string,
+  ) => void;
+  onChecklistPaste: (items: readonly TaskChecklistClipboardItem[]) => void;
+  onInvalidChecklistPaste: (reason: string) => void;
   onMoveVertical: (direction: -1 | 1) => boolean;
   onMoveHorizontal: (
     direction: -1 | 1,
@@ -1230,6 +1484,32 @@ function DraftChecklistRow({
     }
   };
 
+  const handlePaste = (event: ReactClipboardEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const text = event.clipboardData.getData('text/plain');
+    const parsed = parseTaskChecklistClipboard(text);
+    if (parsed.kind === 'invalid-checklist-payload') {
+      event.preventDefault();
+      event.stopPropagation();
+      onInvalidChecklistPaste(parsed.reason);
+      return;
+    }
+    if (parsed.kind === 'checklist-items') {
+      event.preventDefault();
+      event.stopPropagation();
+      onChecklistPaste(parsed.envelope.items);
+      return;
+    }
+    if (parsed.kind !== 'text' || !/[\r\n]/.test(parsed.text)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onMultilinePaste(
+      input.selectionStart ?? 0,
+      input.selectionEnd ?? input.selectionStart ?? 0,
+      parsed.text,
+    );
+  };
+
   return (
     <div
       ref={rowRef}
@@ -1279,7 +1559,50 @@ function DraftChecklistRow({
         onFocus={onFocus}
         onMouseDown={onInputMouseDown}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
       />
     </div>
   );
+}
+
+async function writeChecklistClipboardText(
+  textPromise: Promise<string>,
+  event: ClipboardEvent,
+): Promise<void> {
+  if (
+    typeof ClipboardItem !== 'undefined'
+    && globalThis.navigator?.clipboard?.write
+  ) {
+    const item = new ClipboardItem({
+      'text/plain': textPromise.then((text) => (
+        new Blob([text], { type: 'text/plain' })
+      )),
+    });
+    await globalThis.navigator.clipboard.write([item]);
+    return;
+  }
+  const text = await textPromise;
+  if (event.clipboardData) {
+    event.clipboardData.setData('text/plain', text);
+    return;
+  }
+  if (globalThis.navigator?.clipboard?.writeText) {
+    await globalThis.navigator.clipboard.writeText(text);
+    return;
+  }
+  throw new Error('The browser clipboard is unavailable');
+}
+
+function showChecklistError(title: string, error: unknown): void {
+  toast({
+    title,
+    description: error instanceof Error ? error.message : 'Unknown error',
+    variant: 'destructive',
+  });
+}
+
+function normalizeChecklistCompletionForClipboard(completed: unknown): boolean {
+  if (completed === true || completed === 1) return true;
+  if (completed === false || completed === 0) return false;
+  throw new Error('Checklist clipboard completion state is invalid');
 }

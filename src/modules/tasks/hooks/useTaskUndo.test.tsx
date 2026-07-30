@@ -215,6 +215,55 @@ describe('useTaskUndo', () => {
     }
   });
 
+  it('exposes task creation for recoverable undo and exact redo', async () => {
+    const created = taskTodoFixture({ title: 'Pasted task' });
+    const event = historyRow(0, {
+      transition: 'create',
+      before_state: null,
+      after_state: JSON.stringify(snapshotTask(created)),
+    });
+    const historyData = [event];
+    let taskData = [created];
+    const repository = {
+      undoTask: vi.fn().mockResolvedValue(taskTodoFixture({
+        ...created,
+        disposition: 'deleted',
+        deleted_at: '2026-07-20T04:31:00.000Z',
+        deletion_root_id: created.id,
+      })),
+      redoTask: vi.fn().mockResolvedValue(created),
+    };
+    mocks.useQuery.mockImplementation((sql: string) => ({
+      data: sql.includes('tasks_history_events') ? historyData : taskData,
+      isLoading: false,
+      error: null,
+    }));
+    mocks.useTasksRuntime.mockReturnValue({ repository });
+    const { container, root } = renderHookHarness();
+    try {
+      expect(latest.available).toBe(true);
+      await act(async () => {
+        await latest.undo();
+      });
+      expect(repository.undoTask).toHaveBeenCalledWith('owner-a', event.id);
+
+      taskData = [taskTodoFixture({
+        ...created,
+        disposition: 'deleted',
+        deleted_at: '2026-07-20T04:31:00.000Z',
+        deletion_root_id: created.id,
+      })];
+      rerender(root);
+      expect(latest.redoAvailable).toBe(true);
+      await act(async () => {
+        await latest.redo();
+      });
+      expect(repository.redoTask).toHaveBeenCalledWith('owner-a', event.id);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('does not expose history movement without a supported source event', async () => {
     mocks.useQuery.mockReturnValue({ data: [], isLoading: false, error: null });
     mocks.useTasksRuntime.mockReturnValue({

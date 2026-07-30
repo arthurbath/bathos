@@ -3,9 +3,7 @@
 ## Purpose
 
 Define BathOS application surfaces, shared mobile navigation geometry, and platform-wide icon conventions.
-
 ## Requirements
-
 ### Requirement: BathOS uses one continuous dark application surface
 BathOS SHALL use the application background color for the document root, React root, application shell, platform top navigation, and card surfaces so initial loading and transitions do not expose a light or contrasting intermediate background.
 
@@ -18,15 +16,25 @@ BathOS SHALL use the application background color for the document root, React r
 - **THEN** the platform header, page surface, and card backgrounds remain one continuous application background color
 
 ### Requirement: Mobile modules use shared floating-pill navigation
-BathOS SHALL present the shared mobile bottom navigation as an opaque floating rounded outer pill containing smaller rounded navigation destinations, with the active destination visibly filled, complete safe-area clearance, and unchanged link semantics.
+BathOS SHALL present the shared mobile bottom navigation as a fully rounded, subtly translucent floating outer pill with a low-contrast border and backdrop blur, containing smaller rounded navigation destinations with the active destination visibly filled, complete safe-area clearance, and unchanged link semantics.
 
 #### Scenario: Render a mobile module navigation
 - **WHEN** a module supplies destinations to the shared mobile navigation
-- **THEN** the destinations appear inside a floating pill inset from the viewport edges and safe area rather than inside a full-width bottom bar
+- **THEN** the destinations appear inside a complete pill with no flat side edges, inset from the viewport edges and safe area rather than inside a full-width bottom bar
+
+#### Scenario: Preserve restrained depth over content
+- **WHEN** page content passes beneath the floating mobile navigation
+- **THEN** the navigation retains an opaque-enough semantic dark surface for legibility while slight translucency and backdrop blur softly obscure the underlying content and its border blends into that surface
 
 #### Scenario: Activate and open navigation destinations
 - **WHEN** a user taps, keyboard-activates, modified-clicks, or middle-clicks a mobile navigation destination
 - **THEN** the destination preserves the established route and browser link behavior while its active state uses the nested-pill treatment
+- **AND** the equal-width destinations have no inter-item gap so the longest persistent label receives the maximum horizontal breathing room without widening or overflowing the outer navigation pill
+
+#### Scenario: Present mobile destination feedback
+- **WHEN** the shared mobile navigation presents inactive destinations
+- **THEN** it does not apply a pointer-hover color treatment
+- **AND** active and keyboard focus-visible feedback remain available
 
 ### Requirement: Generic external-link actions use canonical iconography
 BathOS SHALL use Lucide `ExternalLink` for a generic icon action that opens an external destination and SHALL preserve an established protocol-specific icon when the destination's protocol conveys more useful meaning.

@@ -7,6 +7,7 @@ import {
   publishTaskNativeWidgetSnapshot,
   publishTaskNativeWidgetCredential,
 } from '@/modules/tasks/native/taskNativeWidgetBridge';
+import { maintainTaskNativeWidgetCredential } from '@/modules/tasks/native/taskNativeWidgetCredential';
 import type { TaskArea, TaskTodo } from '@/modules/tasks/types/tasks';
 import { supabase } from '@/integrations/supabase/client';
 import { getTasksNativeInstallationId } from '@/platform/native/tasksNativeCompanion';
@@ -63,39 +64,30 @@ export function useTaskNativeWidgetBridge({
     if (!installationId) return;
     const credentialKey = `${ownerId}:${installationId}`;
     if (provisionedCredentialKeyRef.current === credentialKey) return;
-    provisionedCredentialKeyRef.current = credentialKey;
-    let cancelled = false;
+    const controller = new AbortController();
 
-    void supabase.functions.invoke('tasks-widget-actions', {
-      body: { action: 'issue', installationId },
-    }).then(({ data, error }) => {
-      if (cancelled || error || typeof data !== 'object' || data === null) {
-        provisionedCredentialKeyRef.current = null;
-        return;
+    void maintainTaskNativeWidgetCredential({
+      ownerId,
+      installationId,
+      signal: controller.signal,
+      issue: async () => {
+        const { data, error } = await supabase.functions.invoke(
+          'tasks-widget-actions',
+          { body: { action: 'issue', installationId } },
+        );
+        return error ? null : data;
+      },
+      publish: publishTaskNativeWidgetCredential,
+    }).then((provisioned) => {
+      if (provisioned && !controller.signal.aborted) {
+        provisionedCredentialKeyRef.current = credentialKey;
       }
-      const result = data as Record<string, unknown>;
-      if (
-        result.outcome !== 'issued'
-        || result.ownerId !== ownerId
-        || result.installationId !== installationId
-        || typeof result.credential !== 'string'
-        || typeof result.expiresAt !== 'string'
-      ) {
-        provisionedCredentialKeyRef.current = null;
-        return;
-      }
-      publishTaskNativeWidgetCredential({
-        ownerId,
-        installationId,
-        credential: result.credential,
-        expiresAt: result.expiresAt,
-      });
     }).catch(() => {
-      provisionedCredentialKeyRef.current = null;
+      if (!controller.signal.aborted) {
+        provisionedCredentialKeyRef.current = null;
+      }
     });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [ownerId]);
 }

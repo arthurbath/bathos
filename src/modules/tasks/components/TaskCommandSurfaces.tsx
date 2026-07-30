@@ -155,6 +155,7 @@ export function TaskBulkCommandDialog({
             todayDate={planningDate}
             clearable
             clearEnabled={deadlineClearEnabled}
+            commandScope="task-deadline"
             active
           />
         ) : (

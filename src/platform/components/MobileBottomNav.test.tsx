@@ -55,7 +55,7 @@ describe('MobileBottomNav', () => {
     expect(viewport).toHaveAttribute('data-mobile-bottom-nav-viewport');
     expect(viewport).toHaveClass(
       'pointer-events-none',
-      'bottom-[calc(env(safe-area-inset-bottom)+0.5rem)]',
+      'bottom-[var(--mobile-bottom-nav-bottom-offset)]',
     );
     expect(nav).toHaveClass(
       'w-[calc(100%-2rem)]',
@@ -119,10 +119,7 @@ describe('MobileBottomNav', () => {
     expect(viewport).toHaveAttribute('data-native-touch', 'true');
     expect(viewport).not.toHaveAttribute('data-standalone-touch');
     expect(viewport).toHaveClass(
-      'bottom-0.5',
-    );
-    expect(viewport).not.toHaveClass(
-      'bottom-[calc(env(safe-area-inset-bottom)+0.5rem)]',
+      'bottom-[var(--mobile-bottom-nav-bottom-offset)]',
     );
     expect(document.documentElement).toHaveAttribute(
       'data-mobile-bottom-nav-installed-touch',
@@ -155,7 +152,7 @@ describe('MobileBottomNav', () => {
     expect(viewport).not.toHaveAttribute('data-native-touch');
     expect(viewport).toHaveAttribute('data-standalone-touch', 'true');
     expect(viewport).toHaveClass(
-      'bottom-[calc(env(safe-area-inset-bottom)+0.125rem)]',
+      'bottom-[var(--mobile-bottom-nav-bottom-offset)]',
     );
     expect(document.documentElement).toHaveAttribute(
       'data-mobile-bottom-nav-installed-touch',
@@ -186,10 +183,7 @@ describe('MobileBottomNav', () => {
     expect(viewport).not.toHaveAttribute('data-native-touch');
     expect(viewport).not.toHaveAttribute('data-standalone-touch');
     expect(viewport).toHaveClass(
-      'bottom-[calc(env(safe-area-inset-bottom)+0.5rem)]',
-    );
-    expect(viewport).not.toHaveClass(
-      'bottom-[calc(env(safe-area-inset-bottom)+0.125rem)]',
+      'bottom-[var(--mobile-bottom-nav-bottom-offset)]',
     );
     expect(document.documentElement).not.toHaveAttribute(
       'data-mobile-bottom-nav-installed-touch',

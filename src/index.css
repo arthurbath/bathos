@@ -68,6 +68,7 @@
     --category-group-row-bg: 0 0% 38%;
     --grid-sticky-line: 0 0% 64%;
     --grid-handle-line: 0 0% 42%;
+    --mobile-bottom-nav-bottom-offset: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
   }
 }
 
@@ -152,6 +153,11 @@
 }
 
 html[data-mobile-bottom-nav-installed-touch='true'] {
+  --mobile-bottom-nav-bottom-offset: calc(env(safe-area-inset-bottom, 0px) + 0.25rem);
+}
+
+html[data-mobile-bottom-nav-installed-touch='true'],
+html[data-mobile-bottom-nav-installed-touch='true'] body {
   overscroll-behavior-y: none;
 }
 

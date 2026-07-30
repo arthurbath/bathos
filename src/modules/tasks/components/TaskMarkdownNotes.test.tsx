@@ -241,10 +241,21 @@ describe('TaskMarkdownNotes', () => {
     expect(editor.textContent).toBe('# Live**bold** and `code`');
   });
 
-  it('continues asterisk bullets on Enter and preserves the two-character hanging indent', () => {
+  it.each([
+    ['asterisk', '* '],
+    ['hyphen', '- '],
+  ] as const)('continues %s bullets on Enter and preserves their source marker', (
+    _markerName,
+    marker,
+  ) => {
     const onChange = vi.fn();
     const { container } = render(
-      <TaskMarkdownNotes id="notes-bullet" notes="* first" disabled={false} onChange={onChange} />,
+      <TaskMarkdownNotes
+        id={`notes-${marker.trim()}-bullet`}
+        notes={`${marker}first`}
+        disabled={false}
+        onChange={onChange}
+      />,
     );
     const editor = screen.getByRole('textbox', { name: 'Notes' });
     editor.focus();
@@ -252,10 +263,66 @@ describe('TaskMarkdownNotes', () => {
 
     fireEvent.keyDown(editor, { key: 'Enter' });
 
-    expect(onChange).toHaveBeenLastCalledWith('* first\n* ');
+    expect(onChange).toHaveBeenLastCalledWith(`${marker}first\n${marker}`);
     expect(container.querySelectorAll('[data-task-markdown-indicator="bullet"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-task-markdown-indicator="bullet"]')[0]?.textContent)
+      .toBe(marker);
+    expect(container.querySelectorAll('[data-task-markdown-indicator="bullet"]')[1]?.textContent)
+      .toBe(marker);
     expect(Array.from(editor.children)).toHaveLength(2);
     expect(editor.lastElementChild).toHaveClass('pl-[2ch]', '[text-indent:-2ch]');
+  });
+
+  it('gives hyphen bullets the same source styling and semantic preview as asterisk bullets', () => {
+    const notes = '- hyphen bullet that can wrap\n* asterisk bullet that can wrap';
+    const { container } = render(
+      <TaskMarkdownNotes
+        id="notes-hyphen-bullet-presentations"
+        notes={notes}
+        disabled={false}
+        onChange={vi.fn()}
+      />,
+    );
+    const editor = screen.getByRole('textbox', { name: 'Notes' });
+    const lines = () => Array.from(
+      container.querySelectorAll<HTMLElement>('[data-task-note-line]'),
+    );
+    const indicators = () => Array.from(
+      container.querySelectorAll<HTMLElement>('[data-task-markdown-indicator="bullet"]'),
+    );
+
+    expect(indicators()).toHaveLength(2);
+    expect(indicators()[0].textContent).toBe('- ');
+    expect(indicators()[1].textContent).toBe('* ');
+    for (const indicator of indicators()) {
+      expect(indicator).toHaveClass(
+        'font-mono',
+        'text-muted-foreground',
+        'text-[0px]',
+        "after:content-['•_']",
+      );
+      expect(indicator.parentElement)
+        .toHaveClass('pl-[0.75em]', '[text-indent:-0.75em]');
+    }
+
+    editor.focus();
+    setCaret(findTextNode(editor, 'hyphen bullet that can wrap'), 3);
+    fireSelectionChange();
+
+    expect(lines()[0]).toHaveAttribute('data-task-note-presentation', 'source');
+    expect(lines()[0]).toHaveClass('pl-[2ch]', '[text-indent:-2ch]');
+    expect(indicators()[0].textContent).toBe('- ');
+    expect(indicators()[0]).toHaveClass('font-mono', 'text-muted-foreground');
+    expect(indicators()[0]).not.toHaveClass('text-[0px]');
+    expect(lines()[1]).toHaveAttribute('data-task-note-presentation', 'semantic');
+    expect(lines()[1]).toHaveClass('pl-[0.75em]', '[text-indent:-0.75em]');
+    expect(indicators()[1]).toHaveClass('text-[0px]', "after:content-['•_']");
+
+    fireEvent.blur(editor);
+
+    expect(lines()[0]).toHaveAttribute('data-task-note-presentation', 'semantic');
+    expect(lines()[0]).toHaveClass('pl-[0.75em]', '[text-indent:-0.75em]');
+    expect(indicators()[0]).toHaveClass('text-[0px]', "after:content-['•_']");
   });
 
   it('uses a narrower hanging indent for inactive bullets than active source bullets', () => {

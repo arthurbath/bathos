@@ -1098,6 +1098,7 @@ export type Database = {
           id: string
           last_actor_type: string
           last_mutation_channel: string
+          last_operation_id: string
           order_key: string
           owner_id: string
           revision: number
@@ -1114,6 +1115,7 @@ export type Database = {
           id: string
           last_actor_type?: string
           last_mutation_channel?: string
+          last_operation_id?: string
           order_key: string
           owner_id: string
           revision?: number
@@ -1130,6 +1132,7 @@ export type Database = {
           id?: string
           last_actor_type?: string
           last_mutation_channel?: string
+          last_operation_id?: string
           order_key?: string
           owner_id?: string
           revision?: number
@@ -1151,6 +1154,7 @@ export type Database = {
           id: string
           last_actor_type: string
           last_mutation_channel: string
+          last_operation_id: string
           order_key: string
           owner_id: string
           revision: number
@@ -1174,6 +1178,7 @@ export type Database = {
           id: string
           last_actor_type?: string
           last_mutation_channel?: string
+          last_operation_id?: string
           order_key: string
           owner_id: string
           revision?: number
@@ -1197,6 +1202,7 @@ export type Database = {
           id?: string
           last_actor_type?: string
           last_mutation_channel?: string
+          last_operation_id?: string
           order_key?: string
           owner_id?: string
           revision?: number
@@ -1284,6 +1290,7 @@ export type Database = {
       tasks_hierarchy_history_events: {
         Row: {
           actor_type: string
+          action_id: string
           affected_ids: string[]
           after_state: Json
           base_revision: number
@@ -1301,6 +1308,7 @@ export type Database = {
         }
         Insert: {
           actor_type: string
+          action_id?: string
           affected_ids: string[]
           after_state: Json
           base_revision: number
@@ -1318,6 +1326,7 @@ export type Database = {
         }
         Update: {
           actor_type?: string
+          action_id?: string
           affected_ids?: string[]
           after_state?: Json
           base_revision?: number

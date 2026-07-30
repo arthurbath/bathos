@@ -232,3 +232,37 @@ The iOS and macOS Tasks companions SHALL compile the same large-widget renderer,
 #### Scenario: Preserve iOS-only system controls
 - **WHEN** the macOS widget target builds
 - **THEN** it excludes the iOS Control Center implementation without removing or changing that control from the iOS target
+
+### Requirement: Native widgets preserve Primary Link identity
+The Tasks iOS widget SHALL use the closest native equivalent of the web task-row Primary Link identity icon without changing link routing or exposing the Primary Link value in the cached projection.
+
+#### Scenario: Show a generic Primary Link
+- **WHEN** a widget task has a generic Primary Link action
+- **THEN** the widget uses the native chain-link symbol rather than the external-launch symbol
+
+#### Scenario: Show a recognized Primary Link
+- **WHEN** a widget task has a recognized Mail, Jira, or Obsidian Primary Link kind
+- **THEN** the widget preserves that kind's existing protocol-specific native symbol
+
+#### Scenario: Activate a widget Primary Link
+- **WHEN** the user activates any widget Primary Link icon
+- **THEN** the existing widget action opens the configured destination without launching an unrelated Tasks route
+
+### Requirement: iOS shake invokes task undo
+The iOS Tasks companion SHALL translate one completed foreground device-shake gesture into the same guarded task-and-checklist undo command used by the Tasks web interface.
+
+#### Scenario: Shake with an undoable task change
+- **WHEN** the user shakes the device while the iOS Tasks companion is in the foreground and the task history has a safely undoable change
+- **THEN** the companion invokes the existing Tasks undo command exactly once and the synchronized inverse mutation follows the normal task history contract
+
+#### Scenario: Shake with an undoable checklist change
+- **WHEN** the user shakes the device while the latest safely undoable Tasks change belongs to a checklist item
+- **THEN** the existing Tasks undo arbitration reverses that checklist change without creating a separate native history
+
+#### Scenario: Shake at the undo boundary
+- **WHEN** the user shakes the device and no task or checklist change can be safely undone
+- **THEN** Tasks performs no mutation and shows the existing neutral Nothing to Undo toast
+
+#### Scenario: Non-shake motion
+- **WHEN** the native web view receives a completed motion event that is not a shake
+- **THEN** the companion does not dispatch the Tasks undo command

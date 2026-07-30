@@ -61,6 +61,20 @@ final class TasksBrowserModel: NSObject, ObservableObject {
       }));
     })();
     """
+    static let taskUndoCommandJavaScript = """
+    window.dispatchEvent(new CustomEvent("bathos:tasks-native-command", {
+      detail: {
+        schemaVersion: 1,
+        command: "undo"
+      }
+    }));
+    """
+    static let reloadSafeWebsiteDataTypes: Set<String> = [
+        WKWebsiteDataTypeDiskCache,
+        WKWebsiteDataTypeFetchCache,
+        WKWebsiteDataTypeMemoryCache,
+        WKWebsiteDataTypeOfflineWebApplicationCache,
+    ]
 
     private static let logger = Logger(
         subsystem: "garden.bath.tasks",
@@ -124,6 +138,40 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         } else {
             webView?.load(URLRequest(url: requestedURL))
         }
+    }
+
+    func reloadClearingCache() {
+        cancelColdStartRecovery()
+        loadError = nil
+        isLoading = true
+        URLCache.shared.removeAllCachedResponses()
+
+        guard let webView else {
+            return
+        }
+        let fallbackURL = requestedURL
+        webView.configuration.websiteDataStore.removeData(
+            ofTypes: Self.reloadSafeWebsiteDataTypes,
+            modifiedSince: .distantPast
+        ) { [weak webView] in
+            Task { @MainActor in
+                guard let webView else {
+                    return
+                }
+                if webView.url != nil {
+                    webView.reloadFromOrigin()
+                } else {
+                    webView.load(URLRequest(
+                        url: fallbackURL,
+                        cachePolicy: .reloadIgnoringLocalAndRemoteCacheData
+                    ))
+                }
+            }
+        }
+    }
+
+    func requestTaskUndo() {
+        webView?.evaluateJavaScript(Self.taskUndoCommandJavaScript)
     }
 
     func didStartLoading() {

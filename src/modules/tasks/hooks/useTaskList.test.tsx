@@ -34,6 +34,7 @@ let harnessView: TaskListView;
 let harnessRetainedTaskId: string | null;
 let harnessForwardMutation: ReturnType<typeof vi.fn>;
 let harnessReserveForwardMutation: ReturnType<typeof vi.fn>;
+let harnessMetadataMutation: ReturnType<typeof vi.fn>;
 
 function Harness() {
   latest = useTaskList(
@@ -42,6 +43,7 @@ function Harness() {
     harnessRetainedTaskId,
     harnessForwardMutation,
     harnessReserveForwardMutation,
+    harnessMetadataMutation,
   );
   return null;
 }
@@ -79,6 +81,7 @@ describe('useTaskList optimistic display', () => {
     harnessRetainedTaskId = null;
     harnessForwardMutation = vi.fn();
     harnessReserveForwardMutation = vi.fn();
+    harnessMetadataMutation = vi.fn();
     queryData = [originalTask];
     mocks.useQuery.mockReset().mockImplementation(() => ({
       data: queryData,
@@ -143,6 +146,10 @@ describe('useTaskList optimistic display', () => {
         await updatePromise;
       });
       expect(latest.tasks[0]).toEqual(savedTask);
+      expect(harnessMetadataMutation).toHaveBeenCalledWith([{
+        before: originalTask,
+        after: savedTask,
+      }]);
 
       queryData = [originalTask];
       rerender(root);
@@ -233,6 +240,7 @@ describe('useTaskList optimistic display', () => {
         'owner-a',
         'task-a',
         'complete',
+        undefined,
       );
       expect(commit).not.toHaveBeenCalled();
 

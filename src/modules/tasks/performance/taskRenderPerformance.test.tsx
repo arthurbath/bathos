@@ -133,7 +133,7 @@ describePerformance('Tasks rendered-view performance', () => {
       const searchOpenMs = performance.now() - searchStartedAt;
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
       expect(dialog).toHaveAccessibleName('Quick Find');
-      expect(dialog?.querySelector('[aria-label="Find Tasks and Areas"]')).toBeTruthy();
+      expect(dialog?.querySelector('[aria-label="Find Tasks"]')).toBeTruthy();
       expect(dialog?.querySelectorAll('select')).toHaveLength(0);
       expect(searchOpenMs).toBeLessThan(1_000);
 

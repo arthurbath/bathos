@@ -56,12 +56,14 @@ export type CreateTaskInput = {
   actionability?: TaskActionability;
   areaId?: string | null;
   hierarchyOrderKey?: string | null;
+  operationId?: string;
 };
 
 export type TaskMutationContext = {
   channel?: TaskEntryChannel;
   actorType?: TaskActorType;
   operationId?: string;
+  occurredAt?: string;
 };
 
 type NormalizedTaskMutationContext = {
@@ -110,7 +112,10 @@ export type EditableTaskPatch = Partial<
 export type TaskRepositoryOptions = {
   createId?: () => string;
   now?: () => string;
+  transientWriteRetryDelaysMs?: readonly number[];
 };
+
+const defaultTransientWriteRetryDelaysMs = [50, 250, 750] as const;
 
 const insertColumns = [
   'id',
@@ -176,6 +181,7 @@ export class TaskRepository {
   private readonly createId: () => string;
   private readonly now: () => string;
   private readonly hierarchyOperations: TaskHierarchyOperationsRepository;
+  private readonly transientWriteRetryDelaysMs: readonly number[];
 
   constructor(
     private readonly database: TaskRepositoryDatabase,
@@ -183,7 +189,30 @@ export class TaskRepository {
   ) {
     this.createId = options.createId ?? createUuid;
     this.now = options.now ?? (() => new Date().toISOString());
+    this.transientWriteRetryDelaysMs = options.transientWriteRetryDelaysMs
+      ?? defaultTransientWriteRetryDelaysMs;
     this.hierarchyOperations = new TaskHierarchyOperationsRepository(database, options);
+  }
+
+  private async writePlanningTransaction<T>(
+    callback: (transaction: Transaction) => Promise<T>,
+  ): Promise<T> {
+    let retryIndex = 0;
+    while (true) {
+      try {
+        return await this.database.writeTransaction(callback);
+      } catch (error) {
+        const retryDelayMs = this.transientWriteRetryDelaysMs[retryIndex];
+        if (
+          retryDelayMs === undefined
+          || !isTransientOpfsAccessHandleConflict(error)
+        ) {
+          throw error;
+        }
+        retryIndex += 1;
+        await waitForRetry(retryDelayMs);
+      }
+    }
   }
 
   async createTask(input: CreateTaskInput): Promise<TaskTodo> {
@@ -258,7 +287,7 @@ export class TaskRepository {
         entry_channel: entryChannel,
         last_mutation_channel: entryChannel,
         last_actor_type: input.actorType ?? 'user',
-        last_operation_id: clientMutationId,
+        last_operation_id: input.operationId ?? clientMutationId,
         undo_source_event_id: null,
         source_kind: input.sourceKind ?? null,
         source_url: input.sourceUrl ?? null,
@@ -562,7 +591,7 @@ export class TaskRepository {
         : input.todaySection ?? null;
     assertPlanningPlacement(input.destination, todaySection, startDate);
 
-    return this.database.writeTransaction(async (transaction) => {
+    return this.writePlanningTransaction(async (transaction) => {
       const occurredAt = this.now();
       await assertFutureStartDate(transaction, ownerId, startDate, occurredAt);
       const current = await getOwnedTask(transaction, ownerId, taskId);
@@ -620,7 +649,7 @@ export class TaskRepository {
         : input.todaySection ?? null;
     assertPlanningPlacement(input.destination, todaySection, startDate);
 
-    return this.database.writeTransaction(async (transaction) => {
+    return this.writePlanningTransaction(async (transaction) => {
       const occurredAt = this.now();
       await assertFutureStartDate(transaction, ownerId, startDate, occurredAt);
       const currentTasks: TaskTodo[] = [];
@@ -883,7 +912,7 @@ export class TaskRepository {
         const event = parseTaskHistoryEvent(storedEvent);
         const current = await getOwnedTask(transaction, ownerId, event.task_id);
         const patch = direction === 'undo'
-          ? createTaskUndoPatch(current, event)
+          ? createTaskUndoPatch(current, event, occurredAt)
           : createTaskRedoPatch(current, event);
         try {
         assertSource(
@@ -1166,6 +1195,34 @@ function assertOwner(ownerId: string): void {
   if (!ownerId) {
     throw new InvalidTaskMutationError('A signed-in task owner is required');
   }
+}
+
+function isTransientOpfsAccessHandleConflict(error: unknown): boolean {
+  let current = error;
+  for (let depth = 0; depth < 4 && current != null; depth += 1) {
+    const message = current instanceof Error
+      ? `${current.name}: ${current.message}`
+      : typeof current === 'object' && 'message' in current
+        ? String(current.message)
+        : String(current);
+    if (
+      message.includes('createSyncAccessHandle')
+      && message.includes('another open Access Handle or Writable stream')
+    ) {
+      return true;
+    }
+    current = typeof current === 'object' && 'cause' in current
+      ? current.cause
+      : null;
+  }
+  return false;
+}
+
+function waitForRetry(delayMs: number): Promise<void> {
+  if (delayMs <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
 }
 
 function assertSource(

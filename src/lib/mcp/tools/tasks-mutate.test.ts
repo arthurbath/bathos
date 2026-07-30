@@ -105,6 +105,7 @@ function checklist(): Tables['tasks_checklist_items']['Row'] {
     entry_channel: 'web',
     last_mutation_channel: 'web',
     last_actor_type: 'user',
+    last_operation_id: '70000000-0000-4000-8000-000000000001',
     revision: 1,
     client_mutation_id: '70000000-0000-4000-8000-000000000001',
     created_at: '2026-07-20T08:00:00.000Z',

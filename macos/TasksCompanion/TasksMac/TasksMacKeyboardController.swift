@@ -17,6 +17,15 @@ final class TasksMacKeyboardController: ObservableObject {
             guard let self else {
                 return event
             }
+            if Self.shouldPerformCacheClearingRefresh(
+                charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+                modifierFlags: event.modifierFlags,
+                isRepeat: event.isARepeat,
+                tasksWindowIsKey: self.browserModel?.webView?.window?.isKeyWindow == true
+            ) {
+                self.browserModel?.reloadClearingCache()
+                return nil
+            }
             if let destination = Self.destination(
                 charactersIgnoringModifiers: event.charactersIgnoringModifiers,
                 modifierFlags: event.modifierFlags
@@ -61,6 +70,25 @@ final class TasksMacKeyboardController: ObservableObject {
             return nil
         }
         return destination
+    }
+
+    static func shouldPerformCacheClearingRefresh(
+        charactersIgnoringModifiers: String?,
+        modifierFlags: NSEvent.ModifierFlags,
+        isRepeat: Bool,
+        tasksWindowIsKey: Bool
+    ) -> Bool {
+        guard tasksWindowIsKey,
+              !isRepeat,
+              charactersIgnoringModifiers?.lowercased() == "r" else {
+            return false
+        }
+        return modifierFlags.intersection([
+            .command,
+            .control,
+            .option,
+            .shift,
+        ]) == [.command, .option]
     }
 
     static func shouldConsumeEscape(

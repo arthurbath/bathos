@@ -145,6 +145,20 @@ The Tasks widget SHALL present the four active planning lists with compact, top-
 - **WHEN** a widget renders an open task
 - **THEN** its unchecked square uses the ordinary neutral gray treatment without inheriting Today horizon colors
 
+#### Scenario: Identify Today horizons
+- **WHEN** the Today widget renders an open task in Inbox, Now, Next, or Later
+- **THEN** the row shows the canonical horizon symbol between the completion control and summary using that horizon's canonical green, yellow, red-orange, or reddish-purple color
+
+#### Scenario: Identify Upcoming dates
+- **WHEN** the Upcoming widget renders a task beginning one through six calendar days after the projection planning date
+- **THEN** the row shows the localized short weekday in a compact chip between the leading task control and summary
+- **WHEN** the authoritative Upcoming display date is seven or more calendar days after the projection planning date
+- **THEN** the chip instead shows the localized abbreviated month and day
+
+#### Scenario: Protect an Upcoming recurrence projection
+- **WHEN** an Upcoming widget row represents a repeating schedule projection rather than a materialized task instance
+- **THEN** the row replaces the completion checkbox with the canonical repeating symbol and exposes no completion action
+
 #### Scenario: Omit an extraneous header count
 - **WHEN** a widget renders its list header
 - **THEN** it shows the canonical icon and list name without a task-count badge or number

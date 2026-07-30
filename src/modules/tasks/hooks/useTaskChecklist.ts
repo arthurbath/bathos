@@ -2,12 +2,19 @@ import { useQuery } from '@powersync/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { TaskChecklistItemPatch } from '@/modules/tasks/data/taskHierarchyRepository';
+import type { TaskMutationContext } from '@/modules/tasks/data/taskRepository';
 import {
   compareTaskOrder,
   generateTaskMoveOrderKey,
   generateTaskOrderKey,
 } from '@/modules/tasks/domain/taskOrder';
-import { planChecklistGroupMove } from '@/modules/tasks/domain/taskChecklistOrder';
+import {
+  planChecklistBatchInsertionOrderKeys,
+  planChecklistGroupMove,
+} from '@/modules/tasks/domain/taskChecklistOrder';
+import type {
+  TaskChecklistClipboardItem,
+} from '@/modules/tasks/domain/taskChecklistClipboard';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskChecklistItem } from '@/modules/tasks/types/tasks';
 
@@ -37,26 +44,103 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
   const createItem = useCallback(async (
     title: string,
     destinationIndex = items.length,
+    context?: TaskMutationContext,
   ) => {
     const boundedIndex = Math.max(0, Math.min(destinationIndex, items.length));
     const orderKey = checklistInsertionOrderKey(items, boundedIndex);
+    const occurredAt = context?.occurredAt ?? new Date().toISOString();
+    const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
     const item = await hierarchyRepository.createChecklistItem({
       ownerId,
       taskId,
       title,
       orderKey,
+      operationId,
+      occurredAt,
     });
     setOptimistic((current) => ({ ...current, [item.id]: item }));
+    notifyTaskChecklistForwardMutation();
     return item;
   }, [hierarchyRepository, items, ownerId, taskId]);
 
-  const updateItem = useCallback(async (itemId: string, patch: TaskChecklistItemPatch) => {
-    const item = await hierarchyRepository.updateChecklistItem(ownerId, itemId, patch);
+  const createItemCopies = useCallback(async (
+    copiedItems: readonly TaskChecklistClipboardItem[],
+    destinationIndex = items.length,
+    context?: TaskMutationContext,
+  ) => {
+    const normalizedItems = copiedItems
+      .map((item) => ({ ...item, title: item.title.trim() }))
+      .filter(({ title }) => Boolean(title));
+    if (normalizedItems.length === 0) return [];
+
+    const orderKeys = planChecklistBatchInsertionOrderKeys(
+      items.map((item) => ({ id: item.id, orderKey: item.order_key })),
+      destinationIndex,
+      normalizedItems.length,
+    );
+    const created: TaskChecklistItem[] = [];
+    const occurredAt = context?.occurredAt ?? new Date().toISOString();
+    const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
+    const mutationContext = { ...context, occurredAt, operationId };
+    for (const [index, copiedItem] of normalizedItems.entries()) {
+      let item = await hierarchyRepository.createChecklistItem({
+        ownerId,
+        taskId,
+        title: copiedItem.title,
+        orderKey: orderKeys[index],
+        operationId,
+        occurredAt,
+      });
+      if (copiedItem.completed) {
+        item = await hierarchyRepository.completeChecklistItem(
+          ownerId,
+          item.id,
+          true,
+          mutationContext,
+        );
+      }
+      created.push(item);
+      setOptimistic((current) => ({ ...current, [item.id]: item }));
+    }
+    notifyTaskChecklistForwardMutation();
+    return created;
+  }, [hierarchyRepository, items, ownerId, taskId]);
+
+  const createItems = useCallback((
+    titles: readonly string[],
+    destinationIndex = items.length,
+    context?: TaskMutationContext,
+  ) => createItemCopies(
+    titles.map((title) => ({ title, completed: false })),
+    destinationIndex,
+    context,
+  ), [createItemCopies, items.length]);
+
+  const updateItem = useCallback(async (
+    itemId: string,
+    patch: TaskChecklistItemPatch,
+    context?: TaskMutationContext,
+  ) => {
+    const mutationContext = {
+      ...context,
+      operationId: context?.operationId ?? globalThis.crypto.randomUUID(),
+    };
+    const item = await hierarchyRepository.updateChecklistItem(
+      ownerId,
+      itemId,
+      patch,
+      mutationContext,
+    );
     setOptimistic((current) => ({ ...current, [item.id]: item }));
+    notifyTaskChecklistForwardMutation();
     return item;
   }, [hierarchyRepository, ownerId]);
 
-  const setCompleted = useCallback(async (item: TaskChecklistItem, completed: boolean) => {
+  const setCompleted = useCallback(async (
+    item: TaskChecklistItem,
+    completed: boolean,
+    context?: TaskMutationContext,
+  ) => {
     const lastKey = items.filter(({ id }) => id !== item.id).at(-1)?.order_key ?? null;
     const patch: TaskChecklistItemPatch = completed
       ? {
@@ -65,21 +149,30 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
           order_key: generateTaskOrderKey(lastKey, null),
         }
       : { completed: false, completed_at: null };
-    return updateItem(item.id, patch);
+    return updateItem(item.id, patch, context);
   }, [items, updateItem]);
 
-  const deleteItem = useCallback(async (itemId: string) => {
+  const deleteItem = useCallback(async (itemId: string, context?: TaskMutationContext) => {
+    const mutationContext = {
+      ...context,
+      operationId: context?.operationId ?? globalThis.crypto.randomUUID(),
+    };
     await hierarchyOperationsRepository.request({
       ownerId,
       rootType: 'checklist_item',
       rootId: itemId,
       operation: 'delete',
       descendantPolicy: 'reject',
+      context: mutationContext,
     });
     setOptimistic((current) => ({ ...current, [itemId]: null }));
+    notifyTaskChecklistForwardMutation();
   }, [hierarchyOperationsRepository, ownerId]);
 
-  const deleteItems = useCallback(async (itemIds: readonly string[]) => {
+  const deleteItems = useCallback(async (
+    itemIds: readonly string[],
+    context?: TaskMutationContext,
+  ) => {
     const requestedIds = new Set(itemIds);
     const targets = items.filter(({ id }) => requestedIds.has(id));
     if (targets.length === 0) return;
@@ -91,6 +184,9 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     });
 
     const deletedIds = new Set<string>();
+    const occurredAt = context?.occurredAt ?? new Date().toISOString();
+    const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
+    const mutationContext = { ...context, occurredAt, operationId };
     try {
       for (const item of targets) {
         await hierarchyOperationsRepository.request({
@@ -99,6 +195,7 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
           rootId: item.id,
           operation: 'delete',
           descendantPolicy: 'reject',
+          context: mutationContext,
         });
         deletedIds.add(item.id);
       }
@@ -112,20 +209,26 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
       });
       throw error;
     }
+    notifyTaskChecklistForwardMutation();
   }, [hierarchyOperationsRepository, items, ownerId]);
 
-  const reorderItem = useCallback(async (itemId: string, destinationIndex: number) => {
+  const reorderItem = useCallback(async (
+    itemId: string,
+    destinationIndex: number,
+    context?: TaskMutationContext,
+  ) => {
     const orderKey = generateTaskMoveOrderKey(
       items.map((item) => ({ id: item.id, orderKey: item.order_key })),
       itemId,
       destinationIndex,
     );
-    return updateItem(itemId, { order_key: orderKey });
+    return updateItem(itemId, { order_key: orderKey }, context);
   }, [items, updateItem]);
 
   const reorderItems = useCallback(async (
     itemIds: readonly string[],
     destinationIndex: number,
+    context?: TaskMutationContext,
   ) => {
     const itemById = new Map(items.map((item) => [item.id, item]));
     const move = planChecklistGroupMove(
@@ -165,18 +268,23 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     }));
 
     const savedItems: TaskChecklistItem[] = [];
+    const occurredAt = context?.occurredAt ?? new Date().toISOString();
+    const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
+    const mutationContext = { ...context, occurredAt, operationId };
     try {
       for (const projected of projections) {
         savedItems.push(await hierarchyRepository.updateChecklistItem(
           ownerId,
           projected.id,
           { order_key: projected.order_key },
+          mutationContext,
         ));
       }
       setOptimistic((current) => ({
         ...current,
         ...Object.fromEntries(savedItems.map((item) => [item.id, item])),
       }));
+      notifyTaskChecklistForwardMutation();
       return savedItems;
     } catch (error) {
       setOptimistic((current) => {
@@ -193,6 +301,8 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     items,
     loading: query.isLoading,
     createItem,
+    createItems,
+    createItemCopies,
     updateItem,
     setCompleted,
     deleteItem,
@@ -200,6 +310,10 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     reorderItem,
     reorderItems,
   };
+}
+
+function notifyTaskChecklistForwardMutation() {
+  globalThis.dispatchEvent?.(new Event('bathos:task-checklist-forward-mutation'));
 }
 
 function compareChecklistRows(left: TaskChecklistItem, right: TaskChecklistItem): number {

@@ -58,6 +58,8 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 | AddTask | `Plus` | Add a task |
 | AddArea | `Plus` | Add an area |
 | MultiSelect | `Lasso` | Enter task multi-selection mode |
+| Undo | `Undo2` | Undo the latest Tasks change |
+| Redo | `Redo2` | Redo the next undone Tasks change |
 | Search | `Search` | Search Tasks and views |
 | QuickFilters | `Filter` | Apply a predefined quick filter |
 | Delete | `Trash2` | Recoverably delete task content |

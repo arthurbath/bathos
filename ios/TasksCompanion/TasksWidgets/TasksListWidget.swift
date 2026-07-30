@@ -173,11 +173,19 @@ private struct TaskListLockScreenWidgetView: View {
                             visibleTasks
                         ) { task in
                             HStack(spacing: 5) {
-                                Image(systemName: entry.listID == .someday
-                                    ? "square.dashed"
-                                    : "square"
+                                Image(systemName: task.isRecurrenceProjection == true
+                                    && entry.listID == .upcoming
+                                    ? "repeat"
+                                    : entry.listID == .someday
+                                        ? "square.dashed"
+                                        : "square"
                                 )
                                 .font(.system(size: 10, weight: .regular))
+                                TaskWidgetListContext(
+                                    listID: entry.listID,
+                                    task: task,
+                                    planningDate: entry.snapshot?.planningDate
+                                )
                                 Text(task.summary)
                                     .font(.system(
                                         size: 13,
@@ -290,7 +298,14 @@ private struct TaskListWidgetView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(list.tasks.prefix(TaskWidgetPresentationPolicy.largeWidgetTaskLimit)) { task in
                         HStack(spacing: 9) {
-                            if task.terminalState == nil {
+                            if task.isRecurrenceProjection == true
+                                && entry.listID == .upcoming {
+                                Image(systemName: "repeat")
+                                    .font(.system(size: 14, weight: .regular))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 28, height: 28)
+                                    .accessibilityLabel("Repeating Schedule")
+                            } else if task.terminalState == nil {
                                 Toggle(
                                     isOn: false,
                                     intent: CompleteTaskIntent(
@@ -308,6 +323,11 @@ private struct TaskListWidgetView: View {
                                     .font(.system(size: 14, weight: .regular))
                                     .foregroundStyle(taskColor(task))
                             }
+                            TaskWidgetListContext(
+                                listID: entry.listID,
+                                task: task,
+                                planningDate: entry.snapshot?.planningDate
+                            )
                             Link(
                                 destination: TaskNativeRoute.task(
                                     task.id,
@@ -330,7 +350,12 @@ private struct TaskListWidgetView: View {
                                 .accessibilityLabel(primaryLink.accessibilityLabel)
                             }
                         }
-                        .frame(maxWidth: .infinity, minHeight: 29, alignment: .leading)
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: TaskWidgetPresentationPolicy
+                                .largeWidgetTaskRowMinimumHeight,
+                            alignment: .leading
+                        )
                         .contentShape(Rectangle())
                     }
                 }
@@ -379,6 +404,115 @@ private struct TaskListWidgetView: View {
             return .green
         }
         return .secondary
+    }
+}
+
+private struct TaskWidgetListContext: View {
+    let listID: TaskWidgetListID
+    let task: TaskWidgetTask
+    let planningDate: String?
+
+    @ViewBuilder
+    var body: some View {
+        if listID == .today, let horizon = task.todaySection {
+            TaskWidgetHorizonMarker(horizon: horizon)
+        } else if listID == .upcoming,
+                  let planningDate,
+                  let label = TaskWidgetPresentationPolicy.upcomingDateLabel(
+                    upcomingDate: task.upcomingDate,
+                    planningDate: planningDate
+                  ) {
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(Color.white.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .accessibilityLabel("Starts \(label)")
+        }
+    }
+}
+
+private struct TaskWidgetHorizonMarker: View {
+    let horizon: String
+
+    var body: some View {
+        Group {
+            if horizon == "inbox" {
+                Image(systemName: "tray")
+                    .font(.system(size: 12, weight: .regular))
+            } else {
+                TaskWidgetClockMarker(hour: hour)
+            }
+        }
+        .foregroundStyle(color)
+        .frame(width: 15, height: 15)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var hour: Int {
+        switch horizon {
+        case "now":
+            return 2
+        case "later":
+            return 8
+        default:
+            return 5
+        }
+    }
+
+    private var color: Color {
+        switch horizon {
+        case "inbox":
+            return Color(red: 52 / 255, green: 178 / 255, blue: 104 / 255)
+        case "now":
+            return Color(red: 244 / 255, green: 206 / 255, blue: 52 / 255)
+        case "next":
+            return Color(red: 241 / 255, green: 118 / 255, blue: 65 / 255)
+        default:
+            return Color(red: 220 / 255, green: 106 / 255, blue: 171 / 255)
+        }
+    }
+
+    private var accessibilityLabel: String {
+        horizon.prefix(1).uppercased() + horizon.dropFirst()
+    }
+}
+
+private struct TaskWidgetClockMarker: View {
+    let hour: Int
+
+    var body: some View {
+        Canvas { context, size in
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let radius = min(size.width, size.height) * 0.42
+            var clock = Path()
+            clock.addEllipse(in: CGRect(
+                x: center.x - radius,
+                y: center.y - radius,
+                width: radius * 2,
+                height: radius * 2
+            ))
+            clock.move(to: center)
+            clock.addLine(to: CGPoint(x: center.x, y: center.y - radius * 0.58))
+            let angle = CGFloat(hour) * .pi / 6 - .pi / 2
+            clock.move(to: center)
+            clock.addLine(to: CGPoint(
+                x: center.x + cos(angle) * radius * 0.52,
+                y: center.y + sin(angle) * radius * 0.52
+            ))
+            context.stroke(
+                clock,
+                with: .foreground,
+                style: StrokeStyle(
+                    lineWidth: 1.6,
+                    lineCap: .round,
+                    lineJoin: .round
+                )
+            )
+        }
     }
 }
 

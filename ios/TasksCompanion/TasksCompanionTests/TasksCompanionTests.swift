@@ -761,6 +761,87 @@ final class TasksCompanionTests: XCTestCase {
             TaskWidgetPresentationPolicy.largeWidgetTaskLimit,
             10
         )
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.largeWidgetTaskRowMinimumHeight,
+            29
+        )
+    }
+
+    func testUpcomingWidgetLabelsUseWeekdaysBeforeTheSevenDayBoundary() {
+        let locale = Locale(identifier: "en_US")
+
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.upcomingDateLabel(
+                upcomingDate: "2026-07-31",
+                planningDate: "2026-07-30",
+                locale: locale
+            ),
+            "Fri"
+        )
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.upcomingDateLabel(
+                upcomingDate: "2026-08-05",
+                planningDate: "2026-07-30",
+                locale: locale
+            ),
+            "Wed"
+        )
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.upcomingDateLabel(
+                upcomingDate: "2026-08-06",
+                planningDate: "2026-07-30",
+                locale: locale
+            ),
+            "Aug 6"
+        )
+    }
+
+    func testSnapshotValidatesUpcomingRecurrencePresentationOnlyInUpcoming() throws {
+        let ownerID = UUID()
+        let projection = TaskWidgetTask(
+            id: UUID(),
+            summary: "Repeating Schedule",
+            deadline: nil,
+            todaySection: nil,
+            actionability: "actionable",
+            terminalState: nil,
+            upcomingDate: "2026-08-31",
+            isRecurrenceProjection: true
+        )
+        var validLists = makeSnapshot(ownerID: ownerID).lists
+        validLists[1] = TaskWidgetList(
+            id: .upcoming,
+            title: "Upcoming",
+            totalCount: 1,
+            truncated: false,
+            tasks: [projection]
+        )
+        let valid = TaskWidgetSnapshot(
+            type: "snapshot",
+            schemaVersion: TaskWidgetSnapshot.schemaVersion,
+            ownerId: ownerID,
+            generatedAt: "2026-07-30T08:00:00Z",
+            planningDate: "2026-07-30",
+            lists: validLists
+        )
+        XCTAssertNoThrow(try valid.validate())
+
+        validLists[0] = TaskWidgetList(
+            id: .today,
+            title: "Today",
+            totalCount: 1,
+            truncated: false,
+            tasks: [projection]
+        )
+        let invalid = TaskWidgetSnapshot(
+            type: "snapshot",
+            schemaVersion: TaskWidgetSnapshot.schemaVersion,
+            ownerId: ownerID,
+            generatedAt: "2026-07-30T08:00:00Z",
+            planningDate: "2026-07-30",
+            lists: validLists
+        )
+        XCTAssertThrowsError(try invalid.validate())
     }
 
     func testLargeWidgetNewTaskDeepLinkTargetsConfiguredList() {
@@ -780,6 +861,54 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertEqual(
             Bundle.main.object(forInfoDictionaryKey: "WKAppBoundDomains") as? [String],
             [TaskCompanionConstants.trustedWebHost]
+        )
+    }
+
+    func testWebViewScrollPolicyKeepsFixedChromeStableAtScrollBoundaries() {
+        let scrollView = UIScrollView()
+        scrollView.bounces = true
+        scrollView.contentInsetAdjustmentBehavior = .automatic
+
+        TasksWebViewScrollPolicy.apply(to: scrollView)
+
+        XCTAssertFalse(scrollView.bounces)
+        XCTAssertEqual(scrollView.contentInsetAdjustmentBehavior, .never)
+    }
+
+    @MainActor
+    func testTasksCommandWebViewMapsOnlyCompletedShakeMotionToUndo() {
+        let webView = TasksCommandWebView(
+            frame: .zero,
+            configuration: WKWebViewConfiguration()
+        )
+        var shakeCount = 0
+        webView.onShake = {
+            shakeCount += 1
+        }
+
+        XCTAssertFalse(webView.handleCompletedMotion(.remoteControlPlay))
+        XCTAssertEqual(shakeCount, 0)
+        XCTAssertTrue(webView.handleCompletedMotion(.motionShake))
+        XCTAssertEqual(shakeCount, 1)
+        XCTAssertTrue(webView.handleCompletedMotion(.motionShake))
+        XCTAssertEqual(shakeCount, 2)
+    }
+
+    func testTaskUndoNativeCommandUsesTheVersionedTasksEvent() {
+        XCTAssertTrue(
+            TasksBrowserModel.taskUndoCommandJavaScript.contains(
+                "bathos:tasks-native-command"
+            )
+        )
+        XCTAssertTrue(
+            TasksBrowserModel.taskUndoCommandJavaScript.contains(
+                "schemaVersion: 1"
+            )
+        )
+        XCTAssertTrue(
+            TasksBrowserModel.taskUndoCommandJavaScript.contains(
+                "command: \"undo\""
+            )
         )
     }
 

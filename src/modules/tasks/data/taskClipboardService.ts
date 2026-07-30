@@ -142,6 +142,7 @@ export class TaskClipboardService {
     }
 
     const created: TaskTodo[] = [];
+    const operationId = globalThis.crypto.randomUUID();
     try {
       for (let index = plans.length - 1; index >= 0; index -= 1) {
         const plan = plans[index];
@@ -164,6 +165,7 @@ export class TaskClipboardService {
           areaId: plan.areaId,
           ...(orderKey ? { orderKey } : {}),
           ...(hierarchyOrderKey ? { hierarchyOrderKey } : {}),
+          operationId,
         });
         created.unshift(task);
         if (options.atTop) {
