@@ -133,8 +133,24 @@ export default function AuthPage() {
 
             <TabsContent value="login">
               <form data-bathos-return-submits="true" onSubmit={handleLogin} className="space-y-4 pt-2">
-                <Input placeholder="Email" type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required />
-                <Input placeholder="Password" type="password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required />
+                <Input
+                  autoComplete="username"
+                  name="email"
+                  placeholder="Email"
+                  type="email"
+                  value={loginEmail}
+                  onChange={e => setLoginEmail(e.target.value)}
+                  required
+                />
+                <Input
+                  autoComplete="current-password"
+                  name="password"
+                  placeholder="Password"
+                  type="password"
+                  value={loginPassword}
+                  onChange={e => setLoginPassword(e.target.value)}
+                  required
+                />
                 <Button type="submit" className="w-full" disabled={loading}>Sign In</Button>
               </form>
               <div className="mt-3 text-center">
@@ -146,9 +162,33 @@ export default function AuthPage() {
 
             <TabsContent value="signup">
               <form data-bathos-return-submits="true" onSubmit={handleSignup} className="space-y-4 pt-2">
-                <Input placeholder="Display Name" value={signupName} onChange={e => setSignupName(e.target.value)} required />
-                <Input placeholder="Email" type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} required />
-                <Input placeholder="Password" type="password" value={signupPassword} onChange={e => setSignupPassword(e.target.value)} required minLength={8} />
+                <Input
+                  autoComplete="name"
+                  name="name"
+                  placeholder="Display Name"
+                  value={signupName}
+                  onChange={e => setSignupName(e.target.value)}
+                  required
+                />
+                <Input
+                  autoComplete="username"
+                  name="email"
+                  placeholder="Email"
+                  type="email"
+                  value={signupEmail}
+                  onChange={e => setSignupEmail(e.target.value)}
+                  required
+                />
+                <Input
+                  autoComplete="new-password"
+                  name="new-password"
+                  placeholder="Password"
+                  type="password"
+                  value={signupPassword}
+                  onChange={e => setSignupPassword(e.target.value)}
+                  required
+                  minLength={8}
+                />
                 <PasswordRequirements password={signupPassword} />
                 <div className="flex items-center space-x-3">
                   <Checkbox

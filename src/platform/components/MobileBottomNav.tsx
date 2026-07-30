@@ -9,7 +9,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { shouldHandleWithBrowser } from '@/lib/navigation';
-import { isInstalledApp } from '@/platform/installedApp';
+import {
+  getDeclaredNativeModuleId,
+  isInstalledApp,
+  isStandalonePwa,
+} from '@/platform/installedApp';
 
 interface MobileBottomNavItem {
   path: string;
@@ -83,22 +87,43 @@ export function MobileBottomNav({
     };
   }, []);
 
+  const touchDevice = mounted && isTouchDevice(window);
+  const nativeTouch = touchDevice && getDeclaredNativeModuleId(window) !== null;
+  const standaloneTouch = touchDevice && isStandalonePwa(window);
+  const installedTouch = touchDevice && isInstalledApp(window);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!installedTouch) {
+      root.removeAttribute('data-mobile-bottom-nav-installed-touch');
+      return;
+    }
+
+    root.setAttribute('data-mobile-bottom-nav-installed-touch', 'true');
+    return () => {
+      root.removeAttribute('data-mobile-bottom-nav-installed-touch');
+    };
+  }, [installedTouch]);
+
   if (!mounted) return null;
 
   const hasOverflow = overflowItems.length > 0;
   const overflowActive = overflowItems.some(({ path }) => isActive(path));
-  const installedTouch = isInstalledApp(window) && isTouchDevice(window);
   const itemClassName = (active: boolean) => (
-    `inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? 'bg-foreground/[0.12] text-foreground' : 'text-muted-foreground'}`
+    `inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? 'bg-foreground/[0.12] text-foreground' : 'text-muted-foreground'}`
   );
 
   const nav = (
     <div
       data-mobile-bottom-nav-viewport
       data-installed-touch={installedTouch ? 'true' : undefined}
+      data-native-touch={nativeTouch ? 'true' : undefined}
+      data-standalone-touch={standaloneTouch ? 'true' : undefined}
       className={`pointer-events-none fixed left-0 z-40 md:hidden ${
-        installedTouch
-          ? 'bottom-[env(safe-area-inset-bottom)]'
+        nativeTouch
+          ? 'bottom-0.5'
+          : standaloneTouch
+            ? 'bottom-[calc(env(safe-area-inset-bottom)+0.125rem)]'
           : 'bottom-[calc(env(safe-area-inset-bottom)+0.5rem)]'
       }`}
       style={viewportStyle ? {
@@ -110,7 +135,7 @@ export function MobileBottomNav({
     >
       <nav
         aria-label="Mobile navigation"
-        className="pointer-events-auto mx-auto grid w-[calc(100%-2rem)] max-w-[calc(64rem-2rem)] gap-0 rounded-full border border-secondary bg-secondary/90 p-1.5 backdrop-blur-sm supports-[backdrop-filter]:bg-secondary/85"
+        className="pointer-events-auto mx-auto grid w-[calc(100%-2rem)] max-w-[calc(64rem-2rem)] gap-0 rounded-full border border-secondary bg-secondary/90 p-1 backdrop-blur-sm supports-[backdrop-filter]:bg-secondary/85"
         style={{ gridTemplateColumns: `repeat(${items.length + (hasOverflow ? 1 : 0)}, minmax(0, 1fr))` }}
       >
         {items.map(({ path, label, icon: Icon }) => {

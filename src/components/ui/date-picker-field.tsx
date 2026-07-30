@@ -36,9 +36,101 @@ interface DatePickerFieldProps extends Omit<React.ButtonHTMLAttributes<HTMLButto
   minDate?: string;
   todayDate?: string;
   clearable?: boolean;
+  clearEnabled?: boolean;
   clearLabel?: string;
   decoration?: React.ReactNode;
   decorationClassName?: string;
+}
+
+export interface DatePickerPanelProps {
+  value: string;
+  onValueChange: (value: string) => void;
+  onRequestClose: () => void;
+  onTabExit?: (backwards: boolean) => void;
+  minDate?: string;
+  todayDate?: string;
+  clearable?: boolean;
+  clearEnabled?: boolean;
+  clearLabel?: string;
+  active?: boolean;
+}
+
+export function DatePickerPanel({
+  value,
+  onValueChange,
+  onRequestClose,
+  onTabExit,
+  minDate,
+  todayDate,
+  clearable = false,
+  clearEnabled,
+  clearLabel = 'Clear',
+  active = true,
+}: DatePickerPanelProps) {
+  const [visibleMonth, setVisibleMonth] = React.useState<Date>(
+    () => getVisibleMonth(value, todayDate),
+  );
+  const clearButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const selectedDate = parseDatePickerFieldValue(value);
+  const minimumDate = parseDatePickerFieldValue(minDate);
+  const calendarToday = parseDatePickerFieldValue(todayDate);
+
+  React.useEffect(() => {
+    if (!active) return;
+    setVisibleMonth(getVisibleMonth(value, todayDate));
+  }, [active, todayDate, value]);
+
+  return (
+    <div
+      data-date-picker-panel
+      onKeyDownCapture={(event) => {
+        if (event.key !== 'Tab' || !onTabExit) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onTabExit(event.shiftKey);
+      }}
+    >
+      <Calendar
+        mode="single"
+        selected={selectedDate}
+        disabled={minimumDate ? { before: minimumDate } : undefined}
+        fromDate={minimumDate}
+        month={visibleMonth}
+        today={calendarToday}
+        initialFocusDate={selectedDate ?? minimumDate ?? calendarToday}
+        allowTabExit
+        onMonthChange={setVisibleMonth}
+        onDayGridExitDown={() => {
+          if (clearButtonRef.current?.disabled) return false;
+          clearButtonRef.current?.focus();
+          return Boolean(clearButtonRef.current);
+        }}
+        onSelect={(date) => {
+          if (date) onValueChange(toDatePickerFieldValue(date));
+          onRequestClose();
+        }}
+        initialFocus
+      />
+      {clearable ? (
+        <div className="border-t border-[hsl(var(--grid-sticky-line))] p-2">
+          <Button
+            ref={clearButtonRef}
+            type="button"
+            variant="clear"
+            className="w-full justify-start gap-2 text-muted-foreground"
+            disabled={clearEnabled === undefined ? !value : !clearEnabled}
+            onClick={() => {
+              onValueChange('');
+              onRequestClose();
+            }}
+          >
+            <X className="h-4 w-4" aria-hidden />
+            {clearLabel}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFieldProps>(({
@@ -51,6 +143,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   minDate,
   todayDate,
   clearable = false,
+  clearEnabled,
   clearLabel = 'Clear',
   decoration,
   decorationClassName,
@@ -59,22 +152,11 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   ...props
 }, forwardedRef) => {
   const [open, setOpen] = React.useState(false);
-  const [visibleMonth, setVisibleMonth] = React.useState<Date>(
-    () => getVisibleMonth(value, todayDate),
-  );
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
-  const clearButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const tabExitDirectionRef = React.useRef<'forward' | 'backward' | null>(null);
   const selectedDate = parseDatePickerFieldValue(value);
-  const minimumDate = parseDatePickerFieldValue(minDate);
-  const calendarToday = parseDatePickerFieldValue(todayDate);
 
   React.useImperativeHandle(forwardedRef, () => triggerRef.current as HTMLButtonElement);
-
-  React.useEffect(() => {
-    if (!open) return;
-    setVisibleMonth(getVisibleMonth(value, todayDate));
-  }, [open, todayDate, value]);
 
   const restoreTriggerFocus = () => {
     window.setTimeout(() => {
@@ -130,59 +212,25 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
             focusAdjacentFormControl(triggerRef.current, direction === 'backward');
           }
         }}
-        onKeyDownCapture={(event) => {
-          if (event.key !== 'Tab') return;
-          event.preventDefault();
-          event.stopPropagation();
-          tabExitDirectionRef.current = event.shiftKey ? 'backward' : 'forward';
-          setOpen(false);
-        }}
       >
-        <Calendar
-          mode="single"
-          selected={selectedDate}
-          disabled={minimumDate ? { before: minimumDate } : undefined}
-          fromDate={minimumDate}
-          month={visibleMonth}
-          today={calendarToday}
-          initialFocusDate={selectedDate ?? minimumDate ?? calendarToday}
-          allowTabExit
-          onMonthChange={setVisibleMonth}
-          onDayGridExitDown={() => {
-            if (clearButtonRef.current?.disabled) return false;
-            clearButtonRef.current?.focus();
-            return Boolean(clearButtonRef.current);
-          }}
-          onSelect={(date) => {
-            if (!date) {
-              setOpen(false);
-              return;
-            }
-            onValueChange(toDatePickerFieldValue(date));
+        <DatePickerPanel
+          value={value}
+          onValueChange={onValueChange}
+          minDate={minDate}
+          todayDate={todayDate}
+          clearable={clearable}
+          clearEnabled={clearEnabled}
+          clearLabel={clearLabel}
+          active={open}
+          onRequestClose={() => {
             setOpen(false);
             restoreTriggerFocus();
           }}
-          initialFocus
+          onTabExit={(backwards) => {
+            tabExitDirectionRef.current = backwards ? 'backward' : 'forward';
+            setOpen(false);
+          }}
         />
-        {clearable ? (
-          <div className="border-t border-[hsl(var(--grid-sticky-line))] p-2">
-            <Button
-              ref={clearButtonRef}
-              type="button"
-              variant="clear"
-              className="w-full justify-start gap-2 text-muted-foreground"
-              disabled={!value}
-              onClick={() => {
-                onValueChange('');
-                setOpen(false);
-                restoreTriggerFocus();
-              }}
-            >
-              <X className="h-4 w-4" aria-hidden />
-              {clearLabel}
-            </Button>
-          </div>
-        ) : null}
       </PopoverContent>
     </Popover>
   );

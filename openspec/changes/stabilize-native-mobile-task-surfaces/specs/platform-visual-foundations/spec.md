@@ -1,0 +1,27 @@
+## MODIFIED Requirements
+
+### Requirement: Mobile modules use shared floating-pill navigation
+BathOS SHALL present the shared mobile bottom navigation as a fully rounded, subtly translucent fixed outer pill with a low-contrast border and backdrop blur, containing smaller rounded navigation destinations with the active destination visibly filled, compact internal padding, complete safe-area clearance, stable lower-scroll-boundary placement, and unchanged link semantics.
+
+#### Scenario: Render a mobile module navigation
+- **WHEN** a module supplies destinations to the shared mobile navigation
+- **THEN** the destinations appear inside a complete pill with no flat side edges, inset from the viewport edges and safe area rather than inside a full-width bottom bar
+- **AND** compact outer and destination padding maximize usable label width without widening the pill or reducing its minimum touch height
+
+#### Scenario: Preserve restrained depth over content
+- **WHEN** page content passes beneath the floating mobile navigation
+- **THEN** the navigation retains an opaque-enough semantic dark surface for legibility while slight translucency and backdrop blur softly obscure the underlying content and its border blends into that surface
+
+#### Scenario: Remain fixed at a list boundary
+- **WHEN** an installed touch user reaches or interacts with the lower scroll boundary of a list
+- **THEN** the navigation remains at the same viewport position without shifting upward or following overscroll
+
+#### Scenario: Activate and open navigation destinations
+- **WHEN** a user taps, keyboard-activates, modified-clicks, or middle-clicks a mobile navigation destination
+- **THEN** the destination preserves the established route and browser link behavior while its active state uses the nested-pill treatment
+- **AND** the equal-width destinations have no inter-item gap so the longest persistent label receives the maximum horizontal breathing room without widening or overflowing the outer navigation pill
+
+#### Scenario: Present mobile destination feedback
+- **WHEN** the shared mobile navigation presents inactive destinations
+- **THEN** it does not apply a pointer-hover color treatment
+- **AND** active and keyboard focus-visible feedback remain available

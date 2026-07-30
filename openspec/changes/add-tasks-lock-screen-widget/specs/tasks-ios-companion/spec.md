@@ -10,6 +10,7 @@ The companion SHALL provide an accessory rectangular Lock Screen widget that let
 #### Scenario: Render three or more tasks
 - **WHEN** the configured list has three or more cached tasks
 - **THEN** the Lock Screen widget shows the first three summaries in authoritative list order with compact neutral task indicators
+- **AND** each summary uses the native default system typeface at 13 points and regular weight, matching the Calendar Lock Screen event-title treatment
 - **AND** the three rows use slight vertical separation and are vertically centered together inside the widget
 - **AND** their row height and separation match the populated one- and two-task states so corresponding task lines occupy approximately the same vertical positions
 

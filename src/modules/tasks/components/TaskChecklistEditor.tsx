@@ -33,10 +33,14 @@ export function TaskChecklistEditor({
   ownerId,
   taskId,
   focusRequestTaskId = taskId,
+  emptyActionLayout = 'standalone',
+  onContentPresenceChange,
 }: {
   ownerId: string;
   taskId: string;
   focusRequestTaskId?: string;
+  emptyActionLayout?: 'paired' | 'standalone';
+  onContentPresenceChange?: (present: boolean) => void;
 }) {
   const checklist = useTaskChecklist(ownerId, taskId);
   const [draftIndex, setDraftIndex] = useState<number | null>(null);
@@ -74,6 +78,16 @@ export function TaskChecklistEditor({
   const deleteItemRef = useRef(checklist.deleteItem);
   itemsRef.current = checklist.items;
   deleteItemRef.current = checklist.deleteItem;
+
+  useEffect(() => {
+    if (checklist.loading) return;
+    onContentPresenceChange?.(checklist.items.length > 0 || draftIndex !== null);
+  }, [
+    checklist.items.length,
+    checklist.loading,
+    draftIndex,
+    onContentPresenceChange,
+  ]);
 
   const clearSelection = useCallback(() => {
     setSelectedItemIds((current) => (
@@ -868,7 +882,13 @@ export function TaskChecklistEditor({
         <button
           type="button"
           aria-label="Add Checklist"
-          className="inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          data-task-checklist-disclosure
+          className={[
+            'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            emptyActionLayout === 'paired'
+              ? 'w-full justify-center'
+              : 'w-fit justify-start',
+          ].join(' ')}
           onClick={beginChecklist}
         >
           <TASK_ICONS.TaskChecklist className="h-4 w-4" aria-hidden="true" />

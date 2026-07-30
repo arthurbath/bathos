@@ -23,6 +23,8 @@ describe('TaskMarkdownNotes', () => {
     const editor = screen.getByRole('textbox', { name: 'Notes' });
     expect(editor).toHaveAttribute('contenteditable', 'true');
     expect(editor).toHaveAttribute('aria-multiline', 'true');
+    expect(editor).toHaveClass('min-h-16', 'py-2', 'leading-6');
+    expect(editor).not.toHaveClass('min-h-28');
     expect(editor.textContent).toBe(supportedNotes.replaceAll('\n', ''));
     expect(container.querySelector('textarea')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Edit Notes' })).toBeNull();

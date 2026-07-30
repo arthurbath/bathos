@@ -1,0 +1,302 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		BB0000000000000000001001 /* TasksMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000101 /* TasksMacApp.swift */; };
+		BB0000000000000000001002 /* TasksMacKeyboardController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000102 /* TasksMacKeyboardController.swift */; };
+		BB0000000000000000001003 /* TasksMacWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000103 /* TasksMacWebView.swift */; };
+		BB0000000000000000001004 /* TasksBrowserModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000301 /* TasksBrowserModel.swift */; };
+		BB0000000000000000001005 /* TaskWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000302 /* TaskWidgetSnapshot.swift */; };
+		BB0000000000000000001006 /* TaskNativeRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000303 /* TaskNativeRoute.swift */; };
+		BB0000000000000000001007 /* TaskCompanionConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000304 /* TaskCompanionConstants.swift */; };
+		BB0000000000000000001008 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000106 /* Assets.xcassets */; };
+		BB0000000000000000001101 /* TasksMacWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000201 /* TasksMacWidgetsBundle.swift */; };
+		BB0000000000000000001102 /* TasksListWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000305 /* TasksListWidget.swift */; };
+		BB0000000000000000001103 /* TaskWidgetIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000306 /* TaskWidgetIntent.swift */; };
+		BB0000000000000000001104 /* TaskWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000302 /* TaskWidgetSnapshot.swift */; };
+		BB0000000000000000001105 /* TaskNativeRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000303 /* TaskNativeRoute.swift */; };
+		BB0000000000000000001106 /* TaskCompanionConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000304 /* TaskCompanionConstants.swift */; };
+		BB0000000000000000001201 /* TasksMacTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000401 /* TasksMacTests.swift */; };
+		BB0000000000000000001301 /* TasksMacWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000009 /* TasksMacWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		BB0000000000000000000802 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BB0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BB0000000000000000000502;
+			remoteInfo = TasksMacWidgets;
+		};
+		BB0000000000000000000804 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BB0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BB0000000000000000000501;
+			remoteInfo = TasksMac;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		BB0000000000000000000604 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				BB0000000000000000001301 /* TasksMacWidgets.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		BB0000000000000000000008 /* Tasks.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tasks.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000000009 /* TasksMacWidgets.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = TasksMacWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB000000000000000000000A /* TasksMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TasksMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000000101 /* TasksMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksMacApp.swift; sourceTree = "<group>"; };
+		BB0000000000000000000102 /* TasksMacKeyboardController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksMacKeyboardController.swift; sourceTree = "<group>"; };
+		BB0000000000000000000103 /* TasksMacWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksMacWebView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000104 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BB0000000000000000000105 /* TasksMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TasksMac.entitlements; sourceTree = "<group>"; };
+		BB0000000000000000000106 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BB0000000000000000000201 /* TasksMacWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksMacWidgetsBundle.swift; sourceTree = "<group>"; };
+		BB0000000000000000000202 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BB0000000000000000000203 /* TasksMacWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TasksMacWidgets.entitlements; sourceTree = "<group>"; };
+		BB0000000000000000000301 /* TasksBrowserModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../../ios/TasksCompanion/TasksCompanion/TasksBrowserModel.swift"; sourceTree = SOURCE_ROOT; };
+		BB0000000000000000000302 /* TaskWidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../../ios/TasksCompanion/Shared/TaskWidgetSnapshot.swift"; sourceTree = SOURCE_ROOT; };
+		BB0000000000000000000303 /* TaskNativeRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../../ios/TasksCompanion/Shared/TaskNativeRoute.swift"; sourceTree = SOURCE_ROOT; };
+		BB0000000000000000000304 /* TaskCompanionConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../../ios/TasksCompanion/Shared/TaskCompanionConstants.swift"; sourceTree = SOURCE_ROOT; };
+		BB0000000000000000000305 /* TasksListWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../../ios/TasksCompanion/TasksWidgets/TasksListWidget.swift"; sourceTree = SOURCE_ROOT; };
+		BB0000000000000000000306 /* TaskWidgetIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../../ios/TasksCompanion/TasksWidgets/TaskWidgetIntent.swift"; sourceTree = SOURCE_ROOT; };
+		BB0000000000000000000401 /* TasksMacTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksMacTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BB0000000000000000000603 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		BB0000000000000000000613 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		BB0000000000000000000623 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		BB0000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000004 /* TasksMac */,
+				BB0000000000000000000005 /* TasksMacWidgets */,
+				BB0000000000000000000006 /* Shared Apple Sources */,
+				BB0000000000000000000007 /* TasksMacTests */,
+				BB0000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		BB0000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000008 /* Tasks.app */,
+				BB0000000000000000000009 /* TasksMacWidgets.appex */,
+				BB000000000000000000000A /* TasksMacTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		BB0000000000000000000004 /* TasksMac */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000101 /* TasksMacApp.swift */,
+				BB0000000000000000000102 /* TasksMacKeyboardController.swift */,
+				BB0000000000000000000103 /* TasksMacWebView.swift */,
+				BB0000000000000000000106 /* Assets.xcassets */,
+				BB0000000000000000000104 /* Info.plist */,
+				BB0000000000000000000105 /* TasksMac.entitlements */,
+			);
+			path = TasksMac;
+			sourceTree = "<group>";
+		};
+		BB0000000000000000000005 /* TasksMacWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000201 /* TasksMacWidgetsBundle.swift */,
+				BB0000000000000000000202 /* Info.plist */,
+				BB0000000000000000000203 /* TasksMacWidgets.entitlements */,
+			);
+			path = TasksMacWidgets;
+			sourceTree = "<group>";
+		};
+		BB0000000000000000000006 /* Shared Apple Sources */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000301 /* TasksBrowserModel.swift */,
+				BB0000000000000000000302 /* TaskWidgetSnapshot.swift */,
+				BB0000000000000000000303 /* TaskNativeRoute.swift */,
+				BB0000000000000000000304 /* TaskCompanionConstants.swift */,
+				BB0000000000000000000305 /* TasksListWidget.swift */,
+				BB0000000000000000000306 /* TaskWidgetIntent.swift */,
+			);
+			name = "Shared Apple Sources";
+			sourceTree = "<group>";
+		};
+		BB0000000000000000000007 /* TasksMacTests */ = {
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000401 /* TasksMacTests.swift */,
+			);
+			path = TasksMacTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		BB0000000000000000000501 /* TasksMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB0000000000000000000713 /* Build configuration list for PBXNativeTarget "TasksMac" */;
+			buildPhases = (
+				BB0000000000000000000601 /* Sources */,
+				BB0000000000000000000603 /* Frameworks */,
+				BB0000000000000000000602 /* Resources */,
+				BB0000000000000000000604 /* Embed App Extensions */,
+			);
+			buildRules = ();
+			dependencies = (BB0000000000000000000801 /* PBXTargetDependency */,);
+			name = TasksMac;
+			productName = Tasks;
+			productReference = BB0000000000000000000008 /* Tasks.app */;
+			productType = "com.apple.product-type.application";
+		};
+		BB0000000000000000000502 /* TasksMacWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB0000000000000000000723 /* Build configuration list for PBXNativeTarget "TasksMacWidgets" */;
+			buildPhases = (
+				BB0000000000000000000611 /* Sources */,
+				BB0000000000000000000613 /* Frameworks */,
+				BB0000000000000000000612 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = TasksMacWidgets;
+			productName = TasksMacWidgets;
+			productReference = BB0000000000000000000009 /* TasksMacWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		BB0000000000000000000503 /* TasksMacTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB0000000000000000000733 /* Build configuration list for PBXNativeTarget "TasksMacTests" */;
+			buildPhases = (
+				BB0000000000000000000621 /* Sources */,
+				BB0000000000000000000623 /* Frameworks */,
+				BB0000000000000000000622 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = (BB0000000000000000000803 /* PBXTargetDependency */,);
+			name = TasksMacTests;
+			productName = TasksMacTests;
+			productReference = BB000000000000000000000A /* TasksMacTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BB0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					BB0000000000000000000501 = {CreatedOnToolsVersion = 27.0; };
+					BB0000000000000000000502 = {CreatedOnToolsVersion = 27.0; };
+					BB0000000000000000000503 = {CreatedOnToolsVersion = 27.0; TestTargetID = BB0000000000000000000501; };
+				};
+			};
+			buildConfigurationList = BB0000000000000000000703 /* Build configuration list for PBXProject "TasksCompanion" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base,);
+			mainGroup = BB0000000000000000000002;
+			productRefGroup = BB0000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				BB0000000000000000000501 /* TasksMac */,
+				BB0000000000000000000502 /* TasksMacWidgets */,
+				BB0000000000000000000503 /* TasksMacTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		BB0000000000000000000602 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (BB0000000000000000001008 /* Assets.xcassets in Resources */,); runOnlyForDeploymentPostprocessing = 0; };
+		BB0000000000000000000612 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		BB0000000000000000000622 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BB0000000000000000000601 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000001001 /* TasksMacApp.swift in Sources */,
+				BB0000000000000000001002 /* TasksMacKeyboardController.swift in Sources */,
+				BB0000000000000000001003 /* TasksMacWebView.swift in Sources */,
+				BB0000000000000000001004 /* TasksBrowserModel.swift in Sources */,
+				BB0000000000000000001005 /* TaskWidgetSnapshot.swift in Sources */,
+				BB0000000000000000001006 /* TaskNativeRoute.swift in Sources */,
+				BB0000000000000000001007 /* TaskCompanionConstants.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB0000000000000000000611 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000001101 /* TasksMacWidgetsBundle.swift in Sources */,
+				BB0000000000000000001102 /* TasksListWidget.swift in Sources */,
+				BB0000000000000000001103 /* TaskWidgetIntent.swift in Sources */,
+				BB0000000000000000001104 /* TaskWidgetSnapshot.swift in Sources */,
+				BB0000000000000000001105 /* TaskNativeRoute.swift in Sources */,
+				BB0000000000000000001106 /* TaskCompanionConstants.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB0000000000000000000621 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000001201 /* TasksMacTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BB0000000000000000000801 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = BB0000000000000000000502 /* TasksMacWidgets */; targetProxy = BB0000000000000000000802 /* PBXContainerItemProxy */; };
+		BB0000000000000000000803 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = BB0000000000000000000501 /* TasksMac */; targetProxy = BB0000000000000000000804 /* PBXContainerItemProxy */; };
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		BB0000000000000000000701 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; GCC_C_LANGUAGE_STANDARD = gnu17; GCC_OPTIMIZATION_LEVEL = 0; MACOSX_DEPLOYMENT_TARGET = 14.0; ONLY_ACTIVE_ARCH = YES; SDKROOT = macosx; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
+		BB0000000000000000000702 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; GCC_C_LANGUAGE_STANDARD = gnu17; MACOSX_DEPLOYMENT_TARGET = 14.0; SDKROOT = macosx; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_OPTIMIZATION_LEVEL = "-O"; VALIDATE_PRODUCT = YES; }; name = Release; };
+		BB0000000000000000000711 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = TasksMac/TasksMac.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = SPJYXE7ZA3; ENABLE_HARDENED_RUNTIME = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = TasksMac/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks",); MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = garden.bath.tasks; PRODUCT_MODULE_NAME = TasksMac; PRODUCT_NAME = Tasks; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; }; name = Debug; };
+		BB0000000000000000000712 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_ENTITLEMENTS = TasksMac/TasksMac.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = SPJYXE7ZA3; ENABLE_HARDENED_RUNTIME = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = TasksMac/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks",); MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = garden.bath.tasks; PRODUCT_MODULE_NAME = TasksMac; PRODUCT_NAME = Tasks; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; }; name = Release; };
+		BB0000000000000000000721 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = TasksMacWidgets/TasksMacWidgets.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = SPJYXE7ZA3; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = TasksMacWidgets/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks",); MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = garden.bath.tasks.widgets; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; }; name = Debug; };
+		BB0000000000000000000722 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = TasksMacWidgets/TasksMacWidgets.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = SPJYXE7ZA3; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = TasksMacWidgets/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks",); MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = garden.bath.tasks.widgets; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; }; name = Release; };
+		BB0000000000000000000731 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = SPJYXE7ZA3; GENERATE_INFOPLIST_FILE = YES; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = garden.bath.tasks.macos.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Tasks.app/Contents/MacOS/Tasks"; }; name = Debug; };
+		BB0000000000000000000732 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = SPJYXE7ZA3; GENERATE_INFOPLIST_FILE = YES; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = garden.bath.tasks.macos.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Tasks.app/Contents/MacOS/Tasks"; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		BB0000000000000000000703 /* Build configuration list for PBXProject "TasksCompanion" */ = {isa = XCConfigurationList; buildConfigurations = (BB0000000000000000000701 /* Debug */, BB0000000000000000000702 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		BB0000000000000000000713 /* Build configuration list for PBXNativeTarget "TasksMac" */ = {isa = XCConfigurationList; buildConfigurations = (BB0000000000000000000711 /* Debug */, BB0000000000000000000712 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		BB0000000000000000000723 /* Build configuration list for PBXNativeTarget "TasksMacWidgets" */ = {isa = XCConfigurationList; buildConfigurations = (BB0000000000000000000721 /* Debug */, BB0000000000000000000722 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		BB0000000000000000000733 /* Build configuration list for PBXNativeTarget "TasksMacTests" */ = {isa = XCConfigurationList; buildConfigurations = (BB0000000000000000000731 /* Debug */, BB0000000000000000000732 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = BB0000000000000000000001 /* Project object */;
+}

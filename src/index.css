@@ -151,6 +151,10 @@
   display: none;
 }
 
+html[data-mobile-bottom-nav-installed-touch='true'] {
+  overscroll-behavior-y: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   body[data-tasks-motion-scope='true'] *,
   body[data-tasks-motion-scope='true'] *::before,

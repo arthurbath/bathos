@@ -60,6 +60,18 @@ enum TaskWidgetPresentationPolicy {
     }
 }
 
+enum TaskWidgetPlatformPolicy {
+    static var supportedFamilies: [WidgetFamily] {
+#if os(iOS)
+        [.systemLarge, .accessoryRectangular]
+#elseif os(macOS)
+        [.systemLarge]
+#else
+        [.systemLarge]
+#endif
+    }
+}
+
 struct TaskWidgetPrimaryLink: Codable, Equatable {
     enum Kind: String, Codable {
         case mail

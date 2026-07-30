@@ -155,4 +155,41 @@ describe('AuthPage redirect after sign-in', () => {
       cleanup(root, container);
     }
   });
+
+  it('exposes the correct credential semantics for sign-in and sign-up', () => {
+    mockAuthContext.mockReturnValue({
+      session: null,
+      signIn: vi.fn(),
+      signUp: vi.fn(),
+    });
+
+    const { root, container } = renderAt('/signin');
+
+    try {
+      const login = container.querySelector('[data-testid="tabs-content-login"]');
+      const signup = container.querySelector('[data-testid="tabs-content-signup"]');
+
+      expect(login?.querySelector('input[type="email"]')).toMatchObject({
+        autocomplete: 'username',
+        name: 'email',
+      });
+      expect(login?.querySelector('input[type="password"]')).toMatchObject({
+        autocomplete: 'current-password',
+        name: 'password',
+      });
+      expect(signup?.querySelector('input[name="name"]')).toMatchObject({
+        autocomplete: 'name',
+      });
+      expect(signup?.querySelector('input[type="email"]')).toMatchObject({
+        autocomplete: 'username',
+        name: 'email',
+      });
+      expect(signup?.querySelector('input[type="password"]')).toMatchObject({
+        autocomplete: 'new-password',
+        name: 'new-password',
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
 });

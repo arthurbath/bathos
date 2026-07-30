@@ -3,6 +3,7 @@ import Foundation
 enum TaskNativeRoute: Equatable {
     case list(TaskWidgetListID)
     case task(UUID, list: TaskWidgetListID)
+    case settings
     case newTask
     case newTaskInList(TaskWidgetListID)
 
@@ -16,6 +17,14 @@ enum TaskNativeRoute: Equatable {
         let routePathComponents = Array(url.pathComponents.dropFirst())
         let pathComponent = routePathComponents.first
         switch url.host?.lowercased() {
+        case "settings":
+            guard routePathComponents.isEmpty,
+                  URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                    .queryItems?
+                    .isEmpty != false else {
+                return .list(.today)
+            }
+            return .settings
         case "new":
             guard routePathComponents.count <= 1,
                   URLComponents(url: url, resolvingAgainstBaseURL: false)?
@@ -51,6 +60,9 @@ enum TaskNativeRoute: Equatable {
     }
 
     var webURL: URL {
+        if case .settings = self {
+            return Self.productionOrigin.appending(path: "tasks/config")
+        }
         if case .newTask = self {
             var components = URLComponents(
                 url: Self.productionOrigin.appending(path: "tasks/today"),
@@ -81,6 +93,8 @@ enum TaskNativeRoute: Equatable {
         case .task(let id, let list):
             listID = list
             taskID = id
+        case .settings:
+            preconditionFailure("Handled before list route resolution")
         case .newTask:
             preconditionFailure("Handled before list route resolution")
         case .newTaskInList:
@@ -110,6 +124,8 @@ enum TaskNativeRoute: Equatable {
             components.path = "/\(id.uuidString.lowercased())"
             components.queryItems = [URLQueryItem(name: "list", value: list.rawValue)]
             return components.url!
+        case .settings:
+            return URL(string: "\(Self.scheme)://settings")!
         case .newTask:
             return URL(string: "\(Self.scheme)://new")!
         case .newTaskInList(let list):

@@ -35,7 +35,16 @@ function checklistModel(items = [
   };
 }
 
-function renderEditor(focusRequestTaskId?: string) {
+function renderEditor(
+  focusRequestTaskId?: string,
+  {
+    emptyActionLayout,
+    onContentPresenceChange,
+  }: {
+    emptyActionLayout?: 'paired' | 'standalone';
+    onContentPresenceChange?: (present: boolean) => void;
+  } = {},
+) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -44,6 +53,8 @@ function renderEditor(focusRequestTaskId?: string) {
       ownerId="owner-a"
       taskId="task-a"
       focusRequestTaskId={focusRequestTaskId}
+      emptyActionLayout={emptyActionLayout}
+      onContentPresenceChange={onContentPresenceChange}
     />,
   ));
   return { container, root };
@@ -86,6 +97,41 @@ describe('TaskChecklistEditor', () => {
     reorderItem.mockResolvedValue(taskChecklistItemFixture());
     reorderItems.mockResolvedValue([]);
     mockUseTaskChecklist.mockReturnValue(checklistModel());
+  });
+
+  it('reports loaded checklist content to its task editor', () => {
+    const onContentPresenceChange = vi.fn();
+    const { container, root } = renderEditor(undefined, { onContentPresenceChange });
+
+    try {
+      expect(onContentPresenceChange).toHaveBeenLastCalledWith(true);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('centers the empty checklist disclosure in paired layout and reports a draft', () => {
+    mockUseTaskChecklist.mockReturnValue(checklistModel([]));
+    const onContentPresenceChange = vi.fn();
+    const { container, root } = renderEditor(undefined, {
+      emptyActionLayout: 'paired',
+      onContentPresenceChange,
+    });
+
+    try {
+      const addChecklist = container.querySelector<HTMLButtonElement>(
+        '[data-task-checklist-disclosure]',
+      );
+      expect(addChecklist).toHaveClass('w-full', 'justify-center');
+      expect(onContentPresenceChange).toHaveBeenLastCalledWith(false);
+
+      act(() => addChecklist?.click());
+
+      expect(onContentPresenceChange).toHaveBeenLastCalledWith(true);
+      expect(container.querySelector('input[aria-label="New Checklist Item"]')).toBeTruthy();
+    } finally {
+      cleanup(root, container);
+    }
   });
 
   it('focuses an existing checklist from the task command request', async () => {

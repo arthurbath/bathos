@@ -347,7 +347,7 @@ export function TaskMarkdownNotes({
         onBlur={handleBlur}
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
-        className="min-h-28 w-full min-w-0 rounded-md border border-[hsl(var(--grid-sticky-line))] bg-background px-3 py-2 text-sm leading-6 text-foreground [overflow-wrap:anywhere] focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 data-[empty=true]:before:pointer-events-none data-[empty=true]:before:text-muted-foreground data-[empty=true]:before:content-[attr(data-placeholder)]"
+        className="min-h-16 w-full min-w-0 rounded-md border border-[hsl(var(--grid-sticky-line))] bg-background px-3 py-2 text-sm leading-6 text-foreground [overflow-wrap:anywhere] focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 data-[empty=true]:before:pointer-events-none data-[empty=true]:before:text-muted-foreground data-[empty=true]:before:content-[attr(data-placeholder)]"
       />
     </section>
   );

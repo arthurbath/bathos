@@ -62,11 +62,13 @@ describe('MobileBottomNav', () => {
       'rounded-full',
       'border-secondary',
       'bg-secondary/90',
+      'p-1',
       'backdrop-blur-sm',
       'supports-[backdrop-filter]:bg-secondary/85',
       'gap-0',
       'pointer-events-auto',
     );
+    expect(nav).not.toHaveClass('p-1.5');
     expect(nav).not.toHaveClass('gap-0.5');
     expect(nav).not.toHaveClass('gap-1');
     const links = within(nav).getAllByRole('link');
@@ -75,6 +77,7 @@ describe('MobileBottomNav', () => {
     expect(screen.getByRole('link', { name: 'Today' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: 'Today' })).toHaveClass(
       'rounded-full',
+      'px-0.5',
       'bg-foreground/[0.12]',
     );
     const inboxLink = screen.getByRole('link', { name: 'Inbox' });
@@ -101,7 +104,7 @@ describe('MobileBottomNav', () => {
       'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
     );
 
-    render(
+    const { unmount } = render(
       <MobileBottomNav
         items={primaryItems}
         isActive={(path) => path === '/today'}
@@ -113,11 +116,22 @@ describe('MobileBottomNav', () => {
       name: 'Mobile navigation',
     })).parentElement;
     expect(viewport).toHaveAttribute('data-installed-touch', 'true');
+    expect(viewport).toHaveAttribute('data-native-touch', 'true');
+    expect(viewport).not.toHaveAttribute('data-standalone-touch');
     expect(viewport).toHaveClass(
-      'bottom-[env(safe-area-inset-bottom)]',
+      'bottom-0.5',
     );
     expect(viewport).not.toHaveClass(
       'bottom-[calc(env(safe-area-inset-bottom)+0.5rem)]',
+    );
+    expect(document.documentElement).toHaveAttribute(
+      'data-mobile-bottom-nav-installed-touch',
+      'true',
+    );
+
+    unmount();
+    expect(document.documentElement).not.toHaveAttribute(
+      'data-mobile-bottom-nav-installed-touch',
     );
   });
 
@@ -138,8 +152,14 @@ describe('MobileBottomNav', () => {
       name: 'Mobile navigation',
     })).parentElement;
     expect(viewport).toHaveAttribute('data-installed-touch', 'true');
+    expect(viewport).not.toHaveAttribute('data-native-touch');
+    expect(viewport).toHaveAttribute('data-standalone-touch', 'true');
     expect(viewport).toHaveClass(
-      'bottom-[env(safe-area-inset-bottom)]',
+      'bottom-[calc(env(safe-area-inset-bottom)+0.125rem)]',
+    );
+    expect(document.documentElement).toHaveAttribute(
+      'data-mobile-bottom-nav-installed-touch',
+      'true',
     );
   });
 
@@ -163,11 +183,16 @@ describe('MobileBottomNav', () => {
       name: 'Mobile navigation',
     })).parentElement;
     expect(viewport).not.toHaveAttribute('data-installed-touch');
+    expect(viewport).not.toHaveAttribute('data-native-touch');
+    expect(viewport).not.toHaveAttribute('data-standalone-touch');
     expect(viewport).toHaveClass(
       'bottom-[calc(env(safe-area-inset-bottom)+0.5rem)]',
     );
     expect(viewport).not.toHaveClass(
-      'bottom-[env(safe-area-inset-bottom)]',
+      'bottom-[calc(env(safe-area-inset-bottom)+0.125rem)]',
+    );
+    expect(document.documentElement).not.toHaveAttribute(
+      'data-mobile-bottom-nav-installed-touch',
     );
   });
 

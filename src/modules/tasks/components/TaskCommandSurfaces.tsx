@@ -8,7 +8,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
-import { DatePickerField } from '@/components/ui/date-picker-field';
+import { DatePickerPanel } from '@/components/ui/date-picker-field';
 import {
   Dialog,
   DialogBody,
@@ -18,12 +18,15 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
-import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import { resolveTaskReminderTimeInput } from '@/modules/tasks/domain/taskReminderTimeInput';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
 import { isMacLikeTaskPlatform } from '@/modules/tasks/domain/taskSelection';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
+import {
+  TaskStartPickerPanel,
+  type PlanningSelection,
+} from '@/modules/tasks/components/TaskStartPicker';
 
 export type TaskBulkCommandMode = 'start' | 'deadline' | 'organization' | 'reminder';
 
@@ -36,7 +39,12 @@ export function TaskBulkCommandDialog({
   reminderTimeZone,
   reminderIncludesToday,
   onOpenChange,
-  onApplyDate,
+  startTask,
+  startClearEnabled,
+  deadlineValue,
+  deadlineClearEnabled,
+  onApplyStart,
+  onApplyDeadline,
   onApplyOrganization,
   onApplyReminder,
 }: {
@@ -48,21 +56,24 @@ export function TaskBulkCommandDialog({
   reminderTimeZone: string;
   reminderIncludesToday: boolean;
   onOpenChange: (open: boolean) => void;
-  onApplyDate: (value: string) => Promise<void>;
+  startTask: Pick<TaskTodo, 'id' | 'title' | 'destination' | 'start_date' | 'today_section'>;
+  startClearEnabled: boolean;
+  deadlineValue: string;
+  deadlineClearEnabled: boolean;
+  onApplyStart: (selection: PlanningSelection) => Promise<void>;
+  onApplyDeadline: (value: string) => Promise<void>;
   onApplyOrganization: (patch: EditableTaskPatch) => Promise<void>;
   onApplyReminder: (localTime: string) => Promise<void>;
 }) {
   const [reminderTime, setReminderTime] = useState('');
   const [confirmedReminderTime, setConfirmedReminderTime] = useState<string | null>(null);
-  const dateRef = useRef<HTMLButtonElement>(null);
   const organizationRef = useRef<HTMLSelectElement>(null);
   const reminderRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (mode === null) return;
     const timer = window.setTimeout(() => {
-      if (mode === 'start' || mode === 'deadline') dateRef.current?.click();
-      else if (mode === 'organization') organizationRef.current?.focus();
-      else reminderRef.current?.focus();
+      if (mode === 'organization') organizationRef.current?.focus();
+      else if (mode === 'reminder') reminderRef.current?.focus();
     }, 0);
     return () => window.clearTimeout(timer);
   }, [mode]);
@@ -107,27 +118,51 @@ export function TaskBulkCommandDialog({
     <Dialog open={mode !== null} onOpenChange={onOpenChange}>
       <DialogContent
         footerless
-        className="shadow-none sm:max-w-sm"
+        hideClose
+        className="w-auto max-w-[calc(100vw-2rem)] border-0 bg-popover p-0 shadow-none sm:max-w-none max-sm:!left-1/2 max-sm:!right-auto max-sm:!top-1/2 max-sm:!h-auto max-sm:!max-h-[calc(100dvh-2rem)] max-sm:!w-auto max-sm:!max-w-[calc(100vw-2rem)] max-sm:!-translate-x-1/2 max-sm:!-translate-y-1/2"
         aria-describedby={undefined}
+        onOpenAutoFocus={(event) => event.preventDefault()}
         data-task-bulk-selection-surface
       >
-        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+        <DialogTitle className="sr-only">{title}</DialogTitle>
+        {mode === 'start' ? (
+          <TaskStartPickerPanel
+            task={startTask}
+            reminder={null}
+            reminderTime=""
+            reminderTimeZone={reminderTimeZone}
+            reminderDisabled={pending}
+            planningDate={planningDate}
+            onPlanningChange={onApplyStart}
+            onReminderChange={onApplyReminder}
+            onClear={() => onApplyStart({
+              destination: 'anytime',
+              startDate: null,
+              todaySection: null,
+            })}
+            clearEnabled={startClearEnabled}
+            focusTarget="start"
+            active
+            onRequestClose={() => onOpenChange(false)}
+            onTabExit={() => onOpenChange(false)}
+          />
+        ) : mode === 'deadline' ? (
+          <DatePickerPanel
+            value={deadlineValue}
+            onValueChange={(value) => void onApplyDeadline(value)}
+            onRequestClose={() => onOpenChange(false)}
+            onTabExit={() => onOpenChange(false)}
+            todayDate={planningDate}
+            clearable
+            clearEnabled={deadlineClearEnabled}
+            active
+          />
+        ) : (
         <DialogBody className="space-y-4 pt-4">
           <p className="text-sm text-muted-foreground">
             Applies to {selectedCount} selected {selectedCount === 1 ? 'task' : 'tasks'}.
           </p>
-          {mode === 'start' || mode === 'deadline' ? (
-            <DatePickerField
-              ref={dateRef}
-              value=""
-              onValueChange={(value) => void onApplyDate(value)}
-              placeholder={mode === 'start' ? "Select Start" : 'Select Deadline'}
-              aria-label={mode === 'start' ? "Start" : 'Deadline'}
-              disabled={pending}
-              minDate={mode === 'start' ? addTaskCalendarDays(planningDate, 1) : undefined}
-              popoverAlign="center"
-            />
-          ) : mode === 'organization' ? (
+          {mode === 'organization' ? (
             <select
               ref={organizationRef}
               defaultValue=""
@@ -194,6 +229,7 @@ export function TaskBulkCommandDialog({
             </div>
           ) : null}
         </DialogBody>
+        )}
       </DialogContent>
     </Dialog>
   );

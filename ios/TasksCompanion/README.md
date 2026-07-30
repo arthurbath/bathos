@@ -13,6 +13,7 @@ This Xcode project contains the thin native BathOS Tasks companion, its configur
 - App: `garden.bath.tasks`
 - Widget extension: `garden.bath.tasks.widgets`
 - Shared App Group: `group.garden.bath.tasks`
+- Apple development team: `SPJYXE7ZA3`
 - URL scheme: `bathostasks`
 
 ## Apple Team Setup

@@ -117,7 +117,7 @@ struct TaskListWidget: Widget {
         }
         .configurationDisplayName("Tasks List")
         .description("Show a selected BathOS task list.")
-        .supportedFamilies([.systemLarge, .accessoryRectangular])
+        .supportedFamilies(TaskWidgetPlatformPolicy.supportedFamilies)
         .contentMarginsDisabled()
     }
 }
@@ -130,11 +130,13 @@ private struct TaskListWidgetRootView: View {
     @ViewBuilder
     var body: some View {
         switch family {
+#if os(iOS)
         case .accessoryRectangular:
             TaskListLockScreenWidgetView(entry: entry)
                 .containerBackground(for: .widget) {
                     Color.clear
                 }
+#endif
         default:
             TaskListWidgetView(entry: entry)
                 .containerBackground(Color.black, for: .widget)
@@ -142,6 +144,7 @@ private struct TaskListWidgetRootView: View {
     }
 }
 
+#if os(iOS)
 private struct TaskListLockScreenWidgetView: View {
     let entry: TaskListWidgetEntry
 
@@ -176,7 +179,11 @@ private struct TaskListLockScreenWidgetView: View {
                                 )
                                 .font(.system(size: 10, weight: .regular))
                                 Text(task.summary)
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.system(
+                                        size: 13,
+                                        weight: .regular,
+                                        design: .default
+                                    ))
                                     .lineLimit(1)
                                     .privacySensitive()
                                 Spacer(minLength: 0)
@@ -226,6 +233,7 @@ private struct TaskListLockScreenWidgetView: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
+#endif
 
 private struct TaskListWidgetView: View {
     let entry: TaskListWidgetEntry
@@ -374,7 +382,7 @@ private struct TaskListWidgetView: View {
     }
 }
 
-#if DEBUG
+#if DEBUG && os(iOS)
 private struct TaskListLockScreenWidgetViewPreviews: PreviewProvider {
     static var previews: some View {
         Group {

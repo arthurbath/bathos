@@ -20,13 +20,6 @@ import {
   toDatePickerFieldValue,
 } from '@/components/ui/date-picker-field';
 import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -69,13 +62,13 @@ import {
   taskHorizonPresentations,
 } from './taskHorizonPresentation';
 
-type PlanningSelection = {
+export type PlanningSelection = {
   destination: TaskTodo['destination'];
   startDate: string | null;
   todaySection: TaskTodaySection | null;
 };
 
-type TaskStartPickerProps = {
+export type TaskStartPickerProps = {
   task: Pick<TaskTodo, 'id' | 'title' | 'destination' | 'start_date' | 'today_section'>;
   reminder: TaskReminder | null;
   reminderTime: string;
@@ -86,9 +79,10 @@ type TaskStartPickerProps = {
   onPlanningChange: (selection: PlanningSelection) => Promise<void>;
   onReminderChange: (localTime: string) => Promise<void>;
   onClear: () => Promise<void>;
+  clearEnabled?: boolean;
 };
 
-function TaskStartPickerPanel({
+export function TaskStartPickerPanel({
   task,
   reminder,
   reminderTime,
@@ -99,6 +93,7 @@ function TaskStartPickerPanel({
   onPlanningChange,
   onReminderChange,
   onClear,
+  clearEnabled,
   focusTarget,
   active,
   onRequestClose,
@@ -123,9 +118,9 @@ function TaskStartPickerPanel({
   );
   const [calendarFocusDate, setCalendarFocusDate] = useState<Date | undefined>();
   const [calendarFocusRequestKey, setCalendarFocusRequestKey] = useState(0);
-  const planned = task.destination === 'someday'
+  const planned = clearEnabled ?? (task.destination === 'someday'
     || task.start_date !== null
-    || task.today_section !== null;
+    || task.today_section !== null);
   const committedReminderDisplay = formatTaskReminderTimeDisplay(reminderTime) ?? '';
   const [reminderInput, setReminderInput] = useState(committedReminderDisplay);
   const [reminderHourMenuOpen, setReminderHourMenuOpen] = useState(false);
@@ -672,7 +667,7 @@ function TaskStartPickerPanel({
       </div>
 
       <div
-        className="grid grid-cols-2 gap-1 border-t border-[hsl(var(--grid-sticky-line))] p-2"
+        className="relative grid grid-cols-2 gap-0 border-t border-[hsl(var(--grid-sticky-line))] p-2"
         data-task-start-footer
       >
         <Button
@@ -712,6 +707,11 @@ function TaskStartPickerPanel({
           <TASK_ICONS.Someday className="h-4 w-4" aria-hidden />
           Someday
         </Button>
+        <span
+          aria-hidden="true"
+          data-task-start-footer-divider
+          className="pointer-events-none absolute inset-y-2 left-1/2 w-px bg-[hsl(var(--grid-sticky-line)/0.35)]"
+        />
       </div>
     </div>
   );
@@ -841,46 +841,5 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
         />
       </PopoverContent>
     </Popover>
-  );
-}
-
-export function TaskStartDialog({
-  open,
-  onOpenChange,
-  onCloseAutoFocus,
-  ...props
-}: TaskStartPickerProps & {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCloseAutoFocus: () => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        footerless
-        className="w-auto max-w-[calc(100vw-2rem)] p-0 shadow-none sm:max-w-none"
-        aria-describedby={undefined}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          onCloseAutoFocus();
-        }}
-      >
-        <DialogHeader className="px-4 pt-4">
-          <DialogTitle>Start</DialogTitle>
-        </DialogHeader>
-        <DialogBody className="mx-0 mb-0 border-b-0 p-0">
-          <p className="truncate px-4 pb-3 text-sm font-medium text-foreground">
-            {props.task.title}
-          </p>
-          <TaskStartPickerPanel
-            {...props}
-            focusTarget="start"
-            active={open}
-            onRequestClose={() => onOpenChange(false)}
-            onTabExit={() => onOpenChange(false)}
-          />
-        </DialogBody>
-      </DialogContent>
-    </Dialog>
   );
 }

@@ -5,7 +5,7 @@ import WidgetKit
 
 @MainActor
 final class TasksBrowserModel: NSObject, ObservableObject {
-    typealias InPageNavigator = (WKWebView, URL) -> Void
+    typealias InPageNavigator = @MainActor (WKWebView, URL) -> Void
 
     static let newTaskSummaryFocusMessageType = "focus-new-task-summary"
     static let webTextInputEngagedMessageType = "web-text-input-engaged"
@@ -311,7 +311,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
                 changed = try store.clear()
                 if let credentialStore = TaskWidgetCredentialStore() {
                     let credential = try? credentialStore.load()
-                    try? credentialStore.clear()
+                    _ = try? credentialStore.clear()
                     if let credential {
                         Task {
                             await Self.revokeCredential(credential.credential)
