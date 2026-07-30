@@ -40,4 +40,4 @@
 
 - [x] 7.1 Lower the Mac content minimum to a mobile-class width and explicitly preserve resizable full-screen-primary window behavior.
 - [x] 7.2 Add focused window-policy coverage, rebuild and strictly verify the signed Mac app, and replace the installed copy.
-- [ ] 7.3 Run the complete repository release gates, publish the matching web release, and verify the installed Mac build.
+- [x] 7.3 Run the complete repository release gates, publish the matching web release, and verify the installed Mac build.
