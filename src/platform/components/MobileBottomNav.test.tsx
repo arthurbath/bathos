@@ -12,7 +12,7 @@ const primaryItems = [
 
 const overflowItems = [
   { path: '/trash', label: 'Trash', icon: Trash2 },
-  { path: '/config', label: 'Config', icon: Settings },
+  { path: '/config', label: 'Settings', icon: Settings },
 ] as const;
 
 type NativeAppWindow = Window & {
@@ -64,8 +64,11 @@ describe('MobileBottomNav', () => {
       'bg-secondary/90',
       'backdrop-blur-sm',
       'supports-[backdrop-filter]:bg-secondary/85',
+      'gap-0',
       'pointer-events-auto',
     );
+    expect(nav).not.toHaveClass('gap-0.5');
+    expect(nav).not.toHaveClass('gap-1');
     const links = within(nav).getAllByRole('link');
     expect(links).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
@@ -74,12 +77,14 @@ describe('MobileBottomNav', () => {
       'rounded-full',
       'bg-foreground/[0.12]',
     );
+    const inboxLink = screen.getByRole('link', { name: 'Inbox' });
+    expect(inboxLink).not.toHaveClass('hover:bg-foreground/[0.07]');
+    expect(inboxLink).not.toHaveClass('hover:text-foreground');
 
     fireEvent.click(screen.getByRole('link', { name: 'Inbox' }));
     expect(onNavigate).toHaveBeenCalledWith('/inbox');
 
     onNavigate.mockClear();
-    const inboxLink = screen.getByRole('link', { name: 'Inbox' });
     inboxLink.addEventListener('click', (event) => event.preventDefault(), { once: true });
     fireEvent.click(inboxLink, { metaKey: true });
     expect(onNavigate).not.toHaveBeenCalled();
@@ -107,9 +112,9 @@ describe('MobileBottomNav', () => {
     const viewport = (await screen.findByRole('navigation', {
       name: 'Mobile navigation',
     })).parentElement;
-    expect(viewport).toHaveAttribute('data-installed-ios', 'true');
+    expect(viewport).toHaveAttribute('data-installed-touch', 'true');
     expect(viewport).toHaveClass(
-      'bottom-[calc(env(safe-area-inset-bottom)+0.25rem)]',
+      'bottom-[env(safe-area-inset-bottom)]',
     );
     expect(viewport).not.toHaveClass(
       'bottom-[calc(env(safe-area-inset-bottom)+0.5rem)]',
@@ -132,9 +137,37 @@ describe('MobileBottomNav', () => {
     const viewport = (await screen.findByRole('navigation', {
       name: 'Mobile navigation',
     })).parentElement;
-    expect(viewport).toHaveAttribute('data-installed-ios', 'true');
+    expect(viewport).toHaveAttribute('data-installed-touch', 'true');
     expect(viewport).toHaveClass(
-      'bottom-[calc(env(safe-area-inset-bottom)+0.25rem)]',
+      'bottom-[env(safe-area-inset-bottom)]',
+    );
+  });
+
+  it('retains the ordinary web offset on a touch device outside installed mode', async () => {
+    setNavigatorProperty('platform', 'iPhone');
+    setNavigatorProperty('maxTouchPoints', 5);
+    setNavigatorProperty(
+      'userAgent',
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+    );
+
+    render(
+      <MobileBottomNav
+        items={primaryItems}
+        isActive={(path) => path === '/today'}
+        onNavigate={vi.fn()}
+      />,
+    );
+
+    const viewport = (await screen.findByRole('navigation', {
+      name: 'Mobile navigation',
+    })).parentElement;
+    expect(viewport).not.toHaveAttribute('data-installed-touch');
+    expect(viewport).toHaveClass(
+      'bottom-[calc(env(safe-area-inset-bottom)+0.5rem)]',
+    );
+    expect(viewport).not.toHaveClass(
+      'bottom-[env(safe-area-inset-bottom)]',
     );
   });
 
@@ -162,7 +195,7 @@ describe('MobileBottomNav', () => {
 
     more.focus();
     await user.keyboard('{Enter}');
-    const config = await screen.findByRole('menuitem', { name: 'Config' });
+    const config = await screen.findByRole('menuitem', { name: 'Settings' });
     expect(config).toHaveAttribute('href', '/tasks/config');
     await waitFor(() => expect(document.activeElement).toHaveAttribute('role', 'menuitem'));
 

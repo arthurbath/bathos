@@ -58,7 +58,7 @@ Cut, Copy, Paste, and Select All remain native when an editable text control own
 | Open Anytime | `⌘3` | `⌃3` |
 | Open Someday | `⌘4` | `⌃4` |
 | Open Done | `⌘5` | `⌃5` |
-| Open Config | `⌘6` | `⌃6` |
+| Open Settings | `⌘6` | `⌃6` |
 
 | Task-specific action | Mac | Windows |
 | --- | --- | --- |
@@ -87,7 +87,7 @@ Tasks retains up to 100 safe forward changes for keyboard undo and redo. Every e
 
 The first Command-click on Mac, Control-click on Windows, or Shift-click immediately enters selection mode, selects the closed task, establishes the range anchor, and reveals the selection toolbar. A later modified click or Shift-click updates that explicit selection. If one task already has lightweight keyboard focus, a modified click begins selection with the focused task included and anchored. Once selection is active, an ordinary click also toggles a task. Reducing the set to one task retains selection mode and the toolbar. Reducing it to zero clears selection. Clicking outside every task or switching views clears task focus and selection. Modified clicks on task links retain native link behavior, and direct clicks on completion or action controls perform only their own actions. Done rows support selection for Copy and Duplicate. Cut is unavailable there because Done represents retained terminal task states rather than active work.
 
-Drag a Today task before or after a task in another visible Today section to change its day horizon and order together. Empty Today sections remain hidden and do not act as drop zones. Anytime and Someday show unassigned tasks first without a heading, then group Area work in the manual Area order maintained in Config. Dragging inside one Area region changes order. Dragging across Area regions assigns the destination Area, or removes organization when dropped into the unassigned region. Keyboard task reordering is not currently supported.
+Drag a Today task before or after a task in another visible Today section to change its day horizon and order together. Empty Today sections remain hidden and do not act as drop zones. Anytime and Someday show unassigned tasks first without a heading, then group Area work in the manual Area order maintained in Settings. Dragging inside one Area region changes order. Dragging across Area regions assigns the destination Area, or removes organization when dropped into the unassigned region. Keyboard task reordering is not currently supported.
 
 ## Capture from Raycast
 

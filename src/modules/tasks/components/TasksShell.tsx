@@ -13,6 +13,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
+  type TouchEvent as ReactTouchEvent,
 } from 'react';
 import {
   ExternalLink,
@@ -82,6 +83,7 @@ import {
   taskHorizonPresentations,
 } from '@/modules/tasks/components/taskHorizonPresentation';
 import {
+  requestTaskStartPickerAdvance,
   requestTaskStartPickerOpen,
   type TaskStartPickerFocusTarget,
 } from '@/modules/tasks/components/taskStartPickerEvents';
@@ -253,7 +255,7 @@ const primaryTaskViews = [
 const secondaryTaskViews = [
   { path: '/templates', label: 'Templates', icon: TASK_ICONS.Templates },
   { path: '/done', label: 'Done', icon: TASK_ICONS.Done },
-  { path: '/config', label: 'Config', icon: TASK_ICONS.Config },
+  { path: '/config', label: 'Settings', icon: TASK_ICONS.Config },
 ] as const;
 
 const taskViews = [...primaryTaskViews, ...secondaryTaskViews] as const;
@@ -371,6 +373,9 @@ function isTaskInteractiveTarget(target: EventTarget | null): boolean {
 }
 
 function taskNestedSurfaceOwnsEscape(target: EventTarget | null): boolean {
+  if (document.querySelector(
+    '[data-task-checklist][data-checklist-selection-active="true"]',
+  )) return true;
   if (target instanceof Element && target.closest(
     '[data-radix-popper-content-wrapper], [role="dialog"], [role="menu"], [role="listbox"]',
   )) return true;
@@ -380,6 +385,47 @@ function taskNestedSurfaceOwnsEscape(target: EventTarget | null): boolean {
       + '[role="menu"][data-state="open"], '
       + '[role="listbox"][data-state="open"]',
   ) !== null;
+}
+
+function captureTaskEditableFocus(): (() => void) | null {
+  const activeElement = document.activeElement;
+  if (!(activeElement instanceof HTMLElement) || !isTaskEditableTarget(activeElement)) {
+    return null;
+  }
+  const activeElementId = activeElement.id;
+  const selection = activeElement instanceof HTMLInputElement
+    || activeElement instanceof HTMLTextAreaElement
+    ? {
+        start: activeElement.selectionStart,
+        end: activeElement.selectionEnd,
+        direction: activeElement.selectionDirection,
+      }
+    : null;
+
+  return () => {
+    const currentFocus = document.activeElement;
+    if (
+      currentFocus instanceof HTMLElement
+      && currentFocus !== document.body
+      && currentFocus !== document.documentElement
+      && currentFocus !== activeElement
+    ) return;
+    const focusTarget = activeElement.isConnected
+      ? activeElement
+      : activeElementId
+        ? document.getElementById(activeElementId)
+        : null;
+    if (!(focusTarget instanceof HTMLElement) || !isTaskEditableTarget(focusTarget)) return;
+    focusTarget.focus({ preventScroll: true });
+    if (
+      selection
+      && (focusTarget instanceof HTMLInputElement || focusTarget instanceof HTMLTextAreaElement)
+      && selection.start !== null
+      && selection.end !== null
+    ) {
+      focusTarget.setSelectionRange(selection.start, selection.end, selection.direction ?? undefined);
+    }
+  };
 }
 
 function taskNestedSurfaceOwnsTypeToSearch(target: EventTarget | null): boolean {
@@ -404,6 +450,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const basePath = useModuleBasePath();
   const view = getTaskViewFromPath(location.pathname);
   const areaId = getTaskAreaIdFromPath(location.pathname);
+  const quickFindListEligible = view !== 'config' && view !== 'search';
   useEffect(() => {
     if (/\/tasks\/projects(?:\/[^/]+)?$/.test(location.pathname)) {
       navigate(`${basePath}/anytime`, { replace: true });
@@ -644,6 +691,66 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   );
   const acknowledgeReminderDelivery = reminders.acknowledge;
   const commandReturnFocusRef = useRef<HTMLElement | null>(null);
+  const [touchQuickFindEnabled, setTouchQuickFindEnabled] = useState(false);
+  const [touchQuickFindPull, setTouchQuickFindPull] = useState(0);
+  const touchQuickFindStartYRef = useRef<number | null>(null);
+  const touchQuickFindPullRef = useRef(0);
+  const quickFindPullThreshold = 84;
+  useEffect(() => {
+    const coarsePointer = window.matchMedia('(pointer: coarse)');
+    const syncTouchCapability = () => {
+      setTouchQuickFindEnabled(
+        navigator.maxTouchPoints > 0 || coarsePointer.matches,
+      );
+    };
+    syncTouchCapability();
+    coarsePointer.addEventListener('change', syncTouchCapability);
+    return () => coarsePointer.removeEventListener('change', syncTouchCapability);
+  }, []);
+  const resetTouchQuickFindPull = useCallback(() => {
+    touchQuickFindStartYRef.current = null;
+    touchQuickFindPullRef.current = 0;
+    setTouchQuickFindPull(0);
+  }, []);
+  const handleTouchQuickFindStart = useCallback((event: ReactTouchEvent) => {
+    if (
+      !touchQuickFindEnabled
+      || !quickFindListEligible
+      || quickFindOpen
+      || event.touches.length !== 1
+      || window.scrollY > 0
+      || document.querySelector('[role="dialog"], [data-radix-portal], [data-vaul-drawer]')
+    ) {
+      resetTouchQuickFindPull();
+      return;
+    }
+    touchQuickFindStartYRef.current = event.touches[0].clientY;
+  }, [
+    quickFindListEligible,
+    quickFindOpen,
+    resetTouchQuickFindPull,
+    touchQuickFindEnabled,
+  ]);
+  const handleTouchQuickFindMove = useCallback((event: ReactTouchEvent) => {
+    const startY = touchQuickFindStartYRef.current;
+    if (startY === null || event.touches.length !== 1) return;
+    const delta = event.touches[0].clientY - startY;
+    if (delta <= 0 || window.scrollY > 0) {
+      resetTouchQuickFindPull();
+      return;
+    }
+    const distance = Math.min(delta * 0.5, quickFindPullThreshold);
+    touchQuickFindPullRef.current = distance;
+    setTouchQuickFindPull(distance);
+  }, [resetTouchQuickFindPull]);
+  const handleTouchQuickFindEnd = useCallback(() => {
+    const shouldOpen = touchQuickFindPullRef.current >= quickFindPullThreshold;
+    resetTouchQuickFindPull();
+    if (!shouldOpen) return;
+    commandReturnFocusRef.current = null;
+    setQuickFindInitialQuery('');
+    setQuickFindOpen(true);
+  }, [resetTouchQuickFindPull]);
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
   const selectedTaskIdRef = useRef<string | null>(null);
   const previousViewRef = useRef(view);
@@ -1683,6 +1790,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       targets.map((task) => task.area_id),
     );
     if (areaId === undefined) return;
+    const restoreEditableFocus = captureTaskEditableFocus();
     try {
       for (const task of targets) {
         if (task.id === NEW_TASK_DRAFT_ID) {
@@ -1691,6 +1799,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           await updateTask(task.id, { area_id: areaId });
         }
       }
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => restoreEditableFocus?.());
+      });
     } catch (cycleError) {
       showTaskError('Task Area Could Not Be Changed', cycleError);
     }
@@ -1899,6 +2010,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       if (event.key === 'Escape' && taskNestedSurfaceOwnsEscape(event.target)) return;
       if (
         event.key === 'Escape'
+        && selectedTaskIdRef.current !== null
+        && !bulkMode
+        && bulkCommandMode === null
+        && !quickFindOpen
+        && !keyboardHelpOpen
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void closeOpenTaskToFocus();
+        return;
+      }
+      if (
+        event.key === 'Escape'
         && !bulkMode
         && selectedTaskIdRef.current === null
         && event.target instanceof HTMLElement
@@ -2008,6 +2132,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       ) return;
       if (command === 'copy' || command === 'cut' || command === 'paste') return;
       if (
+        (command === 'undo' || command === 'redo')
+        && isTaskEditableTarget(event.target)
+      ) return;
+      if (
         command === 'close-task'
         && selectedTaskIdRef.current === null
         && focusedTaskIdRef.current === null
@@ -2086,6 +2214,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         return;
       }
       if (command === 'open-start-date') {
+        if (!bulkMode) {
+          const activeStartPicker = document.querySelector<HTMLElement>(
+            '[data-task-start-picker]',
+          );
+          if (activeStartPicker) {
+            requestTaskStartPickerAdvance(activeStartPicker);
+            return;
+          }
+        }
         void openTaskCommandField('start');
         return;
       }
@@ -3085,6 +3222,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     <div
       className="min-h-screen bg-background"
       data-task-module-drop-surface
+      onTouchStart={handleTouchQuickFindStart}
+      onTouchMove={handleTouchQuickFindMove}
+      onTouchEnd={handleTouchQuickFindEnd}
+      onTouchCancel={resetTouchQuickFindPull}
       onDragOver={(event) => {
         if (
           activeDraggedTaskIdRef.current === null
@@ -3102,6 +3243,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         void commitActiveTaskDrop();
       }}
     >
+      {touchQuickFindEnabled && quickFindListEligible && touchQuickFindPull > 0 ? (
+        <div
+          aria-hidden="true"
+          data-task-pull-to-find-indicator
+          className="pointer-events-none fixed inset-x-0 top-[env(safe-area-inset-top,0px)] z-50 flex justify-center"
+          style={{
+            opacity: touchQuickFindPull / quickFindPullThreshold,
+            transform: `translateY(${Math.max(8, touchQuickFindPull * 0.45)}px)`,
+          }}
+        >
+          <TASK_ICONS.Search className="h-5 w-5 text-muted-foreground" />
+        </div>
+      ) : null}
       <ToplineHeader
         title="Tasks"
         moduleId="tasks"
@@ -3125,8 +3279,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             >
               {getTaskViewLabel(view)}
             </h2>
-            {bulkEligible ? (
+            {quickFindListEligible ? (
               <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="clear"
+                  size="icon"
+                  aria-label="Quick Find Tasks and Areas"
+                  className="h-9 w-9 text-muted-foreground"
+                  onClick={() => openCommandSurface(setQuickFindOpen)}
+                >
+                  <TASK_ICONS.Search className="h-4 w-4" aria-hidden="true" />
+                </Button>
                 {!bulkMode ? (
                   <Button
                     type="button"
@@ -3140,12 +3304,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                     <TASK_ICONS.MultiSelect className="h-4 w-4" aria-hidden="true" />
                   </Button>
                 ) : null}
-                <TaskQuickFilterControl
-                  value={taskQuickFilter}
-                  onChange={(nextFilter) => {
-                    void applyTaskQuickFilter(nextFilter);
-                  }}
-                />
+                {bulkEligible ? (
+                  <TaskQuickFilterControl
+                    value={taskQuickFilter}
+                    onChange={(nextFilter) => {
+                      void applyTaskQuickFilter(nextFilter);
+                    }}
+                  />
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -3474,15 +3640,23 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         || view === 'someday') && !bulkMode ? (
           <div
             data-task-floating-create-boundary
-            className="pointer-events-none fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 mx-auto flex w-full max-w-3xl justify-end px-4 md:bottom-6"
+            className={[
+              'pointer-events-none fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 mx-auto flex w-full max-w-3xl justify-end px-4 transition-opacity duration-200 ease-out md:bottom-6',
+              selectedTaskId !== null ? 'opacity-0' : 'opacity-100',
+            ].join(' ')}
           >
             <Button
               type="button"
               variant="success"
               aria-label="New Task"
+              aria-hidden={selectedTaskId !== null ? true : undefined}
+              disabled={selectedTaskId !== null}
               data-task-floating-create
               onClick={() => void beginTaskCreation(floatingTaskCreationPlacement)}
-              className="pointer-events-auto h-12 w-12 rounded-full border border-success bg-success/85 p-0 text-success-foreground backdrop-blur-sm supports-[backdrop-filter]:bg-success/75 enabled:hover:bg-success/90 [&_svg]:size-6"
+              className={[
+                'h-12 w-12 rounded-full border border-success bg-success/85 p-0 text-success-foreground backdrop-blur-sm disabled:opacity-100 supports-[backdrop-filter]:bg-success/75 enabled:hover:bg-success/90 [&_svg]:size-6',
+                selectedTaskId !== null ? 'pointer-events-none' : 'pointer-events-auto',
+              ].join(' ')}
             >
               <TASK_ICONS.AddTask aria-hidden="true" />
             </Button>
@@ -6423,7 +6597,7 @@ function getTaskViewLabel(view: TaskShellView): string {
   if (view === 'upcoming') return 'Upcoming';
   if (view === 'area') return 'Area';
   if (view === 'templates') return 'Templates';
-  if (view === 'config') return 'Config';
+  if (view === 'config') return 'Settings';
   if (view === 'search') return 'Search';
   return 'Today';
 }

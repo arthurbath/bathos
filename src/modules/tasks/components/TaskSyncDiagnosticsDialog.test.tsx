@@ -51,7 +51,7 @@ describe('TaskSyncDiagnosticsDialog', () => {
     expect(screen.getByText('No conflict receipts.')).toBeVisible();
   });
 
-  it('shows the latest in-app reminder condition only in Config diagnostics', async () => {
+  it('shows the latest in-app reminder condition only in Settings diagnostics', async () => {
     const { rerender } = render(
       <TaskSyncDiagnosticsDialog
         triggerVariant="config"

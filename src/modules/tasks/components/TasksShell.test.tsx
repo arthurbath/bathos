@@ -476,6 +476,19 @@ function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: str
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function dispatchTouch(
+  target: Element,
+  type: 'touchstart' | 'touchmove' | 'touchend',
+  clientY?: number,
+) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'touches', {
+    configurable: true,
+    value: clientY === undefined ? [] : [{ clientY }],
+  });
+  target.dispatchEvent(event);
+}
+
 function setSelectValue(select: HTMLSelectElement, value: string) {
   Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(select, value);
   select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -516,8 +529,11 @@ function expectInteractiveControlsToHaveNames(scope: ParentNode) {
     '[role="checkbox"]',
     '[role="menuitem"]',
   ].join(','))));
-  expect(controls.length).toBeGreaterThan(0);
-  controls.forEach((control) => {
+  const accessibilityTreeControls = controls.filter(
+    (control) => control.closest('[aria-hidden="true"], [inert]') === null,
+  );
+  expect(accessibilityTreeControls.length).toBeGreaterThan(0);
+  accessibilityTreeControls.forEach((control) => {
     expect(control, control.outerHTML).not.toHaveAccessibleName('');
   });
 }
@@ -1019,6 +1035,62 @@ describe('TasksShell', () => {
     }
   });
 
+  it('fades and disables the floating creation action while adding or editing a task', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell('/tasks/today');
+
+    try {
+      const floatingBoundary = container.querySelector<HTMLElement>(
+        '[data-task-floating-create-boundary]',
+      )!;
+      const floatingCreate = container.querySelector<HTMLButtonElement>(
+        '[data-task-floating-create]',
+      )!;
+
+      expect(floatingBoundary).toHaveClass('opacity-100', 'transition-opacity');
+      expect(floatingCreate).toBeEnabled();
+      expect(floatingCreate).toHaveClass('pointer-events-auto');
+      expect(floatingCreate).not.toHaveAttribute('aria-hidden');
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await waitFor(() => {
+        expect(container.querySelector('#task-title-task-a')).not.toBeNull();
+        expect(floatingBoundary).toHaveClass('opacity-0');
+        expect(floatingCreate).toBeDisabled();
+      });
+      expect(floatingCreate).toHaveAttribute('aria-hidden', 'true');
+      expect(floatingCreate).toHaveClass('pointer-events-none', 'disabled:opacity-100');
+
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await waitFor(() => {
+        expect(container.querySelector('#task-title-task-a')).toBeNull();
+        expect(floatingBoundary).toHaveClass('opacity-100');
+        expect(floatingCreate).toBeEnabled();
+      });
+      expect(floatingCreate).not.toHaveAttribute('aria-hidden');
+      expect(floatingCreate).toHaveClass('pointer-events-auto');
+
+      await act(async () => {
+        floatingCreate.click();
+      });
+      await waitFor(() => {
+        expect(container.querySelector('[data-task-row-id="task-draft:new"]')).not.toBeNull();
+        expect(floatingBoundary).toHaveClass('opacity-0');
+        expect(floatingCreate).toBeDisabled();
+      });
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('creates from the floating action at the top of the first visible Today bucket', async () => {
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
@@ -1154,6 +1226,49 @@ describe('TasksShell', () => {
     }
   });
 
+  it('reveals and opens Quick Find after a touch pull from the top of a list', async () => {
+    const maxTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      'maxTouchPoints',
+    );
+    Object.defineProperty(window.navigator, 'maxTouchPoints', {
+      configurable: true,
+      value: 5,
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      const surface = container.querySelector<HTMLElement>(
+        '[data-task-module-drop-surface]',
+      )!;
+      await act(async () => {
+        dispatchTouch(surface, 'touchstart', 20);
+        dispatchTouch(surface, 'touchmove', 220);
+      });
+      expect(container.querySelector('[data-task-pull-to-find-indicator]')).toBeTruthy();
+
+      await act(async () => {
+        dispatchTouch(surface, 'touchend');
+        await Promise.resolve();
+      });
+      expect(document.querySelector<HTMLElement>('[role="dialog"]'))
+        .toHaveAccessibleName('Quick Find');
+      expect(container.querySelector('[data-task-pull-to-find-indicator]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+      if (maxTouchPointsDescriptor) {
+        Object.defineProperty(
+          window.navigator,
+          'maxTouchPoints',
+          maxTouchPointsDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(window.navigator, 'maxTouchPoints');
+      }
+    }
+  });
+
   it('navigates non-list routes to Today before opening a new task', async () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const { container, root } = renderShell('/tasks/config');
@@ -1274,7 +1389,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('keeps an untitled draft open on plain Escape and discards it on the form-submit command', async () => {
+  it('closes and discards an untitled draft on plain Escape', async () => {
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell();
@@ -1292,15 +1407,6 @@ describe('TasksShell', () => {
       await act(async () => {
         title.dispatchEvent(close);
       });
-      expect(container.querySelector('[id="task-title-task-draft:new"]')).toBe(title);
-      expect(close.defaultPrevented).toBe(false);
-
-      const submitClose = new KeyboardEvent('keydown', {
-        key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true,
-      });
-      await act(async () => {
-        title.dispatchEvent(submitClose);
-      });
       await waitFor(() => {
         expect(container.querySelector('[data-task-editor-region]'))
           .toHaveAttribute('data-state', 'closing');
@@ -1310,7 +1416,7 @@ describe('TasksShell', () => {
           .toHaveAttribute('data-draft-exiting', 'true');
       });
       await waitForTaskEditorExit(container, 'task-draft:new');
-      expect(submitClose.defaultPrevented).toBe(true);
+      expect(close.defaultPrevented).toBe(true);
       expect(taskList.createTask).not.toHaveBeenCalled();
       expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({ title: 'Task Saved' }));
     } finally {
@@ -1529,7 +1635,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('opens Quick Find by typing without exposing a visible search control', async () => {
+  it('opens Quick Find from the visible list action and by typing', async () => {
     const mailTask = {
       ...task,
       id: 'task-mail',
@@ -1549,9 +1655,20 @@ describe('TasksShell', () => {
     const { container, root } = renderShell();
 
     try {
-      expect(container.querySelector(
+      const quickFindAction = container.querySelector<HTMLButtonElement>(
         'button[aria-label="Quick Find Tasks and Areas"]',
-      )).toBeNull();
+      );
+      expect(quickFindAction).toBeTruthy();
+      await act(async () => quickFindAction?.click());
+      expect(document.querySelector<HTMLElement>('[role="dialog"]'))
+        .toHaveAccessibleName('Quick Find');
+      await act(async () => {
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'r',
@@ -1696,7 +1813,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('opens type-to-search from Config and leaves editable search input typing alone', async () => {
+  it('opens type-to-search from Settings and leaves editable search input typing alone', async () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const { container, root } = renderShell('/tasks/config');
 
@@ -1849,7 +1966,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('captures task undo and redo before editable controls and browser handlers', async () => {
+  it('leaves undo and redo with editable controls while capturing them outside editors', async () => {
     const undo = vi.fn().mockResolvedValue(undefined);
     const redo = vi.fn().mockResolvedValue(undefined);
     const registerForwardMutation = vi.fn();
@@ -1889,9 +2006,9 @@ describe('TasksShell', () => {
       await act(async () => {
         editorTitle.dispatchEvent(undoEvent);
       });
-      expect(undo).toHaveBeenCalledTimes(1);
-      expect(undoEvent.defaultPrevented).toBe(true);
-      expect(downstreamHandler).not.toHaveBeenCalled();
+      expect(undo).not.toHaveBeenCalled();
+      expect(undoEvent.defaultPrevented).toBe(false);
+      expect(downstreamHandler).toHaveBeenCalled();
 
       const redoEvent = new KeyboardEvent('keydown', {
         key: 'y', ctrlKey: true, bubbles: true, cancelable: true,
@@ -1899,8 +2016,8 @@ describe('TasksShell', () => {
       await act(async () => {
         editorTitle.dispatchEvent(redoEvent);
       });
-      expect(redo).toHaveBeenCalledTimes(1);
-      expect(redoEvent.defaultPrevented).toBe(true);
+      expect(redo).not.toHaveBeenCalled();
+      expect(redoEvent.defaultPrevented).toBe(false);
 
       const shiftedRedoEvent = new KeyboardEvent('keydown', {
         key: 'z', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true,
@@ -1908,8 +2025,8 @@ describe('TasksShell', () => {
       await act(async () => {
         editorTitle.dispatchEvent(shiftedRedoEvent);
       });
-      expect(redo).toHaveBeenCalledTimes(2);
-      expect(shiftedRedoEvent.defaultPrevented).toBe(true);
+      expect(redo).not.toHaveBeenCalled();
+      expect(shiftedRedoEvent.defaultPrevented).toBe(false);
 
       const alternateUndoEvent = new KeyboardEvent('keydown', {
         key: 'z', altKey: true, shiftKey: true, bubbles: true, cancelable: true,
@@ -1917,8 +2034,17 @@ describe('TasksShell', () => {
       await act(async () => {
         editorTitle.dispatchEvent(alternateUndoEvent);
       });
-      expect(undo).toHaveBeenCalledTimes(2);
-      expect(alternateUndoEvent.defaultPrevented).toBe(true);
+      expect(undo).not.toHaveBeenCalled();
+      expect(alternateUndoEvent.defaultPrevented).toBe(false);
+
+      const row = container.querySelector<HTMLElement>('[data-task-row-id="task-a"]')!;
+      row.focus();
+      const globalUndoEvent = new KeyboardEvent('keydown', {
+        key: 'z', ctrlKey: true, bubbles: true, cancelable: true,
+      });
+      await act(async () => row.dispatchEvent(globalUndoEvent));
+      expect(undo).toHaveBeenCalledTimes(1);
+      expect(globalUndoEvent.defaultPrevented).toBe(true);
 
       await act(async () => {
         editorTitle.dispatchEvent(new KeyboardEvent('keydown', {
@@ -2537,7 +2663,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('omits explicit task selection entry from Config', () => {
+  it('omits explicit task selection entry from Settings', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const { container, root } = renderShell('/tasks/config');
     try {
@@ -4351,14 +4477,14 @@ describe('TasksShell', () => {
         'Today', 'Upcoming', 'Anytime', 'Someday',
       ]);
       expect(mobileLinks.slice(4).map((link) => link.textContent)).toEqual([
-        'Templates', 'Done', 'Config',
+        'Templates', 'Done', 'Settings',
       ]);
     } finally {
       cleanup(today.root, today.container);
     }
   });
 
-  it('keeps maintenance surfaces on Config and out of the daily header and body', () => {
+  it('keeps maintenance surfaces on Settings and out of the daily header and body', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const today = renderShell('/tasks/today');
 
@@ -4372,7 +4498,7 @@ describe('TasksShell', () => {
 
     const config = renderShell('/tasks/config');
     try {
-      expect(config.container.querySelector('[data-task-view-heading]')?.textContent).toBe('Config');
+      expect(config.container.querySelector('[data-task-view-heading]')?.textContent).toBe('Settings');
       for (const title of [
         'Areas',
         'List Sorting',
@@ -4397,7 +4523,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('persists the single automatic sorting preference from Config', async () => {
+  it('persists the single automatic sorting preference from Settings', async () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const setEnabled = vi.fn().mockResolvedValue(undefined);
     mockTaskAutomaticListSorting.mockReturnValue({
@@ -4457,7 +4583,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('routes an Area detail path as part of Config without exposing task capture', () => {
+  it('routes an Area detail path as part of Settings without exposing task capture', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const area = renderShell('/tasks/areas/area-work');
     try {
@@ -5643,9 +5769,11 @@ describe('TasksShell', () => {
         .not.toHaveAttribute('data-state', 'closing');
 
       await act(async () => {
-        container.querySelector<HTMLElement>('[data-task-view-heading]')?.dispatchEvent(
-          new MouseEvent('pointerdown', { bubbles: true, cancelable: true }),
-        );
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        }));
         await Promise.resolve();
       });
       expect(container.querySelector('[data-task-editor-region]'))
@@ -6581,8 +6709,12 @@ describe('TasksShell', () => {
         expect(field).toHaveClass('min-w-0');
       });
       expect(temporalGrid?.querySelectorAll('svg.lucide-calendar')).toHaveLength(2);
-      expect(container.querySelector('#task-start-task-a [data-control-decoration] svg'))
-        .toBeTruthy();
+      const startDecoration = container.querySelector(
+        '#task-start-task-a [data-control-decoration]',
+      );
+      expect(startDecoration?.querySelector('svg')).toHaveClass('lucide-clock-5');
+      expect(startDecoration).toHaveClass('text-muted-foreground');
+      expect(startDecoration).not.toHaveClass('text-task-horizon-next');
       expect(container.querySelector('#task-deadline-task-a [data-control-decoration] svg'))
         .toHaveClass('lucide-flag');
       expect(container.querySelector('#task-actionability-task-a [data-control-decoration] svg'))
@@ -6653,6 +6785,158 @@ describe('TasksShell', () => {
       expect(selectedDay?.textContent?.trim()).toBe('24');
       expect(document.activeElement).toBe(selectedDay);
     } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('advances repeated Control+E focus through Today horizons and into future dates', async () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    const unplannedTask = taskTodoFixture({
+      ...task,
+      destination: 'anytime',
+      start_date: null,
+      today_section: null,
+    });
+    const taskList = { ...defaultTaskList(), tasks: [unplannedTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/anytime');
+
+    const invokeStartCommand = async () => {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'e',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+    };
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+
+      await invokeStartCommand();
+      expect(document.activeElement).toBe(
+        document.querySelector('[data-task-start-horizon="inbox"]'),
+      );
+
+      for (const horizon of ['now', 'next', 'later']) {
+        await invokeStartCommand();
+        expect(document.activeElement).toBe(
+          document.querySelector(`[data-task-start-horizon="${horizon}"]`),
+        );
+      }
+
+      await invokeStartCommand();
+      await waitFor(() => {
+        expect(document.activeElement).toBe(
+          document.querySelector('button[data-calendar-date="2026-07-21"]'),
+        );
+      });
+      expect(taskList.updateTask).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        configurable: true,
+        value: originalPlatform,
+      });
+      cleanup(root, container);
+    }
+  });
+
+  it('pages to the next month before repeated Control+E focuses its first date', async () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    const futureTask = taskTodoFixture({
+      ...task,
+      start_date: '2026-07-31',
+      today_section: 'next',
+    });
+    const taskList = { ...defaultTaskList(), tasks: [futureTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'e',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(document.activeElement).toBe(
+        document.querySelector('button[data-calendar-date="2026-07-31"]'),
+      );
+
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'e',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      await waitFor(() => {
+        expect(document.querySelector('button[name="caption-month-year"]'))
+          .toHaveTextContent('August 2026');
+        expect(document.activeElement).toBe(
+          document.querySelector('button[data-calendar-date="2026-08-01"]'),
+        );
+      });
+
+      await act(async () => {
+        document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      await waitFor(() => {
+        expect(document.querySelector('button[name="caption-month-year"]'))
+          .toHaveTextContent('July 2026');
+        expect(document.activeElement).toBe(
+          document.querySelector('button[data-calendar-date="2026-07-31"]'),
+        );
+      });
+
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'e',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+      await waitFor(() => {
+        expect(document.querySelector('button[name="caption-month-year"]'))
+          .toHaveTextContent('August 2026');
+        expect(document.activeElement).toBe(
+          document.querySelector('button[data-calendar-date="2026-08-01"]'),
+        );
+      });
+      expect(taskList.updateTask).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        configurable: true,
+        value: originalPlatform,
+      });
       cleanup(root, container);
     }
   });
@@ -7407,7 +7691,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('keeps a failed due-reminder check out of task lists and reports it only on Config', () => {
+  it('keeps a failed due-reminder check out of task lists and reports it only on Settings', () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     mockTaskReminders.mockReturnValue({
       reminders: [], byRootId: new Map(), dueItems: [], mode: 'connected',
@@ -8275,6 +8559,77 @@ describe('TasksShell', () => {
     }
   });
 
+  it('retains an open Anytime task in its rendered Area until the editor closes', async () => {
+    const initialTask = taskTodoFixture({
+      ...task,
+      id: 'task-area-retained',
+      title: 'Move Areas Later',
+      area_id: 'area-work',
+    });
+    let acceptedTasks = [initialTask];
+    const taskList = defaultTaskList();
+    mockTaskList.mockImplementation((
+      _ownerId: string,
+      _view: string,
+      retainedTaskId: string | null,
+    ) => ({
+      ...taskList,
+      tasks: acceptedTasks,
+      retainedTaskPlacement: retainedTaskId === initialTask.id
+        ? {
+            destination: initialTask.destination,
+            today_section: initialTask.today_section,
+            start_date: initialTask.start_date,
+            deadline: initialTask.deadline,
+            actionability: initialTask.actionability,
+            order_key: initialTask.order_key,
+            area_id: initialTask.area_id,
+          }
+        : null,
+    }));
+    mockTaskHierarchy.mockReturnValue({
+      areas: [
+        taskAreaFixture({ id: 'area-work', title: 'Work', order_key: 'a0' }),
+        taskAreaFixture({ id: 'area-home', title: 'Home', order_key: 'a1' }),
+      ],
+      loading: false,
+      error: null,
+    });
+    const { container, root, rerender } = renderShell('/tasks/anytime');
+    const sectionContainingTask = (area: string) => container.querySelector(
+      `section[aria-labelledby="tasks-area-${area}-heading"] `
+        + '[data-task-row-id="task-area-retained"]',
+    );
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(
+          '[data-task-id="task-area-retained"]',
+        )?.click();
+      });
+      acceptedTasks = [{ ...initialTask, area_id: 'area-home' }];
+      await act(async () => {
+        rerender();
+        await Promise.resolve();
+      });
+
+      expect(sectionContainingTask('area-work')).toBeTruthy();
+      expect(sectionContainingTask('area-home')).toBeNull();
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(
+          '[data-task-id="task-area-retained"]',
+        )?.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 450));
+        rerender();
+      });
+      expect(sectionContainingTask('area-work')).toBeNull();
+      expect(sectionContainingTask('area-home')).toBeTruthy();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('automatically sorts inside an Area but retains an edited task until close', async () => {
     mockTaskAutomaticListSorting.mockReturnValue({
       enabled: true,
@@ -8734,7 +9089,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('groups Someday tasks in the manual Area order maintained in Config', () => {
+  it('groups Someday tasks in the manual Area order maintained in Settings', () => {
     mockTaskList.mockReturnValue({
       ...defaultTaskList(),
       tasks: [
@@ -9327,6 +9682,49 @@ describe('TasksShell', () => {
     }
   });
 
+  it('preserves the active editor field and caret while cycling Area', async () => {
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskHierarchy.mockReturnValue({
+      areas: [
+        { id: 'area-work', owner_id: 'owner-a', title: 'Work' },
+        { id: 'area-home', owner_id: 'owner-a', title: 'Home' },
+      ],
+      loading: false,
+      error: null,
+    });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      const title = container.querySelector<HTMLInputElement>('#task-title-task-a')!;
+      title.focus();
+      title.setSelectionRange(3, 3);
+
+      await act(async () => {
+        title.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'v',
+          altKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 40));
+      });
+
+      expect(taskList.updateTask).toHaveBeenCalledWith('task-a', {
+        area_id: 'area-work',
+      });
+      expect(document.activeElement).toBe(title);
+      expect(title.selectionStart).toBe(3);
+      expect(title.selectionEnd).toBe(3);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('normalizes mixed bulk Areas before advancing them together', async () => {
     const secondTask = taskTodoFixture({
       ...task,
@@ -9913,7 +10311,7 @@ describe('TasksShell', () => {
         }));
         await Promise.resolve();
       });
-      expect(container.querySelector('[data-task-view-heading]')).toHaveTextContent('Config');
+      expect(container.querySelector('[data-task-view-heading]')).toHaveTextContent('Settings');
       expect(container.querySelector('[data-task-quick-filter-trigger]')).toBeNull();
     } finally {
       cleanup(root, container);
@@ -9921,7 +10319,7 @@ describe('TasksShell', () => {
   });
 
 
-  it('opens Config with the Windows application command', async () => {
+  it('opens Settings with the Windows application command', async () => {
     mockTaskList.mockReturnValue(defaultTaskList());
     const { container, root } = renderShell();
     try {
@@ -9936,7 +10334,7 @@ describe('TasksShell', () => {
         await Promise.resolve();
       });
       expect(shortcut.defaultPrevented).toBe(true);
-      expect(container.querySelector('[data-task-view-heading]')?.textContent).toContain('Config');
+      expect(container.querySelector('[data-task-view-heading]')?.textContent).toContain('Settings');
     } finally {
       cleanup(root, container);
     }

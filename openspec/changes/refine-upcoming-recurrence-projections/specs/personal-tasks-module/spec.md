@@ -57,7 +57,11 @@ The system SHALL keep revisioned recurrence definitions separate from task occur
 
 #### Scenario: Edit Repeat from Upcoming
 - **WHEN** a user activates a recurrence projection or chooses Edit Repeat
-- **THEN** Tasks opens the recurrence editor with the current revision values and saves accepted changes as a new recurrence revision
+- **THEN** Tasks opens the recurrence editor with the current prototype name and revision schedule values and saves accepted name or schedule changes as a new recurrence revision
+
+#### Scenario: Keep the next occurrence current or future
+- **WHEN** a user creates or edits recurrence scheduling
+- **THEN** the next occurrence cannot be selected or saved before the owner's current planning date, and an older source date advances to the next valid cadence date
 
 #### Scenario: Replace materialized future projections after a calendar edit
 - **WHEN** a calendar recurrence edit is accepted after its prior revision has materialized future Upcoming projections

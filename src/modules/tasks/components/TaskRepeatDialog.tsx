@@ -113,10 +113,14 @@ export function TaskRepeatDialog({
 }) {
   const { mode, recurrenceService } = useTasksRuntime();
   const editing = definition !== null && revision !== null;
-  const initialScheduleDate = revision?.start_date
+  const requestedInitialScheduleDate = revision?.start_date
     ?? task?.deadline
     ?? task?.start_date
     ?? planningDate;
+  const initialScheduleDate = requestedInitialScheduleDate < planningDate
+    ? planningDate
+    : requestedInitialScheduleDate;
+  const [name, setName] = useState(definition?.name ?? task?.title ?? '');
   const [ruleMode, setRuleMode] = useState<TaskRecurrenceRuleMode>('calendar');
   const [frequency, setFrequency] = useState<TaskRecurrenceFrequency>('weekly');
   const [intervalCount, setIntervalCount] = useState(1);
@@ -153,13 +157,15 @@ export function TaskRepeatDialog({
 
   useEffect(() => {
     if (!open) return;
-    const date = revision?.start_date
+    const requestedDate = revision?.start_date
       ?? task?.deadline
       ?? task?.start_date
       ?? planningDate;
+    const date = requestedDate < planningDate ? planningDate : requestedDate;
     const config = recurrenceRuleConfigRecord(revision?.rule_config);
     const monthlyKind = config.monthly_kind;
     const yearlyKind = config.yearly_kind;
+    setName(definition?.name ?? task?.title ?? '');
     setRuleMode(revision?.rule_mode ?? 'calendar');
     setFrequency(revision?.frequency ?? 'weekly');
     setIntervalCount(revision?.interval_count ?? 1);
@@ -215,7 +221,7 @@ export function TaskRepeatDialog({
       : task?.deadline != null);
     setDeadlineOffsetDays(revision?.deadline_offset_days ?? 0);
     setPending(false);
-  }, [open, planningDate, revision, task]);
+  }, [definition, open, planningDate, revision, task]);
 
   const ruleConfig = useMemo<TaskRecurrenceRuleConfig>(() => (
     frequency === 'weekly'
@@ -294,14 +300,20 @@ export function TaskRepeatDialog({
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    if (pending || mode !== 'connected') return;
+    const normalizedName = name.trim();
+    if (
+      pending
+      || mode !== 'connected'
+      || !normalizedName
+      || effectiveScheduleDate < planningDate
+    ) return;
     setPending(true);
     try {
       const result = editing
         ? await (onEdit ?? recurrenceService.edit.bind(recurrenceService))({
             definition,
             revision,
-            name: definition.name,
+            name: normalizedName,
             ruleMode,
             frequency,
             intervalCount,
@@ -316,7 +328,7 @@ export function TaskRepeatDialog({
         : task
           ? await recurrenceService.createFromTask({
               taskId: task.id,
-              name: task.title,
+              name: normalizedName,
               ruleMode,
               frequency,
               intervalCount,
@@ -361,6 +373,15 @@ export function TaskRepeatDialog({
             onSubmit={save}
             className="space-y-4"
           >
+            <label className="space-y-1 text-sm">
+              <span>Repeat Name</span>
+              <Input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Repeat Name"
+                aria-label="Repeat Name"
+              />
+            </label>
             <div className="grid grid-cols-[auto_1fr] items-center gap-3">
               <span className="text-sm font-medium">Repeat</span>
               <Select
@@ -621,6 +642,7 @@ export function TaskRepeatDialog({
                   value={effectiveScheduleDate}
                   onValueChange={setScheduleDate}
                   todayDate={planningDate}
+                  minDate={planningDate}
                 />
               </label>
               <div className="space-y-1 text-sm">
@@ -733,7 +755,12 @@ export function TaskRepeatDialog({
             type="submit"
             form={`task-repeat-form-${task?.id ?? definition?.id ?? 'unavailable'}`}
             data-bathos-form-submit="true"
-            disabled={pending || mode !== 'connected'}
+            disabled={
+              pending
+              || mode !== 'connected'
+              || !name.trim()
+              || effectiveScheduleDate < planningDate
+            }
           >
             Save
           </Button>

@@ -66,7 +66,7 @@ export function SnakeShell({
 
   const navItems = [
     { path: '/weights', label: 'Weights', icon: Scale },
-    { path: '/config', label: 'Config', icon: Settings },
+    { path: '/config', label: 'Settings', icon: Settings },
   ] as const;
 
   const {
@@ -245,13 +245,13 @@ export function SnakeShell({
           <div className={isFullViewGridRoute ? 'mx-auto w-full max-w-5xl px-4' : ''}>
             <Card>
               <CardContent className="space-y-3 py-8 text-center">
-                <p className="text-sm text-muted-foreground">Create a snake in Config before tracking weight records.</p>
+                <p className="text-sm text-muted-foreground">Create a snake in Settings before tracking weight records.</p>
                 <Button asChild type="button">
                   <a
                     href={`${basePath}/config`}
                     onClick={(event) => handleClientSideLinkNavigation(event, navigate, `${basePath}/config`)}
                   >
-                    Go to Config
+                    Go to Settings
                   </a>
                 </Button>
               </CardContent>

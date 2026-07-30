@@ -84,7 +84,7 @@ describe('TaskAreaDetailView', () => {
       expect(onOpenTask).toHaveBeenCalledWith('task-a', '/upcoming');
 
       expect(container.querySelector<HTMLAnchorElement>('a[href="/config"]')?.textContent)
-        .toContain('Config');
+        .toContain('Settings');
       expect(container.querySelector('[aria-label="Rename Work"]')).toBeNull();
     } finally {
       cleanup(root, container);

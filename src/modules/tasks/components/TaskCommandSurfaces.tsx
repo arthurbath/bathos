@@ -242,7 +242,7 @@ export function TaskKeyboardHelpDialog({
         ['Open Anytime', '⌃3', '⌃3'],
         ['Open Someday', '⌃4', '⌃4'],
         ['Open Done', '⌃5', '⌃5'],
-        ['Open Config', '⌃6', '⌃6'],
+        ['Open Settings', '⌃6', '⌃6'],
       ],
     },
     {

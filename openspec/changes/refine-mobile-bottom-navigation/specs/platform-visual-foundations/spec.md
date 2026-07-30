@@ -14,3 +14,9 @@ BathOS SHALL present the shared mobile bottom navigation as a fully rounded, sub
 #### Scenario: Activate and open navigation destinations
 - **WHEN** a user taps, keyboard-activates, modified-clicks, or middle-clicks a mobile navigation destination
 - **THEN** the destination preserves the established route and browser link behavior while its active state uses the nested-pill treatment
+- **AND** the equal-width destinations have no inter-item gap so the longest persistent label receives the maximum horizontal breathing room without widening or overflowing the outer navigation pill
+
+#### Scenario: Present mobile destination feedback
+- **WHEN** the shared mobile navigation presents inactive destinations
+- **THEN** it does not apply a pointer-hover color treatment
+- **AND** active and keyboard focus-visible feedback remain available

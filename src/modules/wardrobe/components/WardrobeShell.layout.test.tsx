@@ -91,7 +91,7 @@ describe('WardrobeShell layout', () => {
     }
   });
 
-  it('adds an installed-only Config destination with the account card', async () => {
+  it('adds an installed-only Settings destination with the account card', async () => {
     Object.defineProperty(window.navigator, 'standalone', {
       configurable: true,
       value: true,
@@ -106,14 +106,14 @@ describe('WardrobeShell layout', () => {
       const mobileNav = document.body.querySelector('nav[aria-label="Mobile navigation"]');
       const links = Array.from(mobileNav?.querySelectorAll('a') ?? []);
       expect(links).toHaveLength(2);
-      expect(links.map((link) => link.textContent?.trim())).toEqual(['Items', 'Config']);
+      expect(links.map((link) => link.textContent?.trim())).toEqual(['Items', 'Settings']);
       expect(links[1]).toHaveAttribute('aria-current', 'page');
     } finally {
       cleanup(root, container);
     }
   });
 
-  it('redirects ordinary web access to the installed-only Config route', async () => {
+  it('redirects ordinary web access to the installed-only Settings route', async () => {
     const { container, root } = renderShell('/wardrobe/config');
 
     try {

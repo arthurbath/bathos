@@ -42,13 +42,19 @@ describe('TaskMarkdownNotes', () => {
     expect(container.querySelectorAll('[data-task-markdown-indicator="italic"]')).toHaveLength(2);
     expect(container.querySelectorAll('[data-task-markdown-indicator="strong"]')).toHaveLength(2);
     expect(container.querySelector('[data-task-markdown-indicator="bullet"]'))
-      .toHaveClass('font-mono', 'text-muted-foreground', 'text-[0px]', "after:content-['•_']");
+      .toHaveClass(
+        'font-mono',
+        'text-muted-foreground',
+        'text-[0px]',
+        "after:content-['•_']",
+      );
     expect(container.querySelector('[data-task-markdown-indicator="bullet"]')?.parentElement)
-      .toHaveClass('pl-[2ch]', '[text-indent:-2ch]');
+      .toHaveClass('pl-[0.75em]', '[text-indent:-0.75em]');
 
     const link = screen.getByRole('link', { name: 'Link' });
     expect(link).toHaveAttribute('href', 'https://example.com/reading');
     expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveClass('break-all');
     expect(container.querySelectorAll('[data-task-markdown-indicator="link"]')).toHaveLength(3);
     expect(container.querySelectorAll('[data-task-markdown-indicator="link"]')[0])
       .toHaveClass('font-mono', 'text-muted-foreground', 'text-[0px]');
@@ -250,6 +256,35 @@ describe('TaskMarkdownNotes', () => {
     expect(editor.lastElementChild).toHaveClass('pl-[2ch]', '[text-indent:-2ch]');
   });
 
+  it('uses a narrower hanging indent for inactive bullets than active source bullets', () => {
+    const { container } = render(
+      <TaskMarkdownNotes
+        id="notes-bullet-presentations"
+        notes={'* first bullet that can wrap\n* second bullet that can wrap'}
+        disabled={false}
+        onChange={vi.fn()}
+      />,
+    );
+    const editor = screen.getByRole('textbox', { name: 'Notes' });
+    const lines = () => Array.from(
+      container.querySelectorAll<HTMLElement>('[data-task-note-line]'),
+    );
+
+    expect(lines()[0]).toHaveClass('pl-[0.75em]', '[text-indent:-0.75em]');
+    expect(lines()[1]).toHaveClass('pl-[0.75em]', '[text-indent:-0.75em]');
+
+    editor.focus();
+    setCaret(findTextNode(editor, 'second bullet that can wrap'), 3);
+    fireSelectionChange();
+
+    expect(lines()[0]).toHaveAttribute('data-task-note-presentation', 'semantic');
+    expect(lines()[0]).toHaveClass('pl-[0.75em]', '[text-indent:-0.75em]');
+    expect(lines()[0]).not.toHaveClass('pl-[2ch]', '[text-indent:-2ch]');
+    expect(lines()[1]).toHaveAttribute('data-task-note-presentation', 'source');
+    expect(lines()[1]).toHaveClass('pl-[2ch]', '[text-indent:-2ch]');
+    expect(lines()[1]).not.toHaveClass('pl-[0.75em]', '[text-indent:-0.75em]');
+  });
+
   it('preserves the caret while retokenizing and inserts pasted content as plain text', () => {
     const onChange = vi.fn();
     const { container } = render(
@@ -329,6 +364,7 @@ describe('TaskMarkdownNotes', () => {
 
     const links = Array.from(container.querySelectorAll<HTMLAnchorElement>('a'));
     expect(links).toHaveLength(2);
+    expect(links[0]).toHaveClass('break-all');
     expect(links[0]).toHaveClass('cursor-pointer');
     expect(links[0]).toHaveClass('text-info');
     expect(links[0].className).not.toContain('hover:underline');

@@ -103,7 +103,12 @@ export function TaskRecurrencePanel({
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    if (!selectedTemplate || !name.trim() || pendingAction) return;
+    if (
+      !selectedTemplate
+      || !name.trim()
+      || pendingAction
+      || startDate < model.planningDate
+    ) return;
     const existing = editingId
       ? model.definitions.find((definition) => definition.id === editingId)
       : null;
@@ -257,7 +262,13 @@ export function TaskRecurrencePanel({
             />
           </Field>
           <Field label="Recurrence Start">
-            <DatePickerField value={startDate} onValueChange={setStartDate} disabled={!connected} />
+            <DatePickerField
+              value={startDate}
+              onValueChange={setStartDate}
+              minDate={model.planningDate}
+              todayDate={model.planningDate}
+              disabled={!connected}
+            />
           </Field>
           <Field label="Missed Events">
             <select

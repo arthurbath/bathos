@@ -37,13 +37,16 @@ export function ToplineHeader({
   const moduleConfig = moduleId ? getModuleById(moduleId) : undefined;
   const ModuleIcon = moduleConfig?.icon;
   const installed = useInstalledAppMode();
+  const touchInstalledApp = navigator.maxTouchPoints > 0
+    || /Android|iPhone|iPad|iPod/i.test(`${navigator.platform} ${navigator.userAgent}`);
 
   if (installed) {
+    if (!touchInstalledApp) return null;
     return (
       <div
         data-installed-app-safe-area
         aria-hidden="true"
-        className="h-[env(safe-area-inset-top)] shrink-0 bg-background"
+        className="h-[env(safe-area-inset-top)] shrink-0 border-0 bg-background shadow-none outline-none"
       />
     );
   }

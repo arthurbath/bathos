@@ -128,7 +128,7 @@ export function DrawersView({
   const isConfigRoute = location.pathname.endsWith('/config');
   const drawersNavItems = [
     { path: '/plan', icon: LayoutGrid, label: 'Plan' },
-    { path: '/config', icon: Settings, label: 'Config' },
+    { path: '/config', icon: Settings, label: 'Settings' },
   ] as const;
 
   const getErrorMessage = (error: unknown, fallback: string) => {

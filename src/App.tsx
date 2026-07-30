@@ -108,8 +108,12 @@ export function ScrollToTopOnPathnameChange() {
 }
 
 export function AppRoutes() {
+  const location = useLocation();
+  const tasksOwnPullGesture = location.pathname === '/tasks'
+    || location.pathname.startsWith('/tasks/');
+
   return (
-    <PullToRefresh>
+    <PullToRefresh disabled={tasksOwnPullGesture}>
       <GlobalFormInteractions />
       <InstalledAppNavigationBoundary />
       <ScrollToTopOnPathnameChange />

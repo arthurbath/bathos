@@ -36,7 +36,7 @@ export function WardrobeShell({ userId, displayName, onSignOut }: WardrobeShellP
   const isConfigRoute = location.pathname.endsWith('/config');
   const navItems = [
     { path: '/items', label: 'Items', icon: Shirt },
-    ...(installed ? [{ path: '/config', label: 'Config', icon: Settings }] : []),
+    ...(installed ? [{ path: '/config', label: 'Settings', icon: Settings }] : []),
   ];
   const hasDesktopNavigation = navItems.length > 1;
 

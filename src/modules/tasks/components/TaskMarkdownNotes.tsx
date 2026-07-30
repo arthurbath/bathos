@@ -48,9 +48,10 @@ const taskNoteTokenPattern = /(\[[^\]\n]+\]\([A-Za-z][A-Za-z0-9]*:\/\/[^)\s]+\)|
 const blockedTaskNoteSchemes = new Set(['javascript', 'data', 'vbscript']);
 const noteLineClass = 'block min-h-6 whitespace-pre-wrap';
 const headingLineClass = `${noteLineClass} text-lg font-semibold leading-7`;
-const bulletLineClass = `${noteLineClass} pl-[2ch] [text-indent:-2ch]`;
+const sourceBulletLineClass = `${noteLineClass} pl-[2ch] [text-indent:-2ch]`;
+const semanticBulletLineClass = `${noteLineClass} pl-[0.75em] [text-indent:-0.75em]`;
 const indicatorClass = 'font-mono text-muted-foreground';
-const linkClass = 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const linkClass = 'break-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const bareLinkClass = `${linkClass} text-info`;
 const codeClass = 'rounded bg-foreground/[0.08] px-1 py-0.5 font-mono text-[0.92em] text-foreground';
 
@@ -360,7 +361,7 @@ export function TaskMarkdownPreview({ notes }: { notes: string }) {
         return (
           <span
             key={`${lineIndex}:${line}`}
-            className={taskNoteLineClass(parsed)}
+            className={taskNoteLineClass(parsed, 'semantic')}
           >
             {renderTaskNoteSourceLine(parsed, 'semantic')}
           </span>
@@ -370,9 +371,16 @@ export function TaskMarkdownPreview({ notes }: { notes: string }) {
   );
 }
 
-function taskNoteLineClass(line: TaskNoteSourceLine): string {
+function taskNoteLineClass(
+  line: TaskNoteSourceLine,
+  presentation: TaskNotePresentation,
+): string {
   if (line.headingIndicator !== null) return headingLineClass;
-  if (line.bulletIndicator !== null) return bulletLineClass;
+  if (line.bulletIndicator !== null) {
+    return presentation === 'source'
+      ? sourceBulletLineClass
+      : semanticBulletLineClass;
+  }
   return noteLineClass;
 }
 
@@ -572,7 +580,7 @@ function decorateTaskNotesEditor(
     line.dataset.taskNoteLine = '';
     const presentation = sourceLineIndexes.has(lineIndex) ? 'source' : 'semantic';
     line.dataset.taskNotePresentation = presentation;
-    line.className = taskNoteLineClass(parsed);
+    line.className = taskNoteLineClass(parsed, presentation);
     if (source === '') {
       line.append(document.createElement('br'));
     } else {

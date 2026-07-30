@@ -7,9 +7,17 @@ Installed BathOS modules SHALL retain their module-local mobile destinations ins
 - **WHEN** a module runs in native or standalone installed mode on a mobile viewport
 - **THEN** its local navigation floats above the bottom safe area inside the shared rounded outer pill without touching the viewport edges
 
-#### Scenario: Use an installed module on iOS
-- **WHEN** a module runs as a native app or standalone PWA on iPhone or iPad
-- **THEN** the floating navigation retains the complete home-indicator safe-area inset and uses a smaller additional bottom margin than ordinary mobile web so it sits closer to the home indicator without overlap
+#### Scenario: Use an installed module on a touch device
+- **WHEN** a module runs as a native app or standalone PWA on a touch-capable device
+- **THEN** the floating navigation retains the complete home-indicator safe-area inset without an additional bottom margin so it sits only a few pixels above the indicator without overlap
+
+#### Scenario: Use the same module in an ordinary browser
+- **WHEN** a module runs in a normal browser tab rather than native or standalone installed mode
+- **THEN** the floating navigation retains its established additional bottom margin
+
+#### Scenario: Hide desktop installed-app top chrome completely
+- **WHEN** a module runs in an installed desktop PWA where no top safe-area inset is needed
+- **THEN** BathOS renders no hidden-header spacer, border, shadow, outline, or one-pixel top seam
 
 #### Scenario: Open an overflow destination
 - **WHEN** a module has more direct destinations than the floating navigation presents

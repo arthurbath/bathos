@@ -21,3 +21,9 @@
 
 - [x] 4.1 Add focused service, hook, dialog, and TasksShell tests
 - [x] 4.2 Run database, application, TypeScript, lint, build, OpenSpec, and rendered-behavior verification
+
+## 5. Prototype Name and Date Guard
+
+- [x] 5.1 Edit the repeating prototype name in the existing Edit Repeat dialog.
+- [x] 5.2 Prevent a next occurrence before the owner-local planning date and advance stale source dates to the next valid cadence.
+- [x] 5.3 Add focused name/date regression coverage and rerun full validation.

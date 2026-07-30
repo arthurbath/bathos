@@ -129,15 +129,21 @@ describe('Calendar keyboard navigation', () => {
     }
   });
 
-  it('moves focus to an outside day without changing the visible month', async () => {
-    const { container, root } = mount(
-      <Calendar
-        mode="single"
-        month={new Date(2026, 3, 1)}
-        selected={new Date(2026, 3, 1)}
-        onSelect={() => {}}
-      />,
-    );
+  it('pages to the adjacent month when arrow navigation reaches a legal outside day', async () => {
+    function Harness() {
+      const [month, setMonth] = React.useState(new Date(2026, 3, 1));
+      return (
+        <Calendar
+          mode="single"
+          month={month}
+          selected={new Date(2026, 3, 1)}
+          onMonthChange={setMonth}
+          onSelect={() => {}}
+        />
+      );
+    }
+
+    const { container, root } = mount(<Harness />);
 
     try {
       const aprilFirst = getDayButton(container, '1');
@@ -148,9 +154,67 @@ describe('Calendar keyboard navigation', () => {
         aprilFirst?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
       });
       await flushUi();
-      const marchThirtyFirst = getDayButton(container, '31', { outside: true });
+      const marchThirtyFirst = getDayButton(container, '31');
       expect(document.activeElement).toBe(marchThirtyFirst);
+      expect(container.textContent).toContain('March 2026');
+
+      act(() => {
+        marchThirtyFirst?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          bubbles: true,
+        }));
+      });
+      await flushUi();
+
       expect(container.textContent).toContain('April 2026');
+      expect(document.activeElement).toBe(getDayButton(container, '1'));
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('pages vertically when week navigation reaches a legal adjacent-month date', async () => {
+    function Harness() {
+      const [month, setMonth] = React.useState(new Date(2026, 6, 1));
+      return (
+        <Calendar
+          mode="single"
+          month={month}
+          selected={new Date(2026, 6, 31)}
+          onMonthChange={setMonth}
+          onSelect={() => {}}
+        />
+      );
+    }
+
+    const { container, root } = mount(<Harness />);
+
+    try {
+      const julyThirtyFirst = getDayButton(container, '31');
+      act(() => {
+        julyThirtyFirst?.focus();
+        julyThirtyFirst?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+        }));
+      });
+      await flushUi();
+
+      expect(container.textContent).toContain('August 2026');
+      expect(document.activeElement).toBe(getDayButton(container, '7'));
+
+      act(() => {
+        (document.activeElement as HTMLButtonElement | null)?.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'ArrowUp',
+            bubbles: true,
+          }),
+        );
+      });
+      await flushUi();
+
+      expect(container.textContent).toContain('July 2026');
+      expect(document.activeElement).toBe(getDayButton(container, '31'));
     } finally {
       unmount(root, container);
     }

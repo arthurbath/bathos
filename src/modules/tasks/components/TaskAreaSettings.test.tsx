@@ -49,7 +49,7 @@ function cleanup(root: Root, container: HTMLElement) {
 }
 
 describe('TaskAreaSettings', () => {
-  it('adds and renames Areas from Config', async () => {
+  it('adds and renames Areas from Settings', async () => {
     const model = hierarchy();
     const { container, root } = renderSettings(model);
 

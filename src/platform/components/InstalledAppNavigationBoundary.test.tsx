@@ -12,7 +12,7 @@ function mount() {
     root.render(
       <>
         <InstalledAppNavigationBoundary />
-        <a href="/tasks/config">Tasks Config</a>
+        <a href="/tasks/config">Tasks Settings</a>
         <a href="/budget/summary">Budget</a>
         <a href="https://example.test/read">External</a>
       </>,

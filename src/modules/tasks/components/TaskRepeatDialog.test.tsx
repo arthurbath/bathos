@@ -212,6 +212,10 @@ describe('TaskRepeatDialog', () => {
       expect(document.body).toHaveTextContent('Edit Repeat');
       expect(document.body).toHaveTextContent('Next Occurrence');
       expect(document.body).not.toHaveTextContent('Next Start');
+      const repeatName = document.querySelector<HTMLInputElement>(
+        'input[aria-label="Repeat Name"]',
+      )!;
+      await act(async () => setInput(repeatName, 'Water All Plants'));
 
       await act(async () => {
         document.querySelector<HTMLButtonElement>(
@@ -223,6 +227,7 @@ describe('TaskRepeatDialog', () => {
       expect(edit).toHaveBeenCalledWith(expect.objectContaining({
         definition,
         revision,
+        name: 'Water All Plants',
         ruleMode: 'after_completion',
         frequency: 'monthly',
         intervalCount: 2,
@@ -303,9 +308,9 @@ describe('TaskRepeatDialog', () => {
       await selectBathosOption('Yearly Weekday', 'Sunday');
 
       const preview = document.querySelector('[aria-label="Next Three Occurrences"]')!;
-      expect(preview).toHaveTextContent('May 10, 2026');
       expect(preview).toHaveTextContent('May 9, 2027');
       expect(preview).toHaveTextContent('May 14, 2028');
+      expect(preview).toHaveTextContent('May 13, 2029');
 
       await act(async () => {
         document.querySelector<HTMLButtonElement>(
@@ -315,7 +320,7 @@ describe('TaskRepeatDialog', () => {
       });
 
       expect(createFromTask).toHaveBeenCalledWith(expect.objectContaining({
-        scheduleDate: '2026-05-10',
+        scheduleDate: '2027-05-09',
         frequency: 'yearly',
         ruleConfig: {
           yearly_kind: 'ordinal_weekday',

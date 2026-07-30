@@ -157,6 +157,34 @@ describe('ToplineHeader installed presentation', () => {
       unmount(root, container);
     }
   });
+
+  it('omits the safe-area spacer and top seam in a desktop standalone PWA', () => {
+    mockStandaloneMode(true);
+    Object.defineProperty(window.navigator, 'maxTouchPoints', {
+      configurable: true,
+      value: 0,
+    });
+    Object.defineProperty(window.navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    });
+
+    const { container, root } = mount(
+      <ToplineHeader title="Budget" userId="user-1" displayName="Art" onSignOut={vi.fn()} />,
+    );
+
+    try {
+      expect(container.querySelector('header')).toBeNull();
+      expect(container.querySelector('[data-installed-app-safe-area]')).toBeNull();
+      expect(container.childElementCount).toBe(0);
+    } finally {
+      unmount(root, container);
+    }
+  });
 });
 
 describe('ToplineHeader module title', () => {

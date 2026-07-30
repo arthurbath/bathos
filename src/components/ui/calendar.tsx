@@ -19,6 +19,7 @@ type SingleDayPickerProps = Extract<
 export type CalendarProps = SingleDayPickerProps & {
   allowTabExit?: boolean;
   initialFocusDate?: Date;
+  initialFocusRequestKey?: number;
   onDayGridExitDown?: () => boolean;
   onKeyDownCapture?: React.KeyboardEventHandler;
 };
@@ -60,6 +61,7 @@ function CalendarDay({ date, displayMonth }: DayProps) {
         {...dayRender.divProps}
         aria-current={dayRender.activeModifiers.today ? "date" : undefined}
         aria-label={currentDateLabel}
+        data-calendar-date={format(date, "yyyy-MM-dd")}
       >
         {dayContent}
       </div>
@@ -72,6 +74,7 @@ function CalendarDay({ date, displayMonth }: DayProps) {
       {...dayRender.buttonProps}
       aria-current={dayRender.activeModifiers.today ? "date" : undefined}
       aria-label={currentDateLabel}
+      data-calendar-date={format(date, "yyyy-MM-dd")}
     >
       {dayContent}
     </DayPickerButton>
@@ -140,6 +143,7 @@ function focusCalendarArrowTarget(
   activeElement: HTMLElement,
   key: string,
   onDayGridExitDown?: () => boolean,
+  onOutsideMonthDate?: (date: Date) => void,
 ): boolean {
   const previousMonthButton = root.querySelector<HTMLButtonElement>('button[name="previous-month"]');
   const nextMonthButton = root.querySelector<HTMLButtonElement>('button[name="next-month"]');
@@ -174,6 +178,17 @@ function focusCalendarArrowTarget(
     }
 
     if (!target) return false;
+    if (
+      target.getAttribute("name") === "day"
+      && target.className.includes("day-outside")
+      && canReceiveCalendarFocus(target)
+    ) {
+      const outsideDate = parseCalendarDateValue(target.dataset.calendarDate);
+      if (outsideDate) {
+        onOutsideMonthDate?.(outsideDate);
+        return true;
+      }
+    }
     target.focus();
     return true;
   }
@@ -432,6 +447,7 @@ function Calendar({
   showOutsideDays = true,
   allowTabExit = false,
   initialFocusDate,
+  initialFocusRequestKey,
   onDayGridExitDown,
   onKeyDownCapture,
   month,
@@ -483,7 +499,7 @@ function Calendar({
       findDayButton(rootRef.current, new Date(initialFocusTime))?.focus();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [initialFocusTime, viewMode]);
+  }, [initialFocusRequestKey, initialFocusTime, viewMode]);
 
   React.useEffect(() => {
     if (!pendingPreviousMonthFocusRef.current || viewMode !== "day") return;
@@ -541,7 +557,16 @@ function Calendar({
       const activeElement = event.target instanceof HTMLElement ? event.target : null;
       if (
         activeElement
-        && focusCalendarArrowTarget(root, activeElement, event.key, onDayGridExitDown)
+        && focusCalendarArrowTarget(
+          root,
+          activeElement,
+          event.key,
+          onDayGridExitDown,
+          (outsideDate) => {
+            commitMonthChange(outsideDate);
+            setPendingDayFocusDate(outsideDate);
+          },
+        )
       ) {
         event.preventDefault();
         event.stopPropagation();
@@ -701,4 +726,12 @@ function findDayButton(root: HTMLElement | null, date: Date): HTMLButtonElement 
     button.textContent?.trim() === String(date.getDate())
     && !button.className.includes("day-outside")
   )) ?? null;
+}
+
+function parseCalendarDateValue(value?: string): Date | null {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+  return Number.isNaN(parsed.valueOf()) ? null : parsed;
 }

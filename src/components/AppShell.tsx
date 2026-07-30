@@ -126,7 +126,7 @@ export function AppShell({
     { path: '/summary', icon: PieChart, label: 'Summary' },
     { path: '/expenses', icon: BanknoteArrowUp, label: 'Expenses' },
     { path: '/incomes', icon: HandCoins, label: 'Incomes' },
-    { path: '/config', icon: Settings, label: 'Config' },
+    { path: '/config', icon: Settings, label: 'Settings' },
   ] as const;
 
   const handleReassignCategory = async (oldId: string, newId: string | null) => {

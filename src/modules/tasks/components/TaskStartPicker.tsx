@@ -60,6 +60,7 @@ import type {
   TaskTodo,
 } from '@/modules/tasks/types/tasks';
 import {
+  TASK_START_PICKER_ADVANCE_EVENT,
   TASK_START_PICKER_OPEN_EVENT,
   type TaskStartPickerFocusTarget,
 } from './taskStartPickerEvents';
@@ -117,7 +118,11 @@ function TaskStartPickerPanel({
   const minimumDateValue = addTaskCalendarDays(planningDate, 1);
   const minimumDate = parseDatePickerFieldValue(minimumDateValue);
   const planningToday = parseDatePickerFieldValue(planningDate);
-  const visibleMonth = selectedDate ?? minimumDate ?? new Date();
+  const [calendarMonth, setCalendarMonth] = useState(
+    () => selectedDate ?? minimumDate ?? new Date(),
+  );
+  const [calendarFocusDate, setCalendarFocusDate] = useState<Date | undefined>();
+  const [calendarFocusRequestKey, setCalendarFocusRequestKey] = useState(0);
   const planned = task.destination === 'someday'
     || task.start_date !== null
     || task.today_section !== null;
@@ -161,6 +166,19 @@ function TaskStartPickerPanel({
     return true;
   }, []);
 
+  const focusCurrentStartChoice = useCallback(() => {
+    const selectedHorizon = panelRef.current?.querySelector<HTMLButtonElement>(
+      '[data-task-start-horizon][aria-pressed="true"]',
+    );
+    const selectedDay = panelRef.current?.querySelector<HTMLButtonElement>(
+      'button[name="day"][aria-selected="true"]',
+    );
+    const selectedSomeday = panelRef.current?.querySelector<HTMLButtonElement>(
+      '[data-task-start-someday][aria-pressed="true"]',
+    );
+    (selectedHorizon ?? selectedDay ?? selectedSomeday ?? firstHorizonRef.current)?.focus();
+  }, []);
+
   useEffect(() => {
     if (!active) return;
     const timer = window.setTimeout(() => {
@@ -169,23 +187,81 @@ function TaskStartPickerPanel({
         focusReminderInput();
         return;
       }
-      const selectedHorizon = panelRef.current?.querySelector<HTMLButtonElement>(
-        '[data-task-start-horizon][aria-pressed="true"]',
-      );
-      const selectedDay = panelRef.current?.querySelector<HTMLButtonElement>(
-        'button[name="day"][aria-selected="true"]',
-      );
-      const selectedSomeday = panelRef.current?.querySelector<HTMLButtonElement>(
-        '[data-task-start-someday][aria-pressed="true"]',
-      );
-      (selectedHorizon ?? selectedDay ?? selectedSomeday ?? firstHorizonRef.current)?.focus();
+      focusCurrentStartChoice();
     }, 0);
     initialFocusTimerRef.current = timer;
     return () => {
       window.clearTimeout(timer);
       if (initialFocusTimerRef.current === timer) initialFocusTimerRef.current = null;
     };
-  }, [active, focusReminderInput, focusTarget]);
+  }, [active, focusCurrentStartChoice, focusReminderInput, focusTarget]);
+
+  useEffect(() => {
+    if (!active) return;
+    setCalendarMonth(
+      parseDatePickerFieldValue(task.start_date ?? minimumDateValue) ?? new Date(),
+    );
+    setCalendarFocusDate(undefined);
+    setCalendarFocusRequestKey(0);
+  }, [active, minimumDateValue, task.start_date]);
+
+  const focusCalendarDate = useCallback((date: Date) => {
+    setCalendarMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+    setCalendarFocusDate(date);
+    setCalendarFocusRequestKey((requestKey) => requestKey + 1);
+  }, []);
+
+  const advanceStartFocus = useCallback(() => {
+    const panel = panelRef.current;
+    const activeElement = document.activeElement;
+    if (!panel || !(activeElement instanceof HTMLElement) || !panel.contains(activeElement)) {
+      focusCurrentStartChoice();
+      return;
+    }
+
+    const horizon = activeElement.closest<HTMLButtonElement>('[data-task-start-horizon]');
+    if (horizon) {
+      const horizons = Array.from(panel.querySelectorAll<HTMLButtonElement>(
+        '[data-task-start-horizon]:not(:disabled)',
+      ));
+      const index = horizons.indexOf(horizon);
+      if (index >= 0 && index < horizons.length - 1) {
+        horizons[index + 1]?.focus();
+        return;
+      }
+      if (minimumDate) focusCalendarDate(minimumDate);
+      return;
+    }
+
+    const day = activeElement.closest<HTMLButtonElement>(
+      'button[name="day"][data-calendar-date]',
+    );
+    const dateValue = day?.dataset.calendarDate;
+    const date = parseDatePickerFieldValue(dateValue);
+    if (date) {
+      const nextDate = parseDatePickerFieldValue(
+        addTaskCalendarDays(toDatePickerFieldValue(date), 1),
+      );
+      if (nextDate) focusCalendarDate(nextDate);
+      return;
+    }
+
+    if (activeElement.closest('[data-task-start-someday]')) {
+      firstHorizonRef.current?.focus();
+      return;
+    }
+
+    focusCurrentStartChoice();
+  }, [focusCalendarDate, focusCurrentStartChoice, minimumDate]);
+
+  useEffect(() => {
+    if (!active) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const handleAdvance = () => advanceStartFocus();
+    panel.addEventListener(TASK_START_PICKER_ADVANCE_EVENT, handleAdvance);
+    return () => panel.removeEventListener(TASK_START_PICKER_ADVANCE_EVENT, handleAdvance);
+  }, [active, advanceStartFocus]);
 
   useEffect(() => {
     if (reminderHourMenuDisabled) setReminderHourMenuOpen(false);
@@ -481,7 +557,10 @@ function TaskStartPickerPanel({
           selected={selectedDate}
           disabled={minimumDate ? { before: minimumDate } : undefined}
           fromDate={minimumDate}
-          defaultMonth={visibleMonth}
+          month={calendarMonth}
+          onMonthChange={setCalendarMonth}
+          initialFocusDate={calendarFocusDate}
+          initialFocusRequestKey={calendarFocusRequestKey}
           today={planningToday}
           onDayGridExitDown={() => {
             if (!focusReminderInput()) return focusFooterAction();
@@ -714,7 +793,7 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
               && 'text-muted-foreground',
           )}
         >
-          <ControlDecoration className={horizonPresentation?.colorClass}>
+          <ControlDecoration>
             <StartDecorationIcon />
           </ControlDecoration>
           <span className="ml-2 min-w-0 flex-1 truncate">{summary}</span>

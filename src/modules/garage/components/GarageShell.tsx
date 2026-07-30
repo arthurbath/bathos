@@ -41,7 +41,7 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
     { path: '/due', label: 'Due', icon: ListChecks },
     { path: '/services', label: 'Services', icon: ClipboardCheck },
     { path: '/servicings', label: 'Servicings', icon: CarFront },
-    { path: '/config', label: 'Config', icon: Settings },
+    { path: '/config', label: 'Settings', icon: Settings },
   ] as const;
 
   const {
@@ -271,13 +271,13 @@ export function GarageShell({ userId, displayName, onSignOut }: GarageShellProps
           <div className={isFullViewGridRoute ? 'mx-auto w-full max-w-5xl px-4' : ''}>
             <Card>
               <CardContent className="space-y-3 py-8 text-center">
-                <p className="text-sm text-muted-foreground">Create a vehicle in Config before tracking services.</p>
+                <p className="text-sm text-muted-foreground">Create a vehicle in Settings before tracking services.</p>
                 <Button asChild type="button">
                   <a
                     href={`${basePath}/config`}
                     onClick={(event) => handleClientSideLinkNavigation(event, navigate, `${basePath}/config`)}
                   >
-                    Go to Config
+                    Go to Settings
                   </a>
                 </Button>
               </CardContent>
