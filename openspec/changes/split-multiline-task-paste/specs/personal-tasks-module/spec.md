@@ -35,6 +35,10 @@ Tasks SHALL interpret normalized plain-text clipboard lines as ordered task or c
 - **WHEN** a user checks or reopens a persisted checklist item
 - **THEN** Tasks writes the completion state, completion timestamp, revision, and undo-operation metadata to the local PowerSync database and retains that state across rerender and application restart
 
+#### Scenario: Upload checklist completion operation metadata
+- **WHEN** PowerSync uploads a persisted checklist completion or reopening mutation
+- **THEN** Tasks accepts the mutation's undo-operation identifier as checklist metadata and applies the mutation remotely instead of rejecting and reverting it
+
 ### Requirement: Checklist Item Clipboard Transfer
 Tasks SHALL let users copy, cut, and paste selected checklist items between task checklists through a strict versioned clipboard payload while preserving item order, text, and completion state.
 

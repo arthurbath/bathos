@@ -30,4 +30,5 @@
 ## 7. Checklist Completion Regression
 
 - [x] 7.1 Cover checklist completion through the production repository and PowerSync schema, including database reopen persistence
-- [x] 7.2 Run focused checklist tests, Tasks TypeScript, lint, build, strict OpenSpec validation, and rendered checklist interaction QA
+- [x] 7.2 Accept checklist undo-operation identifiers through the PowerSync upload path and cover the parsed remote update
+- [x] 7.3 Run focused checklist tests, Tasks TypeScript, lint, build, strict OpenSpec validation, and rendered checklist interaction QA

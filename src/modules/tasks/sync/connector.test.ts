@@ -86,6 +86,7 @@ function checklistPatchEntry() {
   return new CrudEntry(5, UpdateType.PATCH, 'tasks_checklist_items', 'item-a', 5, {
     completed: 1,
     completed_at: '2026-07-20T05:00:00.000Z',
+    last_operation_id: 'operation-checklist',
     revision: 2,
     client_mutation_id: 'mutation-checklist',
     updated_at: '2026-07-20T05:00:00.000Z',
@@ -187,7 +188,11 @@ describe('task sync connector', () => {
     expect(remoteStore.updateChecklistItem).toHaveBeenCalledWith(
       'item-a',
       1,
-      expect.objectContaining({ completed: true, revision: 2 }),
+      expect.objectContaining({
+        completed: true,
+        last_operation_id: 'operation-checklist',
+        revision: 2,
+      }),
     );
   });
 

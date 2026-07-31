@@ -705,6 +705,7 @@ const hierarchyMutableColumns = {
 const hierarchyMetadataColumns = [
   'last_mutation_channel',
   'last_actor_type',
+  'last_operation_id',
   'revision',
   'client_mutation_id',
   'updated_at',
