@@ -86,6 +86,8 @@ export function DatePickerPanel({
   const minimumDate = parseDatePickerFieldValue(minDate);
   const calendarToday = parseDatePickerFieldValue(todayDate);
   const defaultFocusDate = selectedDate ?? minimumDate ?? calendarToday;
+  const selectedDateTime = selectedDate?.valueOf();
+  const minimumDateTime = minimumDate?.valueOf();
   const defaultFocusTime = defaultFocusDate?.valueOf();
   const [visibleMonth, setVisibleMonth] = React.useState<Date>(
     () => getVisibleMonth(value, todayDate),
@@ -115,23 +117,42 @@ export function DatePickerPanel({
     const handleAdvance = () => {
       const activeElement = document.activeElement;
       const focusedDateValue = activeElement instanceof HTMLElement
-        && panel.contains(activeElement)
         ? activeElement.closest<HTMLButtonElement>(
           'button[name="day"][data-calendar-date]',
         )?.dataset.calendarDate
         : undefined;
-      const currentDate = parseDatePickerFieldValue(focusedDateValue)
+      const advancingOverdueSelection = selectedDateTime !== undefined
+        && minimumDateTime !== undefined
+        && selectedDateTime < minimumDateTime
+        && focusedDateValue === value;
+      const currentDate = advancingOverdueSelection
+        ? new Date(selectedDateTime)
+        : parseDatePickerFieldValue(focusedDateValue)
+          ?? focusDate
         ?? (defaultFocusTime === undefined ? undefined : new Date(defaultFocusTime));
       if (!currentDate) return;
-      focusCalendarDate(new Date(
+      const nextDate = new Date(
         currentDate.getFullYear(),
         currentDate.getMonth(),
         currentDate.getDate() + 1,
-      ));
+      );
+      focusCalendarDate(nextDate);
+      const visibleTarget = panel.querySelector<HTMLButtonElement>(
+        `button[name="day"][data-calendar-date="${toDatePickerFieldValue(nextDate)}"]`,
+      );
+      if (visibleTarget && !visibleTarget.disabled) visibleTarget.focus();
     };
     panel.addEventListener(DATE_PICKER_ADVANCE_EVENT, handleAdvance);
     return () => panel.removeEventListener(DATE_PICKER_ADVANCE_EVENT, handleAdvance);
-  }, [active, defaultFocusTime, focusCalendarDate]);
+  }, [
+    active,
+    defaultFocusTime,
+    focusCalendarDate,
+    focusDate,
+    minimumDateTime,
+    selectedDateTime,
+    value,
+  ]);
 
   return (
     <div
@@ -251,7 +272,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
               {decoration}
             </ControlDecoration>
           ) : null}
-          <span className={cn('min-w-0 flex-1 truncate', decoration && 'ml-2')}>
+          <span className="min-w-0 flex-1 truncate">
             {selectedDate ? displayValue ?? format(selectedDate, displayFormat) : placeholder}
           </span>
           <CalendarIcon className="ml-auto h-4 w-4 shrink-0 text-foreground opacity-50" />

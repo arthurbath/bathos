@@ -267,6 +267,7 @@ const TASK_POST_CLOSE_SETTLE_DELAY_MS = 180;
 const TASK_PLACEMENT_ANIMATION_DURATION_MS = 240;
 const TASK_TERMINAL_SETTLE_DELAY_MS = 180;
 const TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS = 220;
+const TASK_COMPLETION_GRACE_DELAY_MS = 3_000;
 export const TASK_NATIVE_COMMAND_EVENT = 'bathos:tasks-native-command';
 const TASK_VIEW_TRANSITION_MINIMUM_MS = 120;
 const TASK_LIST_BOTTOM_CLEARANCE_CLASS = 'pb-[calc(env(safe-area-inset-bottom)+11rem)] md:pb-36';
@@ -658,6 +659,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     return () => window.clearTimeout(timeout);
   }, [fetching, loading, taskListTransition, taskListView]);
   const taskListRouteSettling = taskListTransition?.view === taskListView;
+  const cachelessTaskListLoading = loading
+    || (fetching && projectedTasks.length === 0);
   const recurrences = useTaskRecurrences(userId);
   useTaskNativeWidgetBridge({
     ownerId: userId,
@@ -3648,7 +3651,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 />
               )
               : <section aria-label={getTaskSectionLabel(taskListView)}>
-            {loading
+            {cachelessTaskListLoading
             || taskListRouteSettling
             || hierarchy.loading
             || (view === 'done' && deletedHierarchyRoots.loading) ? (
@@ -5632,6 +5635,7 @@ function TaskRow({
   const [repeatOpen, setRepeatOpen] = useState(false);
   const [terminalSettling, setTerminalSettling] = useState(false);
   const [terminalExiting, setTerminalExiting] = useState(false);
+  const [completionGraceActive, setCompletionGraceActive] = useState(false);
   const [touchSwipeOffset, setTouchSwipeOffset] = useState(0);
   const [touchSwipeActive, setTouchSwipeActive] = useState(false);
   const [editorMounted, setEditorMounted] = useState(selected);
@@ -5655,6 +5659,11 @@ function TaskRow({
     viewportWidth: number;
   } | null>(null);
   const pendingRef = useRef(false);
+  const completionGraceActiveRef = useRef(false);
+  const completionGraceTimerRef = useRef<number | null>(null);
+  const completionGraceReservationRef = useRef<TaskForwardMutationReservation | undefined>();
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
   const inBulkSelection = bulkSelection !== undefined;
   const areaLabel = showAreaMetadata ? getTaskAreaLabel(task, hierarchy) : null;
   const taskLabel = visibleTitle || 'New Task';
@@ -5854,11 +5863,15 @@ function TaskRow({
     animate = true,
     focusDelay = 0,
     restoreFocusAfterAction = true,
+    providedReservation?: TaskForwardMutationReservation,
+    reservationAlreadyCreated = false,
   ) => {
     if (pendingRef.current) return;
     const focus = restoreFocusAfterAction ? captureTaskFocus() : null;
     if (!restoreFocusAfterAction) onClearTaskFocus();
-    const reservation = reserveTerminalMutation();
+    const reservation = reservationAlreadyCreated
+      ? providedReservation
+      : reserveTerminalMutation();
     pendingRef.current = true;
     setPending(true);
     if (animate) {
@@ -5876,7 +5889,10 @@ function TaskRow({
       setTerminalSettling(false);
       setTerminalExiting(false);
       if (restoreFocusAfterAction) {
-        window.setTimeout(restoreCurrentTaskFocus, 0);
+        window.setTimeout(() => {
+          restoreCurrentTaskFocus();
+          articleRef.current?.focus();
+        }, 0);
       } else {
         onClearTaskFocus();
       }
@@ -5885,6 +5901,66 @@ function TaskRow({
       setPending(false);
     }
   };
+
+  const clearCompletionGraceTimer = useCallback(() => {
+    if (completionGraceTimerRef.current === null) return;
+    window.clearTimeout(completionGraceTimerRef.current);
+    completionGraceTimerRef.current = null;
+  }, []);
+
+  const cancelCompletionGrace = useCallback(() => {
+    clearCompletionGraceTimer();
+    completionGraceReservationRef.current?.cancel();
+    completionGraceReservationRef.current = undefined;
+    completionGraceActiveRef.current = false;
+    setCompletionGraceActive(false);
+  }, [clearCompletionGraceTimer]);
+
+  const commitCompletionGrace = () => {
+    if (!completionGraceActiveRef.current) return;
+    clearCompletionGraceTimer();
+    const reservation = completionGraceReservationRef.current;
+    completionGraceReservationRef.current = undefined;
+    completionGraceActiveRef.current = false;
+    setCompletionGraceActive(false);
+    void runTerminalAction(
+      onCompleteRef.current,
+      true,
+      0,
+      true,
+      reservation,
+      true,
+    );
+  };
+
+  const toggleCompletionGrace = () => {
+    if (completionGraceActiveRef.current) {
+      cancelCompletionGrace();
+      return;
+    }
+    completionGraceReservationRef.current = reserveTerminalMutation();
+    completionGraceActiveRef.current = true;
+    setCompletionGraceActive(true);
+    completionGraceTimerRef.current = window.setTimeout(
+      commitCompletionGrace,
+      TASK_COMPLETION_GRACE_DELAY_MS,
+    );
+  };
+
+  useEffect(() => {
+    if (!selected || !completionGraceActiveRef.current) return;
+    cancelCompletionGrace();
+    onToggleDeferredCompletion();
+  }, [cancelCompletionGrace, selected, onToggleDeferredCompletion]);
+
+  useEffect(() => () => {
+    if (!completionGraceActiveRef.current) return;
+    clearCompletionGraceTimer();
+    const reservation = completionGraceReservationRef.current;
+    completionGraceReservationRef.current = undefined;
+    completionGraceActiveRef.current = false;
+    void onCompleteRef.current(reservation).catch(() => reservation?.cancel());
+  }, [clearCompletionGraceTimer]);
 
   const reminderTime = reminder?.local_time.slice(0, 5) ?? '';
   const applyStartPlanning = async ({
@@ -6160,6 +6236,7 @@ function TaskRow({
       data-task-quick-entry-editor={quickEntry ? 'true' : undefined}
       data-terminal-settling={terminalSettling ? 'true' : undefined}
       data-terminal-exiting={terminalExiting ? 'true' : undefined}
+      data-completion-grace={completionGraceActive ? 'true' : undefined}
       data-draft-exiting={draftExiting ? 'true' : undefined}
     >
       {dragPlacement ? (
@@ -6237,7 +6314,7 @@ function TaskRow({
                 ? 'Mark Incomplete'
                 : terminalState === 'canceled'
                   ? 'Reopen Canceled'
-                : completionRequested
+                : completionRequested || completionGraceActive
                   ? 'Mark Incomplete'
                   : 'Complete'} ${taskLabel}`}
             aria-pressed={selected && !terminalState ? completionRequested : undefined}
@@ -6251,7 +6328,7 @@ function TaskRow({
                 onToggleDeferredCompletion();
                 return;
               }
-              void runTerminalAction(onComplete);
+              toggleCompletionGrace();
             }}
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
@@ -6259,7 +6336,10 @@ function TaskRow({
               <TASK_ICONS.Reopen className="h-5 w-5" aria-hidden="true" />
             ) : terminalState === 'canceled' ? (
               <TASK_ICONS.Canceled className="h-5 w-5" aria-hidden="true" />
-            ) : terminalState === 'completed' || completionRequested || terminalSettling ? (
+            ) : terminalState === 'completed'
+              || completionRequested
+              || completionGraceActive
+              || terminalSettling ? (
               <TASK_ICONS.CompletedTask className="h-6 w-6" aria-hidden="true" />
             ) : (
               task.destination === 'someday' ? (
@@ -6655,6 +6735,7 @@ function TaskRow({
                 onRequestClose={() => setTemporalPicker(null)}
                 onTabExit={() => setTemporalPicker(null)}
                 todayDate={planningDate}
+                minDate={planningDate}
                 clearable
                 clearLabel="Clear"
                 commandScope="task-deadline"
@@ -7182,6 +7263,7 @@ function TaskEditor({
             decorationClassName={deadlineUrgent ? 'text-destructive' : undefined}
             className={cn('text-sm', deadlineUrgent && 'text-destructive')}
             todayDate={planningDate}
+            minDate={planningDate}
             clearable
             clearLabel="Clear"
             panelCommandScope="task-deadline"

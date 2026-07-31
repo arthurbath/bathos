@@ -1850,6 +1850,22 @@ describe('TasksShell', () => {
     }
   });
 
+  it('shows loading instead of a false empty state during a cacheless fetch', () => {
+    mockTaskList.mockReturnValue({
+      ...defaultTaskList(),
+      tasks: [],
+      fetching: true,
+    });
+    const { container, root } = renderShell();
+
+    try {
+      expect(container.textContent).toContain('Loading Tasks');
+      expect(container.textContent).not.toContain('No Tasks');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('opens Quick Find from the visible list action and by typing', async () => {
     const mailTask = {
       ...task,
@@ -4043,6 +4059,7 @@ describe('TasksShell', () => {
   });
 
   it('applies task commands to one focused closed task and toggles it open and closed', async () => {
+    vi.useFakeTimers();
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell();
@@ -4061,12 +4078,13 @@ describe('TasksShell', () => {
         window.dispatchEvent(complete);
       });
       expect(container.querySelector('[data-task-row-id="task-a"]'))
-        .toHaveAttribute('data-terminal-settling', 'true');
+        .toHaveAttribute('data-completion-grace', 'true');
       expect(taskList.transitionTask).not.toHaveBeenCalled();
       await act(async () => {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 420));
+        await vi.advanceTimersByTimeAsync(3_400);
       });
       expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'complete');
+      vi.useRealTimers();
 
       taskList.transitionTask.mockClear();
       await act(async () => {
@@ -4087,6 +4105,7 @@ describe('TasksShell', () => {
       );
     } finally {
       cleanup(root, container);
+      vi.useRealTimers();
     }
   });
 
@@ -4129,16 +4148,18 @@ describe('TasksShell', () => {
         }));
       });
 
+      vi.useFakeTimers();
       await act(async () => {
         container.querySelector<HTMLButtonElement>(
           '[aria-label="Complete Existing task"]',
         )?.click();
+        await vi.advanceTimersByTimeAsync(3_400);
       });
-      await waitFor(() => {
-        expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'complete');
-      });
+      expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'complete');
+      vi.useRealTimers();
     } finally {
       cleanup(root, container);
+      vi.useRealTimers();
     }
   });
 
@@ -5656,10 +5677,14 @@ describe('TasksShell', () => {
       expect(quickEntry.container.querySelector('[data-task-primary-link-disclosure]')).toBeTruthy();
       expect(quickEntry.container.querySelector('[data-task-checklist-disclosure]')).toBeTruthy();
 
+      const startTrigger = quickEntry.container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Start"]',
+      );
+      expect(startTrigger).toHaveClass('gap-2');
+      expect(startTrigger?.children[1]).not.toHaveClass('ml-2');
+
       await act(async () => {
-        quickEntry.container.querySelector<HTMLButtonElement>(
-          'button[aria-label="Start"]',
-        )?.click();
+        startTrigger?.click();
       });
       expect(document.querySelector('[data-task-start-picker-placement="viewport-center"]'))
         .toBeTruthy();
@@ -5957,7 +5982,8 @@ describe('TasksShell', () => {
     }
   });
 
-  it('completes an open task from its accessible completion control', async () => {
+  it('keeps a closed task reversibly checked for three seconds before completing it', async () => {
+    vi.useFakeTimers();
     const taskList = defaultTaskList();
     mockTaskList.mockReturnValue(taskList);
     const { container, root } = renderShell();
@@ -5969,29 +5995,69 @@ describe('TasksShell', () => {
         complete?.click();
       });
 
+      expect(complete?.closest('article')).toHaveAttribute('data-completion-grace', 'true');
+      expect(complete).toHaveAttribute('aria-label', 'Mark Incomplete Existing task');
+      expect(complete?.closest('article')).not.toHaveAttribute('data-terminal-settling');
+      expect(taskList.transitionTask).not.toHaveBeenCalled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_999);
+      });
+      expect(taskList.transitionTask).not.toHaveBeenCalled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
       expect(complete?.closest('article')).toHaveAttribute('data-terminal-settling', 'true');
       expect(taskList.transitionTask).not.toHaveBeenCalled();
       await act(async () => {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 190));
+        await vi.advanceTimersByTimeAsync(180);
       });
       expect(complete?.closest('article')).toHaveAttribute('data-terminal-exiting', 'true');
       expect(taskList.transitionTask).not.toHaveBeenCalled();
       await act(async () => {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 230));
+        await vi.advanceTimersByTimeAsync(220);
       });
       expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'complete');
       await act(async () => {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+        await vi.advanceTimersByTimeAsync(1);
       });
       expect(document.activeElement).toBe(
         container.querySelector('[data-task-view-heading]'),
       );
     } finally {
+      vi.useRealTimers();
+      cleanup(root, container);
+    }
+  });
+
+  it('cancels a closed task completion when its checked control is clicked again', async () => {
+    vi.useFakeTimers();
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    try {
+      const complete = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Complete Existing task"]',
+      )!;
+      await act(async () => {
+        complete.click();
+      });
+      expect(complete.closest('article')).toHaveAttribute('data-completion-grace', 'true');
+      await act(async () => {
+        complete.click();
+        await vi.advanceTimersByTimeAsync(3_500);
+      });
+      expect(complete.closest('article')).not.toHaveAttribute('data-completion-grace');
+      expect(complete).toHaveAttribute('aria-label', 'Complete Existing task');
+      expect(taskList.transitionTask).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
       cleanup(root, container);
     }
   });
 
   it('anchors a terminal mutation before Safari Command-Z can arrive during exit motion', async () => {
+    vi.useFakeTimers();
     const originalPlatform = navigator.platform;
     Object.defineProperty(navigator, 'platform', {
       configurable: true,
@@ -6042,7 +6108,7 @@ describe('TasksShell', () => {
       expect(undo).toHaveBeenCalledOnce();
 
       await act(async () => {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 420));
+        await vi.advanceTimersByTimeAsync(3_400);
       });
       expect(taskList.transitionTask).toHaveBeenCalledWith(
         'task-a',
@@ -6050,6 +6116,7 @@ describe('TasksShell', () => {
         reservation,
       );
     } finally {
+      vi.useRealTimers();
       Object.defineProperty(navigator, 'platform', {
         configurable: true,
         value: originalPlatform,
@@ -6059,6 +6126,7 @@ describe('TasksShell', () => {
   });
 
   it('restores a failed animated completion and rejects a duplicate terminal action', async () => {
+    vi.useFakeTimers();
     const taskList = defaultTaskList();
     taskList.transitionTask.mockRejectedValue(new Error('write failed'));
     mockTaskList.mockReturnValue(taskList);
@@ -6071,20 +6139,27 @@ describe('TasksShell', () => {
       complete.focus();
       await act(async () => {
         complete.click();
-        complete.click();
+      });
+      expect(complete.closest('article')).toHaveAttribute('data-completion-grace', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000);
       });
       expect(complete.closest('article')).toHaveAttribute('data-terminal-settling', 'true');
       expect(complete.closest('article')).not.toHaveAttribute('data-terminal-exiting');
       expect(taskList.transitionTask).not.toHaveBeenCalled();
 
       await act(async () => {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 190));
+        await vi.advanceTimersByTimeAsync(180);
       });
       expect(complete.closest('article')).toHaveAttribute('data-terminal-exiting', 'true');
       expect(taskList.transitionTask).not.toHaveBeenCalled();
 
       await act(async () => {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 230));
+        await vi.advanceTimersByTimeAsync(220);
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await vi.runOnlyPendingTimersAsync();
       });
       expect(taskList.transitionTask).toHaveBeenCalledTimes(1);
       expect(complete.closest('article')).not.toHaveAttribute('data-terminal-exiting');
@@ -6094,11 +6169,13 @@ describe('TasksShell', () => {
       expect(container.querySelector('[data-task-row-id="task-a"]'))
         .toHaveAttribute('aria-current', 'true');
     } finally {
+      vi.useRealTimers();
       cleanup(root, container);
     }
   });
 
   it('skips the decorative completion delay when reduced motion is requested', async () => {
+    vi.useFakeTimers();
     const originalMatchMedia = window.matchMedia;
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === '(prefers-reduced-motion: reduce)',
@@ -6120,8 +6197,13 @@ describe('TasksShell', () => {
           'button[aria-label="Complete Existing task"]',
         )?.click();
       });
+      expect(taskList.transitionTask).not.toHaveBeenCalled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000);
+      });
       expect(taskList.transitionTask).toHaveBeenCalledWith('task-a', 'complete');
     } finally {
+      vi.useRealTimers();
       window.matchMedia = originalMatchMedia;
       cleanup(root, container);
     }
@@ -11543,6 +11625,60 @@ describe('TasksShell', () => {
       expect(document.querySelector(
         '[data-date-picker-command-scope="task-deadline"]',
       )).not.toBeNull();
+      expect(taskList.updateTask).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(navigator, 'platform', {
+        configurable: true,
+        value: originalPlatform,
+      });
+      cleanup(root, container);
+    }
+  });
+
+  it('advances an overdue yesterday deadline to today before tomorrow', async () => {
+    const originalPlatform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+    const deadlineTask = taskTodoFixture({
+      ...task,
+      deadline: '2026-07-19',
+    });
+    const taskList = { ...defaultTaskList(), tasks: [deadlineTask] };
+    mockTaskList.mockReturnValue(taskList);
+    const { container, root } = renderShell();
+
+    const invokeDeadlineCommand = async () => {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'd',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+    };
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await invokeDeadlineCommand();
+      expect(document.querySelector(
+        '[data-date-picker-command-scope="task-deadline"]',
+      )).not.toBeNull();
+
+      await invokeDeadlineCommand();
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute('data-calendar-date', '2026-07-20');
+      });
+
+      await invokeDeadlineCommand();
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute('data-calendar-date', '2026-07-21');
+      });
       expect(taskList.updateTask).not.toHaveBeenCalled();
     } finally {
       Object.defineProperty(navigator, 'platform', {

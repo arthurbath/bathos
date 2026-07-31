@@ -58,7 +58,7 @@ export function TaskSourceIndicator({
 
   if (!task.source_kind) return null;
 
-  const presentation = sourcePresentations[task.source_kind];
+  const presentation = sourcePresentations[task.source_kind] ?? sourcePresentations.other;
   const Icon = presentation.icon;
   const accessibleLabel = `${presentation.label} Source for ${task.title}`;
   const title = task.source_title?.trim()

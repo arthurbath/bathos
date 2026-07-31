@@ -801,7 +801,7 @@ export function TaskStartPickerField({
           <ControlDecoration className={horizonPresentation?.colorClass}>
             <StartDecorationIcon />
           </ControlDecoration>
-          <span className="ml-2 min-w-0 flex-1 truncate">{summary}</span>
+          <span className="min-w-0 flex-1 truncate">{summary}</span>
           {props.reminderTime ? (
             <TASK_ICONS.Reminder
               className="ml-auto h-4 w-4 shrink-0 text-info"

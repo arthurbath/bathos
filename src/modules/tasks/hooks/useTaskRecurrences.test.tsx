@@ -115,6 +115,29 @@ describe('useTaskRecurrences', () => {
     }]);
   });
 
+  it('skips a legacy recurrence revision that has not received its prototype snapshot yet', () => {
+    const definition = taskRecurrenceDefinitionFixture();
+    definitionRows = [definition];
+    revisionRows = [{
+      ...taskRecurrenceRevisionFixture({ recurrence_id: definition.id }),
+      prototype_snapshot: null,
+    } as unknown as TaskRecurrenceRevision];
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'local', planningTimeZone,
+      recurrenceService: { evaluate: vi.fn(), createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn() },
+    });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useTaskRecurrences('owner-a'));
+
+    expect(result.current.revisions).toEqual(new Map());
+    expect(consoleError).toHaveBeenCalledWith(
+      'Tasks skipped an invalid synchronized recurrence revision',
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
+  });
+
   it('keeps an after-completion prototype in waiting while its ordinary instance is open', () => {
     const definition = taskRecurrenceDefinitionFixture({ next_occurrence_date: null });
     definitionRows = [definition];

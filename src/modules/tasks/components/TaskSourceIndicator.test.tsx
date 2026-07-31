@@ -161,4 +161,19 @@ describe('TaskSourceIndicator', () => {
       cleanup(root, container);
     }
   });
+
+  it('falls back safely when persisted provenance predates the current source vocabulary', () => {
+    const { container, root } = renderIndicator(taskTodoFixture({
+      title: 'Imported task',
+      source_kind: 'legacy_import' as TaskTodo['source_kind'],
+      source_title: 'Earlier source',
+    }));
+
+    try {
+      expect(container.querySelector('[aria-label="Source Source for Imported task"]'))
+        .toBeTruthy();
+    } finally {
+      cleanup(root, container);
+    }
+  });
 });

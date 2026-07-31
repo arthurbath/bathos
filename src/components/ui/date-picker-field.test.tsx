@@ -49,7 +49,10 @@ describe('DatePickerField', () => {
       expect(decoration).toHaveAttribute('aria-hidden', 'true');
       expect(decoration).toHaveClass('pointer-events-none', 'shrink-0');
       expect(decoration?.querySelector('svg')).toHaveClass('lucide-flag');
-      expect(trigger?.querySelector('.min-w-0.flex-1.truncate')).toBeTruthy();
+      const content = trigger?.querySelector('.min-w-0.flex-1.truncate');
+      expect(trigger).toHaveClass('gap-2');
+      expect(content).toBeTruthy();
+      expect(content).not.toHaveClass('ml-2');
     } finally {
       unmount(root, container);
     }

@@ -92,7 +92,14 @@ export function useTaskRecurrences(ownerId: string) {
     [definitionsQuery.data],
   );
   const queriedRevisions = useMemo(
-    () => revisionsQuery.data.map((revision) => parseTaskRecurrenceRevision(revision)),
+    () => revisionsQuery.data.flatMap((revision) => {
+      try {
+        return [parseTaskRecurrenceRevision(revision)];
+      } catch (error) {
+        console.error('Tasks skipped an invalid synchronized recurrence revision', error);
+        return [];
+      }
+    }),
     [revisionsQuery.data],
   );
   const occurrences = useMemo(
