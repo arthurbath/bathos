@@ -84,39 +84,37 @@ export async function getTaskRecurrencesData(
   };
 }
 
-export async function saveTaskRecurrenceData(
+export async function createTaskRecurrenceData(
   input: {
-    recurrence_id?: string;
-    expected_record_revision?: number;
+    task_id: string;
     name: string;
-    template_id: string;
-    template_revision?: number;
     rule_mode: 'calendar' | 'after_completion';
     frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
     interval_count: number;
-    start_date: string;
-    planning_timezone: string;
-    missed_policy: 'skip' | 'latest' | 'all';
-    catch_up_limit: number;
-    target_area_id?: string;
+    schedule_date: string;
+    rule_config: Record<string, unknown>;
+    end_mode: 'never' | 'after' | 'on_date';
+    end_after_count?: number;
+    end_on_date?: string;
+    reminder_local_time?: string;
+    deadline_offset_days?: number;
     idempotency_key: string;
   },
   auth: AuthenticatedMcpContext,
 ) {
-  const { data, error } = await auth.supabase.rpc('tasks_save_recurrence', {
-    _recurrence_id: input.recurrence_id ?? null,
-    _expected_record_revision: input.expected_record_revision ?? null,
+  const { data, error } = await auth.supabase.rpc('tasks_create_recurrence_from_task', {
+    _task_id: input.task_id,
     _name: input.name,
-    _template_id: input.template_id,
-    _template_revision: input.template_revision ?? null,
     _rule_mode: input.rule_mode,
     _frequency: input.frequency,
     _interval_count: input.interval_count,
-    _start_date: input.start_date,
-    _planning_timezone: input.planning_timezone,
-    _missed_policy: input.missed_policy,
-    _catch_up_limit: input.catch_up_limit,
-    _target_area_id: input.target_area_id ?? null,
+    _schedule_date: input.schedule_date,
+    _rule_config: input.rule_config as Database['public']['Functions']['tasks_create_recurrence_from_task']['Args']['_rule_config'],
+    _end_mode: input.end_mode,
+    _end_after_count: input.end_mode === 'after' ? input.end_after_count ?? null : null,
+    _end_on_date: input.end_mode === 'on_date' ? input.end_on_date ?? null : null,
+    _reminder_local_time: input.reminder_local_time ?? null,
+    _deadline_offset_days: input.deadline_offset_days ?? null,
     _mutation_id: input.idempotency_key,
     _mutation_channel: 'mcp',
     _actor_type: 'automation',
@@ -176,29 +174,27 @@ export const getTaskRecurrences = defineTool({
   handler: (input, ctx) => toMcpResult(getTaskRecurrencesData(input, requireAuthenticated(ctx))),
 });
 
-export const saveTaskRecurrence = defineTool({
-  name: 'save_task_recurrence',
-  title: 'Save Task Recurrence',
-  description: 'Create or revise one recurrence definition from an immutable native task-template revision. Existing generated work never changes.',
+export const createTaskRecurrence = defineTool({
+  name: 'create_task_recurrence',
+  title: 'Create Task Recurrence',
+  description: 'Turn one existing open task into the first ordinary instance of a recurrence whose independent prototype remains in Upcoming.',
   inputSchema: {
-    recurrence_id: uuidSchema.optional().describe('Existing recurrence to revise. Omit to create.'),
-    expected_record_revision: z.number().int().positive().optional()
-      .describe('Required current record revision when revising an existing recurrence.'),
+    task_id: uuidSchema.describe('Existing open task to adopt as the first recurrence instance.'),
     name: z.string().min(1).max(500),
-    template_id: uuidSchema,
-    template_revision: z.number().int().positive().optional(),
     rule_mode: z.enum(['calendar', 'after_completion']),
     frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
     interval_count: z.number().int().min(1).max(1000).default(1),
-    start_date: calendarDateSchema,
-    planning_timezone: z.string().min(1).max(200),
-    missed_policy: z.enum(['skip', 'latest', 'all']).default('latest'),
-    catch_up_limit: z.number().int().min(1).max(100).default(50),
-    target_area_id: uuidSchema.optional(),
+    schedule_date: calendarDateSchema,
+    rule_config: z.record(z.string(), z.unknown()).default({}),
+    end_mode: z.enum(['never', 'after', 'on_date']).default('never'),
+    end_after_count: z.number().int().positive().optional(),
+    end_on_date: calendarDateSchema.optional(),
+    reminder_local_time: z.string().regex(/^\d{2}:\d{2}(?::\d{2})?$/).optional(),
+    deadline_offset_days: z.number().int().min(0).optional(),
     idempotency_key: uuidSchema.describe('Stable UUID for this exact save request.'),
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
-  handler: (input, ctx) => toMcpResult(saveTaskRecurrenceData(input, requireAuthenticated(ctx))),
+  handler: (input, ctx) => toMcpResult(createTaskRecurrenceData(input, requireAuthenticated(ctx))),
 });
 
 export const setTaskRecurrenceStatus = defineTool({

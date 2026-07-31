@@ -7,9 +7,11 @@ import {
   parseTaskRecurrenceRevision,
   type TaskRecurrenceCreateFromTaskInput,
   type TaskRecurrenceEditInput,
-  type TaskRecurrenceSaveInput,
 } from '@/modules/tasks/data/taskRecurrenceService';
-import { taskCalendarDateInTimeZone } from '@/modules/tasks/domain/taskDates';
+import {
+  addTaskCalendarDays,
+  taskCalendarDateInTimeZone,
+} from '@/modules/tasks/domain/taskDates';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type {
   TaskRecurrenceDefinition,
@@ -175,10 +177,15 @@ export function useTaskRecurrences(ownerId: string) {
   }, []);
 
   const runEvaluation = useCallback(async (recurrenceId: string) => {
-    const key = `${recurrenceId}:${planningDate}`;
+    const revision = revisions.get(recurrenceId);
+    const throughDate = revision?.rule_mode === 'calendar'
+      && revision.deadline_offset_days
+      ? addTaskCalendarDays(planningDate, revision.deadline_offset_days)
+      : planningDate;
+    const key = `${recurrenceId}:${throughDate}`;
     evaluationRequests.current.add(key);
     try {
-      const result = await recurrenceService.evaluate(recurrenceId, planningDate);
+      const result = await recurrenceService.evaluate(recurrenceId, throughDate);
       setOptimisticDefinitions((current) => ({
         ...current,
         [recurrenceId]: result.definition,
@@ -189,7 +196,13 @@ export function useTaskRecurrences(ownerId: string) {
       recordEvaluationFailure(recurrenceId);
       throw error;
     }
-  }, [clearEvaluationFailure, planningDate, recordEvaluationFailure, recurrenceService]);
+  }, [
+    clearEvaluationFailure,
+    planningDate,
+    recordEvaluationFailure,
+    recurrenceService,
+    revisions,
+  ]);
 
   const evaluate = useCallback(async (definition: TaskRecurrenceDefinition) => {
     if (mode !== 'connected') throw new Error('Recurrence evaluation requires connected task storage');
@@ -199,45 +212,33 @@ export function useTaskRecurrences(ownerId: string) {
   useEffect(() => {
     if (mode !== 'connected') return;
     for (const definition of definitions) {
-      const key = `${definition.id}:${planningDate}`;
+      const revision = revisions.get(definition.id);
+      const throughDate = revision?.rule_mode === 'calendar'
+        && revision.deadline_offset_days
+        ? addTaskCalendarDays(planningDate, revision.deadline_offset_days)
+        : planningDate;
+      const key = `${definition.id}:${throughDate}`;
       if (
         definition.status !== 'active'
-        || definition.evaluated_through_date >= planningDate
+        || (
+          definition.evaluated_through_date >= throughDate
+          && (
+            definition.next_occurrence_date === null
+            || definition.next_occurrence_date > throughDate
+          )
+        )
         || evaluationRequests.current.has(key)
       ) continue;
       evaluationRequests.current.add(key);
       void runEvaluation(definition.id).catch(() => undefined);
     }
-  }, [definitions, mode, planningDate, runEvaluation]);
-
-  const save = useCallback(async (input: Omit<
-    TaskRecurrenceSaveInput,
-    'planningTimeZone'
-  >) => {
-    if (mode !== 'connected') throw new Error('Recurrence changes require connected task storage');
-    const result = await recurrenceService.save({ ...input, planningTimeZone });
-    if (result.outcome === 'conflict') {
-      throw new Error('The recurrence changed before it could be saved');
-    }
-    setOptimisticDefinitions((current) => ({
-      ...current,
-      [result.definition.id]: result.definition,
-    }));
-    if (result.revision) {
-      setOptimisticRevisions((current) => ({
-        ...current,
-        [result.definition.id]: result.revision!,
-      }));
-    }
-    clearEvaluationFailure(result.definition.id);
-    if (
-      result.definition.status === 'active'
-      && input.startDate <= planningDate
-    ) {
-      await runEvaluation(result.definition.id).catch(() => undefined);
-    }
-    return result;
-  }, [clearEvaluationFailure, mode, planningDate, planningTimeZone, recurrenceService, runEvaluation]);
+  }, [
+    definitions,
+    mode,
+    planningDate,
+    revisions,
+    runEvaluation,
+  ]);
 
   const createFromTask = useCallback(async (
     input: TaskRecurrenceCreateFromTaskInput,
@@ -257,8 +258,17 @@ export function useTaskRecurrences(ownerId: string) {
       }));
     }
     clearEvaluationFailure(result.definition.id);
+    if (input.ruleMode === 'calendar' && input.scheduleDate <= planningDate) {
+      await runEvaluation(result.definition.id).catch(() => undefined);
+    }
     return result;
-  }, [clearEvaluationFailure, mode, recurrenceService]);
+  }, [
+    clearEvaluationFailure,
+    mode,
+    planningDate,
+    recurrenceService,
+    runEvaluation,
+  ]);
 
   const edit = useCallback(async (input: TaskRecurrenceEditInput) => {
     if (mode !== 'connected') {
@@ -279,8 +289,11 @@ export function useTaskRecurrences(ownerId: string) {
       }));
     }
     clearEvaluationFailure(result.definition.id);
+    if (input.ruleMode === 'calendar' && result.definition.status === 'active') {
+      await runEvaluation(result.definition.id).catch(() => undefined);
+    }
     return result;
-  }, [clearEvaluationFailure, mode, recurrenceService]);
+  }, [clearEvaluationFailure, mode, recurrenceService, runEvaluation]);
 
   const setStatus = useCallback(async (
     definition: TaskRecurrenceDefinition,
@@ -308,6 +321,24 @@ export function useTaskRecurrences(ownerId: string) {
     occurrences,
     openOccurrenceDefinitionIds,
     openOccurrenceByDefinitionId,
+    calendarPrototypes: definitions.flatMap((definition) => {
+      const revision = revisions.get(definition.id);
+      return definition.status === 'active'
+        && revision?.rule_mode === 'calendar'
+        && definition.next_occurrence_date !== null
+        && definition.next_occurrence_date > planningDate
+        ? [{
+            definition,
+            revision,
+            scheduledDate: revision.deadline_offset_days
+              ? addTaskCalendarDays(
+                  definition.next_occurrence_date,
+                  -revision.deadline_offset_days,
+                )
+              : definition.next_occurrence_date,
+          }]
+        : [];
+    }),
     evaluationFailures,
     planningDate,
     mode,
@@ -319,7 +350,6 @@ export function useTaskRecurrences(ownerId: string) {
       ?? revisionsQuery.error
       ?? occurrencesQuery.error
       ?? openOccurrencesQuery.error,
-    save,
     createFromTask,
     edit,
     setStatus,

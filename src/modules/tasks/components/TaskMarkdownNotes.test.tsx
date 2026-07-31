@@ -436,7 +436,7 @@ describe('TaskMarkdownNotes', () => {
     expect(links[0]).toHaveClass('break-all');
     expect(links[0]).toHaveClass('cursor-pointer');
     expect(links[0]).toHaveClass('text-info');
-    expect(links[0].className).not.toContain('hover:underline');
+    expect(links[0].className).not.toContain('hover:');
 
     fireEvent.click(links[0]);
     expect(open).toHaveBeenCalledWith(
@@ -497,6 +497,17 @@ describe('TaskMarkdownNotes', () => {
       .toHaveClass('text-info');
     fireEvent.click(activeLink);
     expect(open).toHaveBeenCalledTimes(1);
+    const activeDestination = container.querySelector<HTMLElement>(
+      '[data-task-markdown-link-destination]',
+    )!;
+    fireEvent.mouseDown(activeDestination);
+    fireEvent.click(activeDestination);
+    expect(open).toHaveBeenLastCalledWith(
+      'https://example.test/survey',
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(open).toHaveBeenCalledTimes(2);
     open.mockRestore();
   });
 

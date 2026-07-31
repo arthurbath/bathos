@@ -28,7 +28,6 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 | Anytime | `ListTodo` | The Anytime view |
 | Someday | `SquareDashed` | The Someday planning state and view |
 | Done | `ListChecks` | The Done view |
-| Templates | `LayoutTemplate` | Task templates |
 | Config | `Settings` | Tasks configuration |
 | Inbox | `Inbox` | Today's Inbox horizon |
 | Now | `Clock2` | Today's Now horizon |
@@ -76,7 +75,6 @@ Source icons describe provenance. A File source is distinct from a task Attachme
 | FileSource | `File` | Captured file source |
 | SelectedTextSource | `TextQuote` | Captured selected text |
 | ReadingItemSource | `BookOpen` | Captured reading item |
-| TemplateSource | `LayoutTemplate` | Content created from a template |
 | OtherSource | `Link2` | Another structured source |
 
 ## Recurrence, Portability, and Synchronization
@@ -87,7 +85,7 @@ Source icons describe provenance. A File source is distinct from a task Attachme
 | PauseRecurrence | `Pause` | Pause recurrence |
 | ResumeRecurrence | `Play` | Resume recurrence |
 | RegenerateRecurrence | `RefreshCw` | Regenerate recurrence |
-| Archive | `Archive` | Archive a template or recurrence definition |
+| Archive | `Archive` | Archive a recurrence definition |
 | DataPortability | `DatabaseBackup` | Backup and restore task data |
 | Export | `Download` | Export task data |
 | Import | `Upload` | Import task data |

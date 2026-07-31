@@ -19,7 +19,6 @@ export const taskSourceKinds = [
   'file',
   'selected_text',
   'reading_item',
-  'template',
   'other',
 ] as const;
 export const taskMailSourceLifecycles = [
@@ -33,7 +32,6 @@ export const taskMailSourceTransitions = [
   'retirement_failed',
   'retired',
 ] as const;
-export const taskTemplateKinds = ['todo'] as const;
 export const taskRecurrenceStatuses = ['active', 'paused', 'archived'] as const;
 export const taskRecurrenceRuleModes = ['calendar', 'after_completion'] as const;
 export const taskRecurrenceFrequencies = ['daily', 'weekly', 'monthly', 'yearly'] as const;
@@ -99,7 +97,6 @@ export type TaskEntryChannel = (typeof taskEntryChannels)[number];
 export type TaskSourceKind = (typeof taskSourceKinds)[number];
 export type TaskMailSourceLifecycle = (typeof taskMailSourceLifecycles)[number];
 export type TaskMailSourceTransition = (typeof taskMailSourceTransitions)[number];
-export type TaskTemplateKind = (typeof taskTemplateKinds)[number];
 export type TaskRecurrenceStatus = (typeof taskRecurrenceStatuses)[number];
 export type TaskRecurrenceRuleMode = (typeof taskRecurrenceRuleModes)[number];
 export type TaskRecurrenceFrequency = (typeof taskRecurrenceFrequencies)[number];
@@ -131,9 +128,6 @@ type TaskMailSourceRow = Tables<'tasks_mail_sources'>;
 type TaskMailSourceEventRow = Tables<'tasks_mail_source_events'>;
 type TaskHierarchyOperationRow = Tables<'tasks_hierarchy_operations'>;
 type TaskHierarchyHistoryRow = Tables<'tasks_hierarchy_history_events'>;
-type TaskTemplateRow = Tables<'tasks_templates'>;
-type TaskTemplateRevisionRow = Tables<'tasks_template_revisions'>;
-type TaskTemplateInstantiationRow = Tables<'tasks_template_instantiations'>;
 type TaskRecurrenceDefinitionRow = Tables<'tasks_recurrence_definitions'>;
 type TaskRecurrenceRevisionRow = Tables<'tasks_recurrence_revisions'>;
 type TaskRecurrenceOccurrenceRow = Tables<'tasks_recurrence_occurrences'>;
@@ -217,16 +211,18 @@ export type TaskHierarchyHistoryEvent = Omit<
   transition: Exclude<TaskMutationTransition, 'undo' | 'redo'>;
 };
 
-export type TaskTemplateChecklistNode = {
+export type TaskRecurrencePrototypeChecklistItem = {
   node_id: string;
   title: string;
+  completed: boolean;
   order_key: string;
 };
 
-export type TaskTemplateTodoNode = {
+export type TaskRecurrencePrototypeTodo = {
   node_id: string;
   title: string;
   notes: string;
+  primary_link: string | null;
   actionability: TaskActionability;
   destination: TaskDestination;
   today_section: TaskTodaySection | null;
@@ -234,41 +230,13 @@ export type TaskTemplateTodoNode = {
   hierarchy_order_key?: string;
   start_offset_days: number | null;
   deadline_offset_days: number | null;
-  checklist: TaskTemplateChecklistNode[];
+  checklist: TaskRecurrencePrototypeChecklistItem[];
 };
 
-export type TaskTodoTemplateSnapshot = {
-  version: 1;
+export type TaskRecurrencePrototypeSnapshot = {
+  version: 2;
   kind: 'todo';
-  root: TaskTemplateTodoNode;
-};
-
-export type TaskTemplateSnapshot = TaskTodoTemplateSnapshot;
-
-type RefinedTemplateFields = {
-  kind: TaskTemplateKind;
-  last_mutation_channel: TaskEntryChannel;
-  last_actor_type: TaskActorType;
-};
-
-export type TaskTemplate = Omit<TaskTemplateRow, keyof RefinedTemplateFields>
-  & RefinedTemplateFields;
-
-export type TaskTemplateRevision = Omit<
-  TaskTemplateRevisionRow,
-  'source_type' | 'snapshot'
-> & {
-  source_type: TaskTemplateKind;
-  snapshot: TaskTemplateSnapshot;
-};
-
-export type TaskTemplateInstantiation = Omit<
-  TaskTemplateInstantiationRow,
-  'entry_channel' | 'actor_type' | 'root_type'
-> & {
-  entry_channel: TaskEntryChannel;
-  actor_type: TaskActorType;
-  root_type: TaskTemplateKind;
+  root: TaskRecurrencePrototypeTodo;
 };
 
 export type TaskRecurrenceDefinition = Omit<
@@ -282,20 +250,21 @@ export type TaskRecurrenceDefinition = Omit<
 
 export type TaskRecurrenceRevision = Omit<
   TaskRecurrenceRevisionRow,
-  'rule_mode' | 'frequency' | 'missed_policy' | 'end_mode'
+  'rule_mode' | 'frequency' | 'missed_policy' | 'end_mode' | 'prototype_snapshot'
 > & {
   rule_mode: TaskRecurrenceRuleMode;
   frequency: TaskRecurrenceFrequency;
   missed_policy: TaskRecurrenceMissedPolicy;
   end_mode: TaskRecurrenceEndMode;
   rule_config: TaskRecurrenceRuleConfig;
+  prototype_snapshot: TaskRecurrencePrototypeSnapshot;
 };
 
 export type TaskRecurrenceOccurrence = Omit<
   TaskRecurrenceOccurrenceRow,
   'root_type' | 'origin'
 > & {
-  root_type: TaskTemplateKind;
+  root_type: 'todo';
   origin: TaskRecurrenceOccurrenceOrigin;
 };
 
@@ -326,7 +295,7 @@ export type TaskReminder = Omit<
   | 'last_mutation_channel'
   | 'last_actor_type'
 > & {
-  root_type: TaskTemplateKind;
+  root_type: 'todo';
   status: TaskReminderStatus;
   ambiguity_choice: TaskReminderAmbiguityChoice;
   resolution_kind: TaskReminderResolutionKind;

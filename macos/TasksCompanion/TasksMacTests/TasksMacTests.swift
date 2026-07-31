@@ -1,10 +1,20 @@
 import AppKit
+import Carbon
 import WebKit
 import XCTest
 @testable import TasksMac
 
 @MainActor
 final class TasksMacTests: XCTestCase {
+    func testWebViewAcceptsTheFirstMouseEventFromAnInactiveWindow() {
+        let webView = TasksFirstMouseWebView(
+            frame: .zero,
+            configuration: WKWebViewConfiguration()
+        )
+
+        XCTAssertTrue(webView.acceptsFirstMouse(for: nil))
+    }
+
     func testMacWidgetUsesCompactTenRowDensity() {
         XCTAssertEqual(
             TaskWidgetPresentationPolicy.largeWidgetTaskRowMinimumHeight,
@@ -37,6 +47,25 @@ final class TasksMacTests: XCTestCase {
         )
         XCTAssertEqual(TaskCompanionConstants.appGroupIdentifier, "group.garden.bath.tasks")
         XCTAssertEqual(TaskCompanionConstants.widgetKind, "garden.bath.tasks.list-widget")
+    }
+
+    func testMacHostEmbedsTheUnifiedTasksWidgetExtension() throws {
+        let widgetURL = try XCTUnwrap(
+            Bundle.main.builtInPlugInsURL?
+                .appendingPathComponent("TasksMacWidgets.appex")
+        )
+        let widgetBundle = try XCTUnwrap(Bundle(url: widgetURL))
+        let extensionAttributes = try XCTUnwrap(
+            widgetBundle.object(forInfoDictionaryKey: "NSExtension")
+                as? [String: Any]
+        )
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: widgetURL.path))
+        XCTAssertEqual(widgetBundle.bundleIdentifier, "garden.bath.tasks.widgets")
+        XCTAssertEqual(
+            extensionAttributes["NSExtensionPointIdentifier"] as? String,
+            "com.apple.widgetkit-extension"
+        )
     }
 
     func testMacHostUsesTheCompiledModernAppIcon() {
@@ -115,6 +144,112 @@ final class TasksMacTests: XCTestCase {
         ))
     }
 
+    func testGlobalQuickEntryShortcutRoundTripsThroughNativeStorage() throws {
+        let suiteName = "TasksMacTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let shortcut = TaskQuickEntryShortcutPayload(
+            code: "Space",
+            command: false,
+            control: true,
+            option: true,
+            shift: false
+        )
+
+        TasksGlobalShortcutStore.save(shortcut, defaults: defaults)
+
+        XCTAssertEqual(
+            TasksGlobalShortcutStore.load(defaults: defaults),
+            shortcut
+        )
+        XCTAssertEqual(TasksGlobalShortcutStore.display(shortcut), "⌃⌥Space")
+        XCTAssertEqual(TasksGlobalShortcutKeyMap.keyCode(for: "Space"), 49)
+        XCTAssertNil(TasksGlobalShortcutKeyMap.keyCode(for: "Unsupported"))
+    }
+
+    func testFailedGlobalShortcutReplacementRetainsTheWorkingRegistration() throws {
+        let suiteName = "TasksMacTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        var registrations = 0
+        var unregistered: [EventHotKeyRef] = []
+        let registrar = TasksGlobalShortcutRegistrar(
+            defaults: defaults,
+            installEventHandler: false,
+            registerHotKey: { _, _, _, candidate in
+                registrations += 1
+                if registrations == 1 {
+                    candidate.pointee = OpaquePointer(bitPattern: 1)
+                    return noErr
+                }
+                candidate.pointee = nil
+                return OSStatus(eventHotKeyExistsErr)
+            },
+            unregisterHotKey: {
+                unregistered.append($0)
+                return noErr
+            }
+        )
+        let working = TaskQuickEntryShortcutPayload(
+            code: "Space",
+            command: false,
+            control: true,
+            option: true,
+            shift: false
+        )
+        let reserved = TaskQuickEntryShortcutPayload(
+            code: "KeyJ",
+            command: true,
+            control: false,
+            option: false,
+            shift: true
+        )
+
+        XCTAssertEqual(
+            registrar.configure(working),
+            TaskQuickEntryShortcutResponse(
+                success: true,
+                display: "⌃⌥Space",
+                message: nil
+            )
+        )
+        XCTAssertEqual(
+            registrar.configure(reserved),
+            TaskQuickEntryShortcutResponse(
+                success: false,
+                display: "⌃⌥Space",
+                message: "That shortcut is reserved or already used by another application"
+            )
+        )
+        XCTAssertEqual(TasksGlobalShortcutStore.load(defaults: defaults), working)
+        XCTAssertTrue(unregistered.isEmpty)
+    }
+
+    func testGlobalQuickEntryPanelUsesTheAuthoritativeWebEditorOnAllSpaces() {
+        let policy = TasksMacQuickEntryPanelPolicy.self
+
+        XCTAssertEqual(policy.contentSize, NSSize(width: 640, height: 760))
+        XCTAssertEqual(policy.webURL.host, "os.bath.garden")
+        XCTAssertEqual(policy.webURL.path, "/tasks/today")
+        XCTAssertEqual(
+            URLComponents(
+                url: policy.webURL,
+                resolvingAgainstBaseURL: false
+            )?.queryItems,
+            [
+                URLQueryItem(name: "native_new_task", value: "1"),
+                URLQueryItem(name: "native_quick_entry", value: "1"),
+            ]
+        )
+        XCTAssertTrue(policy.collectionBehavior.contains(.canJoinAllSpaces))
+        XCTAssertTrue(policy.collectionBehavior.contains(.fullScreenAuxiliary))
+        XCTAssertTrue(policy.collectionBehavior.contains(.transient))
+    }
+
     func testEscapeIsConsumedOnlyForTheKeyTasksWindow() {
         XCTAssertTrue(TasksMacKeyboardController.shouldConsumeEscape(
             keyCode: 53,
@@ -188,6 +323,13 @@ final class TasksMacTests: XCTestCase {
         XCTAssertEqual(
             TaskWidgetListID.widgetConfigurationCases,
             [.today, .upcoming, .anytime, .someday]
+        )
+    }
+
+    func testLockScreenRowsReserveWidthForTheSummary() {
+        XCTAssertEqual(
+            TaskWidgetPresentationPolicy.lockScreenLeadingSystemImageName,
+            "square"
         )
     }
 

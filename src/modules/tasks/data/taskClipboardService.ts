@@ -1,23 +1,15 @@
 import type { AbstractPowerSyncDatabase } from '@powersync/web';
 
 import type { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
-import type { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import type { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import type { TaskRepository } from '@/modules/tasks/data/taskRepository';
 import {
   planTaskClipboardPaste,
   type TaskClipboardDestination,
-  type TaskClipboardRecurrence,
   type TaskClipboardSnapshot,
 } from '@/modules/tasks/domain/taskClipboard';
 import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
-import type {
-  TaskChecklistItem,
-  TaskRecurrenceDefinition,
-  TaskRecurrenceRevision,
-  TaskReminder,
-  TaskTodo,
-} from '@/modules/tasks/types/tasks';
+import type { TaskChecklistItem, TaskReminder, TaskTodo } from '@/modules/tasks/types/tasks';
 
 type ClipboardDatabase = Pick<AbstractPowerSyncDatabase, 'getAll' | 'getOptional'>;
 
@@ -35,7 +27,6 @@ export class TaskClipboardService {
     private readonly repository: TaskRepository,
     private readonly hierarchyRepository: TaskHierarchyRepository,
     private readonly reminderService: TaskReminderService,
-    private readonly recurrenceService: TaskRecurrenceService,
     private readonly ownerId: string,
   ) {}
 
@@ -74,11 +65,6 @@ export class TaskClipboardService {
         reminder.task_id ? [[reminder.task_id, reminder] as const] : []
       )),
     );
-    const recurrenceByTask = new Map<string, TaskClipboardRecurrence | null>();
-    await Promise.all(orderedTasks.map(async (task) => {
-      recurrenceByTask.set(task.id, await this.loadRecurrence(task));
-    }));
-
     return orderedTasks.map((task) => {
       const reminder = reminderByTask.get(task.id) ?? null;
       return {
@@ -101,7 +87,6 @@ export class TaskClipboardService {
           timeZone: reminder.time_zone,
           ambiguityChoice: reminder.ambiguity_choice,
         },
-        recurrence: recurrenceByTask.get(task.id) ?? null,
       };
     });
   }
@@ -127,9 +112,9 @@ export class TaskClipboardService {
     });
     if (
       !options.connected
-      && plans.some(({ reminder, recurrence }) => reminder !== null || recurrence !== null)
+      && plans.some(({ reminder }) => reminder !== null)
     ) {
-      throw new Error('Reminder and recurrence copies require connected task storage');
+      throw new Error('Reminder copies require connected task storage');
     }
 
     let nextPlanningKey: string | null = null;
@@ -212,67 +197,6 @@ export class TaskClipboardService {
       });
       if (result.outcome === 'conflict') throw new Error('Reminder copy conflicted');
     }
-    if (snapshot.recurrence !== null) {
-      const recurrence = snapshot.recurrence;
-      const result = await this.recurrenceService.save({
-        name: recurrence.name,
-        templateId: recurrence.templateId,
-        templateRevision: recurrence.templateRevision,
-        ruleMode: recurrence.ruleMode,
-        frequency: recurrence.frequency,
-        intervalCount: recurrence.intervalCount,
-        startDate: recurrence.startDate,
-        planningTimeZone: recurrence.planningTimeZone,
-        missedPolicy: recurrence.missedPolicy,
-        catchUpLimit: recurrence.catchUpLimit,
-        targetAreaId: recurrence.targetAreaId,
-      });
-      if (result.outcome === 'conflict') throw new Error('Recurrence copy conflicted');
-      if (recurrence.status !== 'active') {
-        const statusResult = await this.recurrenceService.setStatus(
-          result.definition,
-          recurrence.status,
-        );
-        if (statusResult.outcome === 'conflict') {
-          throw new Error('Recurrence status copy conflicted');
-        }
-      }
-    }
-  }
-
-  private async loadRecurrence(task: TaskTodo): Promise<TaskClipboardRecurrence | null> {
-    if (task.recurrence_definition_id === null || task.recurrence_revision === null) {
-      return null;
-    }
-    const [definition, revision] = await Promise.all([
-      this.database.getOptional<TaskRecurrenceDefinition>(
-        `SELECT * FROM tasks_recurrence_definitions
-         WHERE owner_id = ? AND id = ?`,
-        [this.ownerId, task.recurrence_definition_id],
-      ),
-      this.database.getOptional<TaskRecurrenceRevision>(
-        `SELECT * FROM tasks_recurrence_revisions
-         WHERE owner_id = ? AND recurrence_id = ? AND revision = ?`,
-        [this.ownerId, task.recurrence_definition_id, task.recurrence_revision],
-      ),
-    ]);
-    if (!definition || !revision) {
-      throw new Error('The task recurrence is not fully projected');
-    }
-    return {
-      name: definition.name,
-      status: definition.status,
-      templateId: revision.template_id,
-      templateRevision: revision.template_revision,
-      ruleMode: revision.rule_mode,
-      frequency: revision.frequency,
-      intervalCount: revision.interval_count,
-      startDate: revision.start_date,
-      planningTimeZone: revision.planning_timezone,
-      missedPolicy: revision.missed_policy,
-      catchUpLimit: revision.catch_up_limit,
-      targetAreaId: revision.target_area_id,
-    };
   }
 
   private async firstPlanningOrderKey(

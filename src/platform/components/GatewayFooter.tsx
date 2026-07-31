@@ -20,13 +20,13 @@ export default function GatewayFooter() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              className="hover:text-foreground transition-colors"
+              className=" transition-colors"
               onClick={() => setShowTerms(true)}
             >
               Terms
             </button>
             <span className="text-muted-foreground/40">|</span>
-            <Link to="/help" className="hover:text-foreground transition-colors">
+            <Link to="/help" className=" transition-colors">
               Help
             </Link>
           </div>

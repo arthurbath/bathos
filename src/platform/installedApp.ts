@@ -20,6 +20,8 @@ type StandaloneNavigator = Navigator & {
 type BathOSNativeAppDescriptor = {
   schemaVersion?: unknown;
   moduleId?: unknown;
+  platform?: unknown;
+  quickEntryShortcut?: unknown;
 };
 
 type InstalledAppWindow = Window & {
@@ -70,6 +72,23 @@ export function isStandalonePwa(targetWindow: Window = window): boolean {
 export function getDeclaredNativeModuleId(targetWindow: Window = window): PlatformModuleId | null {
   const descriptor = (targetWindow as InstalledAppWindow).__bathosNativeApp;
   return isInstallableModuleId(descriptor?.moduleId) ? descriptor.moduleId : null;
+}
+
+export function getDeclaredNativePlatform(
+  targetWindow: Window = window,
+): 'ios' | 'macos' | null {
+  const platform = (targetWindow as InstalledAppWindow).__bathosNativeApp?.platform;
+  return platform === 'ios' || platform === 'macos' ? platform : null;
+}
+
+export function getDeclaredNativeQuickEntryShortcut(
+  targetWindow: Window = window,
+): string | null {
+  const shortcut = (targetWindow as InstalledAppWindow).__bathosNativeApp
+    ?.quickEntryShortcut;
+  return typeof shortcut === 'string' && shortcut.trim() !== ''
+    ? shortcut
+    : null;
 }
 
 export function isInstalledApp(targetWindow: Window = window): boolean {

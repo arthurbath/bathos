@@ -3,8 +3,6 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 import { cn } from "@/lib/utils";
 
-const TOOLTIP_HOVER_DELAY_MS = 300;
-
 function TooltipProvider({
   ...props
 }: Omit<
@@ -13,7 +11,7 @@ function TooltipProvider({
 >) {
   return (
     <TooltipPrimitive.Provider
-      delayDuration={TOOLTIP_HOVER_DELAY_MS}
+      delayDuration={0}
       skipDelayDuration={0}
       {...props}
     />
@@ -22,7 +20,20 @@ function TooltipProvider({
 
 const Tooltip = TooltipPrimitive.Root;
 
-const TooltipTrigger = TooltipPrimitive.Trigger;
+const TooltipTrigger = React.forwardRef<
+  React.ElementRef<typeof TooltipPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Trigger>
+>(({ onPointerMove, ...props }, ref) => (
+  <TooltipPrimitive.Trigger
+    ref={ref}
+    onPointerMove={(event) => {
+      onPointerMove?.(event);
+      event.preventDefault();
+    }}
+    {...props}
+  />
+));
+TooltipTrigger.displayName = TooltipPrimitive.Trigger.displayName;
 
 const TooltipContent = React.forwardRef<
   React.ElementRef<typeof TooltipPrimitive.Content>,
@@ -67,16 +78,8 @@ function PersistentTooltipText({
   includeInTabOrder = true,
 }: PersistentTooltipTextProps) {
   const triggerRef = React.useRef<HTMLSpanElement>(null);
-  const hoverTimerRef = React.useRef<number | null>(null);
-  const [hovered, setHovered] = React.useState(false);
   const [pinned, setPinned] = React.useState(false);
-  const open = hovered || pinned;
-
-  const clearHoverTimer = React.useCallback(() => {
-    if (hoverTimerRef.current === null) return;
-    window.clearTimeout(hoverTimerRef.current);
-    hoverTimerRef.current = null;
-  }, []);
+  const open = pinned;
 
   React.useEffect(() => {
     if (!open) return;
@@ -85,15 +88,12 @@ function PersistentTooltipText({
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (triggerRef.current?.contains(target)) return;
-      setHovered(false);
       setPinned(false);
     };
 
     document.addEventListener("pointerdown", handlePointerDown, true);
     return () => document.removeEventListener("pointerdown", handlePointerDown, true);
   }, [open]);
-
-  React.useEffect(() => clearHoverTimer, [clearHoverTimer]);
 
   return (
     <Tooltip open={open}>
@@ -106,31 +106,12 @@ function PersistentTooltipText({
             "inline-block cursor-help underline decoration-dotted underline-offset-2 focus:outline-none [&_*]:cursor-help",
             triggerClassName,
           )}
-          onMouseEnter={() => {
-            clearHoverTimer();
-            hoverTimerRef.current = window.setTimeout(() => {
-              hoverTimerRef.current = null;
-              setHovered(true);
-            }, TOOLTIP_HOVER_DELAY_MS);
-          }}
-          onMouseLeave={() => {
-            clearHoverTimer();
-            setHovered(false);
-            setPinned(false);
-          }}
-          onFocus={() => {
-            clearHoverTimer();
-            setPinned(true);
-          }}
+          onFocus={() => setPinned(true)}
           onBlur={() => setPinned(false)}
-          onClick={() => {
-            clearHoverTimer();
-            setPinned(true);
-          }}
+          onClick={() => setPinned(true)}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
-              clearHoverTimer();
               setPinned(true);
             }
           }}
@@ -145,4 +126,4 @@ function PersistentTooltipText({
   );
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, PersistentTooltipText, TOOLTIP_HOVER_DELAY_MS };
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, PersistentTooltipText };

@@ -29,10 +29,6 @@ const taskTodos = new Table(
     source_url: column.text,
     source_title: column.text,
     source_external_id: column.text,
-    template_definition_id: column.text,
-    template_revision: column.integer,
-    template_instantiation_id: column.text,
-    template_node_id: column.text,
     recurrence_definition_id: column.text,
     recurrence_revision: column.integer,
     recurrence_occurrence_id: column.text,
@@ -105,10 +101,6 @@ const taskChecklistItems = new Table(
     disposition: column.text,
     deleted_at: column.text,
     deletion_root_id: column.text,
-    template_definition_id: column.text,
-    template_revision: column.integer,
-    template_instantiation_id: column.text,
-    template_node_id: column.text,
     entry_channel: column.text,
     last_mutation_channel: column.text,
     last_actor_type: column.text,
@@ -215,70 +207,6 @@ const taskUserSettings = new Table(
   },
 );
 
-const taskTemplates = new Table(
-  {
-    owner_id: column.text,
-    kind: column.text,
-    name: column.text,
-    current_revision: column.integer,
-    record_revision: column.integer,
-    archived_at: column.text,
-    last_mutation_channel: column.text,
-    last_actor_type: column.text,
-    client_mutation_id: column.text,
-    created_at: column.text,
-    updated_at: column.text,
-  },
-  {
-    indexes: {
-      ownerKindName: ['owner_id', 'archived_at', 'kind', 'name'],
-    },
-  },
-);
-
-const taskTemplateRevisions = new Table(
-  {
-    owner_id: column.text,
-    template_id: column.text,
-    revision: column.integer,
-    name: column.text,
-    source_type: column.text,
-    source_id: column.text,
-    source_revision: column.integer,
-    anchor_date: column.text,
-    snapshot: column.text,
-    client_mutation_id: column.text,
-    created_at: column.text,
-  },
-  {
-    indexes: {
-      ownerTemplateRevision: ['owner_id', 'template_id', '-revision'],
-    },
-  },
-);
-
-const taskTemplateInstantiations = new Table(
-  {
-    owner_id: column.text,
-    template_id: column.text,
-    template_revision: column.integer,
-    anchor_date: column.text,
-    entry_channel: column.text,
-    actor_type: column.text,
-    target_area_id: column.text,
-    root_type: column.text,
-    root_id: column.text,
-    result: column.text,
-    client_mutation_id: column.text,
-    created_at: column.text,
-  },
-  {
-    indexes: {
-      ownerTemplateCreated: ['owner_id', 'template_id', '-created_at'],
-    },
-  },
-);
-
 const taskRecurrenceDefinitions = new Table(
   {
     owner_id: column.text,
@@ -287,6 +215,7 @@ const taskRecurrenceDefinitions = new Table(
     current_revision: column.integer,
     record_revision: column.integer,
     evaluated_through_date: column.text,
+    next_occurrence_date: column.text,
     archived_at: column.text,
     last_mutation_channel: column.text,
     last_actor_type: column.text,
@@ -307,8 +236,6 @@ const taskRecurrenceRevisions = new Table(
     recurrence_id: column.text,
     revision: column.integer,
     name: column.text,
-    template_id: column.text,
-    template_revision: column.integer,
     rule_mode: column.text,
     frequency: column.text,
     interval_count: column.integer,
@@ -322,6 +249,7 @@ const taskRecurrenceRevisions = new Table(
     end_on_date: column.text,
     reminder_local_time: column.text,
     deadline_offset_days: column.integer,
+    prototype_snapshot: column.text,
     target_area_id: column.text,
     client_mutation_id: column.text,
     created_at: column.text,
@@ -341,7 +269,6 @@ const taskRecurrenceOccurrences = new Table(
     logical_key: column.text,
     scheduled_date: column.text,
     predecessor_occurrence_id: column.text,
-    template_instantiation_id: column.text,
     root_type: column.text,
     root_id: column.text,
     origin: column.text,
@@ -528,9 +455,6 @@ export const tasksPowerSyncSchema = new Schema({
   tasks_hierarchy_operations: taskHierarchyOperations,
   tasks_hierarchy_history_events: taskHierarchyHistoryEvents,
   tasks_user_settings: taskUserSettings,
-  tasks_templates: taskTemplates,
-  tasks_template_revisions: taskTemplateRevisions,
-  tasks_template_instantiations: taskTemplateInstantiations,
   tasks_recurrence_definitions: taskRecurrenceDefinitions,
   tasks_recurrence_revisions: taskRecurrenceRevisions,
   tasks_recurrence_occurrences: taskRecurrenceOccurrences,

@@ -154,7 +154,7 @@ export default function AuthPage() {
                 <Button type="submit" className="w-full" disabled={loading}>Sign In</Button>
               </form>
               <div className="mt-3 text-center">
-                <Link to="/forgot-password" className="text-sm text-muted-foreground hover:text-foreground underline">
+                <Link to="/forgot-password" className="text-sm text-muted-foreground  underline">
                   Forgot Password
                 </Link>
               </div>
@@ -200,7 +200,7 @@ export default function AuthPage() {
                     <Label htmlFor="terms" className="cursor-pointer">
                       I Agree to the{' '}
                     </Label>
-                    <Link to="/terms" className="underline hover:text-primary transition-colors">
+                    <Link to="/terms" className="underline  transition-colors">
                       Terms of Service and Privacy Policy
                     </Link>
                   </div>

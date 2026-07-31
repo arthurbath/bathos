@@ -176,7 +176,7 @@ function CategoryCell({
       }
     }}>
       <SelectTrigger
-        className={`h-7 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
+        className={`h-7 border-transparent bg-transparent px-1  text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
         {...gridSelectTriggerProps(ctx, 1, {
           onDeleteReset: value === null ? undefined : () => onChange(null),
         })}
@@ -217,7 +217,7 @@ function StatusCell({
       }
     }}>
       <SelectTrigger
-        className={`h-7 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
+        className={`h-7 border-transparent bg-transparent px-1  text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
         style={{ backgroundColor: statusColor || 'transparent' }}
         {...gridSelectTriggerProps(ctx, 7, {
           onDeleteReset: value === null ? undefined : () => onChange(null),
@@ -288,7 +288,7 @@ function WardrobeActionsCell({
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="bg-destructive text-destructive-foreground "
             onClick={() => onDelete(item.id)}
           >
             Delete

@@ -291,11 +291,7 @@ export function TaskMarkdownNotes({
 
   const handleMouseDown = (event: MouseEvent<HTMLDivElement>) => {
     const anchor = closestTaskNoteAnchor(event.target, event.currentTarget);
-    if (
-      anchor !== null
-      && anchor.closest<HTMLElement>('[data-task-note-line]')
-        ?.dataset.taskNotePresentation === 'semantic'
-    ) {
+    if (anchor !== null && taskNoteAnchorShouldActivate(event.target, anchor)) {
       event.preventDefault();
       return;
     }
@@ -305,13 +301,8 @@ export function TaskMarkdownNotes({
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {
     const anchor = closestTaskNoteAnchor(event.target, event.currentTarget);
     if (anchor === null) return;
+    if (!taskNoteAnchorShouldActivate(event.target, anchor)) return;
     event.preventDefault();
-    if (
-      anchor.closest<HTMLElement>('[data-task-note-line]')
-        ?.dataset.taskNotePresentation === 'source'
-    ) {
-      return;
-    }
     const href = anchor.getAttribute('href');
     if (!href) return;
     const targetName = /^https?:\/\//iu.test(href) ? '_blank' : '_self';
@@ -529,6 +520,19 @@ function renderTaskNoteToken(
     );
   }
   return <span key={key}>{token.text}</span>;
+}
+
+function taskNoteAnchorShouldActivate(
+  target: EventTarget | null,
+  anchor: HTMLAnchorElement,
+): boolean {
+  const presentation = anchor.closest<HTMLElement>('[data-task-note-line]')
+    ?.dataset.taskNotePresentation;
+  if (presentation !== 'source') return true;
+  if (!(target instanceof Element)) return false;
+  const destination = target.closest('[data-task-markdown-link-destination]');
+  if (destination !== null && anchor.contains(destination)) return true;
+  return anchor.querySelector('[data-task-markdown-link-destination]') === null;
 }
 
 function tokenizeTaskNoteSourceLine(source: string): TaskNoteSourceLine {

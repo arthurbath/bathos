@@ -80,10 +80,6 @@ vi.mock('@/platform/components/MobileBottomNav', () => ({
 vi.mock('@/platform/hooks/useHostModule', () => ({
   useModuleBasePath: () => '/tasks',
 }));
-vi.mock('@/modules/tasks/components/TaskTemplatesView', () => ({
-  TaskTemplatesView: () => null,
-}));
-
 const describePerformance = process.env.RUN_TASKS_PERFORMANCE === '1' ? describe : describe.skip;
 
 describePerformance('Tasks rendered-view performance', () => {

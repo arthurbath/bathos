@@ -60,7 +60,7 @@ export function TaskAreaDetailView({
       <a
         href={configHref}
         onClick={(event) => handleClientSideLinkNavigation(event, navigate, configHref)}
-        className="inline-flex min-h-9 items-center gap-1.5 rounded-sm text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex min-h-9 items-center gap-1.5 rounded-sm text-sm font-medium text-muted-foreground  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         Settings

@@ -9,6 +9,9 @@ final class TasksBrowserModel: NSObject, ObservableObject {
 
     static let newTaskSummaryFocusMessageType = "focus-new-task-summary"
     static let webTextInputEngagedMessageType = "web-text-input-engaged"
+    static let configureQuickEntryShortcutMessageType =
+        "configure-quick-entry-shortcut"
+    static let quickEntryFinishedMessageType = "quick-entry-finished"
     static let newTaskSummaryInputIdentifier = "task-title-task-draft:new"
     static let newTaskSummaryFocusJavaScript = """
     (() => {
@@ -89,6 +92,10 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     weak var webView: WKWebView?
     var presentSummaryKeyboard: ((WKWebView) -> Bool)?
     var dismissSummaryKeyboard: (() -> Void)?
+    var configureQuickEntryShortcut: ((
+        TaskQuickEntryShortcutPayload
+    ) -> TaskQuickEntryShortcutResponse)?
+    var quickEntryDidFinish: ((_ committed: Bool) -> Void)?
 
     private let coldStartRecoveryDelayNanoseconds: UInt64
     private let inPageNavigator: InPageNavigator
@@ -116,8 +123,11 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     }
 
     func open(_ route: TaskNativeRoute) {
+        openWebURL(route.webURL)
+    }
+
+    func openWebURL(_ nextURL: URL) {
         cancelColdStartRecovery()
-        let nextURL = route.webURL
         requestedURL = nextURL
         loadError = nil
         if hasLoadedContent, let webView {
@@ -327,6 +337,40 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             Self.recordBridgeDiagnostic("Rejected: invalid envelope")
             return
         }
+        if envelope.type == Self.configureQuickEntryShortcutMessageType {
+            guard let request = try? JSONDecoder().decode(
+                TaskQuickEntryShortcutBridgeMessage.self,
+                from: data
+            ) else {
+                Self.recordBridgeDiagnostic("Rejected: invalid shortcut request")
+                return
+            }
+            let response = configureQuickEntryShortcut?(request.shortcut)
+                ?? TaskQuickEntryShortcutResponse(
+                    success: false,
+                    display: nil,
+                    message: "The native shortcut recorder is unavailable"
+                )
+            sendQuickEntryShortcutResponse(response)
+            Self.recordBridgeDiagnostic(
+                "Accepted: \(envelope.type); success=\(response.success)"
+            )
+            return
+        }
+        if envelope.type == Self.quickEntryFinishedMessageType {
+            guard let request = try? JSONDecoder().decode(
+                TaskQuickEntryFinishedBridgeMessage.self,
+                from: data
+            ) else {
+                Self.recordBridgeDiagnostic("Rejected: invalid quick-entry result")
+                return
+            }
+            quickEntryDidFinish?(request.committed)
+            Self.recordBridgeDiagnostic(
+                "Accepted: \(envelope.type); committed=\(request.committed)"
+            )
+            return
+        }
         if envelope.type == Self.newTaskSummaryFocusMessageType {
             guard let webView else {
                 Self.recordBridgeDiagnostic("Rejected: web view unavailable for Summary focus")
@@ -417,6 +461,25 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         ])
         _ = try? await URLSession.shared.data(for: request)
     }
+
+    private func sendQuickEntryShortcutResponse(
+        _ response: TaskQuickEntryShortcutResponse
+    ) {
+        guard let data = try? JSONEncoder().encode(response),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let responseData = try? JSONSerialization.data(
+                withJSONObject: object
+              ),
+              let literal = String(data: responseData, encoding: .utf8) else {
+            return
+        }
+        webView?.evaluateJavaScript("""
+        window.dispatchEvent(new CustomEvent(
+          "bathos:tasks-native-quick-entry-shortcut",
+          { detail: \(literal) }
+        ));
+        """)
+    }
 }
 
 private struct TaskBridgeEnvelope: Decodable {
@@ -429,4 +492,26 @@ private struct TaskCredentialBridgeMessage: Decodable {
     let installationId: UUID
     let credential: String
     let expiresAt: String
+}
+
+struct TaskQuickEntryShortcutPayload: Codable, Equatable {
+    let code: String
+    let command: Bool
+    let control: Bool
+    let option: Bool
+    let shift: Bool
+}
+
+struct TaskQuickEntryShortcutResponse: Codable, Equatable {
+    let success: Bool
+    let display: String?
+    let message: String?
+}
+
+private struct TaskQuickEntryShortcutBridgeMessage: Decodable {
+    let shortcut: TaskQuickEntryShortcutPayload
+}
+
+private struct TaskQuickEntryFinishedBridgeMessage: Decodable {
+    let committed: Bool
 }

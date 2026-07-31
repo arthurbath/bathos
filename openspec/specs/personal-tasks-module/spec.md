@@ -397,9 +397,17 @@ The system SHALL retain task notes as plain text while presenting one complete, 
 - **WHEN** `[label](destination)` source is on a line that does not contain the caret or active selection
 - **THEN** the editor hides its brackets, parentheses, and destination, presents only the label in semantic link-blue, and exposes the safe underlying destination as an actionable link
 
-#### Scenario: Edit a Markdown link source
+#### Scenario: Present an active Markdown link source
 - **WHEN** the caret or active selection enters a line containing `[label](destination)` source
-- **THEN** the editor reveals the complete source with muted fixed-width bracket and parenthesis indicators, ordinary foreground label text, and semantic link-blue destination text without navigating from an ordinary editing click
+- **THEN** the editor reveals the complete source with muted fixed-width bracket and parenthesis indicators, ordinary foreground label text, and semantic link-blue actionable destination text
+
+#### Scenario: Follow a link on an active line
+- **WHEN** a user clicks or taps semantic link-blue Markdown destination text or a semantic link-blue bare URL while its source line is active
+- **THEN** the editor opens the validated destination and does not move the caret into the activated URL
+
+#### Scenario: Edit a link destination
+- **WHEN** a user needs to edit a destination on an active source line
+- **THEN** the user can move the caret into the destination with ordinary keyboard arrow navigation and edit its exact plain-text source
 
 #### Scenario: Limit live Markdown recognition
 - **WHEN** notes contain supported Markdown syntax
@@ -1618,7 +1626,7 @@ The system SHALL provide append-only history, a projection-safe guarded 100-step
 
 #### Scenario: Restore a deleted task from its trash control
 - **WHEN** Done presents a recoverably deleted task root
-- **THEN** its leading icon-only control shows a trash icon at rest, changes to a restore icon on hover or keyboard focus, and restores the task through the existing hierarchy-safe restore transition when activated
+- **THEN** its leading icon-only control persistently shows a restore icon and restores the task through the existing hierarchy-safe restore transition when activated
 
 #### Scenario: Preserve task-row interaction in Done
 - **WHEN** a retained task appears in Done
@@ -1996,7 +2004,7 @@ The Tasks module SHALL expose pointer and touch creation affordances on active p
 
 #### Scenario: Present the primary floating creation action
 - **WHEN** a user views Today, Upcoming, Anytime, or Someday outside bulk selection mode
-- **THEN** Tasks presents one compact circular New Task button fixed near the bottom-right edge of the bounded Tasks list with a slightly translucent solid-green surface, backdrop blur where supported, a thin opaque green border, and a white Plus at rest and on hover, clear of mobile navigation and safe-area insets, and does not present the former New Task action in the view header
+- **THEN** Tasks presents one compact circular New Task button fixed near the bottom-right edge of the bounded Tasks list with a slightly translucent solid-green surface, backdrop blur where supported, a thin opaque green border, and a persistent white Plus, clear of mobile navigation and safe-area insets, and does not present the former New Task action in the view header
 
 #### Scenario: Create in the first Today bucket
 - **WHEN** a user invokes the floating action from Today
@@ -2019,8 +2027,8 @@ The Tasks module SHALL expose pointer and touch creation affordances on active p
 - **THEN** Tasks opens a blank draft at the top of that bucket and assigns the section's canonical day, first day of month, or first day of year as Start
 
 #### Scenario: Reveal a bucket add affordance
-- **WHEN** a pointer or keyboard user hovers or focuses a creatable bucket heading
-- **THEN** the heading uses a pointer cursor and reveals a small Lucide Plus to the right of its label while the complete heading control remains the activation target
+- **WHEN** a creatable bucket heading is presented
+- **THEN** the heading uses a pointer cursor and persistently shows a small Lucide Plus to the right of its label while the complete heading control remains the activation target
 
 #### Scenario: Keep pointer and keyboard creation contracts distinct
 - **WHEN** the established keyboard new-task command is invoked
@@ -2350,7 +2358,13 @@ The system SHALL provide typing-only Quick Find as the primary Tasks search entr
 
 #### Scenario: Present compact results
 - **WHEN** Quick Find has a nonblank query
-- **THEN** the palette shows at most three matching to-dos without task checkboxes, row borders, a visible title, or a visible close control and retains Continue Search after those results
+- **THEN** the palette shows at most three matching to-dos without task checkboxes, row borders, a visible title, or a visible close control
+
+#### Scenario: Offer exhaustive results conditionally
+- **WHEN** the full Search page would return at least one result for the current query
+- **THEN** Quick Find shows `See All Results` after its compact results
+- **WHEN** the full Search page would return no result
+- **THEN** Quick Find omits `See All Results`
 
 #### Scenario: Prioritize summary matches
 - **WHEN** a query matches one to-do's summary and only ancillary metadata such as notes, source details, or Area on other to-dos
@@ -2362,11 +2376,11 @@ The system SHALL provide typing-only Quick Find as the primary Tasks search entr
 
 #### Scenario: Navigate preliminary selection
 - **WHEN** the query input owns DOM and text-cursor focus and the user presses Up or Down
-- **THEN** Quick Find keeps text focus in the input while moving one visible preliminary selection through the results and Continue Search
+- **THEN** Quick Find keeps text focus in the input while moving one visible preliminary selection through the results and the conditional See All Results action
 
 #### Scenario: Activate preliminary selection
 - **WHEN** a preliminary selection is visible and the user presses Return
-- **THEN** Quick Find activates that result or Continue Search without requiring pointer input
+- **THEN** Quick Find activates that result or See All Results without requiring pointer input
 
 #### Scenario: Close Quick Find with Escape
 - **WHEN** Quick Find is visible and the user presses Escape
@@ -2384,8 +2398,8 @@ The system SHALL provide typing-only Quick Find as the primary Tasks search entr
 - **WHEN** the user activates an Upcoming recurrence-definition result
 - **THEN** Tasks navigates to Upcoming, keeps recurrence management closed, smoothly reveals the recurrence row, and applies whole-row keyboard focus
 
-#### Scenario: Continue a search
-- **WHEN** the user activates Continue Search
+#### Scenario: See all results
+- **WHEN** the user activates See All Results
 - **THEN** the module navigates through a real in-app link to `/tasks/search` with the current query and lists every matching task from every planning and lifecycle view
 
 #### Scenario: Refine full results
@@ -3030,18 +3044,26 @@ The Tasks module SHALL provide one synchronized, owner-scoped preference that op
 - **THEN** its options appear as Ready, Rechecking, then Waiting
 
 ### Requirement: Upcoming Date-Section Ordering
-The Tasks module SHALL permit manual task ordering inside each visible Upcoming date section and SHALL convert cross-section task drops into future Start planning.
+The Tasks module SHALL permit manual ordering of ordinary tasks and scheduled recurrence projections inside each visible Upcoming date section and SHALL convert eligible cross-section ordinary-task drops into future Start planning.
 
 #### Scenario: Manually order tasks inside one Upcoming section
-- **WHEN** a user drags an Upcoming task before or after another task in the same visible day, month, or year section
+- **WHEN** a user drags an Upcoming ordinary task before or after another ordinary task or recurrence projection in the same visible day, month, or year section
 - **THEN** Tasks persists the selected manual order without changing either task's Start or Deadline
 
+#### Scenario: Reorder a recurrence projection
+- **WHEN** a user drags a scheduled recurrence projection before or after an ordinary task or another recurrence projection in its current visible date section
+- **THEN** Tasks persists the selected manual order without changing the recurrence cadence, projected Start, Deadline, or recurrence identity
+
+#### Scenario: Keep recurrence projections in their cadence date
+- **WHEN** a user drags a scheduled recurrence projection across another visible Upcoming date section
+- **THEN** Tasks does not move the projection into that section or change its cadence-controlled date
+
 #### Scenario: Move a task to another Upcoming section
-- **WHEN** a user drags an Upcoming task into another visible date section
+- **WHEN** a user drags an ordinary Upcoming task into another visible date section
 - **THEN** Tasks assigns the destination section's canonical future date as the task's Start, clears any Today horizon, and persists the selected manual position inside that section
 
 #### Scenario: Move a deadline-only task to another Upcoming section
-- **WHEN** a task appears in Upcoming only because of its Deadline and the user drops it into a different Upcoming section
+- **WHEN** an ordinary task appears in Upcoming only because of its Deadline and the user drops it into a different Upcoming section
 - **THEN** Tasks assigns the destination section date as its Start and retains its existing Deadline
 
 #### Scenario: Prefer Start over Deadline exactly once
@@ -3050,10 +3072,10 @@ The Tasks module SHALL permit manual task ordering inside each visible Upcoming 
 
 #### Scenario: Drop into an Upcoming section without another task
 - **WHEN** the destination Upcoming section contains no task row that can serve as a manual-order target
-- **THEN** dropping on the section still assigns its canonical future Start and places the task as that section's only manually ordered task
+- **THEN** dropping an ordinary task on the section still assigns its canonical future Start and places the task as that section's only manually ordered task
 
 #### Scenario: Reschedule a reminder after an Upcoming move
-- **WHEN** a task with a reminder moves to another Upcoming section
+- **WHEN** an ordinary task with a reminder moves to another Upcoming section
 - **THEN** Tasks reschedules the reminder against the task's newly assigned Start
 
 ### Requirement: Bulk Task Drag Group
@@ -3456,7 +3478,7 @@ Done SHALL present retained completed, canceled, and deleted tasks as fully insp
 
 #### Scenario: Restore a deleted task from its trash control
 - **WHEN** Done presents a recoverably deleted task root
-- **THEN** its leading icon-only control shows a trash icon at rest, changes to a restore icon on hover or keyboard focus, and restores the task through the existing hierarchy-safe transition according to its current planning metadata
+- **THEN** its leading icon-only control persistently shows a restore icon and restores the task through the existing hierarchy-safe transition according to its current planning metadata
 
 #### Scenario: Open and edit a terminal task
 - **WHEN** a retained completed, canceled, or deleted task appears in Done
@@ -3667,19 +3689,68 @@ Task list views SHALL let a touch user reveal and open Quick Find by pulling dow
 
 #### Scenario: Reveal pull progress
 - **WHEN** a touch starts while the task list is scrolled to the top and moves downward
-- **THEN** a magnifying-glass indicator fades into view in proportion to the pull distance
+- **THEN** a magnifying-glass indicator fades into view in proportion to the pull distance and the list follows with bounded damped displacement
 
 #### Scenario: Open after threshold
 - **WHEN** the user releases the pull after crossing the activation threshold
-- **THEN** Tasks opens the existing Quick Find dialog
+- **THEN** Tasks opens the existing Quick Find dialog, places text focus in its query input inside the releasing user gesture, and requests the touch software keyboard
 
 #### Scenario: Release before threshold
 - **WHEN** the user releases before crossing the activation threshold
-- **THEN** the indicator retracts and Quick Find remains closed
+- **THEN** the indicator and list smoothly retract and Quick Find remains closed
 
 #### Scenario: Do not enable on non-touch devices
 - **WHEN** the current device has no touch capability
 - **THEN** Tasks does not install or render the pull-down Quick Find interaction
+
+### Requirement: Touch List Edge Elasticity
+Task list views SHALL provide bounded native-feeling visual elasticity at the top and bottom edge on touch devices without custom scrolling or displacement of fixed controls.
+
+#### Scenario: Pull beyond the top
+- **WHEN** a touch user drags downward while the list is already at its top boundary
+- **THEN** the scroll content follows with damped capped displacement and returns smoothly when released
+
+#### Scenario: Pull beyond the bottom
+- **WHEN** a touch user drags upward while the list is already at its bottom boundary
+- **THEN** the scroll content follows with damped capped displacement and returns smoothly when released
+
+#### Scenario: Preserve ordinary native scrolling
+- **WHEN** list content remains scrollable in the gesture direction
+- **THEN** Tasks leaves movement and momentum to the browser's native scrolling behavior
+
+#### Scenario: Keep floating controls fixed
+- **WHEN** the list content is elastically displaced
+- **THEN** mobile navigation, the floating Add button, selection controls, dialogs, and other viewport-fixed surfaces remain stationary
+
+### Requirement: Reached-Start Order After Midnight
+The owner-local activation process SHALL preserve the Upcoming order of newly reached starts while placing them after unfinished Today tasks rolled into the new day's Inbox.
+
+#### Scenario: Roll unfinished Today work first
+- **WHEN** owner-local midnight is crossed with unfinished Today work and newly reached future starts
+- **THEN** the system first retains the unfinished work in Inbox in its prior Today order
+
+#### Scenario: Append newly reached starts
+- **WHEN** the same activation processes tasks whose Start has reached the new planning date
+- **THEN** it clears their Start, assigns Inbox, and places them after the rolled-over Inbox tail
+
+#### Scenario: Preserve Upcoming order
+- **WHEN** multiple ordinary and recurrence-projection tasks reach their Start together
+- **THEN** their relative Today Inbox order matches their final manual order in the controlling Upcoming date section
+
+#### Scenario: Keep activation idempotent
+- **WHEN** the activation process retries for the same owner and planning date
+- **THEN** it does not reorder already activated work or duplicate recurrence instances
+
+### Requirement: Selection Completion Language
+The Tasks selection toolbar SHALL label its explicit selection-mode exit action `Done`.
+
+#### Scenario: Finish selection mode
+- **WHEN** selection mode is active with zero or more selected tasks
+- **THEN** the fixed selection toolbar presents `Done` as its exit action
+
+#### Scenario: Activate Done
+- **WHEN** the user activates the selection toolbar's Done action
+- **THEN** Tasks clears selection state and exits selection mode without changing task lifecycle
 
 ### Requirement: Visible List Search Action
 Every Tasks list view SHALL expose a top-right Search button that opens Quick Find.

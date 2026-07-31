@@ -19,9 +19,8 @@ BathOS Tasks is ready for deliberate personal parallel use at [os.bath.garden/ta
 | Anytime | All active work available now, including every Today task |
 | Someday | Inactive work kept for possible future attention, grouped by Area |
 | Done | Completed, canceled, and recoverably deleted tasks retained for 30 full owner-local days |
-| Templates | Reusable task and checklist structures |
 
-Today, Upcoming, Anytime, and Someday remain directly available in the primary navigation. Open More for Templates, Done, and Config. Config contains the Areas section for adding, renaming, reordering, and recoverably deleting Areas. Moving an Area higher or lower there controls the order of its buckets in Anytime and Someday.
+Today, Upcoming, Anytime, and Someday remain directly available in the primary navigation. Open More for Done and Config. Config contains the Areas section for adding, renaming, reordering, and recoverably deleting Areas. Moving an Area higher or lower there controls the order of its buckets in Anytime and Someday.
 
 Use the magnifying-glass action in the page header to open Quick Find for tasks and areas. You can also begin typing any printable character from the background or a focused task on any Tasks page, including Config, to open Quick Find with that character already entered. Shifted letters and punctuation are preserved. Typing inside a field, menu, popover, or dialog remains with that control and does not invoke search. Quick Find shows up to three best matches. Choose Continue Search to open the complete live task-results page for the current query.
 
@@ -49,7 +48,7 @@ Press `⌘/` on Mac or `⌃/` on Windows to open the current keyboard and pointe
 | Close an Open Task | `⌘Return` / `⌘Escape` | `⌃Return` |
 | Show Keyboard Commands | `⌘/` | `⌃/` |
 
-Cut, Copy, Paste, and Select All remain native when an editable text control owns the command. Outside text editing, task Cut and Copy target either the single focused task or every task in multiple selection. Paste reconstructs a structured BathOS Tasks payload when available. Other nonblank clipboard text becomes one new task whose Summary contains the clipboard text. Today paste produces Today Inbox work. Anytime paste produces unplanned Anytime work. Someday paste produces undated Someday work. Area detail views apply their visible organization. Upcoming, Done, Config, Templates, and Search reject task paste.
+Cut, Copy, Paste, and Select All remain native when an editable text control owns the command. Outside text editing, task Cut and Copy target either the single focused task or every task in multiple selection. Paste reconstructs a structured BathOS Tasks payload when available. Other nonblank clipboard text becomes one new task whose Summary contains the clipboard text. Today paste produces Today Inbox work. Anytime paste produces unplanned Anytime work. Someday paste produces undated Someday work. Area detail views apply their visible organization. Upcoming, Done, Config, and Search reject task paste.
 
 | View navigation | Mac | Windows |
 | --- | --- | --- |
@@ -146,7 +145,7 @@ In-app reminders remain available when browser notifications are unsupported, bl
 
 ## Backup, Restore, and Recovery
 
-Use Backup and Restore under Config to download a checksum-protected JSON backup of task data, history, templates, recurrence, and schedules.
+Use Backup and Restore under Config to download a checksum-protected JSON backup of task data, history, recurrence, and schedules.
 
 - Merge restore validates the backup and adds records that do not conflict with existing stable identifiers.
 - Replace restore downloads a required pre-restore backup, asks for separate confirmation, and replaces the synchronized task graph in one server transaction.

@@ -212,8 +212,9 @@ describe('TaskRepeatDialog', () => {
       expect(document.body).toHaveTextContent('Edit Repeat');
       expect(document.body).toHaveTextContent('Next Occurrence');
       expect(document.body).not.toHaveTextContent('Next Start');
+      expect(document.body).not.toHaveTextContent('Ends');
       const repeatName = document.querySelector<HTMLInputElement>(
-        'input[aria-label="Repeat Name"]',
+        'input[aria-label="Summary"]',
       )!;
       await act(async () => setInput(repeatName, 'Water All Plants'));
 
@@ -232,8 +233,12 @@ describe('TaskRepeatDialog', () => {
         frequency: 'monthly',
         intervalCount: 2,
         scheduleDate: '2026-08-15',
-        endMode: 'after',
-        endAfterCount: 8,
+        endMode: 'never',
+        endAfterCount: null,
+        endOnDate: null,
+        prototypeSnapshot: expect.objectContaining({
+          root: expect.objectContaining({ title: 'Water All Plants' }),
+        }),
       }));
       expect(createFromTask).not.toHaveBeenCalled();
       expect(evaluate).not.toHaveBeenCalled();
@@ -251,7 +256,7 @@ describe('TaskRepeatDialog', () => {
     });
     const { container, root } = renderDialog(task);
     try {
-      expect(document.querySelectorAll('[role="combobox"]').length).toBeGreaterThanOrEqual(3);
+      expect(document.querySelectorAll('[role="combobox"]').length).toBeGreaterThanOrEqual(2);
 
       await selectBathosOption('Frequency', 'Months');
       await selectBathosOption('Monthly Pattern', 'Day-Type Position');

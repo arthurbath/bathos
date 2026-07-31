@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(29);
+SELECT plan(31);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -107,6 +107,14 @@ INSERT INTO public.tasks_todos (
     'anytime', NULL, DATE '2099-01-02', 'a6', 1,
     'd4000000-0000-4000-8000-000000000033',
     '2099-01-01 14:59:50+00'
+  ),
+  (
+    'd4000000-0000-4000-8000-000000000036',
+    'd4000000-0000-4000-8000-000000000001',
+    'Second Start reaches new Tokyo date', 'open', NULL, 'present', NULL, NULL,
+    'anytime', NULL, DATE '2099-01-02', 'a7', 1,
+    'd4000000-0000-4000-8000-000000000037',
+    '2099-01-01 14:59:55+00'
   ),
   (
     'd4000000-0000-4000-8000-000000000034',
@@ -220,8 +228,8 @@ SELECT is(
 SELECT is(
   (current_setting('test.tasks_rollover_result')::jsonb
     ->> 'activated_todos')::integer,
-  1,
-  'activates the Start that reached the new date after rollover'
+  2,
+  'activates the Starts that reached the new date after rollover'
 );
 SELECT is(
   (SELECT today_section FROM public.tasks_todos
@@ -270,6 +278,22 @@ SELECT is(
     WHERE id = 'd4000000-0000-4000-8000-000000000032'),
   'inbox',
   'activates newly reached work into Inbox after rollover'
+);
+SELECT ok(
+  (SELECT activated.order_key > rolled.order_key
+    FROM public.tasks_todos AS activated
+    CROSS JOIN public.tasks_todos AS rolled
+    WHERE activated.id = 'd4000000-0000-4000-8000-000000000032'
+      AND rolled.id = 'd4000000-0000-4000-8000-000000000022'),
+  'places newly reached work after rolled-over unfinished Today work'
+);
+SELECT ok(
+  (SELECT first_due.order_key < second_due.order_key
+    FROM public.tasks_todos AS first_due
+    CROSS JOIN public.tasks_todos AS second_due
+    WHERE first_due.id = 'd4000000-0000-4000-8000-000000000032'
+      AND second_due.id = 'd4000000-0000-4000-8000-000000000036'),
+  'preserves Upcoming manual order while activating a shared date bucket'
 );
 SELECT is(
   (SELECT today_section FROM public.tasks_todos

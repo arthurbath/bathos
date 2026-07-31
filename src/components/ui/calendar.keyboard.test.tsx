@@ -180,6 +180,7 @@ describe('Calendar keyboard navigation', () => {
         <Calendar
           mode="single"
           month={month}
+          today={new Date(2026, 0, 1)}
           selected={new Date(2026, 6, 31)}
           onMonthChange={setMonth}
           onSelect={() => {}}
@@ -622,8 +623,7 @@ describe('Calendar keyboard navigation', () => {
       expect(monthPickerNav?.className).toBe(dayPickerNav?.className);
       expect(previousYearHeaderButton?.className).toBe(previousMonthButton?.className);
       expect(nextYearHeaderButton?.className).toBe(nextMonthButton?.className);
-      expect(captionButton?.className).toContain('hover:bg-primary/10');
-      expect(captionButton?.className).toContain('hover:text-primary');
+      expect(captionButton?.className).not.toContain('hover:');
       expect(yearLabel?.className).not.toBe(captionButton?.className);
     } finally {
       unmount(root, container);
@@ -968,7 +968,8 @@ describe('Calendar keyboard navigation', () => {
         '[data-calendar-current-date-icon="true"]',
       );
       expect(currentDateIcon).toBeTruthy();
-      expect(currentDateIcon?.classList.contains('text-warning')).toBe(true);
+      expect(currentDateIcon?.classList.contains('text-primary-foreground')).toBe(true);
+      expect(currentDateIcon?.classList.contains('text-warning')).toBe(false);
       expect(today?.className).toContain('bg-accent');
       expect(today?.className).toContain('bg-primary');
       expect(today?.className).toContain('enabled:!cursor-pointer');

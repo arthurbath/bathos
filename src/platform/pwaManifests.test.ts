@@ -29,4 +29,13 @@ describe('static BathOS PWA manifests', () => {
     expect(manifest.background_color).toBe('#0d0d0d');
     expect(manifest.theme_color).toBe('#0d0d0d');
   });
+
+  it('requests portrait presentation for the installed Tasks PWA', () => {
+    const manifest = JSON.parse(readFileSync(
+      resolve(process.cwd(), 'public/tasks/manifest.json'),
+      'utf8',
+    )) as { orientation?: string };
+
+    expect(manifest.orientation).toBe('portrait-primary');
+  });
 });

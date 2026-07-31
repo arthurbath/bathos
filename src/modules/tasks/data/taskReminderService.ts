@@ -10,13 +10,11 @@ import {
   taskReminderAmbiguityChoices,
   taskReminderResolutionKinds,
   taskReminderStatuses,
-  taskTemplateKinds,
   type TaskReminder,
   type TaskReminderAmbiguityChoice,
   type TaskReminderDelivery,
   type TaskReminderOccurrence,
   type TaskDeliveryTarget,
-  type TaskTemplateKind,
 } from '@/modules/tasks/types/tasks';
 
 type TaskReminderClient = Pick<SupabaseClient<Database>, 'rpc'>;
@@ -26,7 +24,7 @@ const TASK_REMINDER_PLANNING_RETRY_DELAYS_MS = [150, 300, 600, 1_200, 2_400] as 
 
 export type TaskReminderSaveInput = {
   reminder?: TaskReminder | null;
-  rootType: TaskTemplateKind;
+  rootType: 'todo';
   rootId: string;
   localTime: string;
   timeZone: string;
@@ -46,7 +44,7 @@ export type TaskDueReminder = {
   delivery_id: string;
   occurrence_id: string;
   reminder_id: string;
-  root_type: TaskTemplateKind;
+  root_type: 'todo';
   root_id: string;
   title: string;
   resolved_at: string;
@@ -339,7 +337,7 @@ export function parseTaskReminder(value: unknown): TaskReminder {
   requirePositiveInteger(record.record_revision, 'reminder revision');
   return {
     ...record,
-    root_type: requireEnum(record.root_type, taskTemplateKinds, 'reminder root type'),
+    root_type: requireEnum(record.root_type, ['todo'] as const, 'reminder root type'),
     status: requireEnum(record.status, taskReminderStatuses, 'reminder status'),
     ambiguity_choice: requireEnum(
       record.ambiguity_choice,
@@ -397,7 +395,7 @@ function parseTaskDueReminder(value: unknown): TaskDueReminder {
     delivery_id: requireText(record.delivery_id, 'delivery identifier'),
     occurrence_id: requireText(record.occurrence_id, 'occurrence identifier'),
     reminder_id: requireText(record.reminder_id, 'reminder identifier'),
-    root_type: requireEnum(record.root_type, taskTemplateKinds, 'reminder root type'),
+    root_type: requireEnum(record.root_type, ['todo'] as const, 'reminder root type'),
     root_id: requireText(record.root_id, 'reminder root identifier'),
     title: requireText(record.title, 'reminder title'),
     resolved_at: requireTimestamp(record.resolved_at, 'reminder due time'),

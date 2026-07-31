@@ -129,7 +129,7 @@ export function MobileBottomNav({
     >
       <nav
         aria-label="Mobile navigation"
-        className="pointer-events-auto mx-auto grid w-[calc(100%-2rem)] max-w-[calc(64rem-2rem)] gap-0 rounded-full border border-secondary bg-secondary/90 p-1 backdrop-blur-sm supports-[backdrop-filter]:bg-secondary/85"
+        className="pointer-events-auto mx-auto grid w-[calc(100%-2rem)] max-w-[calc(64rem-2rem)] gap-0 rounded-full border border-[hsl(var(--mobile-bottom-nav-border))] bg-secondary/90 p-1 backdrop-blur-sm supports-[backdrop-filter]:bg-secondary/85"
         style={{ gridTemplateColumns: `repeat(${items.length + (hasOverflow ? 1 : 0)}, minmax(0, 1fr))` }}
       >
         {items.map(({ path, label, icon: Icon }) => {

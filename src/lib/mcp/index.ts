@@ -22,11 +22,10 @@ import {
 } from "./tools/tasks-mail";
 import { moveTask, scheduleTask, transitionTask, updateTask } from "./tools/tasks-mutate";
 import { reorderTask, reorderTaskHierarchy } from "./tools/tasks-reorder";
-import { getTaskTemplates, instantiateTaskTemplate } from "./tools/tasks-templates";
 import {
   evaluateTaskRecurrence,
   getTaskRecurrences,
-  saveTaskRecurrence,
+  createTaskRecurrence,
   setTaskRecurrenceStatus,
 } from "./tools/tasks-recurrence";
 import {
@@ -45,7 +44,7 @@ export default defineMcp({
   title: "BathOS",
   version: "0.1.0",
   instructions:
-    "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped areas, tasks, checklist items, planning views, native templates, recurrence definitions, and resolved reminders plus guarded creation, content updates, move, reorder, schedule, template-instantiation, recurrence, reminder, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates. Reminder times are tied to each task's Start and use its IANA time zone and daylight-saving ambiguity choice. Neither uses tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
+    "Authenticated tools for the signed-in BathOS user across Budget, Garage, Snake, Tasks, and Wardrobe. Use `whoami` to verify connectivity. Read with get_* tools. Tasks expose owner-scoped areas, tasks, checklist items, planning views, recurrence prototypes and ordinary generated instances, and resolved reminders plus guarded creation, content updates, move, reorder, schedule, recurrence, reminder, and lifecycle or recovery mutations. Use task mutations only when the user clearly asks, read the current revision first, and never reuse a mutation UUID for a different request. Recurrence rules use explicit calendar dates. Reminder times are tied to each task's Start and use its IANA time zone and daylight-saving ambiguity choice. Neither uses tags. Task deletion is recoverable; permanent deletion is unavailable. Mutate other modules only when the user clearly asks, using set_* tools scoped by the signed-in user or accessible household. Receipt files, household lifecycle actions, and restore execution are out of scope.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated",
@@ -63,7 +62,6 @@ export default defineMcp({
     getTaskHierarchy,
     getTaskRecord,
     getTaskView,
-    getTaskTemplates,
     getTaskRecurrences,
     getTaskReminders,
     createTask,
@@ -81,8 +79,7 @@ export default defineMcp({
     transitionTask,
     reorderTask,
     reorderTaskHierarchy,
-    instantiateTaskTemplate,
-    saveTaskRecurrence,
+    createTaskRecurrence,
     setTaskRecurrenceStatus,
     evaluateTaskRecurrence,
     saveTaskReminder,

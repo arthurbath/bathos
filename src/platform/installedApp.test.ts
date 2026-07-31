@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getDeclaredNativeModuleId,
+  getDeclaredNativePlatform,
+  getDeclaredNativeQuickEntryShortcut,
   getInstalledModuleLaunchPath,
   getModuleIdFromPath,
   getSignOutDestination,
@@ -14,6 +16,8 @@ type TestWindow = Window & {
   __bathosNativeApp?: {
     schemaVersion: number;
     moduleId: string;
+    platform?: 'ios' | 'macos';
+    quickEntryShortcut?: string | null;
   };
 };
 
@@ -77,6 +81,37 @@ describe('installed app context', () => {
     expect(getDeclaredNativeModuleId()).toBe('tasks');
     expect(resolveInstalledModuleId()).toBe('tasks');
     expect(getInstalledModuleLaunchPath()).toBe('/tasks/today');
+  });
+
+  it('exposes bounded Mac companion metadata without affecting module detection', () => {
+    (window as TestWindow).__bathosNativeApp = {
+      schemaVersion: 2,
+      moduleId: 'tasks',
+      platform: 'macos',
+      quickEntryShortcut: '⌃⌥Space',
+    };
+
+    expect(getDeclaredNativeModuleId()).toBe('tasks');
+    expect(getDeclaredNativePlatform()).toBe('macos');
+    expect(getDeclaredNativeQuickEntryShortcut()).toBe('⌃⌥Space');
+  });
+
+  it('rejects unknown native platforms and empty shortcut labels', () => {
+    (window as TestWindow).__bathosNativeApp = {
+      schemaVersion: 2,
+      moduleId: 'tasks',
+      platform: 'ios',
+      quickEntryShortcut: '   ',
+    };
+    expect(getDeclaredNativePlatform()).toBe('ios');
+    expect(getDeclaredNativeQuickEntryShortcut()).toBeNull();
+
+    Object.assign((window as TestWindow).__bathosNativeApp!, {
+      platform: 'windows',
+      quickEntryShortcut: null,
+    });
+    expect(getDeclaredNativePlatform()).toBeNull();
+    expect(getDeclaredNativeQuickEntryShortcut()).toBeNull();
   });
 
   it('rejects unsupported native module declarations', () => {

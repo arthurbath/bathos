@@ -414,7 +414,7 @@ export function HouseholdManagementPanel({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deletingHousehold}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground "
               onClick={handleDeleteHousehold}
               disabled={deletingHousehold || deleteBlocked}
             >

@@ -283,7 +283,7 @@ export default function AccountPage() {
                     type="button"
                     aria-label="Edit Display Name"
                     onClick={() => setEditingName(true)}
-                    className="text-muted-foreground transition-colors hover:text-foreground"
+                    className="text-muted-foreground transition-colors "
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
@@ -299,7 +299,7 @@ export default function AccountPage() {
                   type="button"
                   aria-label="Change Email"
                   onClick={() => setShowChangeEmail(true)}
-                  className="text-muted-foreground transition-colors hover:text-foreground"
+                  className="text-muted-foreground transition-colors "
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
@@ -348,7 +348,7 @@ export default function AccountPage() {
                     <AlertDialogAction
                       onClick={handleDeleteAccount}
                       disabled={deleteConfirmText.toLowerCase() !== userEmail.toLowerCase() || isDeleting}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      className="bg-destructive text-destructive-foreground "
                     >
                       {isDeleting ? 'Deleting...' : 'Delete Account'}
                     </AlertDialogAction>

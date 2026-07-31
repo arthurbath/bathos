@@ -24,7 +24,6 @@ import { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepos
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
-import { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
 import { addTaskCalendarDays } from '@/modules/tasks/domain/taskDates';
 import { cleanupProductionTopology } from '@/modules/tasks/integration/productionTopologyCleanup';
 import { bindTasksDatabaseOwner } from '@/modules/tasks/sync/database';
@@ -164,31 +163,19 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       title: 'Cross-Owner Mutation Must Fail',
     }, authB)).rejects.toThrow('task is unavailable');
 
-    const template = await new TaskTemplateService(ownerA.client, ownerA.id).capture({
-      sourceType: 'todo',
-      sourceId: taskId,
-      name: 'Synthetic Topology Template',
-      anchorDate: '2030-01-01',
-    });
     const recurrenceService = new TaskRecurrenceService(ownerA.client, ownerA.id);
-    const recurrence = await recurrenceService.save({
+    const recurrence = await recurrenceService.createFromTask({
+      taskId,
       name: 'Synthetic Topology Recurrence',
-      templateId: template.template.id,
-      templateRevision: template.revision.revision,
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 1,
-      startDate: '2030-01-01',
-      planningTimeZone: 'America/Los_Angeles',
-      missedPolicy: 'latest',
+      scheduleDate: '2030-01-01',
+      ruleConfig: {},
+      endMode: 'never',
     });
-    const recurrenceEvaluation = await recurrenceService.evaluate(
-      recurrence.definition.id,
-      '2030-01-01',
-    );
-    expect(recurrenceEvaluation.generated_count).toBe(1);
     const recurrenceStatus = await recurrenceService.setStatus(
-      recurrenceEvaluation.definition,
+      recurrence.definition,
       'paused',
     );
     expect(recurrenceStatus.outcome).toBe('accepted');
@@ -470,15 +457,13 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     )).toEqual({ completed: 1 });
     expect(await fresh.database.getOptional<{
       origin: string;
-      template_instantiation_id: string | null;
     }>(
-      `SELECT origin, template_instantiation_id
+      `SELECT origin
        FROM tasks_recurrence_occurrences
        WHERE recurrence_id = ? AND root_id = ?`,
       [recurrence.definition.id, recurrenceTask.task.id],
     )).toEqual({
       origin: 'adopted',
-      template_instantiation_id: null,
     });
 
     const reopened = await fresh.repository.transitionTask(

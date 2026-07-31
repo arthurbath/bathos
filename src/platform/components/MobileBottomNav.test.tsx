@@ -60,7 +60,7 @@ describe('MobileBottomNav', () => {
     expect(nav).toHaveClass(
       'w-[calc(100%-2rem)]',
       'rounded-full',
-      'border-secondary',
+      'border-[hsl(var(--mobile-bottom-nav-border))]',
       'bg-secondary/90',
       'p-1',
       'backdrop-blur-sm',
@@ -81,8 +81,7 @@ describe('MobileBottomNav', () => {
       'bg-foreground/[0.12]',
     );
     const inboxLink = screen.getByRole('link', { name: 'Inbox' });
-    expect(inboxLink).not.toHaveClass('hover:bg-foreground/[0.07]');
-    expect(inboxLink).not.toHaveClass('hover:text-foreground');
+    expect(inboxLink.className).not.toContain('hover:');
 
     fireEvent.click(screen.getByRole('link', { name: 'Inbox' }));
     expect(onNavigate).toHaveBeenCalledWith('/inbox');

@@ -5,24 +5,16 @@ import {
 import {
   taskActionabilities,
   taskDestinations,
-  taskRecurrenceFrequencies,
-  taskRecurrenceMissedPolicies,
-  taskRecurrenceRuleModes,
-  taskRecurrenceStatuses,
   taskReminderAmbiguityChoices,
   taskTodaySections,
   type TaskActionability,
   type TaskDestination,
-  type TaskRecurrenceFrequency,
-  type TaskRecurrenceMissedPolicy,
-  type TaskRecurrenceRuleMode,
-  type TaskRecurrenceStatus,
   type TaskReminderAmbiguityChoice,
   type TaskTodaySection,
 } from '@/modules/tasks/types/tasks';
 
 export const TASK_CLIPBOARD_KIND = 'garden.bath.tasks.clipboard';
-export const TASK_CLIPBOARD_VERSION = 1;
+export const TASK_CLIPBOARD_VERSION = 2;
 export const TASK_CLIPBOARD_MAX_TASKS = 100;
 export const TASK_CLIPBOARD_MAX_BYTES = 1_000_000;
 
@@ -38,21 +30,6 @@ export type TaskClipboardReminder = {
   ambiguityChoice: TaskReminderAmbiguityChoice;
 };
 
-export type TaskClipboardRecurrence = {
-  name: string;
-  status: TaskRecurrenceStatus;
-  templateId: string;
-  templateRevision: number;
-  ruleMode: TaskRecurrenceRuleMode;
-  frequency: TaskRecurrenceFrequency;
-  intervalCount: number;
-  startDate: string;
-  planningTimeZone: string;
-  missedPolicy: TaskRecurrenceMissedPolicy;
-  catchUpLimit: number;
-  targetAreaId: string | null;
-};
-
 export type TaskClipboardSnapshot = {
   title: string;
   notes: string;
@@ -65,7 +42,6 @@ export type TaskClipboardSnapshot = {
   areaId: string | null;
   checklist: TaskClipboardChecklistItem[];
   reminder: TaskClipboardReminder | null;
-  recurrence: TaskClipboardRecurrence | null;
 };
 
 export type TaskClipboardEnvelope = {
@@ -194,21 +170,11 @@ export function planTaskClipboardPaste(
       : planning.startDate !== null || planning.todaySection !== null
         ? snapshot.reminder
         : null;
-  const recurrence = snapshot.recurrence === null
-    ? null
-    : destination.kind === 'area'
-      ? {
-        ...snapshot.recurrence,
-        targetAreaId: destination.areaId,
-      }
-      : snapshot.recurrence;
-
   return {
     ...snapshot,
     ...organization,
     ...planning,
     reminder,
-    recurrence,
   };
 }
 
@@ -257,7 +223,6 @@ function parseSnapshot(value: unknown): TaskClipboardSnapshot {
     areaId,
     checklist,
     reminder: row.reminder === null ? null : parseReminder(row.reminder),
-    recurrence: row.recurrence === null ? null : parseRecurrence(row.recurrence),
   };
 }
 
@@ -273,36 +238,6 @@ function parseReminder(value: unknown): TaskClipboardReminder {
       taskReminderAmbiguityChoices,
       'Reminder ambiguity',
     ),
-  };
-}
-
-function parseRecurrence(value: unknown): TaskClipboardRecurrence {
-  const row = requireRecord(value, 'Task recurrence is invalid');
-  const planningTimeZone = requireText(
-    row.planningTimeZone,
-    'Recurrence planning time zone',
-    200,
-  );
-  if (!isTaskPlanningTimeZone(planningTimeZone)) {
-    throw new Error('Recurrence planning time zone is invalid');
-  }
-  return {
-    name: requireText(row.name, 'Recurrence name', 500),
-    status: requireEnum(row.status, taskRecurrenceStatuses, 'Recurrence status'),
-    templateId: requireId(row.templateId, 'Recurrence template'),
-    templateRevision: requireInteger(row.templateRevision, 'Recurrence template revision', 1, 1_000_000),
-    ruleMode: requireEnum(row.ruleMode, taskRecurrenceRuleModes, 'Recurrence mode'),
-    frequency: requireEnum(row.frequency, taskRecurrenceFrequencies, 'Recurrence frequency'),
-    intervalCount: requireInteger(row.intervalCount, 'Recurrence interval', 1, 1_000),
-    startDate: requireDate(row.startDate, 'Recurrence Start'),
-    planningTimeZone,
-    missedPolicy: requireEnum(
-      row.missedPolicy,
-      taskRecurrenceMissedPolicies,
-      'Recurrence missed policy',
-    ),
-    catchUpLimit: requireInteger(row.catchUpLimit, 'Recurrence catch-up limit', 1, 10_000),
-    targetAreaId: requireNullableId(row.targetAreaId, 'Recurrence area'),
   };
 }
 

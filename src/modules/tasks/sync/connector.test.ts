@@ -375,10 +375,9 @@ describe('task sync connector', () => {
     expect(complete).toHaveBeenCalledOnce();
   });
 
-  it('rejects direct template writes because guarded RPCs own immutable history', async () => {
-    const entry = new CrudEntry(7, UpdateType.PUT, 'tasks_templates', 'template-a', 7, {
+  it('rejects writes to tables outside the synchronized task contract', async () => {
+    const entry = new CrudEntry(7, UpdateType.PUT, 'legacy_task_store', 'legacy-a', 7, {
       owner_id: 'owner-a',
-      kind: 'todo',
       name: 'Unsafe Direct Write',
     });
     const { complete, connector, database, remoteStore } = createHarness(entry);
@@ -390,7 +389,7 @@ describe('task sync connector', () => {
       expect.stringContaining('INSERT OR IGNORE INTO tasks_sync_issues'),
       [
         'crud-7',
-        'template-a',
+        'legacy-a',
         'rejected_operation',
         'PUT',
         null,

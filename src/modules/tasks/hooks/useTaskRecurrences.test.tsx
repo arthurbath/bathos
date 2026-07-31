@@ -13,15 +13,11 @@ import type {
 } from '@/modules/tasks/types/tasks';
 import { useTaskRecurrences } from './useTaskRecurrences';
 
-const mocks = vi.hoisted(() => ({
-  useQuery: vi.fn(),
-  useTasksRuntime: vi.fn(),
-}));
+const mocks = vi.hoisted(() => ({ useQuery: vi.fn(), useTasksRuntime: vi.fn() }));
 
 vi.mock('@powersync/react', () => ({
   useQuery: (...args: unknown[]) => mocks.useQuery(...args),
 }));
-
 vi.mock('@/modules/tasks/runtime/tasksRuntimeContext', () => ({
   useTasksRuntime: () => mocks.useTasksRuntime(),
 }));
@@ -52,238 +48,105 @@ describe('useTaskRecurrences', () => {
       data: query.includes('SELECT occurrence.recurrence_id')
         ? openOccurrenceRows
         : query.includes('tasks_recurrence_revisions')
-        ? revisionRows
-        : query.includes('tasks_recurrence_definitions') ? definitionRows : occurrenceRows,
+          ? revisionRows
+          : query.includes('tasks_recurrence_definitions')
+            ? definitionRows
+            : occurrenceRows,
       isLoading: false,
       error: null,
     }));
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+  afterEach(() => vi.useRealTimers());
 
-  it('derives the owner-local planning date and evaluates an overdue active definition once', async () => {
-    const stale = taskRecurrenceDefinitionFixture({ evaluated_through_date: '2026-07-18' });
-    const evaluated = taskRecurrenceDefinitionFixture({
-      evaluated_through_date: '2026-07-19',
-      record_revision: 2,
-      client_mutation_id: 'mutation-recurrence-evaluated',
+  it('evaluates an active definition when its next prototype date has been reached', async () => {
+    const stale = taskRecurrenceDefinitionFixture({
+      evaluated_through_date: '2026-07-18',
+      next_occurrence_date: '2026-07-19',
     });
+    const evaluated = { ...stale, evaluated_through_date: '2026-07-19', record_revision: 2 };
     const recurrenceService = {
       evaluate: vi.fn().mockResolvedValue({
-        outcome: 'accepted',
-        status: 'active',
-        through_date: '2026-07-19',
-        generated_count: 1,
-        occurrence_ids: ['recurrence-occurrence-a'],
-        definition: evaluated,
+        outcome: 'accepted', status: 'active', through_date: '2026-07-19',
+        generated_count: 1, occurrence_ids: ['occurrence-a'], definition: evaluated,
       }),
-      save: vi.fn(),
-      setStatus: vi.fn(),
+      createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn(),
     };
     definitionRows = [stale];
     revisionRows = [taskRecurrenceRevisionFixture()];
     occurrenceRows = [taskRecurrenceOccurrenceFixture()];
-    mocks.useTasksRuntime.mockReturnValue({
-      mode: 'connected',
-      planningTimeZone,
-      recurrenceService,
-    });
+    mocks.useTasksRuntime.mockReturnValue({ mode: 'connected', planningTimeZone, recurrenceService });
 
     const { result } = renderHook(() => useTaskRecurrences('owner-a'));
-
     expect(result.current.planningDate).toBe('2026-07-19');
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(recurrenceService.evaluate).toHaveBeenCalledTimes(1);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(recurrenceService.evaluate).toHaveBeenCalledWith(stale.id, '2026-07-19');
     expect(result.current.definitions[0]).toEqual(evaluated);
   });
 
-  it('passes the planning time zone to saves and immediately evaluates due active work', async () => {
+  it('keeps reached and subsequently deferred occurrence tasks ordinary', () => {
     const definition = taskRecurrenceDefinitionFixture({
-      evaluated_through_date: '2026-07-18',
-      client_mutation_id: 'mutation-saved-recurrence',
+      id: 'recurrence-calendar',
+      next_occurrence_date: '2026-07-27',
     });
-    const revision = taskRecurrenceRevisionFixture({
-      client_mutation_id: 'mutation-saved-recurrence',
-    });
-    const recurrenceService = {
-      save: vi.fn().mockResolvedValue({ outcome: 'accepted', definition, revision }),
-      evaluate: vi.fn().mockResolvedValue({
-        outcome: 'accepted',
-        status: 'active',
-        through_date: '2026-07-19',
-        generated_count: 1,
-        occurrence_ids: ['recurrence-occurrence-a'],
-        definition: { ...definition, evaluated_through_date: '2026-07-19' },
-      }),
-      setStatus: vi.fn(),
-    };
+    definitionRows = [definition];
+    revisionRows = [taskRecurrenceRevisionFixture({ recurrence_id: definition.id })];
+    openOccurrenceRows = [{
+      recurrence_id: definition.id,
+      root_id: 'deferred-instance',
+      scheduled_date: '2026-07-19',
+      destination: 'anytime',
+      today_section: null,
+      start_date: '2026-07-20',
+      deadline: null,
+    }];
     mocks.useTasksRuntime.mockReturnValue({
-      mode: 'connected',
-      planningTimeZone,
-      recurrenceService,
+      mode: 'local', planningTimeZone,
+      recurrenceService: { evaluate: vi.fn(), createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn() },
     });
+
     const { result } = renderHook(() => useTaskRecurrences('owner-a'));
-
-    await act(async () => {
-      await result.current.save({
-        name: 'Daily Review',
-        templateId: 'template-a',
-        templateRevision: 1,
-        ruleMode: 'calendar',
-        frequency: 'daily',
-        intervalCount: 1,
-        startDate: '2026-07-19',
-        missedPolicy: 'latest',
-      });
-    });
-
-    expect(recurrenceService.save).toHaveBeenCalledWith(expect.objectContaining({
-      planningTimeZone,
-      startDate: '2026-07-19',
-    }));
-    expect(recurrenceService.evaluate).toHaveBeenCalledWith(definition.id, '2026-07-19');
-    expect(result.current.revisions.get(definition.id)).toEqual(revision);
+    expect(result.current.openOccurrenceByDefinitionId.get(definition.id)?.root_id)
+      .toBe('deferred-instance');
+    expect(result.current.calendarPrototypes).toEqual([{
+      definition,
+      revision: revisionRows[0],
+      scheduledDate: '2026-07-27',
+    }]);
   });
 
-  it('keeps an accepted save successful while exposing a failed catch-up for explicit retry', async () => {
-    const definition = taskRecurrenceDefinitionFixture({
-      evaluated_through_date: '2026-07-18',
-      client_mutation_id: 'mutation-saved-recurrence',
-    });
-    const revision = taskRecurrenceRevisionFixture({
-      client_mutation_id: 'mutation-saved-recurrence',
-    });
-    const evaluated = {
-      ...definition,
-      evaluated_through_date: '2026-07-19',
-    };
-    const recurrenceService = {
-      save: vi.fn().mockResolvedValue({ outcome: 'accepted', definition, revision }),
-      evaluate: vi.fn()
-        .mockRejectedValueOnce(new Error('catch-up unavailable'))
-        .mockResolvedValue({
-          outcome: 'accepted',
-          status: 'active',
-          through_date: '2026-07-19',
-          generated_count: 1,
-          occurrence_ids: ['recurrence-occurrence-a'],
-          definition: evaluated,
-        }),
-      setStatus: vi.fn(),
-    };
+  it('keeps an after-completion prototype in waiting while its ordinary instance is open', () => {
+    const definition = taskRecurrenceDefinitionFixture({ next_occurrence_date: null });
+    definitionRows = [definition];
+    revisionRows = [taskRecurrenceRevisionFixture({ rule_mode: 'after_completion' })];
+    openOccurrenceRows = [{
+      recurrence_id: definition.id,
+      root_id: 'open-instance',
+      scheduled_date: '2026-07-19',
+      destination: 'anytime',
+      today_section: null,
+      start_date: '2026-07-25',
+      deadline: null,
+    }];
     mocks.useTasksRuntime.mockReturnValue({
-      mode: 'connected',
-      planningTimeZone,
-      recurrenceService,
-    });
-    const { result } = renderHook(() => useTaskRecurrences('owner-a'));
-
-    let saveResult: Awaited<ReturnType<typeof result.current.save>> | undefined;
-    await act(async () => {
-      saveResult = await result.current.save({
-        name: 'Daily Review',
-        templateId: 'template-a',
-        templateRevision: 1,
-        ruleMode: 'calendar',
-        frequency: 'daily',
-        intervalCount: 1,
-        startDate: '2026-07-19',
-        missedPolicy: 'latest',
-      });
-    });
-
-    expect(saveResult?.outcome).toBe('accepted');
-    expect(result.current.evaluationFailures.has(definition.id)).toBe(true);
-
-    await act(async () => {
-      await result.current.evaluate(definition);
-    });
-    expect(recurrenceService.evaluate).toHaveBeenCalledTimes(2);
-    expect(result.current.evaluationFailures.has(definition.id)).toBe(false);
-    expect(result.current.definitions[0]).toEqual(evaluated);
-  });
-
-  it('reports an automatic evaluation failure once without entering a retry loop', async () => {
-    const stale = taskRecurrenceDefinitionFixture({ evaluated_through_date: '2026-07-18' });
-    const recurrenceService = {
-      evaluate: vi.fn().mockRejectedValue(new Error('catch-up unavailable')),
-      save: vi.fn(),
-      setStatus: vi.fn(),
-    };
-    definitionRows = [stale];
-    revisionRows = [taskRecurrenceRevisionFixture()];
-    mocks.useTasksRuntime.mockReturnValue({
-      mode: 'connected',
-      planningTimeZone,
-      recurrenceService,
+      mode: 'local', planningTimeZone,
+      recurrenceService: { evaluate: vi.fn(), createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn() },
     });
 
     const { result } = renderHook(() => useTaskRecurrences('owner-a'));
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(recurrenceService.evaluate).toHaveBeenCalledTimes(1);
-    expect(result.current.evaluationFailures.has(stale.id)).toBe(true);
+    expect(result.current.openOccurrenceDefinitionIds).toEqual(new Set([definition.id]));
+    expect(result.current.calendarPrototypes).toEqual([]);
   });
 
   it('keeps recurrence mutations unavailable in local-only mode', async () => {
     const recurrenceService = {
-      save: vi.fn(),
-      evaluate: vi.fn(),
-      setStatus: vi.fn(),
+      evaluate: vi.fn(), createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn(),
     };
-    mocks.useTasksRuntime.mockReturnValue({
-      mode: 'local',
-      planningTimeZone,
-      recurrenceService,
-    });
+    mocks.useTasksRuntime.mockReturnValue({ mode: 'local', planningTimeZone, recurrenceService });
     const { result } = renderHook(() => useTaskRecurrences('owner-a'));
-
     await expect(result.current.evaluate(taskRecurrenceDefinitionFixture())).rejects.toThrow(
       'Recurrence evaluation requires connected task storage',
     );
     expect(recurrenceService.evaluate).not.toHaveBeenCalled();
-  });
-
-  it('projects which definitions still have an outstanding open occurrence', () => {
-    const outstanding = taskRecurrenceDefinitionFixture({ id: 'recurrence-open' });
-    definitionRows = [outstanding];
-    revisionRows = [taskRecurrenceRevisionFixture({
-      recurrence_id: outstanding.id,
-      rule_mode: 'after_completion',
-    })];
-    openOccurrenceRows = [{
-      recurrence_id: outstanding.id,
-      root_id: '53a4b5c1-3a4e-4fab-a5bf-4c1b114fc690',
-      scheduled_date: '2026-07-20',
-      destination: 'anytime',
-      today_section: 'inbox',
-      start_date: null,
-      deadline: null,
-    }];
-    mocks.useTasksRuntime.mockReturnValue({
-      mode: 'local',
-      planningTimeZone,
-      recurrenceService: {
-        save: vi.fn(),
-        evaluate: vi.fn(),
-        setStatus: vi.fn(),
-      },
-    });
-
-    const { result } = renderHook(() => useTaskRecurrences('owner-a'));
-
-    expect(result.current.openOccurrenceDefinitionIds).toEqual(new Set([outstanding.id]));
-    expect(result.current.openOccurrenceByDefinitionId.get(outstanding.id)?.root_id)
-      .toBe('53a4b5c1-3a4e-4fab-a5bf-4c1b114fc690');
   });
 });

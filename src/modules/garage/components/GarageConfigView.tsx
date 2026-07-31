@@ -230,7 +230,7 @@ function VehicleDateCell({
             setOpen(true);
           }}
           className={cn(
-            'inline-flex h-7 w-full items-center justify-start gap-1 rounded-md border border-transparent bg-transparent px-1 text-left text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 hover:border-[hsl(var(--grid-sticky-line))]',
+            'inline-flex h-7 w-full items-center justify-start gap-1 rounded-md border border-transparent bg-transparent px-1 text-left text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ',
             GRID_CONTROL_FOCUS_CLASS,
             !value && 'text-muted-foreground',
           )}
@@ -755,7 +755,7 @@ export function GarageConfigView({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground "
               disabled={deleteBusy || !deleteTarget}
               onClick={() => {
                 if (!deleteTarget) return;

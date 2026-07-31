@@ -226,7 +226,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
           variant="outline"
           disabled={disabled}
           className={cn(
-            'h-10 w-full justify-start rounded-md border-[hsl(var(--grid-sticky-line))] bg-background px-3 py-2 text-left text-base font-normal text-foreground enabled:hover:bg-background md:text-sm',
+            'h-10 w-full justify-start rounded-md border-[hsl(var(--grid-sticky-line))] bg-background px-3 py-2 text-left text-base font-normal text-foreground  md:text-sm',
             !selectedDate && 'text-muted-foreground',
             className,
           )}

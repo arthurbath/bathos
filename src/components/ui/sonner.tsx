@@ -1,4 +1,6 @@
-import { Toaster as Sonner, toast } from "sonner";
+import { Toaster as Sonner, toast as sonnerToast, type ExternalToast } from "sonner";
+
+import { getToastDurationMs } from "@/lib/toastDuration";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
@@ -21,4 +23,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
   );
 };
 
-export { Toaster, toast };
+type SonnerErrorMessage = Parameters<typeof sonnerToast.error>[0];
+
+function showSonnerErrorToast(message: SonnerErrorMessage, data?: ExternalToast) {
+  return sonnerToast.error(message, {
+    ...data,
+    duration: getToastDurationMs(message, data?.description),
+  });
+}
+
+export { Toaster, showSonnerErrorToast };

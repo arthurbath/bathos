@@ -20,7 +20,7 @@ VALUES
   );
 
 SELECT has_function(
-  'public', 'tasks_create_export_v13', ARRAY[]::text[],
+  'public', 'tasks_create_export_v14', ARRAY[]::text[],
   'creates portable task exports with Mail source audit history'
 );
 
@@ -30,14 +30,14 @@ SELECT has_function(
 );
 
 SELECT is(
-  has_function_privilege('anon', 'public.tasks_create_export_v13()', 'EXECUTE'),
+  has_function_privilege('anon', 'public.tasks_create_export_v14()', 'EXECUTE'),
   false,
   'withholds current export from anonymous callers'
 );
 
 SELECT is(
   has_function_privilege(
-    'authenticated', 'public.tasks_create_export_v13()', 'EXECUTE'
+    'authenticated', 'public.tasks_create_export_v14()', 'EXECUTE'
   ),
   true,
   'grants current export to authenticated callers'
@@ -84,11 +84,11 @@ SELECT public.tasks_resolve_mail_retirement(
 );
 
 CREATE TEMP TABLE captured_mail_event_export AS
-SELECT public.tasks_create_export_v13() AS envelope;
+SELECT public.tasks_create_export_v14() AS envelope;
 
 SELECT is(
   (SELECT envelope ->> 'schema_version' FROM captured_mail_event_export),
-  '13',
+  '14',
   'advances the portable task schema for Mail source audit events'
 );
 
@@ -318,7 +318,7 @@ SELECT is(
 
 SELECT is(
   (SELECT jsonb_array_length(
-    public.tasks_create_export_v13() #> '{data,tasks_mail_source_events}'
+    public.tasks_create_export_v14() #> '{data,tasks_mail_source_events}'
   )),
   4,
   're-exports the restored audit history for its new owner'

@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(42);
+SELECT plan(41);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -372,19 +372,11 @@ SELECT is(
   'inbox',
   'normalizes a reached legacy future horizon to Today Inbox'
 );
-SELECT is(
-  tasks_private.resolve_template_planning(
-    'anytime', 'later', 0, NULL,
-    DATE '2099-07-22', DATE '2099-07-22', true
-  ) ->> 'today_section',
-  'next',
-  'instantiates a reached template Start into Today Next'
-);
-SELECT set_config('test.tasks_v12_export', public.tasks_create_export_v13()::text, false);
+SELECT set_config('test.tasks_v12_export', public.tasks_create_export_v14()::text, false);
 SELECT is(
   (current_setting('test.tasks_v12_export')::jsonb ->> 'schema_version')::integer,
-  13,
-  'creates schema-thirteen task exports'
+  14,
+  'creates schema-fourteen task exports'
 );
 SELECT ok(
   NOT (current_setting('test.tasks_v12_export')::jsonb
@@ -395,8 +387,8 @@ SELECT is(
   public.tasks_restore_export_current(
     current_setting('test.tasks_v12_export')::jsonb, true
   ) ->> 'schema_version',
-  '13',
-  'previews a schema-thirteen merge restore through the current boundary'
+  '14',
+  'previews a schema-fourteen merge restore through the current boundary'
 );
 
 SELECT * FROM finish();

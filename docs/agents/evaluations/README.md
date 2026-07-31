@@ -14,6 +14,7 @@ This folder contains dated agent-facing security, performance, and technology ev
 
 | Date | File | Topic |
 |---|---|---|
+| 2026-07-31 | `2026-07-31_tasks_template_elimination_preflight.md` | Template-free recurrence model, exact production conversion preflight, and gated rollout |
 | 2026-07-28 | `2026-07-28_things_authoritative_cutover.md` | Private Things migration, Tasks-only capture cutover, and production acceptance |
 | 2026-07-26 | `2026-07-26_tasks_project_removal_release.md` | Project-free Tasks data model, 20-table synchronization boundary, and production acceptance |
 | 2026-07-25 | `2026-07-25_tasks_daily_rollover_release.md` | Owner-local midnight reset of unfinished Today tasks, preserved activation job, and production acceptance |

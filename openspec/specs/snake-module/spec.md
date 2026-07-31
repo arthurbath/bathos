@@ -96,7 +96,7 @@ The system SHALL derive previous-record and growth-evaluation fields from stored
 - **THEN** the system displays `Within Expectations`
 
 #### Scenario: Growth status expectation tooltip
-- **WHEN** a household member hovers or focuses a non-empty growth status value in the weight-record grid
+- **WHEN** a household member focuses or deliberately activates a non-empty growth status value by click or tap in the weight-record grid
 - **THEN** the system shows the expected growth thresholds for the selected snake's growth profile by age band
 - **AND** the age band that applies to that record is bolded
 

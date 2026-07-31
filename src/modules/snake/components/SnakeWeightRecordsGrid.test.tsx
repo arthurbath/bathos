@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { SnakeWeightRecordsGrid } from '@/modules/snake/components/SnakeWeightRecordsGrid';
-import { TOOLTIP_HOVER_DELAY_MS, TooltipProvider } from '@/components/ui/tooltip';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { Snake, SnakeGrowthExpectationRange, SnakeWeightRecord } from '@/modules/snake/types/snake';
 
 vi.mock('@/hooks/useGridColumnWidths', () => ({
@@ -46,9 +46,8 @@ function unmount(root: Root, container: HTMLElement) {
   container.remove();
 }
 
-async function waitForTooltip() {
+async function flushUi() {
   await act(async () => {
-    vi.advanceTimersByTime(TOOLTIP_HOVER_DELAY_MS);
     await Promise.resolve();
   });
 }
@@ -128,7 +127,6 @@ const records: SnakeWeightRecord[] = [
 
 describe('SnakeWeightRecordsGrid', () => {
   it('shows expected growth thresholds and bolds the active age band from a growth status cell', async () => {
-    vi.useFakeTimers();
     const { container, root } = mount(
       <TooltipProvider>
         <SnakeWeightRecordsGrid
@@ -150,9 +148,9 @@ describe('SnakeWeightRecordsGrid', () => {
       expect(trigger).toBeTruthy();
 
       await act(async () => {
-        trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+        trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
-      await waitForTooltip();
+      await flushUi();
 
       const tooltip = document.body.querySelector('[role="tooltip"]');
       expect(tooltip?.textContent).toContain('Age');
@@ -167,7 +165,6 @@ describe('SnakeWeightRecordsGrid', () => {
       expect(activeRow?.className).toContain('font-bold');
     } finally {
       unmount(root, container);
-      vi.useRealTimers();
     }
   });
 });

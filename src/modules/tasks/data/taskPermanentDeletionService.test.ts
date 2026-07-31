@@ -24,7 +24,6 @@ const preview: TaskPermanentDeletionPreview = {
   },
   preserved_receipts: {
     hierarchy_operations: ['operation-a'],
-    template_instantiations: [],
     recurrence_occurrences: [],
   },
   erased_record_count: 10,

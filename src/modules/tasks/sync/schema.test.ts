@@ -28,9 +28,6 @@ describe('tasks PowerSync schema', () => {
       'tasks_reminders',
       'tasks_sync_health_events',
       'tasks_sync_issues',
-      'tasks_template_instantiations',
-      'tasks_template_revisions',
-      'tasks_templates',
       'tasks_todos',
       'tasks_user_settings',
     ]);
@@ -41,9 +38,6 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_checklist_items.local_only).toBe(false);
     expect(tables.tasks_hierarchy_operations.local_only).toBe(false);
     expect(tables.tasks_hierarchy_history_events.local_only).toBe(false);
-    expect(tables.tasks_templates.local_only).toBe(false);
-    expect(tables.tasks_template_revisions.local_only).toBe(false);
-    expect(tables.tasks_template_instantiations.local_only).toBe(false);
     expect(tables.tasks_recurrence_definitions.local_only).toBe(false);
     expect(tables.tasks_recurrence_revisions.local_only).toBe(false);
     expect(tables.tasks_recurrence_occurrences.local_only).toBe(false);
@@ -66,7 +60,7 @@ describe('tasks PowerSync schema', () => {
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('deadline');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('today_section');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('actionability');
-    expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain(
+    expect(tables.tasks_todos.columns.map(({ name }) => name)).not.toContain(
       'template_instantiation_id',
     );
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain(
@@ -74,6 +68,12 @@ describe('tasks PowerSync schema', () => {
     );
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain(
       'recurrence_superseded_at',
+    );
+    expect(tables.tasks_recurrence_definitions.columns.map(({ name }) => name)).toContain(
+      'next_occurrence_date',
+    );
+    expect(tables.tasks_recurrence_revisions.columns.map(({ name }) => name)).toContain(
+      'prototype_snapshot',
     );
     expect(tables.tasks_todos.columns.map(({ name }) => name)).not.toContain('project_id');
     expect(tables.tasks_todos.columns.map(({ name }) => name)).toContain('deletion_root_id');

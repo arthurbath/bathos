@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.1"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -1098,7 +1118,6 @@ export type Database = {
           id: string
           last_actor_type: string
           last_mutation_channel: string
-          last_operation_id: string
           order_key: string
           owner_id: string
           revision: number
@@ -1115,7 +1134,6 @@ export type Database = {
           id: string
           last_actor_type?: string
           last_mutation_channel?: string
-          last_operation_id?: string
           order_key: string
           owner_id: string
           revision?: number
@@ -1132,7 +1150,6 @@ export type Database = {
           id?: string
           last_actor_type?: string
           last_mutation_channel?: string
-          last_operation_id?: string
           order_key?: string
           owner_id?: string
           revision?: number
@@ -1159,10 +1176,6 @@ export type Database = {
           owner_id: string
           revision: number
           task_id: string
-          template_definition_id: string | null
-          template_instantiation_id: string | null
-          template_node_id: string | null
-          template_revision: number | null
           title: string
           updated_at: string
         }
@@ -1183,10 +1196,6 @@ export type Database = {
           owner_id: string
           revision?: number
           task_id: string
-          template_definition_id?: string | null
-          template_instantiation_id?: string | null
-          template_node_id?: string | null
-          template_revision?: number | null
           title: string
           updated_at?: string
         }
@@ -1207,10 +1216,6 @@ export type Database = {
           owner_id?: string
           revision?: number
           task_id?: string
-          template_definition_id?: string | null
-          template_instantiation_id?: string | null
-          template_node_id?: string | null
-          template_revision?: number | null
           title?: string
           updated_at?: string
         }
@@ -1221,27 +1226,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tasks_todos"
             referencedColumns: ["id", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_checklist_items_template_definition_owner_fkey"
-            columns: ["template_definition_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_templates"
-            referencedColumns: ["id", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_checklist_items_template_instantiation_owner_fkey"
-            columns: ["template_instantiation_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_template_instantiations"
-            referencedColumns: ["id", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_checklist_items_template_revision_owner_fkey"
-            columns: ["template_definition_id", "template_revision", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_template_revisions"
-            referencedColumns: ["template_id", "revision", "owner_id"]
           },
         ]
       }
@@ -1289,8 +1273,8 @@ export type Database = {
       }
       tasks_hierarchy_history_events: {
         Row: {
-          actor_type: string
           action_id: string
+          actor_type: string
           affected_ids: string[]
           after_state: Json
           base_revision: number
@@ -1307,8 +1291,8 @@ export type Database = {
           transition: string
         }
         Insert: {
-          actor_type: string
           action_id?: string
+          actor_type: string
           affected_ids: string[]
           after_state: Json
           base_revision: number
@@ -1325,8 +1309,8 @@ export type Database = {
           transition: string
         }
         Update: {
-          actor_type?: string
           action_id?: string
+          actor_type?: string
           affected_ids?: string[]
           after_state?: Json
           base_revision?: number
@@ -1594,6 +1578,7 @@ export type Database = {
           last_actor_type: string
           last_mutation_channel: string
           name: string
+          next_occurrence_date: string | null
           owner_id: string
           record_revision: number
           status: string
@@ -1609,6 +1594,7 @@ export type Database = {
           last_actor_type?: string
           last_mutation_channel?: string
           name: string
+          next_occurrence_date?: string | null
           owner_id: string
           record_revision?: number
           status?: string
@@ -1624,6 +1610,7 @@ export type Database = {
           last_actor_type?: string
           last_mutation_channel?: string
           name?: string
+          next_occurrence_date?: string | null
           owner_id?: string
           record_revision?: number
           status?: string
@@ -1683,7 +1670,6 @@ export type Database = {
           root_id: string
           root_type: string
           scheduled_date: string
-          template_instantiation_id: string | null
         }
         Insert: {
           client_mutation_id: string
@@ -1698,7 +1684,6 @@ export type Database = {
           root_id: string
           root_type: string
           scheduled_date: string
-          template_instantiation_id?: string | null
         }
         Update: {
           client_mutation_id?: string
@@ -1713,7 +1698,6 @@ export type Database = {
           root_id?: string
           root_type?: string
           scheduled_date?: string
-          template_instantiation_id?: string | null
         }
         Relationships: [
           {
@@ -1722,13 +1706,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tasks_recurrence_revisions"
             referencedColumns: ["recurrence_id", "revision", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_recurrence_occurrences_instantiation_owner_fkey"
-            columns: ["template_instantiation_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_template_instantiations"
-            referencedColumns: ["id", "owner_id"]
           },
           {
             foreignKeyName: "tasks_recurrence_occurrences_predecessor_owner_fkey"
@@ -1755,6 +1732,7 @@ export type Database = {
           name: string
           owner_id: string
           planning_timezone: string
+          prototype_snapshot: Json
           recurrence_id: string
           reminder_local_time: string | null
           revision: number
@@ -1762,8 +1740,6 @@ export type Database = {
           rule_mode: string
           start_date: string
           target_area_id: string | null
-          template_id: string
-          template_revision: number
         }
         Insert: {
           catch_up_limit?: number
@@ -1780,6 +1756,7 @@ export type Database = {
           name: string
           owner_id: string
           planning_timezone: string
+          prototype_snapshot: Json
           recurrence_id: string
           reminder_local_time?: string | null
           revision: number
@@ -1787,8 +1764,6 @@ export type Database = {
           rule_mode: string
           start_date: string
           target_area_id?: string | null
-          template_id: string
-          template_revision: number
         }
         Update: {
           catch_up_limit?: number
@@ -1805,6 +1780,7 @@ export type Database = {
           name?: string
           owner_id?: string
           planning_timezone?: string
+          prototype_snapshot?: Json
           recurrence_id?: string
           reminder_local_time?: string | null
           revision?: number
@@ -1812,8 +1788,6 @@ export type Database = {
           rule_mode?: string
           start_date?: string
           target_area_id?: string | null
-          template_id?: string
-          template_revision?: number
         }
         Relationships: [
           {
@@ -1829,13 +1803,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tasks_areas"
             referencedColumns: ["id", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_recurrence_revisions_template_owner_fkey"
-            columns: ["template_id", "template_revision", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_template_revisions"
-            referencedColumns: ["template_id", "revision", "owner_id"]
           },
         ]
       }
@@ -2079,167 +2046,6 @@ export type Database = {
           },
         ]
       }
-      tasks_template_instantiations: {
-        Row: {
-          actor_type: string
-          anchor_date: string
-          client_mutation_id: string
-          created_at: string
-          entry_channel: string
-          id: string
-          owner_id: string
-          result: Json
-          root_id: string
-          root_type: string
-          target_area_id: string | null
-          template_id: string
-          template_revision: number
-        }
-        Insert: {
-          actor_type: string
-          anchor_date: string
-          client_mutation_id: string
-          created_at?: string
-          entry_channel: string
-          id?: string
-          owner_id: string
-          result: Json
-          root_id: string
-          root_type: string
-          target_area_id?: string | null
-          template_id: string
-          template_revision: number
-        }
-        Update: {
-          actor_type?: string
-          anchor_date?: string
-          client_mutation_id?: string
-          created_at?: string
-          entry_channel?: string
-          id?: string
-          owner_id?: string
-          result?: Json
-          root_id?: string
-          root_type?: string
-          target_area_id?: string | null
-          template_id?: string
-          template_revision?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tasks_template_instantiations_target_area_owner_fkey"
-            columns: ["target_area_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_areas"
-            referencedColumns: ["id", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_template_instantiations_template_revision_owner_fkey"
-            columns: ["template_id", "template_revision", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_template_revisions"
-            referencedColumns: ["template_id", "revision", "owner_id"]
-          },
-        ]
-      }
-      tasks_template_revisions: {
-        Row: {
-          anchor_date: string
-          client_mutation_id: string
-          created_at: string
-          id: string
-          name: string
-          owner_id: string
-          revision: number
-          snapshot: Json
-          source_id: string
-          source_revision: number
-          source_type: string
-          template_id: string
-        }
-        Insert: {
-          anchor_date: string
-          client_mutation_id: string
-          created_at?: string
-          id?: string
-          name: string
-          owner_id: string
-          revision: number
-          snapshot: Json
-          source_id: string
-          source_revision: number
-          source_type: string
-          template_id: string
-        }
-        Update: {
-          anchor_date?: string
-          client_mutation_id?: string
-          created_at?: string
-          id?: string
-          name?: string
-          owner_id?: string
-          revision?: number
-          snapshot?: Json
-          source_id?: string
-          source_revision?: number
-          source_type?: string
-          template_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tasks_template_revisions_template_owner_fkey"
-            columns: ["template_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_templates"
-            referencedColumns: ["id", "owner_id"]
-          },
-        ]
-      }
-      tasks_templates: {
-        Row: {
-          archived_at: string | null
-          client_mutation_id: string
-          created_at: string
-          current_revision: number
-          id: string
-          kind: string
-          last_actor_type: string
-          last_mutation_channel: string
-          name: string
-          owner_id: string
-          record_revision: number
-          updated_at: string
-        }
-        Insert: {
-          archived_at?: string | null
-          client_mutation_id: string
-          created_at?: string
-          current_revision?: number
-          id?: string
-          kind: string
-          last_actor_type?: string
-          last_mutation_channel?: string
-          name: string
-          owner_id: string
-          record_revision?: number
-          updated_at?: string
-        }
-        Update: {
-          archived_at?: string | null
-          client_mutation_id?: string
-          created_at?: string
-          current_revision?: number
-          id?: string
-          kind?: string
-          last_actor_type?: string
-          last_mutation_channel?: string
-          name?: string
-          owner_id?: string
-          record_revision?: number
-          updated_at?: string
-        }
-        Relationships: []
-      }
       tasks_todos: {
         Row: {
           actionability: string
@@ -2275,10 +2081,6 @@ export type Database = {
           source_title: string | null
           source_url: string | null
           start_date: string | null
-          template_definition_id: string | null
-          template_instantiation_id: string | null
-          template_node_id: string | null
-          template_revision: number | null
           title: string
           today_section: string | null
           undo_source_event_id: string | null
@@ -2318,10 +2120,6 @@ export type Database = {
           source_title?: string | null
           source_url?: string | null
           start_date?: string | null
-          template_definition_id?: string | null
-          template_instantiation_id?: string | null
-          template_node_id?: string | null
-          template_revision?: number | null
           title: string
           today_section?: string | null
           undo_source_event_id?: string | null
@@ -2361,10 +2159,6 @@ export type Database = {
           source_title?: string | null
           source_url?: string | null
           start_date?: string | null
-          template_definition_id?: string | null
-          template_instantiation_id?: string | null
-          template_node_id?: string | null
-          template_revision?: number | null
           title?: string
           today_section?: string | null
           undo_source_event_id?: string | null
@@ -2395,27 +2189,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tasks_recurrence_revisions"
             referencedColumns: ["recurrence_id", "revision", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_todos_template_definition_owner_fkey"
-            columns: ["template_definition_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_templates"
-            referencedColumns: ["id", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_todos_template_instantiation_owner_fkey"
-            columns: ["template_instantiation_id", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_template_instantiations"
-            referencedColumns: ["id", "owner_id"]
-          },
-          {
-            foreignKeyName: "tasks_todos_template_revision_owner_fkey"
-            columns: ["template_definition_id", "template_revision", "owner_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_template_revisions"
-            referencedColumns: ["template_id", "revision", "owner_id"]
           },
         ]
       }
@@ -2754,16 +2527,6 @@ export type Database = {
         Args: { _delivery_id: string }
         Returns: Json
       }
-      tasks_archive_template: {
-        Args: {
-          _actor_type?: string
-          _expected_record_revision: number
-          _mutation_channel?: string
-          _mutation_id: string
-          _template_id: string
-        }
-        Returns: Json
-      }
       tasks_begin_mail_retirement: {
         Args: {
           _expected_revision: number
@@ -2782,19 +2545,6 @@ export type Database = {
         }
         Returns: Json
       }
-      tasks_capture_template: {
-        Args: {
-          _actor_type?: string
-          _anchor_date: string
-          _mutation_channel?: string
-          _mutation_id: string
-          _name: string
-          _source_id: string
-          _source_type: string
-          _template_id: string
-        }
-        Returns: Json
-      }
       tasks_claim_due_reminders: {
         Args: { _request_id: string; _through_at: string }
         Returns: Json
@@ -2803,8 +2553,17 @@ export type Database = {
         Args: { _limit?: number; _through_at: string }
         Returns: Json
       }
+      tasks_complete_from_widget: {
+        Args: {
+          _client_mutation_id: string
+          _operation_id: string
+          _raw_token: string
+          _task_id: string
+        }
+        Returns: Json
+      }
       tasks_create_export_v1: { Args: never; Returns: Json }
-      tasks_create_export_v13: { Args: never; Returns: Json }
+      tasks_create_export_v14: { Args: never; Returns: Json }
       tasks_create_export_v2: { Args: never; Returns: Json }
       tasks_create_export_v3: { Args: never; Returns: Json }
       tasks_create_mail_capture: {
@@ -2846,16 +2605,6 @@ export type Database = {
         }
         Returns: Json
       }
-      tasks_evaluate_recurrence: {
-        Args: {
-          _actor_type?: string
-          _entry_channel?: string
-          _recurrence_id: string
-          _request_id: string
-          _through_date: string
-        }
-        Returns: Json
-      }
       tasks_edit_recurrence: {
         Args: {
           _actor_type?: string
@@ -2872,26 +2621,32 @@ export type Database = {
           _mutation_id: string
           _name: string
           _planning_timezone: string
+          _prototype_snapshot: Json
           _recurrence_id: string
           _reminder_local_time: string
           _rule_config: Json
           _rule_mode: string
           _start_date: string
           _target_area_id: string
-          _template_id: string
-          _template_revision: number
         }
         Returns: Json
       }
-      tasks_instantiate_template: {
+      tasks_evaluate_recurrence: {
         Args: {
           _actor_type?: string
-          _anchor_date: string
           _entry_channel?: string
+          _recurrence_id: string
           _request_id: string
-          _target_area_id?: string
-          _template_id: string
-          _template_revision: number
+          _through_date: string
+        }
+        Returns: Json
+      }
+      tasks_issue_widget_completion_credential: {
+        Args: {
+          _expires_at: string
+          _installation_id: string
+          _owner_id: string
+          _raw_token: string
         }
         Returns: Json
       }
@@ -2905,12 +2660,16 @@ export type Database = {
         }
         Returns: Json
       }
-      tasks_prepare_replace_restore_v13: {
+      tasks_prepare_replace_restore_v14: {
         Args: { _envelope: Json }
         Returns: Json
       }
       tasks_preview_permanent_deletion: {
         Args: { _root_id: string; _root_type: string }
+        Returns: Json
+      }
+      tasks_read_widget_snapshot: {
+        Args: { _raw_token: string }
         Returns: Json
       }
       tasks_record_web_push_delivery_result: {
@@ -2933,7 +2692,7 @@ export type Database = {
         }
         Returns: Json
       }
-      tasks_replace_restore_v13: {
+      tasks_replace_restore_v14: {
         Args: {
           _confirmation: string
           _envelope: Json
@@ -2971,7 +2730,7 @@ export type Database = {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
       }
-      tasks_restore_export_v13: {
+      tasks_restore_export_v14: {
         Args: { _dry_run?: boolean; _envelope: Json }
         Returns: Json
       }
@@ -2995,25 +2754,8 @@ export type Database = {
         Args: { _reason?: string; _target_id: string }
         Returns: Json
       }
-      tasks_save_recurrence: {
-        Args: {
-          _actor_type?: string
-          _catch_up_limit: number
-          _expected_record_revision: number
-          _frequency: string
-          _interval_count: number
-          _missed_policy: string
-          _mutation_channel?: string
-          _mutation_id: string
-          _name: string
-          _planning_timezone: string
-          _recurrence_id: string
-          _rule_mode: string
-          _start_date: string
-          _target_area_id: string
-          _template_id: string
-          _template_revision: number
-        }
+      tasks_revoke_widget_completion_credential: {
+        Args: { _raw_token: string }
         Returns: Json
       }
       tasks_save_reminder: {
@@ -3204,6 +2946,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["admin", "user"],

@@ -29,7 +29,6 @@ import {
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
-import { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
 import { bindTasksDatabaseOwner } from '@/modules/tasks/sync/database';
 import { createTasksSupabaseConnector } from '@/modules/tasks/sync/connector';
 import { tasksPowerSyncSchema } from '@/modules/tasks/sync/schema';
@@ -208,31 +207,19 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
       receipt: { outcome: 'accepted', transition: 'retirement_failed' },
     });
 
-    const template = await new TaskTemplateService(sourceClient, source.id).capture({
-      sourceType: 'todo',
-      sourceId: primary.id,
-      name: 'Preservation Template',
-      anchorDate: '2026-07-20',
-    });
     const recurrenceService = new TaskRecurrenceService(sourceClient, source.id);
-    const recurrence = await recurrenceService.save({
+    const recurrence = await recurrenceService.createFromTask({
+      taskId: primary.id,
       name: 'Preservation Recurrence',
-      templateId: template.template.id,
-      templateRevision: template.revision.revision,
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 1,
-      startDate: '2026-07-20',
-      planningTimeZone: 'America/Los_Angeles',
-      missedPolicy: 'latest',
+      scheduleDate: '2026-07-20',
+      ruleConfig: {},
+      endMode: 'never',
     });
-    const recurrenceEvaluation = await recurrenceService.evaluate(
-      recurrence.definition.id,
-      '2026-07-20',
-    );
-    expect(recurrenceEvaluation.generated_count).toBe(1);
     const pausedRecurrence = await recurrenceService.setStatus(
-      recurrenceEvaluation.definition,
+      recurrence.definition,
       'paused',
     );
     expect(pausedRecurrence).toMatchObject({ outcome: 'accepted', definition: { status: 'paused' } });

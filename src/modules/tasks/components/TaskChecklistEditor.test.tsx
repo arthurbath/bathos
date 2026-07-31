@@ -54,9 +54,11 @@ function renderEditor(
   {
     emptyActionLayout,
     onContentPresenceChange,
+    onRegisterFlush,
   }: {
     emptyActionLayout?: 'paired' | 'standalone';
     onContentPresenceChange?: (present: boolean) => void;
+    onRegisterFlush?: (flush: (() => Promise<void>) | null) => void;
   } = {},
 ) {
   const container = document.createElement('div');
@@ -69,6 +71,7 @@ function renderEditor(
       focusRequestTaskId={focusRequestTaskId}
       emptyActionLayout={emptyActionLayout}
       onContentPresenceChange={onContentPresenceChange}
+      onRegisterFlush={onRegisterFlush}
     />,
   ));
   return { container, root };
@@ -419,8 +422,8 @@ describe('TaskChecklistEditor', () => {
       );
       expect(openControl).toHaveClass('text-muted-foreground');
       expect(completedControl).toHaveClass('text-muted-foreground');
-      expect(openControl).not.toHaveClass('hover:text-success');
-      expect(completedControl).not.toHaveClass('hover:text-success');
+      expect(openControl?.className).not.toContain('hover:');
+      expect(completedControl?.className).not.toContain('hover:');
       expect(completedControl?.querySelector('svg.lucide-square-check'))
         .not.toHaveClass('text-success');
     } finally {
@@ -938,6 +941,35 @@ describe('TaskChecklistEditor', () => {
       });
       expect(createItem).toHaveBeenCalledWith('First step', 0);
       expect(createItem).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('flushes the final checklist draft before its task editor closes', async () => {
+    mockUseTaskChecklist.mockReturnValue(checklistModel([]));
+    let flush: (() => Promise<void>) | null = null;
+    const { container, root } = renderEditor(undefined, {
+      onRegisterFlush: (nextFlush) => {
+        flush = nextFlush;
+      },
+    });
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('button[aria-label="Add Checklist"]')?.click();
+      });
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      await act(async () => setInput(input, 'Final step'));
+
+      await act(async () => {
+        await flush?.();
+      });
+
+      expect(createItem).toHaveBeenCalledWith('Final step', 0);
+      expect(createItem).toHaveBeenCalledTimes(1);
+      expect(container.querySelector('input[aria-label="New Checklist Item"]')).toBeNull();
     } finally {
       cleanup(root, container);
     }

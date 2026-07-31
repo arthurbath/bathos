@@ -117,10 +117,6 @@ export class TaskHierarchyRepository {
         disposition: 'present',
         deleted_at: null,
         deletion_root_id: null,
-        template_definition_id: null,
-        template_revision: null,
-        template_instantiation_id: null,
-        template_node_id: null,
       };
       await insertRow(transaction, 'tasks_checklist_items', item);
       return item;

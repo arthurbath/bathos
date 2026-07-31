@@ -1,6 +1,6 @@
 import { PostgrestError } from '@supabase/supabase-js';
+import { showSonnerErrorToast } from '@/components/ui/sonner';
 import { isLikelyNetworkError, toUserFacingErrorMessage } from '@/lib/networkErrors';
-import { toast } from 'sonner';
 
 /**
  * Checks whether a Supabase PostgREST error payload looks like a transient
@@ -172,7 +172,7 @@ export { supabaseRequest as supabaseRpc };
  * Re-exported from networkErrors for convenience so callers don't need two imports.
  */
 export function showMutationError(error: unknown): void {
-  toast.error('Operation Failed', {
+  showSonnerErrorToast('Operation Failed', {
     description: toUserFacingErrorMessage(error),
   });
 }

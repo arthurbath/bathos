@@ -65,7 +65,7 @@ export default function LauncherPage() {
               return (
                 <Card
                   key={module.id}
-                  className="cursor-pointer hover:shadow-sm transition-shadow"
+                  className="cursor-pointer  transition-shadow"
                 >
                   <a
                     href={module.launchPath}

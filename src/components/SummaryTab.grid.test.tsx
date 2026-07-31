@@ -3,7 +3,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { SummaryTab } from '@/components/SummaryTab';
-import { TOOLTIP_HOVER_DELAY_MS } from '@/components/ui/tooltip';
 import type { Income } from '@/hooks/useIncomes';
 import type { Expense } from '@/hooks/useExpenses';
 import type { LinkedAccount } from '@/hooks/useLinkedAccounts';
@@ -191,8 +190,7 @@ describe('SummaryTab DataGrid', () => {
     }
   });
 
-  it('shows normalized cadence details when hovering a monthly value', async () => {
-    vi.useFakeTimers();
+  it('shows normalized cadence details when activating a monthly value', async () => {
     const incomes: Income[] = [
       {
         id: 'income-x',
@@ -245,10 +243,7 @@ describe('SummaryTab DataGrid', () => {
       expect(trigger).toBeTruthy();
 
       act(() => {
-        trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-      });
-      act(() => {
-        vi.advanceTimersByTime(TOOLTIP_HOVER_DELAY_MS);
+        trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
       await flushUi();
 
@@ -259,7 +254,6 @@ describe('SummaryTab DataGrid', () => {
       expect(text).toContain(`Annually: $${annual.toFixed(2)}`);
     } finally {
       unmount(root, container);
-      vi.useRealTimers();
     }
   });
 });

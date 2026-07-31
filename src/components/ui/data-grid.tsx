@@ -58,8 +58,6 @@ export const GRID_HEADER_TONE_CLASS = 'bg-border';
 export const GRID_READONLY_TEXT_CLASS = 'text-[hsl(var(--grid-text))]';
 // Shared null-state affordance for grid controls. Override per cell only when a more specific prompt is necessary.
 export const GRID_NULL_PLACEHOLDER = '—';
-// Use on button controls rendered inside grid cells to match hover border treatment of other grid inputs.
-export const GRID_CONTROL_HOVER_BORDER_CLASS = 'border-transparent hover:border-[hsl(var(--grid-sticky-line))]';
 // Header/footer cell borders and sticky first-column divider are baseline grid affordances in both card and full-view layouts.
 // Card layouts should keep bottom padding on the surrounding card content so rounded bottom corners remain visible.
 const GRID_HEADER_CELL_BORDERS_CLASS = '[&>tr>th]:shadow-[inset_0_-1px_0_0_hsl(var(--grid-sticky-line)),inset_0_1px_0_0_hsl(var(--grid-sticky-line))]';
@@ -989,7 +987,7 @@ export function DataGrid<TData>({
       <tr
         key={row.id}
         className={cn(
-          'group border-b bg-background transition-colors hover:bg-muted',
+          'group border-b bg-background transition-colors ',
           highlightedRowId === row.id && 'data-grid-row-resorted',
         )}
       >
@@ -1127,7 +1125,6 @@ export function DataGrid<TData>({
                       `relative h-9 text-left align-middle font-medium ${GRID_READONLY_TEXT_CLASS}`,
                       isActionsColumn ? 'px-0' : 'px-2',
                       canSort && 'cursor-pointer select-none',
-                      canSort && !isResizingColumn && 'hover:bg-muted',
                       colIdx === 0 && stickyFirstColumn && GRID_HEADER_TONE_CLASS,
                       colIdx === 0 && stickyFirstColumn && `sticky left-0 z-40 bg-border ${GRID_STICKY_FIRST_COLUMN_DIVIDER_CLASS}`,
                       isStickyActionsColumn && `${GRID_HEADER_TONE_CLASS} sticky right-0 z-30`,
@@ -1191,7 +1188,7 @@ export function DataGrid<TData>({
                       >
                         <span
                           className={cn(
-                            'pointer-events-none absolute inset-y-0 w-px bg-[hsl(var(--grid-handle-line))] group-hover:bg-foreground',
+                            'pointer-events-none absolute inset-y-0 w-px bg-[hsl(var(--grid-handle-line))] ',
                             'right-[4px]',
                             isResizing && 'bg-foreground',
                           )}
@@ -1257,7 +1254,7 @@ export function DataGrid<TData>({
 }
 
 // ─── Cell Primitives ───
-const CELL_INPUT_CLASS = 'min-w-0 h-7 rounded-md border border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 !text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
+const CELL_INPUT_CLASS = 'min-w-0 h-7 rounded-md border border-transparent bg-transparent px-1  focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 !text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 cursor-pointer [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
 
 function isPrintableEntryKey(e: React.KeyboardEvent<HTMLInputElement>) {
   return e.key.length === 1
@@ -1645,7 +1642,7 @@ export function GridEditableCell({ value, onChange, navCol, type = 'text', input
             type="button"
             variant="outline"
             size="icon"
-            className="h-7 w-7 shrink-0 border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))]"
+            className="h-7 w-7 shrink-0 border-transparent bg-transparent "
             aria-label={`View ${longTextTitle}`}
             disabled={disabled}
             data-row={ctx?.rowIndex}
@@ -2014,7 +2011,7 @@ export function GridUrlCell({
         type="button"
         variant="outline"
         size="icon"
-        className="h-7 w-7 shrink-0 border-transparent bg-transparent hover:border-[hsl(var(--grid-sticky-line))]"
+        className="h-7 w-7 shrink-0 border-transparent bg-transparent "
         aria-label="Open URL"
         disabled={disabled || !canOpen}
         data-row={ctx?.rowIndex}

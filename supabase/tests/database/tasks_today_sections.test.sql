@@ -41,7 +41,7 @@ SELECT ok(
     LIKE '%today_section%',
   'indexes active manual order by Today section'
 );
-SELECT has_function('public', 'tasks_create_export_v13', ARRAY[]::text[], 'exports schema version thirteen');
+SELECT has_function('public', 'tasks_create_export_v14', ARRAY[]::text[], 'exports schema version fourteen');
 SELECT has_function(
   'public',
   'tasks_restore_export_current',
@@ -141,11 +141,11 @@ SET
   client_mutation_id = '71000000-0000-4000-8000-000000000023'
 WHERE id = '71000000-0000-4000-8000-000000000010';
 
-SELECT set_config('test.tasks_today_export', public.tasks_create_export_v13()::text, false);
+SELECT set_config('test.tasks_today_export', public.tasks_create_export_v14()::text, false);
 SELECT is(
   (current_setting('test.tasks_today_export')::jsonb ->> 'schema_version')::integer,
-  13,
-  'uses portable export schema version thirteen'
+  14,
+  'uses portable export schema version fourteen'
 );
 SELECT is(
   current_setting('test.tasks_today_export')::jsonb

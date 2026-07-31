@@ -208,11 +208,11 @@ describe('DatePickerField', () => {
       const populated = container.querySelector('#populated-date');
 
       expect(empty).toHaveTextContent('No Date');
-      expect(empty).toHaveClass('text-muted-foreground', 'enabled:hover:bg-background');
-      expect(empty).not.toHaveClass('enabled:hover:text-foreground');
+      expect(empty).toHaveClass('text-muted-foreground');
+      expect(empty?.className).not.toContain('hover:');
       expect(populated).toHaveTextContent('Mar 2, 2026');
-      expect(populated).toHaveClass('text-foreground', 'enabled:hover:bg-background');
-      expect(populated).not.toHaveClass('enabled:hover:text-foreground');
+      expect(populated).toHaveClass('text-foreground');
+      expect(populated?.className).not.toContain('hover:');
     } finally {
       unmount(root, container);
     }

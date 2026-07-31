@@ -384,12 +384,12 @@ SELECT is(
 );
 
 SELECT set_config(
-  'test.reminder_export', public.tasks_create_export_v13()::text, false
+  'test.reminder_export', public.tasks_create_export_v14()::text, false
 );
 SELECT is(
   (current_setting('test.reminder_export')::jsonb ->> 'schema_version')::integer,
-  13,
-  'uses portable task export schema version thirteen'
+  14,
+  'uses portable task export schema version fourteen'
 );
 SELECT ok(
   jsonb_array_length(

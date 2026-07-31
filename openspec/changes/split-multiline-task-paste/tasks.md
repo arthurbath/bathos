@@ -27,6 +27,13 @@
 - [x] 5.1 Run focused Tasks tests, Tasks TypeScript, targeted lint, build, and strict OpenSpec validation
 - [x] 5.2 Smoke-check the rendered task editor without mutating the user's live task data
 
+## 6. Checklist Creation Regression
+
+- [x] 6.1 Restore the checklist undo-operation column to the PowerSync client schema and guard it with schema coverage
+- [x] 6.2 Register checklist drafts with the task-editor flush boundary so Return and close durably preserve new checklist items
+- [x] 6.3 Add focused regression coverage for Return-created following items and close-time draft persistence
+- [x] 6.4 Run focused tests, Tasks TypeScript, targeted lint, build, strict OpenSpec validation, and a rendered non-mutating smoke check
+
 ## 7. Checklist Completion Regression
 
 - [x] 7.1 Cover checklist completion through the production repository and PowerSync schema, including database reopen persistence

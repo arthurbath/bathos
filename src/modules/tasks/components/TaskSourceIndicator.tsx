@@ -24,7 +24,6 @@ const sourcePresentations: Record<TaskSourceKind, SourcePresentation> = {
   file: { icon: TASK_ICONS.FileSource, label: 'File' },
   selected_text: { icon: TASK_ICONS.SelectedTextSource, label: 'Selected Text' },
   reading_item: { icon: TASK_ICONS.ReadingItemSource, label: 'Reading Item' },
-  template: { icon: TASK_ICONS.TemplateSource, label: 'Template' },
   other: { icon: TASK_ICONS.OtherSource, label: 'Source' },
 };
 
@@ -38,7 +37,7 @@ export function TaskSourceIndicator({
   const primaryLinkKind = getTaskPrimaryLinkKind(task.primary_link);
   const primaryLinkIconKind = getTaskPrimaryLinkIconKind(task.primary_link);
   const href = getTaskPrimaryLinkHref(task.primary_link);
-  const className = `inline-flex ${compact ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`;
+  const className = `inline-flex ${compact ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`;
   if (primaryLinkKind !== null && primaryLinkIconKind !== null && href !== null) {
     const Icon = TASK_PRIMARY_LINK_ICONS[primaryLinkIconKind];
     const label = `Open ${TASK_PRIMARY_LINK_LABELS[primaryLinkIconKind]} for ${task.title}`;

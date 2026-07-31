@@ -60,7 +60,7 @@ export function TaskSyncDiagnosticsDialog({
           <button
             type="button"
             className={cn(
-              'inline-flex cursor-pointer items-center gap-1.5 rounded-sm text-xs font-medium transition-colors hover:text-foreground',
+              'inline-flex cursor-pointer items-center gap-1.5 rounded-sm text-xs font-medium transition-colors ',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
               hasError ? 'text-destructive' : 'text-info',
             )}

@@ -264,7 +264,7 @@ function CategoryCell({ exp, categories, onChange, onAddNew, disabled = false }:
     }} disabled={disabled}>
       <SelectTrigger
         disabled={disabled}
-        className={`h-7 border-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm ${GRID_CONTROL_FOCUS_CLASS}`}
+        className={`h-7 border-transparent px-1  text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm ${GRID_CONTROL_FOCUS_CLASS}`}
         style={{ backgroundColor: normalizePaletteColor(categories.find(c => c.id === exp.category_id)?.color) || 'transparent' }}
         {...gridSelectTriggerProps(ctx, 1, {
           disabled,
@@ -323,7 +323,7 @@ function ExpenseFrequencyCell({ exp, onChange, disabled = false }: { exp: Expens
       }} disabled={disabled}>
         <SelectTrigger
           disabled={disabled}
-          className={`h-7 min-w-0 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
+          className={`h-7 min-w-0 border-transparent bg-transparent px-1  text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
           {...gridSelectTriggerProps(ctx, 4, { disabled })}
         >
           <GridSelectValue />
@@ -364,7 +364,7 @@ function PaymentMethodCell({ exp, linkedAccounts, partnerX, partnerY, onChange, 
     }} disabled={disabled}>
       <SelectTrigger
         disabled={disabled}
-        className={`h-7 border-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm ${GRID_CONTROL_FOCUS_CLASS}`}
+        className={`h-7 border-transparent px-1  text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 rounded-sm ${GRID_CONTROL_FOCUS_CLASS}`}
         style={{ backgroundColor: normalizePaletteColor(linkedAccounts.find(la => la.id === exp.linked_account_id)?.color) || 'transparent' }}
         {...gridSelectTriggerProps(ctx, 6, {
           disabled,
@@ -413,7 +413,7 @@ function EstimateCell({ checked, onToggle, disabled = false }: { checked: boolea
       navCol={3}
       disabled={disabled}
       deleteResetChecked={false}
-      className={disabled ? 'ml-1 opacity-60' : 'ml-1 hover:border-[hsl(var(--grid-sticky-line))]'}
+      className={disabled ? 'ml-1 opacity-60' : 'ml-1 '}
     />
   );
 }
@@ -435,7 +435,7 @@ function AveragedAmountCell({
         type="button"
         disabled={disabled}
         data-grid-focus-only="true"
-        className={`h-7 w-full rounded-md border border-transparent bg-transparent pl-4 pr-2 text-right tabular-nums text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 hover:border-[hsl(var(--grid-sticky-line))] ${GRID_CONTROL_FOCUS_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}
+        className={`h-7 w-full rounded-md border border-transparent bg-transparent pl-4 pr-2 text-right tabular-nums text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2  ${GRID_CONTROL_FOCUS_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}
         onClick={onEdit}
         {...gridNavProps(ctx, 2)}
         aria-label={`Edit Averaged Records for ${expense.name}`}
@@ -507,7 +507,7 @@ function ExpenseActionsCell({
         </AlertDialogBody>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={onRemove}>Delete</AlertDialogAction>
+          <AlertDialogAction className="bg-destructive text-destructive-foreground " onClick={onRemove}>Delete</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

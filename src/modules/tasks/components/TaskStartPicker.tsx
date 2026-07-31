@@ -447,7 +447,6 @@ export function TaskStartPickerPanel({
         reminderInputConfirmedRef.current = true;
         toast({
           title: 'Not Allowed.',
-          duration: 1_800,
         });
         return false;
       }
@@ -598,7 +597,10 @@ export function TaskStartPickerPanel({
               void commitReminderInput();
             }}
           />
-          <InputGroupAddon align="inline-end">
+          <InputGroupAddon
+            align="inline-end"
+            className="h-full p-0"
+          >
             <DropdownMenu
               open={reminderHourMenuOpen}
               onOpenChange={(nextOpen) => {
@@ -614,6 +616,7 @@ export function TaskStartPickerPanel({
                   aria-label="Choose Reminder Hour"
                   data-task-reminder-hour-trigger
                   disabled={reminderHourMenuDisabled}
+                  className="h-full w-10 rounded-none rounded-r-md border-l border-[hsl(var(--grid-sticky-line))] bg-muted/15 text-muted-foreground hover:bg-muted/35 hover:text-foreground disabled:bg-transparent disabled:text-muted-foreground/40 disabled:opacity-100"
                 >
                   <AlarmClock aria-hidden />
                 </InputGroupButton>
@@ -778,7 +781,7 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
           variant="outline"
           aria-label="Start"
           className={cn(
-            'h-10 w-full justify-start rounded-md border-[hsl(var(--grid-sticky-line))] bg-background px-3 text-left font-normal enabled:hover:bg-background',
+            'h-10 w-full justify-start rounded-md border-[hsl(var(--grid-sticky-line))] bg-background px-3 text-left font-normal ',
             props.task.destination !== 'someday'
               && props.task.start_date === null
               && props.task.today_section === null

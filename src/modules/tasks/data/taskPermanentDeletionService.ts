@@ -25,7 +25,6 @@ export type TaskPermanentDeletionRelated = {
 
 export type TaskPermanentDeletionPreservedReceipts = {
   hierarchy_operations: string[];
-  template_instantiations: string[];
   recurrence_occurrences: string[];
 };
 
@@ -172,10 +171,6 @@ function parsePreservedReceipts(value: unknown): TaskPermanentDeletionPreservedR
   const receipts = requireRecord(value, 'Permanent-deletion receipt data is invalid');
   return {
     hierarchy_operations: requireStringArray(receipts.hierarchy_operations, 'hierarchy operations'),
-    template_instantiations: requireStringArray(
-      receipts.template_instantiations,
-      'template instantiations',
-    ),
     recurrence_occurrences: requireStringArray(
       receipts.recurrence_occurrences,
       'recurrence occurrences',

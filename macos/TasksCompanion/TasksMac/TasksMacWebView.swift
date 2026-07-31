@@ -18,6 +18,12 @@ enum TasksMacWebViewPolicy {
     }
 }
 
+final class TasksFirstMouseWebView: WKWebView {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+}
+
 enum TasksMacWebNavigationDisposition: Equatable {
     case allow
     case openExternally
@@ -111,11 +117,20 @@ private struct TasksMacWebViewRepresentable: NSViewRepresentable {
             name: TaskCompanionConstants.webBridgeHandler
         )
 
+        let shortcutDisplay = TasksGlobalShortcutStore.display(
+            TasksGlobalShortcutStore.load()
+        )
+        let shortcutLiteral = (
+            try? JSONEncoder().encode(shortcutDisplay)
+        ).flatMap {
+            String(data: $0, encoding: .utf8)
+        } ?? "null"
         var nativeContextScript = """
         window.__bathosNativeApp = Object.freeze({
           schemaVersion: 1,
           moduleId: "tasks",
-          platform: "macos"
+          platform: "macos",
+          quickEntryShortcut: \(shortcutLiteral)
         });
         """
         if let installationID = try? TaskWidgetInstallationStore()?.identifier() {
@@ -137,7 +152,10 @@ private struct TasksMacWebViewRepresentable: NSViewRepresentable {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         TasksMacWebViewPolicy.apply(to: configuration)
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = TasksFirstMouseWebView(
+            frame: .zero,
+            configuration: configuration
+        )
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true

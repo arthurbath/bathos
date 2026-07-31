@@ -1,4 +1,4 @@
-import { toast } from 'sonner';
+import { showSonnerErrorToast } from '@/components/ui/sonner';
 
 const NETWORK_ERROR_FALLBACK = 'Network request failed. Check your connection or content blocker and try again.';
 const DEFAULT_RETRY_ATTEMPTS = 3;
@@ -71,7 +71,7 @@ export async function retryOnLikelyNetworkError<T>(
 }
 
 export function showMutationError(error: unknown): void {
-  toast.error('Operation Failed', {
+  showSonnerErrorToast('Operation Failed', {
     description: toUserFacingErrorMessage(error),
   });
 }

@@ -3,834 +3,466 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(63);
+SELECT plan(44);
 
-INSERT INTO auth.users (
-  id, aud, role, email, encrypted_password, email_confirmed_at,
-  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
-) VALUES
-  (
-    '96000000-0000-4000-8000-000000000001',
-    'authenticated', 'authenticated', 'recurrence-a@example.test', '', now(),
-    '{}', '{}', now(), now()
-  ),
-  (
-    '96000000-0000-4000-8000-000000000002',
-    'authenticated', 'authenticated', 'recurrence-b@example.test', '', now(),
-    '{}', '{}', now(), now()
-  );
-
-SELECT has_table(
-  'public', 'tasks_recurrence_definitions',
-  'stores owner-scoped recurrence definitions'
-);
-SELECT has_table(
-  'public', 'tasks_recurrence_revisions',
-  'stores immutable recurrence revisions'
-);
-SELECT has_table(
-  'public', 'tasks_recurrence_occurrences',
-  'stores generated logical occurrences'
-);
-SELECT has_table(
-  'public', 'tasks_recurrence_evaluations',
-  'stores idempotent evaluation receipts'
-);
-SELECT has_table(
-  'public', 'tasks_recurrence_status_events',
-  'stores immutable recurrence status receipts'
+SELECT has_table('public', 'tasks_recurrence_definitions', 'stores recurrence prototypes');
+SELECT has_table('public', 'tasks_recurrence_revisions', 'stores immutable prototype revisions');
+SELECT has_table('public', 'tasks_recurrence_occurrences', 'stores spawned-instance receipts');
+SELECT has_column(
+  'public', 'tasks_recurrence_definitions', 'next_occurrence_date',
+  'stores the next virtual prototype date'
 );
 SELECT has_column(
-  'public', 'tasks_todos', 'recurrence_occurrence_id',
-  'stores to-do recurrence provenance'
+  'public', 'tasks_recurrence_revisions', 'prototype_snapshot',
+  'stores first-class prototype content'
 );
-SELECT hasnt_table(
-  'public', 'tasks_projects',
-  'does not retain project recurrence roots'
+SELECT hasnt_table('public', 'tasks_templates', 'removes Template definitions');
+SELECT hasnt_table('public', 'tasks_template_revisions', 'removes Template revisions');
+SELECT hasnt_table('public', 'tasks_template_instantiations', 'removes Template instances');
+SELECT hasnt_column(
+  'public', 'tasks_todos', 'template_instantiation_id',
+  'removes Template provenance from ordinary tasks'
 );
 SELECT has_function(
-  'public', 'tasks_save_recurrence',
+  'public', 'tasks_create_recurrence_from_task',
   ARRAY[
-    'uuid', 'bigint', 'text', 'uuid', 'bigint', 'text', 'text', 'integer',
-    'date', 'text', 'text', 'integer', 'uuid', 'uuid', 'text', 'text'
+    'uuid', 'text', 'text', 'text', 'integer', 'date', 'jsonb', 'text',
+    'integer', 'date', 'time without time zone', 'integer', 'uuid', 'text', 'text'
   ],
-  'creates and revises recurrence through one guarded function'
+  'creates a recurrence prototype from an ordinary task'
+);
+SELECT has_function(
+  'public', 'tasks_edit_recurrence',
+  ARRAY[
+    'uuid', 'bigint', 'text', 'text', 'text', 'integer', 'date', 'text',
+    'text', 'integer', 'uuid', 'jsonb', 'text', 'integer', 'date',
+    'time without time zone', 'integer', 'jsonb', 'uuid', 'text', 'text'
+  ],
+  'edits recurrence schedule and prototype content explicitly'
 );
 SELECT has_function(
   'public', 'tasks_evaluate_recurrence',
   ARRAY['uuid', 'date', 'uuid', 'text', 'text'],
-  'evaluates recurrence authoritatively'
+  'spawns due ordinary instances'
 );
 SELECT has_function(
-  'public', 'tasks_set_recurrence_status',
-  ARRAY['uuid', 'bigint', 'text', 'uuid', 'text', 'text'],
-  'changes recurrence status explicitly'
+  'public', 'tasks_create_export_v14', ARRAY[]::text[],
+  'exports the template-free task graph'
 );
-SELECT has_function(
-  'public', 'tasks_create_export_v13', ARRAY[]::text[],
-  'exports recurrence definitions and provenance'
-);
-SELECT has_function(
-  'public', 'tasks_restore_export_current', ARRAY['jsonb', 'boolean'],
-  'restores recurrence definitions and provenance'
-);
-SELECT has_index(
-  'public', 'tasks_recurrence_occurrences',
-  'tasks_recurrence_occurrences_logical_event_key',
-  'enforces one row for each deterministic logical event'
-);
-SELECT is(
-  tasks_private.add_recurrence_interval('2024-02-29', 'yearly', 1, 1),
-  '2025-02-28'::date,
-  'yearly recurrence clamps leap-day schedules safely'
-);
-SELECT is(
-  tasks_private.first_recurrence_step_after(
-    '2024-01-31', 'monthly', 1, '2024-02-29'
-  ),
-  2,
-  'recurrence cursor advances past a clamped month-end occurrence'
-);
-SELECT is(
-  tasks_private.first_recurrence_step_after(
-    '1900-01-01', 'daily', 1, '2026-07-21'
-  ),
-  ('2026-07-21'::date - '1900-01-01'::date) + 1,
-  'recurrence cursor derives a distant daily step without interval scanning'
+
+INSERT INTO auth.users (
+  id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) VALUES (
+  'a1000000-0000-4000-8000-000000000001',
+  'authenticated', 'authenticated', 'recurrence@example.test', '', now(),
+  '{}', '{}', now(), now()
 );
 
 SET LOCAL ROLE authenticated;
 SELECT set_config(
-  'request.jwt.claim.sub', '96000000-0000-4000-8000-000000000001', true
+  'request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000001', true
 );
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 INSERT INTO public.tasks_user_settings (
   id, owner_id, planning_timezone, client_mutation_id
 ) VALUES (
-  '96000000-0000-4000-8000-000000000010',
-  '96000000-0000-4000-8000-000000000001',
+  'a1000000-0000-4000-8000-000000000002',
+  'a1000000-0000-4000-8000-000000000001',
   'UTC',
-  '96000000-0000-4000-8000-000000000011'
+  'a1000000-0000-4000-8000-000000000003'
 );
-INSERT INTO public.tasks_todos (
-  id, owner_id, title, destination, order_key, client_mutation_id
+
+INSERT INTO public.tasks_areas (
+  id, owner_id, title, order_key, client_mutation_id
 ) VALUES (
-  '96000000-0000-4000-8000-000000000012',
-  '96000000-0000-4000-8000-000000000001',
-  'Recurring source', 'anytime', 'a0',
-  '96000000-0000-4000-8000-000000000013'
+  'a1000000-0000-4000-8000-000000000004',
+  'a1000000-0000-4000-8000-000000000001',
+  'Health', 'a0',
+  'a1000000-0000-4000-8000-000000000005'
 );
+
+INSERT INTO public.tasks_todos (
+  id, owner_id, area_id, title, notes, primary_link, actionability,
+  destination, order_key, start_date, today_section, client_mutation_id
+) VALUES (
+  'a1000000-0000-4000-8000-000000000010',
+  'a1000000-0000-4000-8000-000000000001',
+  'a1000000-0000-4000-8000-000000000004',
+  'Exercise', 'Prototype notes', 'https://example.test/exercise', 'actionable',
+  'anytime', 'a0', '2026-08-01', NULL,
+  'a1000000-0000-4000-8000-000000000011'
+);
+
+INSERT INTO public.tasks_checklist_items (
+  id, owner_id, task_id, title, completed, completed_at, order_key,
+  client_mutation_id
+) VALUES
+  (
+    'a1000000-0000-4000-8000-000000000012',
+    'a1000000-0000-4000-8000-000000000001',
+    'a1000000-0000-4000-8000-000000000010',
+    'Warm up', true, '2026-07-31T12:00:00Z', 'a0',
+    'a1000000-0000-4000-8000-000000000013'
+  ),
+  (
+    'a1000000-0000-4000-8000-000000000014',
+    'a1000000-0000-4000-8000-000000000001',
+    'a1000000-0000-4000-8000-000000000010',
+    'Work out', false, NULL, 'a1',
+    'a1000000-0000-4000-8000-000000000015'
+  );
+
 SELECT set_config(
-  'test.recurrence_template',
-  public.tasks_capture_template(
-    NULL,
-    'todo',
-    '96000000-0000-4000-8000-000000000012',
-    'Recurring source',
-    '2026-01-01',
-    '96000000-0000-4000-8000-000000000014'
+  'test.calendar_recurrence',
+  public.tasks_create_recurrence_from_task(
+    'a1000000-0000-4000-8000-000000000010',
+    'Exercise', 'calendar', 'daily', 1, '2026-08-01', '{}'::jsonb,
+    'never', NULL, NULL, NULL, NULL,
+    'a1000000-0000-4000-8000-000000000016'
   )::text,
   false
 );
 
-SELECT lives_ok(
-  $$
-    SELECT set_config(
-      'test.latest_recurrence',
-      public.tasks_save_recurrence(
-        NULL, NULL, 'Daily latest',
-        (current_setting('test.recurrence_template')::jsonb #>> '{template,id}')::uuid,
-        1, 'calendar', 'daily', 1, '2026-01-01', 'UTC', 'latest', 50,
-        NULL, '96000000-0000-4000-8000-000000000015'
-      )::text,
-      false
-    )
-  $$,
-  'creates a calendar recurrence definition'
-);
 SELECT is(
-  current_setting('test.latest_recurrence')::jsonb #>> '{revision,rule_mode}',
-  'calendar',
-  'stores calendar mode explicitly'
-);
-SELECT lives_ok(
-  $$
-    SELECT set_config(
-      'test.latest_evaluation',
-      public.tasks_evaluate_recurrence(
-        (current_setting('test.latest_recurrence')::jsonb #>> '{definition,id}')::uuid,
-        '2026-01-04', '96000000-0000-4000-8000-000000000016'
-      )::text,
-      false
-    )
-  $$,
-  'evaluates missed calendar events transactionally'
+  current_setting('test.calendar_recurrence')::jsonb ->> 'outcome',
+  'accepted',
+  'creates a calendar recurrence without creating a Template'
 );
 SELECT is(
   (
-    current_setting('test.latest_evaluation')::jsonb
-      ->> 'generated_count'
-  )::integer,
-  1,
-  'latest policy creates only the newest missed event'
+    current_setting('test.calendar_recurrence')::jsonb
+      #>> '{occurrence,scheduled_date}'
+  )::date,
+  '2026-08-01'::date,
+  'adopts the source task as the reached ordinary instance'
+);
+SELECT is(
+  (
+    current_setting('test.calendar_recurrence')::jsonb
+      #>> '{definition,next_occurrence_date}'
+  )::date,
+  '2026-08-02'::date,
+  'places the virtual prototype on its next spawn date'
+);
+SELECT is(
+  current_setting('test.calendar_recurrence')::jsonb
+    #>> '{revision,prototype_snapshot,root,title}',
+  'Exercise',
+  'stores the prototype Summary independently'
+);
+SELECT is(
+  current_setting('test.calendar_recurrence')::jsonb
+    #>> '{revision,prototype_snapshot,root,primary_link}',
+  'https://example.test/exercise',
+  'stores the prototype Primary Link independently'
+);
+SELECT is(
+  (
+    current_setting('test.calendar_recurrence')::jsonb
+      #>> '{revision,prototype_snapshot,root,checklist,0,completed}'
+  )::boolean,
+  true,
+  'stores checklist completion state on the prototype'
+);
+
+SELECT lives_ok(
+  $$
+    UPDATE public.tasks_todos
+    SET title = 'Deferred Exercise Instance',
+        notes = 'Instance-only notes',
+        primary_link = 'https://example.test/instance',
+        revision = revision + 1,
+        client_mutation_id = 'a1000000-0000-4000-8000-000000000017'
+    WHERE id = 'a1000000-0000-4000-8000-000000000010'
+  $$,
+  'allows the ordinary instance to diverge from prototype content'
+);
+SELECT is(
+  (
+    SELECT prototype_snapshot #>> '{root,title}'
+    FROM public.tasks_recurrence_revisions
+    WHERE recurrence_id = (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid AND revision = 1
+  ),
+  'Exercise',
+  'instance edits never mutate the prototype snapshot'
+);
+SELECT lives_ok(
+  $$
+    UPDATE public.tasks_todos
+    SET start_date = '2026-08-02',
+        today_section = NULL,
+        revision = revision + 1,
+        client_mutation_id = 'a1000000-0000-4000-8000-000000000018'
+    WHERE id = 'a1000000-0000-4000-8000-000000000010'
+  $$,
+  'allows a reached ordinary instance to be deferred into Upcoming'
 );
 SELECT is(
   (
     SELECT scheduled_date
     FROM public.tasks_recurrence_occurrences
-    WHERE recurrence_id = (
-      current_setting('test.latest_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid
+    WHERE root_id = 'a1000000-0000-4000-8000-000000000010'
   ),
-  '2026-01-04'::date,
-  'latest policy anchors generated work to the selected logical date'
+  '2026-08-01'::date,
+  'keeps the instance recurrence date immutable after deferral'
 );
 SELECT is(
   (
-    SELECT recurrence_logical_key
-    FROM public.tasks_todos
-    WHERE recurrence_definition_id = (
-      current_setting('test.latest_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid
+    SELECT start_date FROM public.tasks_todos
+    WHERE id = 'a1000000-0000-4000-8000-000000000010'
   ),
-  'calendar:2026-01-04',
-  'generated root stores deterministic recurrence provenance'
+  '2026-08-02'::date,
+  'keeps the deferred instance accessible on its chosen Upcoming date'
 );
 SELECT is(
   (
-    public.tasks_evaluate_recurrence(
-      (current_setting('test.latest_recurrence')::jsonb #>> '{definition,id}')::uuid,
-      '2026-01-04', '96000000-0000-4000-8000-000000000016'
-    ) ->> 'outcome'
-  ),
-  'already_applied',
-  'returns the stored evaluation result for an exact retry'
-);
-SELECT is(
-  (
-    SELECT count(*) FROM public.tasks_recurrence_occurrences
-    WHERE recurrence_id = (
-      current_setting('test.latest_recurrence')::jsonb #>> '{definition,id}'
+    SELECT next_occurrence_date FROM public.tasks_recurrence_definitions
+    WHERE id = (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
     )::uuid
   ),
-  1::bigint,
-  'does not duplicate an occurrence on retry'
+  '2026-08-02'::date,
+  'does not mistake deferred instance placement for prototype placement'
 );
 
 SELECT set_config(
-  'test.all_recurrence',
-  public.tasks_save_recurrence(
-    NULL, NULL, 'Weekly all',
-    (current_setting('test.recurrence_template')::jsonb #>> '{template,id}')::uuid,
-    1, 'calendar', 'weekly', 1, '2026-01-01', 'UTC', 'all', 10,
-    NULL, '96000000-0000-4000-8000-000000000017'
+  'test.edited_recurrence',
+  public.tasks_edit_recurrence(
+    (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid,
+    2,
+    'Exercise', 'calendar', 'daily', 1, '2026-08-01', 'UTC',
+    'latest', 100, 'a1000000-0000-4000-8000-000000000004', '{}'::jsonb,
+    'never', NULL, NULL, NULL, NULL,
+    jsonb_set(
+      current_setting('test.calendar_recurrence')::jsonb
+        #> '{revision,prototype_snapshot}',
+      '{root,title}',
+      '"Prototype Exercise"'::jsonb
+    ),
+    'a1000000-0000-4000-8000-000000000019'
   )::text,
   false
 );
 SELECT is(
-  (
-    public.tasks_evaluate_recurrence(
-      (current_setting('test.all_recurrence')::jsonb #>> '{definition,id}')::uuid,
-      '2026-01-22', '96000000-0000-4000-8000-000000000018'
-    ) ->> 'generated_count'
-  )::integer,
-  4,
-  'all policy creates every missed weekly event within the safety limit'
-);
-SELECT lives_ok(
-  $$
-    SELECT set_config(
-      'test.unsafe_recurrence',
-      public.tasks_save_recurrence(
-        NULL, NULL, 'Unsafe all',
-        (current_setting('test.recurrence_template')::jsonb #>> '{template,id}')::uuid,
-        1, 'calendar', 'daily', 1, '2026-01-01', 'UTC', 'all', 2,
-        NULL, '96000000-0000-4000-8000-000000000020'
-      )::text,
-      false
-    )
-  $$,
-  'accepts a bounded all-policy definition'
-);
-SELECT throws_ok(
-  format(
-    $$
-      SELECT public.tasks_evaluate_recurrence(
-        %L::uuid, '2026-01-04', '96000000-0000-4000-8000-000000000021'
-      )
-    $$,
-    current_setting('test.unsafe_recurrence')::jsonb #>> '{definition,id}'
-  ),
-  '54000',
-  'Recurrence catch-up exceeds its safety limit',
-  'rejects unbounded all-policy catch-up before creating partial work'
-);
-
-SELECT set_config(
-  'test.skip_recurrence',
-  public.tasks_save_recurrence(
-    NULL, NULL, 'Daily skip',
-    (current_setting('test.recurrence_template')::jsonb #>> '{template,id}')::uuid,
-    1, 'calendar', 'daily', 1, '2026-01-01', 'UTC', 'skip', 50,
-    NULL, '96000000-0000-4000-8000-000000000022'
-  )::text,
-  false
+  current_setting('test.edited_recurrence')::jsonb ->> 'outcome',
+  'accepted',
+  'edits prototype content only through the recurrence workflow'
 );
 SELECT is(
   (
-    public.tasks_evaluate_recurrence(
-      (current_setting('test.skip_recurrence')::jsonb #>> '{definition,id}')::uuid,
-      '2026-01-03', '96000000-0000-4000-8000-000000000023'
-    ) ->> 'generated_count'
-  )::integer,
-  1,
-  'skip policy still creates an event due exactly on the evaluation date'
-);
-SELECT set_config(
-  'test.paused_recurrence',
-  public.tasks_set_recurrence_status(
-    (current_setting('test.skip_recurrence')::jsonb #>> '{definition,id}')::uuid,
-    2, 'paused', '96000000-0000-4000-8000-000000000024'
-  )::text,
-  false
-);
-SELECT is(
-  (
-    public.tasks_evaluate_recurrence(
-      (current_setting('test.skip_recurrence')::jsonb #>> '{definition,id}')::uuid,
-      '2026-01-04', '96000000-0000-4000-8000-000000000025'
-    ) ->> 'generated_count'
-  )::integer,
-  0,
-  'paused recurrence generates no future work'
-);
-SELECT is(
-  (
-    public.tasks_set_recurrence_status(
-      (current_setting('test.skip_recurrence')::jsonb #>> '{definition,id}')::uuid,
-      3, 'active', '96000000-0000-4000-8000-000000000026'
-    ) #>> '{definition,status}'
-  ),
-  'active',
-  'resumes a paused recurrence explicitly'
-);
-SELECT is(
-  (
-    public.tasks_evaluate_recurrence(
-      (current_setting('test.skip_recurrence')::jsonb #>> '{definition,id}')::uuid,
-      '2026-01-04', '96000000-0000-4000-8000-000000000035'
-    ) ->> 'generated_count'
-  )::integer,
-  1,
-  'resumed recurrence catches up from its preserved evaluation cursor'
-);
-SELECT is(
-  (
-    public.tasks_set_recurrence_status(
-      (current_setting('test.skip_recurrence')::jsonb #>> '{definition,id}')::uuid,
-      3, 'active', '96000000-0000-4000-8000-000000000026'
-    ) ->> 'outcome'
-  ),
-  'already_applied',
-  'status retry remains provable after a later evaluation'
-);
-
-SELECT set_config(
-  'test.revised_recurrence',
-  public.tasks_save_recurrence(
-    (current_setting('test.latest_recurrence')::jsonb #>> '{definition,id}')::uuid,
-    2, 'Monthly latest',
-    (current_setting('test.recurrence_template')::jsonb #>> '{template,id}')::uuid,
-    1, 'calendar', 'monthly', 1, '2026-01-31', 'UTC', 'latest', 50,
-    NULL, '96000000-0000-4000-8000-000000000027'
-  )::text,
-  false
-);
-SELECT is(
-  (
-    current_setting('test.revised_recurrence')::jsonb
+    current_setting('test.edited_recurrence')::jsonb
       #>> '{definition,current_revision}'
   )::integer,
   2,
-  'editing recurrence creates a new immutable revision'
+  'creates an immutable recurrence revision for prototype edits'
 );
 SELECT is(
-  (
-    SELECT frequency FROM public.tasks_recurrence_revisions
-    WHERE recurrence_id = (
-      current_setting('test.revised_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid AND revision = 1
-  ),
-  'daily',
-  'editing recurrence leaves its prior revision unchanged'
-);
-SELECT is(
-  (
-    public.tasks_evaluate_recurrence(
-      (current_setting('test.revised_recurrence')::jsonb #>> '{definition,id}')::uuid,
-      '2026-03-31', '96000000-0000-4000-8000-000000000028'
-    ) ->> 'generated_count'
-  )::integer,
-  1,
-  'revised rule generates only future ungenerated work'
-);
-SELECT ok(
-  EXISTS (
-    SELECT 1 FROM public.tasks_recurrence_occurrences
-    WHERE recurrence_id = (
-      current_setting('test.revised_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid AND recurrence_revision = 2 AND scheduled_date = '2026-03-31'
-  ),
-  'monthly arithmetic preserves the original month day after February'
+  current_setting('test.edited_recurrence')::jsonb
+    #>> '{revision,prototype_snapshot,root,title}',
+  'Prototype Exercise',
+  'stores explicitly edited prototype content'
 );
 
 SELECT set_config(
-  'test.after_recurrence',
-  public.tasks_save_recurrence(
-    NULL, NULL, 'After completion',
-    (current_setting('test.recurrence_template')::jsonb #>> '{template,id}')::uuid,
-    1, 'after_completion', 'daily', 1, '2026-01-01', 'UTC', 'latest', 50,
-    NULL, '96000000-0000-4000-8000-000000000029'
-  )::text,
-  false
-);
-SELECT set_config(
-  'test.after_evaluation',
+  'test.calendar_evaluation',
   public.tasks_evaluate_recurrence(
-    (current_setting('test.after_recurrence')::jsonb #>> '{definition,id}')::uuid,
-    '2026-01-01', '96000000-0000-4000-8000-000000000030'
+    (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid,
+    '2026-08-02',
+    'a1000000-0000-4000-8000-000000000020'
   )::text,
   false
 );
-UPDATE public.tasks_todos
-SET lifecycle = 'completed', completed_at = '2026-01-03 12:00:00+00',
-    revision = revision + 1,
-    client_mutation_id = '96000000-0000-4000-8000-000000000031'
-WHERE id = (
-  SELECT root_id FROM public.tasks_recurrence_occurrences
-  WHERE recurrence_id = (
-    current_setting('test.after_recurrence')::jsonb #>> '{definition,id}'
-  )::uuid AND predecessor_occurrence_id IS NULL
-);
 SELECT is(
   (
-    SELECT count(*) FROM public.tasks_recurrence_occurrences
-    WHERE recurrence_id = (
-      current_setting('test.after_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid
-  ),
-  2::bigint,
-  'authoritative completion creates exactly one next occurrence'
-);
-SELECT ok(
-  EXISTS (
-    SELECT 1 FROM public.tasks_recurrence_occurrences
-    WHERE recurrence_id = (
-      current_setting('test.after_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid
-      AND logical_key LIKE 'after:%'
-      AND scheduled_date = '2026-01-04'
-  ),
-  'after-completion occurrence derives its date from the completion date'
-);
-UPDATE public.tasks_todos
-SET lifecycle = 'canceled', canceled_at = '2026-01-05 12:00:00+00',
-    revision = revision + 1,
-    client_mutation_id = '96000000-0000-4000-8000-000000000032'
-WHERE id = (
-  SELECT root_id FROM public.tasks_recurrence_occurrences
-  WHERE recurrence_id = (
-    current_setting('test.after_recurrence')::jsonb #>> '{definition,id}'
-  )::uuid AND predecessor_occurrence_id IS NOT NULL
-);
-SELECT is(
-  (
-    SELECT count(*) FROM public.tasks_recurrence_occurrences
-    WHERE recurrence_id = (
-      current_setting('test.after_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid
-  ),
-  2::bigint,
-  'cancellation does not advance after-completion recurrence'
-);
-
-SELECT throws_ok(
-  format(
-    $$
-      UPDATE public.tasks_todos
-      SET recurrence_definition_id = %L::uuid,
-          recurrence_revision = 1,
-          recurrence_occurrence_id = %L::uuid,
-          recurrence_logical_key = 'spoofed',
-          revision = revision + 1,
-          client_mutation_id = '96000000-0000-4000-8000-000000000033'
-      WHERE id = '96000000-0000-4000-8000-000000000012'
-    $$,
-    current_setting('test.after_recurrence')::jsonb #>> '{definition,id}',
-    current_setting('test.after_evaluation')::jsonb #>> '{occurrence_ids,0}'
-  ),
-  '42501',
-  'Recurrence provenance can be assigned only by generation or restore',
-  'rejects client-spoofed recurrence provenance'
-);
-SELECT throws_ok(
-  format(
-    $$
-      SELECT public.tasks_archive_template(
-        %L::uuid, 1, '96000000-0000-4000-8000-000000000034'
-      )
-    $$,
-    current_setting('test.recurrence_template')::jsonb #>> '{template,id}'
-  ),
-  '23514',
-  'Archive linked recurrence definitions before archiving this template',
-  'protects the immutable template snapshot used by live recurrence'
-);
-
-SELECT lives_ok(
-  $$
-    SELECT set_config(
-      'test.recurrence_export',
-      public.tasks_create_export_v13()::text,
-      false
-    )
-  $$,
-  'creates a recurrence-aware portable export'
-);
-SELECT is(
-  (
-    current_setting('test.recurrence_export')::jsonb
-      ->> 'schema_version'
+    current_setting('test.calendar_evaluation')::jsonb ->> 'generated_count'
   )::integer,
-  13,
-  'uses the current task export schema'
-);
-SELECT ok(
-  jsonb_array_length(
-    current_setting('test.recurrence_export')::jsonb
-      #> '{data,tasks_recurrence_occurrences}'
-  ) > 0,
-  'exports generated recurrence occurrences'
-);
-SELECT throws_ok(
-  $$
-    SELECT public.tasks_restore_export_current(
-      jsonb_set(
-        current_setting('test.recurrence_export')::jsonb,
-        '{manifest,checksums,tasks_recurrence_definitions}',
-        to_jsonb(repeat('0', 64))
-      ),
-      true
-    )
-  $$,
-  '22023',
-  'Task export collection tasks_recurrence_definitions is invalid',
-  'rejects a recurrence collection with a mismatched checksum'
-);
-
-SELECT set_config(
-  'request.jwt.claim.sub', '96000000-0000-4000-8000-000000000002', true
+  1,
+  'spawns exactly one ordinary task when the prototype date arrives'
 );
 SELECT is(
-  (SELECT count(*) FROM public.tasks_recurrence_definitions),
-  0::bigint,
-  'RLS hides another owner recurrence definitions'
-);
-SELECT is(
-  (SELECT count(*) FROM public.tasks_recurrence_occurrences),
-  0::bigint,
-  'RLS hides another owner recurrence occurrences'
-);
-
-RESET ROLE;
-SELECT set_config('request.jwt.claim.sub', '', true);
-DELETE FROM auth.users
-WHERE id = '96000000-0000-4000-8000-000000000001';
-SET LOCAL ROLE authenticated;
-SELECT set_config(
-  'request.jwt.claim.sub', '96000000-0000-4000-8000-000000000002', true
-);
-SELECT set_config('request.jwt.claim.role', 'authenticated', true);
-SELECT ok(
   (
-    public.tasks_restore_export_current(
-      current_setting('test.recurrence_export')::jsonb, true
-    ) #>> '{tasks_recurrence_definitions,inserts}'
-  )::integer > 0,
-  'previews recurrence definitions as owner-rebound inserts'
+    SELECT count(*) FROM public.tasks_recurrence_occurrences
+    WHERE recurrence_id = (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid
+  ),
+  2::bigint,
+  'stores the adopted and generated instance receipts without a projection row'
+);
+SELECT is(
+  (
+    SELECT task.title
+    FROM public.tasks_todos AS task
+    JOIN public.tasks_recurrence_occurrences AS occurrence
+      ON occurrence.root_id = task.id AND occurrence.owner_id = task.owner_id
+    WHERE occurrence.recurrence_id = (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid AND occurrence.scheduled_date = '2026-08-02'
+  ),
+  'Prototype Exercise',
+  'spawns from the prototype rather than from the edited prior instance'
+);
+SELECT is(
+  (
+    SELECT task.primary_link
+    FROM public.tasks_todos AS task
+    JOIN public.tasks_recurrence_occurrences AS occurrence
+      ON occurrence.root_id = task.id AND occurrence.owner_id = task.owner_id
+    WHERE occurrence.recurrence_id = (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid AND occurrence.scheduled_date = '2026-08-02'
+  ),
+  'https://example.test/exercise',
+  'spawns the prototype Primary Link rather than the prior instance edit'
+);
+SELECT results_eq(
+  $$
+    SELECT item.title, item.completed
+    FROM public.tasks_checklist_items AS item
+    JOIN public.tasks_recurrence_occurrences AS occurrence
+      ON occurrence.root_id = item.task_id AND occurrence.owner_id = item.owner_id
+    WHERE occurrence.recurrence_id = (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid AND occurrence.scheduled_date = '2026-08-02'
+    ORDER BY item.order_key
+  $$,
+  $$VALUES ('Warm up'::text, true), ('Work out'::text, false)$$,
+  'spawns prototype checklist text, order, and completion state'
+);
+SELECT is(
+  (
+    SELECT task.lifecycle || ':' || task.disposition
+    FROM public.tasks_todos AS task
+    JOIN public.tasks_recurrence_occurrences AS occurrence
+      ON occurrence.root_id = task.id AND occurrence.owner_id = task.owner_id
+    WHERE occurrence.recurrence_id = (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid AND occurrence.scheduled_date = '2026-08-02'
+  ),
+  'open:present',
+  'spawns a normal open task instance'
+);
+SELECT is(
+  (
+    SELECT next_occurrence_date FROM public.tasks_recurrence_definitions
+    WHERE id = (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid
+  ),
+  '2026-08-03'::date,
+  'moves the virtual prototype to the following cadence date'
+);
+
+INSERT INTO public.tasks_todos (
+  id, owner_id, title, destination, order_key, client_mutation_id
+) VALUES (
+  'a1000000-0000-4000-8000-000000000030',
+  'a1000000-0000-4000-8000-000000000001',
+  'Water Plants', 'anytime', 'a1',
+  'a1000000-0000-4000-8000-000000000031'
+);
+SELECT set_config(
+  'test.completion_recurrence',
+  public.tasks_create_recurrence_from_task(
+    'a1000000-0000-4000-8000-000000000030',
+    'Water Plants', 'after_completion', 'daily', 2, current_date, '{}'::jsonb,
+    'never', NULL, NULL, NULL, NULL,
+    'a1000000-0000-4000-8000-000000000032'
+  )::text,
+  false
+);
+SELECT is(
+  current_setting('test.completion_recurrence')::jsonb ->> 'outcome',
+  'accepted',
+  'creates an after-completion recurrence prototype'
+);
+SELECT is(
+  (
+    SELECT next_occurrence_date FROM public.tasks_recurrence_definitions
+    WHERE id = (
+      current_setting('test.completion_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid
+  ),
+  NULL::date,
+  'keeps the prototype waiting while its instance remains open'
 );
 SELECT lives_ok(
   $$
-    SELECT set_config(
-      'test.recurrence_restore',
-      public.tasks_restore_export_current(
-        current_setting('test.recurrence_export')::jsonb, false
-      )::text,
-      false
-    )
+    UPDATE public.tasks_todos
+    SET lifecycle = 'completed',
+        completed_at = clock_timestamp(),
+        revision = revision + 1,
+        client_mutation_id = 'a1000000-0000-4000-8000-000000000033'
+    WHERE id = 'a1000000-0000-4000-8000-000000000030'
   $$,
-  'restores the complete recurrence graph for another owner'
+  'completion schedules the next prototype spawn date'
 );
 SELECT is(
   (
-    current_setting('test.recurrence_restore')::jsonb
-      ->> 'applied'
-  )::boolean,
-  true,
-  'reports an applied recurrence merge restore'
+    SELECT next_occurrence_date FROM public.tasks_recurrence_definitions
+    WHERE id = (
+      current_setting('test.completion_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid
+  ),
+  current_date + 2,
+  'after-completion cadence starts from the completion date'
+);
+SELECT lives_ok(
+  $$
+    UPDATE public.tasks_todos
+    SET lifecycle = 'open',
+        completed_at = NULL,
+        revision = revision + 1,
+        client_mutation_id = 'a1000000-0000-4000-8000-000000000034'
+    WHERE id = 'a1000000-0000-4000-8000-000000000030'
+  $$,
+  'restoration before successor spawn returns the prototype to waiting'
+);
+SELECT is(
+  (
+    SELECT next_occurrence_date FROM public.tasks_recurrence_definitions
+    WHERE id = (
+      current_setting('test.completion_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid
+  ),
+  NULL::date,
+  'clears the next spawn date when the watched instance is restored'
+);
+
+SELECT set_config(
+  'test.export_v14', public.tasks_create_export_v14()::text, false
+);
+SELECT is(
+  (current_setting('test.export_v14')::jsonb ->> 'schema_version')::integer,
+  14,
+  'exports schema version fourteen'
+);
+SELECT is(
+  jsonb_array_length(
+    current_setting('test.export_v14')::jsonb #> '{manifest,collections}'
+  ),
+  16,
+  'exports the sixteen template-free task collections'
 );
 SELECT ok(
-  (SELECT count(*) FROM public.tasks_recurrence_occurrences) > 0,
-  'rebinds restored recurrence occurrences to the authenticated owner'
-);
-
-RESET ROLE;
-
-INSERT INTO public.tasks_recurrence_definitions (
-  id, owner_id, name, current_revision, record_revision, client_mutation_id
-) VALUES (
-  '96000000-0000-4000-8000-000000000090',
-  '96000000-0000-4000-8000-000000000002',
-  'Explicit monthly patterns',
-  5,
-  1,
-  '96000000-0000-4000-8000-000000000091'
-);
-
-INSERT INTO public.tasks_recurrence_revisions (
-  id, owner_id, recurrence_id, revision, name, template_id, template_revision,
-  rule_mode, frequency, interval_count, start_date, planning_timezone,
-  missed_policy, catch_up_limit, client_mutation_id, rule_config
-)
-SELECT
-  values.id,
-  '96000000-0000-4000-8000-000000000002'::uuid,
-  '96000000-0000-4000-8000-000000000090'::uuid,
-  values.revision,
-  values.name,
-  template.template_id,
-  template.revision,
-  'calendar',
-  'monthly',
-  1,
-  '2026-07-01'::date,
-  'UTC',
-  'latest',
-  50,
-  values.client_mutation_id,
-  values.rule_config
-FROM (
-  VALUES
-    (
-      '96000000-0000-4000-8000-000000000092'::uuid,
-      1::bigint,
-      'Last day',
-      '96000000-0000-4000-8000-000000000093'::uuid,
-      '{"monthly_kind":"last_day"}'::jsonb
-    ),
-    (
-      '96000000-0000-4000-8000-000000000094'::uuid,
-      2::bigint,
-      'First Thursday',
-      '96000000-0000-4000-8000-000000000095'::uuid,
-      '{"monthly_kind":"ordinal_weekday","ordinal":1,"weekday":4}'::jsonb
-    ),
-    (
-      '96000000-0000-4000-8000-000000000096'::uuid,
-      3::bigint,
-      'Last weekday',
-      '96000000-0000-4000-8000-000000000097'::uuid,
-      '{"monthly_kind":"ordinal_day_type","ordinal":-1,"day_type":"weekday"}'::jsonb
-    ),
-    (
-      '96000000-0000-4000-8000-000000000098'::uuid,
-      4::bigint,
-      'Last weekend day',
-      '96000000-0000-4000-8000-000000000099'::uuid,
-      '{"monthly_kind":"ordinal_day_type","ordinal":-1,"day_type":"weekend_day"}'::jsonb
-    ),
-    (
-      '96000000-0000-4000-8000-000000000100'::uuid,
-      5::bigint,
-      'Fifth Monday',
-      '96000000-0000-4000-8000-000000000101'::uuid,
-      '{"monthly_kind":"ordinal_weekday","ordinal":5,"weekday":1}'::jsonb
+  NOT (current_setting('test.export_v14')::jsonb -> 'data' ? 'tasks_templates')
+    AND NOT (
+      current_setting('test.export_v14')::jsonb
+        -> 'data' ? 'tasks_template_revisions'
     )
-) AS values(id, revision, name, client_mutation_id, rule_config)
-CROSS JOIN LATERAL (
-  SELECT revision.template_id, revision.revision
-  FROM public.tasks_template_revisions AS revision
-  WHERE revision.owner_id = '96000000-0000-4000-8000-000000000002'
-  ORDER BY revision.created_at
-  LIMIT 1
-) AS template;
-
-SELECT is(
-  (
-    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
-    FROM public.tasks_recurrence_revisions AS recurrence_revision
-    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000092'
-  ),
-  '2026-07-31'::date,
-  'monthly recurrence supports the final calendar day'
-);
-SELECT is(
-  (
-    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
-    FROM public.tasks_recurrence_revisions AS recurrence_revision
-    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000094'
-  ),
-  '2026-07-02'::date,
-  'monthly recurrence supports an explicit ordinal weekday'
-);
-SELECT is(
-  (
-    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
-    FROM public.tasks_recurrence_revisions AS recurrence_revision
-    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000096'
-  ),
-  '2026-07-31'::date,
-  'monthly recurrence supports the final weekday'
-);
-SELECT is(
-  (
-    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
-    FROM public.tasks_recurrence_revisions AS recurrence_revision
-    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000098'
-  ),
-  '2026-07-26'::date,
-  'monthly recurrence supports the final weekend day'
-);
-SELECT is(
-  (
-    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
-    FROM public.tasks_recurrence_revisions AS recurrence_revision
-    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000100'
-  ),
-  '2026-08-31'::date,
-  'monthly recurrence skips months without the requested fifth weekday'
-);
-
-INSERT INTO public.tasks_recurrence_revisions (
-  id, owner_id, recurrence_id, revision, name, template_id, template_revision,
-  rule_mode, frequency, interval_count, start_date, planning_timezone,
-  missed_policy, catch_up_limit, client_mutation_id, rule_config
-)
-SELECT
-  values.id,
-  '96000000-0000-4000-8000-000000000002'::uuid,
-  '96000000-0000-4000-8000-000000000090'::uuid,
-  values.revision,
-  values.name,
-  template.template_id,
-  template.revision,
-  'calendar',
-  'yearly',
-  1,
-  values.start_date,
-  'UTC',
-  'latest',
-  50,
-  values.client_mutation_id,
-  values.rule_config
-FROM (
-  VALUES
-    (
-      '96000000-0000-4000-8000-000000000102'::uuid,
-      6::bigint,
-      'Leap day',
-      '2026-02-28'::date,
-      '96000000-0000-4000-8000-000000000103'::uuid,
-      '{"yearly_kind":"fixed_date","month":2,"month_day":29}'::jsonb
+    AND NOT (
+      current_setting('test.export_v14')::jsonb
+        -> 'data' ? 'tasks_template_instantiations'
     ),
-    (
-      '96000000-0000-4000-8000-000000000104'::uuid,
-      7::bigint,
-      'Second Sunday in May',
-      '2026-01-01'::date,
-      '96000000-0000-4000-8000-000000000105'::uuid,
-      '{"yearly_kind":"ordinal_weekday","month":5,"ordinal":2,"weekday":7}'::jsonb
-    ),
-    (
-      '96000000-0000-4000-8000-000000000106'::uuid,
-      8::bigint,
-      'Last day of February',
-      '2026-01-01'::date,
-      '96000000-0000-4000-8000-000000000107'::uuid,
-      '{"yearly_kind":"last_day","month":2}'::jsonb
-    )
-) AS values(id, revision, name, start_date, client_mutation_id, rule_config)
-CROSS JOIN LATERAL (
-  SELECT revision.template_id, revision.revision
-  FROM public.tasks_template_revisions AS revision
-  WHERE revision.owner_id = '96000000-0000-4000-8000-000000000002'
-  ORDER BY revision.created_at
-  LIMIT 1
-) AS template;
-
-SELECT is(
-  (
-    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
-    FROM public.tasks_recurrence_revisions AS recurrence_revision
-    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000102'
-  ),
-  '2026-02-28'::date,
-  'yearly fixed-date recurrence clamps leap day in a common year'
-);
-SELECT is(
-  (
-    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 2)
-    FROM public.tasks_recurrence_revisions AS recurrence_revision
-    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000102'
-  ),
-  '2028-02-29'::date,
-  'yearly fixed-date recurrence preserves leap day when available'
-);
-SELECT is(
-  (
-    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
-    FROM public.tasks_recurrence_revisions AS recurrence_revision
-    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000104'
-  ),
-  '2026-05-10'::date,
-  'yearly recurrence supports an ordinal weekday'
-);
-SELECT is(
-  (
-    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 1)
-    FROM public.tasks_recurrence_revisions AS recurrence_revision
-    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000104'
-  ),
-  '2027-05-09'::date,
-  'yearly ordinal weekday advances to the next eligible year'
-);
-SELECT is(
-  (
-    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 2)
-    FROM public.tasks_recurrence_revisions AS recurrence_revision
-    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000104'
-  ),
-  '2028-05-14'::date,
-  'yearly ordinal weekday remains calendar-correct across leap years'
-);
-SELECT is(
-  (
-    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 0)
-    FROM public.tasks_recurrence_revisions AS recurrence_revision
-    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000106'
-  ),
-  '2026-02-28'::date,
-  'yearly last-day recurrence uses the common-year month end'
-);
-SELECT is(
-  (
-    SELECT tasks_private.recurrence_date_for_step(recurrence_revision, 2)
-    FROM public.tasks_recurrence_revisions AS recurrence_revision
-    WHERE recurrence_revision.id = '96000000-0000-4000-8000-000000000106'
-  ),
-  '2028-02-29'::date,
-  'yearly last-day recurrence follows leap-year month end'
+  'omits every Template collection from current backups'
 );
 
 SELECT * FROM finish();

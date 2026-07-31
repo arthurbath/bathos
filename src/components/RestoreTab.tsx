@@ -437,7 +437,7 @@ export function RestoreTab({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => void handleConfirmDelete()}>Delete</AlertDialogAction>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground " onClick={() => void handleConfirmDelete()}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

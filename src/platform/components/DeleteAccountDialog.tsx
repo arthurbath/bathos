@@ -75,7 +75,7 @@ export function DeleteAccountDialog({ isOpen, onOpenChange }: DeleteAccountDialo
           <AlertDialogAction
             onClick={handleDelete}
             disabled={confirmText.toLowerCase() !== userEmail.toLowerCase() || isDeleting}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="bg-destructive text-destructive-foreground "
           >
             {isDeleting ? 'Deleting...' : 'Delete Account'}
           </AlertDialogAction>

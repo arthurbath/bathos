@@ -19,9 +19,6 @@ struct TasksMacApp: App {
                 .onAppear {
                     keyboardController.attach(to: browserModel)
                 }
-                .onDisappear {
-                    keyboardController.stop()
-                }
         }
         .defaultSize(width: 1_100, height: 780)
         .windowResizability(.contentMinSize)

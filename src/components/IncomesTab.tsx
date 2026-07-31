@@ -170,7 +170,7 @@ function PartnerCell({
     }} disabled={disabled}>
       <SelectTrigger
         disabled={disabled}
-        className={`h-7 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
+        className={`h-7 border-transparent bg-transparent px-1  text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
         {...gridSelectTriggerProps(ctx, 1, { disabled })}
       >
         <GridSelectValue />
@@ -215,7 +215,7 @@ function FrequencyCell({
       }} disabled={disabled}>
         <SelectTrigger
           disabled={disabled}
-          className={`h-7 min-w-0 border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
+          className={`h-7 min-w-0 border-transparent bg-transparent px-1  text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
           {...gridSelectTriggerProps(ctx, 4, { disabled })}
         >
           <GridSelectValue />
@@ -251,7 +251,7 @@ function EstimateCell({
       navCol={3}
       disabled={disabled || isAveraged}
       deleteResetChecked={false}
-      className={isAveraged ? 'ml-1 opacity-60' : 'ml-1 hover:border-[hsl(var(--grid-sticky-line))]'}
+      className={isAveraged ? 'ml-1 opacity-60' : 'ml-1 '}
     />
   );
 }
@@ -273,7 +273,7 @@ function AveragedAmountCell({
         type="button"
         disabled={disabled}
         data-grid-focus-only="true"
-        className={`h-7 w-full rounded-md border border-transparent bg-transparent pl-4 pr-2 text-right tabular-nums text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 hover:border-[hsl(var(--grid-sticky-line))] ${GRID_CONTROL_FOCUS_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}
+        className={`h-7 w-full rounded-md border border-transparent bg-transparent pl-4 pr-2 text-right tabular-nums text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2  ${GRID_CONTROL_FOCUS_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}
         onClick={onEdit}
         {...gridNavProps(ctx, 2)}
         aria-label={`Edit Averaged Records for ${income.name}`}
@@ -345,7 +345,7 @@ function IncomeActionsCell({
         </AlertDialogBody>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => onRemove(income)}>Delete</AlertDialogAction>
+          <AlertDialogAction className="bg-destructive text-destructive-foreground " onClick={() => onRemove(income)}>Delete</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

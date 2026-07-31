@@ -18,12 +18,14 @@ import {
   taskExportV6Collections,
   taskExportV8Collections,
   taskExportV13Collections,
+  taskExportV14Collections,
   type TaskExportV5,
   type TaskExportV6,
   type TaskExportV7,
   type TaskExportV8,
   type TaskExportV13,
-  type TaskExportV13Collection,
+  type TaskExportV14,
+  type TaskExportV14Collection,
 } from './taskPortability';
 
 const checksum = 'a'.repeat(64);
@@ -62,7 +64,7 @@ const versionEightExport = {
   data: Object.fromEntries(taskExportV8Collections.map((name) => [name, []])),
 } as TaskExportV8;
 
-const currentTaskExport = {
+const versionThirteenExport = {
   format: 'garden.bath.tasks.export',
   schema_version: 13,
   created_at: '2026-07-20T05:30:00.000Z',
@@ -76,6 +78,21 @@ const currentTaskExport = {
   },
   data: Object.fromEntries(taskExportV13Collections.map((name) => [name, []])),
 } as TaskExportV13;
+
+const currentTaskExport = {
+  format: 'garden.bath.tasks.export',
+  schema_version: 14,
+  created_at: '2026-07-20T05:30:00.000Z',
+  manifest: {
+    collections: [...taskExportV14Collections],
+    counts: Object.fromEntries(taskExportV14Collections.map((name) => [name, 0])),
+    checksums: {
+      algorithm: 'sha256',
+      ...Object.fromEntries(taskExportV14Collections.map((name) => [name, checksum])),
+    },
+  },
+  data: Object.fromEntries(taskExportV14Collections.map((name) => [name, []])),
+} as TaskExportV14;
 
 const versionFiveExport = {
   ...versionSixExport,
@@ -104,7 +121,7 @@ describe('task portability', () => {
     const client = createClient([currentTaskExport]);
 
     await expect(createTaskExport(client)).resolves.toEqual(currentTaskExport);
-    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v13');
+    expect(client.rpc).toHaveBeenCalledWith('tasks_create_export_v14');
     expect(serializeTaskExport(currentTaskExport)).toBe(`${JSON.stringify(currentTaskExport, null, 2)}\n`);
     expect(getTaskExportFilename(currentTaskExport.created_at)).toBe('bathos-tasks-2026-07-20.json');
   });
@@ -112,8 +129,8 @@ describe('task portability', () => {
   it('previews and executes restore through distinct explicit calls', async () => {
     const preview = {
       dry_run: true,
-      schema_version: 13,
-      ...Object.fromEntries(taskExportV13Collections.map((name) => [name, report(0)])),
+      schema_version: 14,
+      ...Object.fromEntries(taskExportV14Collections.map((name) => [name, report(0)])),
       tasks_todos: report(2),
       tasks_history_events: report(4),
       tasks_user_settings: report(1),
@@ -136,8 +153,8 @@ describe('task portability', () => {
   it('retains restore compatibility with version five exports', async () => {
     const preview = {
       dry_run: true,
-      schema_version: 13,
-      ...Object.fromEntries(taskExportV13Collections.map((name) => [name, report(0)])),
+      schema_version: 14,
+      ...Object.fromEntries(taskExportV14Collections.map((name) => [name, report(0)])),
     };
     const client = createClient([preview]);
 
@@ -152,8 +169,8 @@ describe('task portability', () => {
   it('retains restore compatibility with version eight exports', async () => {
     const preview = {
       dry_run: true,
-      schema_version: 13,
-      ...Object.fromEntries(taskExportV13Collections.map((name) => [name, report(0)])),
+      schema_version: 14,
+      ...Object.fromEntries(taskExportV14Collections.map((name) => [name, report(0)])),
     };
     const client = createClient([preview]);
 
@@ -168,12 +185,12 @@ describe('task portability', () => {
   it('prepares and executes guarded current-schema replacement restore', async () => {
     const restorePreview = {
       dry_run: true,
-      schema_version: 13,
-      ...Object.fromEntries(taskExportV13Collections.map((name) => [name, report(0)])),
+      schema_version: 14,
+      ...Object.fromEntries(taskExportV14Collections.map((name) => [name, report(0)])),
     };
-    const counts = Object.fromEntries(taskExportV13Collections.map((name) => [name, 0]));
+    const counts = Object.fromEntries(taskExportV14Collections.map((name) => [name, 0]));
     const preparation = {
-      schema_version: 13,
+      schema_version: 14,
       backup: currentTaskExport,
       backup_digest: checksum,
       current_counts: counts,
@@ -182,7 +199,7 @@ describe('task portability', () => {
     };
     const result = {
       outcome: 'accepted',
-      schema_version: 13,
+      schema_version: 14,
       request_id: 'request-a',
       backup_digest: checksum,
       target_digest: checksum,
@@ -198,10 +215,10 @@ describe('task portability', () => {
       confirmation: TASK_REPLACE_RESTORE_CONFIRMATION,
       requestId: 'request-a',
     })).resolves.toEqual(result);
-    expect(client.rpc).toHaveBeenNthCalledWith(1, 'tasks_prepare_replace_restore_v13', {
+    expect(client.rpc).toHaveBeenNthCalledWith(1, 'tasks_prepare_replace_restore_v14', {
       _envelope: currentTaskExport,
     });
-    expect(client.rpc).toHaveBeenNthCalledWith(2, 'tasks_replace_restore_v13', {
+    expect(client.rpc).toHaveBeenNthCalledWith(2, 'tasks_replace_restore_v14', {
       _envelope: currentTaskExport,
       _expected_backup_digest: checksum,
       _request_id: 'request-a',
@@ -212,26 +229,26 @@ describe('task portability', () => {
   it('keeps legacy exports and unconfirmed replacements out of replace restore', async () => {
     const client = createClient([]);
     await expect(prepareTaskReplaceRestore(client, versionEightExport as never)).rejects.toThrow(
-      'requires a current schema version thirteen export',
+      'requires a current schema version fourteen export',
     );
     await expect(replaceTaskRestore(client, {
       taskExport: currentTaskExport,
       preparation: {
-        schema_version: 13,
+        schema_version: 14,
         backup: currentTaskExport,
         backup_digest: checksum,
         current_counts: Object.fromEntries(
-          taskExportV13Collections.map((name) => [name, 0]),
-        ) as Record<TaskExportV13Collection, number>,
+          taskExportV14Collections.map((name) => [name, 0]),
+        ) as Record<TaskExportV14Collection, number>,
         incoming_counts: Object.fromEntries(
-          taskExportV13Collections.map((name) => [name, 0]),
-        ) as Record<TaskExportV13Collection, number>,
+          taskExportV14Collections.map((name) => [name, 0]),
+        ) as Record<TaskExportV14Collection, number>,
         restore_preview: {
           dry_run: true,
-          schema_version: 13,
+          schema_version: 14,
           tasks_todos: report(0),
           tasks_history_events: report(0),
-          ...Object.fromEntries(taskExportV13Collections.map((name) => [name, report(0)])),
+          ...Object.fromEntries(taskExportV14Collections.map((name) => [name, report(0)])),
         },
       },
       confirmation: 'REPLACE',
@@ -254,13 +271,25 @@ describe('task portability', () => {
 
     const client = createClient([{
       dry_run: true,
-      schema_version: 13,
-      ...Object.fromEntries(taskExportV13Collections.map((name) => [name, report(0)])),
+      schema_version: 14,
+      ...Object.fromEntries(taskExportV14Collections.map((name) => [name, report(0)])),
       tasks_todos: { ...report(1), inserts: 2 },
     }]);
     await expect(previewTaskRestore(client, taskExport)).rejects.toThrow(
       'collection counts are invalid',
     );
+  });
+
+  it('retains restore compatibility with version thirteen template-bearing exports', async () => {
+    const preview = {
+      dry_run: true,
+      schema_version: 14,
+      ...Object.fromEntries(taskExportV14Collections.map((name) => [name, report(0)])),
+    };
+    const client = createClient([preview]);
+
+    expect(parseTaskExport(versionThirteenExport)).toEqual(versionThirteenExport);
+    await expect(previewTaskRestore(client, versionThirteenExport)).resolves.toEqual(preview);
   });
 });
 

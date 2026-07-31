@@ -69,7 +69,7 @@ Plan and complete personal tasks through a private-first, keyboard-focused workf
 - Inbox, Now, Next, and Later sections inside Today, projected from Anytime
 - Future-only Start Dates with independently retained Inbox, Now, Next, and Later horizons, plus Upcoming grouping by controlling start date or deadline
 - Four primary navigation destinations with secondary views and maintenance tools under More and Config
-- Areas, tasks, checklists, task templates, reminders, and recurrence
+- Areas, tasks, checklists, reminders, and recurrence prototypes
 - Actionable, Waiting, and Rechecking states plus structured source provenance without generic tags
 - Offline local operation, 30-day Done recovery, projection-safe 100-step undo/redo, export, and restore
 - Single-click animated autosaved editing with outside-click close, editable Primary Link, safe live-styled Markdown notes, modifier-based range selection, and cross-horizon Today drag reordering with keyboard alternatives

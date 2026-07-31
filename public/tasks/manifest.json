@@ -5,6 +5,7 @@
   "description": "Plan and complete personal tasks",
   "start_url": "/tasks/today",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#0d0d0d",
   "theme_color": "#0d0d0d",
   "icons": [

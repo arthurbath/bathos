@@ -25,11 +25,16 @@ import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import {
   createTaskSearchDocuments,
   filterTaskSearchDocuments,
+  getTaskSearchRank,
   rankTaskSearchDocuments,
 } from '@/modules/tasks/domain/taskSearch';
 import { getTaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
-import type { TaskTodo } from '@/modules/tasks/types/tasks';
+import type {
+  TaskRecurrenceDefinition,
+  TaskRecurrenceRevision,
+  TaskTodo,
+} from '@/modules/tasks/types/tasks';
 
 type QuickFindResult =
   | {
@@ -39,8 +44,24 @@ type QuickFindResult =
       detail: string;
       href: string;
       task: TaskTodo;
-      activation: 'open' | 'focus-recurrence';
+      activation: 'open';
+      rank: number;
+    }
+  | {
+      kind: 'recurrence';
+      id: string;
+      title: string;
+      detail: string;
+      href: string;
+      definition: TaskRecurrenceDefinition;
+      activation: 'focus-recurrence';
+      rank: number;
     };
+
+export type TaskQuickFindRecurrence = {
+  definition: TaskRecurrenceDefinition;
+  revision: TaskRecurrenceRevision;
+};
 
 function normalize(value: string): string {
   return value.trim().toLocaleLowerCase();
@@ -58,31 +79,60 @@ function createQuickFindResults(
   tasks: readonly TaskTodo[],
   hierarchy: TaskHierarchyModel,
   planningDate: string,
+  recurrences: readonly TaskQuickFindRecurrence[],
 ): QuickFindResult[] {
   const normalizedQuery = normalize(query);
   if (!normalizedQuery) return [];
-  const taskResults: QuickFindResult[] = rankTaskSearchDocuments(
-    filterTaskSearchDocuments(
-      createTaskSearchDocuments(tasks, hierarchy),
-      normalizedQuery,
-    ),
+  const documents = filterTaskSearchDocuments(
+    createTaskSearchDocuments(tasks, hierarchy),
     normalizedQuery,
-  )
-    .map(({ task, hierarchyLabel }) => {
+  );
+  const taskResults: QuickFindResult[] = rankTaskSearchDocuments(
+    documents,
+    normalizedQuery,
+  ).map((document) => {
+      const { task, hierarchyLabel } = document;
       const route = getTaskPlanningRoute(task, planningDate);
-      const recurrenceProjection = task.recurrence_definition_id !== null
-        && route === 'upcoming';
       return {
         kind: 'todo',
         id: task.id,
         title: task.title,
         detail: taskDetail(task, hierarchyLabel),
-        href: `${basePath}/${recurrenceProjection ? 'upcoming' : route}`,
+        href: `${basePath}/${route}`,
         task,
-        activation: recurrenceProjection ? 'focus-recurrence' : 'open',
+        activation: 'open',
+        rank: getTaskSearchRank(document, normalizedQuery),
       };
     });
-  return taskResults.slice(0, 3);
+  const areaTitles = new Map(hierarchy.areas.map(({ id, title }) => [id, title]));
+  const recurrenceResults: QuickFindResult[] = recurrences.flatMap(({ definition, revision }) => {
+    const prototype = revision.prototype_snapshot.root;
+    const fields = {
+      normalizedTitle: normalize(prototype.title),
+      normalizedNotes: normalize(prototype.notes),
+      normalizedSourceTitle: '',
+      normalizedSourceUrl: normalize(prototype.primary_link ?? ''),
+      normalizedHierarchyLabel: normalize(
+        revision.target_area_id ? areaTitles.get(revision.target_area_id) ?? '' : '',
+      ),
+    };
+    if (!Object.values(fields).some((value) => value.includes(normalizedQuery))) return [];
+    return [{
+      kind: 'recurrence' as const,
+      id: definition.id,
+      title: prototype.title,
+      detail: 'Repeating Task',
+      href: `${basePath}/upcoming`,
+      definition,
+      activation: 'focus-recurrence' as const,
+      rank: getTaskSearchRank(fields, normalizedQuery),
+    }];
+  });
+  return [...taskResults, ...recurrenceResults].sort((left, right) => (
+    left.rank - right.rank
+    || left.title.localeCompare(right.title)
+    || left.id.localeCompare(right.id)
+  ));
 }
 
 export function TaskQuickFindDialog({
@@ -92,12 +142,14 @@ export function TaskQuickFindDialog({
   tasks,
   hierarchy,
   planningDate,
+  recurrences,
   loading,
   error,
   onOpenChange,
   onCloseAutoFocus,
   onNavigate,
   onSelectTask,
+  onSelectRecurrence,
 }: {
   open: boolean;
   initialQuery: string;
@@ -105,6 +157,7 @@ export function TaskQuickFindDialog({
   tasks: TaskTodo[];
   hierarchy: TaskHierarchyModel;
   planningDate: string;
+  recurrences: TaskQuickFindRecurrence[];
   loading: boolean;
   error: unknown;
   onOpenChange: (open: boolean) => void;
@@ -113,8 +166,8 @@ export function TaskQuickFindDialog({
   onSelectTask: (
     task: TaskTodo,
     path: string,
-    activation: 'open' | 'focus-recurrence',
   ) => void;
+  onSelectRecurrence: (definition: TaskRecurrenceDefinition, path: string) => void;
 }) {
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -133,19 +186,37 @@ export function TaskQuickFindDialog({
     return () => window.cancelAnimationFrame(frame);
   }, [initialQuery, open]);
   const deferredQuery = useDeferredValue(query);
-  const results = useMemo(
-    () => createQuickFindResults(deferredQuery, basePath, tasks, hierarchy, planningDate),
-    [basePath, deferredQuery, hierarchy, planningDate, tasks],
+  const allResults = useMemo(
+    () => createQuickFindResults(
+      deferredQuery,
+      basePath,
+      tasks,
+      hierarchy,
+      planningDate,
+      recurrences,
+    ),
+    [
+      basePath,
+      deferredQuery,
+      hierarchy,
+      planningDate,
+      recurrences,
+      tasks,
+    ],
   );
+  const results = allResults.slice(0, 3);
+  const showAllResults = allResults.length > 0;
   const resultIdentity = results.map(({ id, activation }) => `${id}:${activation}`).join('|');
   useEffect(() => {
     setActiveIndex(0);
   }, [deferredQuery, resultIdentity]);
   const continueHref = `${basePath}/search?q=${encodeURIComponent(query.trim())}`;
-  const optionCount = results.length + 1;
-  const activeOptionId = activeIndex < results.length
-    ? `${listboxId}-result-${activeIndex}`
-    : `${listboxId}-continue`;
+  const optionCount = results.length + (showAllResults ? 1 : 0);
+  const activeOptionId = optionCount === 0
+    ? undefined
+    : activeIndex < results.length
+      ? `${listboxId}-result-${activeIndex}`
+      : `${listboxId}-all`;
   const close = () => {
     onOpenChange(false);
     setQuery('');
@@ -154,21 +225,24 @@ export function TaskQuickFindDialog({
   const activate = (event: MouseEvent<HTMLAnchorElement>, result: QuickFindResult) => {
     if (shouldHandleWithBrowser(event)) return;
     event.preventDefault();
-    onSelectTask(result.task, result.href, result.activation);
+    if (result.kind === 'todo') onSelectTask(result.task, result.href);
+    else onSelectRecurrence(result.definition, result.href);
   };
 
   const activateIndex = (index: number) => {
     const result = results[index];
     if (result) {
-      onSelectTask(result.task, result.href, result.activation);
+      if (result.kind === 'todo') onSelectTask(result.task, result.href);
+      else onSelectRecurrence(result.definition, result.href);
       return;
     }
-    if (normalize(query)) onNavigate(continueHref);
+    if (showAllResults) onNavigate(continueHref);
   };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      if (optionCount === 0) return;
       event.preventDefault();
       const direction = event.key === 'ArrowDown' ? 1 : -1;
       setActiveIndex((current) => (current + direction + optionCount) % optionCount);
@@ -232,6 +306,7 @@ export function TaskQuickFindDialog({
             <TASK_ICONS.Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
               ref={inputRef}
+              data-task-quick-find-input
               autoFocus
               role="combobox"
               aria-autocomplete="list"
@@ -260,7 +335,6 @@ export function TaskQuickFindDialog({
                 role="option"
                 aria-selected={activeIndex === index}
                 href={result.href}
-                onPointerMove={() => setActiveIndex(index)}
                 onClick={(event) => activate(event, result)}
                 className={cn(
                   'flex min-h-12 items-center gap-2 overflow-hidden rounded-lg px-3 py-2 outline-none',
@@ -281,31 +355,26 @@ export function TaskQuickFindDialog({
                 </span>
               </a>
             ))}
-            <a
-              id={`${listboxId}-continue`}
-              role="option"
-              aria-selected={activeIndex === results.length}
-              href={continueHref}
-              aria-disabled={!normalize(query)}
-              onPointerMove={() => setActiveIndex(results.length)}
-              onClick={(event) => {
-                if (!normalize(query)) {
+            {showAllResults ? (
+              <a
+                id={`${listboxId}-all`}
+                role="option"
+                aria-selected={activeIndex === results.length}
+                href={continueHref}
+                onClick={(event) => {
+                  if (shouldHandleWithBrowser(event)) return;
                   event.preventDefault();
-                  return;
-                }
-                if (shouldHandleWithBrowser(event)) return;
-                event.preventDefault();
-                onNavigate(continueHref);
-              }}
-              className={cn(
-                'flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-foreground outline-none',
-                activeIndex === results.length && 'bg-info/10',
-                !normalize(query) && 'pointer-events-none text-muted-foreground',
-              )}
-            >
-              <TASK_ICONS.Search className="h-4 w-4 shrink-0" aria-hidden="true" />
-              Continue Search
-            </a>
+                  onNavigate(continueHref);
+                }}
+                className={cn(
+                  'flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-foreground outline-none',
+                  activeIndex === results.length && 'bg-info/10',
+                )}
+              >
+                <TASK_ICONS.Search className="h-4 w-4 shrink-0" aria-hidden="true" />
+                See All Results
+              </a>
+            ) : null}
           </div>
         </DialogPrimitive.Content>
       </DialogPortal>

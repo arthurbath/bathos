@@ -93,7 +93,6 @@ export function TaskBulkCommandDialog({
       setConfirmedReminderTime(null);
       toast({
         title: 'Not Allowed.',
-        duration: 1_800,
       });
       return null;
     }

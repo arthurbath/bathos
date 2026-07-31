@@ -11,7 +11,6 @@ import { afterAll, describe, expect, it } from 'vitest';
 import type { Database } from '@/integrations/supabase/types';
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
-import { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
 import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
 import { bindTasksDatabaseOwner } from '@/modules/tasks/sync/database';
 import { createTasksSupabaseConnector } from '@/modules/tasks/sync/connector';
@@ -91,40 +90,20 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
     });
     await waitForUploadQueue(activeDatabase, 0);
 
-    const template = await new TaskTemplateService(supabase, ownerId).capture({
-      sourceType: 'todo',
-      sourceId: recurrenceSource.id,
-      name: 'Offline Recurrence Template',
-      anchorDate: '2026-07-20',
-    });
     const recurrenceService = new TaskRecurrenceService(supabase, ownerId);
-    const recurrence = await recurrenceService.save({
+    const recurrence = await recurrenceService.createFromTask({
+      taskId: recurrenceSource.id,
       name: 'Offline Recurrence',
-      templateId: template.template.id,
-      templateRevision: template.revision.revision,
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 1,
-      startDate: '2026-07-20',
-      planningTimeZone: 'America/Los_Angeles',
-      missedPolicy: 'latest',
+      scheduleDate: '2026-07-20',
+      ruleConfig: {},
+      endMode: 'never',
     });
-    const evaluation = await recurrenceService.evaluate(
-      recurrence.definition.id,
-      '2026-07-20',
-    );
-    expect(evaluation.generated_count).toBe(1);
-    const { data: occurrenceRecord, error: occurrenceError } = await supabase
-      .from('tasks_recurrence_occurrences')
-      .select('root_id')
-      .eq('id', evaluation.occurrence_ids[0])
-      .single();
-    expect(occurrenceError).toBeNull();
-    expect(occurrenceRecord?.root_id).toBeTruthy();
-    if (!occurrenceRecord?.root_id) throw new Error('Recurrence occurrence root is missing');
     const occurrence = await waitForTask(
       activeDatabase,
-      occurrenceRecord.root_id,
+      recurrence.occurrence.root_id,
       30_000,
     );
 
@@ -174,7 +153,6 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
     expect(afterRestart.get(beta.id)).toMatchObject({ lifecycle: 'completed' });
     expect(afterRestart.get(occurrence.id)).toMatchObject({
       lifecycle: 'completed',
-      template_instantiation_id: occurrence.template_instantiation_id,
     });
     expect(afterRestart.get(createdOffline.id)).toMatchObject({
       disposition: 'deleted',

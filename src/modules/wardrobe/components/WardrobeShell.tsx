@@ -74,7 +74,7 @@ export function WardrobeShell({ userId, displayName, onSignOut }: WardrobeShellP
                   key={path}
                   href={href}
                   onClick={(event) => handleClientSideLinkNavigation(event, navigate, href)}
-                  className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${active ? 'bg-background text-foreground' : 'text-foreground hover:bg-background/50'}`}
+                  className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${active ? 'bg-background text-foreground' : 'text-foreground '}`}
                 >
                   <Icon className="h-4 w-4" aria-hidden="true" />
                   {label}

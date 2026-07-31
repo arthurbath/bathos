@@ -173,19 +173,9 @@ private struct TaskListLockScreenWidgetView: View {
                             visibleTasks
                         ) { task in
                             HStack(spacing: 5) {
-                                Image(systemName: task.isRecurrenceProjection == true
-                                    && entry.listID == .upcoming
-                                    ? "repeat"
-                                    : entry.listID == .someday
-                                        ? "square.dashed"
-                                        : "square"
-                                )
+                                Image(systemName: TaskWidgetPresentationPolicy
+                                    .lockScreenLeadingSystemImageName)
                                 .font(.system(size: 10, weight: .regular))
-                                TaskWidgetListContext(
-                                    listID: entry.listID,
-                                    task: task,
-                                    planningDate: entry.snapshot?.planningDate
-                                )
                                 Text(task.summary)
                                     .font(.system(
                                         size: 13,

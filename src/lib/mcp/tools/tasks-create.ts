@@ -435,7 +435,7 @@ export const createTask = defineTool({
     start_date: calendarDateSchema.nullable().optional(),
     deadline: calendarDateSchema.nullable().optional(),
     area_id: uuidSchema.optional(),
-    source: sourceSchema.optional().describe('Optional typed source reference. Template provenance is reserved for template instantiation.'),
+    source: sourceSchema.optional().describe('Optional typed source reference for captured work.'),
     primary_link: z.string().max(8_000).nullable().optional().describe('Optional editable shortcut, stored independently from typed source provenance.'),
   },
   annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },

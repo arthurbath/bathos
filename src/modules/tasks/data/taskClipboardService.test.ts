@@ -4,8 +4,6 @@ import { TaskClipboardService } from './taskClipboardService';
 import type { TaskClipboardSnapshot } from '@/modules/tasks/domain/taskClipboard';
 import {
   taskChecklistItemFixture,
-  taskRecurrenceDefinitionFixture,
-  taskRecurrenceRevisionFixture,
   taskReminderFixture,
   taskTodoFixture,
 } from '@/modules/tasks/testing/taskFixtures';
@@ -30,10 +28,6 @@ function dependencies() {
     reminderService: {
       save: vi.fn().mockResolvedValue({ outcome: 'accepted' }),
     },
-    recurrenceService: {
-      save: vi.fn().mockResolvedValue({ outcome: 'accepted' }),
-      setStatus: vi.fn().mockResolvedValue({ outcome: 'accepted' }),
-    },
   };
 }
 
@@ -49,7 +43,6 @@ const snapshot: TaskClipboardSnapshot = {
   areaId: null,
   checklist: [],
   reminder: null,
-  recurrence: null,
 };
 
 describe('TaskClipboardService', () => {
@@ -83,29 +76,11 @@ describe('TaskClipboardService', () => {
       if (sql.includes('FROM tasks_reminders')) return [reminder];
       return [];
     });
-    deps.database.getOptional.mockImplementation(async (sql: string) => {
-      if (sql.includes('tasks_recurrence_definitions')) {
-        return taskRecurrenceDefinitionFixture({
-          id: task.recurrence_definition_id!,
-          owner_id: ownerId,
-          name: 'Daily review',
-        });
-      }
-      if (sql.includes('tasks_recurrence_revisions')) {
-        return taskRecurrenceRevisionFixture({
-          owner_id: ownerId,
-          recurrence_id: task.recurrence_definition_id!,
-          revision: 1,
-        });
-      }
-      return null;
-    });
     const service = new TaskClipboardService(
       deps.database as never,
       deps.repository as never,
       deps.hierarchyRepository as never,
       deps.reminderService as never,
-      deps.recurrenceService as never,
       ownerId,
     );
 
@@ -117,11 +92,6 @@ describe('TaskClipboardService', () => {
       reminder: {
         localTime: '14:30',
         timeZone: 'America/Los_Angeles',
-      },
-      recurrence: {
-        name: 'Daily review',
-        status: 'active',
-        templateRevision: 1,
       },
     });
   });
@@ -157,27 +127,12 @@ describe('TaskClipboardService', () => {
         timeZone: 'America/Los_Angeles',
         ambiguityChoice: 'earlier',
       },
-      recurrence: {
-        name: 'Daily review',
-        status: 'active',
-        templateId: '99999999-9999-4999-8999-999999999999',
-        templateRevision: 1,
-        ruleMode: 'calendar',
-        frequency: 'daily',
-        intervalCount: 1,
-        startDate: '2026-07-25',
-        planningTimeZone: 'America/Los_Angeles',
-        missedPolicy: 'latest',
-        catchUpLimit: 50,
-        targetAreaId: null,
-      },
     };
     const service = new TaskClipboardService(
       deps.database as never,
       deps.repository as never,
       deps.hierarchyRepository as never,
       deps.reminderService as never,
-      deps.recurrenceService as never,
       ownerId,
     );
 
@@ -203,10 +158,6 @@ describe('TaskClipboardService', () => {
     expect(result.map(({ title }) => title)).toEqual(['First task', 'Second task']);
     expect(deps.hierarchyRepository.completeChecklistItem).toHaveBeenCalled();
     expect(deps.reminderService.save).toHaveBeenCalled();
-    expect(deps.recurrenceService.save).toHaveBeenCalledWith(expect.objectContaining({
-      name: 'Daily review',
-      templateId: '99999999-9999-4999-8999-999999999999',
-    }));
   });
 
   it('rejects connected-only content before creating roots', async () => {
@@ -216,7 +167,6 @@ describe('TaskClipboardService', () => {
       deps.repository as never,
       deps.hierarchyRepository as never,
       deps.reminderService as never,
-      deps.recurrenceService as never,
       ownerId,
     );
     await expect(service.reconstruct([{
@@ -253,7 +203,6 @@ describe('TaskClipboardService', () => {
       deps.repository as never,
       deps.hierarchyRepository as never,
       deps.reminderService as never,
-      deps.recurrenceService as never,
       ownerId,
     );
 
@@ -282,7 +231,6 @@ describe('TaskClipboardService', () => {
       deps.repository as never,
       deps.hierarchyRepository as never,
       deps.reminderService as never,
-      deps.recurrenceService as never,
       ownerId,
     );
 

@@ -7,8 +7,8 @@ import {
   evaluateTaskRecurrenceData,
   getTaskRecurrences,
   getTaskRecurrencesData,
-  saveTaskRecurrence,
-  saveTaskRecurrenceData,
+  createTaskRecurrence,
+  createTaskRecurrenceData,
   setTaskRecurrenceStatus,
 } from './tasks-recurrence';
 
@@ -51,7 +51,7 @@ class FakeQuery implements PromiseLike<{ data: Row[]; error: null }> {
 
 const ownerId = '10000000-0000-4000-8000-000000000001';
 const recurrenceId = '20000000-0000-4000-8000-000000000001';
-const templateId = '30000000-0000-4000-8000-000000000001';
+const taskId = '30000000-0000-4000-8000-000000000001';
 
 function authFor(tables: Record<string, Row[]>, rpc = vi.fn()): AuthenticatedMcpContext {
   return {
@@ -65,11 +65,11 @@ function authFor(tables: Record<string, Row[]>, rpc = vi.fn()): AuthenticatedMcp
 }
 
 describe('Tasks recurrence MCP tools', () => {
-  it('advertises explicit read, save, status, and evaluation operations', () => {
+  it('advertises explicit read, create, status, and evaluation operations', () => {
     expect(getTaskRecurrences.name).toBe('get_task_recurrences');
     expect(getTaskRecurrences.annotations.readOnlyHint).toBe(true);
-    expect(saveTaskRecurrence.name).toBe('save_task_recurrence');
-    expect(saveTaskRecurrence.annotations.idempotentHint).toBe(true);
+    expect(createTaskRecurrence.name).toBe('create_task_recurrence');
+    expect(createTaskRecurrence.annotations.idempotentHint).toBe(true);
     expect(setTaskRecurrenceStatus.name).toBe('set_task_recurrence_status');
     expect(evaluateTaskRecurrence.name).toBe('evaluate_task_recurrence');
   });
@@ -103,25 +103,23 @@ describe('Tasks recurrence MCP tools', () => {
     expect(result.recurrences[0]).not.toHaveProperty('owner_id');
   });
 
-  it('saves through the guarded RPC with explicit structured recurrence fields', async () => {
+  it('creates a recurrence from an ordinary task through the guarded RPC', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: { outcome: 'accepted' }, error: null });
-    const result = await saveTaskRecurrenceData({
+    const result = await createTaskRecurrenceData({
+      task_id: taskId,
       name: 'Review',
-      template_id: templateId,
       rule_mode: 'after_completion',
       frequency: 'weekly',
       interval_count: 2,
-      start_date: '2026-07-20',
-      planning_timezone: 'America/Los_Angeles',
-      missed_policy: 'latest',
-      catch_up_limit: 50,
+      schedule_date: '2026-07-20',
+      rule_config: {},
+      end_mode: 'never',
       idempotency_key: '40000000-0000-4000-8000-000000000001',
     }, authFor({}, rpc));
 
     expect(result).toEqual({ outcome: 'accepted' });
-    expect(rpc).toHaveBeenCalledWith('tasks_save_recurrence', expect.objectContaining({
-      _recurrence_id: null,
-      _template_id: templateId,
+    expect(rpc).toHaveBeenCalledWith('tasks_create_recurrence_from_task', expect.objectContaining({
+      _task_id: taskId,
       _rule_mode: 'after_completion',
       _frequency: 'weekly',
       _interval_count: 2,

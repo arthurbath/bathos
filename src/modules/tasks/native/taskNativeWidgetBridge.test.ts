@@ -1,11 +1,19 @@
-import { taskAreaFixture, taskTodoFixture } from '@/modules/tasks/testing/taskFixtures';
+import {
+  taskAreaFixture,
+  taskRecurrenceDefinitionFixture,
+  taskRecurrenceRevisionFixture,
+  taskTodoFixture,
+} from '@/modules/tasks/testing/taskFixtures';
 
 import {
   buildTaskNativeWidgetSnapshot,
   clearTaskNativeWidgetCache,
+  configureTaskNativeQuickEntryShortcut,
+  finishTaskNativeQuickEntry,
   getNativeNewTaskSignal,
   getNativeTaskDeepLinkId,
   hasNativeNewTaskSignal,
+  isTaskNativeQuickEntry,
   publishTaskNativeWidgetSnapshot,
   publishTaskNativeWidgetCredential,
   requestTaskNativeNewTaskSummaryFocus,
@@ -115,7 +123,7 @@ describe('taskNativeWidgetBridge', () => {
     expect(JSON.stringify(snapshot)).not.toContain('Other Owner');
   });
 
-  it('projects authoritative Upcoming dates and protects recurrence projections', () => {
+  it('shows first-class recurrence prototypes separately from ordinary Upcoming tasks', () => {
     const recurrenceId = '40000000-0000-4000-8000-000000000001';
     const snapshot = buildTaskNativeWidgetSnapshot({
       ownerId,
@@ -124,6 +132,36 @@ describe('taskNativeWidgetBridge', () => {
       quickFilter: 'all',
       automaticListSorting: false,
       areas: [],
+      recurrencePrototypes: [{
+        definition: taskRecurrenceDefinitionFixture({
+          id: recurrenceId,
+          owner_id: ownerId,
+          name: 'Repeating Prototype',
+          next_occurrence_date: '2026-08-31',
+        }),
+        revision: taskRecurrenceRevisionFixture({
+          recurrence_id: recurrenceId,
+          name: 'Repeating Prototype',
+          prototype_snapshot: {
+            version: 2,
+            kind: 'todo',
+            root: {
+              node_id: 'prototype-node-a',
+              title: 'Repeating Prototype',
+              notes: '',
+              primary_link: null,
+              actionability: 'actionable',
+              destination: 'anytime',
+              today_section: null,
+              order_key: 'a0',
+              start_offset_days: 0,
+              deadline_offset_days: null,
+              checklist: [],
+            },
+          },
+        }),
+        scheduledDate: '2026-08-31',
+      }],
       tasks: [
         taskTodoFixture({
           id: taskA,
@@ -136,8 +174,8 @@ describe('taskNativeWidgetBridge', () => {
         taskTodoFixture({
           id: taskB,
           owner_id: ownerId,
-          title: 'Repeating Schedule Projection',
-          start_date: '2026-08-31',
+          title: 'Deferred Repeating Instance',
+          start_date: '2026-08-30',
           today_section: null,
           recurrence_definition_id: recurrenceId,
           recurrence_revision: 1,
@@ -155,8 +193,47 @@ describe('taskNativeWidgetBridge', () => {
       }),
       expect.objectContaining({
         id: taskB,
+        upcomingDate: '2026-08-30',
+        isRecurrenceProjection: false,
+      }),
+      expect.objectContaining({
+        id: recurrenceId,
+        summary: 'Repeating Prototype',
         upcomingDate: '2026-08-31',
         isRecurrenceProjection: true,
+      }),
+    ]);
+  });
+
+  it('keeps a reached recurrence instance ordinary when its Deadline still shows in Upcoming', () => {
+    const recurrenceId = '40000000-0000-4000-8000-000000000002';
+    const snapshot = buildTaskNativeWidgetSnapshot({
+      ownerId,
+      planningDate: '2026-07-27',
+      generatedAt: '2026-07-27T12:00:00.000Z',
+      quickFilter: 'all',
+      automaticListSorting: false,
+      areas: [],
+      tasks: [
+        taskTodoFixture({
+          id: taskA,
+          owner_id: ownerId,
+          title: 'Reached Repeating Instance',
+          start_date: '2026-07-27',
+          deadline: '2026-08-01',
+          today_section: 'inbox',
+          recurrence_definition_id: recurrenceId,
+          recurrence_revision: 1,
+          recurrence_occurrence_id: '50000000-0000-4000-8000-000000000002',
+          recurrence_logical_key: 'calendar:2026-07-27',
+        }),
+      ],
+    });
+
+    expect(snapshot.lists.find(({ id }) => id === 'upcoming')?.tasks).toEqual([
+      expect.objectContaining({
+        id: taskA,
+        isRecurrenceProjection: false,
       }),
     ]);
   });
@@ -371,6 +448,46 @@ describe('taskNativeWidgetBridge', () => {
     }]);
   });
 
+  it('configures and finishes Mac quick entry only through the current bridge', () => {
+    const messages: unknown[] = [];
+    const shortcut = {
+      code: 'Space',
+      command: false,
+      control: true,
+      option: true,
+      shift: false,
+    };
+
+    expect(configureTaskNativeQuickEntryShortcut(shortcut, {} as Window)).toBe(false);
+    expect(configureTaskNativeQuickEntryShortcut(
+      shortcut,
+      bridgeWindow(messages, 1),
+    )).toBe(false);
+    expect(configureTaskNativeQuickEntryShortcut(
+      shortcut,
+      bridgeWindow(messages),
+    )).toBe(true);
+    expect(finishTaskNativeQuickEntry(true, bridgeWindow(messages))).toBe(true);
+    expect(finishTaskNativeQuickEntry(false, bridgeWindow(messages))).toBe(true);
+    expect(messages).toEqual([
+      {
+        type: 'configure-quick-entry-shortcut',
+        schemaVersion: 2,
+        shortcut,
+      },
+      {
+        type: 'quick-entry-finished',
+        schemaVersion: 2,
+        committed: true,
+      },
+      {
+        type: 'quick-entry-finished',
+        schemaVersion: 2,
+        committed: false,
+      },
+    ]);
+  });
+
   it('accepts only UUID native-task links and removes just that parameter', () => {
     expect(getNativeTaskDeepLinkId(`?native_task=${taskA}`)).toBe(taskA);
     expect(getNativeTaskDeepLinkId('?native_task=not-a-task')).toBeNull();
@@ -390,5 +507,11 @@ describe('taskNativeWidgetBridge', () => {
     expect(removeNativeNewTaskSignal(
       '?native_new_task=1&reminder_delivery=delivery-a',
     )).toBe('?reminder_delivery=delivery-a');
+  });
+
+  it('recognizes only the active Mac quick-entry route signal', () => {
+    expect(isTaskNativeQuickEntry('?native_quick_entry=1')).toBe(true);
+    expect(isTaskNativeQuickEntry('?native_quick_entry=0')).toBe(false);
+    expect(isTaskNativeQuickEntry('?native_new_task=1')).toBe(false);
   });
 });

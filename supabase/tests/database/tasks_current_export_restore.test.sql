@@ -21,15 +21,15 @@ INSERT INTO auth.users (
   );
 
 SELECT has_function(
-  'public', 'tasks_create_export_v13', ARRAY[]::text[],
-  'creates the current schema-thirteen export'
+  'public', 'tasks_create_export_v14', ARRAY[]::text[],
+  'creates the current schema-fourteen export'
 );
 SELECT has_function(
   'public', 'tasks_restore_export_current', ARRAY['jsonb', 'boolean'],
   'restores supported exports through the current contract'
 );
 SELECT has_function(
-  'public', 'tasks_replace_restore_v13', ARRAY['jsonb', 'text', 'uuid', 'text'],
+  'public', 'tasks_replace_restore_v14', ARRAY['jsonb', 'text', 'uuid', 'text'],
   'keeps guarded replacement restore versioned with the current export'
 );
 SELECT hasnt_table('public', 'tasks_projects', 'removes Project persistence');
@@ -79,27 +79,27 @@ INSERT INTO public.tasks_todos (
 );
 
 SELECT set_config(
-  'test.tasks_export_v13',
-  public.tasks_create_export_v13()::text,
+  'test.tasks_export_v14',
+  public.tasks_create_export_v14()::text,
   false
 );
 SELECT is(
-  (current_setting('test.tasks_export_v13')::jsonb
+  (current_setting('test.tasks_export_v14')::jsonb
     ->> 'schema_version')::integer,
-  13,
-  'emits schema version thirteen'
+  14,
+  'emits schema version fourteen'
 );
 SELECT is(
   jsonb_array_length(
-    current_setting('test.tasks_export_v13')::jsonb
+    current_setting('test.tasks_export_v14')::jsonb
       #> '{manifest,collections}'
   ),
-  19,
-  'declares exactly the project-free portable collections'
+  16,
+  'declares exactly the project-free and template-free portable collections'
 );
 SELECT ok(
   NOT (
-    current_setting('test.tasks_export_v13')::jsonb
+    current_setting('test.tasks_export_v14')::jsonb
       #> '{manifest,collections}'
     @> '["tasks_projects"]'::jsonb
   ),
@@ -141,7 +141,7 @@ DECLARE
   _todos jsonb;
 BEGIN
   _legacy := tasks_private.export_v13_as_v12_for_validation(
-    current_setting('test.tasks_export_v13')::jsonb
+    current_setting('test.tasks_export_v14')::jsonb
   );
   _legacy := jsonb_set(_legacy, '{data,tasks_projects}', _projects);
   _legacy := jsonb_set(_legacy, '{manifest,counts,tasks_projects}', '1'::jsonb);

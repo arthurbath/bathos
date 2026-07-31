@@ -144,7 +144,7 @@ function ColorPicker({
         <button
           ref={triggerRef}
           type="button"
-          className={`relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[hsl(var(--grid-sticky-line))] bg-transparent p-0 transition-[filter,border-color,background-color,box-shadow] ${normalizedColor ? 'hover:brightness-125 hover:border-foreground/40 hover:shadow-[inset_0_0_0_1px_hsl(var(--foreground)/0.16)]' : 'hover:bg-muted hover:border-foreground/40 hover:shadow-[inset_0_0_0_1px_hsl(var(--foreground)/0.12)]'} focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50`}
+          className={`relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[hsl(var(--grid-sticky-line))] bg-transparent p-0 transition-[filter,border-color,background-color,box-shadow] ${normalizedColor ? '  ' : '  '} focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50`}
           style={normalizedColor ? { backgroundColor: normalizedColor } : undefined}
           title="Pick Color"
           disabled={disabled}
@@ -195,7 +195,7 @@ function ColorPicker({
               ref={(node) => {
                 swatchRefs.current[swatch.slug] = node;
               }}
-              className={`h-6 w-6 rounded border border-[hsl(var(--grid-sticky-line))] transition-shadow focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 ${normalizedColor === swatch.value ? 'ring-2 ring-ring border-ring' : 'hover:ring-1 hover:ring-ring'}`}
+              className={`h-6 w-6 rounded border border-[hsl(var(--grid-sticky-line))] transition-shadow focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0 ${normalizedColor === swatch.value ? 'ring-2 ring-ring border-ring' : ''}`}
               style={{ backgroundColor: swatch.value }}
               title={swatch.label}
               aria-label={`Use ${swatch.label}`}
@@ -221,7 +221,7 @@ function ColorPicker({
         {color && (
           <button
             type="button"
-            className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            className="mt-2 flex items-center gap-1 text-xs text-muted-foreground "
             onClick={() => handleChange(null)}
           >
             <X className="h-3 w-3" /> Remove Color

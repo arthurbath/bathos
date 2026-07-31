@@ -34,7 +34,7 @@ SELECT has_index(
   'indexes owner-scoped actionability filters'
 );
 SELECT has_function(
-  'public', 'tasks_create_export_v13', ARRAY[]::text[],
+  'public', 'tasks_create_export_v14', ARRAY[]::text[],
   'creates the actionability-aware portable export'
 );
 SELECT has_function(
@@ -200,10 +200,10 @@ SELECT lives_ok(
   'allows actionability changes while inspecting Trash'
 );
 
-SELECT set_config('test.tasks_actionability_export', public.tasks_create_export_v13()::text, false);
+SELECT set_config('test.tasks_actionability_export', public.tasks_create_export_v14()::text, false);
 SELECT is(
   (current_setting('test.tasks_actionability_export')::jsonb ->> 'schema_version')::integer,
-  13,
+  14,
   'uses the current portable schema'
 );
 SELECT is(

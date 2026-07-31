@@ -371,7 +371,7 @@ export default function AdminPage() {
             <AlertDialogAction
               onClick={handleDeleteUserByEmail}
               disabled={isDeletingUser || confirmEmail.trim().toLowerCase() !== (emailPendingDelete ?? '')}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground "
             >
               {isDeletingUser ? 'Deleting...' : 'Delete user'}
             </AlertDialogAction>

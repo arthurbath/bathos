@@ -31,6 +31,14 @@ Tasks SHALL interpret normalized plain-text clipboard lines as ordered task or c
 - **WHEN** an editable control other than a checklist item owns Paste
 - **THEN** Tasks leaves the control's existing native or specialized paste behavior unchanged and does not create task objects from its clipboard text
 
+#### Scenario: Commit checklist drafts while creating a task
+- **WHEN** a user adds a checklist while creating a task, enters a nonempty checklist item, and presses Return
+- **THEN** Tasks persists that checklist item, inserts and focuses a following draft item, and retains the saved checklist after the task editor closes
+
+#### Scenario: Flush the final checklist draft when closing
+- **WHEN** a task editor closes while its checklist contains a nonempty transient draft
+- **THEN** Tasks waits for that draft to persist before unmounting the editor and does not lose the checklist item
+
 #### Scenario: Persist checklist completion locally
 - **WHEN** a user checks or reopens a persisted checklist item
 - **THEN** Tasks writes the completion state, completion timestamp, revision, and undo-operation metadata to the local PowerSync database and retains that state across rerender and application restart

@@ -296,7 +296,7 @@ function PaymentMethodOwnerCell({
     >
       <SelectTrigger
         disabled={disabled}
-        className={`h-7 w-full min-w-[92px] border-transparent bg-transparent px-1 hover:border-[hsl(var(--grid-sticky-line))] text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
+        className={`h-7 w-full min-w-[92px] border-transparent bg-transparent px-1  text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ${GRID_CONTROL_FOCUS_CLASS}`}
         {...gridSelectTriggerProps(ctx, 2, { disabled })}
       >
         <GridSelectValue />

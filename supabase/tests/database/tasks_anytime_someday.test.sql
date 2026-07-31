@@ -232,7 +232,7 @@ SELECT is(
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '72000000-0000-4000-8000-000000000001', true);
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
-SELECT set_config('test.tasks_planning_export', public.tasks_create_export_v13()::text, false);
+SELECT set_config('test.tasks_planning_export', public.tasks_create_export_v14()::text, false);
 SELECT is(
   jsonb_array_length(
     jsonb_path_query_array(

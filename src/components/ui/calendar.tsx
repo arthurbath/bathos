@@ -29,11 +29,11 @@ const CALENDAR_VIEWPORT_WIDTH_CLASS = "box-border w-[276px]";
 const CALENDAR_DAY_VIEWPORT_CLASS = `${CALENDAR_VIEWPORT_WIDTH_CLASS} min-h-[318px]`;
 const CALENDAR_CAPTION_CLASS = "flex justify-center pt-1 relative items-center";
 const CALENDAR_NAV_CLASS = "space-x-1 flex items-center";
-const CALENDAR_NAV_BUTTON_CLASS = "h-7 w-7 bg-transparent p-0 opacity-50 enabled:!cursor-pointer hover:opacity-100 disabled:!cursor-not-allowed";
+const CALENDAR_NAV_BUTTON_CLASS = "h-7 w-7 bg-transparent p-0 opacity-50 enabled:!cursor-pointer  disabled:!cursor-not-allowed";
 const CALENDAR_NAV_PREV_CLASS = "absolute left-1 disabled:invisible";
 const CALENDAR_NAV_NEXT_CLASS = "absolute right-1";
 const CALENDAR_HEADER_CLASS = "inline-flex items-center justify-center rounded-md px-2 py-1 text-sm font-medium focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/65 focus:ring-offset-0 focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/65 focus-visible:ring-offset-0";
-const CALENDAR_HEADER_BUTTON_CLASS = `${CALENDAR_HEADER_CLASS} !cursor-pointer border border-transparent bg-transparent text-white transition-colors hover:bg-primary/10 hover:text-primary`;
+const CALENDAR_HEADER_BUTTON_CLASS = `${CALENDAR_HEADER_CLASS} !cursor-pointer border border-transparent bg-transparent text-white transition-colors  `;
 
 function CalendarDay({ date, displayMonth }: DayProps) {
   const buttonRef = React.useRef<HTMLButtonElement>(null);
@@ -47,7 +47,10 @@ function CalendarDay({ date, displayMonth }: DayProps) {
   const dayContent = isCurrentDate ? (
     <Star
       aria-hidden="true"
-      className="h-3.5 w-3.5 text-warning"
+      className={cn(
+        "h-3.5 w-3.5",
+        dayRender.activeModifiers.selected ? "text-primary-foreground" : "text-warning",
+      )}
       data-calendar-current-date-icon="true"
     />
   ) : dayRender.buttonProps.children;
@@ -629,7 +632,7 @@ function Calendar({
             ),
             day_range_end: "day-range-end",
             day_selected:
-              "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+              "bg-primary text-primary-foreground   focus:bg-primary focus:text-primary-foreground",
             day_today: "bg-accent text-accent-foreground",
             day_outside:
               "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",

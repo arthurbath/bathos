@@ -43,12 +43,14 @@ export function TaskChecklistEditor({
   focusRequestTaskId = taskId,
   emptyActionLayout = 'standalone',
   onContentPresenceChange,
+  onRegisterFlush,
 }: {
   ownerId: string;
   taskId: string;
   focusRequestTaskId?: string;
   emptyActionLayout?: 'paired' | 'standalone';
   onContentPresenceChange?: (present: boolean) => void;
+  onRegisterFlush?: (flush: (() => Promise<void>) | null) => void;
 }) {
   const checklist = useTaskChecklist(ownerId, taskId);
   const [draftIndex, setDraftIndex] = useState<number | null>(null);
@@ -77,6 +79,9 @@ export function TaskChecklistEditor({
   const animateNextCompletionReorderRef = useRef(false);
   const saveTimers = useRef(new Map<string, number>());
   const pendingInsertRef = useRef(false);
+  const pendingDraftMutationRef = useRef<Promise<unknown> | null>(null);
+  const draftIndexRef = useRef<number | null>(draftIndex);
+  const draftTitleRef = useRef(draftTitle);
   const focusedItemIdRef = useRef<string | null>(null);
   const pendingFocusRef = useRef<{
     id: string;
@@ -86,6 +91,22 @@ export function TaskChecklistEditor({
   const deleteItemRef = useRef(checklist.deleteItem);
   itemsRef.current = checklist.items;
   deleteItemRef.current = checklist.deleteItem;
+
+  const updateDraftIndex = useCallback((
+    next: number | null | ((current: number | null) => number | null),
+  ) => {
+    const value = typeof next === 'function' ? next(draftIndexRef.current) : next;
+    draftIndexRef.current = value;
+    setDraftIndex(value);
+  }, []);
+
+  const updateDraftTitle = useCallback((
+    next: string | ((current: string) => string),
+  ) => {
+    const value = typeof next === 'function' ? next(draftTitleRef.current) : next;
+    draftTitleRef.current = value;
+    setDraftTitle(value);
+  }, []);
 
   useEffect(() => {
     if (checklist.loading) return;
@@ -171,10 +192,10 @@ export function TaskChecklistEditor({
       requestInputFocus(finalUnchecked.id, 'end');
       return;
     }
-    setDraftIndex(checklist.items.length);
-    setDraftTitle('');
+    updateDraftIndex(checklist.items.length);
+    updateDraftTitle('');
     requestInputFocus(DRAFT_ID, 'start');
-  }, [checklist.items, requestInputFocus]);
+  }, [checklist.items, requestInputFocus, updateDraftIndex, updateDraftTitle]);
 
   useEffect(() => {
     const handleFocusRequest = (event: Event) => {
@@ -284,12 +305,12 @@ export function TaskChecklistEditor({
     const insertionIndex = draftIndex;
     try {
       const item = await checklist.createItem(title, insertionIndex);
-      setDraftTitle('');
+      updateDraftTitle('');
       if (keepFollowingDraft) {
-        setDraftIndex(insertionIndex + 1);
+        updateDraftIndex(insertionIndex + 1);
         requestInputFocus(DRAFT_ID, 'start');
       } else {
-        setDraftIndex(null);
+        updateDraftIndex(null);
       }
       return item;
     } finally {
@@ -308,8 +329,8 @@ export function TaskChecklistEditor({
     const before = title.slice(0, selectionStart);
     const after = title.slice(selectionEnd);
     setEditingTitle(item.id, before);
-    setDraftTitle(after);
-    setDraftIndex(index + 1);
+    updateDraftTitle(after);
+    updateDraftIndex(index + 1);
     requestInputFocus(DRAFT_ID, 'start');
     if (before.trim()) void saveTitle(item, before);
   };
@@ -325,15 +346,15 @@ export function TaskChecklistEditor({
 
     if (!before.trim()) {
       if (!after.trim()) {
-        setDraftIndex(Math.min(index + 1, checklist.items.length));
+        updateDraftIndex(Math.min(index + 1, checklist.items.length));
         requestInputFocus(DRAFT_ID, 'start');
         return;
       }
       pendingInsertRef.current = true;
       try {
         const item = await checklist.createItem(after.trim(), index);
-        setDraftTitle(before);
-        setDraftIndex(index);
+        updateDraftTitle(before);
+        updateDraftIndex(index);
         requestInputFocus(item.id, 'start');
       } finally {
         pendingInsertRef.current = false;
@@ -344,8 +365,8 @@ export function TaskChecklistEditor({
     pendingInsertRef.current = true;
     try {
       await checklist.createItem(before.trim(), index);
-      setDraftTitle(after);
-      setDraftIndex(index + 1);
+      updateDraftTitle(after);
+      updateDraftIndex(index + 1);
       requestInputFocus(DRAFT_ID, 'start');
     } finally {
       pendingInsertRef.current = false;
@@ -419,8 +440,8 @@ export function TaskChecklistEditor({
         index,
         { occurredAt: new Date().toISOString() },
       );
-      setDraftTitle(finalTitle);
-      setDraftIndex(index + created.length);
+      updateDraftTitle(finalTitle);
+      updateDraftIndex(index + created.length);
       requestInputFocus(DRAFT_ID, plan.finalCaretOffset);
     } finally {
       pendingInsertRef.current = false;
@@ -460,7 +481,7 @@ export function TaskChecklistEditor({
         index,
         { occurredAt: new Date().toISOString() },
       );
-      setDraftIndex(index + created.length);
+      updateDraftIndex(index + created.length);
       const finalItem = created.at(-1);
       if (finalItem) requestInputFocus(finalItem.id, 'end');
     } catch (error) {
@@ -473,6 +494,52 @@ export function TaskChecklistEditor({
   const rejectChecklistPaste = (reason: string) => {
     showChecklistError('Checklist Items Could Not Be Pasted', new Error(reason));
   };
+
+  const trackDraftMutation = useCallback((
+    mutation: Promise<unknown>,
+    failureTitle: string,
+  ) => {
+    pendingDraftMutationRef.current = mutation;
+    void mutation
+      .catch((error) => {
+        showChecklistError(failureTitle, error);
+      })
+      .finally(() => {
+        if (pendingDraftMutationRef.current === mutation) {
+          pendingDraftMutationRef.current = null;
+        }
+      });
+  }, []);
+
+  const flushDraft = useCallback(async () => {
+    const pendingMutation = pendingDraftMutationRef.current;
+    if (pendingMutation !== null) {
+      await pendingMutation.catch(() => undefined);
+    }
+
+    const title = draftTitleRef.current.trim();
+    const insertionIndex = draftIndexRef.current;
+    if (!title || insertionIndex === null) return;
+
+    try {
+      await checklist.createItem(title, insertionIndex);
+      if (
+        draftTitleRef.current.trim() === title
+        && draftIndexRef.current === insertionIndex
+      ) {
+        updateDraftTitle('');
+        updateDraftIndex(null);
+      }
+    } catch (error) {
+      showChecklistError('Checklist Item Could Not Be Saved', error);
+      throw error;
+    }
+  }, [checklist, updateDraftIndex, updateDraftTitle]);
+
+  useLayoutEffect(() => {
+    onRegisterFlush?.(flushDraft);
+    return () => onRegisterFlush?.(null);
+  }, [flushDraft, onRegisterFlush]);
 
   const moveInputFocus = useCallback((
     currentId: string,
@@ -496,7 +563,7 @@ export function TaskChecklistEditor({
     cancelScheduledSave(item.id);
     if (draftIndex === index) {
       const boundary = draftTitle.length;
-      setDraftTitle(`${draftTitle}${title}`);
+      updateDraftTitle(`${draftTitle}${title}`);
       await checklist.deleteItem(item.id);
       requestInputFocus(DRAFT_ID, boundary);
       return;
@@ -523,8 +590,8 @@ export function TaskChecklistEditor({
       const boundary = title.length;
       const combined = `${title}${draftTitle}`;
       setEditingTitle(item.id, combined);
-      setDraftIndex(null);
-      setDraftTitle('');
+      updateDraftIndex(null);
+      updateDraftTitle('');
       if (combined.trim()) await checklist.updateItem(item.id, { title: combined.trim() });
       requestInputFocus(item.id, boundary);
       return;
@@ -550,8 +617,8 @@ export function TaskChecklistEditor({
     const combined = `${previousTitle}${draftTitle}`;
     const boundary = previousTitle.length;
     setEditingTitle(previous.id, combined);
-    setDraftIndex(null);
-    setDraftTitle('');
+    updateDraftIndex(null);
+    updateDraftTitle('');
     if (combined.trim()) await checklist.updateItem(previous.id, { title: combined.trim() });
     requestInputFocus(previous.id, boundary);
   };
@@ -563,7 +630,7 @@ export function TaskChecklistEditor({
     cancelScheduledSave(next.id);
     const nextTitle = editingTitlesRef.current[next.id] ?? next.title;
     const boundary = draftTitle.length;
-    setDraftTitle(`${draftTitle}${nextTitle}`);
+    updateDraftTitle(`${draftTitle}${nextTitle}`);
     await checklist.deleteItem(next.id);
     requestInputFocus(DRAFT_ID, boundary);
   };
@@ -660,7 +727,7 @@ export function TaskChecklistEditor({
         .filter(({ id }) => selectedIds.has(id))
         .length;
       if (removedBeforeDraft > 0) {
-        setDraftIndex(Math.max(0, draftIndex - removedBeforeDraft));
+        updateDraftIndex(Math.max(0, draftIndex - removedBeforeDraft));
       }
     }
     clearSelection();
@@ -674,6 +741,7 @@ export function TaskChecklistEditor({
     draftIndex,
     requestInputFocus,
     selectedItemIds,
+    updateDraftIndex,
   ]);
 
   useEffect(() => {
@@ -820,14 +888,14 @@ export function TaskChecklistEditor({
     clearDragState();
     try {
       if (activeDraggedIds[0] === DRAFT_ID) {
-        setDraftIndex(Math.max(0, Math.min(destinationIndex, checklist.items.length)));
+        updateDraftIndex(Math.max(0, Math.min(destinationIndex, checklist.items.length)));
       } else {
         await checklist.reorderItems(activeDraggedIds, destinationIndex);
       }
     } finally {
       dropCommitInFlightRef.current = false;
     }
-  }, [checklist, clearDragState]);
+  }, [checklist, clearDragState, updateDraftIndex]);
 
   const handleDrop = (event: DragEvent, destinationIndex: number) => {
     event.preventDefault();
@@ -883,18 +951,24 @@ export function TaskChecklistEditor({
       showDropBefore={dropIndex === index}
       canJoinPrevious={index > 0}
       canJoinNext={index < checklist.items.length}
-      onTitleChange={setDraftTitle}
+      onTitleChange={updateDraftTitle}
       onJoinPrevious={joinDraftPrevious}
       onJoinNext={joinDraftNext}
       onDeleteEmpty={() => {
-        setDraftIndex(null);
-        setDraftTitle('');
+        updateDraftIndex(null);
+        updateDraftTitle('');
       }}
       onReturn={(selectionStart, selectionEnd) => {
-        void splitDraft(index, selectionStart, selectionEnd);
+        trackDraftMutation(
+          splitDraft(index, selectionStart, selectionEnd),
+          'Checklist Item Could Not Be Added',
+        );
       }}
       onMultilinePaste={(selectionStart, selectionEnd, text) => {
-        void pasteIntoDraft(index, selectionStart, selectionEnd, text);
+        trackDraftMutation(
+          pasteIntoDraft(index, selectionStart, selectionEnd, text),
+          'Checklist Items Could Not Be Pasted',
+        );
       }}
       onChecklistPaste={(items) => {
         void pasteChecklistItemsAtDraft(index, items);
@@ -905,7 +979,12 @@ export function TaskChecklistEditor({
         moveInputFocus(DRAFT_ID, direction, position)
       )}
       onBlur={() => {
-        if (draftTitle.trim()) void commitDraft({ keepFollowingDraft: false });
+        if (draftTitle.trim()) {
+          trackDraftMutation(
+            commitDraft({ keepFollowingDraft: false }),
+            'Checklist Item Could Not Be Saved',
+          );
+        }
       }}
       onFocus={() => {
         focusedItemIdRef.current = DRAFT_ID;
@@ -1018,7 +1097,7 @@ export function TaskChecklistEditor({
               await checklist.deleteItem(item.id);
               const next = checklist.items[index + 1];
               if (draftIndex !== null && draftIndex > index) {
-                setDraftIndex(draftIndex - 1);
+                updateDraftIndex(draftIndex - 1);
               }
               if (draftIndex === index || draftIndex === index + 1) {
                 requestInputFocus(DRAFT_ID, 'start');
@@ -1089,7 +1168,7 @@ export function TaskChecklistEditor({
           aria-label="Add Checklist"
           data-task-checklist-disclosure
           className={[
-            'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             emptyActionLayout === 'paired'
               ? 'w-full justify-center'
               : 'w-fit justify-start',
@@ -1313,7 +1392,7 @@ function ChecklistRow({
           aria-checked={selected}
           aria-label={`${selected ? 'Deselect' : 'Select'} ${item.title}`}
           data-checklist-selection-control
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-info transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-info transition-colors  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={onToggleSelection}
         >
           {selected ? (

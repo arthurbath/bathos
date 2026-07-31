@@ -7,7 +7,7 @@ Define the current-period indicators that every BathOS date picker inherits from
 ## Requirements
 
 ### Requirement: Shared Current-Period Star Indicators
-Every BathOS date picker that uses the shared Calendar SHALL identify the resolved current day and current month with Lucide's `Star` icon while preserving independent selection styling and complete accessible names.
+Every BathOS date picker that uses the shared Calendar SHALL identify the resolved current day and current month with Lucide's `Star` icon while preserving independent selection styling, selected-state contrast, and complete accessible names.
 
 #### Scenario: Mark the current day in its own month
 - **WHEN** the resolved current date is visible in the day calendar for the month to which that date belongs
@@ -28,6 +28,10 @@ Every BathOS date picker that uses the shared Calendar SHALL identify the resolv
 #### Scenario: Preserve selected-value styling
 - **WHEN** the current day or current month is also the selected value
 - **THEN** the Star icon and the existing subtle selected-value highlight appear together without changing selection semantics
+
+#### Scenario: Contrast a selected current day
+- **WHEN** the current day is selected and its day control uses a light selected background
+- **THEN** the Star uses the dark selected-foreground color rather than the ordinary yellow current-period color
 
 #### Scenario: Apply the convention to Tasks date pickers
 - **WHEN** a user opens either Start or Deadline in BathOS Tasks

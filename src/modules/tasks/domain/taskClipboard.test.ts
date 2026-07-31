@@ -24,7 +24,6 @@ const snapshot: TaskClipboardSnapshot = {
     timeZone: 'America/Los_Angeles',
     ambiguityChoice: 'earlier',
   },
-  recurrence: null,
 };
 
 describe('task clipboard', () => {
@@ -34,7 +33,7 @@ describe('task clipboard', () => {
       kind: 'tasks',
       envelope: {
         kind: TASK_CLIPBOARD_KIND,
-        version: 1,
+        version: 2,
         operation: 'copy',
         tasks: [snapshot],
       },

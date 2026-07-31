@@ -202,7 +202,7 @@ export function TermsUpdateOverlay({ latestVersion, pendingVersions, onAgree }: 
             The{' '}
             <button
               type="button"
-              className="text-primary underline underline-offset-2 hover:text-primary/80"
+              className="text-primary underline underline-offset-2 "
               onClick={() => setShowTermsModal(true)}
             >
               Terms of Service & Privacy Policy

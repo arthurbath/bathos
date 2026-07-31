@@ -507,7 +507,7 @@ export function DrawersView({
                 key={path}
                 href={fullPath}
                 onClick={(event) => handleClientSideLinkNavigation(event, navigate, fullPath)}
-                className={`inline-flex items-center justify-center gap-0 sm:gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${active ? 'bg-background text-foreground' : 'text-foreground hover:bg-background/50'}`}
+                className={`inline-flex items-center justify-center gap-0 sm:gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${active ? 'bg-background text-foreground' : 'text-foreground '}`}
               >
                 <Icon className="hidden h-4 w-4 sm:inline" />
                 <span>{label}</span>
@@ -815,7 +815,7 @@ export function DrawersView({
             <AlertDialogAction
               onClick={handleDeleteUnit}
               disabled={deleteBusy}
-              className={deleteMode === 'delete' || !pendingUnitHasDrawers ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
+              className={deleteMode === 'delete' || !pendingUnitHasDrawers ? 'bg-destructive text-destructive-foreground ' : ''}
             >
               {deleteBusy ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>

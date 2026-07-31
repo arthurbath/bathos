@@ -170,7 +170,7 @@ function ServicingDateCell({
             setOpen(true);
           }}
           className={cn(
-            'inline-flex h-7 w-full items-center justify-start gap-1 rounded-md border border-transparent bg-transparent px-1 text-left text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 hover:border-[hsl(var(--grid-sticky-line))]',
+            'inline-flex h-7 w-full items-center justify-start gap-1 rounded-md border border-transparent bg-transparent px-1 text-left text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ',
             GRID_CONTROL_FOCUS_CLASS,
             !value && 'text-muted-foreground',
           )}
@@ -284,7 +284,7 @@ function ServicingActionsCell({
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="bg-destructive text-destructive-foreground "
             onClick={() => onDelete(servicing.id)}
           >
             Delete
@@ -1102,7 +1102,7 @@ export function GarageServicingsGrid({
                           }}
                           type="button"
                           tabIndex={-1}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-muted focus:bg-muted focus:outline-none"
+                          className="w-full px-3 py-2 text-left text-sm  focus:bg-muted focus:outline-none"
                           onMouseDown={(event) => {
                             event.preventDefault();
                           }}
@@ -1224,7 +1224,7 @@ export function GarageServicingsGrid({
                             <button
                               ref={servicePickerAddNewRef}
                               type="button"
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted focus:bg-muted focus:outline-none"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm  focus:bg-muted focus:outline-none"
                               onClick={() => openAddServiceDialog(servicePickerQueryTrimmed)}
                               onKeyDown={(event) => {
                                 if (event.key === 'ArrowUp') {
@@ -1254,7 +1254,7 @@ export function GarageServicingsGrid({
                                 servicePickerItemRefs.current[index] = element;
                               }}
                               type="button"
-                              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted focus:bg-muted focus:outline-none"
+                              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm  focus:bg-muted focus:outline-none"
                               onClick={() => addServiceOutcome(service.id)}
                               onKeyDown={(event) => {
                                 if (event.key === 'ArrowDown') {

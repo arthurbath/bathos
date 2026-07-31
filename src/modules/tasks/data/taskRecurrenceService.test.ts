@@ -16,6 +16,7 @@ const definition = {
   current_revision: 1,
   record_revision: 1,
   evaluated_through_date: null,
+  next_occurrence_date: '2026-07-27',
   archived_at: null,
   last_mutation_channel: 'web',
   last_actor_type: 'user',
@@ -30,8 +31,23 @@ const revision = {
   recurrence_id: definition.id,
   revision: 1,
   name: definition.name,
-  template_id: '50000000-0000-4000-8000-000000000001',
-  template_revision: 2,
+  prototype_snapshot: {
+    version: 2,
+    kind: 'todo',
+    root: {
+      node_id: 'prototype-node',
+      title: 'Weekly Review',
+      notes: '',
+      primary_link: null,
+      actionability: 'actionable',
+      destination: 'anytime',
+      today_section: null,
+      order_key: 'a0',
+      start_offset_days: 0,
+      deadline_offset_days: null,
+      checklist: [],
+    },
+  },
   rule_mode: 'calendar',
   frequency: 'weekly',
   interval_count: 1,
@@ -56,9 +72,9 @@ describe('TaskRecurrenceService', () => {
       logical_key: 'calendar:2026-07-20',
       scheduled_date: '2026-07-20',
       predecessor_occurrence_id: null,
-      template_instantiation_id: '70000000-0000-4000-8000-000000000001',
       root_type: 'todo',
       root_id: '80000000-0000-4000-8000-000000000001',
+      origin: 'generated',
       client_mutation_id: '60000000-0000-4000-8000-000000000001',
       generated_at: '2026-07-20T00:00:00Z',
     }).logical_key).toBe('calendar:2026-07-20');
@@ -127,44 +143,6 @@ describe('TaskRecurrenceService', () => {
     });
   });
 
-  it('saves a structured rule through the server-authoritative RPC', async () => {
-    const { owner_id: _definitionOwner, ...ownerSafeDefinition } = definition;
-    const { owner_id: _revisionOwner, ...ownerSafeRevision } = revision;
-    const rpc = vi.fn().mockResolvedValue({
-      data: {
-        outcome: 'accepted',
-        definition: ownerSafeDefinition,
-        revision: ownerSafeRevision,
-      },
-      error: null,
-    });
-    const service = new TaskRecurrenceService({ rpc } as never, definition.owner_id);
-
-    await expect(service.save({
-      name: definition.name,
-      templateId: revision.template_id,
-      templateRevision: 2,
-      ruleMode: 'calendar',
-      frequency: 'weekly',
-      intervalCount: 1,
-      startDate: '2026-07-20',
-      planningTimeZone: 'America/Los_Angeles',
-      missedPolicy: 'latest',
-      mutationId: definition.client_mutation_id,
-    })).resolves.toMatchObject({
-      outcome: 'accepted',
-      definition: { id: definition.id, owner_id: definition.owner_id },
-      revision: { owner_id: definition.owner_id },
-    });
-    expect(rpc).toHaveBeenCalledWith('tasks_save_recurrence', expect.objectContaining({
-      _template_id: revision.template_id,
-      _template_revision: 2,
-      _rule_mode: 'calendar',
-      _frequency: 'weekly',
-      _missed_policy: 'latest',
-    }));
-  });
-
   it('adopts an existing task through the rich recurrence RPC', async () => {
     const adoptedOccurrence = {
       id: '60000000-0000-4000-8000-000000000001',
@@ -174,7 +152,6 @@ describe('TaskRecurrenceService', () => {
       logical_key: 'calendar:2026-07-27',
       scheduled_date: '2026-07-27',
       predecessor_occurrence_id: null,
-      template_instantiation_id: null,
       root_type: 'todo',
       root_id: '80000000-0000-4000-8000-000000000001',
       origin: 'adopted',
@@ -218,7 +195,6 @@ describe('TaskRecurrenceService', () => {
       occurrence: {
         root_id: adoptedOccurrence.root_id,
         origin: 'adopted',
-        template_instantiation_id: null,
       },
       revision: {
         end_mode: 'after',
@@ -301,7 +277,7 @@ describe('TaskRecurrenceService', () => {
     expect(rpc).toHaveBeenCalledWith('tasks_edit_recurrence', expect.objectContaining({
       _recurrence_id: definition.id,
       _expected_record_revision: 1,
-      _template_id: revision.template_id,
+      _prototype_snapshot: revision.prototype_snapshot,
       _rule_mode: 'after_completion',
       _start_date: '2026-08-03',
       _end_mode: 'after',
@@ -333,16 +309,15 @@ describe('TaskRecurrenceService', () => {
   it('rejects malformed rule input before calling the database', async () => {
     const rpc = vi.fn();
     const service = new TaskRecurrenceService({ rpc } as never, definition.owner_id);
-    await expect(service.save({
+    await expect(service.createFromTask({
+      taskId: '80000000-0000-4000-8000-000000000001',
       name: '',
-      templateId: revision.template_id,
-      templateRevision: 2,
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 0,
-      startDate: 'not-a-date',
-      planningTimeZone: 'UTC',
-      missedPolicy: 'latest',
+      scheduleDate: 'not-a-date',
+      ruleConfig: {},
+      endMode: 'never',
     })).rejects.toBeInstanceOf(InvalidTaskRecurrenceError);
     expect(rpc).not.toHaveBeenCalled();
   });

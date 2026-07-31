@@ -11,7 +11,6 @@ import {
   taskRecurrenceOccurrenceOrigins,
   taskRecurrenceRuleModes,
   taskRecurrenceStatuses,
-  taskTemplateKinds,
   type TaskRecurrenceDefinition,
   type TaskRecurrenceEndMode,
   type TaskRecurrenceFrequency,
@@ -20,27 +19,11 @@ import {
   type TaskRecurrenceRevision,
   type TaskRecurrenceRuleMode,
   type TaskRecurrenceRuleConfig,
+  type TaskRecurrencePrototypeSnapshot,
   type TaskRecurrenceStatus,
 } from '@/modules/tasks/types/tasks';
 
 type TaskRecurrenceClient = Pick<SupabaseClient<Database>, 'rpc'>;
-
-export type TaskRecurrenceSaveInput = {
-  recurrenceId?: string | null;
-  expectedRecordRevision?: number | null;
-  name: string;
-  templateId: string;
-  templateRevision: number;
-  ruleMode: TaskRecurrenceRuleMode;
-  frequency: TaskRecurrenceFrequency;
-  intervalCount: number;
-  startDate: string;
-  planningTimeZone: string;
-  missedPolicy: TaskRecurrenceMissedPolicy;
-  catchUpLimit?: number;
-  targetAreaId?: string | null;
-  mutationId?: string;
-};
 
 export type TaskRecurrenceSaveResult = {
   outcome: 'accepted' | 'already_applied' | 'conflict';
@@ -96,6 +79,8 @@ export type TaskRecurrenceEditInput = {
   endOnDate?: string | null;
   reminderLocalTime?: string | null;
   deadlineOffsetDays?: number | null;
+  prototypeSnapshot?: TaskRecurrencePrototypeSnapshot;
+  targetAreaId?: string | null;
   mutationId?: string;
 };
 
@@ -112,55 +97,6 @@ export class TaskRecurrenceService {
     private readonly ownerId: string,
   ) {
     requireText(ownerId, 'recurrence owner');
-  }
-
-  async save(input: TaskRecurrenceSaveInput): Promise<TaskRecurrenceSaveResult> {
-    const name = input.name.trim();
-    if (
-      !name
-      || name.length > 500
-      || !Number.isInteger(input.templateRevision)
-      || input.templateRevision < 1
-      || !Number.isInteger(input.intervalCount)
-      || input.intervalCount < 1
-      || input.intervalCount > 1000
-      || !isTaskCalendarDate(input.startDate)
-      || !input.planningTimeZone
-    ) {
-      throw new InvalidTaskRecurrenceError('A valid recurrence definition is required');
-    }
-    const { data, error } = await this.client.rpc('tasks_save_recurrence', {
-      _recurrence_id: (input.recurrenceId ?? null) as unknown as string,
-      _expected_record_revision: (input.expectedRecordRevision ?? null) as unknown as number,
-      _name: name,
-      _template_id: input.templateId,
-      _template_revision: input.templateRevision,
-      _rule_mode: input.ruleMode,
-      _frequency: input.frequency,
-      _interval_count: input.intervalCount,
-      _start_date: input.startDate,
-      _planning_timezone: input.planningTimeZone,
-      _missed_policy: input.missedPolicy,
-      _catch_up_limit: input.catchUpLimit ?? 50,
-      _target_area_id: (input.targetAreaId ?? null) as unknown as string,
-      _mutation_id: input.mutationId ?? crypto.randomUUID(),
-      _mutation_channel: 'web',
-      _actor_type: 'user',
-    });
-    if (error) throw error;
-    const result = requireRecord(data, 'Recurrence save returned an invalid result');
-    const outcome = requireEnum(
-      result.outcome,
-      ['accepted', 'already_applied', 'conflict'] as const,
-      'recurrence save outcome',
-    );
-    return {
-      outcome,
-      definition: parseTaskRecurrenceDefinition(result.definition, this.ownerId),
-      ...(outcome === 'conflict'
-        ? {}
-        : { revision: parseTaskRecurrenceRevision(result.revision, this.ownerId) }),
-    };
   }
 
   async createFromTask(
@@ -234,8 +170,6 @@ export class TaskRecurrenceService {
       _recurrence_id: input.definition.id,
       _expected_record_revision: input.definition.record_revision,
       _name: name,
-      _template_id: input.revision.template_id,
-      _template_revision: input.revision.template_revision,
       _rule_mode: input.ruleMode,
       _frequency: input.frequency,
       _interval_count: input.intervalCount,
@@ -243,13 +177,17 @@ export class TaskRecurrenceService {
       _planning_timezone: input.revision.planning_timezone,
       _missed_policy: input.revision.missed_policy,
       _catch_up_limit: input.revision.catch_up_limit,
-      _target_area_id: input.revision.target_area_id as unknown as string,
+      _target_area_id: (input.targetAreaId === undefined
+        ? input.revision.target_area_id
+        : input.targetAreaId) as unknown as string,
       _rule_config: input.ruleConfig as unknown as Database['public']['Functions']['tasks_edit_recurrence']['Args']['_rule_config'],
       _end_mode: input.endMode,
       _end_after_count: input.endMode === 'after' ? input.endAfterCount ?? null : null,
       _end_on_date: input.endMode === 'on_date' ? input.endOnDate ?? null : null,
       _reminder_local_time: input.reminderLocalTime ?? null,
       _deadline_offset_days: input.deadlineOffsetDays ?? null,
+      _prototype_snapshot: (input.prototypeSnapshot
+        ?? input.revision.prototype_snapshot) as unknown as Database['public']['Functions']['tasks_edit_recurrence']['Args']['_prototype_snapshot'],
       _mutation_id: input.mutationId ?? crypto.randomUUID(),
       _mutation_channel: 'web',
       _actor_type: 'user',
@@ -372,9 +310,7 @@ export function parseTaskRecurrenceRevision(
     'recurrence revision owner',
   );
   requireText(record.recurrence_id, 'recurrence identifier');
-  requireText(record.template_id, 'recurrence template identifier');
   requirePositiveInteger(record.revision, 'recurrence revision');
-  requirePositiveInteger(record.template_revision, 'recurrence template revision');
   requirePositiveInteger(record.interval_count, 'recurrence interval');
   requireCalendarDate(record.start_date, 'recurrence start');
   requireText(record.planning_timezone, 'recurrence planning time zone');
@@ -394,6 +330,7 @@ export function parseTaskRecurrenceRevision(
       'recurrence end mode',
     ),
     rule_config: parseRuleConfig(record.rule_config ?? {}),
+    prototype_snapshot: parseTaskRecurrencePrototypeSnapshot(record.prototype_snapshot),
   } as TaskRecurrenceRevision;
 }
 
@@ -412,13 +349,95 @@ export function parseTaskRecurrenceOccurrence(
   return {
     ...record,
     owner_id: resolvedOwnerId,
-    root_type: requireEnum(record.root_type, taskTemplateKinds, 'occurrence root type'),
+    root_type: requireEnum(record.root_type, ['todo'] as const, 'occurrence root type'),
     origin: requireEnum(
       record.origin ?? 'generated',
       taskRecurrenceOccurrenceOrigins,
       'occurrence origin',
     ),
   } as TaskRecurrenceOccurrence;
+}
+
+export function parseTaskRecurrencePrototypeSnapshot(
+  value: unknown,
+): TaskRecurrencePrototypeSnapshot {
+  const snapshot = requireRecord(value, 'Recurrence prototype snapshot is invalid');
+  if (snapshot.version !== 2 || snapshot.kind !== 'todo') {
+    throw new InvalidTaskRecurrenceError('Recurrence prototype snapshot is unsupported');
+  }
+  const root = requireRecord(snapshot.root, 'Recurrence prototype task is invalid');
+  requireText(root.node_id, 'recurrence prototype node');
+  requireText(root.title, 'recurrence prototype summary');
+  const checklist = requireArray(
+    root.checklist ?? [],
+    'Recurrence prototype checklist is invalid',
+  ).map((item) => {
+    const record = requireRecord(item, 'Recurrence prototype checklist item is invalid');
+    requireText(record.node_id, 'recurrence prototype checklist node');
+    requireText(record.title, 'recurrence prototype checklist item');
+    requireText(record.order_key, 'recurrence prototype checklist order');
+    if (typeof record.completed !== 'boolean') {
+      throw new InvalidTaskRecurrenceError(
+        'Recurrence prototype checklist completion is invalid',
+      );
+    }
+    return {
+      node_id: record.node_id as string,
+      title: record.title as string,
+      completed: record.completed,
+      order_key: record.order_key as string,
+    };
+  });
+  const startOffset = parseNullableInteger(
+    root.start_offset_days,
+    'recurrence prototype start offset',
+  );
+  const deadlineOffset = parseNullableInteger(
+    root.deadline_offset_days,
+    'recurrence prototype deadline offset',
+  );
+  return {
+    version: 2,
+    kind: 'todo',
+    root: {
+      node_id: root.node_id as string,
+      title: root.title as string,
+      notes: typeof root.notes === 'string' ? root.notes : '',
+      primary_link: typeof root.primary_link === 'string' ? root.primary_link : null,
+      actionability: requireEnum(
+        root.actionability,
+        ['actionable', 'waiting', 'rechecking'] as const,
+        'recurrence prototype actionability',
+      ),
+      destination: requireEnum(
+        root.destination,
+        ['anytime', 'someday'] as const,
+        'recurrence prototype destination',
+      ),
+      today_section: root.today_section === null
+        ? null
+        : requireEnum(
+            root.today_section,
+            ['inbox', 'now', 'next', 'later'] as const,
+            'recurrence prototype horizon',
+          ),
+      order_key: requireText(root.order_key, 'recurrence prototype order'),
+      ...(typeof root.hierarchy_order_key === 'string'
+        ? { hierarchy_order_key: root.hierarchy_order_key }
+        : {}),
+      start_offset_days: startOffset,
+      deadline_offset_days: deadlineOffset,
+      checklist,
+    },
+  };
+}
+
+function parseNullableInteger(value: unknown, field: string): number | null {
+  if (value === null || value === undefined) return null;
+  if (!Number.isInteger(value)) {
+    throw new InvalidTaskRecurrenceError(`${field} is invalid`);
+  }
+  return Number(value);
 }
 
 function parseRuleConfig(value: unknown): TaskRecurrenceRuleConfig {

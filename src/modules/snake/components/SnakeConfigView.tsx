@@ -170,7 +170,7 @@ function SnakeDateCell({
             setOpen(true);
           }}
           className={cn(
-            'inline-flex h-7 w-full items-center justify-start gap-1 rounded-md border border-transparent bg-transparent px-1 text-left text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 hover:border-[hsl(var(--grid-sticky-line))]',
+            'inline-flex h-7 w-full items-center justify-start gap-1 rounded-md border border-transparent bg-transparent px-1 text-left text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 ',
             GRID_CONTROL_FOCUS_CLASS,
             !value && 'text-muted-foreground',
           )}
@@ -261,7 +261,7 @@ function SnakeSexCell({
       }}
     >
       <SelectTrigger
-        className={`h-7 border-transparent bg-transparent px-1 text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2 hover:border-[hsl(var(--grid-sticky-line))] ${GRID_CONTROL_FOCUS_CLASS}`}
+        className={`h-7 border-transparent bg-transparent px-1 text-xs font-normal underline decoration-dashed decoration-muted-foreground/40 underline-offset-2  ${GRID_CONTROL_FOCUS_CLASS}`}
         {...gridSelectTriggerProps(ctx, 4)}
       >
         <GridSelectValue placeholder="Unknown" />
@@ -721,7 +721,7 @@ export function SnakeConfigView({
           <AlertDialogBody />
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDelete} disabled={deleting}>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground " onClick={handleDelete} disabled={deleting}>
               {deleting ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>

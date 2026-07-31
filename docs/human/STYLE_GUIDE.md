@@ -65,6 +65,14 @@ Apply casing only to system-authored framing. Never change the capitalization of
 
 A system-authored accessible name or tooltip title that labels a button or input follows the title-case control-label rule. Descriptive accessibility prose that communicates state or instructions uses sentence case.
 
+## Toast Notifications
+
+- Shared BathOS toast services calculate automatic dismissal timing from the amount of readable text rather than using a fixed duration.
+- Estimate one visible mobile line for each 42 characters in the title and message body. Count the title and message body as separate text blocks, and count explicit line breaks separately.
+- Each estimated line contributes 1,000 ms to the display duration. Every toast remains visible for at least 1,000 ms.
+- Modules should provide the toast content and rely on the shared timing policy. Do not add local duration overrides for routine notifications.
+- Preserve manual dismissal and the toast renderer's normal pause and interaction behavior.
+
 ## Icons
 
 - All iconography uses Lucide React (`lucide-react`)
@@ -202,9 +210,16 @@ This is the standing standard for all new and updated BathOS controls.
 
 For dotted-underline tooltip text triggers, use the persistent interaction model:
 
-- Hover, tap, or click opens the tooltip.
+- Keyboard focus, tap, or click opens the tooltip. Pointer hover alone does not.
 - Repeated taps/clicks on the same trigger do not dismiss it.
-- Tooltip closes only when the pointer leaves the trigger text or when the user taps/clicks elsewhere in the UI.
+- Tooltip closes when focus leaves the trigger or when the user taps/clicks elsewhere in the UI.
+
+## Hover-Independent Interaction
+
+- BathOS does not change control color, opacity, border, decoration, transform, or visibility solely because a pointer hovers it.
+- Focus-visible, pressed, open, selected, checked, disabled, invalid, saving, and other semantic states remain visible.
+- An action or essential explanation must never be available only on hover. Present it persistently or behind a deliberate click, tap, keyboard, or assistive-technology action.
+- Remove a former hover disclosure when it only duplicates an action or fact already clear in the same context.
 
 ## Link Navigation Convention
 

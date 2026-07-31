@@ -15,6 +15,15 @@ export type TaskSearchDocument = {
   normalizedText: string;
 };
 
+export type TaskSearchRankFields = Pick<
+  TaskSearchDocument,
+  | 'normalizedTitle'
+  | 'normalizedNotes'
+  | 'normalizedSourceTitle'
+  | 'normalizedSourceUrl'
+  | 'normalizedHierarchyLabel'
+>;
+
 export function createTaskSearchDocuments(
   tasks: readonly TaskTodo[],
   hierarchy: TaskSearchHierarchy,
@@ -67,8 +76,8 @@ export function rankTaskSearchDocuments(
   ));
 }
 
-function getTaskSearchRank(
-  document: TaskSearchDocument,
+export function getTaskSearchRank(
+  document: TaskSearchRankFields,
   normalizedQuery: string,
 ): number {
   if (document.normalizedTitle === normalizedQuery) return 0;

@@ -90,7 +90,7 @@ The Tasks MCP boundary SHALL expose and accept only canonical mutually exclusive
 - **THEN** the server creates one active Anytime task with no future Start and the Inbox horizon while preserving the integration's idempotent source record and final AI-processed content
 
 ### Requirement: Personal Tasks MCP Resource Actions
-The BathOS MCP server SHALL let an authenticated user read and mutate their heading-free task hierarchy, templates, to-dos, checklists, future-only Starts, mutually exclusive Today horizons, reminder time, Done recovery state, and supported structured workflow fields under the current Tasks domain rules.
+The BathOS MCP server SHALL let an authenticated user read and mutate their heading-free task hierarchy, to-dos, checklists, future-only Starts, mutually exclusive Today horizons, reminder time, Done recovery state, recurrence state, and supported structured workflow fields under the current Tasks domain rules.
 
 #### Scenario: Read task data
 - **WHEN** an authenticated MCP client requests task data or a defined task view
@@ -99,10 +99,6 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their head
 #### Scenario: Read one task record
 - **WHEN** an authenticated MCP client requests one current task record by supported type and stable identifier
 - **THEN** the server returns that owned record without exposing an owner identifier or a record owned by another user
-
-#### Scenario: Read native templates
-- **WHEN** an authenticated MCP client requests active or explicitly archived native templates
-- **THEN** the server returns only the signed-in owner's bounded template definitions and their current immutable revisions without exposing owner identifiers
 
 #### Scenario: Retry hierarchy creation after later changes
 - **WHEN** an MCP client retries an exact hierarchy-creation request after the resulting record has changed
@@ -265,7 +261,7 @@ The BathOS MCP server SHALL let an authenticated user read and mutate their head
 - **THEN** no MCP tool can defer the purge, resurrect purged content, or enumerate another owner's terminal records
 
 ### Requirement: Structured Task Automation Contract
-The BathOS MCP server SHALL expose explicit task fields for three-state actionability, source/origin, templates, future-only scheduling, mutually exclusive Today horizons, reminders, recurrence, and completion without requiring clients to encode meaning in generic tags or task titles.
+The BathOS MCP server SHALL expose explicit task fields for three-state actionability, source/origin, future-only scheduling, mutually exclusive Today horizons, reminders, recurrence, and completion without requiring clients to encode meaning in generic tags or task titles.
 
 #### Scenario: Set structured origin
 - **WHEN** an MCP client creates a task from a supported external source or collection integration
@@ -280,18 +276,18 @@ The BathOS MCP server SHALL expose explicit task fields for three-state actionab
 - **THEN** the server stores the active Today horizon, clears any future Start, and returns it in owner-safe planning state
 
 ### Requirement: Project-Free Tasks MCP Surface
-The BathOS MCP SHALL expose owner-scoped Tasks resources and mutations for Areas, tasks, and checklist items without accepting, returning, creating, updating, moving, scheduling, reordering, reminding, transitioning, restoring, or searching a Project entity.
+The BathOS MCP SHALL expose owner-scoped Tasks resources and mutations for Areas, tasks, and checklist items without accepting, returning, creating, updating, moving, scheduling, reordering, reminding, transitioning, restoring, or searching a Project or Template entity.
 
-#### Scenario: Read the project-free hierarchy
+#### Scenario: Read the project-free and template-free hierarchy
 - **WHEN** an authenticated client reads the complete Tasks hierarchy or an Area or task scope
-- **THEN** the response contains Areas, tasks, and applicable checklist items with no Projects collection or Project identifier
+- **THEN** the response contains Areas, tasks, and applicable checklist items with no Projects or Templates collection or identifier
 
 #### Scenario: Create or move a task
 - **WHEN** an authenticated client creates or moves a task
 - **THEN** it may assign one owned Area or no Area and the request schema exposes no Project parameter
 
-#### Scenario: Reject a stale Project operation
-- **WHEN** a stale client submits a Project record type, root type, identifier, transition, reminder, recurrence, template, or reorder request
+#### Scenario: Reject a stale Project or Template operation
+- **WHEN** a stale client submits a Project or Template record type, root type, identifier, transition, reminder, recurrence, instantiation, or reorder request
 - **THEN** MCP schema validation rejects the request before any Supabase mutation
 
 #### Scenario: Preserve guarded task mutations

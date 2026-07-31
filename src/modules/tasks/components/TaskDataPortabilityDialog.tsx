@@ -28,7 +28,7 @@ import {
   parseTaskExport,
   serializeTaskExport,
   TASK_REPLACE_RESTORE_CONFIRMATION,
-  type TaskExportV13,
+  type TaskExportV14,
   type TaskPortableExport,
   type TaskPortabilityService,
   type TaskReplaceRestorePreparation,
@@ -131,7 +131,7 @@ export function TaskDataPortabilityDialog({
   const prepareReplace = async () => {
     if (
       !taskExport
-      || taskExport.schema_version !== 13
+      || taskExport.schema_version !== 14
       || !replaceAvailable
       || busy
     ) return;
@@ -164,7 +164,7 @@ export function TaskDataPortabilityDialog({
   const confirmReplace = async () => {
     if (
       !taskExport
-      || taskExport.schema_version !== 13
+      || taskExport.schema_version !== 14
       || !preparation
       || !backupDownloaded
       || !replaceAvailable
@@ -237,7 +237,7 @@ export function TaskDataPortabilityDialog({
               <div>
                 <h3 id="task-backup-heading" className="text-sm font-medium">Create Backup</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Download a checksum-protected JSON copy of task data, history, templates, and schedules.
+                  Download a checksum-protected JSON copy of task data, history, recurrence, and schedules.
                 </p>
               </div>
               <Button type="button" variant="outline" className="gap-2" disabled={busy} onClick={() => void createBackup()}>
@@ -289,7 +289,7 @@ export function TaskDataPortabilityDialog({
                   >
                     Merge Backup
                   </Button>
-                  {taskExport.schema_version === 13 ? (
+                  {taskExport.schema_version === 14 ? (
                     <Button
                       type="button"
                       variant="outline-destructive"
@@ -306,7 +306,7 @@ export function TaskDataPortabilityDialog({
                   )}
                 </div>
               ) : null}
-              {taskExport?.schema_version === 13 && !replaceAvailable ? (
+              {taskExport?.schema_version === 14 && !replaceAvailable ? (
                 <p role="status" className="text-sm text-warning">
                   {replaceUnavailableReason ?? 'Connect and synchronize task changes before replacing data.'}
                 </p>
@@ -388,7 +388,7 @@ export function TaskDataPortabilityDialog({
             <AlertDialogCancel disabled={busy}>Keep Current Data</AlertDialogCancel>
             <AlertDialogAction
               disabled={busy || !replacementReady}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground "
               onClick={(event) => {
                 event.preventDefault();
                 void confirmReplace();
@@ -427,7 +427,7 @@ function countRecord(counts: Record<string, number>): number {
   return Object.values(counts).reduce((total, count) => total + count, 0);
 }
 
-function downloadTaskExport(taskExport: TaskExportV13 | TaskPortableExport, fileName: string) {
+function downloadTaskExport(taskExport: TaskExportV14 | TaskPortableExport, fileName: string) {
   const url = URL.createObjectURL(new Blob([serializeTaskExport(taskExport)], {
     type: 'application/json',
   }));

@@ -15,6 +15,7 @@ import {
   type RefObject,
   type TouchEvent as ReactTouchEvent,
 } from 'react';
+import { flushSync } from 'react-dom';
 import {
   ExternalLink,
   MoreHorizontal,
@@ -60,6 +61,7 @@ import { toast } from '@/hooks/use-toast';
 import { handleClientSideLinkNavigation } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
+import type { TaskRecurrenceEditInput } from '@/modules/tasks/data/taskRecurrenceService';
 import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import { TaskClipboardService } from '@/modules/tasks/data/taskClipboardService';
 import {
@@ -136,9 +138,13 @@ import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import {
   getNativeTaskDeepLinkId,
   getNativeNewTaskSignal,
+  isTaskNativeQuickEntry,
   removeNativeNewTaskSignal,
   removeNativeTaskDeepLink,
   requestTaskNativeNewTaskSummaryFocus,
+  configureTaskNativeQuickEntryShortcut,
+  finishTaskNativeQuickEntry,
+  type TaskNativeQuickEntryShortcut,
 } from '@/modules/tasks/native/taskNativeWidgetBridge';
 import type {
   TaskRecurrenceDefinition,
@@ -155,7 +161,6 @@ import {
 } from '@/modules/tasks/domain/taskPrimaryLink';
 import { TaskAreaDetailView } from '@/modules/tasks/components/TaskAreaDetailView';
 import { TaskAreaSettings } from '@/modules/tasks/components/TaskAreaSettings';
-import { TaskTemplatesView } from '@/modules/tasks/components/TaskTemplatesView';
 import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
 import { TASK_PLANNING_LIST_CLASS } from '@/modules/tasks/components/taskPlanningStyles';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
@@ -170,6 +175,10 @@ import {
 import { MobileBottomNav } from '@/platform/components/MobileBottomNav';
 import { ToplineHeader } from '@/platform/components/ToplineHeader';
 import { InstalledAppAccountCard } from '@/platform/components/InstalledAppAccountCard';
+import {
+  getDeclaredNativePlatform,
+  getDeclaredNativeQuickEntryShortcut,
+} from '@/platform/installedApp';
 import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import {
   deriveTaskAreaSections,
@@ -179,6 +188,7 @@ import { projectTaskBulkDrop } from '@/modules/tasks/domain/taskBulkDrop';
 import { getAutomaticTaskDropTarget } from '@/modules/tasks/domain/taskAutomaticOrder';
 import {
   getTaskUpcomingDate,
+  getTaskUpcomingCanonicalStart,
   getTaskUpcomingGroup,
   getTaskUpcomingSections,
 } from '@/modules/tasks/domain/taskUpcoming';
@@ -271,7 +281,6 @@ const primaryTaskViews = [
 ] as const;
 
 const secondaryTaskViews = [
-  { path: '/templates', label: 'Templates', icon: TASK_ICONS.Templates },
   { path: '/done', label: 'Done', icon: TASK_ICONS.Done },
   { path: '/config', label: 'Settings', icon: TASK_ICONS.Config },
 ] as const;
@@ -287,7 +296,7 @@ const taskCommandPaths: Partial<Record<TaskKeyboardCommand, string>> = {
   'view-config': '/config',
 };
 
-type TaskShellView = TaskListView | 'area' | 'templates' | 'config' | 'search';
+type TaskShellView = TaskListView | 'area' | 'config' | 'search';
 
 function taskMotionAllowed(): boolean {
   return !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -463,20 +472,36 @@ function taskNestedSurfaceOwnsTypeToSearch(target: EventTarget | null): boolean 
   ) !== null;
 }
 
+async function waitForTaskUploads(
+  database: { getUploadQueueStats: () => Promise<{ count: number }> },
+  timeoutMs = 10_000,
+): Promise<void> {
+  const deadline = performance.now() + timeoutMs;
+  while ((await database.getUploadQueueStats()).count > 0) {
+    if (performance.now() >= deadline) {
+      throw new Error('The recurrence prototype is still waiting to sync');
+    }
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
+  }
+}
+
 export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const basePath = useModuleBasePath();
   const view = getTaskViewFromPath(location.pathname);
+  const nativeQuickEntry = getDeclaredNativePlatform() === 'macos'
+    && isTaskNativeQuickEntry(location.search);
   const areaId = getTaskAreaIdFromPath(location.pathname);
   const quickFindListEligible = view !== 'config' && view !== 'search';
   useEffect(() => {
     if (/\/tasks\/projects(?:\/[^/]+)?$/.test(location.pathname)) {
       navigate(`${basePath}/anytime`, { replace: true });
+    } else if (location.pathname.endsWith('/templates')) {
+      navigate(`${basePath}/upcoming`, { replace: true });
     }
   }, [basePath, location.pathname, navigate]);
   const taskListView: TaskListView = view === 'area'
-    || view === 'templates'
     || view === 'config'
     || view === 'search'
     ? 'today'
@@ -633,12 +658,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     return () => window.clearTimeout(timeout);
   }, [fetching, loading, taskListTransition, taskListView]);
   const taskListRouteSettling = taskListTransition?.view === taskListView;
+  const recurrences = useTaskRecurrences(userId);
   useTaskNativeWidgetBridge({
     ownerId: userId,
     planningDate,
     areas: hierarchy.areas,
     automaticListSorting: automaticListSorting.enabled,
     quickFilter: taskQuickFilter,
+    recurrencePrototypes: recurrences.calendarPrototypes,
   });
   const projectedTasksRef = useRef(projectedTasks);
   const retainedTaskPlacementRef = useRef(retainedTaskPlacement);
@@ -691,10 +718,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   ]);
   metadataMutationHandlerRef.current = handleTaskMetadataMutations;
   const renderedPlanningTasks = useMemo(
-    () => creationDraft?.view === taskListView
+    () => nativeQuickEntry
+      ? creationDraft?.view === taskListView ? [creationDraft.task] : []
+      : creationDraft?.view === taskListView
       ? [creationDraft.task, ...filteredTasks]
       : filteredTasks,
-    [creationDraft, filteredTasks, taskListView],
+    [creationDraft, filteredTasks, nativeQuickEntry, taskListView],
   );
   const detachedCreationDraft = creationDraft?.view === 'upcoming'
     && creationDraft.task.start_date === null
@@ -707,7 +736,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         ? task.disposition === 'deleted' || task.lifecycle !== 'open'
         : task.disposition === 'present'
           && task.lifecycle === 'open'
-          && (view !== 'upcoming' || task.recurrence_definition_id === null)
     )),
     [filteredTasks, view],
   );
@@ -716,12 +744,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     repository,
     hierarchyRepository,
     reminderService,
-    recurrenceService,
     userId,
   ), [
     database,
     hierarchyRepository,
-    recurrenceService,
     reminderService,
     repository,
     userId,
@@ -738,37 +764,42 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [quickFindOpen, setQuickFindOpen] = useState(false);
   const [quickFindInitialQuery, setQuickFindInitialQuery] = useState('');
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
-  const [searchTarget, setSearchTarget] = useState<{
-    taskId: string;
-    activation: 'open' | 'focus-recurrence';
-  } | null>(null);
+  const [searchTarget, setSearchTarget] = useState<
+    | { kind: 'task'; taskId: string }
+    | { kind: 'recurrence'; definitionId: string }
+    | null
+  >(null);
+  const handleRecurrenceFocusFulfilled = useCallback((definitionId: string) => {
+    setSearchTarget((current) => (
+      current?.kind === 'recurrence' && current.definitionId === definitionId
+        ? null
+        : current
+    ));
+  }, []);
   const taskSearch = useTaskSearch(userId, quickFindOpen || view === 'search');
   const reminders = useTaskReminders(userId);
-  const recurrences = useTaskRecurrences(userId);
   const waitingRecurrences = useMemo(() => recurrences.definitions.filter(
     (definition) => {
       const occurrence = recurrences.openOccurrenceByDefinitionId.get(definition.id);
-      const occurrenceIsAlreadyDatedInUpcoming = occurrence !== undefined && (
-        (occurrence.start_date !== null && occurrence.start_date > planningDate)
-        || (
-          (occurrence.start_date === null || occurrence.start_date <= planningDate)
-          && occurrence.deadline !== null
-          && occurrence.deadline > planningDate
-        )
-      );
       return (
         definition.status === 'active'
         && recurrences.revisions.get(definition.id)?.rule_mode === 'after_completion'
         && occurrence !== undefined
-        && !occurrenceIsAlreadyDatedInUpcoming
       );
     },
   ), [
     recurrences.definitions,
     recurrences.openOccurrenceByDefinitionId,
     recurrences.revisions,
-    planningDate,
   ]);
+  const searchableRecurrences = useMemo(() => recurrences.definitions.flatMap(
+    (definition) => {
+      const revision = recurrences.revisions.get(definition.id);
+      return definition.status === 'active' && revision
+        ? [{ definition, revision }]
+        : [];
+    },
+  ), [recurrences.definitions, recurrences.revisions]);
   const reminderAvailability = getTaskReminderAvailability(
     reminders.mode,
     reminders.loading,
@@ -778,7 +809,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const commandReturnFocusRef = useRef<HTMLElement | null>(null);
   const [touchQuickFindEnabled, setTouchQuickFindEnabled] = useState(false);
   const [touchQuickFindPull, setTouchQuickFindPull] = useState(0);
+  const [touchListElasticity, setTouchListElasticity] = useState(0);
+  const [touchListElasticActive, setTouchListElasticActive] = useState(false);
   const touchQuickFindStartYRef = useRef<number | null>(null);
+  const touchListBoundaryRef = useRef<'top' | 'bottom' | null>(null);
   const touchQuickFindPullRef = useRef(0);
   const quickFindPullThreshold = 84;
   useEffect(() => {
@@ -794,8 +828,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, []);
   const resetTouchQuickFindPull = useCallback(() => {
     touchQuickFindStartYRef.current = null;
+    touchListBoundaryRef.current = null;
     touchQuickFindPullRef.current = 0;
     setTouchQuickFindPull(0);
+    setTouchListElasticity(0);
+    setTouchListElasticActive(false);
   }, []);
   const handleTouchQuickFindStart = useCallback((event: ReactTouchEvent) => {
     if (
@@ -803,13 +840,21 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       || !quickFindListEligible
       || quickFindOpen
       || event.touches.length !== 1
-      || window.scrollY > 0
       || document.querySelector('[role="dialog"], [data-radix-portal], [data-vaul-drawer]')
     ) {
       resetTouchQuickFindPull();
       return;
     }
+    const atTop = window.scrollY <= 0;
+    const atBottom = Math.ceil(window.scrollY + window.innerHeight)
+      >= document.documentElement.scrollHeight;
+    if (!atTop && !atBottom) {
+      resetTouchQuickFindPull();
+      return;
+    }
     touchQuickFindStartYRef.current = event.touches[0].clientY;
+    touchListBoundaryRef.current = atTop ? 'top' : 'bottom';
+    setTouchListElasticActive(true);
   }, [
     quickFindListEligible,
     quickFindOpen,
@@ -820,21 +865,33 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const startY = touchQuickFindStartYRef.current;
     if (startY === null || event.touches.length !== 1) return;
     const delta = event.touches[0].clientY - startY;
-    if (delta <= 0 || window.scrollY > 0) {
+    const boundary = touchListBoundaryRef.current;
+    const eligibleDirection = boundary === 'top' ? delta > 0 : delta < 0;
+    if (!eligibleDirection) {
       resetTouchQuickFindPull();
       return;
     }
-    const distance = Math.min(delta * 0.5, quickFindPullThreshold);
-    touchQuickFindPullRef.current = distance;
-    setTouchQuickFindPull(distance);
+    event.preventDefault();
+    const distance = Math.min(Math.abs(delta) * 0.5, quickFindPullThreshold);
+    const signedDistance = boundary === 'top' ? distance : -distance;
+    touchQuickFindPullRef.current = boundary === 'top' ? distance : 0;
+    setTouchQuickFindPull(boundary === 'top' ? distance : 0);
+    setTouchListElasticity(signedDistance);
   }, [resetTouchQuickFindPull]);
   const handleTouchQuickFindEnd = useCallback(() => {
     const shouldOpen = touchQuickFindPullRef.current >= quickFindPullThreshold;
     resetTouchQuickFindPull();
     if (!shouldOpen) return;
     commandReturnFocusRef.current = null;
-    setQuickFindInitialQuery('');
-    setQuickFindOpen(true);
+    flushSync(() => {
+      setQuickFindInitialQuery('');
+      setQuickFindOpen(true);
+    });
+    const input = document.querySelector<HTMLInputElement>(
+      '[data-task-quick-find-input]',
+    );
+    input?.focus({ preventScroll: true });
+    input?.setSelectionRange(input.value.length, input.value.length);
   }, [resetTouchQuickFindPull]);
   const acknowledgedPushDeliveriesRef = useRef(new Set<string>());
   const previousViewRef = useRef(view);
@@ -877,7 +934,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const taskViewIsEmpty = creationDraft === null && (view === 'done'
     ? filteredTasks.length === 0 && doneRoots.length === 0
     : view === 'upcoming'
-      ? filteredTasks.length === 0 && waitingRecurrences.length === 0
+      ? filteredTasks.length === 0
+        && waitingRecurrences.length === 0
+        && recurrences.calendarPrototypes.length === 0
     : filteredTasks.length === 0);
   const serverReplacementAvailable = mode === 'connected'
     && syncState === 'connected'
@@ -1235,7 +1294,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       if (openTaskSequenceRef.current !== sequence) return false;
     }
     setClosingTaskId(null);
-    if (closingCreationDraft) finishCreationDraft(completingCreationDraft);
+    if (closingCreationDraft) {
+      finishCreationDraft(completingCreationDraft);
+      if (nativeQuickEntry) {
+        finishTaskNativeQuickEntry(!exitingEmptyCreationDraft);
+      }
+    }
     if (currentTaskId !== null) latestTaskMetadataRef.current.delete(currentTaskId);
     if (closingDepartureToast !== null) toast(closingDepartureToast);
     if (shouldSettleBeforeProjection && currentTaskId !== null && closingTaskRect !== null) {
@@ -1252,6 +1316,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     finalizeDeferredCompletion,
     finishCreationDraft,
     planningDate,
+    nativeQuickEntry,
     taskListView,
     taskQuickFilter,
     userId,
@@ -1669,32 +1734,30 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   useEffect(() => {
     if (!searchTarget) return;
-    const target = tasks.find(({ id }) => id === searchTarget.taskId);
-    if (!target) return;
-    if (searchTarget.activation !== 'focus-recurrence') {
-      if (target.lifecycle === 'open') {
-        void setOpenTask(target.id);
-      } else {
-        document.querySelector<HTMLElement>(
-          `[data-task-search-id="${target.id}"]`,
-        )?.focus();
-      }
-      setSearchTarget((current) => (
-        current?.taskId === target.id ? null : current
-      ));
+    if (searchTarget.kind === 'recurrence') {
+      void setOpenTask(null);
       return;
     }
-    const timeout = window.setTimeout(() => {
-      void setOpenTask(null).then((closed) => {
-        if (!closed) return;
-        focusTaskRow(target.id, true);
-      });
-      setSearchTarget((current) => (
-        current?.taskId === target.id ? null : current
-      ));
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [focusTaskRow, searchTarget, setOpenTask, tasks]);
+    const target = tasks.find(({ id }) => id === searchTarget.taskId);
+    if (!target) return;
+    if (target.lifecycle === 'open') {
+      void setOpenTask(target.id);
+    } else {
+      document.querySelector<HTMLElement>(
+        `[data-task-search-id="${target.id}"]`,
+      )?.focus();
+    }
+    setSearchTarget((current) => (
+      current?.kind === 'task' && current.taskId === target.id ? null : current
+    ));
+  }, [
+    recurrences.calendarPrototypes,
+    searchTarget,
+    setOpenTask,
+    tasks,
+    view,
+    waitingRecurrences,
+  ]);
 
   const getTaskCommandTargets = useCallback((): TaskTodo[] => {
     if (bulkMode && bulkSelection.size >= 1) {
@@ -2783,8 +2846,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       const targetTodaySection = view === 'today' && targetTask
         ? getTodayTaskSection(targetTask, planningDate)
         : null;
+      const movableSelectedTasks = selectedTasks;
+      const movableSelectedIds = new Set(movableSelectedTasks.map(({ id }) => id));
       const patchesByTaskId = new Map<string, EditableTaskPatch>();
-      for (const task of selectedTasks) {
+      for (const task of movableSelectedTasks) {
         const patch: EditableTaskPatch = {};
         if (view === 'today' && targetTodaySection !== null) {
           patch.destination = 'anytime';
@@ -2817,7 +2882,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
       const targetAreaId = indicator.targetAreaId;
       const scopeTasks = tasks.filter((task) => {
-        if (selectedIds.has(task.id)) return true;
+        if (movableSelectedIds.has(task.id)) return true;
         if (view === 'today' && targetTodaySection !== null) {
           return getTodayTaskSection(task, planningDate) === targetTodaySection;
         }
@@ -2835,8 +2900,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       const projection = indicator.targetTaskId === null
         ? null
         : projectTaskBulkDrop({
-            tasks: scopeTasks,
-            selectedTaskIds: selectedIds,
+          tasks: scopeTasks,
+          selectedTaskIds: movableSelectedIds,
             targetTaskId: indicator.targetTaskId,
             placement: indicator.placement,
             patchesByTaskId,
@@ -2844,13 +2909,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               && (view === 'anytime' || view === 'someday'),
           });
       const inputs = projection?.patches
-        ?? selectedTasks.map((task) => ({
+        ?? movableSelectedTasks.map((task) => ({
           taskId: task.id,
           patch: patchesByTaskId.get(task.id) ?? {},
         }));
       await applyTaskPatches(inputs);
 
-      const upcomingChangedTasks = selectedTasks.filter((task) => (
+      const upcomingChangedTasks = movableSelectedTasks.filter((task) => (
         patchesByTaskId.get(task.id)?.start_date !== undefined
       ));
       if (upcomingChangedTasks.length > 0) {
@@ -2876,22 +2941,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     targetUpcomingSection?: { key: string; startDate: string },
   ) => {
     const isCreationDraft = task.id === NEW_TASK_DRAFT_ID;
-    const recurrenceDefinition = task.recurrence_definition_id
-      ? recurrences.definitions.find(({ id }) => id === task.recurrence_definition_id) ?? null
-      : null;
-    const recurrenceRevision = task.recurrence_definition_id
-      ? recurrences.revisions.get(task.recurrence_definition_id) ?? null
-      : null;
-    const isRecurrenceProjection = view === 'upcoming'
-      && task.recurrence_definition_id !== null;
-    const recurrenceProjection = recurrenceDefinition !== null
-      && recurrenceRevision !== null
-      ? {
-          definition: recurrenceDefinition,
-          revision: recurrenceRevision,
-          onEdit: recurrences.edit,
-        }
-      : null;
     const persistedDraftTaskId = isCreationDraft
       ? creationDraftRef.current?.persistedTaskId ?? null
       : null;
@@ -2926,11 +2975,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         } : undefined}
         hierarchy={hierarchy}
         showAreaMetadata={view !== 'anytime'}
-        selected={!isRecurrenceProjection && selectedTaskId === task.id}
+        selected={selectedTaskId === task.id}
         focused={focusedTaskId === task.id}
-        recurrenceProjection={isRecurrenceProjection
-          ? recurrenceProjection
-          : undefined}
         onSelect={(event) => handleTaskPointerSelection(event, task.id)}
         onTouchSwipeSelect={() => {
           void enterTaskSelectionFromTouchSwipe(task.id);
@@ -2949,7 +2995,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         reserveTerminalMutation={() => (
           isCreationDraft ? undefined : reserveForwardMutation(task)
         )}
-        bulkSelection={bulkMode && !isCreationDraft && !isRecurrenceProjection ? {
+        bulkSelection={bulkMode && !isCreationDraft ? {
           selected: bulkSelection.has(task.id),
           onKeyboardToggle: () => toggleTaskFromKeyboard(task.id),
           onToggle: (event) => handleTaskPointerSelection(
@@ -2992,7 +3038,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           }
         }}
         draggableTask={!isCreationDraft
-          && !isRecurrenceProjection
           && (
             view === 'today'
             || view === 'upcoming'
@@ -3360,6 +3405,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     && selectedBulkTasks.every(
       (task) => task.lifecycle === 'open' && task.disposition === 'present',
     );
+  const bulkTemporalEditsAvailable = bulkEditsAvailable
+    && selectedBulkTasks.length > 0;
   const bulkActionabilityFirst = selectedBulkTasks[0]?.actionability ?? null;
   const bulkActionabilityValue = bulkActionabilityFirst !== null
     && selectedBulkTasks.every((task) => task.actionability === bulkActionabilityFirst)
@@ -3369,6 +3416,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   return (
     <div
       className="min-h-screen bg-background"
+      data-task-native-quick-entry={nativeQuickEntry ? 'true' : undefined}
       data-task-module-drop-surface
       onTouchStart={handleTouchQuickFindStart}
       onTouchMove={handleTouchQuickFindMove}
@@ -3404,22 +3452,38 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           <TASK_ICONS.Search className="h-5 w-5 text-muted-foreground" />
         </div>
       ) : null}
-      <ToplineHeader
-        title="Tasks"
-        moduleId="tasks"
-        userId={userId}
-        displayName={displayName}
-        onSignOut={handleSignOut}
-        showAppSwitcher
-      />
+      {!nativeQuickEntry ? (
+        <ToplineHeader
+          title="Tasks"
+          moduleId="tasks"
+          userId={userId}
+          displayName={displayName}
+          onSignOut={handleSignOut}
+          showAppSwitcher
+        />
+      ) : null}
 
       <main
         data-task-space-entry-surface
         data-task-list-bottom-clearance
-        className={`mx-auto w-full max-w-3xl px-4 pt-8 md:pt-10 ${TASK_LIST_BOTTOM_CLEARANCE_CLASS}`}
+        className={`mx-auto w-full px-4 ${
+          nativeQuickEntry ? 'max-w-xl py-4' : 'max-w-3xl pt-8 md:pt-10'
+        } ${
+          touchListElasticActive ? '' : 'transition-transform duration-200 ease-out'
+        } ${nativeQuickEntry ? 'pb-4' : TASK_LIST_BOTTOM_CLEARANCE_CLASS}`}
+        style={{
+          transform: touchListElasticity === 0
+            ? undefined
+            : `translate3d(0, ${touchListElasticity}px, 0)`,
+        }}
       >
         <div className="space-y-7">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div
+            className={nativeQuickEntry
+              ? 'hidden'
+              : 'flex flex-wrap items-center justify-between gap-4'}
+            data-task-list-toolbar
+          >
             <h2
               tabIndex={-1}
               data-task-view-heading
@@ -3488,7 +3552,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             ) : null}
           </div>
 
-          {reminders.dueItems.length > 0 ? (
+          {!nativeQuickEntry && reminders.dueItems.length > 0 ? (
             <TaskDueReminders
               items={reminders.dueItems}
               onAcknowledge={async (deliveryId) => {
@@ -3501,9 +3565,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             />
           ) : null}
 
-          {reminders.projectionError ? <TaskReminderProjectionFailure /> : null}
+          {!nativeQuickEntry && reminders.projectionError
+            ? <TaskReminderProjectionFailure />
+            : null}
 
-          <TaskDesktopNavigation view={view} basePath={basePath} navigate={navigate} />
+          {!nativeQuickEntry ? (
+            <TaskDesktopNavigation view={view} basePath={basePath} navigate={navigate} />
+          ) : null}
 
           {detachedCreationDraft ? (
             <section aria-label="New Task">
@@ -3529,7 +3597,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 }, { replace: true });
               }}
               onSelectTask={(task, path) => {
-                setSearchTarget({ taskId: task.id, activation: 'open' });
+                setSearchTarget({ kind: 'task', taskId: task.id });
                 navigate(path);
               }}
             />
@@ -3540,12 +3608,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               hierarchy={hierarchy}
               planningDate={planningDate}
               onOpenTask={(taskId, href) => {
-                setSearchTarget({ taskId, activation: 'open' });
+                setSearchTarget({ kind: 'task', taskId });
                 navigate(href);
               }}
             />
-          ) : view === 'templates' ? <TaskTemplatesView ownerId={userId} hierarchy={hierarchy} />
-              : view === 'config' ? (
+          ) : view === 'config' ? (
                 <TaskConfigView
                   keyboardHelpShortcut={macLikePlatform ? '⌘/' : '⌃/'}
                   userId={userId}
@@ -3666,6 +3733,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   <>
                     <UpcomingTaskSections
                       tasks={renderedPlanningTasks}
+                      recurrencePrototypes={recurrences.calendarPrototypes}
+                      focusRecurrenceId={searchTarget?.kind === 'recurrence'
+                        ? searchTarget.definitionId
+                        : null}
+                      onRecurrenceFocused={handleRecurrenceFocusFulfilled}
+                      onEditRecurrence={recurrences.edit}
+                      areas={hierarchy.areas}
                       planningDate={planningDate}
                       retainedTaskId={retainedTaskId}
                       retainedTaskPlacement={retainedTaskPlacement}
@@ -3713,6 +3787,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                                 revision={revision}
                                 planningDate={planningDate}
                                 onEdit={recurrences.edit}
+                                areas={hierarchy.areas}
+                                focusRequested={searchTarget?.kind === 'recurrence'
+                                  && searchTarget.definitionId === definition.id}
+                                onFocusFulfilled={() => {
+                                  handleRecurrenceFocusFulfilled(definition.id);
+                                }}
                                 onGoToInstance={() => {
                                   const targetView = occurrence.start_date
                                     && occurrence.start_date > planningDate
@@ -3806,7 +3886,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         </div>
       </main>
 
-      {(view === 'today'
+      {!nativeQuickEntry && (view === 'today'
         || view === 'upcoming'
         || view === 'anytime'
         || view === 'someday') && !bulkMode ? (
@@ -3826,7 +3906,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               data-task-floating-create
               onClick={() => void beginTaskCreation(floatingTaskCreationPlacement)}
               className={[
-                'h-12 w-12 rounded-full border border-success bg-success/85 p-0 text-success-foreground backdrop-blur-sm disabled:opacity-100 supports-[backdrop-filter]:bg-success/75 enabled:hover:bg-success/90 [&_svg]:size-6',
+                'h-12 w-12 rounded-full border border-success bg-success/85 p-0 text-success-foreground backdrop-blur-sm disabled:opacity-100 supports-[backdrop-filter]:bg-success/75  [&_svg]:size-6',
                 selectedTaskId !== null ? 'pointer-events-none' : 'pointer-events-auto',
               ].join(' ')}
             >
@@ -3841,6 +3921,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           totalCount={selectableTasks.length}
           pending={bulkPending}
           editsAvailable={bulkEditsAvailable}
+          temporalEditsAvailable={bulkTemporalEditsAvailable}
           areas={hierarchy.areas}
           actionability={bulkActionabilityValue}
           onSelectAll={() => {
@@ -3859,20 +3940,23 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         />
       ) : null}
 
-      <MobileBottomNav
-        items={primaryTaskViews}
-        overflowItems={secondaryTaskViews}
-        isActive={(path) => isTaskNavigationActive(view, path)}
-        onNavigate={(path) => navigate(`${basePath}${path}`)}
-        hrefForPath={(path) => `${basePath}${path}`}
-      />
-      <TaskQuickFindDialog
+      {!nativeQuickEntry ? (
+        <MobileBottomNav
+          items={primaryTaskViews}
+          overflowItems={secondaryTaskViews}
+          isActive={(path) => isTaskNavigationActive(view, path)}
+          onNavigate={(path) => navigate(`${basePath}${path}`)}
+          hrefForPath={(path) => `${basePath}${path}`}
+        />
+      ) : null}
+      {!nativeQuickEntry ? <TaskQuickFindDialog
         open={quickFindOpen}
         initialQuery={quickFindInitialQuery}
         basePath={basePath}
         tasks={taskSearch.tasks}
         hierarchy={hierarchy}
         planningDate={planningDate}
+        recurrences={searchableRecurrences}
         loading={taskSearch.loading}
         error={taskSearch.error}
         onOpenChange={(nextOpen) => {
@@ -3886,14 +3970,21 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           setQuickFindInitialQuery('');
           navigate(path);
         }}
-        onSelectTask={(task, path, activation) => {
+        onSelectTask={(task, path) => {
           commandReturnFocusRef.current = null;
           setQuickFindOpen(false);
           setQuickFindInitialQuery('');
-          setSearchTarget({ taskId: task.id, activation });
+          setSearchTarget({ kind: 'task', taskId: task.id });
           navigate(path);
         }}
-      />
+        onSelectRecurrence={(definition, path) => {
+          commandReturnFocusRef.current = null;
+          setQuickFindOpen(false);
+          setQuickFindInitialQuery('');
+          setSearchTarget({ kind: 'recurrence', definitionId: definition.id });
+          navigate(path);
+        }}
+      /> : null}
       <TaskKeyboardHelpDialog
         open={keyboardHelpOpen}
         onOpenChange={setKeyboardHelpOpen}
@@ -4003,6 +4094,7 @@ function TaskBulkToolbar({
   totalCount,
   pending,
   editsAvailable,
+  temporalEditsAvailable,
   areas,
   actionability,
   onSelectAll,
@@ -4017,6 +4109,7 @@ function TaskBulkToolbar({
   totalCount: number;
   pending: boolean;
   editsAvailable: boolean;
+  temporalEditsAvailable: boolean;
   areas: TaskHierarchyModel['areas'];
   actionability: TaskTodo['actionability'] | null;
   onSelectAll: () => void;
@@ -4061,12 +4154,16 @@ function TaskBulkToolbar({
           data-task-bulk-selection-surface
           onCloseAutoFocus={(event) => event.preventDefault()}
         >
-          <DropdownMenuItem disabled={!editsAvailable} onSelect={onStart}>
-            Start...
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={!editsAvailable} onSelect={onDeadline}>
-            Deadline...
-          </DropdownMenuItem>
+          {temporalEditsAvailable ? (
+            <>
+              <DropdownMenuItem disabled={!editsAvailable} onSelect={onStart}>
+                Start...
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!editsAvailable} onSelect={onDeadline}>
+                Deadline...
+              </DropdownMenuItem>
+            </>
+          ) : null}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger disabled={!editsAvailable}>Area</DropdownMenuSubTrigger>
             <DropdownMenuSubContent data-task-bulk-selection-surface>
@@ -4122,7 +4219,7 @@ function TaskBulkToolbar({
         disabled={pending}
         onClick={onCancel}
       >
-        Cancel
+        Done
       </Button>
     </section>
   );
@@ -4208,7 +4305,7 @@ function TaskDesktopNavigation({
   ));
   const itemClassName = (active: boolean) => (
     `inline-flex h-10 items-center justify-center gap-2 rounded-sm px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-      active ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:text-foreground'
+      active ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground '
     }`
   );
 
@@ -4303,6 +4400,7 @@ function TaskConfigView({
   replaceAvailable: boolean;
   replaceUnavailableReason?: string;
 }) {
+  const macNative = getDeclaredNativePlatform() === 'macos';
   return (
     <div className="space-y-4">
       <p
@@ -4366,12 +4464,106 @@ function TaskConfigView({
         />
       </TaskConfigSection>
 
+      {macNative ? <TaskMacQuickEntrySettings /> : null}
+
       <InstalledAppAccountCard
         userId={userId}
         displayName={displayName}
         onSignOut={onSignOut}
       />
     </div>
+  );
+}
+
+type TaskMacShortcutResult = {
+  success?: unknown;
+  display?: unknown;
+  message?: unknown;
+};
+
+function TaskMacQuickEntrySettings() {
+  const [shortcut, setShortcut] = useState(
+    () => getDeclaredNativeQuickEntryShortcut() ?? 'Not Set',
+  );
+  const [recording, setRecording] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleResult = (event: Event) => {
+      const detail = (event as CustomEvent<TaskMacShortcutResult>).detail;
+      if (detail?.success === true && typeof detail.display === 'string') {
+        setShortcut(detail.display);
+        setStatus('Global Quick Entry shortcut saved');
+      } else {
+        setStatus(
+          typeof detail?.message === 'string'
+            ? detail.message
+            : 'That shortcut could not be registered',
+        );
+      }
+      setRecording(false);
+    };
+    window.addEventListener('bathos:tasks-native-quick-entry-shortcut', handleResult);
+    return () => {
+      window.removeEventListener('bathos:tasks-native-quick-entry-shortcut', handleResult);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!recording) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'Escape') {
+        setRecording(false);
+        setStatus(null);
+        return;
+      }
+      if (['Meta', 'Control', 'Alt', 'Shift'].includes(event.key)) return;
+      const candidate: TaskNativeQuickEntryShortcut = {
+        code: event.code,
+        command: event.metaKey,
+        control: event.ctrlKey,
+        option: event.altKey,
+        shift: event.shiftKey,
+      };
+      if (!candidate.command && !candidate.control && !candidate.option) {
+        setStatus('Include Command, Control, or Option in the shortcut');
+        return;
+      }
+      if (!configureTaskNativeQuickEntryShortcut(candidate)) {
+        setStatus('The native shortcut recorder is unavailable');
+        setRecording(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [recording]);
+
+  return (
+    <TaskConfigSection title="Global Quick Entry" icon={TASK_ICONS.AddTask}>
+      <div className="flex flex-col gap-2 sm:items-end">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-pressed={recording}
+          onClick={() => {
+            setStatus(null);
+            setRecording(true);
+          }}
+        >
+          {recording ? 'Type Shortcut...' : shortcut}
+        </Button>
+        <p className="max-w-sm text-xs text-muted-foreground sm:text-right" aria-live="polite">
+          {status ?? (
+            recording
+              ? 'Press a modified key combination, or Escape to cancel'
+              : 'Opens the new-task editor from any Mac application'
+          )}
+        </p>
+      </div>
+    </TaskConfigSection>
   );
 }
 
@@ -4758,7 +4950,7 @@ function DeletedTaskRow({
         type="button"
         disabled={restoring}
         aria-label={`Restore ${task.title}`}
-        className="group/restore inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
         onClick={() => {
           setRestoring(true);
           void onRestore()
@@ -4767,14 +4959,7 @@ function DeletedTaskRow({
             .finally(() => setRestoring(false));
         }}
       >
-        <TASK_ICONS.Delete
-          className="h-5 w-5 group-hover/restore:hidden group-focus-visible/restore:hidden"
-          aria-hidden="true"
-        />
-        <TASK_ICONS.Reopen
-          className="hidden h-5 w-5 group-hover/restore:block group-focus-visible/restore:block"
-          aria-hidden="true"
-        />
+        <TASK_ICONS.Reopen className="h-5 w-5" aria-hidden="true" />
       </button>
       <div className="min-w-0 flex-1">
         <p
@@ -4844,10 +5029,6 @@ function TodayTaskSections({
                   aria-hidden="true"
                 />
                 <span>{label}</span>
-                <TASK_ICONS.AddTask
-                  className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                  aria-hidden="true"
-                />
               </button>
             </h3>
             <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
@@ -4961,10 +5142,6 @@ function TaskAreaSections({
               >
                 <TASK_ICONS.Area className="h-4 w-4" aria-hidden="true" />
                 <span>{area.title}</span>
-                <TASK_ICONS.AddTask
-                  className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                  aria-hidden="true"
-                />
               </button>
             </h3>
             <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
@@ -4979,6 +5156,11 @@ function TaskAreaSections({
 
 function UpcomingTaskSections({
   tasks,
+  recurrencePrototypes = [],
+  focusRecurrenceId,
+  onRecurrenceFocused,
+  onEditRecurrence,
+  areas,
   planningDate,
   retainedTaskId,
   retainedTaskPlacement,
@@ -4988,6 +5170,15 @@ function UpcomingTaskSections({
   renderTask,
 }: {
   tasks: TaskTodo[];
+  recurrencePrototypes: Array<{
+    definition: TaskRecurrenceDefinition;
+    revision: TaskRecurrenceRevision;
+    scheduledDate: string;
+  }>;
+  focusRecurrenceId: string | null;
+  onRecurrenceFocused: (definitionId: string) => void;
+  onEditRecurrence: NonNullable<Parameters<typeof TaskRepeatDialog>[0]['onEdit']>;
+  areas: ReadonlyArray<{ id: string; title: string }>;
   planningDate: string;
   retainedTaskId: string | null;
   retainedTaskPlacement: RetainedTaskViewPlacement | null;
@@ -5011,12 +5202,33 @@ function UpcomingTaskSections({
     retainedTaskId,
     retainedTaskPlacement,
   ));
-  const sections = getTaskUpcomingSections(placementTasks, planningDate);
-  if (sections.length === 0) return null;
+  const taskSections = getTaskUpcomingSections(placementTasks, planningDate);
+  const sections = new Map(taskSections.map((section) => [section.key, {
+    ...section,
+    prototypes: [] as typeof recurrencePrototypes,
+  }]));
+  for (const prototype of recurrencePrototypes) {
+    const group = getTaskUpcomingGroup(prototype.scheduledDate, planningDate);
+    const existing = sections.get(group.key);
+    if (existing) {
+      existing.prototypes.push(prototype);
+    } else {
+      sections.set(group.key, {
+        ...group,
+        date: getTaskUpcomingCanonicalStart(group, planningDate),
+        entries: [],
+        prototypes: [prototype],
+      });
+    }
+  }
+  const orderedSections = [...sections.values()].sort(
+    (left, right) => left.date.localeCompare(right.date),
+  );
+  if (orderedSections.length === 0) return null;
 
   return (
     <div className="space-y-7" aria-label="Upcoming Tasks">
-      {sections.map((section) => {
+      {orderedSections.map((section) => {
         const orderedEntries = [
           ...section.entries.filter((entry) => entry.item.id === NEW_TASK_DRAFT_ID),
           ...section.entries.filter((entry) => entry.item.id !== NEW_TASK_DRAFT_ID),
@@ -5024,6 +5236,22 @@ function UpcomingTaskSections({
         const sectionTasks = orderedEntries.map(
           (entry) => currentTaskById.get(entry.item.id) ?? entry.item,
         );
+        const orderedRows = [
+          ...orderedEntries.map((entry) => ({
+            kind: 'task' as const,
+            orderKey: entry.item.order_key,
+            entry,
+          })),
+          ...section.prototypes.map((prototype) => ({
+            kind: 'prototype' as const,
+            orderKey: prototype.revision.prototype_snapshot.root.order_key,
+            prototype,
+          })),
+        ].sort((left, right) => {
+          if (left.kind === 'task' && left.entry.item.id === NEW_TASK_DRAFT_ID) return -1;
+          if (right.kind === 'task' && right.entry.item.id === NEW_TASK_DRAFT_ID) return 1;
+          return left.orderKey.localeCompare(right.orderKey);
+        });
         const sectionDropPlacement = dropIndicator?.targetUpcomingSectionKey === section.key
           && dropIndicator.targetTaskId === null
           ? dropIndicator.placement
@@ -5069,18 +5297,29 @@ function UpcomingTaskSections({
                 className="group inline-flex cursor-pointer items-center gap-2 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/65"
               >
                 <span>{section.label}</span>
-                <TASK_ICONS.AddTask
-                  className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                  aria-hidden="true"
-                />
               </button>
             </h3>
             <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
-              {orderedEntries.map((entry) => renderTask(
-                  currentTaskById.get(entry.item.id) ?? entry.item,
-                  sectionTasks,
-                  undefined,
-                  { key: section.key, startDate: section.date },
+              {orderedRows.map((row) => row.kind === 'task'
+                ? renderTask(
+                    currentTaskById.get(row.entry.item.id) ?? row.entry.item,
+                    sectionTasks,
+                    undefined,
+                    { key: section.key, startDate: section.date },
+                  )
+                : (
+                  <CalendarRecurrencePrototypeRow
+                    key={`recurrence:${row.prototype.definition.id}`}
+                    definition={row.prototype.definition}
+                    revision={row.prototype.revision}
+                    planningDate={planningDate}
+                    onEdit={onEditRecurrence}
+                    areas={areas}
+                    focusRequested={focusRecurrenceId === row.prototype.definition.id}
+                    onFocusFulfilled={() => {
+                      onRecurrenceFocused(row.prototype.definition.id);
+                    }}
+                  />
                 ))}
             </div>
           </section>
@@ -5095,21 +5334,42 @@ function WaitingRecurrenceRow({
   revision,
   planningDate,
   onEdit,
+  areas,
+  focusRequested,
+  onFocusFulfilled,
   onGoToInstance,
 }: {
   definition: TaskRecurrenceDefinition;
   revision: TaskRecurrenceRevision;
   planningDate: string;
   onEdit: NonNullable<Parameters<typeof TaskRepeatDialog>[0]['onEdit']>;
+  areas: ReadonlyArray<{ id: string; title: string }>;
+  focusRequested: boolean;
+  onFocusFulfilled: () => void;
   onGoToInstance: () => void;
 }) {
   const [repeatOpen, setRepeatOpen] = useState(false);
+  const rowRef = useRef<HTMLElement>(null);
+  const titleButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!focusRequested) return;
+    const timer = window.setTimeout(() => {
+      rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      titleButtonRef.current?.focus({ preventScroll: true });
+      onFocusFulfilled();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [focusRequested, onFocusFulfilled]);
 
   return (
     <>
       <article
+        ref={rowRef}
         className="flex h-11 items-center gap-2 px-1 pr-1.5 text-[15px] text-foreground"
         data-task-waiting-recurrence
+        data-task-recurrence-prototype={definition.id}
+        tabIndex={-1}
       >
         <span
           className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground"
@@ -5118,6 +5378,7 @@ function WaitingRecurrenceRow({
           <TASK_ICONS.Recurrence className="h-5 w-5" aria-hidden="true" />
         </span>
         <button
+          ref={titleButtonRef}
           type="button"
           className="flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => setRepeatOpen(true)}
@@ -5166,6 +5427,103 @@ function WaitingRecurrenceRow({
         open={repeatOpen}
         onOpenChange={setRepeatOpen}
         onEdit={onEdit}
+        areas={areas}
+      />
+    </>
+  );
+}
+
+function CalendarRecurrencePrototypeRow({
+  definition,
+  revision,
+  planningDate,
+  onEdit,
+  areas,
+  focusRequested,
+  onFocusFulfilled,
+}: {
+  definition: TaskRecurrenceDefinition;
+  revision: TaskRecurrenceRevision;
+  planningDate: string;
+  onEdit: NonNullable<Parameters<typeof TaskRepeatDialog>[0]['onEdit']>;
+  areas: ReadonlyArray<{ id: string; title: string }>;
+  focusRequested: boolean;
+  onFocusFulfilled: () => void;
+}) {
+  const [repeatOpen, setRepeatOpen] = useState(false);
+  const prototype = revision.prototype_snapshot.root;
+  const rowRef = useRef<HTMLElement>(null);
+  const titleButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!focusRequested) return;
+    const timer = window.setTimeout(() => {
+      rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      titleButtonRef.current?.focus({ preventScroll: true });
+      onFocusFulfilled();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [focusRequested, onFocusFulfilled]);
+
+  return (
+    <>
+      <article
+        ref={rowRef}
+        className="flex h-11 items-center gap-2 px-1 pr-1.5 text-[15px] text-foreground"
+        data-task-recurrence-prototype={definition.id}
+        tabIndex={-1}
+      >
+        <span
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground"
+          aria-label="Repeating Schedule"
+        >
+          <TASK_ICONS.Recurrence className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <button
+          ref={titleButtonRef}
+          type="button"
+          className="flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setRepeatOpen(true)}
+          aria-label={`Edit Repeat for ${prototype.title}`}
+        >
+          <span className="truncate">{prototype.title}</span>
+          {prototype.checklist.length > 0 ? (
+            <span
+              className="mt-px flex items-center text-xs leading-4 text-muted-foreground"
+              data-task-row-metadata
+            >
+              <TASK_ICONS.TaskChecklist className="h-3.5 w-3.5" aria-hidden="true" />
+            </span>
+          ) : null}
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="clear"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              aria-label={`Actions for ${prototype.title}`}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => setRepeatOpen(true)}>
+              Edit Repeat
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </article>
+      <TaskRepeatDialog
+        task={null}
+        definition={definition}
+        revision={revision}
+        planningDate={planningDate}
+        open={repeatOpen}
+        onOpenChange={setRepeatOpen}
+        onEdit={onEdit}
+        areas={areas}
       />
     </>
   );
@@ -5181,7 +5539,6 @@ function TaskRow({
   showAreaMetadata,
   selected,
   focused,
-  recurrenceProjection,
   onSelect,
   onTouchSwipeSelect,
   onActivate,
@@ -5222,11 +5579,6 @@ function TaskRow({
   showAreaMetadata: boolean;
   selected: boolean;
   focused: boolean;
-  recurrenceProjection?: {
-    definition: TaskRecurrenceDefinition;
-    revision: TaskRecurrenceRevision;
-    onEdit: Parameters<typeof TaskRepeatDialog>[0]['onEdit'];
-  } | null;
   onSelect: (event: MouseEvent<HTMLElement>) => void;
   onTouchSwipeSelect: () => void;
   onActivate: () => void;
@@ -5299,9 +5651,6 @@ function TaskRow({
   } | null>(null);
   const pendingRef = useRef(false);
   const inBulkSelection = bulkSelection !== undefined;
-  const isRecurrenceProjection = recurrenceProjection !== undefined;
-  const recurrenceProjectionReady = recurrenceProjection !== null
-    && recurrenceProjection !== undefined;
   const areaLabel = showAreaMetadata ? getTaskAreaLabel(task, hierarchy) : null;
   const taskLabel = visibleTitle || 'New Task';
   const todayMarkerPresentation = todayMarker
@@ -5631,8 +5980,6 @@ function TaskRow({
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
     if (
-      isRecurrenceProjection
-      ||
       inBulkSelection
       || event.pointerType !== 'touch'
       || event.isPrimary === false
@@ -5746,10 +6093,6 @@ function TaskRow({
             ].join(', '),
           )
         ) return;
-        if (isRecurrenceProjection) {
-          if (recurrenceProjectionReady) setRepeatOpen(true);
-          return;
-        }
         onSelect(event);
       }}
       onKeyDown={(event: ReactKeyboardEvent<HTMLElement>) => {
@@ -5779,9 +6122,6 @@ function TaskRow({
         if (event.key === 'Enter') {
           event.preventDefault();
           if (bulkSelection) bulkSelection.onKeyboardToggle();
-          else if (isRecurrenceProjection) {
-            if (recurrenceProjectionReady) setRepeatOpen(true);
-          }
           else onActivate();
         }
       }}
@@ -5867,7 +6207,7 @@ function TaskRow({
             aria-checked={bulkSelection.selected}
             aria-label={`${bulkSelection.selected ? 'Deselect' : 'Select'} ${taskLabel}`}
             onClick={bulkSelection.onToggle}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-info transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-info transition-colors  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {bulkSelection.selected ? (
               <TASK_ICONS.Selected className="h-5 w-5" aria-hidden="true" />
@@ -5875,14 +6215,6 @@ function TaskRow({
               <TASK_ICONS.Selection className="h-5 w-5" aria-hidden="true" />
             )}
           </button>
-        ) : isRecurrenceProjection ? (
-          <span
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground"
-            aria-label="Repeating Schedule"
-            data-task-recurrence-projection-control
-          >
-            <TASK_ICONS.Recurrence className="h-5 w-5" aria-hidden="true" />
-          </span>
         ) : (
           <button
             type="button"
@@ -5911,19 +6243,10 @@ function TaskRow({
               }
               void runTerminalAction(onComplete);
             }}
-            className="group/restore inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
             {terminalState === 'deleted' ? (
-              <>
-                <TASK_ICONS.Delete
-                  className="h-5 w-5 group-hover/restore:hidden group-focus-visible/restore:hidden"
-                  aria-hidden="true"
-                />
-                <TASK_ICONS.Reopen
-                  className="hidden h-5 w-5 group-hover/restore:block group-focus-visible/restore:block"
-                  aria-hidden="true"
-                />
-              </>
+              <TASK_ICONS.Reopen className="h-5 w-5" aria-hidden="true" />
             ) : terminalState === 'canceled' ? (
               <TASK_ICONS.Canceled className="h-5 w-5" aria-hidden="true" />
             ) : terminalState === 'completed' || completionRequested || terminalSettling ? (
@@ -5945,10 +6268,6 @@ function TaskRow({
               event.preventDefault();
               return;
             }
-            if (isRecurrenceProjection) {
-              if (recurrenceProjectionReady) setRepeatOpen(true);
-              return;
-            }
             onSelect(event);
           }}
           onKeyDown={(event) => {
@@ -5959,7 +6278,7 @@ function TaskRow({
               return;
             }
           }}
-          aria-expanded={bulkSelection || isRecurrenceProjection ? undefined : selected}
+          aria-expanded={bulkSelection ? undefined : selected}
           aria-label={visibleTitle ? undefined : 'New Task'}
           aria-pressed={bulkSelection ? bulkSelection.selected : undefined}
           aria-keyshortcuts={bulkSelection
@@ -6140,14 +6459,6 @@ function TaskRow({
                   onClearTaskFocus();
                 }}
               >
-            {isRecurrenceProjection ? (
-              <DropdownMenuItem
-                disabled={!recurrenceProjectionReady}
-                onSelect={() => setRepeatOpen(true)}
-              >
-                Edit Repeat
-              </DropdownMenuItem>
-            ) : (
               <>
                     <DropdownMenuItem
                       onSelect={() => queueMenuTemporalPicker('start')}
@@ -6221,13 +6532,12 @@ function TaskRow({
               </DropdownMenuItem>
             )}
               </>
-            )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         ) : null}
       </div>
-      {editorMounted && !bulkSelection && !isRecurrenceProjection ? (
+      {editorMounted && !bulkSelection ? (
         <div
           ref={editorRegionRef}
           data-bathos-form-scope="true"
@@ -6259,6 +6569,7 @@ function TaskRow({
               onCancelReminder={onCancelReminder}
               onRegisterAutosave={onRegisterAutosave}
               onTitleChange={setVisibleTitle}
+              showTemporalFields
             />
             <button
               type="button"
@@ -6281,7 +6592,7 @@ function TaskRow({
           </div>
         </div>
       ) : null}
-      {!bulkSelection && !isRecurrenceProjection ? (
+      {!bulkSelection ? (
         <Popover
           open={temporalPicker !== null}
           onOpenChange={(open) => {
@@ -6341,15 +6652,12 @@ function TaskRow({
           </PopoverContent>
         </Popover>
       ) : null}
-      {!bulkSelection && (!isRecurrenceProjection || recurrenceProjectionReady) ? (
+      {!bulkSelection ? (
         <TaskRepeatDialog
-          task={isRecurrenceProjection ? null : task}
+          task={task}
           planningDate={planningDate}
           open={repeatOpen}
           onOpenChange={setRepeatOpen}
-          definition={recurrenceProjection?.definition}
-          revision={recurrenceProjection?.revision}
-          onEdit={recurrenceProjection?.onEdit}
         />
       ) : null}
       </div>
@@ -6372,6 +6680,8 @@ function TaskEditor({
   onCancelReminder,
   onRegisterAutosave,
   onTitleChange,
+  showTemporalFields = true,
+  afterFields = null,
 }: {
   task: TaskTodo;
   hasChecklistItems: boolean;
@@ -6390,6 +6700,8 @@ function TaskEditor({
   onCancelReminder: () => Promise<void>;
   onRegisterAutosave: (taskId: string, flush: () => Promise<void>) => void;
   onTitleChange: (title: string) => void;
+  showTemporalFields?: boolean;
+  afterFields?: ReactNode;
 }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes);
@@ -6417,6 +6729,7 @@ function TaskEditor({
   const pendingTextPatchRef = useRef<EditableTaskPatch>({});
   const retryTaskPatchRef = useRef<EditableTaskPatch>({});
   const textAutosaveTimerRef = useRef<number | null>(null);
+  const checklistFlushRef = useRef<(() => Promise<void>) | null>(null);
   const onSaveRef = useRef(onSave);
   const onSaveReminderRef = useRef(onSaveReminder);
   const onCancelReminderRef = useRef(onCancelReminder);
@@ -6534,7 +6847,14 @@ function TaskEditor({
       if (Object.keys(retryTaskPatchRef.current).length === 0) throw error;
       await enqueueTaskPatch({});
     }
+    await checklistFlushRef.current?.();
   }, [enqueueTaskPatch, takePendingTextPatch]);
+
+  const registerChecklistFlush = useCallback((
+    flush: (() => Promise<void>) | null,
+  ) => {
+    checklistFlushRef.current = flush;
+  }, []);
 
   useLayoutEffect(() => {
     onRegisterAutosave(task.id, flushAutosave);
@@ -6761,7 +7081,7 @@ function TaskEditor({
             aria-label="Add Primary Link"
             data-task-primary-link-disclosure
             className={[
-              'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               pairedMetadataDisclosures ? 'w-full justify-center' : 'w-fit justify-start',
             ].join(' ')}
             onClick={() => {
@@ -6780,6 +7100,7 @@ function TaskEditor({
             focusRequestTaskId={task.id}
             emptyActionLayout={pairedMetadataDisclosures ? 'paired' : 'standalone'}
             onContentPresenceChange={setChecklistContentPresent}
+            onRegisterFlush={registerChecklistFlush}
           />
         ) : onRequestChecklist ? (
           <button
@@ -6787,7 +7108,7 @@ function TaskEditor({
             aria-label="Add Checklist"
             data-task-checklist-disclosure
             className={[
-              'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               pairedMetadataDisclosures ? 'w-full justify-center' : 'w-fit justify-start',
             ].join(' ')}
             onClick={() => void onRequestChecklist()}
@@ -6804,6 +7125,7 @@ function TaskEditor({
           />
         ) : null}
       </div>
+      {showTemporalFields ? (
       <div data-task-editor-temporal-grid className="grid grid-cols-2 gap-3">
         <div className="min-w-0">
           <TaskStartPickerField
@@ -6849,6 +7171,7 @@ function TaskEditor({
           />
         </div>
       </div>
+      ) : null}
       <div
         data-task-editor-identity-grid
         className={`grid gap-3 ${hierarchy.areas.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}
@@ -6904,6 +7227,7 @@ function TaskEditor({
           </Select>
         </div>
       </div>
+      {afterFields}
     </div>
   );
 }
@@ -6947,7 +7271,6 @@ function createPlainTextTaskSnapshot(title: string): TaskClipboardSnapshot {
     areaId: null,
     checklist: [],
     reminder: null,
-    recurrence: null,
   };
 }
 
@@ -6994,7 +7317,6 @@ function getTaskViewLabel(view: TaskShellView): string {
   if (view === 'done') return 'Done';
   if (view === 'upcoming') return 'Upcoming';
   if (view === 'area') return 'Area';
-  if (view === 'templates') return 'Templates';
   if (view === 'config') return 'Settings';
   if (view === 'search') return 'Search';
   return 'Today';
@@ -7010,7 +7332,7 @@ function getTaskViewFromPath(pathname: string): TaskShellView {
   if (pathname.endsWith('/someday')) return 'someday';
   if (pathname.endsWith('/done')) return 'done';
   if (pathname.endsWith('/upcoming')) return 'upcoming';
-  if (pathname.endsWith('/templates')) return 'templates';
+  if (pathname.endsWith('/templates')) return 'upcoming';
   if (pathname.endsWith('/config')) return 'config';
   if (pathname.endsWith('/search')) return 'search';
   if (getTaskAreaIdFromPath(pathname)) return 'area';

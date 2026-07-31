@@ -18,9 +18,6 @@ DECLARE
     'tasks_reminder_deliveries',
     'tasks_reminder_occurrences',
     'tasks_reminders',
-    'tasks_template_instantiations',
-    'tasks_template_revisions',
-    'tasks_templates',
     'tasks_todos',
     'tasks_user_settings'
   ];
@@ -322,6 +319,6 @@ $validation$;
 
 SELECT
   'ready' AS tasks_powersync_database_status,
-  20 AS synchronized_table_count,
+  17 AS synchronized_table_count,
   current_database() AS database_name,
   clock_timestamp() AS verified_at;

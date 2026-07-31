@@ -8,7 +8,12 @@ import {
   publishTaskNativeWidgetCredential,
 } from '@/modules/tasks/native/taskNativeWidgetBridge';
 import { maintainTaskNativeWidgetCredential } from '@/modules/tasks/native/taskNativeWidgetCredential';
-import type { TaskArea, TaskTodo } from '@/modules/tasks/types/tasks';
+import type {
+  TaskArea,
+  TaskRecurrenceDefinition,
+  TaskRecurrenceRevision,
+  TaskTodo,
+} from '@/modules/tasks/types/tasks';
 import { supabase } from '@/integrations/supabase/client';
 import { getTasksNativeInstallationId } from '@/platform/native/tasksNativeCompanion';
 
@@ -18,12 +23,18 @@ export function useTaskNativeWidgetBridge({
   areas,
   automaticListSorting,
   quickFilter,
+  recurrencePrototypes,
 }: {
   ownerId: string;
   planningDate: string;
   areas: readonly TaskArea[];
   automaticListSorting: boolean;
   quickFilter: TaskQuickFilter;
+  recurrencePrototypes: ReadonlyArray<{
+    definition: TaskRecurrenceDefinition;
+    revision: TaskRecurrenceRevision;
+    scheduledDate: string;
+  }>;
 }): void {
   const provisionedCredentialKeyRef = useRef<string | null>(null);
   const query = useQuery<TaskTodo>(
@@ -45,6 +56,7 @@ export function useTaskNativeWidgetBridge({
     areas,
     automaticListSorting,
     quickFilter,
+    recurrencePrototypes,
   }), [
     areas,
     automaticListSorting,
@@ -52,12 +64,20 @@ export function useTaskNativeWidgetBridge({
     planningDate,
     query.data,
     quickFilter,
+    recurrencePrototypes,
   ]);
 
   useEffect(() => {
-    if (query.isLoading || query.error) return;
+    if (
+      query.isLoading
+      || query.error
+    ) return;
     publishTaskNativeWidgetSnapshot(snapshot);
-  }, [query.error, query.isLoading, snapshot]);
+  }, [
+    query.error,
+    query.isLoading,
+    snapshot,
+  ]);
 
   useEffect(() => {
     const installationId = getTasksNativeInstallationId();

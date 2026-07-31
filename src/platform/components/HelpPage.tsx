@@ -84,7 +84,7 @@ export default function HelpPage() {
         <Button
           type="button"
           variant="ghost"
-          className="text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground "
           onClick={handleBack}
         >
           ← Back

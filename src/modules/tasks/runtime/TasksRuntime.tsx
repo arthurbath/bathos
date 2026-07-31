@@ -15,7 +15,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
 import { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
 import { TaskHierarchyOperationsRepository } from '@/modules/tasks/data/taskHierarchyOperationsRepository';
-import { TaskTemplateService } from '@/modules/tasks/data/taskTemplateService';
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskReminderService } from '@/modules/tasks/data/taskReminderService';
 import { TaskPermanentDeletionService } from '@/modules/tasks/data/taskPermanentDeletionService';
@@ -90,10 +89,6 @@ export function TasksRuntimeProvider({
   const hierarchyOperationsRepository = useMemo(
     () => new TaskHierarchyOperationsRepository(database),
     [database],
-  );
-  const templateService = useMemo(
-    () => new TaskTemplateService(supabase, ownerId),
-    [ownerId],
   );
   const recurrenceService = useMemo(
     () => new TaskRecurrenceService(supabase, ownerId),
@@ -325,7 +320,6 @@ export function TasksRuntimeProvider({
       repository,
       hierarchyRepository,
       hierarchyOperationsRepository,
-      templateService,
       recurrenceService,
       reminderService,
       permanentDeletionService,
@@ -347,7 +341,6 @@ export function TasksRuntimeProvider({
       reminderService,
       permanentDeletionService,
       portabilityService,
-      templateService,
       syncState,
       offlineLaunchState,
       pendingUploadCount,

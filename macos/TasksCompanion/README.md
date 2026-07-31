@@ -106,6 +106,9 @@ LaunchServices database or unregister unrelated applications.
 
 ## Native Behavior
 
+- The hosted Tasks web view accepts AppKit's first mouse event, so clicking or
+  beginning a drag over a visible inactive Tasks window activates the window
+  and delivers that same pointer sequence to the intended web interaction.
 - Command+Option+R clears reload-safe WebKit response caches and reloads the
   current Tasks route from its origin. It preserves authentication, local
   storage, IndexedDB and OPFS task data, service-worker registrations, and

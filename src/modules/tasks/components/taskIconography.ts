@@ -23,7 +23,6 @@ import {
   Hourglass,
   Inbox,
   Layers3,
-  LayoutTemplate,
   Lasso,
   Link2,
   ListChecks,
@@ -78,7 +77,6 @@ export const TASK_ICONS = {
   Anytime: ListTodo,
   Someday: SquareDashed,
   Done: ListChecks,
-  Templates: LayoutTemplate,
   Config: Settings,
 
   Inbox: Inbox,
@@ -113,7 +111,6 @@ export const TASK_ICONS = {
   FileSource: File,
   SelectedTextSource: TextQuote,
   ReadingItemSource: BookOpen,
-  TemplateSource: LayoutTemplate,
   OtherSource: Link2,
 
   Recurrence: Repeat2,
@@ -148,7 +145,6 @@ export const TASK_ICON_NAMES = {
   Anytime: 'ListTodo',
   Someday: 'SquareDashed',
   Done: 'ListChecks',
-  Templates: 'LayoutTemplate',
   Config: 'Settings',
 
   Inbox: 'Inbox',
@@ -183,7 +179,6 @@ export const TASK_ICON_NAMES = {
   FileSource: 'File',
   SelectedTextSource: 'TextQuote',
   ReadingItemSource: 'BookOpen',
-  TemplateSource: 'LayoutTemplate',
   OtherSource: 'Link2',
 
   Recurrence: 'Repeat2',

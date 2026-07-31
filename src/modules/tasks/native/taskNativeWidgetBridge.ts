@@ -11,6 +11,8 @@ import { getTaskUpcomingDate } from '@/modules/tasks/domain/taskUpcoming';
 import type {
   TaskActionability,
   TaskArea,
+  TaskRecurrenceDefinition,
+  TaskRecurrenceRevision,
   TaskTodaySection,
   TaskTodo,
 } from '@/modules/tasks/types/tasks';
@@ -31,6 +33,7 @@ export const TASK_NATIVE_WIDGET_LIST_LIMIT = 50;
 export const TASK_NATIVE_WIDGET_BRIDGE_HANDLER = TASKS_NATIVE_BRIDGE_HANDLER;
 export const TASK_NATIVE_TASK_QUERY_PARAMETER = 'native_task';
 export const TASK_NATIVE_NEW_TASK_QUERY_PARAMETER = 'native_new_task';
+export const TASK_NATIVE_QUICK_ENTRY_QUERY_PARAMETER = 'native_quick_entry';
 export type TaskNativeNewTaskSignal = 'today-inbox' | 'current-list';
 
 export const taskNativeWidgetListIds = [
@@ -94,6 +97,26 @@ export type TaskNativeNewTaskSummaryFocusMessage = {
   schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
 };
 
+export type TaskNativeQuickEntryShortcut = {
+  code: string;
+  command: boolean;
+  control: boolean;
+  option: boolean;
+  shift: boolean;
+};
+
+export type TaskNativeQuickEntryShortcutMessage = {
+  type: 'configure-quick-entry-shortcut';
+  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
+  shortcut: TaskNativeQuickEntryShortcut;
+};
+
+export type TaskNativeQuickEntryFinishedMessage = {
+  type: 'quick-entry-finished';
+  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
+  committed: boolean;
+};
+
 type BuildTaskNativeWidgetSnapshotInput = {
   ownerId: string;
   planningDate: string;
@@ -101,6 +124,11 @@ type BuildTaskNativeWidgetSnapshotInput = {
   areas: readonly TaskArea[];
   automaticListSorting: boolean;
   quickFilter: TaskQuickFilter;
+  recurrencePrototypes?: ReadonlyArray<{
+    definition: TaskRecurrenceDefinition;
+    revision: TaskRecurrenceRevision;
+    scheduledDate: string;
+  }>;
   generatedAt?: string;
   listLimit?: number;
 };
@@ -124,6 +152,7 @@ export function buildTaskNativeWidgetSnapshot({
   areas,
   automaticListSorting,
   quickFilter,
+  recurrencePrototypes = [],
   generatedAt = new Date().toISOString(),
   listLimit = TASK_NATIVE_WIDGET_LIST_LIMIT,
 }: BuildTaskNativeWidgetSnapshotInput): TaskNativeWidgetSnapshot {
@@ -155,14 +184,32 @@ export function buildTaskNativeWidgetSnapshot({
           quickFilter,
         ));
 
+      const widgetTasks = filtered.map((task) => (
+        toTaskNativeWidgetTask(task, id, planningDate)
+      ));
+      if (id === 'upcoming') {
+        widgetTasks.push(...recurrencePrototypes
+          .filter(({ revision }) => (
+            quickFilter === 'all'
+            || taskMatchesQuickFilter(
+              revision.prototype_snapshot.root.actionability,
+              quickFilter,
+            )
+          ))
+          .map(toTaskNativeWidgetRecurrencePrototype));
+        widgetTasks.sort((left, right) => (
+          (left.upcomingDate ?? '').localeCompare(right.upcomingDate ?? '')
+          || left.summary.localeCompare(right.summary)
+          || left.id.localeCompare(right.id)
+        ));
+      }
+
       return {
         id,
         title: taskNativeWidgetListTitles[id],
-        totalCount: filtered.length,
-        truncated: filtered.length > safeLimit,
-        tasks: filtered.slice(0, safeLimit).map((task) => (
-          toTaskNativeWidgetTask(task, id, planningDate)
-        )),
+        totalCount: widgetTasks.length,
+        truncated: widgetTasks.length > safeLimit,
+        tasks: widgetTasks.slice(0, safeLimit),
       };
     }),
   };
@@ -228,6 +275,34 @@ export function requestTaskNativeNewTaskSummaryFocus(
   return true;
 }
 
+export function configureTaskNativeQuickEntryShortcut(
+  shortcut: TaskNativeQuickEntryShortcut,
+  target: Window = window,
+): boolean {
+  const handler = getTasksNativeMessageHandler(target);
+  if (!handler || getTasksNativeInstallationId(target) === null) return false;
+  handler.postMessage({
+    type: 'configure-quick-entry-shortcut',
+    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
+    shortcut,
+  } satisfies TaskNativeQuickEntryShortcutMessage);
+  return true;
+}
+
+export function finishTaskNativeQuickEntry(
+  committed: boolean,
+  target: Window = window,
+): boolean {
+  const handler = getTasksNativeMessageHandler(target);
+  if (!handler || getTasksNativeInstallationId(target) === null) return false;
+  handler.postMessage({
+    type: 'quick-entry-finished',
+    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
+    committed,
+  } satisfies TaskNativeQuickEntryFinishedMessage);
+  return true;
+}
+
 export function getNativeTaskDeepLinkId(search: string): string | null {
   const taskId = new URLSearchParams(search).get(TASK_NATIVE_TASK_QUERY_PARAMETER);
   return taskId !== null && uuidPattern.test(taskId) ? taskId : null;
@@ -261,6 +336,10 @@ export function removeNativeNewTaskSignal(search: string): string {
   return next ? `?${next}` : '';
 }
 
+export function isTaskNativeQuickEntry(search: string): boolean {
+  return new URLSearchParams(search).get(TASK_NATIVE_QUICK_ENTRY_QUERY_PARAMETER) === '1';
+}
+
 export function resetTaskNativeWidgetPublisherForTests(): void {
   lastPublishedContent = null;
 }
@@ -284,8 +363,36 @@ function toTaskNativeWidgetTask(
     upcomingDate: listId === 'upcoming'
       ? getTaskUpcomingDate(task, planningDate)
       : null,
-    isRecurrenceProjection: listId === 'upcoming'
-      && task.recurrence_definition_id !== null,
+    isRecurrenceProjection: false,
+    primaryLink: primaryLinkHref && primaryLinkKind
+      ? { href: primaryLinkHref.slice(0, 8_000), kind: primaryLinkKind }
+      : null,
+  };
+}
+
+function toTaskNativeWidgetRecurrencePrototype({
+  definition,
+  revision,
+  scheduledDate,
+}: {
+  definition: TaskRecurrenceDefinition;
+  revision: TaskRecurrenceRevision;
+  scheduledDate: string;
+}): TaskNativeWidgetTask {
+  const prototype = revision.prototype_snapshot.root;
+  const primaryLinkHref = getTaskPrimaryLinkHref(prototype.primary_link);
+  const primaryLinkKind = getTaskPrimaryLinkKind(prototype.primary_link);
+  return {
+    id: definition.id,
+    summary: prototype.title.trim().slice(0, 500),
+    deadline: revision.deadline_offset_days === null
+      ? null
+      : definition.next_occurrence_date,
+    todaySection: null,
+    actionability: prototype.actionability,
+    terminalState: null,
+    upcomingDate: scheduledDate,
+    isRecurrenceProjection: true,
     primaryLink: primaryLinkHref && primaryLinkKind
       ? { href: primaryLinkHref.slice(0, 8_000), kind: primaryLinkKind }
       : null,
