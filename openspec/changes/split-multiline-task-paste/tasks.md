@@ -26,3 +26,8 @@
 
 - [x] 5.1 Run focused Tasks tests, Tasks TypeScript, targeted lint, build, and strict OpenSpec validation
 - [x] 5.2 Smoke-check the rendered task editor without mutating the user's live task data
+
+## 7. Checklist Completion Regression
+
+- [x] 7.1 Cover checklist completion through the production repository and PowerSync schema, including database reopen persistence
+- [x] 7.2 Run focused checklist tests, Tasks TypeScript, lint, build, strict OpenSpec validation, and rendered checklist interaction QA

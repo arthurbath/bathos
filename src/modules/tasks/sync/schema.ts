@@ -112,6 +112,7 @@ const taskChecklistItems = new Table(
     entry_channel: column.text,
     last_mutation_channel: column.text,
     last_actor_type: column.text,
+    last_operation_id: column.text,
     revision: column.integer,
     client_mutation_id: column.text,
     created_at: column.text,

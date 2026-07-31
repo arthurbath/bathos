@@ -31,6 +31,10 @@ Tasks SHALL interpret normalized plain-text clipboard lines as ordered task or c
 - **WHEN** an editable control other than a checklist item owns Paste
 - **THEN** Tasks leaves the control's existing native or specialized paste behavior unchanged and does not create task objects from its clipboard text
 
+#### Scenario: Persist checklist completion locally
+- **WHEN** a user checks or reopens a persisted checklist item
+- **THEN** Tasks writes the completion state, completion timestamp, revision, and undo-operation metadata to the local PowerSync database and retains that state across rerender and application restart
+
 ### Requirement: Checklist Item Clipboard Transfer
 Tasks SHALL let users copy, cut, and paste selected checklist items between task checklists through a strict versioned clipboard payload while preserving item order, text, and completion state.
 
