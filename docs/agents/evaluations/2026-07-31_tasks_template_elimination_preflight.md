@@ -1,7 +1,7 @@
 # Tasks Template Elimination Release
 
 **Date:** 2026-07-31  
-**Status:** Production conversion complete; matching client publication in progress
+**Status:** Production conversion and matching web/macOS publication complete; iOS installation pending device connectivity
 
 ## Decision
 
@@ -107,8 +107,36 @@ Tasks blocker.
 - Production Tasks Edge Functions: active
 - Linked database lint: no new Tasks blocker; unrelated preexisting Drawers errors and existing Tasks warnings remain
 
+## Matching client publication
+
+Commit `aa59d4ded1deceb40a45e9c97204de610d511685` is published to
+`https://os.bath.garden` as Lovable deployment
+`12df9c39-cae1-4766-a75c-17ebbdd97e42`. The live release serves entry asset
+`index-nRQ291Yn.js` with SHA-256
+`a4e646c75bb4b9c8a5771e91157b4770979c674be78056b5173c01c8b7312a98`
+and Tasks asset `TasksIndex-DaPujKjg.js` with SHA-256
+`900096919973e65401a4b568d81122afd8c3dd241fdd640493ad7dd44bfa7dc4`.
+The live Tasks bundle contains the Upcoming recurrence-prototype interactions
+and no Templates label.
+
+Rendered local verification exposed that the retired `/tasks/templates` path
+was initially rejected by the top-level Tasks route guard before the intended
+redirect could run. The guard now admits that retired path long enough for the
+Tasks shell to replace it with `/tasks/upcoming`; focused routing coverage and
+the full application suite pass with that correction.
+
+The automatically signed Release macOS companion and widget passed strict
+signature verification, were installed at `/Applications/Tasks.app`, and were
+registered with macOS. The replaced application remains recoverable at
+`/Users/Art/.Trash/Tasks.previous-20260731-0831.app`.
+
+The automatically signed iOS companion and widget were built for arm64 and
+passed strict signature verification with Team `SPJYXE7ZA3`. Installation on
+Art's Phone remains pending because CoreDevice currently reports the paired
+physical device as unavailable.
+
 ## Remaining release proof
 
-The matching Lovable web publication, iOS installation, final rendered checks,
-and OpenSpec archival are recorded when their post-deployment verification is
-complete.
+Install the verified iOS artifact when Art's Phone becomes reachable, then
+record the installed application, archive this OpenSpec change, and prove the
+repository clean and synchronized.

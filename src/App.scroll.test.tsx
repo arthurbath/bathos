@@ -21,6 +21,7 @@ describe("task route registry", () => {
     expect(TASK_ROUTE_PATHS).toContain("/tasks/areas/:areaId");
     expect(TASK_ROUTE_PATHS).toContain("/tasks/config");
     expect(TASK_ROUTE_PATHS).toContain("/tasks/search");
+    expect(TASK_ROUTE_PATHS).toContain("/tasks/templates");
   });
 
   it("matches only exact supported task routes", () => {
@@ -29,6 +30,7 @@ describe("task route registry", () => {
     expect(isSupportedTaskRoute("/tasks/areas/area-a")).toBe(true);
     expect(isSupportedTaskRoute("/tasks/config")).toBe(true);
     expect(isSupportedTaskRoute("/tasks/search")).toBe(true);
+    expect(isSupportedTaskRoute("/tasks/templates")).toBe(true);
     expect(isSupportedTaskRoute("/tasks/unknown")).toBe(false);
     expect(isSupportedTaskRoute("/tasks/projects/project-a/extra")).toBe(false);
   });

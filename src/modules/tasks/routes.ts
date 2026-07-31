@@ -11,6 +11,7 @@ export const TASK_ROUTE_PATHS = [
   '/tasks/areas/:areaId',
   '/tasks/config',
   '/tasks/search',
+  '/tasks/templates',
 ] as const;
 
 export function isSupportedTaskRoute(pathname: string): boolean {
