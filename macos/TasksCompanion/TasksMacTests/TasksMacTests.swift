@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import SwiftUI
 import WebKit
 import XCTest
 @testable import TasksMac
@@ -232,7 +233,7 @@ final class TasksMacTests: XCTestCase {
     func testGlobalQuickEntryPanelUsesTheAuthoritativeWebEditorOnAllSpaces() {
         let policy = TasksMacQuickEntryPanelPolicy.self
 
-        XCTAssertEqual(policy.contentSize, NSSize(width: 640, height: 760))
+        XCTAssertEqual(policy.contentSize, NSSize(width: 560, height: 680))
         XCTAssertEqual(policy.webURL.host, "os.bath.garden")
         XCTAssertEqual(policy.webURL.path, "/tasks/today")
         XCTAssertEqual(
@@ -248,6 +249,51 @@ final class TasksMacTests: XCTestCase {
         XCTAssertTrue(policy.collectionBehavior.contains(.canJoinAllSpaces))
         XCTAssertTrue(policy.collectionBehavior.contains(.fullScreenAuxiliary))
         XCTAssertTrue(policy.collectionBehavior.contains(.transient))
+    }
+
+    func testGlobalQuickEntryPanelCannotCollapseToHostedIntrinsicSize() {
+        let panel = TasksMacQuickEntryPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 40, height: 80),
+            styleMask: [.titled, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        panel.contentViewController = NSHostingController(
+            rootView: Color.clear.frame(width: 1, height: 1)
+        )
+
+        TasksMacQuickEntryPanelPolicy.apply(to: panel)
+
+        XCTAssertEqual(
+            panel.contentRect(forFrameRect: panel.frame).size,
+            TasksMacQuickEntryPanelPolicy.contentSize
+        )
+        XCTAssertEqual(
+            panel.contentMinSize,
+            TasksMacQuickEntryPanelPolicy.contentSize
+        )
+        XCTAssertEqual(
+            panel.contentMaxSize,
+            TasksMacQuickEntryPanelPolicy.contentSize
+        )
+    }
+
+    func testGlobalQuickEntryControllerPresentsTheDeclaredContentSize() throws {
+        let controller = TasksMacQuickEntryPanelController { _ in }
+
+        controller.show()
+        let panel = try XCTUnwrap(
+            NSApp.windows.compactMap { $0 as? TasksMacQuickEntryPanel }.first
+        )
+        defer {
+            panel.orderOut(nil)
+        }
+
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertEqual(
+            panel.contentRect(forFrameRect: panel.frame).size,
+            TasksMacQuickEntryPanelPolicy.contentSize
+        )
     }
 
     func testEscapeIsConsumedOnlyForTheKeyTasksWindow() {

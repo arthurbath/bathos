@@ -70,6 +70,8 @@
     --grid-handle-line: 0 0% 42%;
     --mobile-bottom-nav-border: 0 0% 28%;
     --mobile-bottom-nav-bottom-offset: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+    --bathos-toast-bottom-offset: 1rem;
+    --bathos-toast-desktop-right-offset: max(1rem, calc((100vw - 64rem) / 2 + 1rem));
   }
 }
 
@@ -155,6 +157,24 @@
 
 html[data-mobile-bottom-nav-installed-touch='true'] {
   --mobile-bottom-nav-bottom-offset: calc(env(safe-area-inset-bottom, 0px) + 0.25rem);
+}
+
+.bathos-sonner-toaster[data-sonner-toaster] {
+  z-index: 35;
+}
+
+@media (max-width: 767px) {
+  html[data-mobile-bottom-nav-visible='true'] {
+    --bathos-toast-bottom-offset: calc(var(--mobile-bottom-nav-bottom-offset) + 4.75rem);
+  }
+
+  .bathos-sonner-toaster[data-sonner-toaster] {
+    --offset-right: 1rem !important;
+    --mobile-offset-right: 1rem !important;
+    --mobile-offset-left: 1rem !important;
+    --offset-bottom: var(--bathos-toast-bottom-offset) !important;
+    --mobile-offset-bottom: var(--bathos-toast-bottom-offset) !important;
+  }
 }
 
 html[data-mobile-bottom-nav-installed-touch='true'],

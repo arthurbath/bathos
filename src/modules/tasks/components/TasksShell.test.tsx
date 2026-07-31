@@ -5644,11 +5644,106 @@ describe('TasksShell', () => {
       expect(quickEntry.container.querySelector('[data-testid="mobile-nav"]')).toBeNull();
       expect(quickEntry.container.querySelector('[aria-label="Add a Task"]')).toBeNull();
       expect(quickEntry.container.querySelector('[data-task-editor-region]')).toBeTruthy();
+      expect(quickEntry.container.querySelector('[data-task-quick-entry-editor="true"]'))
+        .toHaveClass('bg-transparent');
+      expect(quickEntry.container.querySelector('[data-task-row-header]')).toBeNull();
+      expect(quickEntry.container.querySelector('[data-task-completion-control]')).toBeNull();
+      expect(quickEntry.container.querySelector('[data-task-row-trailing-controls]')).toBeNull();
+      expect(quickEntry.container.querySelector('[data-task-editor-form]'))
+        .toHaveClass('gap-2', 'px-1', 'pb-1');
       expect(quickEntry.container.querySelector('[data-task-editor-temporal-grid]')).toBeTruthy();
       expect(quickEntry.container.querySelector('[data-task-editor-identity-grid]')).toBeTruthy();
       expect(quickEntry.container.querySelector('[data-task-primary-link-disclosure]')).toBeTruthy();
       expect(quickEntry.container.querySelector('[data-task-checklist-disclosure]')).toBeTruthy();
+
+      await act(async () => {
+        quickEntry.container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Start"]',
+        )?.click();
+      });
+      expect(document.querySelector('[data-task-start-picker-placement="viewport-center"]'))
+        .toBeTruthy();
+      expect(document.querySelector('[data-task-start-picker-viewport-anchor]')).toBeTruthy();
+
+      await act(async () => {
+        quickEntry.container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Start"]',
+        )?.click();
+        await Promise.resolve();
+      });
+      await waitFor(() => {
+        expect(document.querySelector('[data-task-start-picker-placement="viewport-center"]'))
+          .toBeNull();
+      });
+      await act(async () => {
+        quickEntry.container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Deadline"]',
+        )?.click();
+        await Promise.resolve();
+      });
+      await waitFor(() => {
+        expect(document.querySelector('[data-date-picker-placement="viewport-center"]'))
+          .toBeTruthy();
+      });
+      expect(document.querySelector('[data-date-picker-viewport-anchor]')).toBeTruthy();
     } finally {
+      cleanup(quickEntry.root, quickEntry.container);
+      Reflect.deleteProperty(window, '__bathosNativeApp');
+    }
+  });
+
+  it('persists a native Mac quick-entry draft before opening its checklist editor', async () => {
+    Object.assign(window, {
+      __bathosNativeApp: {
+        schemaVersion: 2,
+        moduleId: 'tasks',
+        platform: 'macos',
+        quickEntryShortcut: '⌃⌥Space',
+      },
+    });
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    const quickEntry = renderShell(
+      '/tasks/today?native_new_task=1&native_quick_entry=1',
+    );
+    const focusRequests: string[] = [];
+    const recordFocusRequest = (event: Event) => {
+      if (event instanceof CustomEvent && typeof event.detail?.taskId === 'string') {
+        focusRequests.push(event.detail.taskId);
+      }
+    };
+    document.addEventListener('bathos:task-checklist-focus', recordFocusRequest);
+
+    try {
+      const title = await waitFor(() => {
+        const input = document.getElementById(
+          `task-title-${NEW_TASK_DRAFT_ID}`,
+        ) as HTMLInputElement | null;
+        expect(input).toBeTruthy();
+        return input!;
+      });
+      const addChecklist = quickEntry.container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Add Checklist"]',
+      )!;
+
+      await act(async () => {
+        setInputValue(title, 'Overlay task with checklist');
+        addChecklist.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      expect(taskList.createTask).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Overlay task with checklist',
+      }));
+      await waitFor(() => {
+        expect(focusRequests).toEqual(['task-draft:new']);
+      });
+      expect(quickEntry.container.querySelector('[data-task-checklist]')).toBeTruthy();
+      expect(quickEntry.container.querySelector(
+        'input[aria-label="New Checklist Item"]',
+      )).toBeTruthy();
+    } finally {
+      document.removeEventListener('bathos:task-checklist-focus', recordFocusRequest);
       cleanup(quickEntry.root, quickEntry.container);
       Reflect.deleteProperty(window, '__bathosNativeApp');
     }

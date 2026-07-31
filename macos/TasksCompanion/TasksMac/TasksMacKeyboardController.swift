@@ -447,6 +447,7 @@ final class TasksMacQuickEntryPanelController: NSObject {
 
     func show() {
         browserModel.openWebURL(TasksMacQuickEntryPanelPolicy.webURL)
+        TasksMacQuickEntryPanelPolicy.apply(to: panel)
         panel.center()
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
@@ -474,17 +475,25 @@ final class TasksMacQuickEntryPanelController: NSObject {
         panel.contentViewController = NSHostingController(
             rootView: TasksMacWebView(model: browserModel)
         )
+        TasksMacQuickEntryPanelPolicy.apply(to: panel)
         return panel
     }
 }
 
 enum TasksMacQuickEntryPanelPolicy {
-    static let contentSize = NSSize(width: 640, height: 760)
+    static let contentSize = NSSize(width: 560, height: 680)
     static let collectionBehavior: NSWindow.CollectionBehavior = [
         .canJoinAllSpaces,
         .fullScreenAuxiliary,
         .transient,
     ]
+
+    static func apply(to panel: NSPanel) {
+        panel.contentMinSize = contentSize
+        panel.contentMaxSize = contentSize
+        panel.setContentSize(contentSize)
+    }
+
     static let webURL = URL(
         string: "https://\(TaskCompanionConstants.trustedWebHost)"
             + "/tasks/today?native_new_task=1&native_quick_entry=1"

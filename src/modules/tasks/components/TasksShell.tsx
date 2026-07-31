@@ -2953,6 +2953,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <TaskRow
         key={task.id}
         task={task}
+        quickEntry={nativeQuickEntry && isCreationDraft}
         draftExiting={isCreationDraft && closingTaskId === task.id}
         hasChecklistItems={checklistTaskIds.has(persistedDraftTaskId ?? task.id)}
         checklistTaskId={persistedDraftTaskId ?? (
@@ -3466,11 +3467,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <main
         data-task-space-entry-surface
         data-task-list-bottom-clearance
-        className={`mx-auto w-full px-4 ${
-          nativeQuickEntry ? 'max-w-xl py-4' : 'max-w-3xl pt-8 md:pt-10'
+        className={`mx-auto w-full ${
+          nativeQuickEntry
+            ? 'max-w-none p-2'
+            : `max-w-3xl px-4 pt-8 md:pt-10 ${TASK_LIST_BOTTOM_CLEARANCE_CLASS}`
         } ${
           touchListElasticActive ? '' : 'transition-transform duration-200 ease-out'
-        } ${nativeQuickEntry ? 'pb-4' : TASK_LIST_BOTTOM_CLEARANCE_CLASS}`}
+        }`}
         style={{
           transform: touchListElasticity === 0
             ? undefined
@@ -5531,6 +5534,7 @@ function CalendarRecurrencePrototypeRow({
 
 function TaskRow({
   task,
+  quickEntry = false,
   draftExiting,
   hasChecklistItems,
   checklistTaskId,
@@ -5571,6 +5575,7 @@ function TaskRow({
   terminalState,
 }: {
   task: TaskTodo;
+  quickEntry?: boolean;
   draftExiting: boolean;
   hasChecklistItems: boolean;
   checklistTaskId: string | null;
@@ -6068,7 +6073,7 @@ function TaskRow({
   return (
     <article
       ref={articleRef}
-      tabIndex={selected ? -1 : 0}
+      tabIndex={quickEntry || selected ? -1 : 0}
       role="group"
       aria-label={taskLabel}
       aria-current={focused ? 'true' : undefined}
@@ -6137,18 +6142,22 @@ function TaskRow({
         );
       }}
       className={[
-        'relative grid overflow-hidden transition-[grid-template-rows,opacity,background-color,border-radius] ease-out focus:outline-none focus-visible:rounded-md focus-visible:bg-info/10 focus-visible:outline-none motion-reduce:transition-none',
+        'relative grid overflow-hidden transition-[grid-template-rows,opacity,background-color,border-radius] ease-out focus:outline-none motion-reduce:transition-none',
+        quickEntry
+          ? 'bg-transparent'
+          : 'focus-visible:rounded-md focus-visible:bg-info/10 focus-visible:outline-none',
         terminalExiting || draftExiting
           ? 'grid-rows-[0fr] opacity-0'
           : 'grid-rows-[1fr] opacity-100',
-        selected
+        !quickEntry && selected
           ? 'rounded-md bg-info/10'
-          : focused || bulkSelection?.selected
+          : !quickEntry && (focused || bulkSelection?.selected)
             ? 'rounded-md bg-info/10'
           : '',
       ].filter(Boolean).join(' ') || undefined}
       style={{ transitionDuration: `${TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS}ms` }}
       data-task-planning-card
+      data-task-quick-entry-editor={quickEntry ? 'true' : undefined}
       data-terminal-settling={terminalSettling ? 'true' : undefined}
       data-terminal-exiting={terminalExiting ? 'true' : undefined}
       data-draft-exiting={draftExiting ? 'true' : undefined}
@@ -6163,6 +6172,7 @@ function TaskRow({
         />
       ) : null}
       <div className="relative min-h-0 overflow-hidden bg-inherit">
+      {!quickEntry ? <>
       <span
         aria-hidden="true"
         data-task-swipe-affordance="start"
@@ -6537,6 +6547,7 @@ function TaskRow({
           </div>
         ) : null}
       </div>
+      </> : null}
       {editorMounted && !bulkSelection ? (
         <div
           ref={editorRegionRef}
@@ -6547,7 +6558,7 @@ function TaskRow({
           className={[
             'grid overflow-hidden transition-[grid-template-rows,opacity,padding-top] ease-out motion-reduce:transition-none',
             editorExpanded
-              ? 'grid-rows-[1fr] pt-[6px] opacity-100'
+              ? `grid-rows-[1fr] opacity-100 ${quickEntry ? 'pt-0' : 'pt-[6px]'}`
               : 'grid-rows-[0fr] pt-0 opacity-0',
             selected ? '' : 'pointer-events-none',
           ].filter(Boolean).join(' ')}
@@ -6570,6 +6581,7 @@ function TaskRow({
               onRegisterAutosave={onRegisterAutosave}
               onTitleChange={setVisibleTitle}
               showTemporalFields
+              quickEntry={quickEntry}
             />
             <button
               type="button"
@@ -6592,7 +6604,7 @@ function TaskRow({
           </div>
         </div>
       ) : null}
-      {!bulkSelection ? (
+      {!quickEntry && !bulkSelection ? (
         <Popover
           open={temporalPicker !== null}
           onOpenChange={(open) => {
@@ -6652,7 +6664,7 @@ function TaskRow({
           </PopoverContent>
         </Popover>
       ) : null}
-      {!bulkSelection ? (
+      {!quickEntry && !bulkSelection ? (
         <TaskRepeatDialog
           task={task}
           planningDate={planningDate}
@@ -6682,6 +6694,7 @@ function TaskEditor({
   onTitleChange,
   showTemporalFields = true,
   afterFields = null,
+  quickEntry = false,
 }: {
   task: TaskTodo;
   hasChecklistItems: boolean;
@@ -6702,6 +6715,7 @@ function TaskEditor({
   onTitleChange: (title: string) => void;
   showTemporalFields?: boolean;
   afterFields?: ReactNode;
+  quickEntry?: boolean;
 }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes);
@@ -6954,7 +6968,9 @@ function TaskEditor({
 
   return (
     <div
-      className="flex flex-col gap-3 px-2 pb-3 sm:px-3.5"
+      className={quickEntry
+        ? 'flex flex-col gap-2 px-1 pb-1'
+        : 'flex flex-col gap-3 px-2 pb-3 sm:px-3.5'}
       data-task-editor-form
     >
       <div
@@ -7146,6 +7162,7 @@ function TaskEditor({
             onPlanningChange={changeStartPlanning}
             onReminderChange={changeReminderTime}
             onClear={clearStartPlanning}
+            popoverPlacement={quickEntry ? 'viewport-center' : 'anchored'}
           />
         </div>
         <div className="min-w-0">
@@ -7168,6 +7185,7 @@ function TaskEditor({
             clearable
             clearLabel="Clear"
             panelCommandScope="task-deadline"
+            popoverPlacement={quickEntry ? 'viewport-center' : 'anchored'}
           />
         </div>
       </div>

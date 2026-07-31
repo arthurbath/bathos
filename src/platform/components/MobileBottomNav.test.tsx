@@ -32,6 +32,7 @@ function setNavigatorProperty(name: string, value: unknown) {
 describe('MobileBottomNav', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+    document.documentElement.removeAttribute('data-mobile-bottom-nav-visible');
     delete (window as NativeAppWindow).__bathosNativeApp;
     setNavigatorProperty('platform', 'MacIntel');
     setNavigatorProperty('userAgent', 'Mozilla/5.0');
@@ -51,6 +52,10 @@ describe('MobileBottomNav', () => {
     );
 
     const nav = await screen.findByRole('navigation', { name: 'Mobile navigation' });
+    expect(document.documentElement).toHaveAttribute(
+      'data-mobile-bottom-nav-visible',
+      'true',
+    );
     const viewport = nav.parentElement;
     expect(viewport).toHaveAttribute('data-mobile-bottom-nav-viewport');
     expect(viewport).toHaveClass(

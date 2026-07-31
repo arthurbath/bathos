@@ -17,7 +17,23 @@ The macOS companion SHALL let the user record one global keyboard shortcut and S
 
 #### Scenario: Reuse the authoritative task form
 - **WHEN** the quick-entry overlay opens
-- **THEN** it hosts the same Summary, Notes, Primary Link, checklist, Start, Deadline, Area, Actionability, reminder, picker, and Control-command behavior as the web new-task workflow
+- **THEN** it opens at a stable content size sufficient to display the form and hosts the same Summary, Notes, Primary Link, checklist, Start, Deadline, Area, Actionability, reminder, picker, and Control-command behavior as the web new-task workflow
+
+#### Scenario: Preserve overlay geometry during native hosting
+- **WHEN** AppKit installs or reuses the SwiftUI-hosted WebKit surface
+- **THEN** the quick-entry panel retains its declared content size instead of collapsing to the hosted view's initial intrinsic size
+
+#### Scenario: Present only the quick-entry editor
+- **WHEN** the global quick-entry overlay displays a new-task draft
+- **THEN** Tasks shows the shared metadata editor without the list summary row, completion control, ellipsis menu, or blue open-task background
+
+#### Scenario: Keep temporal pickers inside the overlay
+- **WHEN** the user opens Start or Deadline from global quick entry
+- **THEN** Tasks centers the authoritative picker in the overlay viewport, preserves its keyboard navigation and focus handoff, and does not clip it against the editor field position
+
+#### Scenario: Edit content that exceeds the overlay
+- **WHEN** Notes or checklist content becomes taller than the quick-entry overlay
+- **THEN** the editor remains vertically scrollable and the user can create and edit checklist items through the same controls as the ordinary new-task form
 
 #### Scenario: Submit quick entry
 - **WHEN** the user commits a nonempty quick-entry draft

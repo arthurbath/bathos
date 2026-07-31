@@ -29,6 +29,12 @@
 - [x] 4.4 Add a compact web quick-entry route that reuses the ordinary new-task editor and command behavior
 - [x] 4.5 Close the overlay after commit or cancellation and refresh the main app/native widget projection
 - [x] 4.6 Add Swift and web tests for recording, registration, routing, commit, cancellation, and failure
+- [x] 4.7 Pin the native quick-entry panel to its declared content geometry after installing and before presenting the SwiftUI WebKit host
+- [x] 4.8 Add Swift regression tests proving the hosted panel cannot collapse and presents at its declared content size
+- [x] 4.9 Replace the native quick-entry list-row presentation with a compact drawer-only editor
+- [x] 4.10 Center the shared Start and Deadline picker surfaces inside the quick-entry viewport
+- [x] 4.11 Restore and regression-test checklist creation in native quick entry
+- [x] 4.12 Reduce overlay-only padding and native panel geometry while preserving internal scrolling
 
 ## 5. Portrait Presentation
 
@@ -41,3 +47,5 @@
 - [x] 6.2 Run the full database and application suites, TypeScript, lint, build, and strict OpenSpec validation
 - [x] 6.3 Build the iOS and macOS companions without signing and verify orientation, widget, bridge, and overlay artifacts
 - [x] 6.4 Inspect rendered browser behavior and prepare the overnight assumptions and ambiguity report
+- [x] 6.5 Run the macOS Swift suite, a signed macOS build and install, and live AppKit panel-controller geometry verification
+- [x] 6.6 Run focused React and Swift coverage, TypeScript, build, lint, and strict OpenSpec validation for the refined overlay

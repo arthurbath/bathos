@@ -33,7 +33,12 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from '@/components/ui/input-group';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { focusAdjacentFormControl } from '@/platform/formInteractions';
@@ -729,7 +734,12 @@ function getStartSummary(
   return "No Start";
 }
 
-export function TaskStartPickerField(props: TaskStartPickerProps) {
+export function TaskStartPickerField({
+  popoverPlacement = 'anchored',
+  ...props
+}: TaskStartPickerProps & {
+  popoverPlacement?: 'anchored' | 'viewport-center';
+}) {
   const [open, setOpen] = useState(false);
   const [focusTarget, setFocusTarget] = useState<TaskStartPickerFocusTarget>('start');
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -807,9 +817,25 @@ export function TaskStartPickerField(props: TaskStartPickerProps) {
           />
         </Button>
       </PopoverTrigger>
+      {popoverPlacement === 'viewport-center' ? (
+        <PopoverAnchor asChild>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none fixed left-1/2 top-1/2 h-px w-px"
+            data-task-start-picker-viewport-anchor
+          />
+        </PopoverAnchor>
+      ) : null}
       <PopoverContent
-        align="start"
-        className="w-auto p-0 shadow-none"
+        align={popoverPlacement === 'viewport-center' ? 'center' : 'start'}
+        side={popoverPlacement === 'viewport-center' ? 'bottom' : undefined}
+        sideOffset={popoverPlacement === 'viewport-center' ? 0 : undefined}
+        avoidCollisions={popoverPlacement !== 'viewport-center'}
+        className={cn(
+          'w-auto p-0 shadow-none',
+          popoverPlacement === 'viewport-center' && '-translate-y-1/2 animate-none',
+        )}
+        data-task-start-picker-placement={popoverPlacement}
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => {
           const direction = tabExitDirectionRef.current;

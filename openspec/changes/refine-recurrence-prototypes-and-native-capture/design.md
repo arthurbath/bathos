@@ -45,6 +45,10 @@ Selection stores prototypes normally. The Edit menu derives the intersection of 
 
 The companion registers a user-recorded global shortcut and presents an AppKit floating panel containing a second app-bound `WKWebView` with the default persistent data store. The panel loads a dedicated Tasks quick-entry route that reuses the existing draft/editor component and hides the list shell. A narrow native bridge closes the panel after commit or cancellation. This preserves authentication, pickers, keyboard commands, and mutation history without a second implementation.
 
+The panel applies its intended content size after installing the SwiftUI hosting controller and again before every presentation. Its native minimum and maximum content sizes are pinned to that same geometry so the hosting controller's initially tiny intrinsic size cannot collapse the overlay before WebKit renders the form.
+
+The quick-entry route uses a drawer-only presentation of the shared editor: it omits the list-row checkbox, summary preview, source affordance, and ellipsis menu, removes the ordinary open-row blue treatment, and reduces overlay-only spacing without forking the editor behavior. The native panel is compact but remains tall enough for the largest temporal picker. Start and Deadline use the same authoritative web picker panels and keyboard handoff as the ordinary task editor, but anchor those panels at the overlay viewport center so they remain fully visible inside the WKWebView. Web content cannot paint beyond its native window, so a separate out-of-window picker would require a second native implementation and is intentionally rejected. Long Notes and checklists continue to scroll within the overlay.
+
 ### PWA orientation remains declarative
 
 The iPhone target declares portrait only. The Tasks manifest requests `portrait-primary`; no forced JavaScript orientation lock or rotated DOM fallback is added because Safari support is not authoritative and scripted rotation would degrade accessibility and input behavior.
@@ -54,6 +58,7 @@ The iPhone target declares portrait only. The Tasks manifest requests `portrait-
 - [Risk] A template commit and recurrence revision could race with another editor. → Use expected record revisions and return a conflict without overwriting either edit.
 - [Risk] A global shortcut conflicts with another app or macOS. → Validate modifiers, retain the last working registration, and report registration failure.
 - [Risk] A second WebKit surface opens before authentication is available. → Share the persistent data store and show the ordinary authenticated loading/sign-in state in the panel.
+- [Risk] An anchored date picker is clipped by the compact WebKit viewport. → Reuse the same picker content with a quick-entry-only viewport-center anchor and retain the ordinary keyboard contract.
 - [Risk] Widget changes accidentally affect large widgets. → Branch the minimal presentation exclusively on `.accessoryRectangular` and retain shared large-widget rendering.
 - [Risk] iOS ignores PWA orientation. → Treat the manifest member as best effort and report the limitation rather than simulate rotation.
 

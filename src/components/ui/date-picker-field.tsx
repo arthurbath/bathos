@@ -4,7 +4,12 @@ import { CalendarIcon, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { ControlDecoration } from '@/components/ui/control-decoration';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { focusAdjacentFormControl } from '@/platform/formInteractions';
 
@@ -47,6 +52,7 @@ interface DatePickerFieldProps extends Omit<React.ButtonHTMLAttributes<HTMLButto
   panelCommandScope?: string;
   decoration?: React.ReactNode;
   decorationClassName?: string;
+  popoverPlacement?: 'anchored' | 'viewport-center';
 }
 
 export interface DatePickerPanelProps {
@@ -198,6 +204,7 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
   panelCommandScope,
   decoration,
   decorationClassName,
+  popoverPlacement = 'anchored',
   className,
   disabled,
   ...props
@@ -250,9 +257,25 @@ export const DatePickerField = React.forwardRef<HTMLButtonElement, DatePickerFie
           <CalendarIcon className="ml-auto h-4 w-4 shrink-0 text-foreground opacity-50" />
         </Button>
       </PopoverTrigger>
+      {popoverPlacement === 'viewport-center' ? (
+        <PopoverAnchor asChild>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none fixed left-1/2 top-1/2 h-px w-px"
+            data-date-picker-viewport-anchor
+          />
+        </PopoverAnchor>
+      ) : null}
       <PopoverContent
-        className="w-auto p-0"
-        align={popoverAlign}
+        className={cn(
+          'w-auto p-0',
+          popoverPlacement === 'viewport-center' && '-translate-y-1/2 animate-none',
+        )}
+        align={popoverPlacement === 'viewport-center' ? 'center' : popoverAlign}
+        side={popoverPlacement === 'viewport-center' ? 'bottom' : undefined}
+        sideOffset={popoverPlacement === 'viewport-center' ? 0 : undefined}
+        avoidCollisions={popoverPlacement !== 'viewport-center'}
+        data-date-picker-placement={popoverPlacement}
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => {
           const direction = tabExitDirectionRef.current;

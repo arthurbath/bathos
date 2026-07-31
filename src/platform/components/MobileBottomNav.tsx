@@ -94,6 +94,15 @@ export function MobileBottomNav({
 
   useEffect(() => {
     const root = document.documentElement;
+    root.setAttribute('data-mobile-bottom-nav-visible', 'true');
+
+    return () => {
+      root.removeAttribute('data-mobile-bottom-nav-visible');
+    };
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
     if (!installedTouch) {
       root.removeAttribute('data-mobile-bottom-nav-installed-touch');
       return;
