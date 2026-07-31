@@ -1,7 +1,7 @@
 # Tasks Template Elimination Release
 
 **Date:** 2026-07-31  
-**Status:** Production conversion and matching web/macOS publication complete; iOS installation pending device connectivity
+**Status:** Complete
 
 ## Decision
 
@@ -109,13 +109,13 @@ Tasks blocker.
 
 ## Matching client publication
 
-Commit `aa59d4ded1deceb40a45e9c97204de610d511685` is published to
+Commit `42dc95daa2483cafb44b9025158684dd9b8ca59d` is published to
 `https://os.bath.garden` as Lovable deployment
-`12df9c39-cae1-4766-a75c-17ebbdd97e42`. The live release serves entry asset
-`index-nRQ291Yn.js` with SHA-256
-`a4e646c75bb4b9c8a5771e91157b4770979c674be78056b5173c01c8b7312a98`
-and Tasks asset `TasksIndex-DaPujKjg.js` with SHA-256
-`900096919973e65401a4b568d81122afd8c3dd241fdd640493ad7dd44bfa7dc4`.
+`94b2aeea-feec-4e3c-8841-018aac53a451`. The live release serves entry asset
+`index-P9A1JdQs.js` with SHA-256
+`624c20358e57a7cf134ed6238fd9318f0816441e744dd65dc981245ff5f21182`
+and Tasks asset `TasksIndex-RvHra1Mj.js` with SHA-256
+`f35012c568e50f2f2ea6f052afc0f0dd0ed50f9c990ec808be96aede07a6c88a`.
 The live Tasks bundle contains the Upcoming recurrence-prototype interactions
 and no Templates label.
 
@@ -131,12 +131,12 @@ registered with macOS. The replaced application remains recoverable at
 `/Users/Art/.Trash/Tasks.previous-20260731-0831.app`.
 
 The automatically signed iOS companion and widget were built for arm64 and
-passed strict signature verification with Team `SPJYXE7ZA3`. Installation on
-Art's Phone remains pending because CoreDevice currently reports the paired
-physical device as unavailable.
+passed strict signature verification with Team `SPJYXE7ZA3`. CoreDevice then
+installed bundle `garden.bath.tasks` version `1.0` build `1` on Art's Phone and
+read the installed application back from the physical device.
 
-## Remaining release proof
+## Release closeout
 
-Install the verified iOS artifact when Art's Phone becomes reachable, then
-record the installed application, archive this OpenSpec change, and prove the
-repository clean and synchronized.
+All approved production, web, native-client, acceptance, PowerSync, cron,
+advisor, parity, rendering, and cleanup proof is complete. The OpenSpec change
+is ready for archival and final repository synchronization.

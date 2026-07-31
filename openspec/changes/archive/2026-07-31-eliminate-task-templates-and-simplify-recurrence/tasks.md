@@ -36,4 +36,4 @@
 
 - [x] 6.1 Produce an exact read-only production preflight before backup refresh, migration, publication contraction, release, or fixture mutation
 - [x] 6.2 Obtain explicit approval for the exact production mutation contract
-- [ ] 6.3 After approval, refresh and verify the private backup, apply migrations in order, publish matching clients, run and clean owner-scoped acceptance fixtures, and verify exactly 17 PowerSync Tasks tables plus production advisors
+- [x] 6.3 After approval, refresh and verify the private backup, apply migrations in order, publish matching clients, run and clean owner-scoped acceptance fixtures, and verify exactly 17 PowerSync Tasks tables plus production advisors
