@@ -14,5 +14,5 @@
 - [x] 3.1 Add pgTAP and application tests for future conversion, current-date adoption, evaluation rejection, and nullable responses.
 - [x] 3.2 Run database, application, type, lint, build, and strict OpenSpec validation locally.
 - [x] 3.3 Refresh and verify the private production backup, apply the migration, and run and clean up owner-scoped recurrence acceptance fixtures.
-- [ ] 3.4 Verify PowerSync, cron, advisors, production parity, and rendered prototype/instance behavior.
-- [ ] 3.5 Publish the matching web release, sync and archive the OpenSpec change, commit and push main, and prove the repository clean and synchronized.
+- [x] 3.4 Verify PowerSync, cron, advisors, production parity, and rendered prototype/instance behavior.
+- [x] 3.5 Publish the matching web release, sync and archive the OpenSpec change, commit and push main, and prove the repository clean and synchronized.
