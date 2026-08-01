@@ -7,7 +7,10 @@ import {
   deriveTaskViewTasks,
   type TaskListView,
 } from '@/modules/tasks/hooks/useTaskList';
-import { getTaskUpcomingDate } from '@/modules/tasks/domain/taskUpcoming';
+import {
+  getTaskUpcomingDate,
+  getTaskUpcomingGroup,
+} from '@/modules/tasks/domain/taskUpcoming';
 import type {
   TaskActionability,
   TaskArea,
@@ -188,6 +191,10 @@ export function buildTaskNativeWidgetSnapshot({
         toTaskNativeWidgetTask(task, id, planningDate)
       ));
       if (id === 'upcoming') {
+        const upcomingOrderKeys = new Map(filtered.map((task) => [
+          task.id,
+          task.upcoming_order_key ?? task.order_key,
+        ]));
         widgetTasks.push(...recurrencePrototypes
           .filter(({ revision }) => (
             quickFilter === 'all'
@@ -196,10 +203,25 @@ export function buildTaskNativeWidgetSnapshot({
               quickFilter,
             )
           ))
-          .map(toTaskNativeWidgetRecurrencePrototype));
+          .map((prototype) => {
+            upcomingOrderKeys.set(
+              prototype.definition.id,
+              prototype.definition.upcoming_order_key
+                ?? prototype.revision.prototype_snapshot.root.order_key,
+            );
+            return toTaskNativeWidgetRecurrencePrototype(prototype);
+          }));
         widgetTasks.sort((left, right) => (
-          (left.upcomingDate ?? '').localeCompare(right.upcomingDate ?? '')
-          || left.summary.localeCompare(right.summary)
+          getTaskUpcomingGroup(
+            left.upcomingDate ?? planningDate,
+            planningDate,
+          ).date.localeCompare(getTaskUpcomingGroup(
+            right.upcomingDate ?? planningDate,
+            planningDate,
+          ).date)
+          || (upcomingOrderKeys.get(left.id) ?? '').localeCompare(
+            upcomingOrderKeys.get(right.id) ?? '',
+          )
           || left.id.localeCompare(right.id)
         ));
       }

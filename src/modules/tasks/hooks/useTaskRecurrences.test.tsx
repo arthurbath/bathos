@@ -115,6 +115,34 @@ describe('useTaskRecurrences', () => {
     }]);
   });
 
+  it('optimistically reorders a calendar prototype in Upcoming', async () => {
+    const definition = taskRecurrenceDefinitionFixture({ upcoming_order_key: 'a0' });
+    const updated = {
+      ...definition,
+      upcoming_order_key: 'a1',
+      record_revision: definition.record_revision + 1,
+    };
+    definitionRows = [definition];
+    revisionRows = [taskRecurrenceRevisionFixture({ recurrence_id: definition.id })];
+    const recurrenceService = {
+      evaluate: vi.fn(), createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn(),
+      reorderProjection: vi.fn().mockResolvedValue({
+        outcome: 'accepted', definition: updated,
+      }),
+    };
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'connected', planningTimeZone, recurrenceService,
+    });
+
+    const { result } = renderHook(() => useTaskRecurrences('owner-a'));
+    await act(async () => {
+      await result.current.reorderProjection(definition, 'a1');
+    });
+
+    expect(recurrenceService.reorderProjection).toHaveBeenCalledWith(definition, 'a1');
+    expect(result.current.definitions[0]).toEqual(updated);
+  });
+
   it('skips a legacy recurrence revision that has not received its prototype snapshot yet', () => {
     const definition = taskRecurrenceDefinitionFixture();
     definitionRows = [definition];

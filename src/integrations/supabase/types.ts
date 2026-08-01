@@ -1582,6 +1582,7 @@ export type Database = {
           owner_id: string
           record_revision: number
           status: string
+          upcoming_order_key: string | null
           updated_at: string
         }
         Insert: {
@@ -1598,6 +1599,7 @@ export type Database = {
           owner_id: string
           record_revision?: number
           status?: string
+          upcoming_order_key?: string | null
           updated_at?: string
         }
         Update: {
@@ -1614,6 +1616,7 @@ export type Database = {
           owner_id?: string
           record_revision?: number
           status?: string
+          upcoming_order_key?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -2084,6 +2087,7 @@ export type Database = {
           title: string
           today_section: string | null
           undo_source_event_id: string | null
+          upcoming_order_key: string | null
           updated_at: string
         }
         Insert: {
@@ -2123,6 +2127,7 @@ export type Database = {
           title: string
           today_section?: string | null
           undo_source_event_id?: string | null
+          upcoming_order_key?: string | null
           updated_at?: string
         }
         Update: {
@@ -2162,6 +2167,7 @@ export type Database = {
           title?: string
           today_section?: string | null
           undo_source_event_id?: string | null
+          upcoming_order_key?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2744,6 +2750,17 @@ export type Database = {
       }
       tasks_restore_export_v3_pre_actionability: {
         Args: { _dry_run?: boolean; _envelope: Json }
+        Returns: Json
+      }
+      tasks_reorder_recurrence_projection: {
+        Args: {
+          _actor_type?: string
+          _expected_record_revision: number
+          _mutation_channel?: string
+          _mutation_id: string
+          _recurrence_id: string
+          _upcoming_order_key: string
+        }
         Returns: Json
       }
       tasks_revoke_web_push_endpoint: {

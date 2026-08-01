@@ -38,9 +38,7 @@ const CALENDAR_HEADER_BUTTON_CLASS = `${CALENDAR_HEADER_CLASS} !cursor-pointer b
 function CalendarDay({ date, displayMonth }: DayProps) {
   const buttonRef = React.useRef<HTMLButtonElement>(null);
   const dayRender = useDayRender(date, displayMonth, buttonRef);
-  const isCurrentDate = Boolean(
-    dayRender.activeModifiers.today && isSameMonth(date, displayMonth),
-  );
+  const isCurrentDate = Boolean(dayRender.activeModifiers.today);
   const currentDateLabel = isCurrentDate
     ? format(date, "EEEE, MMMM d, yyyy")
     : undefined;
@@ -761,12 +759,14 @@ function findSelectableMonth(
 
 function findDayButton(root: HTMLElement | null, date: Date): HTMLButtonElement | null {
   const buttons = Array.from(root?.querySelectorAll<HTMLButtonElement>('button[name="day"]') ?? []);
-  return buttons.find((button) => {
+  const dateValue = format(date, "yyyy-MM-dd");
+  return buttons.find((button) => button.dataset.calendarDate === dateValue)
+    ?? buttons.find((button) => {
     const label = button.getAttribute("aria-label") ?? "";
     return button.textContent?.trim() === String(date.getDate())
       && label.includes(format(date, "MMMM"))
       && label.includes(String(date.getFullYear()));
-  }) ?? buttons.find((button) => (
+    }) ?? buttons.find((button) => (
     button.textContent?.trim() === String(date.getDate())
     && !button.className.includes("day-outside")
   )) ?? null;

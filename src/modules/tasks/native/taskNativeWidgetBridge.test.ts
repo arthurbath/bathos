@@ -205,6 +205,41 @@ describe('taskNativeWidgetBridge', () => {
     ]);
   });
 
+  it('uses the dedicated mixed Upcoming rank within a shared visible date bucket', () => {
+    const recurrenceId = '40000000-0000-4000-8000-000000000099';
+    const snapshot = buildTaskNativeWidgetSnapshot({
+      ownerId,
+      planningDate: '2026-07-27',
+      generatedAt: '2026-07-27T12:00:00.000Z',
+      quickFilter: 'all',
+      automaticListSorting: false,
+      areas: [],
+      tasks: [
+        taskTodoFixture({
+          id: taskA, owner_id: ownerId, title: 'Last',
+          start_date: '2026-08-31', upcoming_order_key: 'a2',
+        }),
+        taskTodoFixture({
+          id: taskB, owner_id: ownerId, title: 'First',
+          start_date: '2026-08-15', upcoming_order_key: 'a0',
+        }),
+      ],
+      recurrencePrototypes: [{
+        definition: taskRecurrenceDefinitionFixture({
+          id: recurrenceId,
+          owner_id: ownerId,
+          next_occurrence_date: '2026-08-20',
+          upcoming_order_key: 'a1',
+        }),
+        revision: taskRecurrenceRevisionFixture({ recurrence_id: recurrenceId }),
+        scheduledDate: '2026-08-20',
+      }],
+    });
+
+    expect(snapshot.lists.find(({ id }) => id === 'upcoming')?.tasks.map(({ id }) => id))
+      .toEqual([taskB, recurrenceId, taskA]);
+  });
+
   it('keeps a reached recurrence instance ordinary when its Deadline still shows in Upcoming', () => {
     const recurrenceId = '40000000-0000-4000-8000-000000000002';
     const snapshot = buildTaskNativeWidgetSnapshot({

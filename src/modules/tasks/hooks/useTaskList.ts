@@ -44,6 +44,7 @@ export type RetainedTaskViewPlacement = Pick<
   | 'deadline'
   | 'actionability'
   | 'order_key'
+  | 'upcoming_order_key'
   | 'area_id'
 >;
 export type TaskListCreateInput = Omit<
@@ -101,7 +102,7 @@ export function useTaskList(
              ORDER BY COALESCE(
                CASE WHEN start_date > ? THEN start_date END,
                deadline
-             ), order_key, id`
+             ), COALESCE(upcoming_order_key, order_key), id`
           : view === 'today'
             ? `${TASK_LIST_SELECT}
          WHERE owner_id = ?
@@ -588,11 +589,16 @@ export function useTaskList(
         return currentTask;
       }
       const orderKey = generateTaskMoveOrderKey(
-        sectionTasks.map((task) => ({ id: task.id, orderKey: task.order_key })),
+        sectionTasks.map((task) => ({
+          id: task.id,
+          orderKey: taskOrderKeyForView(task, view),
+        })),
         taskId,
         destinationIndex,
       );
-      return updateTask(taskId, { order_key: orderKey });
+      return updateTask(taskId, view === 'upcoming'
+        ? { upcoming_order_key: orderKey }
+        : { order_key: orderKey });
     },
     [planningDate, tasks, updateTask, view],
   );
@@ -636,13 +642,18 @@ export function useTaskList(
         return currentTask;
       }
       const orderKey = generateTaskDropOrderKey(
-        targetSectionTasks.map((task) => ({ id: task.id, orderKey: task.order_key })),
+        targetSectionTasks.map((task) => ({
+          id: task.id,
+          orderKey: taskOrderKeyForView(task, view),
+        })),
         targetTaskId,
         placement,
       );
       const patch: EditableTaskPatch = {
         ...dropPatch,
-        order_key: orderKey,
+        ...(view === 'upcoming'
+          ? { upcoming_order_key: orderKey }
+          : { order_key: orderKey }),
       };
       if (isCrossHorizonTodayDrop) {
         patch.today_section = getTodayTaskSection(targetTask, planningDate);
@@ -777,8 +788,8 @@ function compareTasksForView(
       : getTaskUpcomingGroup(rightDate, planningDate).date;
     return leftSectionDate.localeCompare(rightSectionDate)
       || compareTaskOrder(
-        { id: left.id, orderKey: left.order_key },
-        { id: right.id, orderKey: right.order_key },
+        { id: left.id, orderKey: taskOrderKeyForView(left, view) },
+        { id: right.id, orderKey: taskOrderKeyForView(right, view) },
       );
   }
   if (view === 'today') {
@@ -792,6 +803,12 @@ function compareTasksForView(
     { id: left.id, orderKey: left.order_key },
     { id: right.id, orderKey: right.order_key },
   );
+}
+
+function taskOrderKeyForView(task: TaskTodo, view: TaskListView): string {
+  return view === 'upcoming'
+    ? task.upcoming_order_key ?? task.order_key
+    : task.order_key;
 }
 
 export function getTodayTaskSection(task: TaskTodo, _planningDate: string): TodayTaskSection {

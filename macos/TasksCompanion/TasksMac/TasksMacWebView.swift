@@ -158,7 +158,7 @@ private struct TasksMacWebViewRepresentable: NSViewRepresentable {
         )
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
-        webView.allowsBackForwardNavigationGestures = true
+        webView.allowsBackForwardNavigationGestures = false
         webView.allowsMagnification = true
 #if DEBUG
         if #available(macOS 13.3, *) {

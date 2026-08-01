@@ -28,7 +28,7 @@ import {
   getTaskSearchRank,
   rankTaskSearchDocuments,
 } from '@/modules/tasks/domain/taskSearch';
-import { getTaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
+import type { TaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
 import type {
   TaskRecurrenceDefinition,
@@ -67,10 +67,18 @@ function normalize(value: string): string {
   return value.trim().toLocaleLowerCase();
 }
 
-function taskDetail(task: TaskTodo, hierarchyLabel: string | null): string {
-  if (hierarchyLabel) return hierarchyLabel;
+function getTaskQuickFindRoute(task: TaskTodo, planningDate: string): TaskPlanningRoute {
+  if (task.lifecycle !== 'open' || task.disposition === 'deleted') return 'done';
+  if (task.destination === 'someday') return 'someday';
+  if (task.destination === 'anytime' && task.start_date && task.start_date > planningDate) {
+    return 'upcoming';
+  }
+  return 'anytime';
+}
+
+function taskDetail(task: TaskTodo, route: TaskPlanningRoute): string {
   if (task.lifecycle !== 'open') return task.lifecycle === 'completed' ? 'Completed' : 'Canceled';
-  return task.destination === 'someday' ? 'Someday' : 'Anytime';
+  return route[0].toUpperCase() + route.slice(1);
 }
 
 function createQuickFindResults(
@@ -91,13 +99,13 @@ function createQuickFindResults(
     documents,
     normalizedQuery,
   ).map((document) => {
-      const { task, hierarchyLabel } = document;
-      const route = getTaskPlanningRoute(task, planningDate);
+      const { task } = document;
+      const route = getTaskQuickFindRoute(task, planningDate);
       return {
         kind: 'todo',
         id: task.id,
         title: task.title,
-        detail: taskDetail(task, hierarchyLabel),
+        detail: taskDetail(task, route),
         href: `${basePath}/${route}`,
         task,
         activation: 'open',
@@ -274,7 +282,7 @@ export function TaskQuickFindDialog({
     }}>
       <DialogPortal>
         <DialogOverlay
-          className="bg-transparent"
+          className="bg-background/70"
           onPointerDown={dismissFromOverlay}
           data-task-quick-find-dismiss-layer
         />
@@ -292,10 +300,10 @@ export function TaskQuickFindDialog({
             event.preventDefault();
             close();
           }}
-          className="fixed left-1/2 z-50 flex max-h-[calc(var(--bathos-modal-vv-height,100dvh)-2rem)] w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-2 overflow-hidden rounded-xl border border-border bg-popover p-2 focus:outline-none"
+          className="fixed left-1/2 z-50 flex max-h-[calc(var(--bathos-modal-vv-height,100dvh)-5rem)] w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-2 overflow-hidden rounded-xl border border-border bg-popover p-2 focus:outline-none"
           style={{
             ...viewportStyle,
-            top: 'calc(var(--bathos-modal-vv-top, 0px) + (var(--bathos-modal-vv-height, 100dvh) / 2))',
+            top: 'calc(var(--bathos-modal-vv-top, 0px) + 4rem)',
           }}
           data-task-quick-find
         >
@@ -439,8 +447,9 @@ export function TaskSearchResultsView({
           <p className="py-6 text-center text-sm text-muted-foreground">No matching tasks</p>
         ) : (
           <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-            {results.map(({ task, hierarchyLabel }) => {
-              const href = `${basePath}/${getTaskPlanningRoute(task, planningDate)}`;
+            {results.map(({ task }) => {
+              const route = getTaskQuickFindRoute(task, planningDate);
+              const href = `${basePath}/${route}`;
               return (
                 <a
                   key={task.id}
@@ -454,7 +463,7 @@ export function TaskSearchResultsView({
                   data-task-compact-row
                 >
                   <span className="block truncate text-sm font-medium text-foreground">{task.title}</span>
-                  <span className="mt-1 block truncate text-xs text-muted-foreground">{taskDetail(task, hierarchyLabel)}</span>
+                  <span className="mt-1 block truncate text-xs text-muted-foreground">{taskDetail(task, route)}</span>
                 </a>
               );
             })}

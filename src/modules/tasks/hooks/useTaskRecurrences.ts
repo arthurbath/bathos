@@ -322,6 +322,34 @@ export function useTaskRecurrences(ownerId: string) {
     return result;
   }, [clearEvaluationFailure, mode, recurrenceService, runEvaluation]);
 
+  const reorderProjection = useCallback(async (
+    definition: TaskRecurrenceDefinition,
+    upcomingOrderKey: string,
+  ) => {
+    if (mode !== 'connected') {
+      throw new Error('Recurrence reordering requires connected task storage');
+    }
+    const optimistic = {
+      ...definition,
+      upcoming_order_key: upcomingOrderKey,
+    };
+    setOptimisticDefinitions((current) => ({ ...current, [definition.id]: optimistic }));
+    try {
+      const result = await recurrenceService.reorderProjection(definition, upcomingOrderKey);
+      if (result.outcome === 'conflict') {
+        throw new Error('The recurrence changed before its position could be updated');
+      }
+      setOptimisticDefinitions((current) => ({
+        ...current,
+        [definition.id]: result.definition,
+      }));
+      return result;
+    } catch (error) {
+      setOptimisticDefinitions((current) => ({ ...current, [definition.id]: definition }));
+      throw error;
+    }
+  }, [mode, recurrenceService]);
+
   return {
     definitions,
     revisions,
@@ -360,6 +388,7 @@ export function useTaskRecurrences(ownerId: string) {
     createFromTask,
     edit,
     setStatus,
+    reorderProjection,
     evaluate,
   };
 }

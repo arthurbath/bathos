@@ -11,7 +11,7 @@ import type {
 const timestamp = '2026-07-20T04:00:00.000Z';
 
 export function taskTodoFixture(patch: Partial<TaskTodo> = {}): TaskTodo {
-  return {
+  const fixture: TaskTodo = {
     id: 'task-a',
     owner_id: 'owner-a',
     area_id: null,
@@ -27,6 +27,7 @@ export function taskTodoFixture(patch: Partial<TaskTodo> = {}): TaskTodo {
     today_section: null,
     actionability: 'actionable',
     order_key: 'a0',
+    upcoming_order_key: 'a0',
     hierarchy_order_key: null,
     start_date: null,
     deadline: null,
@@ -50,6 +51,10 @@ export function taskTodoFixture(patch: Partial<TaskTodo> = {}): TaskTodo {
     created_at: timestamp,
     updated_at: timestamp,
     ...patch,
+  };
+  return {
+    ...fixture,
+    upcoming_order_key: patch.upcoming_order_key ?? patch.order_key ?? fixture.upcoming_order_key,
   };
 }
 
@@ -112,6 +117,7 @@ export function taskRecurrenceDefinitionFixture(
     next_occurrence_date: '2026-07-20',
     archived_at: null,
     record_revision: 1,
+    upcoming_order_key: 'a0',
     last_mutation_channel: 'web',
     last_actor_type: 'user',
     client_mutation_id: 'mutation-recurrence-a',

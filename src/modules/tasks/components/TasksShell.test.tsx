@@ -792,18 +792,12 @@ describe('TasksShell', () => {
         'task-title-task-draft:new',
       ) as HTMLInputElement;
       expect(document.activeElement).toBe(title);
-      const rowTitle = container.querySelector<HTMLElement>(
-        '[data-task-row-id="task-draft:new"] [data-task-row-title]',
-      );
-      expect(rowTitle).toHaveTextContent('New Task');
-      expect(rowTitle).toHaveAttribute('data-task-row-title-placeholder', 'true');
-      expect(rowTitle).toHaveClass('italic', 'text-muted-foreground');
+      expect(title).toHaveAttribute('placeholder', 'New Task');
 
       await act(async () => {
         setInputValue(title, 'Captured from Control Center');
       });
-      expect(rowTitle).toHaveTextContent('Captured from Control Center');
-      expect(rowTitle).not.toHaveAttribute('data-task-row-title-placeholder');
+      expect(title).toHaveValue('Captured from Control Center');
       expect(document.getElementById('task-start-task-draft:new'))
         .toHaveTextContent('Today · Inbox');
       expect(container.querySelectorAll('[data-task-row-id="task-draft:new"]'))
@@ -2039,6 +2033,52 @@ describe('TasksShell', () => {
     }
   });
 
+  it('labels Today-and-Anytime work as Anytime and future-only work as Upcoming in Quick Find', async () => {
+    const currentTask = taskTodoFixture({
+      ...task,
+      id: 'task-route-current',
+      title: 'Route Current Work',
+      start_date: null,
+      today_section: 'inbox',
+      client_mutation_id: 'mutation-route-current',
+    });
+    const futureTask = taskTodoFixture({
+      ...task,
+      id: 'task-route-future',
+      title: 'Route Future Work',
+      start_date: '2026-07-24',
+      today_section: null,
+      client_mutation_id: 'mutation-route-future',
+    });
+    const searchTasks = [currentTask, futureTask];
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: searchTasks });
+    mockTaskSearch.mockReturnValue({ tasks: searchTasks, loading: false, error: null });
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'r', bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+      const dialog = document.querySelector<HTMLElement>('[data-task-quick-find]')!;
+      const search = dialog.querySelector<HTMLInputElement>('[aria-label="Find Tasks"]')!;
+      await act(async () => setInputValue(search, 'route'));
+      const currentResult = Array.from(dialog.querySelectorAll<HTMLAnchorElement>('a'))
+        .find((link) => link.textContent?.includes(currentTask.title));
+      const futureResult = Array.from(dialog.querySelectorAll<HTMLAnchorElement>('a'))
+        .find((link) => link.textContent?.includes(futureTask.title));
+
+      expect(currentResult).toHaveAttribute('href', '/tasks/anytime');
+      expect(currentResult).toHaveTextContent('Anytime');
+      expect(futureResult).toHaveAttribute('href', '/tasks/upcoming');
+      expect(futureResult).toHaveTextContent('Upcoming');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('keeps text focus in Quick Find while arrow keys select results and See All Results', async () => {
     const matchingTasks = ['Alpha Match', 'Beta Match', 'Gamma Match'].map((title, index) => (
       taskTodoFixture({
@@ -2274,7 +2314,7 @@ describe('TasksShell', () => {
       await waitFor(() => {
         expect(container.querySelector('[data-task-view-heading]')).toHaveTextContent('Upcoming');
         expect(document.activeElement).toBe(container.querySelector(
-          `[data-task-recurrence-prototype="${definition.id}"] button`,
+          `[data-task-recurrence-prototype="${definition.id}"]`,
         ));
       });
       expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -2883,9 +2923,12 @@ describe('TasksShell', () => {
     try {
       await act(async () => {
         container.querySelector<HTMLButtonElement>(
-          '[data-task-id="task-filter-retained"]',
+          '[data-task-row-id="task-filter-retained"] [data-task-title-control]',
         )?.click();
       });
+      await waitFor(() => expect(container.querySelector(
+        '[data-task-row-id="task-filter-retained"] [data-task-editor-region]',
+      )).not.toBeNull());
       const reportMetadataMutation = mockTaskList.mock.calls[0][5] as (
         mutations: Array<{ before: typeof waitingTask; after: typeof waitingTask }>,
       ) => void;
@@ -2909,7 +2952,7 @@ describe('TasksShell', () => {
 
       await act(async () => {
         container.querySelector<HTMLButtonElement>(
-          '[data-task-id="task-filter-retained"]',
+          '[data-task-row-id="task-filter-retained"] [data-bathos-form-submit]',
         )?.click();
         await Promise.resolve();
       });
@@ -2918,6 +2961,7 @@ describe('TasksShell', () => {
         title: 'Task Hidden by Quick Filter',
       }));
 
+      acceptedTasks = [];
       await act(async () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 450));
         rerender();
@@ -5261,11 +5305,11 @@ describe('TasksShell', () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 20));
       });
 
-      const taskRow = container.querySelector('[data-task-id="task-a"]')?.closest('article');
+      const taskRow = container.querySelector('[data-task-row-id="task-a"]');
       const summary = taskRow?.querySelector<HTMLElement>('[data-task-row-header]');
       const dragHandle = summary?.querySelector<HTMLElement>('[data-task-drag-handle]');
       const editor = taskRow?.querySelector<HTMLElement>('[data-task-editor-region]');
-      const titleInput = editor?.querySelector<HTMLInputElement>('#task-title-task-a');
+      const titleInput = taskRow?.querySelector<HTMLInputElement>('#task-title-task-a');
       if (!taskRow || !summary || !dragHandle || !editor || !titleInput) {
         throw new Error('Expected an open draggable task');
       }
@@ -5363,7 +5407,7 @@ describe('TasksShell', () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 20));
       });
 
-      const openTaskRow = container.querySelector('[data-task-id="task-a"]')?.closest('article');
+      const openTaskRow = container.querySelector('[data-task-row-id="task-a"]');
       const draggedTaskRow = container.querySelector('[data-task-id="task-b"]')?.closest('article');
       const dragHandle = draggedTaskRow?.querySelector<HTMLElement>('[data-task-drag-handle]');
       if (!openTaskRow || !draggedTaskRow || !dragHandle) {
@@ -5581,10 +5625,9 @@ describe('TasksShell', () => {
         target.dispatchEvent(drop);
         await Promise.resolve();
       });
-      expect(taskList.reorderTaskTo).toHaveBeenCalledWith(
+      expect(taskList.updateTask).toHaveBeenCalledWith(
         'task-upcoming-first',
-        'task-upcoming-second',
-        'after',
+        { upcoming_order_key: expect.any(String) },
       );
     } finally {
       cleanup(root, container);
@@ -6961,7 +7004,7 @@ describe('TasksShell', () => {
       expect(editor).not.toHaveClass('border-t', 'py-4', 'sm:ml-14');
       expect(editor.querySelector('label')).toBeNull();
       expect(editorTitle).toHaveAttribute('aria-label', 'Summary');
-      expect(editorTitle).toHaveAttribute('placeholder', 'Summary');
+      expect(editorTitle).toHaveAttribute('placeholder', 'New Task');
       expect(primaryLink).toHaveAttribute('aria-label', 'Primary Link');
       expect(primaryLink).toHaveAttribute('placeholder', 'Primary Link');
       expect(primaryLink.closest('[data-decorated-control]')?.querySelector(
@@ -6984,7 +7027,6 @@ describe('TasksShell', () => {
       expect(actionability).toHaveClass('border-[hsl(var(--grid-sticky-line))]');
       expect(organization).toHaveClass('border-[hsl(var(--grid-sticky-line))]');
       expect(Array.from(editor.querySelectorAll<HTMLElement>([
-        '[data-task-editor-title]',
         '#task-notes-task-a',
         '#task-primary-link-task-a',
         '#task-start-task-a',
@@ -6992,7 +7034,6 @@ describe('TasksShell', () => {
         '#task-actionability-task-a',
         '#task-organization-task-a',
       ].join(','))).map((control) => control.id)).toEqual([
-        'task-title-task-a',
         'task-notes-task-a',
         'task-primary-link-task-a',
         'task-start-task-a',
@@ -7057,9 +7098,14 @@ describe('TasksShell', () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
 
-      await openTaskMenuSurface(container, 'Existing task', 'Start...');
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('#task-start-task-a')?.click();
+      });
+      await waitFor(() => expect(document.querySelector(
+        '[data-task-start-picker]',
+      )).not.toBeNull());
       const picker = document.querySelector<HTMLElement>(
-        '[data-task-row-temporal-picker="start"]',
+        '[data-task-start-picker]',
       )!;
       expect(picker).not.toBeNull();
       expect(picker.querySelector('[data-dialog-header]')).toBeNull();
@@ -7221,7 +7267,7 @@ describe('TasksShell', () => {
       });
 
       expect(scrollBy).toHaveBeenCalledWith({
-        top: 348,
+        top: 304,
         left: 0,
         behavior: 'smooth',
       });
@@ -7309,7 +7355,7 @@ describe('TasksShell', () => {
       });
 
       expect(scrollBy).toHaveBeenCalledWith({
-        top: 180,
+        top: 136,
         left: 0,
         behavior: 'auto',
       });
@@ -8645,9 +8691,11 @@ describe('TasksShell', () => {
         });
 
         await invokeStartCommand();
-        expect(document.activeElement).toBe(
-          document.querySelector(`[data-task-start-horizon="${todaySection}"]`),
-        );
+        await waitFor(() => {
+          expect(document.activeElement).toBe(
+            document.querySelector(`[data-task-start-horizon="${todaySection}"]`),
+          );
+        });
 
         await invokeStartCommand();
         await waitFor(() => {
@@ -10341,8 +10389,9 @@ describe('TasksShell', () => {
       expect(row).toHaveTextContent('Quarterly Review');
       expect(row.querySelector('[aria-label="Repeating Schedule"]')).toBeTruthy();
       expect(row.querySelector('[data-task-completion-control]')).toBeNull();
-      expect(row.querySelector('[data-task-drag-handle]')).toBeNull();
-      expect(container.querySelector('[data-task-row-id]')).toBeNull();
+      expect(row).not.toHaveAttribute('draggable');
+      expect(row.querySelector('[data-task-drag-handle]')).toHaveAttribute('draggable', 'true');
+      expect(row).toHaveAttribute('data-task-row-id', `recurrence:${definition.id}`);
 
       const actions = row.querySelector<HTMLButtonElement>(
         'button[aria-label="Actions for Quarterly Review"]',
@@ -10371,6 +10420,89 @@ describe('TasksShell', () => {
     } finally {
       cleanup(root, container);
       vi.unstubAllGlobals();
+    }
+  });
+
+  it('reorders an Upcoming recurrence prototype among ordinary tasks in the same date bucket', async () => {
+    const definition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-reorder',
+      name: 'Repeat Beside Task',
+      next_occurrence_date: '2026-08-01',
+      upcoming_order_key: 'a0',
+    });
+    const revision = taskRecurrenceRevisionFixture({
+      recurrence_id: definition.id,
+      start_date: '2026-08-01',
+    });
+    const ordinaryTask = taskTodoFixture({
+      id: 'task-beside-repeat',
+      title: 'Ordinary Beside Repeat',
+      start_date: '2026-08-01',
+      today_section: null,
+      upcoming_order_key: 'a1',
+    });
+    const reorderProjection = vi.fn().mockResolvedValue(undefined);
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [ordinaryTask] });
+    mockTaskRecurrences.mockReturnValue({
+      definitions: [definition],
+      revisions: new Map([[definition.id, revision]]),
+      occurrences: [],
+      openOccurrenceDefinitionIds: new Set(),
+      openOccurrenceByDefinitionId: new Map(),
+      calendarPrototypes: [{ definition, revision, scheduledDate: '2026-08-01' }],
+      evaluationFailures: new Set(),
+      planningDate: '2026-07-20',
+      mode: 'connected',
+      loading: false,
+      error: null,
+      createFromTask: vi.fn(),
+      edit: vi.fn(),
+      setStatus: vi.fn(),
+      evaluate: vi.fn(),
+      reorderProjection,
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      const source = container.querySelector<HTMLElement>(
+        `[data-task-recurrence-prototype="${definition.id}"]`,
+      )!;
+      const sourceHandle = source.querySelector<HTMLElement>('[data-task-drag-handle]')!;
+      const target = container.querySelector<HTMLElement>(
+        `[data-task-row-id="${ordinaryTask.id}"]`,
+      )!;
+      const dropSurface = container.querySelector<HTMLElement>('[data-task-module-drop-surface]')!;
+      const dataTransfer = {
+        effectAllowed: 'none',
+        dropEffect: 'none',
+        setData: vi.fn(),
+        getData: vi.fn(() => ''),
+      } as unknown as DataTransfer;
+      vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({
+        top: 0, bottom: 100, height: 100, left: 0, right: 100, width: 100,
+        x: 0, y: 0, toJSON: () => ({}),
+      });
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperties(dragOver, {
+        dataTransfer: { value: dataTransfer },
+        clientY: { value: 75 },
+      });
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+
+      await act(async () => {
+        sourceHandle.dispatchEvent(dragStart);
+        target.dispatchEvent(dragOver);
+        dropSurface.dispatchEvent(drop);
+        await Promise.resolve();
+      });
+
+      expect(reorderProjection).toHaveBeenCalledWith(definition, expect.any(String));
+      expect(reorderProjection.mock.calls[0][1]).not.toBe(definition.upcoming_order_key);
+    } finally {
+      cleanup(root, container);
     }
   });
 
@@ -10514,7 +10646,15 @@ describe('TasksShell', () => {
       expect(row.querySelector('[data-task-editor-region]')).toBeTruthy();
       expect(row.querySelector('[data-task-editor-temporal-grid]')).toBeTruthy();
 
-      const actions = row.querySelector<HTMLButtonElement>(
+      await act(async () => {
+        row.querySelector<HTMLButtonElement>('[data-bathos-form-submit]')?.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 450));
+      });
+
+      const closedRow = container.querySelector<HTMLElement>(
+        `[data-task-row-id="${deletedInstance.id}"]`,
+      )!;
+      const actions = closedRow.querySelector<HTMLButtonElement>(
         `button[aria-label="Actions for ${deletedInstance.title}"]`,
       )!;
       await act(async () => {
@@ -10801,9 +10941,11 @@ describe('TasksShell', () => {
 
     try {
       await act(async () => {
-        container.querySelector<HTMLButtonElement>(
-          '[data-task-id="task-area-retained"]',
-        )?.click();
+        container.querySelector<HTMLElement>(
+          '[data-task-row-id="task-area-retained"]',
+        )?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', bubbles: true, cancelable: true,
+        }));
       });
       await selectBathosOption(
         container.querySelector<HTMLButtonElement>(
@@ -10825,7 +10967,7 @@ describe('TasksShell', () => {
 
       await act(async () => {
         container.querySelector<HTMLButtonElement>(
-          '[data-task-id="task-area-retained"]',
+          '[data-task-row-id="task-area-retained"] [data-bathos-form-submit]',
         )?.click();
         await Promise.resolve();
       });
@@ -10894,15 +11036,18 @@ describe('TasksShell', () => {
     }));
     const { container, root, rerender } = renderShell('/tasks/anytime');
     const visibleTitles = () => Array.from(
-      container.querySelectorAll<HTMLElement>('[data-task-row-title]'),
-    ).map((title) => title.textContent?.trim());
+      container.querySelectorAll<HTMLElement>('[data-task-row-id]'),
+    ).map((row) => row.querySelector<HTMLInputElement>('[data-task-editor-title]')?.value
+      ?? row.querySelector<HTMLElement>('[data-task-row-title]')?.textContent?.trim());
 
     try {
       expect(visibleTitles()).toEqual(['Initially Ready', 'Rechecking']);
       await act(async () => {
-        container.querySelector<HTMLButtonElement>(
-          '[data-task-id="task-ready"]',
-        )?.click();
+        container.querySelector<HTMLElement>(
+          '[data-task-row-id="task-ready"]',
+        )?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', bubbles: true, cancelable: true,
+        }));
       });
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
@@ -10930,7 +11075,7 @@ describe('TasksShell', () => {
 
       await act(async () => {
         container.querySelector<HTMLButtonElement>(
-          '[data-task-id="task-ready"]',
+          '[data-task-row-id="task-ready"] [data-bathos-form-submit]',
         )?.click();
         await Promise.resolve();
       });
@@ -10938,6 +11083,7 @@ describe('TasksShell', () => {
 
       await act(async () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 450));
+        rerender();
       });
       expect(visibleTitles()).toEqual(['Rechecking', 'Initially Ready']);
     } finally {
@@ -11005,15 +11151,18 @@ describe('TasksShell', () => {
     });
     const { container, root, rerender } = renderShell('/tasks/anytime');
     const sectionTitles = (area: string) => Array.from(container.querySelectorAll<HTMLElement>(
-      `section[aria-labelledby="tasks-area-${area}-heading"] [data-task-row-title]`,
-    )).map(({ textContent }) => textContent?.trim());
+      `section[aria-labelledby="tasks-area-${area}-heading"] [data-task-row-id]`,
+    )).map((row) => row.querySelector<HTMLInputElement>('[data-task-editor-title]')?.value
+      ?? row.querySelector<HTMLElement>('[data-task-row-title]')?.textContent?.trim());
 
     try {
       expect(sectionTitles('area-work')).toEqual(['Retained slot', 'Work peer']);
       await act(async () => {
-        container.querySelector<HTMLButtonElement>(
-          '[data-task-id="task-slot-retained"]',
-        )?.click();
+        container.querySelector<HTMLElement>(
+          '[data-task-row-id="task-slot-retained"]',
+        )?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', bubbles: true, cancelable: true,
+        }));
       });
 
       automaticSortEnabled = true;
@@ -11036,7 +11185,7 @@ describe('TasksShell', () => {
 
       await act(async () => {
         container.querySelector<HTMLButtonElement>(
-          '[data-task-id="task-slot-retained"]',
+          '[data-task-row-id="task-slot-retained"] [data-bathos-form-submit]',
         )?.click();
         await Promise.resolve();
       });
@@ -11722,7 +11871,6 @@ describe('TasksShell', () => {
         await Promise.resolve();
       });
       expect(container.querySelector('#task-start-task-a')).toHaveTextContent('Today · Later');
-      expect(container.querySelector('[aria-label="Today Later"]')).toBeTruthy();
     } finally {
       cleanup(root, container);
     }

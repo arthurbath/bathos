@@ -36,6 +36,11 @@ export type TaskRecurrenceStatusResult = {
   definition: TaskRecurrenceDefinition;
 };
 
+export type TaskRecurrenceReorderResult = {
+  outcome: 'accepted' | 'already_applied' | 'conflict';
+  definition: TaskRecurrenceDefinition;
+};
+
 export type TaskRecurrenceEvaluationResult = {
   outcome: 'accepted' | 'already_applied';
   status: TaskRecurrenceStatus;
@@ -230,6 +235,35 @@ export class TaskRecurrenceService {
         result.outcome,
         ['accepted', 'already_applied', 'conflict'] as const,
         'recurrence status outcome',
+      ),
+      definition: parseTaskRecurrenceDefinition(result.definition, this.ownerId),
+    };
+  }
+
+  async reorderProjection(
+    definition: TaskRecurrenceDefinition,
+    upcomingOrderKey: string,
+    mutationId = crypto.randomUUID(),
+  ): Promise<TaskRecurrenceReorderResult> {
+    const orderKey = upcomingOrderKey.trim();
+    if (!orderKey || orderKey.length > 200) {
+      throw new InvalidTaskRecurrenceError('A valid Upcoming order is required');
+    }
+    const { data, error } = await this.client.rpc('tasks_reorder_recurrence_projection', {
+      _recurrence_id: definition.id,
+      _expected_record_revision: definition.record_revision,
+      _upcoming_order_key: orderKey,
+      _mutation_id: mutationId,
+      _mutation_channel: 'web',
+      _actor_type: 'user',
+    });
+    if (error) throw error;
+    const result = requireRecord(data, 'Recurrence reorder returned an invalid result');
+    return {
+      outcome: requireEnum(
+        result.outcome,
+        ['accepted', 'already_applied', 'conflict'] as const,
+        'recurrence reorder outcome',
       ),
       definition: parseTaskRecurrenceDefinition(result.definition, this.ownerId),
     };

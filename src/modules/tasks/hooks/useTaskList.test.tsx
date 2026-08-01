@@ -1123,7 +1123,7 @@ describe('useTaskList optimistic display', () => {
       expect(repository.updateTask).toHaveBeenLastCalledWith(
         'owner-a',
         'task-later-in-year',
-        { order_key: expect.any(String) },
+        { upcoming_order_key: expect.any(String) },
       );
 
       await act(async () => {
@@ -1145,7 +1145,7 @@ describe('useTaskList optimistic display', () => {
           destination: 'anytime',
           start_date: '3000-01-01',
           today_section: null,
-          order_key: expect.any(String),
+          upcoming_order_key: expect.any(String),
         },
       );
     } finally {

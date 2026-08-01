@@ -21,7 +21,11 @@ enum TasksWebViewPolicy {
 enum TasksWebViewScrollPolicy {
     static func apply(to scrollView: UIScrollView) {
         scrollView.contentInsetAdjustmentBehavior = .never
-        scrollView.bounces = false
+        scrollView.bounces = true
+        scrollView.alwaysBounceVertical = true
+        scrollView.alwaysBounceHorizontal = false
+        scrollView.isDirectionalLockEnabled = true
+        scrollView.decelerationRate = .normal
     }
 }
 
@@ -181,7 +185,7 @@ private struct TasksWebViewRepresentable: UIViewRepresentable {
         }
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
-        webView.allowsBackForwardNavigationGestures = true
+        webView.allowsBackForwardNavigationGestures = false
         TasksWebViewScrollPolicy.apply(to: webView.scrollView)
         webView.isOpaque = false
         webView.backgroundColor = TasksCompanionAppearance.applicationBackground

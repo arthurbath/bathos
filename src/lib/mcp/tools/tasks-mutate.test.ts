@@ -56,6 +56,7 @@ function task(overrides: Partial<Tables['tasks_todos']['Row']> = {}): Tables['ta
     today_section: null,
     actionability: 'actionable',
     order_key: 'a0',
+    upcoming_order_key: 'a0',
     hierarchy_order_key: null,
     start_date: null,
     deadline: null,

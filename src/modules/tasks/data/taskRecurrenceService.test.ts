@@ -15,6 +15,7 @@ const definition = {
   status: 'active',
   current_revision: 1,
   record_revision: 1,
+  upcoming_order_key: 'a0',
   evaluated_through_date: null,
   next_occurrence_date: '2026-07-27',
   archived_at: null,
@@ -61,6 +62,26 @@ const revision = {
 };
 
 describe('TaskRecurrenceService', () => {
+  it('persists a recurrence prototype Upcoming rank through the owner-scoped RPC', async () => {
+    const updated = { ...definition, upcoming_order_key: 'a1', record_revision: 2 };
+    const rpc = vi.fn().mockResolvedValue({
+      data: { outcome: 'accepted', definition: updated },
+      error: null,
+    });
+    const service = new TaskRecurrenceService({ rpc } as never, definition.owner_id);
+
+    await expect(service.reorderProjection(
+      parseTaskRecurrenceDefinition(definition),
+      'a1',
+      '90000000-0000-4000-8000-000000000099',
+    )).resolves.toEqual({ outcome: 'accepted', definition: updated });
+    expect(rpc).toHaveBeenCalledWith('tasks_reorder_recurrence_projection', expect.objectContaining({
+      _recurrence_id: definition.id,
+      _expected_record_revision: 1,
+      _upcoming_order_key: 'a1',
+    }));
+  });
+
   it('parses synchronized definitions, rules, and occurrence identities', () => {
     expect(parseTaskRecurrenceDefinition(definition).status).toBe('active');
     expect(parseTaskRecurrenceRevision(JSON.stringify(revision)).frequency).toBe('weekly');

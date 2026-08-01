@@ -864,14 +864,21 @@ final class TasksCompanionTests: XCTestCase {
         )
     }
 
-    func testWebViewScrollPolicyKeepsFixedChromeStableAtScrollBoundaries() {
+    func testWebViewScrollPolicyPreservesNativeVerticalScrollingWithoutHorizontalBounce() {
         let scrollView = UIScrollView()
-        scrollView.bounces = true
+        scrollView.bounces = false
+        scrollView.alwaysBounceVertical = false
+        scrollView.alwaysBounceHorizontal = true
+        scrollView.directionalLockEnabled = false
         scrollView.contentInsetAdjustmentBehavior = .automatic
 
         TasksWebViewScrollPolicy.apply(to: scrollView)
 
-        XCTAssertFalse(scrollView.bounces)
+        XCTAssertTrue(scrollView.bounces)
+        XCTAssertTrue(scrollView.alwaysBounceVertical)
+        XCTAssertFalse(scrollView.alwaysBounceHorizontal)
+        XCTAssertTrue(scrollView.directionalLockEnabled)
+        XCTAssertEqual(scrollView.decelerationRate, .normal)
         XCTAssertEqual(scrollView.contentInsetAdjustmentBehavior, .never)
     }
 

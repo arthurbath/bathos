@@ -24,6 +24,7 @@ function task(
     destination: 'anytime',
     today_section: null,
     order_key: order,
+    upcoming_order_key: order,
     hierarchy_order_key: null,
     start_date: null,
     deadline: null,

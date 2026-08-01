@@ -179,7 +179,7 @@ html[data-mobile-bottom-nav-installed-touch='true'] {
 
 html[data-mobile-bottom-nav-installed-touch='true'],
 html[data-mobile-bottom-nav-installed-touch='true'] body {
-  overscroll-behavior-y: none;
+  overscroll-behavior-x: none;
 }
 
 [data-task-native-quick-entry='true'] h3[id^='tasks-'][id$='-heading'] {

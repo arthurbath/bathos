@@ -133,9 +133,9 @@ describe('Calendar keyboard navigation', () => {
       );
       expect(selectedToday).not.toHaveClass('opacity-50', 'aria-selected:opacity-30');
       expect(selectedToday?.className).not.toContain('aria-selected:bg-accent/50');
-      expect(selectedToday?.textContent?.trim()).toBe('31');
+      expect(selectedToday?.textContent?.trim()).toBe('');
       expect(selectedToday?.querySelector('[data-calendar-current-date-icon="true"]'))
-        .toBeFalsy();
+        .toHaveClass('text-warning');
 
       act(() => {
         adjacentDate?.focus();
@@ -1084,7 +1084,9 @@ describe('Calendar keyboard navigation', () => {
       expect(container.querySelector<HTMLButtonElement>(
         'button[name="previous-month"]',
       )?.className).toContain('disabled:invisible');
-      expect(document.activeElement).toBe(getDayButton(container, '1'));
+      expect(document.activeElement).toBe(container.querySelector(
+        'button[name="day"][data-calendar-date="2026-08-01"]',
+      ));
     } finally {
       unmount(root, container);
     }
@@ -1096,6 +1098,7 @@ describe('Calendar keyboard navigation', () => {
         mode="single"
         month={new Date(2026, 6, 1)}
         fromDate={new Date(2026, 6, 23)}
+        today={new Date(2026, 6, 24)}
         selected={new Date(2026, 6, 24)}
         onSelect={() => {}}
       />,
@@ -1323,7 +1326,7 @@ describe('Calendar keyboard navigation', () => {
     }
   });
 
-  it('keeps an outside copy of the current date numeric and does not duplicate the star', () => {
+  it('renders the Today star when the current date appears in an adjacent month grid', () => {
     const { container, root } = mount(
       <Calendar
         mode="single"
@@ -1335,15 +1338,17 @@ describe('Calendar keyboard navigation', () => {
     );
 
     try {
-      const outsideToday = getDayButton(container, '30', { outside: true });
+      const outsideToday = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2030-04-30"]',
+      );
       expect(outsideToday).toHaveAttribute('aria-current', 'date');
-      expect(outsideToday?.textContent?.trim()).toBe('30');
+      expect(outsideToday?.textContent?.trim()).toBe('');
       expect(outsideToday?.querySelector(
         '[data-calendar-current-date-icon="true"]',
-      )).toBeFalsy();
+      )).toBeTruthy();
       expect(container.querySelector(
         '[data-calendar-current-date-icon="true"]',
-      )).toBeFalsy();
+      )).toBeTruthy();
     } finally {
       unmount(root, container);
     }

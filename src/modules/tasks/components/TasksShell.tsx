@@ -15,7 +15,7 @@ import {
   type RefObject,
   type TouchEvent as ReactTouchEvent,
 } from 'react';
-import { flushSync } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import {
   ExternalLink,
   MoreHorizontal,
@@ -189,6 +189,11 @@ import {
 import { projectTaskBulkDrop } from '@/modules/tasks/domain/taskBulkDrop';
 import { getAutomaticTaskDropTarget } from '@/modules/tasks/domain/taskAutomaticOrder';
 import {
+  compareTaskOrder,
+  generateTaskDropOrderKey,
+  generateTaskOrderKey,
+} from '@/modules/tasks/domain/taskOrder';
+import {
   getTaskUpcomingDate,
   getTaskUpcomingCanonicalStart,
   getTaskUpcomingGroup,
@@ -252,6 +257,7 @@ type TasksShellProps = {
 type TaskDropIndicator = {
   draggedTaskId: string;
   targetTaskId: string | null;
+  targetRecurrenceId?: string | null;
   placement: 'before' | 'after';
   targetAreaId?: string | null;
   targetUpcomingSectionKey?: string;
@@ -314,11 +320,12 @@ function alignOpenedTaskToVisibleContent(
   taskRow: HTMLElement | null,
   behavior: ScrollBehavior,
 ): void {
-  const summaryRow = taskRow?.querySelector<HTMLElement>('[data-task-row-header]');
-  if (summaryRow === undefined || summaryRow === null) return;
+  const summaryRow = taskRow?.querySelector<HTMLElement>('[data-task-row-header]') ?? taskRow;
+  if (summaryRow === null) return;
   const stickyBoundary = document.querySelector<HTMLElement>('[data-topline-header]')
     ?.getBoundingClientRect().bottom ?? 0;
-  const scrollDelta = summaryRow.getBoundingClientRect().top - Math.max(0, stickyBoundary);
+  const targetTop = Math.max(0, stickyBoundary) + 44;
+  const scrollDelta = summaryRow.getBoundingClientRect().top - targetTop;
   if (!Number.isFinite(scrollDelta) || Math.abs(scrollDelta) < 1) return;
   window.scrollBy({
     top: scrollDelta,
@@ -553,6 +560,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   // source identity from dragstart instead of rediscovering it on every row.
   const activeDraggedTaskIdRef = useRef<string | null>(null);
   const activeDraggedTaskIdsRef = useRef<string[]>([]);
+  const activeDraggedRecurrenceIdRef = useRef<string | null>(null);
   taskDropIndicatorRef.current = taskDropIndicator;
   const updateTaskDropIndicator = useCallback((indicator: TaskDropIndicator | null) => {
     taskDropIndicatorRef.current = indicator;
@@ -561,6 +569,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   useEffect(() => {
     activeDraggedTaskIdRef.current = null;
     activeDraggedTaskIdsRef.current = [];
+    activeDraggedRecurrenceIdRef.current = null;
     updateTaskDropIndicator(null);
   }, [updateTaskDropIndicator, view]);
   const deletedHierarchyRoots = useTaskDeletedHierarchyRoots(userId);
@@ -771,7 +780,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const [quickFindInitialQuery, setQuickFindInitialQuery] = useState('');
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
   const [searchTarget, setSearchTarget] = useState<
-    | { kind: 'task'; taskId: string }
+    | { kind: 'task'; taskId: string; targetPath: string }
     | { kind: 'recurrence'; definitionId: string }
     | null
   >(null);
@@ -1750,6 +1759,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       void setOpenTask(null);
       return;
     }
+    if (location.pathname !== searchTarget.targetPath.split(/[?#]/, 1)[0]) return;
     const target = tasks.find(({ id }) => id === searchTarget.taskId);
     if (!target) return;
     if (target.lifecycle === 'open') {
@@ -1764,6 +1774,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     ));
   }, [
     recurrences.calendarPrototypes,
+    location.pathname,
     searchTarget,
     setOpenTask,
     tasks,
@@ -2852,15 +2863,120 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   const commitActiveTaskDrop = async () => {
     const draggedTaskId = activeDraggedTaskIdRef.current;
+    const draggedRecurrenceId = activeDraggedRecurrenceIdRef.current;
     const draggedTaskIds = activeDraggedTaskIdsRef.current;
     const indicator = taskDropIndicatorRef.current;
     if (
       draggedTaskId === null
       || indicator === null
       || indicator.draggedTaskId !== draggedTaskId
-      || draggedTaskIds.length === 0
+      || (draggedTaskIds.length === 0 && draggedRecurrenceId === null)
     ) return;
     try {
+      if (view === 'upcoming' && indicator.targetUpcomingSectionKey) {
+        const targetRowId = indicator.targetRecurrenceId
+          ? `recurrence:${indicator.targetRecurrenceId}`
+          : indicator.targetTaskId
+            ? `task:${indicator.targetTaskId}`
+            : null;
+        const sourceRowId = draggedRecurrenceId
+          ? `recurrence:${draggedRecurrenceId}`
+          : `task:${draggedTaskId}`;
+        if (targetRowId !== null && targetRowId !== sourceRowId) {
+          const draggedRowIds = new Set(
+            draggedRecurrenceId
+              ? [`recurrence:${draggedRecurrenceId}`]
+              : draggedTaskIds.map((taskId) => `task:${taskId}`),
+          );
+          const orderedRows = [
+            ...renderedPlanningTasks.flatMap((task) => {
+              const upcomingDate = getTaskUpcomingDate(task, planningDate);
+              return upcomingDate !== null
+                && getTaskUpcomingGroup(upcomingDate, planningDate).key
+                  === indicator.targetUpcomingSectionKey
+                ? [{
+                    id: `task:${task.id}`,
+                    orderKey: task.upcoming_order_key ?? task.order_key,
+                  }]
+                : [];
+            }),
+            ...recurrences.calendarPrototypes.flatMap((prototype) => {
+              const sectionKey = getTaskUpcomingGroup(
+                prototype.scheduledDate,
+                planningDate,
+              ).key;
+              return sectionKey === indicator.targetUpcomingSectionKey
+                ? [{
+                    id: `recurrence:${prototype.definition.id}`,
+                    orderKey: prototype.definition.upcoming_order_key
+                      ?? prototype.revision.prototype_snapshot.root.order_key,
+                  }]
+                : [];
+            }),
+          ].filter(({ id }) => !draggedRowIds.has(id)).sort(compareTaskOrder);
+          const upcomingOrderKey = generateTaskDropOrderKey(
+            orderedRows,
+            targetRowId,
+            indicator.placement,
+          );
+          if (draggedRecurrenceId !== null) {
+            const prototype = recurrences.calendarPrototypes.find(
+              ({ definition }) => definition.id === draggedRecurrenceId,
+            );
+            if (prototype) {
+              await recurrences.reorderProjection(prototype.definition, upcomingOrderKey);
+            }
+            return;
+          }
+          if (draggedTaskIds.length === 1) {
+            const draggedTask = renderedPlanningTasks.find(({ id }) => id === draggedTaskId);
+            const sourceDate = draggedTask
+              ? getTaskUpcomingDate(draggedTask, planningDate)
+              : null;
+            if (
+              sourceDate !== null
+              && getTaskUpcomingGroup(sourceDate, planningDate).key
+                === indicator.targetUpcomingSectionKey
+            ) {
+              await updateTask(draggedTaskId, { upcoming_order_key: upcomingOrderKey });
+              return;
+            }
+          }
+          if (draggedTaskIds.length > 1) {
+            const draggedRows = renderedPlanningTasks
+              .filter((task) => draggedTaskIds.includes(task.id))
+              .flatMap((task) => {
+                const upcomingDate = getTaskUpcomingDate(task, planningDate);
+                return upcomingDate !== null
+                  && getTaskUpcomingGroup(upcomingDate, planningDate).key
+                    === indicator.targetUpcomingSectionKey
+                  ? [{
+                      id: `task:${task.id}`,
+                      taskId: task.id,
+                      orderKey: task.upcoming_order_key ?? task.order_key,
+                    }]
+                  : [];
+              })
+              .sort(compareTaskOrder);
+            const targetIndex = orderedRows.findIndex(({ id }) => id === targetRowId);
+            if (draggedRows.length === draggedTaskIds.length && targetIndex >= 0) {
+              const insertionIndex = targetIndex + (indicator.placement === 'after' ? 1 : 0);
+              let previousKey = orderedRows[insertionIndex - 1]?.orderKey ?? null;
+              const nextKey = orderedRows[insertionIndex]?.orderKey ?? null;
+              const patches = draggedRows.map(({ taskId }) => {
+                const upcomingOrderKey = generateTaskOrderKey(previousKey, nextKey);
+                previousKey = upcomingOrderKey;
+                return {
+                  taskId,
+                  patch: { upcoming_order_key: upcomingOrderKey },
+                };
+              });
+              await applyTaskPatches(patches);
+              return;
+            }
+          }
+        }
+      }
       const selectedIds = new Set(draggedTaskIds);
       const selectedTasks = tasks.filter(({ id }) => selectedIds.has(id));
       if (draggedTaskIds.length === 1) {
@@ -3002,6 +3118,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     } finally {
       activeDraggedTaskIdRef.current = null;
       activeDraggedTaskIdsRef.current = [];
+      activeDraggedRecurrenceIdRef.current = null;
       updateTaskDropIndicator(null);
     }
   };
@@ -3137,6 +3254,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             : [task.id];
           activeDraggedTaskIdRef.current = task.id;
           activeDraggedTaskIdsRef.current = draggedIds;
+          activeDraggedRecurrenceIdRef.current = null;
           updateTaskDropIndicator(automaticSortActive || view === 'upcoming' ? {
             draggedTaskId: task.id,
             targetTaskId: task.id,
@@ -3151,9 +3269,24 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           if (draggedTaskId === null) return;
           if (activeDraggedTaskIdsRef.current.includes(task.id)) return;
           if (view === 'upcoming') {
+            const draggedRecurrenceId = activeDraggedRecurrenceIdRef.current;
+            if (draggedRecurrenceId !== null) {
+              const sourcePrototype = recurrences.calendarPrototypes.find(
+                ({ definition }) => definition.id === draggedRecurrenceId,
+              );
+              if (
+                !sourcePrototype
+                || !targetUpcomingSection
+                || getTaskUpcomingGroup(
+                  sourcePrototype.scheduledDate,
+                  planningDate,
+                ).key !== targetUpcomingSection.key
+              ) return;
+            }
             updateTaskDropIndicator({
               draggedTaskId,
               targetTaskId: task.id,
+              targetRecurrenceId: null,
               placement: pointerPlacement,
               targetUpcomingSectionKey: targetUpcomingSection?.key,
               targetUpcomingStartDate: targetUpcomingSection?.startDate,
@@ -3199,6 +3332,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onTaskDragEnd={() => {
           activeDraggedTaskIdRef.current = null;
           activeDraggedTaskIdsRef.current = [];
+          activeDraggedRecurrenceIdRef.current = null;
           updateTaskDropIndicator(null);
         }}
         planningDate={planningDate}
@@ -3650,7 +3784,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 }, { replace: true });
               }}
               onSelectTask={(task, path) => {
-                setSearchTarget({ kind: 'task', taskId: task.id });
+                setSearchTarget({ kind: 'task', taskId: task.id, targetPath: path });
                 navigate(path);
               }}
             />
@@ -3661,7 +3795,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               hierarchy={hierarchy}
               planningDate={planningDate}
               onOpenTask={(taskId, href) => {
-                setSearchTarget({ kind: 'task', taskId });
+                setSearchTarget({ kind: 'task', taskId, targetPath: href });
                 navigate(href);
               }}
             />
@@ -3803,6 +3937,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                       onSectionDragOver={(section, sectionTasks, placement) => {
                         const draggedTaskId = activeDraggedTaskIdRef.current;
                         if (draggedTaskId === null) return;
+                        const draggedRecurrenceId = activeDraggedRecurrenceIdRef.current;
+                        if (draggedRecurrenceId !== null) {
+                          const sourcePrototype = recurrences.calendarPrototypes.find(
+                            ({ definition }) => definition.id === draggedRecurrenceId,
+                          );
+                          if (
+                            !sourcePrototype
+                            || getTaskUpcomingGroup(
+                              sourcePrototype.scheduledDate,
+                              planningDate,
+                            ).key !== section.key
+                          ) return;
+                        }
                         const draggedIds = new Set(activeDraggedTaskIdsRef.current);
                         const candidates = sectionTasks.filter(({ id }) => !draggedIds.has(id));
                         const targetTask = placement === 'before'
@@ -3815,6 +3962,61 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                           targetUpcomingSectionKey: section.key,
                           targetUpcomingStartDate: section.date,
                         });
+                      }}
+                      onPrototypeDragStart={(prototype, section) => {
+                        activeDraggedTaskIdRef.current = prototype.id;
+                        activeDraggedTaskIdsRef.current = [];
+                        activeDraggedRecurrenceIdRef.current = prototype.id;
+                        updateTaskDropIndicator({
+                          draggedTaskId: prototype.id,
+                          targetTaskId: null,
+                          targetRecurrenceId: prototype.id,
+                          placement: 'before',
+                          targetUpcomingSectionKey: section.key,
+                          targetUpcomingStartDate: section.date,
+                        });
+                      }}
+                      onPrototypeDragOver={(prototype, section, placement) => {
+                        const draggedTaskId = activeDraggedTaskIdRef.current;
+                        if (draggedTaskId === null || draggedTaskId === prototype.id) return;
+                        if (activeDraggedRecurrenceIdRef.current === null) {
+                          const draggedTask = renderedPlanningTasks.find(
+                            ({ id }) => id === draggedTaskId,
+                          );
+                          const sourceDate = draggedTask
+                            ? getTaskUpcomingDate(draggedTask, planningDate)
+                            : null;
+                          if (
+                            sourceDate === null
+                            || getTaskUpcomingGroup(sourceDate, planningDate).key !== section.key
+                          ) return;
+                        } else {
+                          const sourcePrototype = recurrences.calendarPrototypes.find(
+                            ({ definition }) => definition.id
+                              === activeDraggedRecurrenceIdRef.current,
+                          );
+                          if (
+                            !sourcePrototype
+                            || getTaskUpcomingGroup(
+                              sourcePrototype.scheduledDate,
+                              planningDate,
+                            ).key !== section.key
+                          ) return;
+                        }
+                        updateTaskDropIndicator({
+                          draggedTaskId,
+                          targetTaskId: null,
+                          targetRecurrenceId: prototype.id,
+                          placement,
+                          targetUpcomingSectionKey: section.key,
+                          targetUpcomingStartDate: section.date,
+                        });
+                      }}
+                      onPrototypeDragEnd={() => {
+                        activeDraggedTaskIdRef.current = null;
+                        activeDraggedTaskIdsRef.current = [];
+                        activeDraggedRecurrenceIdRef.current = null;
+                        updateTaskDropIndicator(null);
                       }}
                       renderTask={renderActiveTask}
                     />
@@ -4030,7 +4232,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           commandReturnFocusRef.current = null;
           setQuickFindOpen(false);
           setQuickFindInitialQuery('');
-          setSearchTarget({ kind: 'task', taskId: task.id });
+          setSearchTarget({ kind: 'task', taskId: task.id, targetPath: path });
           navigate(path);
         }}
         onSelectRecurrence={(definition, path) => {
@@ -5279,6 +5481,9 @@ function UpcomingTaskSections({
   dropIndicator,
   onCreate,
   onSectionDragOver,
+  onPrototypeDragStart,
+  onPrototypeDragOver,
+  onPrototypeDragEnd,
   renderTask,
 }: {
   tasks: TaskTodo[];
@@ -5301,6 +5506,16 @@ function UpcomingTaskSections({
     sectionTasks: TaskTodo[],
     placement: 'before' | 'after',
   ) => void;
+  onPrototypeDragStart: (
+    prototype: TaskRecurrenceDefinition,
+    section: { key: string; date: string },
+  ) => void;
+  onPrototypeDragOver: (
+    prototype: TaskRecurrenceDefinition,
+    section: { key: string; date: string },
+    placement: 'before' | 'after',
+  ) => void;
+  onPrototypeDragEnd: () => void;
   renderTask: (
     task: TaskTodo,
     sectionTasks: TaskTodo[],
@@ -5351,12 +5566,13 @@ function UpcomingTaskSections({
         const orderedRows = [
           ...orderedEntries.map((entry) => ({
             kind: 'task' as const,
-            orderKey: entry.item.order_key,
+            orderKey: entry.item.upcoming_order_key ?? entry.item.order_key,
             entry,
           })),
           ...section.prototypes.map((prototype) => ({
             kind: 'prototype' as const,
-            orderKey: prototype.revision.prototype_snapshot.root.order_key,
+            orderKey: prototype.definition.upcoming_order_key
+              ?? prototype.revision.prototype_snapshot.root.order_key,
             prototype,
           })),
         ].sort((left, right) => {
@@ -5366,6 +5582,7 @@ function UpcomingTaskSections({
         });
         const sectionDropPlacement = dropIndicator?.targetUpcomingSectionKey === section.key
           && dropIndicator.targetTaskId === null
+          && !dropIndicator.targetRecurrenceId
           ? dropIndicator.placement
           : null;
         return (
@@ -5431,6 +5648,20 @@ function UpcomingTaskSections({
                     onFocusFulfilled={() => {
                       onRecurrenceFocused(row.prototype.definition.id);
                     }}
+                    dragPlacement={dropIndicator?.targetRecurrenceId
+                      === row.prototype.definition.id
+                      ? dropIndicator.placement
+                      : null}
+                    onDragStart={() => onPrototypeDragStart(
+                      row.prototype.definition,
+                      section,
+                    )}
+                    onDragOver={(placement) => onPrototypeDragOver(
+                      row.prototype.definition,
+                      section,
+                      placement,
+                    )}
+                    onDragEnd={onPrototypeDragEnd}
                   />
                 ))}
             </div>
@@ -5462,13 +5693,12 @@ function WaitingRecurrenceRow({
 }) {
   const [repeatOpen, setRepeatOpen] = useState(false);
   const rowRef = useRef<HTMLElement>(null);
-  const titleButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!focusRequested) return;
     const timer = window.setTimeout(() => {
-      rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      titleButtonRef.current?.focus({ preventScroll: true });
+      alignOpenedTaskToVisibleContent(rowRef.current, 'smooth');
+      rowRef.current?.focus({ preventScroll: true });
       onFocusFulfilled();
     }, 0);
     return () => window.clearTimeout(timer);
@@ -5478,7 +5708,7 @@ function WaitingRecurrenceRow({
     <>
       <article
         ref={rowRef}
-        className="flex h-11 items-center gap-2 px-1 pr-1.5 text-[15px] text-foreground"
+        className="flex h-11 items-center gap-2 px-1 pr-1.5 text-[15px] text-foreground focus:rounded-md focus:bg-info/10 focus:outline-none"
         data-task-waiting-recurrence
         data-task-recurrence-prototype={definition.id}
         tabIndex={-1}
@@ -5490,9 +5720,8 @@ function WaitingRecurrenceRow({
           <TASK_ICONS.Recurrence className="h-5 w-5" aria-hidden="true" />
         </span>
         <button
-          ref={titleButtonRef}
           type="button"
-          className="flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus:outline-none"
           onClick={() => setRepeatOpen(true)}
           aria-label={`Edit Repeat for ${definition.name}`}
         >
@@ -5553,6 +5782,10 @@ function CalendarRecurrencePrototypeRow({
   areas,
   focusRequested,
   onFocusFulfilled,
+  dragPlacement,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
 }: {
   definition: TaskRecurrenceDefinition;
   revision: TaskRecurrenceRevision;
@@ -5561,17 +5794,21 @@ function CalendarRecurrencePrototypeRow({
   areas: ReadonlyArray<{ id: string; title: string }>;
   focusRequested: boolean;
   onFocusFulfilled: () => void;
+  dragPlacement: 'before' | 'after' | null;
+  onDragStart: () => void;
+  onDragOver: (placement: 'before' | 'after') => void;
+  onDragEnd: () => void;
 }) {
   const [repeatOpen, setRepeatOpen] = useState(false);
   const prototype = revision.prototype_snapshot.root;
   const rowRef = useRef<HTMLElement>(null);
-  const titleButtonRef = useRef<HTMLButtonElement>(null);
+  const suppressClickUntilRef = useRef(0);
 
   useEffect(() => {
     if (!focusRequested) return;
     const timer = window.setTimeout(() => {
-      rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      titleButtonRef.current?.focus({ preventScroll: true });
+      alignOpenedTaskToVisibleContent(rowRef.current, 'smooth');
+      rowRef.current?.focus({ preventScroll: true });
       onFocusFulfilled();
     }, 0);
     return () => window.clearTimeout(timer);
@@ -5581,10 +5818,27 @@ function CalendarRecurrencePrototypeRow({
     <>
       <article
         ref={rowRef}
-        className="flex h-11 items-center gap-2 px-1 pr-1.5 text-[15px] text-foreground"
+        className="relative flex h-11 items-center gap-2 px-1 pr-1.5 text-[15px] text-foreground focus:rounded-md focus:bg-info/10 focus:outline-none"
         data-task-recurrence-prototype={definition.id}
+        data-task-row-id={`recurrence:${definition.id}`}
+        data-drag-placement={dragPlacement ?? undefined}
         tabIndex={-1}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          const bounds = event.currentTarget.getBoundingClientRect();
+          onDragOver(event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after');
+        }}
       >
+        {dragPlacement ? (
+          <span
+            aria-hidden="true"
+            data-task-drop-indicator
+            className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 bg-info ${
+              dragPlacement === 'before' ? 'top-0' : 'bottom-0'
+            }`}
+          />
+        ) : null}
         <span
           className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground"
           aria-label="Repeating Schedule"
@@ -5592,10 +5846,28 @@ function CalendarRecurrencePrototypeRow({
           <TASK_ICONS.Recurrence className="h-5 w-5" aria-hidden="true" />
         </span>
         <button
-          ref={titleButtonRef}
           type="button"
-          className="flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => setRepeatOpen(true)}
+          draggable
+          data-task-drag-handle="true"
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('application/x-bathos-recurrence-id', definition.id);
+            event.dataTransfer.setData('text/plain', definition.id);
+            suppressClickUntilRef.current = Date.now() + 1_000;
+            onDragStart();
+          }}
+          onDragEnd={() => {
+            suppressClickUntilRef.current = Date.now() + 250;
+            onDragEnd();
+          }}
+          className="flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus:outline-none"
+          onClick={(event) => {
+            if (Date.now() <= suppressClickUntilRef.current) {
+              event.preventDefault();
+              return;
+            }
+            setRepeatOpen(true);
+          }}
           aria-label={`Edit Repeat for ${prototype.title}`}
         >
           <span className="truncate">{prototype.title}</span>
@@ -5747,6 +6019,7 @@ function TaskRow({
   const [editorMounted, setEditorMounted] = useState(selected);
   const [editorExpanded, setEditorExpanded] = useState(selected);
   const [visibleTitle, setVisibleTitle] = useState(task.title);
+  const [summaryInputTarget, setSummaryInputTarget] = useState<HTMLElement | null>(null);
   const articleRef = useRef<HTMLElement>(null);
   const editorRegionRef = useRef<HTMLDivElement>(null);
   const editorAnimationFrameRef = useRef<number | null>(null);
@@ -6116,7 +6389,7 @@ function TaskRow({
       today_section: null,
     });
   };
-  const setSummaryDragPreview = (event: DragEvent<HTMLButtonElement>) => {
+  const setSummaryDragPreview = (event: DragEvent<HTMLElement>) => {
     if (typeof event.dataTransfer.setDragImage !== 'function') return;
     const summary = articleRef.current?.querySelector<HTMLElement>('[data-task-row-header]')
       ?? event.currentTarget;
@@ -6147,7 +6420,7 @@ function TaskRow({
       window.setTimeout(() => preview.remove(), 0);
     }
   };
-  const handleSummaryDragStart = (event: DragEvent<HTMLButtonElement>) => {
+  const handleSummaryDragStart = (event: DragEvent<HTMLElement>) => {
     if (!draggableTask || pending) {
       event.preventDefault();
       return;
@@ -6459,6 +6732,21 @@ function TaskRow({
             )}
           </button>
         )}
+        {selected && !bulkSelection ? (
+          <div
+            ref={setSummaryInputTarget}
+            draggable={draggableTask && !pending}
+            data-task-drag-handle={draggableTask ? 'true' : undefined}
+            data-task-id={task.id}
+            onDragStart={handleSummaryDragStart}
+            onDragEnd={() => {
+              onTaskDragEnd();
+              suppressClickUntilRef.current = Date.now() + 250;
+            }}
+            className={`flex h-full min-w-0 flex-1 items-center overflow-hidden ${draggableTask && !pending ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            data-task-open-summary-input
+          />
+        ) : (
         <button
           ref={titleButtonRef}
           type="button"
@@ -6623,7 +6911,8 @@ function TaskRow({
             </span>
           ) : null}
         </button>
-        {!bulkSelection ? (
+        )}
+        {!bulkSelection && !selected ? (
           <div className="flex shrink-0 items-center gap-0.5" data-task-row-trailing-controls>
             <TaskSourceIndicator task={task} compact />
             <DropdownMenu
@@ -6769,6 +7058,7 @@ function TaskRow({
               onCancelReminder={onCancelReminder}
               onRegisterAutosave={onRegisterAutosave}
               onTitleChange={setVisibleTitle}
+              summaryInputTarget={quickEntry ? null : summaryInputTarget}
               showTemporalFields
               quickEntry={quickEntry}
             />
@@ -6881,6 +7171,7 @@ function TaskEditor({
   onCancelReminder,
   onRegisterAutosave,
   onTitleChange,
+  summaryInputTarget = null,
   showTemporalFields = true,
   afterFields = null,
   quickEntry = false,
@@ -6902,6 +7193,7 @@ function TaskEditor({
   onCancelReminder: () => Promise<void>;
   onRegisterAutosave: (taskId: string, flush: () => Promise<void>) => void;
   onTitleChange: (title: string) => void;
+  summaryInputTarget?: HTMLElement | null;
   showTemporalFields?: boolean;
   afterFields?: ReactNode;
   quickEntry?: boolean;
@@ -7155,6 +7447,63 @@ function TaskEditor({
       : TASK_ICONS.Ready;
   const deadlineUrgent = deadline !== '' && deadline <= planningDate;
 
+  const summaryInput = (
+    <div
+      className="relative w-full"
+      data-task-native-summary-capture={nativeSummaryCaptureActive ? 'true' : undefined}
+    >
+      <Input
+        ref={titleInputRef}
+        id={`task-title-${task.id}`}
+        data-task-editor-title
+        autoFocus={task.id === NEW_TASK_DRAFT_ID}
+        aria-label="Summary"
+        placeholder="New Task"
+        aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Q Alt+Shift+Q"
+        value={title}
+        className={cn(
+          summaryInputTarget !== null && 'h-9 border-[hsl(var(--grid-sticky-line))] bg-background px-3',
+          nativeSummaryCaptureActive && 'border-ring ring-2 ring-ring/65',
+        )}
+        onPointerDown={() => setNativeSummaryCaptureActive(false)}
+        onChange={(event) => {
+          const nextTitle = event.target.value;
+          setTitle(nextTitle);
+          onTitleChange(nextTitle);
+          const normalizedTitle = nextTitle.trim();
+          if (normalizedTitle) scheduleTextPatch({ title: normalizedTitle });
+          else removePendingTextField('title');
+        }}
+        onKeyDown={(event) => {
+          if (
+            event.key !== 'ArrowRight'
+            || event.shiftKey
+            || event.metaKey
+            || event.ctrlKey
+            || event.altKey
+            || event.nativeEvent.isComposing
+            || event.currentTarget.selectionStart !== event.currentTarget.value.length
+            || event.currentTarget.selectionEnd !== event.currentTarget.value.length
+          ) {
+            return;
+          }
+          if (focusTaskNotesAtStart(task.id)) event.preventDefault();
+        }}
+      />
+      {nativeSummaryCaptureActive ? (
+        <span
+          aria-hidden="true"
+          data-task-native-summary-caret
+          className="pointer-events-none absolute inset-y-0 left-3 right-3 flex min-w-0 items-center overflow-hidden whitespace-pre text-sm text-transparent"
+        >
+          <span className="inline-flex max-w-full items-center after:ml-px after:h-4 after:w-px after:shrink-0 after:animate-pulse after:bg-foreground after:content-['']">
+            {title}
+          </span>
+        </span>
+      ) : null}
+    </div>
+  );
+
   return (
     <div
       className={quickEntry
@@ -7162,59 +7511,9 @@ function TaskEditor({
         : 'flex flex-col gap-3 px-2 pb-3 sm:px-3.5'}
       data-task-editor-form
     >
-      <div
-        className="relative"
-        data-task-native-summary-capture={nativeSummaryCaptureActive ? 'true' : undefined}
-      >
-        <Input
-          ref={titleInputRef}
-          id={`task-title-${task.id}`}
-          data-task-editor-title
-          autoFocus={task.id === NEW_TASK_DRAFT_ID}
-          aria-label="Summary"
-          placeholder="Summary"
-          aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Q Alt+Shift+Q"
-          value={title}
-          className={nativeSummaryCaptureActive
-            ? 'border-ring ring-2 ring-ring/65'
-            : undefined}
-          onPointerDown={() => setNativeSummaryCaptureActive(false)}
-          onChange={(event) => {
-            const nextTitle = event.target.value;
-            setTitle(nextTitle);
-            onTitleChange(nextTitle);
-            const normalizedTitle = nextTitle.trim();
-            if (normalizedTitle) scheduleTextPatch({ title: normalizedTitle });
-            else removePendingTextField('title');
-          }}
-          onKeyDown={(event) => {
-            if (
-              event.key !== 'ArrowRight'
-              || event.shiftKey
-              || event.metaKey
-              || event.ctrlKey
-              || event.altKey
-              || event.nativeEvent.isComposing
-              || event.currentTarget.selectionStart !== event.currentTarget.value.length
-              || event.currentTarget.selectionEnd !== event.currentTarget.value.length
-            ) {
-              return;
-            }
-            if (focusTaskNotesAtStart(task.id)) event.preventDefault();
-          }}
-        />
-        {nativeSummaryCaptureActive ? (
-          <span
-            aria-hidden="true"
-            data-task-native-summary-caret
-            className="pointer-events-none absolute inset-y-0 left-3 right-3 flex min-w-0 items-center overflow-hidden whitespace-pre text-sm text-transparent"
-          >
-            <span className="inline-flex max-w-full items-center after:ml-px after:h-4 after:w-px after:shrink-0 after:animate-pulse after:bg-foreground after:content-['']">
-              {title}
-            </span>
-          </span>
-        ) : null}
-      </div>
+      {summaryInputTarget === null
+        ? summaryInput
+        : createPortal(summaryInput, summaryInputTarget)}
       <Suspense fallback={<div className="min-h-16" aria-label="Loading Task Notes" />}>
         <TaskMarkdownNotes
           id={`task-notes-${task.id}`}

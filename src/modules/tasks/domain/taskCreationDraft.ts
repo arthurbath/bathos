@@ -66,6 +66,7 @@ export function createTaskCreationDraft(
       today_section: todaySection,
       actionability: 'actionable',
       order_key: 'draft',
+      upcoming_order_key: 'draft',
       hierarchy_order_key: null,
       start_date: startDate,
       deadline: null,

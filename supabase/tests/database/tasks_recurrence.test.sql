@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(54);
+SELECT plan(63);
 
 SELECT has_table('public', 'tasks_recurrence_definitions', 'stores recurrence prototypes');
 SELECT has_table('public', 'tasks_recurrence_revisions', 'stores immutable prototype revisions');
@@ -11,6 +11,14 @@ SELECT has_table('public', 'tasks_recurrence_occurrences', 'stores spawned-insta
 SELECT has_column(
   'public', 'tasks_recurrence_definitions', 'next_occurrence_date',
   'stores the next virtual prototype date'
+);
+SELECT has_column(
+  'public', 'tasks_todos', 'upcoming_order_key',
+  'stores an Upcoming-only task rank'
+);
+SELECT has_column(
+  'public', 'tasks_recurrence_definitions', 'upcoming_order_key',
+  'stores an Upcoming-only recurrence prototype rank'
 );
 SELECT has_column(
   'public', 'tasks_recurrence_revisions', 'prototype_snapshot',
@@ -44,6 +52,11 @@ SELECT has_function(
   'public', 'tasks_evaluate_recurrence',
   ARRAY['uuid', 'date', 'uuid', 'text', 'text'],
   'spawns due ordinary instances'
+);
+SELECT has_function(
+  'public', 'tasks_reorder_recurrence_projection',
+  ARRAY['uuid', 'bigint', 'text', 'uuid', 'text', 'text'],
+  'reorders one owner-scoped recurrence projection'
 );
 SELECT has_function(
   'public', 'tasks_create_export_v14', ARRAY[]::text[],
@@ -145,6 +158,24 @@ SELECT is(
   )::date,
   current_date + 1,
   'places the virtual prototype on its next spawn date'
+);
+SELECT is(
+  (
+    SELECT upcoming_order_key FROM public.tasks_todos
+    WHERE id = 'a1000000-0000-4000-8000-000000000010'
+  ),
+  'a0',
+  'defaults an ordinary task Upcoming rank from its list rank'
+);
+SELECT is(
+  (
+    SELECT upcoming_order_key FROM public.tasks_recurrence_definitions
+    WHERE id = (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid
+  ),
+  'a0',
+  'defaults the recurrence prototype rank from its prototype snapshot'
 );
 SELECT is(
   (
@@ -278,6 +309,52 @@ SELECT is(
   'stores explicitly edited prototype content'
 );
 
+SELECT set_config(
+  'test.reordered_recurrence',
+  public.tasks_reorder_recurrence_projection(
+    (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid,
+    (
+      current_setting('test.edited_recurrence')::jsonb
+        #>> '{definition,record_revision}'
+    )::bigint,
+    'a9',
+    'a1000000-0000-4000-8000-000000000090'
+  )::text,
+  false
+);
+SELECT is(
+  current_setting('test.reordered_recurrence')::jsonb ->> 'outcome',
+  'accepted',
+  'accepts an owner-scoped recurrence projection reorder'
+);
+SELECT is(
+  (
+    SELECT upcoming_order_key FROM public.tasks_recurrence_definitions
+    WHERE id = (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid
+  ),
+  'a9',
+  'persists the recurrence prototype Upcoming rank'
+);
+SELECT is(
+  public.tasks_reorder_recurrence_projection(
+    (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid,
+    (
+      current_setting('test.edited_recurrence')::jsonb
+        #>> '{definition,record_revision}'
+    )::bigint,
+    'b0',
+    'a1000000-0000-4000-8000-000000000091'
+  ) ->> 'outcome',
+  'conflict',
+  'rejects a recurrence projection reorder from a stale revision'
+);
+
 -- Simulate the point after the reached adopted instance has left the active
 -- recurrence history, then place the virtual prototype on today's due date.
 -- This exercises generation without asking the evaluator to time-travel.
@@ -384,6 +461,19 @@ SELECT is(
   ),
   'open:present',
   'spawns a normal open task instance'
+);
+SELECT is(
+  (
+    SELECT task.upcoming_order_key
+    FROM public.tasks_todos AS task
+    JOIN public.tasks_recurrence_occurrences AS occurrence
+      ON occurrence.root_id = task.id AND occurrence.owner_id = task.owner_id
+    WHERE occurrence.recurrence_id = (
+      current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+    )::uuid AND occurrence.scheduled_date = current_date
+  ),
+  'a9',
+  'spawns an occurrence from the prototype Upcoming rank'
 );
 SELECT is(
   (

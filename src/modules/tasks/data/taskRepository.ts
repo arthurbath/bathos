@@ -97,6 +97,7 @@ export type EditableTaskPatch = Partial<
     | 'destination'
     | 'today_section'
     | 'order_key'
+    | 'upcoming_order_key'
     | 'area_id'
     | 'hierarchy_order_key'
     | 'start_date'
@@ -133,6 +134,7 @@ const insertColumns = [
   'destination',
   'today_section',
   'order_key',
+  'upcoming_order_key',
   'hierarchy_order_key',
   'start_date',
   'deadline',
@@ -276,6 +278,8 @@ export class TaskRepository {
         destination,
         today_section: todaySection,
         order_key: input.orderKey ?? generateTaskOrderKey(lastTask?.order_key ?? null, null),
+        upcoming_order_key: input.orderKey
+          ?? generateTaskOrderKey(lastTask?.order_key ?? null, null),
         hierarchy_order_key: hierarchyOrderKey,
         start_date: startDate,
         deadline,
@@ -461,7 +465,9 @@ export class TaskRepository {
                AND deadline <= ?
              )
            )
-         ORDER BY COALESCE(start_date, deadline), order_key, id`,
+         ORDER BY COALESCE(start_date, deadline),
+                  COALESCE(upcoming_order_key, order_key),
+                  id`,
         [ownerId, reachedDate, reachedDate],
       );
       const occurredAt = this.now();
