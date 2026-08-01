@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(46);
+SELECT plan(54);
 
 SELECT has_table('public', 'tasks_recurrence_definitions', 'stores recurrence prototypes');
 SELECT has_table('public', 'tasks_recurrence_revisions', 'stores immutable prototype revisions');
@@ -91,7 +91,7 @@ INSERT INTO public.tasks_todos (
   'a1000000-0000-4000-8000-000000000001',
   'a1000000-0000-4000-8000-000000000004',
   'Exercise', 'Prototype notes', 'https://example.test/exercise', 'actionable',
-  'anytime', 'a0', '2099-08-01', NULL,
+  'anytime', 'a0', NULL, 'inbox',
   'a1000000-0000-4000-8000-000000000011'
 );
 
@@ -118,7 +118,7 @@ SELECT set_config(
   'test.calendar_recurrence',
   public.tasks_create_recurrence_from_task(
     'a1000000-0000-4000-8000-000000000010',
-    'Exercise', 'calendar', 'daily', 1, '2099-08-01', '{}'::jsonb,
+    'Exercise', 'calendar', 'daily', 1, current_date, '{}'::jsonb,
     'never', NULL, NULL, NULL, NULL,
     'a1000000-0000-4000-8000-000000000016'
   )::text,
@@ -135,7 +135,7 @@ SELECT is(
     current_setting('test.calendar_recurrence')::jsonb
       #>> '{occurrence,scheduled_date}'
   )::date,
-  '2099-08-01'::date,
+  current_date,
   'adopts the source task as the reached ordinary instance'
 );
 SELECT is(
@@ -143,8 +143,17 @@ SELECT is(
     current_setting('test.calendar_recurrence')::jsonb
       #>> '{definition,next_occurrence_date}'
   )::date,
-  '2099-08-02'::date,
+  current_date + 1,
   'places the virtual prototype on its next spawn date'
+);
+SELECT is(
+  (
+    SELECT today_section
+    FROM public.tasks_todos
+    WHERE id = 'a1000000-0000-4000-8000-000000000010'
+  ),
+  'inbox',
+  'places a reached adopted instance in Today Inbox'
 );
 SELECT is(
   current_setting('test.calendar_recurrence')::jsonb
@@ -193,7 +202,7 @@ SELECT is(
 SELECT lives_ok(
   $$
     UPDATE public.tasks_todos
-    SET start_date = '2099-08-02',
+    SET start_date = current_date + 1,
         today_section = NULL,
         revision = revision + 1,
         client_mutation_id = 'a1000000-0000-4000-8000-000000000018'
@@ -207,7 +216,7 @@ SELECT is(
     FROM public.tasks_recurrence_occurrences
     WHERE root_id = 'a1000000-0000-4000-8000-000000000010'
   ),
-  '2099-08-01'::date,
+  current_date,
   'keeps the instance recurrence date immutable after deferral'
 );
 SELECT is(
@@ -215,7 +224,7 @@ SELECT is(
     SELECT start_date FROM public.tasks_todos
     WHERE id = 'a1000000-0000-4000-8000-000000000010'
   ),
-  '2099-08-02'::date,
+  current_date + 1,
   'keeps the deferred instance accessible on its chosen Upcoming date'
 );
 SELECT is(
@@ -225,7 +234,7 @@ SELECT is(
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
     )::uuid
   ),
-  '2099-08-02'::date,
+  current_date + 1,
   'does not mistake deferred instance placement for prototype placement'
 );
 
@@ -236,7 +245,7 @@ SELECT set_config(
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
     )::uuid,
     2,
-    'Exercise', 'calendar', 'daily', 1, '2099-08-01', 'UTC',
+    'Exercise', 'calendar', 'daily', 1, current_date, 'UTC',
     'latest', 100, 'a1000000-0000-4000-8000-000000000004', '{}'::jsonb,
     'never', NULL, NULL, NULL, NULL,
     jsonb_set(
@@ -269,13 +278,39 @@ SELECT is(
   'stores explicitly edited prototype content'
 );
 
+-- Simulate the point after the reached adopted instance has left the active
+-- recurrence history, then place the virtual prototype on today's due date.
+-- This exercises generation without asking the evaluator to time-travel.
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub', '', true);
+DELETE FROM public.tasks_checklist_items
+WHERE task_id = 'a1000000-0000-4000-8000-000000000010';
+DELETE FROM public.tasks_todos
+WHERE id = 'a1000000-0000-4000-8000-000000000010';
+DELETE FROM public.tasks_recurrence_occurrences
+WHERE recurrence_id = (
+  current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+)::uuid;
+UPDATE public.tasks_recurrence_definitions
+SET next_occurrence_date = current_date,
+    evaluated_through_date = current_date - 1,
+    record_revision = record_revision + 1,
+    client_mutation_id = gen_random_uuid()
+WHERE id = (
+  current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+)::uuid;
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000001', true
+);
+
 SELECT set_config(
   'test.calendar_evaluation',
   public.tasks_evaluate_recurrence(
     (
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
     )::uuid,
-    '2099-08-02',
+    current_date,
     'a1000000-0000-4000-8000-000000000020'
   )::text,
   false
@@ -294,8 +329,8 @@ SELECT is(
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
     )::uuid
   ),
-  2::bigint,
-  'stores the adopted and generated instance receipts without a projection row'
+  1::bigint,
+  'stores only the generated instance receipt without a projection row'
 );
 SELECT is(
   (
@@ -305,7 +340,7 @@ SELECT is(
       ON occurrence.root_id = task.id AND occurrence.owner_id = task.owner_id
     WHERE occurrence.recurrence_id = (
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid AND occurrence.scheduled_date = '2099-08-02'
+    )::uuid AND occurrence.scheduled_date = current_date
   ),
   'Prototype Exercise',
   'spawns from the prototype rather than from the edited prior instance'
@@ -318,7 +353,7 @@ SELECT is(
       ON occurrence.root_id = task.id AND occurrence.owner_id = task.owner_id
     WHERE occurrence.recurrence_id = (
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid AND occurrence.scheduled_date = '2099-08-02'
+    )::uuid AND occurrence.scheduled_date = current_date
   ),
   'https://example.test/exercise',
   'spawns the prototype Primary Link rather than the prior instance edit'
@@ -331,7 +366,7 @@ SELECT results_eq(
       ON occurrence.root_id = item.task_id AND occurrence.owner_id = item.owner_id
     WHERE occurrence.recurrence_id = (
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid AND occurrence.scheduled_date = '2099-08-02'
+    )::uuid AND occurrence.scheduled_date = current_date
     ORDER BY item.order_key
   $$,
   $$VALUES ('Warm up'::text, true), ('Work out'::text, false)$$,
@@ -345,7 +380,7 @@ SELECT is(
       ON occurrence.root_id = task.id AND occurrence.owner_id = task.owner_id
     WHERE occurrence.recurrence_id = (
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid AND occurrence.scheduled_date = '2099-08-02'
+    )::uuid AND occurrence.scheduled_date = current_date
   ),
   'open:present',
   'spawns a normal open task instance'
@@ -357,8 +392,86 @@ SELECT is(
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
     )::uuid
   ),
-  '2099-08-03'::date,
+  current_date + 1,
   'moves the virtual prototype to the following cadence date'
+);
+
+INSERT INTO public.tasks_todos (
+  id, owner_id, title, notes, destination, order_key, start_date,
+  client_mutation_id
+) VALUES (
+  'a1000000-0000-4000-8000-000000000021',
+  'a1000000-0000-4000-8000-000000000001',
+  'Future Family Event', 'Future prototype notes', 'anytime', 'a2',
+  current_date + 2,
+  'a1000000-0000-4000-8000-000000000022'
+);
+INSERT INTO public.tasks_checklist_items (
+  id, owner_id, task_id, title, completed, order_key, client_mutation_id
+) VALUES (
+  'a1000000-0000-4000-8000-000000000023',
+  'a1000000-0000-4000-8000-000000000001',
+  'a1000000-0000-4000-8000-000000000021',
+  'Bring a card', false, 'a0',
+  'a1000000-0000-4000-8000-000000000024'
+);
+SELECT set_config(
+  'test.future_recurrence',
+  public.tasks_create_recurrence_from_task(
+    'a1000000-0000-4000-8000-000000000021',
+    'Future Family Event', 'calendar', 'monthly', 1, current_date + 2,
+    jsonb_build_object('monthly_kind', 'day_of_month', 'month_day',
+      extract(day FROM current_date + 2)::integer),
+    'never', NULL, NULL, NULL, NULL,
+    'a1000000-0000-4000-8000-000000000025'
+  )::text,
+  false
+);
+SELECT is(
+  current_setting('test.future_recurrence')::jsonb ->> 'outcome',
+  'accepted',
+  'creates an unreached recurrence as a virtual prototype'
+);
+SELECT is(
+  current_setting('test.future_recurrence')::jsonb -> 'occurrence',
+  'null'::jsonb,
+  'does not adopt an ordinary occurrence before the first spawn date'
+);
+SELECT is(
+  (SELECT count(*) FROM public.tasks_todos
+   WHERE id = 'a1000000-0000-4000-8000-000000000021'),
+  0::bigint,
+  'removes the ordinary source task after preserving the future prototype'
+);
+SELECT is(
+  (SELECT count(*) FROM public.tasks_recurrence_occurrences
+   WHERE recurrence_id = (
+     current_setting('test.future_recurrence')::jsonb #>> '{definition,id}'
+   )::uuid),
+  0::bigint,
+  'stores no occurrence receipt before the future spawn date'
+);
+SELECT is(
+  (current_setting('test.future_recurrence')::jsonb
+    #>> '{definition,next_occurrence_date}')::date,
+  current_date + 2,
+  'keeps the virtual prototype on its first future spawn date'
+);
+SELECT is(
+  current_setting('test.future_recurrence')::jsonb
+    #>> '{revision,prototype_snapshot,root,checklist,0,title}',
+  'Bring a card',
+  'preserves future source checklist content in the prototype snapshot'
+);
+SELECT throws_ok(
+  format(
+    'SELECT public.tasks_evaluate_recurrence(%L::uuid, current_date + 1, %L::uuid)',
+    current_setting('test.future_recurrence')::jsonb #>> '{definition,id}',
+    'a1000000-0000-4000-8000-000000000026'
+  ),
+  '22023',
+  'Recurrence cannot be evaluated beyond the planning date',
+  'rejects recurrence evaluation beyond the owner planning date'
 );
 
 INSERT INTO public.tasks_todos (

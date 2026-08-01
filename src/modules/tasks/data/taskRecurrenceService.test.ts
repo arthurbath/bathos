@@ -213,6 +213,34 @@ describe('TaskRecurrenceService', () => {
     );
   });
 
+  it('accepts a future virtual prototype without an adopted occurrence', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: {
+        outcome: 'accepted',
+        definition,
+        revision,
+        occurrence: null,
+      },
+      error: null,
+    });
+    const service = new TaskRecurrenceService({ rpc } as never, definition.owner_id);
+
+    await expect(service.createFromTask({
+      taskId: '80000000-0000-4000-8000-000000000001',
+      name: definition.name,
+      ruleMode: 'calendar',
+      frequency: 'monthly',
+      intervalCount: 1,
+      scheduleDate: '2026-08-03',
+      ruleConfig: { monthly_kind: 'day_of_month', month_day: 3 },
+      endMode: 'never',
+      mutationId: definition.client_mutation_id,
+    })).resolves.toMatchObject({
+      outcome: 'accepted',
+      occurrence: null,
+    });
+  });
+
   it('edits the complete recurrence rule through one revision-checked RPC', async () => {
     const currentDefinition = parseTaskRecurrenceDefinition(definition);
     const currentRevision = parseTaskRecurrenceRevision({

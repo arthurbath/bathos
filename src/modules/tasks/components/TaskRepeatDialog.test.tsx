@@ -130,8 +130,20 @@ describe('TaskRepeatDialog', () => {
     delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
   });
 
-  it('adopts the existing task and materializes a bounded calendar horizon', async () => {
-    const task = taskTodoFixture({ id: 'task-repeat', title: 'Weekly Review' });
+  it('saves the prototype without materializing a future calendar horizon', async () => {
+    const task = taskTodoFixture({
+      id: 'task-repeat',
+      title: 'Weekly Review',
+      start_date: '2026-08-03',
+    });
+    createFromTask.mockResolvedValueOnce({
+      outcome: 'accepted',
+      definition: taskRecurrenceDefinitionFixture({
+        next_occurrence_date: '2026-08-03',
+      }),
+      revision: taskRecurrenceRevisionFixture({ start_date: '2026-08-03' }),
+      occurrence: null,
+    });
     const { container, root } = renderDialog(task);
     try {
       await act(async () => {
@@ -147,16 +159,11 @@ describe('TaskRepeatDialog', () => {
         ruleMode: 'calendar',
         frequency: 'weekly',
         intervalCount: 1,
-        scheduleDate: '2026-07-27',
+        scheduleDate: '2026-08-03',
         ruleConfig: { weekdays: [1] },
         endMode: 'never',
       }));
-      expect(evaluate).toHaveBeenCalledTimes(4);
-      expect(evaluate).toHaveBeenNthCalledWith(
-        4,
-        'recurrence-a',
-        '2027-07-27',
-      );
+      expect(evaluate).not.toHaveBeenCalled();
       expect(onOpenChange).toHaveBeenCalledWith(false);
     } finally {
       cleanup(root, container);

@@ -9,6 +9,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import type { Database } from '@/integrations/supabase/types';
+import { planningDateInTimeZone } from '@/lib/mcp/tools/tasks-read';
 import { TaskRecurrenceService } from '@/modules/tasks/data/taskRecurrenceService';
 import { TaskRepository } from '@/modules/tasks/data/taskRepository';
 import { generateTaskOrderKey } from '@/modules/tasks/domain/taskOrder';
@@ -91,16 +92,20 @@ describe.skipIf(!integrationEnabled)('Tasks offline persistence integration', ()
     await waitForUploadQueue(activeDatabase, 0);
 
     const recurrenceService = new TaskRecurrenceService(supabase, ownerId);
+    const planningDate = planningDateInTimeZone('America/Los_Angeles');
     const recurrence = await recurrenceService.createFromTask({
       taskId: recurrenceSource.id,
       name: 'Offline Recurrence',
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 1,
-      scheduleDate: '2026-07-20',
+      scheduleDate: planningDate,
       ruleConfig: {},
       endMode: 'never',
     });
+    if (recurrence.occurrence === null) {
+      throw new Error('A reached recurrence must adopt its ordinary task');
+    }
     const occurrence = await waitForTask(
       activeDatabase,
       recurrence.occurrence.root_id,

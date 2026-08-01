@@ -16,6 +16,7 @@ import {
   resolveMailRetirementData,
 } from '@/lib/mcp/tools/tasks-mail';
 import { transitionTaskData } from '@/lib/mcp/tools/tasks-mutate';
+import { planningDateInTimeZone } from '@/lib/mcp/tools/tasks-read';
 import { TaskHierarchyRepository } from '@/modules/tasks/data/taskHierarchyRepository';
 import {
   createTaskExport,
@@ -208,13 +209,14 @@ describe.skipIf(!integrationEnabled)('Tasks preservation and recovery integratio
     });
 
     const recurrenceService = new TaskRecurrenceService(sourceClient, source.id);
+    const planningDate = planningDateInTimeZone('America/Los_Angeles');
     const recurrence = await recurrenceService.createFromTask({
       taskId: primary.id,
       name: 'Preservation Recurrence',
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 1,
-      scheduleDate: '2026-07-20',
+      scheduleDate: planningDate,
       ruleConfig: {},
       endMode: 'never',
     });

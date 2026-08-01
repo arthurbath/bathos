@@ -355,13 +355,12 @@ export function TaskRepeatDialog({
             })
           : null;
       if (!result) throw new Error('The recurrence is unavailable');
-      if (ruleMode === 'calendar') {
-        for (const offset of [90, 180, 270, 365]) {
-          await recurrenceService.evaluate(
-            result.definition.id,
-            addTaskCalendarDays(planningDate, offset),
-          );
-        }
+      if (
+        ruleMode === 'calendar'
+        && result.definition.next_occurrence_date !== null
+        && result.definition.next_occurrence_date <= planningDate
+      ) {
+        await recurrenceService.evaluate(result.definition.id, planningDate);
       }
       toast({ title: editing ? 'Repeat Updated' : 'Repeat Saved' });
       onOpenChange(false);

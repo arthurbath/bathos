@@ -164,13 +164,14 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     }, authB)).rejects.toThrow('task is unavailable');
 
     const recurrenceService = new TaskRecurrenceService(ownerA.client, ownerA.id);
+    const recurrencePlanningDate = planningDateInTimeZone('America/Los_Angeles');
     const recurrence = await recurrenceService.createFromTask({
       taskId,
       name: 'Synthetic Topology Recurrence',
       ruleMode: 'calendar',
       frequency: 'weekly',
       intervalCount: 1,
-      scheduleDate: '2030-01-01',
+      scheduleDate: recurrencePlanningDate,
       ruleConfig: {},
       endMode: 'never',
     });
@@ -181,7 +182,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     expect(recurrenceStatus.outcome).toBe('accepted');
     const recurrenceEvaluation = await recurrenceService.evaluate(
       recurrence.definition.id,
-      '2030-01-02',
+      recurrencePlanningDate,
     );
     expect(recurrenceEvaluation.outcome).toBe('accepted');
 
@@ -383,7 +384,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       ruleMode: 'calendar',
       frequency: 'daily',
       intervalCount: 1,
-      scheduleDate: '2030-01-01',
+      scheduleDate: planningDateInTimeZone('America/Los_Angeles'),
       ruleConfig: {},
       endMode: 'after',
       endAfterCount: 2,
@@ -391,12 +392,18 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       deadlineOffsetDays: 2,
     });
     expect(recurrence.outcome).toBe('accepted');
+    if (recurrence.occurrence === null) {
+      throw new Error('A reached recurrence must adopt its ordinary task');
+    }
     expect(recurrence.occurrence.origin).toBe('adopted');
     const evaluation = await new TaskRecurrenceService(
       owner.client,
       owner.id,
-    ).evaluate(recurrence.definition.id, '2030-01-02');
-    expect(evaluation.generated_count).toBe(1);
+    ).evaluate(
+      recurrence.definition.id,
+      planningDateInTimeZone('America/Los_Angeles'),
+    );
+    expect(evaluation.generated_count).toBe(0);
 
     const completed = await primary.repository.transitionTask(
       owner.id,
@@ -458,7 +465,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
           && task.title === 'Synthetic Edited While Deleted'
           && task.deleted_at !== null,
       ),
-      waitForLocalTableCount(fresh.database, 'tasks_recurrence_occurrences', 2),
+      waitForLocalTableCount(fresh.database, 'tasks_recurrence_occurrences', 1),
     ]);
     expect(await fresh.database.getOptional<{ completed: number }>(
       'SELECT completed FROM tasks_checklist_items WHERE id = ?',

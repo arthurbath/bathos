@@ -62,7 +62,7 @@ export type TaskRecurrenceCreateFromTaskInput = {
 };
 
 export type TaskRecurrenceCreateFromTaskResult = TaskRecurrenceSaveResult & {
-  occurrence: TaskRecurrenceOccurrence;
+  occurrence: TaskRecurrenceOccurrence | null;
 };
 
 export type TaskRecurrenceEditInput = {
@@ -145,7 +145,9 @@ export class TaskRecurrenceService {
       ),
       definition: parseTaskRecurrenceDefinition(result.definition, this.ownerId),
       revision: parseTaskRecurrenceRevision(result.revision, this.ownerId),
-      occurrence: parseTaskRecurrenceOccurrence(result.occurrence, this.ownerId),
+      occurrence: result.occurrence === null
+        ? null
+        : parseTaskRecurrenceOccurrence(result.occurrence, this.ownerId),
     };
   }
 
