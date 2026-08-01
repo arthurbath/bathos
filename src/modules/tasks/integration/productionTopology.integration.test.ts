@@ -179,6 +179,11 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       'paused',
     );
     expect(recurrenceStatus.outcome).toBe('accepted');
+    const recurrenceEvaluation = await recurrenceService.evaluate(
+      recurrence.definition.id,
+      '2030-01-02',
+    );
+    expect(recurrenceEvaluation.outcome).toBe('accepted');
 
     const reminderService = new TaskReminderService(ownerA.client);
     const reminder = await reminderService.save({
@@ -197,6 +202,10 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       ]);
       expect(await localTableCount(unrelated.database, table)).toBe(0);
     }
+    await Promise.all([
+      waitForLocalTask(primary.database, taskId, (task) => task.revision === 2),
+      waitForLocalTask(secondary.database, taskId, (task) => task.revision === 2),
+    ]);
 
     await primary.database.disconnect();
     await primary.repository.updateTask(ownerA.id, taskId, {
@@ -204,7 +213,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     });
     const mcpWinner = await updateTaskData({
       task_id: taskId,
-      expected_revision: 1,
+      expected_revision: 2,
       client_mutation_id: crypto.randomUUID(),
       title: 'Accepted MCP Edit',
     }, authA);
@@ -215,12 +224,12 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       waitForLocalTask(
         primary.database,
         taskId,
-        (task) => task.revision === 2 && task.title === 'Accepted MCP Edit',
+        (task) => task.revision === 3 && task.title === 'Accepted MCP Edit',
       ),
       waitForLocalTask(
         secondary.database,
         taskId,
-        (task) => task.revision === 2 && task.title === 'Accepted MCP Edit',
+        (task) => task.revision === 3 && task.title === 'Accepted MCP Edit',
       ),
     ]);
     expect(await primary.database.getOptional<SyncIssue>(
@@ -234,7 +243,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
 
     const transitionInput = {
       task_id: taskId,
-      expected_revision: 2,
+      expected_revision: 3,
       client_mutation_id: crypto.randomUUID(),
       transition: 'complete' as const,
     };
@@ -246,12 +255,12 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       waitForLocalTask(
         primary.database,
         taskId,
-        (task) => task.revision === 3 && task.lifecycle === 'completed',
+        (task) => task.revision === 4 && task.lifecycle === 'completed',
       ),
       waitForLocalTask(
         secondary.database,
         taskId,
-        (task) => task.revision === 3 && task.lifecycle === 'completed',
+        (task) => task.revision === 4 && task.lifecycle === 'completed',
       ),
     ]);
 
@@ -259,10 +268,10 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
     await waitForLocalTask(
       secondary.database,
       taskId,
-      (task) => task.revision === 3 && task.lifecycle === 'completed',
+      (task) => task.revision === 4 && task.lifecycle === 'completed',
     );
-    expect(await localTaskCount(primary.database)).toBe(2);
-    expect(await localTaskCount(secondary.database)).toBe(2);
+    expect(await localTaskCount(primary.database)).toBe(1);
+    expect(await localTaskCount(secondary.database)).toBe(1);
     expect(await localTaskCount(unrelated.database)).toBe(0);
 
     const { count: taskCount, error: taskCountError } = await admin
@@ -278,7 +287,7 @@ describe.skipIf(!integrationEnabled)('Tasks production topology integration', ()
       .eq('owner_id', ownerA.id)
       .eq('task_id', taskId);
     expect(historyCountError).toBeNull();
-    expect(historyCount).toBe(3);
+    expect(historyCount).toBe(4);
 
     await disposeClient(primary);
     await disposeClient(secondary);

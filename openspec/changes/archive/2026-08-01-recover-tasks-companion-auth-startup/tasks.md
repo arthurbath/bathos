@@ -13,5 +13,5 @@
 
 - [x] 3.1 Run focused authentication, native bridge, and companion tests
 - [x] 3.2 Run TypeScript, lint, build, full application tests, and strict OpenSpec validation
-- [ ] 3.3 Publish the verified web release and prove bounded authenticated startup on the physical iPhone
-- [ ] 3.4 Recheck the warm-cache offline launch and record final production evidence
+- [x] 3.3 Publish the verified web release and prove bounded authenticated startup on the physical iPhone
+- [x] 3.4 Recheck the warm-cache offline launch and record final production evidence

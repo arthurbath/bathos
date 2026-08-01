@@ -12,7 +12,7 @@
 ## 3. Verification
 
 - [x] 3.1 Run focused Tasks tests, TypeScript, lint, build, and strict OpenSpec validation
-- [ ] 3.2 Verify list and checklist paste behavior in the rendered local Tasks app, including console health
+- [x] 3.2 Verify list and checklist paste behavior in the rendered local Tasks app, including console health
 
 ## 4. Structured Checklist Clipboard
 

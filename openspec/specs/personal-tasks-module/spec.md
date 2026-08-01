@@ -26,37 +26,9 @@ The system SHALL provide a single-owner task module whose records are accessible
 ### Requirement: Production Task Synchronization
 The system SHALL deploy remote task synchronization only through an explicitly approved topology whose download boundary mirrors task RLS and whose secrets remain outside the public client repository.
 
-#### Scenario: Provision production synchronization
-- **WHEN** a production PowerSync service is approved for parallel use
-- **THEN** it uses direct encrypted database replication, a least-privilege task-only role and publication, owner-scoped Sync Streams, Supabase Auth verification, managed secrets, and a public HTTPS client endpoint
-
-#### Scenario: Join an existing multi-tab synchronization session
-- **WHEN** a Tasks tab opens after the shared multi-tab database has already reported its connection state
-- **THEN** the tab initializes from the current PowerSync status before waiting for later events and does not remain in a synthetic Connecting state
-
-#### Scenario: Validate production synchronization before personal use
-- **WHEN** the production service, publication, stream rules, authentication, and client endpoint are configured
-- **THEN** a synthetic owner proves cross-client download, queued upload, conflict handling, restart recovery, owner isolation, and cleanup before the user stores personal task content
-
-#### Scenario: Report incomplete synthetic cleanup
-- **WHEN** production-topology validation exits after a failed assertion or another interrupted test path
-- **THEN** it attempts every local-database, session, synthetic-owner, and temporary-artifact cleanup step and reports every cleanup failure as uncertain residue
-
-#### Scenario: Evolve the synchronized task projection
-- **WHEN** a nonlocal task collection is added to or removed from the client schema
-- **THEN** the production and disposable streams, production and disposable publications, replication-role grants, database preflight, replica identity, RLS, and regression test change together as one exact owner-scoped set
-
-#### Scenario: Exclude server-only task secrets
-- **WHEN** the synchronized task projection is configured
-- **THEN** it excludes Web Push subscription material, Mail source lifecycle records, private operational context, and every non-Tasks module table
-
-#### Scenario: Operate without an approved remote topology
-- **WHEN** no production PowerSync endpoint is configured
-- **THEN** the module identifies itself as local-only, preserves that installation's durable task data, and does not imply cross-device or MCP convergence
-
-#### Scenario: Preserve the promotion boundary
-- **WHEN** a free or single-instance topology is used for parallel evaluation
-- **THEN** the system does not treat that topology as authoritative until uptime, monitoring, backup, upgrade, outage, and recovery behavior pass a later explicit review
+#### Scenario: Backfill a newly synchronized field into existing clients
+- **WHEN** a deployed schema adds and populates a field on rows that existing PowerSync clients already cached
+- **THEN** the rollout re-emits those rows after the matching client schema is available, preserves every stored business value, and allows existing clients to hydrate the field without clearing local data
 
 ### Requirement: Exclusive Start And Today Horizon
 The system SHALL store Start and a Today horizon as mutually exclusive planning states for every tasks, and SHALL require Start to be future-only for active present work while preserving supported terminal history.
@@ -202,9 +174,10 @@ The system SHALL organize active work through Anytime, Someday, Areas, tasks, an
 - **WHEN** a user presses Command+A or Control+A while editing a checklist item
 - **THEN** the browser selects only the text in that active input
 
-#### Scenario: Open a checklist with the control shortcut
+#### Scenario: Insert a checklist item with the control shortcut
 - **WHEN** a focused or open task receives the checklist keyboard command
-- **THEN** Tasks opens the task if necessary and focuses the end of the final unchecked checklist item, or creates and focuses one empty checklist row when no unchecked item exists
+- **THEN** Tasks opens the task if necessary, creates one empty checklist row immediately before the first completed checklist item, and focuses that new row
+- **AND** when no completed checklist item exists, Tasks appends and focuses the new empty row at the end of the checklist
 
 #### Scenario: Remove empty checklist rows on close
 - **WHEN** a task drawer closes with one or more empty checklist items
@@ -625,7 +598,7 @@ Tasks SHALL let a touch user enter task selection by deliberately swiping left o
 - **THEN** Tasks moves the complete selected group through its existing native grouped drag transaction without introducing custom pointer dragging or custom scrolling
 
 ### Requirement: Bulk Task Planning
-The system SHALL provide an accessible task-row selection mode for visible tasks, SHALL treat selection as a temporary context bounded by task rows and selection-owned surfaces, SHALL expose its controls as a fixed bottom overlay that does not move list content, and SHALL apply only lifecycle-appropriate editing or clipboard actions to selected records.
+The system SHALL provide an accessible task-row selection mode for visible tasks, SHALL treat selection as a temporary context bounded by task rows and selection-owned surfaces, SHALL expose its controls as a fixed bottom overlay that does not move list content, and SHALL apply only lifecycle-appropriate editing or clipboard actions to selected records. Bulk recoverable deletion SHALL begin every selected deletion as one grouped optimistic interaction, preserve one undoable operation identity, and reconcile each task from the complete persistence result set.
 
 #### Scenario: Enter selection with the platform modifier
 - **WHEN** a user Command-clicks a visible task on Mac or Control-clicks a visible task on Windows while selection is inactive
@@ -712,8 +685,20 @@ The system SHALL provide an accessible task-row selection mode for visible tasks
 - **THEN** Tasks moves the tasks to their eligible views and keeps selection mode active with `0 Tasks`
 
 #### Scenario: Delete selected tasks recoverably
-- **WHEN** the user chooses Delete from the bulk Edit menu for eligible open tasks
-- **THEN** Tasks moves every selected task to Done as trashed, removes those tasks from the current active list, and keeps selection mode active with zero selected tasks
+- **WHEN** the user chooses Delete from the bulk Edit menu or presses a supported delete command for eligible selected open tasks
+- **THEN** Tasks begins every selected recoverable deletion without waiting for another selected deletion, removes the complete group from the current active list in one optimistic render, and groups the accepted deletions as one undoable user action
+
+#### Scenario: Reconcile a successful optimistic deletion group
+- **WHEN** every selected deletion is accepted by persistence
+- **THEN** Tasks keeps every deleted task absent from the active list, moves them to Done as trashed, and keeps selection mode active with zero selected tasks
+
+#### Scenario: Restore failed optimistic deletions
+- **WHEN** one or more selected deletion requests fail after the group has been optimistically removed
+- **THEN** Tasks restores only the failed tasks to the active list, keeps accepted deletions in Done, presents one concise failure notification, and emits one privacy-safe console and Sentry diagnostic for the grouped action
+
+#### Scenario: Protect task content in bulk-deletion diagnostics
+- **WHEN** Tasks reports a partial or complete bulk-deletion failure
+- **THEN** structured diagnostic context includes bounded operational state such as counts, active view, and network availability without task identifiers, titles, notes, links, checklist content, or other user-authored task data
 
 #### Scenario: Select terminal Done tasks for nondestructive actions
 - **WHEN** the user selects one or more tasks in Done
@@ -778,7 +763,7 @@ The Tasks expanded task editor SHALL present Start and Deadline as a matched two
 - **THEN** the shared Calendar replaces today's in-month numeric day label with Lucide's Star icon, places the same icon to the right of the current month name, preserves accessible current-date and month names, and retains selected-value highlighting independently
 
 ### Requirement: Flexible Reminder Time Entry
-The Tasks Start picker and bulk reminder surface SHALL accept a bounded grammar of reasonable time shorthand, normalize accepted input to one visible local time, persist only canonical 24-hour reminder intent, and provide concise rejection feedback without exposing resolution metadata.
+The Tasks Start picker SHALL accept a bounded grammar of reasonable time shorthand, normalize accepted input to one visible local time, persist only canonical 24-hour reminder intent, and provide concise rejection feedback without exposing resolution metadata.
 
 #### Scenario: Normalize meridiem shorthand
 - **WHEN** a user enters `1p`, `1pm`, `1 pm`, `1:3p`, `1:30p`, `1:30pm`, `1:30 pm`, or `130p`
@@ -790,11 +775,11 @@ The Tasks Start picker and bulk reminder surface SHALL accept a bounded grammar 
 
 #### Scenario: Reject malformed reminder input
 - **WHEN** a user commits an impossible or unsupported value such as `25` or `asdf`
-- **THEN** Tasks performs no reminder mutation, restores the last committed display value or empty bulk value, retains the active reminder surface, and briefly shows `Not allowed.`
+- **THEN** Tasks performs no reminder mutation, restores the last committed display value, retains the active reminder surface, and briefly shows `Not allowed.`
 
 #### Scenario: Reject an explicit elapsed Today time
 - **WHEN** a Today reminder entry explicitly resolves to an owner-local instant that is not later than the current time
-- **THEN** Tasks performs no reminder mutation, restores the last committed display value or empty bulk value, and briefly shows `Not allowed.`
+- **THEN** Tasks performs no reminder mutation, restores the last committed display value, and briefly shows `Not allowed.`
 
 #### Scenario: Resolve ambiguous Today shorthand to the remaining future meridiem
 - **WHEN** an unsuffixed 1-12-hour reminder value has an elapsed AM interpretation but a future PM interpretation on the owner planning date
@@ -802,34 +787,23 @@ The Tasks Start picker and bulk reminder surface SHALL accept a bounded grammar 
 
 #### Scenario: Reject fully elapsed ambiguous Today shorthand
 - **WHEN** both AM and PM interpretations of an unsuffixed 1-12-hour value have elapsed on the owner planning date
-- **THEN** Tasks performs no reminder mutation, restores the last committed display value or empty bulk value, and briefly shows `Not allowed.`
+- **THEN** Tasks performs no reminder mutation, restores the last committed display value, and briefly shows `Not allowed.`
 
 #### Scenario: Accept any valid time for future work
-- **WHEN** a reminder belongs only to future Start dates
+- **WHEN** a reminder belongs to a future Start date
 - **THEN** Tasks accepts every valid parser interpretation regardless of the current owner-local time
 
 #### Scenario: Confirm reminder input in two Enter steps
-- **WHEN** a user presses Enter while a Start-picker or bulk Reminder input contains a valid raw or changed value
-- **THEN** Tasks normalizes the visible value and keeps the reminder surface open, then the next Enter on the unchanged normalized value closes the Start picker or submits the bulk reminder form
-
-#### Scenario: Apply a bulk reminder with one pointer action
-- **WHEN** a user enters a valid raw or normalized bulk Reminder value and activates Apply
-- **THEN** Tasks resolves and applies the canonical time in one pointer action without requiring a preliminary normalization click
-
-#### Scenario: Validate a mixed bulk selection atomically
-- **WHEN** a bulk reminder targets both Today and future-starting tasks
-- **THEN** Tasks accepts the shared time only when it is valid for the Today targets and otherwise applies no reminder to any selected task
+- **WHEN** a user presses Enter while a Start-picker Reminder input contains a valid raw or changed value
+- **THEN** Tasks normalizes the visible value and keeps Start open, then the next Enter on the unchanged normalized value closes Start
 
 #### Scenario: Preserve spaces in reminder input
 - **WHEN** focus is inside Reminder and the user presses Space
-- **THEN** the input receives a space rather than activating or closing the reminder surface
+- **THEN** the input receives a space rather than activating or closing Start
 
 #### Scenario: Size Reminder for its surface
 - **WHEN** the Start picker renders Reminder
 - **THEN** its text input uses the ordinary text-field style and fills the available picker row
-
-- **WHEN** the bulk reminder surface renders Reminder
-- **THEN** its text input uses the ordinary text-field style and only the width needed for a time value
 
 ### Requirement: Reminder-Initiated Today Planning
 The Tasks unified Start picker SHALL allow reminder entry before a task has Start planning and SHALL convert a successfully entered reminder into owner-local Today Inbox planning without replacing an existing planning choice.
@@ -959,8 +933,12 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 - **THEN** Tasks closes Start, restores its trigger focus and pre-open provisional field state, and leaves the containing task editor open
 
 #### Scenario: Open Start from the reminder command
-- **WHEN** Control+B on Mac or Alt+Shift+B on Windows targets one open to-do or one or more selected to-dos
-- **THEN** Tasks opens the Start surface for an eligible single target with reminder time prefocused, or opens the existing multi-task reminder surface for eligible bulk work, and suppresses the matching browser command
+- **WHEN** Control+B on Mac or Alt+Shift+B on Windows targets one open to-do outside selection mode
+- **THEN** Tasks opens Start with Reminder prefocused and suppresses the matching browser command
+
+#### Scenario: Ignore the reminder command in selection mode
+- **WHEN** selection mode is active and the user presses Control+B on Mac or Alt+Shift+B on Windows with zero, one, or many selected to-dos
+- **THEN** Tasks suppresses the matching browser command without opening a reminder surface, changing selection membership, or mutating any task or reminder
 
 #### Scenario: Keep Reminder available before planning
 - **WHEN** a task has neither a Today horizon nor a future Start Date
@@ -1059,7 +1037,7 @@ The system SHALL model lifecycle, record disposition, planning destination, Toda
 - **THEN** the system restores valid prior hierarchy and active state, falling back to Anytime with no Today membership when the prior placement is no longer valid
 
 ### Requirement: Temporal Planning Semantics
-The system SHALL store Start Date as a future-only deferral calendar fact, store Deadline independently, retain day horizons for active Today work, reset unfinished Today tasks for owner-local daily re-planning, derive activation and Today from the owner's IANA planning time zone, and store reminder times as unambiguous instants resolved on the current Start intent.
+The system SHALL store Start Date as a future-only deferral calendar fact, store Deadline independently while treating a reached deadline as an implicit activation date only when no explicit Start exists, retain day horizons for active Today work, reset unfinished Today tasks for owner-local daily re-planning, derive activation and Today from the owner's IANA planning time zone, and store reminder times as unambiguous instants resolved on the current Start intent.
 
 #### Scenario: Start date and deadline coexist in either order
 - **WHEN** a to-do has both a start date and a deadline
@@ -1068,6 +1046,18 @@ The system SHALL store Start Date as a future-only deferral calendar fact, store
 #### Scenario: Continue work after its deadline
 - **WHEN** a caller assigns a start date later than the retained deadline
 - **THEN** the system accepts the mutation, preserves the overdue deadline, and keeps the item available according to the new start date
+
+#### Scenario: Keep a future deadline implicit
+- **WHEN** an open, present Anytime to-do has no Start or Today horizon and Upcoming derives its controlling date from a future deadline
+- **THEN** the system keeps the Start visibly and persistently unset before that deadline reaches the owner-local planning date
+
+#### Scenario: Activate a reached deadline without an explicit Start
+- **WHEN** an open, present Anytime to-do has no Start or Today horizon and its deadline reaches the owner-local planning date
+- **THEN** local and server activation converge on Today Inbox, preserve the deadline, include the task in Today and Anytime, and append one accepted system-authored revision transition
+
+#### Scenario: Prefer an explicit Start over deadline activation
+- **WHEN** a to-do has a future Start and a deadline that is today or overdue
+- **THEN** the system retains the future Start, does not activate the to-do into Today from its deadline, and continues to plan it by the explicit Start
 
 #### Scenario: Travel across time zones
 - **WHEN** the owner's current or planning time zone changes
@@ -1085,17 +1075,17 @@ The system SHALL store Start Date as a future-only deferral calendar fact, store
 - **WHEN** the owner's planning date advances while one or more open, present tasks remain in Inbox, Now, Next, or Later
 - **THEN** local and server activation converge on Today Inbox for every such task with one accepted system-authored revision transition per task
 
-#### Scenario: Activate newly reached Starts after rollover
-- **WHEN** the owner-local planning date advances while prior-day Today tasks and future Starts reaching the new date both exist
-- **THEN** the system resets the prior-day Today tasks to Inbox before activating the newly reached Starts into Today Inbox
+#### Scenario: Activate newly reached planning dates after rollover
+- **WHEN** the owner-local planning date advances while prior-day Today tasks, future Starts reaching the new date, and deadline-only tasks due on the new date exist
+- **THEN** the system resets the prior-day Today tasks to Inbox before activating the newly reached Starts and deadlines into Today Inbox
 
 #### Scenario: Preserve deliberate planning after midnight
 - **WHEN** a task is created or its Today planning is changed after the new owner-local date begins but before the next automatic rollover check
 - **THEN** the rollover retains that new-day horizon because the task has already been deliberately planned for the current date
 
-#### Scenario: Exclude inactive and deferred work from rollover
+#### Scenario: Exclude inactive and otherwise unplanned work from rollover
 - **WHEN** the owner-local planning date advances
-- **THEN** completed, canceled, deleted, Someday, future-starting, and horizon-free Anytime tasks retain their existing planning and lifecycle state
+- **THEN** completed, canceled, deleted, Someday, future-starting, and horizon-free Anytime tasks without a reached deadline retain their existing planning and lifecycle state
 
 #### Scenario: Preserve reminders through daily rollover
 - **WHEN** an unfinished Today task with a reminder rolls into the new day's Inbox
@@ -1103,7 +1093,7 @@ The system SHALL store Start Date as a future-only deferral calendar fact, store
 
 #### Scenario: Retry or catch up daily rollover
 - **WHEN** repeated clients or jobs evaluate the same planning date, or evaluation resumes after one or more missed days
-- **THEN** the system performs at most one effective rollover for the latest owner-local date and does not append no-op task revisions
+- **THEN** the system performs at most one effective rollover for the latest owner-local date, activates any overdue deadline-only work once, and does not append no-op task revisions
 
 #### Scenario: Place work in a day horizon
 - **WHEN** a user selects Inbox, Now, Next, or Later for Anytime work
@@ -1130,23 +1120,15 @@ The system SHALL store Start Date as a future-only deferral calendar fact, store
 - **THEN** the interface converts the stored instant for display without moving the scheduled instant
 
 ### Requirement: Recurrence Integrity
-The system SHALL represent each repeating to-do as a first-class revisioned recurrence prototype that lives only in Upcoming, SHALL generate ordinary task instances from that prototype, SHALL support calendar and after-completion schedules, and SHALL assign every spawned logical event a deterministic unique identity.
+The system SHALL keep revisioned recurrence definitions separate from task instances, SHALL present one permanent recurrence prototype only in Upcoming while the definition remains active and has a knowable next spawn date, SHALL support calendar and after-completion schedules, and SHALL assign every logical recurrence event a deterministic unique identity.
 
 #### Scenario: Apply Repeat to an existing task
 - **WHEN** a user saves a recurrence on an ordinary task
-- **THEN** the system snapshots that task into the first recurrence prototype revision, adopts the existing task as the first ordinary occurrence without duplication, and records recurrence lineage
-
-#### Scenario: Keep prototype content authoritative
-- **WHEN** a recurrence prototype contains Summary, Notes, Primary Link, Area, Actionability, planning defaults, or checklist items with order and completion state
-- **THEN** every future instance is spawned from that immutable prototype revision and no previous instance contributes content to the prototype or a later instance
-
-#### Scenario: Edit an ordinary spawned instance
-- **WHEN** a user edits, defers, reorders, completes, trashes, restores, or changes checklist state on a spawned instance
-- **THEN** the instance behaves as an ordinary task and the change does not alter prototype content or any later instance
+- **THEN** the system snapshots that task as the recurrence template, uses it as the initial recurrence prototype without duplicating a spawned instance before its first spawn date, and records recurrence provenance
 
 #### Scenario: Configure an after-completion recurrence
 - **WHEN** a user chooses after completion and supplies a positive interval in days, weeks, months, or years
-- **THEN** the recurrence waits for authoritative completion or trash of the current ordinary instance before deriving the next spawn date
+- **THEN** the recurrence waits for an authoritative Done transition of the current instance before deriving the next schedule anchor
 
 #### Scenario: Configure a calendar recurrence
 - **WHEN** a user chooses daily, weekly, monthly, or yearly recurrence and supplies its interval and applicable day pattern
@@ -1154,111 +1136,115 @@ The system SHALL represent each repeating to-do as a first-class revisioned recu
 
 #### Scenario: Configure recurrence end
 - **WHEN** a user chooses never, after a positive number of occurrences, or on an inclusive end date
-- **THEN** the recurrence produces no instance or prototype projection beyond that boundary
+- **THEN** the recurrence produces no occurrence beyond that boundary
 
 #### Scenario: Generate a recurring instance
-- **WHEN** an active recurrence prototype reaches a logical spawn date
-- **THEN** the authoritative server transaction creates no more than one ordinary task instance for that logical event and advances the prototype independently
+- **WHEN** an active recurrence prototype reaches a spawn date
+- **THEN** the authoritative server transaction creates no more than one ordinary task instance for that logical recurrence event and advances the prototype to its next knowable spawn date
 
-#### Scenario: Project the next calendar prototype
-- **WHEN** a calendar recurrence has a next logical spawn date after evaluation
-- **THEN** Upcoming presents one virtual prototype row in that date bucket without creating a future task row or occurrence row
+#### Scenario: Inherit prototype metadata
+- **WHEN** a recurrence prototype spawns a task instance
+- **THEN** the instance inherits the prototype's captured summary, notes, Primary Link, Area, checklist content and completion states, actionability, reminder configuration, and applicable Start and Deadline rules
 
 #### Scenario: Derive Start from a repeating Deadline
 - **WHEN** a recurrence includes deadlines and specifies that work starts a nonnegative number of days earlier
-- **THEN** each schedule date becomes the ordinary instance Deadline and its Start is that many owner-local dates earlier
+- **THEN** each schedule date becomes the task Deadline and the generated task Start is that many owner-local dates earlier
 
 #### Scenario: Inherit a recurrence reminder
 - **WHEN** a recurrence enables a valid reminder time
-- **THEN** each spawned instance receives that reminder on its generated Start date through the existing time-zone-safe reminder path
+- **THEN** each generated instance receives that reminder on its generated Start date through the existing time-zone-safe reminder path
+
+#### Scenario: Complete an after-completion instance
+- **WHEN** a user completes the latest instance of after-completion work
+- **THEN** the system preserves the recurrence definition and derives exactly one next prototype date from the authoritative completion date
+
+#### Scenario: Trash an after-completion instance
+- **WHEN** a user trashes the latest instance of after-completion work
+- **THEN** the system treats the authoritative trash date as its Done date and derives exactly one next prototype date from it
 
 #### Scenario: Present waiting after-completion work
-- **WHEN** an active after-completion recurrence has an outstanding ordinary instance and therefore cannot yet derive its successor
-- **THEN** Upcoming presents the prototype once in a non-draggable Repeating Tasks section after its dated buckets with Waiting in second-row metadata
+- **WHEN** an active after-completion recurrence has an outstanding open instance and therefore cannot yet derive its successor
+- **THEN** Upcoming presents the prototype once in a non-draggable Repeating Tasks section after its dated buckets, with Waiting in second-row metadata
+
+#### Scenario: Restore the outstanding after-completion instance
+- **WHEN** the latest completed or trashed instance is restored before its successor reaches its spawn date
+- **THEN** the system retracts that future successor from task surfaces and returns the prototype to the waiting section until the restored instance enters Done again
 
 #### Scenario: Go to the outstanding instance
 - **WHEN** a user chooses Go to Instance for a waiting after-completion prototype
-- **THEN** Tasks navigates to the list containing its outstanding ordinary instance and opens that task
+- **THEN** Tasks navigates to the list containing its outstanding instance and opens that ordinary task
 
-#### Scenario: Complete or trash an after-completion instance
-- **WHEN** the outstanding ordinary instance is completed or trashed
-- **THEN** the prototype derives exactly one next spawn date from that terminal owner-local date and leaves the terminal instance unchanged in Done
-
-#### Scenario: Restore an after-completion instance
-- **WHEN** the outstanding instance is restored before its successor reaches its spawn date
-- **THEN** the unspawned successor projection is canceled and the prototype returns to Waiting on that restored instance
-
-#### Scenario: Preserve an already spawned successor on restoration
-- **WHEN** an older instance is restored after its successor has already spawned
-- **THEN** the system preserves both ordinary instances and does not merge, delete, or rewrite either one
+#### Scenario: Present a dated recurrence prototype
+- **WHEN** an active recurrence has a knowable future spawn date
+- **THEN** Upcoming presents exactly one prototype in the date bucket determined by its future Start when present or otherwise its future Deadline
 
 #### Scenario: Distinguish an Upcoming recurrence prototype
-- **WHEN** a virtual recurrence prototype appears in an Upcoming date bucket
-- **THEN** its leading control is the recurrence symbol rather than a checkbox and it cannot be completed, bulk-mutated, dragged, or directly assigned a different Start
+- **WHEN** a future recurrence prototype appears in an Upcoming date bucket
+- **THEN** its leading control is the recurrence symbol rather than a checkbox and it cannot be completed, bulk-mutated, dragged, or directly assigned different task metadata
 
-#### Scenario: Present a deferred spawned instance in Upcoming
-- **WHEN** a reached ordinary instance is assigned a future Start
-- **THEN** Upcoming presents that task in its Start-date bucket with an ordinary checkbox and full ordinary task editing while the prototype remains independently projected at its own next spawn date or waiting section
+#### Scenario: Present a spawned instance in Upcoming
+- **WHEN** an already-spawned recurrence instance remains or becomes eligible for Upcoming because of its editable Start or Deadline
+- **THEN** it appears as an ordinary task with a checkbox and complete ordinary task editing, selection, completion, deletion, and drag behavior
+
+#### Scenario: Reach a recurrence task instance
+- **WHEN** a future prototype reaches its spawn date and its task instance appears in Today, Anytime, or Upcoming
+- **THEN** the instance behaves as an ordinary task and does not expose Edit Repeat
+
+#### Scenario: Keep the prototype after spawning
+- **WHEN** a calendar prototype spawns its due instance
+- **THEN** the prototype remains represented in Upcoming at the next valid cadence date without causing the spawned instance to appear as repeating
 
 #### Scenario: Edit Repeat from Upcoming
 - **WHEN** a user activates a recurrence prototype or chooses Edit Repeat
-- **THEN** Tasks opens the recurrence editor with the current prototype content and schedule and saves accepted changes together as a new immutable recurrence revision
+- **THEN** Tasks opens the recurrence editor with the current prototype name and revision schedule values and saves accepted name or schedule changes as a new recurrence revision
 
-#### Scenario: Keep the next prototype current or future
+#### Scenario: Keep the next occurrence current or future
 - **WHEN** a user creates or edits recurrence scheduling
-- **THEN** the next prototype date cannot be saved before the owner's current planning date and an older source date advances to the next valid cadence date
+- **THEN** the next occurrence cannot be selected or saved before the owner's current planning date, and an older source date advances to the next valid cadence date
 
-#### Scenario: Edit a recurrence cadence without changing reached instances
-- **WHEN** a recurrence edit is accepted after the prior revision has spawned ordinary instances
-- **THEN** the system creates a new prototype revision, recalculates the unspawned projection, and leaves every reached instance unchanged
+#### Scenario: Replace materialized future projections after a calendar edit
+- **WHEN** a calendar recurrence edit is accepted after its prior revision has materialized a future Upcoming prototype
+- **THEN** the system supersedes that prior-revision prototype, resets evaluation to the owner-local planning date, and materializes the edited cadence without changing any reached task instance
 
 #### Scenario: Override the next after-completion occurrence
-- **WHEN** a user edits a waiting after-completion prototype and changes Next Occurrence
-- **THEN** terminal disposition of its outstanding older-revision instance projects the next spawn on that date and later terminal events resume interval-based scheduling
+- **WHEN** a user edits a waiting after-completion recurrence and changes Next Occurrence
+- **THEN** the next prototype generated after its outstanding older-revision instance enters Done uses that date and later Done transitions resume interval-based scheduling
 
-#### Scenario: Retry instance generation
+#### Scenario: Cancel an after-completion instance
+- **WHEN** a user cancels an instance governed by an after-completion rule
+- **THEN** the system does not advance that rule from the cancellation
+
+#### Scenario: Retry occurrence generation
 - **WHEN** clients or jobs concurrently request generation for the same logical recurrence event
-- **THEN** a uniqueness boundary returns the one existing occurrence instead of creating a duplicate task
+- **THEN** a uniqueness boundary returns the one existing occurrence instead of creating a duplicate
 
 #### Scenario: Continue calendar evaluation from its durable cursor
 - **WHEN** a calendar recurrence has already been evaluated through an earlier date and a new request evaluates it farther forward
-- **THEN** the server derives due logical steps and the next future prototype directly, bounds catch-up work independently from recurrence age, and does not rescan from the original Start
+- **THEN** the server derives due work and the next future prototype from its durable occurrence history without duplicating earlier logical events
 
 #### Scenario: Evaluate missed calendar events
 - **WHEN** a calendar recurrence has one or more missed events
-- **THEN** the generator applies the definition's explicit `skip`, `latest`, or `all` policy and defaults to `latest`
+- **THEN** the generator applies the definition's explicit `skip`, `latest`, or `all` policy to spawned instances and defaults to `latest`
+
+#### Scenario: Edit a recurrence definition
+- **WHEN** a user changes a recurrence definition after it has generated work
+- **THEN** the change creates a new revision, reached instances retain their source revision, and superseded future prototypes remain durable but are omitted from task surfaces
 
 #### Scenario: Pause recurrence
 - **WHEN** a user pauses or archives a recurrence definition
-- **THEN** the system stops future generation and removes its virtual prototype projection without deleting existing ordinary instances
+- **THEN** the system stops future generation without deleting existing instances
 
 #### Scenario: Report a failed catch-up independently from an accepted definition change
-- **WHEN** a recurrence prototype is created, revised, or resumed successfully but its immediate evaluation fails
-- **THEN** the system retains the accepted prototype change, reports catch-up as a separate content-free failure, avoids an automatic retry loop for the same planning date, and exposes an explicit retry action
+- **WHEN** a recurrence definition is created, revised, or resumed successfully but its immediate occurrence evaluation fails
+- **THEN** the system retains the accepted definition change, reports catch-up as a separate content-free failure, avoids an automatic retry loop for the same planning date, and exposes an explicit retry action
 
 #### Scenario: Distinguish unavailable recurrence data from an empty list
-- **WHEN** the recurrence prototype projection is loading or fails to load
+- **WHEN** the recurrence projection is loading or fails to load
 - **THEN** the web interface presents the corresponding loading or failure state, withholds the empty-list claim, and disables recurrence mutation until the projection is trustworthy
 
 #### Scenario: Hydrate an owner-safe recurrence response
 - **WHEN** an authenticated recurrence RPC omits the owner identifier from its returned definition or revision
 - **THEN** the client assigns the already authenticated owner to the parsed result while synchronized recurrence rows continue to validate their stored owner identifier
-
-#### Scenario: Convert a legacy template-backed prototype
-- **WHEN** the migration finds a valid current recurrence revision backed by a template revision
-- **THEN** it copies the validated task and checklist snapshot into the recurrence revision before removing template dependencies
-
-#### Scenario: Preserve a deferred reached instance during conversion
-- **WHEN** a recurrence occurrence's immutable scheduled date is current or past but its task Start has been deferred into the future
-- **THEN** migration preserves that occurrence and task as an ordinary instance and does not classify it as a removable future prototype
-
-#### Scenario: Remove a legacy future projection during conversion
-- **WHEN** a legacy recurrence occurrence's immutable scheduled date is future and it is the one materialized projection for its recurrence
-- **THEN** migration captures its latest prototype content, removes that task and occurrence, and replaces them with the recurrence's virtual next-date projection
-
-#### Scenario: Reject malformed legacy recurrence data
-- **WHEN** a recurrence lacks a valid source snapshot, has cross-owner links, duplicate future projections, or another ambiguous conversion state
-- **THEN** the migration aborts before deleting template or task data
 
 ### Requirement: Explicit Monthly Recurrence Cadence
 Tasks SHALL expose every value that controls a monthly recurrence and SHALL evaluate the same explicit rule in the preview and authoritative server paths.
@@ -2019,9 +2005,9 @@ The Tasks module SHALL expose pointer and touch creation affordances on active p
 - **WHEN** a user clicks a day, month, or year task-bucket heading in Upcoming
 - **THEN** Tasks opens a blank draft at the top of that bucket and assigns the section's canonical day, first day of month, or first day of year as Start
 
-#### Scenario: Reveal a bucket add affordance
+#### Scenario: Present a quiet bucket creation target
 - **WHEN** a creatable bucket heading is presented
-- **THEN** the heading uses a pointer cursor and persistently shows a small Lucide Plus to the right of its label while the complete heading control remains the activation target
+- **THEN** the heading uses a pointer cursor and the complete heading control remains the activation target without displaying an Add Task Plus icon
 
 #### Scenario: Keep pointer and keyboard creation contracts distinct
 - **WHEN** the established keyboard new-task command is invoked
@@ -2622,6 +2608,16 @@ The Tasks module SHALL keep Today, Upcoming, Anytime, Someday, Done, and Area vi
 #### Scenario: Present one absent metadata disclosure
 - **WHEN** an expanded task has either Primary Link or Checklist content but not the other
 - **THEN** the remaining add action appears at automatic width on its own line with left-aligned contents and no divider
+
+#### Scenario: Preserve disclosure layout during planning changes
+- **WHEN** the user changes Start or destination while an expanded task already has Primary Link or Checklist content
+- **THEN** the existing content and any remaining add action continue on separate full-width rows
+- **AND** selecting Someday does not recombine them into the paired absent-metadata layout
+
+#### Scenario: Preserve an open Anytime task's rendered placement
+- **WHEN** the user changes Area, Start, Deadline, Actionability, ordering, or any other metadata that would change an expanded Anytime task's visible bucket or invisible automatic-sort position
+- **THEN** the editor and summary row may display the current metadata immediately while the task remains in the exact Area bucket and within-bucket slot where it was rendered when opened
+- **AND** the final metadata projection is allowed to rebucket or reorder the task only after the drawer closes
 
 #### Scenario: Disclose an absent Primary Link
 - **WHEN** an expanded task has no Primary Link
@@ -3443,7 +3439,7 @@ Tasks SHALL reserve every user-editable forward task mutation before asynchronou
 - **THEN** the accepted mutation participates in the same guarded undo and redo chain
 
 ### Requirement: Directly recoverable Done task controls
-Done SHALL present retained completed, canceled, and deleted tasks as fully inspectable, editable, selectable, and recoverable task states, grouped by their owner-local terminal-entry day and never drag-reorderable.
+Done SHALL present retained completed, canceled, and deleted tasks as fully inspectable, editable, selectable, and recoverable task states, grouped by their owner-local terminal-entry day and never drag-reorderable. Done MUST NOT present deleted checklist items as list entries, while their deletion history remains available to undo.
 
 #### Scenario: Delete a task from its menu
 - **WHEN** a user activates Delete in a task's ellipsis menu
@@ -3463,15 +3459,23 @@ Done SHALL present retained completed, canceled, and deleted tasks as fully insp
 
 #### Scenario: Reopen a completed task by unchecking it
 - **WHEN** Done presents a completed present task
-- **THEN** its leading control is a contained checked task checkbox, and activating that control reopens the task according to its current planning metadata
+- **THEN** its leading control is a semantic-green Lucide `SquareCheck`, and activating that control reopens the task according to its current planning metadata
 
 #### Scenario: Reopen a canceled task
 - **WHEN** Done presents a canceled present task
 - **THEN** its leading control communicates cancellation and activating it reopens the task through the same guarded lifecycle path
 
-#### Scenario: Restore a deleted task from its trash control
+#### Scenario: Reopen a deleted task from its terminal control
 - **WHEN** Done presents a recoverably deleted task root
-- **THEN** its leading icon-only control persistently shows a restore icon and restores the task through the existing hierarchy-safe transition according to its current planning metadata
+- **THEN** its leading icon-only control persistently shows a neutral-gray Lucide `SquareX`, is labeled `Reopen`, and reopens the task through the existing hierarchy-safe transition according to its current planning metadata
+
+#### Scenario: Offer the same recovery action in task menus
+- **WHEN** a user opens the ellipsis menu for a completed, canceled, or deleted task in Done
+- **THEN** the recovery action is labeled `Reopen`
+
+#### Scenario: Hide deleted checklist items
+- **WHEN** checklist-item deletion history remains available for undo
+- **THEN** Done does not render those checklist items, a deleted checklist section, or a non-empty state based only on those hidden records
 
 #### Scenario: Open and edit a terminal task
 - **WHEN** a retained completed, canceled, or deleted task appears in Done
@@ -3480,6 +3484,18 @@ Done SHALL present retained completed, canceled, and deleted tasks as fully insp
 #### Scenario: Select terminal tasks together
 - **WHEN** Done contains completed, canceled, or deleted tasks
 - **THEN** whole-task focus, single selection, multi-selection, and eligible bulk recovery treat them as peer task rows
+
+#### Scenario: Present terminal bulk actions
+- **WHEN** one or more completed, canceled, or deleted tasks are selected in Done and the user opens Edit
+- **THEN** Tasks offers Area, Actionability, and Reopen, keeps the Area and Actionability submenus operable, omits Delete, and does not offer terminal-ineligible Start or Deadline actions
+
+#### Scenario: Reopen a mixed terminal selection
+- **WHEN** the user chooses Reopen for a selection containing any mix of completed, canceled, and deleted tasks
+- **THEN** Tasks reopens completed and canceled tasks, restores deleted task hierarchies, clears the terminal metadata that kept every successful task in Done, and treats the bulk request as one user operation
+
+#### Scenario: Bulk edit terminal organization metadata
+- **WHEN** the user chooses an Area or Actionability value for selected Done tasks
+- **THEN** Tasks applies the value atomically to every selected task without reopening it or removing it from Done
 
 #### Scenario: Preserve task-row interaction in Done
 - **WHEN** a retained task appears in Done
@@ -3626,27 +3642,31 @@ Tasks SHALL move editing focus from Summary to the start of Notes when the user 
 - **THEN** Right Arrow retains its ordinary text-editing behavior
 
 ### Requirement: Task Primary Link actions use canonical external-link iconography
-Tasks SHALL use canonical protocol-specific identity icons for Primary Links in task rows, the metadata-editor decoration, and the iOS widget, defaulting to Lucide `Link2` or its closest native equivalent, while the metadata editor's adjacent launch action SHALL always use Lucide `ExternalLink`.
+Tasks SHALL use canonical protocol-specific identity icons for Primary Links in task rows, the metadata-editor decoration, and native widgets, defaulting to Lucide `Link2` or its closest native equivalent. Task-row and native-widget Primary Link identity icons SHALL use the semantic blue link treatment, while the metadata editor's adjacent launch action SHALL always use Lucide `ExternalLink`.
 
 #### Scenario: Show a generic Primary Link
 - **WHEN** a task has a generic HTTP or HTTPS Primary Link
-- **THEN** its task-row and metadata-input decoration use Lucide `Link2` and its widget representation uses the closest native chain-link symbol
+- **THEN** its task-row and metadata-input decoration use Lucide `Link2`, its widget representation uses the closest native chain-link symbol, and the task-row and widget identity icons use their platform's semantic blue link color
 
 #### Scenario: Show a Mail message link
 - **WHEN** a task Primary Link uses the recognized Mail message protocol
-- **THEN** the task row, metadata-input decoration, and widget retain the established Mail message icon
+- **THEN** the task row, metadata-input decoration, and widget retain the established Mail message icon, and the task-row and widget identity icons use their platform's semantic blue link color
 
 #### Scenario: Show a Jira link
 - **WHEN** a task Primary Link uses the Jira protocol or a recognized Jira HTTP or HTTPS URL
-- **THEN** every task-row and metadata-input decoration uses Lucide `Zap`, the iOS widget uses the closest native system rendering, and activation opens the configured browser or registered Jira application as appropriate
+- **THEN** every task-row and metadata-input decoration uses Lucide `Zap`, native widgets use the closest native system rendering, the task-row and widget identity icons use their platform's semantic blue link color, and activation opens the configured browser or registered Jira application as appropriate
 
 #### Scenario: Show an Obsidian link
 - **WHEN** a task Primary Link uses the Obsidian protocol
-- **THEN** every task-row and metadata-input decoration uses Lucide `FileText`, the iOS widget uses the closest native system rendering, and activation opens the registered Obsidian application
+- **THEN** every task-row and metadata-input decoration uses Lucide `FileText`, native widgets use the closest native system rendering, the task-row and widget identity icons use their platform's semantic blue link color, and activation opens the registered Obsidian application
 
 #### Scenario: Keep the launch action stable
 - **WHEN** a nonblank Primary Link appears in an expanded task
 - **THEN** the activation control beside the Primary Link input always uses Lucide `ExternalLink` regardless of the Primary Link's identity icon
+
+#### Scenario: Omit the Primary Link slot after clearing a captured link
+- **WHEN** a task retains Mail or other typed source provenance but its editable Primary Link is null, blank, malformed, or otherwise not actionable
+- **THEN** its task row renders no icon in the Primary Link slot and does not synthesize an icon from source provenance
 
 ### Requirement: Settled Task List Transitions
 The system SHALL conceal stale or partially projected task rows while navigating from one Tasks planning list to another and SHALL reveal the destination list only after its watched query has settled.
@@ -3769,7 +3789,11 @@ Every Tasks list view SHALL expose a top-right Search button that opens Quick Fi
 - **THEN** the list Search button and pull-down Quick Find gesture are absent
 
 ### Requirement: Start Reminder Whole-Hour Menu
-The Tasks unified Start picker SHALL pair its editable Reminder input with a keyboard-accessible alarm action that offers every currently legal whole-hour reminder choice without committing or closing the containing Start picker.
+The Tasks unified Start picker SHALL pair its editable Reminder input with a keyboard-accessible alarm action that is visibly presented as a button appended to the input and offers every currently legal whole-hour reminder choice without committing or closing the containing Start picker.
+
+#### Scenario: Present an appended alarm button
+- **WHEN** the unified Start picker renders the Reminder input
+- **THEN** the alarm action is separated from the editable field by a visible left border and reads as an appended input-group button rather than a passive field decoration
 
 #### Scenario: Offer every hour for a future Start
 - **WHEN** a task has a future Start Date and the user opens the Reminder hour menu
@@ -3784,8 +3808,8 @@ The Tasks unified Start picker SHALL pair its editable Reminder input with a key
 - **THEN** the menu applies the same remaining-hours rule as Today because choosing a reminder will first assign Today Inbox
 
 #### Scenario: Disable an exhausted Today menu
-- **WHEN** a task is governed by Today reminder rules and no whole hour remains later than the current owner-local moment
-- **THEN** the alarm action is disabled while freeform Reminder entry remains available for any later valid minute
+- **WHEN** a task has no Start or a Today Start and no whole hour remains later than the current owner-local moment
+- **THEN** the alarm action is disabled with a visibly muted button state while freeform Reminder entry remains available for any later valid minute
 
 #### Scenario: Open the nested menu without committing Start
 - **WHEN** focus is on the enabled alarm action and the user presses Enter or Space
@@ -4014,14 +4038,22 @@ The expanded Tasks metadata drawer SHALL identify its unlabeled single-line cont
 - **THEN** its decoration retains the ordinary muted control-icon color
 
 ### Requirement: Task completion boxes use neutral color
-Ordinary task and checklist completion controls SHALL use the established neutral gray in both open and checked states and SHALL NOT turn green on hover.
+Ordinary open task and checklist completion controls SHALL use the established neutral gray and SHALL NOT turn green on hover, while a checked to-do SHALL use semantic success green as visible completion confirmation. Checked checklist items SHALL remain neutral gray.
 
 #### Scenario: Hover an ordinary completion box
 - **WHEN** a user points at an open or checked task or checklist completion box
-- **THEN** its icon retains the ordinary neutral gray rather than changing to semantic green
+- **THEN** its icon retains its current state color rather than changing color because of hover
 
-#### Scenario: Present a checked completion box
-- **WHEN** a task or checklist item is shown as checked
+#### Scenario: Present a checked to-do
+- **WHEN** a to-do is shown as checked after pointer activation, keyboard-command activation, optimistic completion feedback, or persisted completion
+- **THEN** its contained checked-square icon uses semantic success green
+
+#### Scenario: Present an open to-do
+- **WHEN** a to-do is open and not awaiting completion
+- **THEN** its open-square icon uses the established neutral gray
+
+#### Scenario: Present a checked checklist item
+- **WHEN** a checklist item is shown as checked
 - **THEN** its checked-square icon uses the same neutral gray family as its unchecked-square icon
 
 #### Scenario: Preserve selection-mode color
@@ -4184,4 +4216,274 @@ Tasks SHALL expose no reusable Template entity, view, route, navigation action, 
 #### Scenario: Omit templates from synchronization
 - **WHEN** the template-free client synchronizes Tasks
 - **THEN** no template collection appears in the PowerSync schema, publication, or owner-scoped stream
+
+### Requirement: Closed-task completion has an accidental-click grace period
+When a user marks a closed ordinary to-do complete from a list, Tasks SHALL show it as checked in place for three seconds before beginning terminal exit motion and persistence.
+
+#### Scenario: User confirms completion by waiting
+- **WHEN** the user checks a closed ordinary to-do and does not interact with its completion control for three seconds
+- **THEN** the row SHALL remain visibly checked during the grace period
+- **AND** Tasks SHALL then run the established completion exit and persistence behavior
+
+#### Scenario: User cancels accidental completion
+- **WHEN** the user checks a closed ordinary to-do and checks the same completion control again before three seconds elapse
+- **THEN** Tasks SHALL restore the unchecked state in place
+- **AND** Tasks SHALL NOT persist a completion mutation
+
+#### Scenario: User opens a task during its grace period
+- **WHEN** a user opens a to-do whose closed-row completion grace period is active
+- **THEN** Tasks SHALL preserve the checked intent using the established open-editor deferred-completion behavior
+- **AND** the user SHALL remain able to uncheck it before closing the editor
+
+### Requirement: Deadline dates are unrestricted and the command crosses the overdue boundary
+Tasks SHALL allow a deadline to be selected on any calendar date before, on, or after the current planning date. An open deadline picker SHALL advance Control+D from the to-do's selected date by one calendar day, including from yesterday to today, before subsequent commands continue from the current keyboard-focused date.
+
+#### Scenario: Past and current deadline dates remain available
+- **WHEN** a user opens a Deadline picker
+- **THEN** dates before the current planning date SHALL remain enabled and selectable
+- **AND** the current planning date SHALL remain enabled and selectable
+
+#### Scenario: Yesterday advances to today
+- **WHEN** a to-do's deadline is yesterday and the user invokes Control+D after opening the deadline picker
+- **THEN** keyboard focus SHALL move to today rather than skipping to tomorrow
+- **AND** a subsequent Control+D SHALL move focus to tomorrow
+
+#### Scenario: Arrow navigation remains authoritative
+- **WHEN** the user changes the focused calendar date with arrow keys after opening or advancing the deadline picker
+- **THEN** the next Control+D SHALL advance one day from that newly focused date
+
+### Requirement: Online startup conceals stale cached task rows
+Tasks SHALL distinguish locally available task rows from task rows that have been refreshed by the authoritative service during the current online launch. While an online connected launch awaits its first current-session completed sync, Tasks SHALL show the centered loading indicator instead of revealing the locally cached list.
+
+#### Scenario: Initial cacheless fetch
+- **WHEN** a task-list query has no locally available rows and is still fetching
+- **THEN** Tasks SHALL show the task loading indicator
+- **AND** Tasks SHALL NOT show a no-tasks empty-state message
+
+#### Scenario: Online launch has cached rows
+- **WHEN** locally cached task rows are available during an online launch but PowerSync has not completed a sync in the current runtime session
+- **THEN** Tasks SHALL show the centered task loading indicator
+- **AND** Tasks SHALL NOT reveal the cached rows before current-session freshness is established
+
+#### Scenario: Current-session sync completes
+- **WHEN** the authoritative service completes the first sync of the current online runtime session
+- **THEN** Tasks SHALL reveal the newly reconciled task list
+- **AND** subsequent same-view background refreshes SHALL leave the currently rendered rows visible
+
+#### Scenario: App launches offline
+- **WHEN** Tasks launches without browser network connectivity and a locally cached projection is available
+- **THEN** Tasks SHALL render the cached rows immediately as its offline fallback
+
+#### Scenario: Online freshness cannot be established promptly
+- **WHEN** a download failure occurs or the bounded startup freshness wait expires before a current-session sync completes
+- **THEN** Tasks SHALL release the loading gate and render the locally available projection
+- **AND** existing synchronization diagnostics SHALL continue to communicate the degraded connection state
+
+#### Scenario: Settled empty list
+- **WHEN** the startup freshness gate is released and the watched query has no rows and is no longer loading or fetching
+- **THEN** Tasks SHALL show the applicable empty-state message
+
+### Requirement: Legacy task provenance is render-safe
+Tasks SHALL render task lists without crashing when a persisted task contains a source-provenance kind that is no longer part of the current typed source vocabulary.
+
+#### Scenario: Unrecognized persisted source kind
+- **WHEN** a task row contains a nonempty source kind that the current client does not recognize
+- **THEN** Tasks SHALL render the established generic Source presentation
+- **AND** the task list SHALL remain usable
+
+### Requirement: Partially upgraded recurrence data is render-safe
+Tasks SHALL keep ordinary task lists usable when synchronized recurrence data is temporarily incomplete during a schema transition or cache refresh.
+
+#### Scenario: Recurrence revision lacks a valid prototype snapshot
+- **WHEN** synchronized storage exposes a recurrence revision without a valid prototype snapshot
+- **THEN** Tasks SHALL skip that invalid recurrence revision and report the parsing failure to developer diagnostics
+- **AND** ordinary tasks SHALL continue rendering
+
+### Requirement: Compatible task-history reconstruction
+Tasks SHALL reconstruct its authoritative undo and redo cursor from every synchronized history row that uses current mutation vocabulary or retained legacy snapshot vocabulary produced by an approved Tasks migration.
+
+#### Scenario: Read widget-originated history
+- **WHEN** synchronized task history includes an accepted mutation whose channel is `widget`
+- **THEN** Tasks decodes that event as valid history and keeps eligible newer task actions available to undo and redo
+
+#### Scenario: Read retained template-era snapshots
+- **WHEN** append-only history retains a task snapshot whose source kind was `template` before template removal
+- **THEN** Tasks normalizes the retired provenance to the template-free task representation and reconstructs the cursor without discarding otherwise valid history
+
+#### Scenario: Diagnose genuinely incompatible history
+- **WHEN** a synchronized history row remains invalid after supported compatibility normalization
+- **THEN** Tasks withholds unsafe traversal, logs a content-free diagnostic with the failing event identity and reason, and does not silently describe the condition as an empty history boundary
+
+### Requirement: Selection-Owned Edit Menu Dismissal
+Tasks SHALL treat dismissal of the selection-mode Edit menu as a menu interaction rather than an instruction to exit selection mode.
+
+#### Scenario: Dismiss Edit menu with an outside pointer
+- **WHEN** one or more tasks are selected, the selection-mode Edit menu is open, and the user clicks or taps outside the menu without choosing an action
+- **THEN** Tasks closes the Edit menu, keeps selection mode active, preserves the selected task membership and range anchor, and does not activate the underlying interface target
+
+#### Scenario: Preserve ordinary outside selection dismissal afterward
+- **WHEN** the selection-mode Edit menu is closed and the user performs a later pointer interaction outside every task row and selection-owned surface
+- **THEN** Tasks applies its ordinary outside-selection dismissal behavior
+
+### Requirement: Compact Tasks Start picker presentation
+The Tasks Start picker SHALL match the shared calendar width and reduce non-calendar space through a vertical Today rail, a compact Reminder row, and small terminal action buttons without changing their semantics or traversal order.
+
+#### Scenario: Match the shared calendar width
+- **WHEN** the Tasks Start picker opens
+- **THEN** its Today, calendar, Reminder, and terminal-action sections share the regular date picker's width
+- **AND** the four horizon labels, Reminder content, Clear, and Someday remain fully usable without horizontal clipping
+
+#### Scenario: Present Today beside the horizons
+- **WHEN** the Tasks Start picker is open
+- **THEN** the Today label appears vertically in a narrow rail to the left of Inbox, Now, Next, and Later
+- **AND** all four horizon buttons remain equal-width, labeled, colored, and directly selectable
+
+#### Scenario: Present compact Reminder and terminal actions
+- **WHEN** the Tasks Start picker renders Reminder, Clear, and Someday
+- **THEN** the Reminder input group and the Clear and Someday buttons use the shared small-control height
+- **AND** Reminder remains full-width while Clear and Someday remain equal-width sibling actions with their existing divider
+
+#### Scenario: Preserve Start picker behavior
+- **WHEN** a user navigates or activates the compact Start picker by keyboard, pointer, or touch
+- **THEN** horizon selection, date selection, reminder entry, reminder-hour selection, Clear, Someday, focus traversal, and picker closure behave exactly as before
+
+#### Scenario: Leave the calendar vertically for Start controls
+- **WHEN** keyboard focus is on a date in the first visible calendar row and the user presses Up beyond the legal day cells in that column
+- **THEN** focus moves to the appropriate calendar header control without paging to another month
+- **WHEN** keyboard focus is on a date in the final visible calendar row and the user presses Down
+- **THEN** focus moves to the Reminder input without paging to another month
+
+#### Scenario: Align the Deadline picker to its field
+- **WHEN** the Tasks Deadline picker opens from an ordinary task editor
+- **THEN** the calendar's right edge aligns with the Deadline input's right edge
+- **AND** the Start picker continues to align with the Start input's left edge
+
+#### Scenario: Present the Reminder hour action as an appended button
+- **WHEN** the compact Reminder input group is visible
+- **THEN** the alarm-clock action has a visible divider only on its left edge
+- **AND** its other edges rely on the containing input group's border
+- **AND** its enabled icon uses the standard white foreground color without a hover effect
+- **AND** its disabled, focus, and activation semantics remain unchanged
+
+#### Scenario: Dismiss only the nested Reminder hour menu
+- **WHEN** the Reminder hour menu is open and the user presses Escape, activates its trigger again, or interacts elsewhere inside the Start picker
+- **THEN** only the Reminder hour menu closes
+- **AND** the Start picker remains open
+- **AND** the task metadata drawer remains open
+
+### Requirement: Multiline Task And Checklist Paste
+Tasks SHALL interpret normalized plain-text clipboard lines as ordered task or checklist-item boundaries when the corresponding Tasks surface owns Paste, while preserving structured task payloads and native single-line text editing.
+
+#### Scenario: Paste multiline text into a task list
+- **WHEN** Paste in a supported task-list destination receives ordinary plain text or the plain-text representation of rich text containing LF, CRLF, or bare CR line boundaries
+- **THEN** Tasks creates one open task per nonempty trimmed line in source order at the destination's normal paste position and applies the destination's planning and organization rules to every created task
+
+#### Scenario: Ignore empty task lines
+- **WHEN** ordinary multiline task clipboard text contains blank or whitespace-only lines
+- **THEN** Tasks creates no task for those lines and preserves the relative source order of every nonempty line
+
+#### Scenario: Preserve structured and single-line task paste
+- **WHEN** Paste receives a valid supported task envelope or ordinary text with no line boundary
+- **THEN** Tasks retains the existing structured reconstruction or single-task plain-text behavior respectively
+
+#### Scenario: Confirm task paste through created rows
+- **WHEN** task Paste succeeds
+- **THEN** Tasks renders the created task rows without showing a redundant success toast
+
+#### Scenario: Paste multiline text into a checklist item
+- **WHEN** a user pastes plain text or the plain-text representation of rich text containing line boundaries into a persisted or draft checklist-item input
+- **THEN** Tasks replaces the active selection as one multiline insertion, keeps the current prefix on the first affected item, places each subsequent line in an adjacent item, appends the current suffix to the final affected item, preserves source order, and keeps the task editor open
+
+#### Scenario: Focus the final checklist paste line
+- **WHEN** multiline checklist paste completes
+- **THEN** Tasks focuses the final affected checklist input and places the caret immediately after the pasted text and before any suffix retained from the original item
+
+#### Scenario: Preserve native paste in other editable controls
+- **WHEN** an editable control other than a checklist item owns Paste
+- **THEN** Tasks leaves the control's existing native or specialized paste behavior unchanged and does not create task objects from its clipboard text
+
+#### Scenario: Commit checklist drafts while creating a task
+- **WHEN** a user adds a checklist while creating a task, enters a nonempty checklist item, and presses Return
+- **THEN** Tasks persists that checklist item, inserts and focuses a following draft item, and retains the saved checklist after the task editor closes
+
+#### Scenario: Flush the final checklist draft when closing
+- **WHEN** a task editor closes while its checklist contains a nonempty transient draft
+- **THEN** Tasks waits for that draft to persist before unmounting the editor and does not lose the checklist item
+
+#### Scenario: Persist checklist completion locally
+- **WHEN** a user checks or reopens a persisted checklist item
+- **THEN** Tasks writes the completion state, completion timestamp, revision, and undo-operation metadata to the local PowerSync database and retains that state across rerender and application restart
+
+#### Scenario: Upload checklist completion operation metadata
+- **WHEN** PowerSync uploads a persisted checklist completion or reopening mutation
+- **THEN** Tasks accepts the mutation's undo-operation identifier as checklist metadata and applies the mutation remotely instead of rejecting and reverting it
+
+### Requirement: Checklist Item Clipboard Transfer
+Tasks SHALL let users copy, cut, and paste selected checklist items between task checklists through a strict versioned clipboard payload while preserving item order, text, and completion state.
+
+#### Scenario: Copy selected checklist items
+- **WHEN** one or more checklist items are selected and the user invokes Copy
+- **THEN** Tasks writes the selected items in visible order to the checklist clipboard payload, preserves their text and completion state, leaves the source items and selection unchanged, and shows a count-bearing success toast
+
+#### Scenario: Cut selected checklist items
+- **WHEN** one or more checklist items are selected and the user invokes Cut
+- **THEN** Tasks first writes the selected items in visible order to the checklist clipboard payload, then removes those items from the source checklist, clears their selection, and shows a count-bearing success toast
+
+#### Scenario: Preserve source rows when checklist Cut cannot write
+- **WHEN** Tasks cannot write a selected checklist Cut payload to the operating-system clipboard
+- **THEN** Tasks keeps every selected source item in place and shows a destructive failure toast
+
+#### Scenario: Paste checklist items after a focused item
+- **WHEN** a persisted checklist-item input has text-cursor focus and the user pastes a valid checklist clipboard payload
+- **THEN** Tasks inserts the copied items immediately after the focused item in source order, preserves each completion state, keeps the destination task editor open, focuses the final pasted item, and does not show a redundant success toast
+
+#### Scenario: Paste checklist items at a draft position
+- **WHEN** a transient checklist draft input has text-cursor focus and the user pastes a valid checklist clipboard payload
+- **THEN** Tasks inserts the copied items at the draft's current list position in source order, preserves each completion state, moves an empty draft below the pasted group or commits a nonempty draft there through its existing blur behavior, focuses the final pasted item, and does not show a redundant success toast
+
+#### Scenario: Reject a malformed checklist clipboard payload
+- **WHEN** a checklist input receives text identifying itself as a checklist clipboard payload but its version, operation, item count, title, or completion state is invalid
+- **THEN** Tasks creates no checklist items, leaves the destination checklist unchanged, and shows a destructive failure toast
+
+#### Scenario: Checklist selection owns Copy and Cut
+- **WHEN** checklist-item selection is active within an open task and the user invokes Copy or Cut
+- **THEN** the checklist editor handles the command and Tasks does not also copy or cut the enclosing task or task-list selection
+
+### Requirement: Protocol-Specific Primary Link Iconography
+Tasks SHALL derive Primary Link iconography consistently for the task row, metadata-editor activation control, and native widget while preserving real-link activation behavior.
+
+#### Scenario: Present a Jira Primary Link
+- **WHEN** a task has a `jira:` Primary Link or a recognized Jira HTTP or HTTPS URL
+- **THEN** its task row and metadata-editor activation control use Lucide `Zap`, and web URLs open in a new browser context while the Jira protocol is handed to its registered application
+
+#### Scenario: Present an Obsidian Primary Link
+- **WHEN** a task has an `obsidian:` Primary Link
+- **THEN** its task row and metadata-editor activation control use Lucide `FileText` and hand activation to Obsidian
+
+#### Scenario: Preserve other Primary Link iconography
+- **WHEN** a task has a Mail message Primary Link or another supported destination
+- **THEN** Mail retains its Mail icon and other destinations retain the canonical generic external-link icon
+
+#### Scenario: Keep the editor and row in parity
+- **WHEN** a nonblank Primary Link is visible in an expanded task
+- **THEN** the activation control beside the Primary Link input uses the same derived icon as the task summary row
+
+### Requirement: Widget Completion Lifecycle Parity
+The Tasks domain SHALL treat an accepted native widget completion as an ordinary idempotent task completion with the same lifecycle, history, recurrence, and convergence guarantees as completion from the web interface.
+
+#### Scenario: Complete from a widget
+- **WHEN** the native widget endpoint accepts a valid request for an owned present open task
+- **THEN** the system sets lifecycle to completed, records the authoritative completion time, increments the task revision, appends one supported history event, and lets applicable recurrence processing observe the transition
+
+#### Scenario: Identify the native mutation
+- **WHEN** the completion is written
+- **THEN** the stored mutation channel identifies the widget boundary, the actor remains the user, and the request carries stable operation and mutation identifiers without storing secret credential material in history
+
+#### Scenario: Converge every client
+- **WHEN** a widget completion is accepted centrally
+- **THEN** PowerSync projects the ordinary task and history changes to active clients without adding the credential table to its publication
+
+#### Scenario: Reject foreign or ineligible work
+- **WHEN** a credential is invalid or its bound owner does not own a present task eligible for completion
+- **THEN** the system changes no task, history, recurrence, or credential ownership data
 

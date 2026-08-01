@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(44);
+SELECT plan(46);
 
 SELECT has_table('public', 'tasks_recurrence_definitions', 'stores recurrence prototypes');
 SELECT has_table('public', 'tasks_recurrence_revisions', 'stores immutable prototype revisions');
@@ -463,6 +463,44 @@ SELECT ok(
         -> 'data' ? 'tasks_template_instantiations'
     ),
   'omits every Template collection from current backups'
+);
+
+SELECT set_config(
+  'test.recurrence_refresh_digest',
+  (
+    SELECT md5(jsonb_agg(to_jsonb(revision) ORDER BY revision.id)::text)
+    FROM public.tasks_recurrence_revisions AS revision
+  ),
+  false
+);
+RESET ROLE;
+SELECT lives_ok(
+  $$
+    INSERT INTO tasks_private.recurrence_contexts (
+      backend_pid, transaction_id, owner_id
+    )
+    SELECT pg_backend_pid(), txid_current(), owner_id
+    FROM public.tasks_recurrence_revisions
+    GROUP BY owner_id
+    ON CONFLICT DO NOTHING;
+
+    UPDATE public.tasks_recurrence_revisions
+    SET prototype_snapshot = prototype_snapshot;
+
+    DELETE FROM tasks_private.recurrence_contexts
+    WHERE backend_pid = pg_backend_pid()
+      AND transaction_id = txid_current();
+  $$,
+  're-emits recurrence snapshots inside the private migration context'
+);
+SET LOCAL ROLE authenticated;
+SELECT is(
+  (
+    SELECT md5(jsonb_agg(to_jsonb(revision) ORDER BY revision.id)::text)
+    FROM public.tasks_recurrence_revisions AS revision
+  ),
+  current_setting('test.recurrence_refresh_digest'),
+  'preserves every recurrence revision value while re-emitting snapshots'
 );
 
 SELECT * FROM finish();

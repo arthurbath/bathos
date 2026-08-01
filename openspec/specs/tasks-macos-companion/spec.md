@@ -23,8 +23,12 @@ The system SHALL provide a native macOS SwiftUI application that hosts the autho
 - **THEN** the app shows an explicit retryable unavailable state instead of a blank window or permanent spinner
 
 #### Scenario: Combine Tasks with another full-screen application
-- **WHEN** the user invokes macOS Split View or a compatible full-screen tiling action
-- **THEN** the Tasks window remains eligible for placement beside another eligible application and can resize to a narrow mobile-class content width
+- **WHEN** the user invokes macOS Split View or a compatible two-up full-screen tiling action from the Tasks window
+- **THEN** the Tasks window explicitly remains eligible for placement beside another eligible application and can resize to a narrow mobile-class content width
+
+#### Scenario: Preserve tiling eligibility across window transitions
+- **WHEN** SwiftUI reconciles the main window or the window enters or exits full screen
+- **THEN** Tasks retains its resizable style, explicit full-screen tiling eligibility, and narrow mobile-class minimum without acquiring a behavior that disallows tiling
 
 ### Requirement: Native macOS Task Navigation Commands
 The Mac companion SHALL own desktop view shortcuts before WebKit or macOS can reserve them.
@@ -82,8 +86,12 @@ The Mac companion SHALL provide one configurable large WidgetKit surface for Tod
 - **WHEN** the user activates an open task's completion control
 - **THEN** the widget performs the existing narrow owner-scoped completion action, displays its optimistic acknowledgement, and reconciles the cached lists without opening the app
 
+#### Scenario: Show a Primary Link
+- **WHEN** a projected task has an approved Primary Link
+- **THEN** its generic or protocol-specific native identity icon uses the shared native system blue link treatment
+
 #### Scenario: Open a Primary Link
-- **WHEN** a projected task has an approved Primary Link and the user activates its link control
+- **WHEN** the user activates the projected task's Primary Link control
 - **THEN** macOS opens the normalized destination in the default browser or protocol application without opening the Tasks app
 
 #### Scenario: Refresh independently
@@ -199,3 +207,87 @@ The verified macOS Tasks installation SHALL embed and register its native Widget
 #### Scenario: Fail before replacing a working app
 - **WHEN** the built application lacks its extension, compatible signing, required entitlements, or strict verification
 - **THEN** the installation stops before replacing the last verified Tasks application
+
+### Requirement: Configurable Global macOS Quick Entry
+The macOS companion SHALL let the user record one global keyboard shortcut and SHALL use it to present the authoritative Tasks new-task editor from any active macOS application.
+
+#### Scenario: Configure the shortcut
+- **WHEN** Tasks runs in the native macOS companion and the user activates the Global Quick Entry shortcut recorder in Settings
+- **THEN** the next supported modified keystroke becomes the persisted shortcut, replaces any prior registration, and is displayed using macOS shortcut notation
+
+#### Scenario: Withhold the setting outside native macOS
+- **WHEN** Tasks runs in an ordinary browser, a PWA, or the iOS companion
+- **THEN** the Global Quick Entry Settings card is absent
+
+#### Scenario: Invoke the shortcut globally
+- **WHEN** the configured shortcut is pressed while any macOS application is active
+- **THEN** Tasks presents a compact centered overlay above the current Space without first requiring the main Tasks window to be active
+
+#### Scenario: Reuse the authoritative task form
+- **WHEN** the quick-entry overlay opens
+- **THEN** it opens at a stable content size sufficient to display the form and hosts the same Summary, Notes, Primary Link, checklist, Start, Deadline, Area, Actionability, reminder, picker, and Control-command behavior as the web new-task workflow
+
+#### Scenario: Preserve overlay geometry during native hosting
+- **WHEN** AppKit installs or reuses the SwiftUI-hosted WebKit surface
+- **THEN** the quick-entry panel retains its declared content size instead of collapsing to the hosted view's initial intrinsic size
+
+#### Scenario: Present only the quick-entry editor
+- **WHEN** the global quick-entry overlay displays a new-task draft
+- **THEN** Tasks shows the shared metadata editor without the list summary row, completion control, ellipsis menu, or blue open-task background
+
+#### Scenario: Keep temporal pickers inside the overlay
+- **WHEN** the user opens Start or Deadline from global quick entry
+- **THEN** Tasks centers the authoritative picker in the overlay viewport, preserves its keyboard navigation and focus handoff, and does not clip it against the editor field position
+
+#### Scenario: Edit content that exceeds the overlay
+- **WHEN** Notes or checklist content becomes taller than the quick-entry overlay
+- **THEN** the editor remains vertically scrollable and the user can create and edit checklist items through the same controls as the ordinary new-task form
+
+#### Scenario: Submit quick entry
+- **WHEN** the user commits a nonempty quick-entry draft
+- **THEN** Tasks creates exactly one task through the ordinary authenticated task repository, closes the overlay, and refreshes the main Tasks surface and native widgets
+
+#### Scenario: Cancel quick entry
+- **WHEN** the user cancels the overlay or dismisses an empty draft
+- **THEN** the overlay closes without creating or changing a task
+
+#### Scenario: Preserve shortcut safety
+- **WHEN** a shortcut is unsupported, reserved, incomplete, or cannot be registered
+- **THEN** Tasks keeps the prior working registration, explains the failure without exposing raw native diagnostics, and logs bounded diagnostic detail
+
+### Requirement: Native macOS First-Pointer Delivery
+The native macOS Tasks companion SHALL allow a pointer press over its hosted Tasks web surface to activate an inactive Tasks window and reach the intended web interaction as the same pointer sequence.
+
+#### Scenario: Activate a control with the first click
+- **WHEN** the Tasks window is visible but inactive and the user clicks an interactive element in the hosted Tasks surface
+- **THEN** the window becomes active and the element receives that initial click without requiring a second click
+
+#### Scenario: Begin dragging with the first press
+- **WHEN** the Tasks window is visible but inactive and the user presses and drags an eligible task or checklist item
+- **THEN** the window becomes active and the hosted Tasks surface receives the original pointer sequence so its existing drag interaction can begin without a second attempt
+
+#### Scenario: Preserve ordinary active-window interaction
+- **WHEN** the Tasks window is already active
+- **THEN** clicks, text selection, controls, and drag gestures retain their existing WebKit behavior without duplicated or synthetic events
+
+### Requirement: Reliable macOS Widget Completion Authority
+The macOS companion SHALL ensure that its shared widget receives the same narrow owner-and-installation-bound completion credential used by the interactive Apple Tasks widget.
+
+#### Scenario: Recover a transient credential-issuance failure
+- **WHEN** the Mac companion publishes its synchronized widget projection but its first authenticated credential-issuance request fails or returns an invalid result
+- **THEN** the web host retries with bounded backoff until it publishes a valid credential for the current owner and installation or that companion session ends
+
+#### Scenario: Stop recovery for a replaced session
+- **WHEN** the authenticated owner or native companion session changes while credential recovery is pending
+- **THEN** the prior recovery loop stops without publishing its result into the replacement session
+
+#### Scenario: Complete from the Mac widget
+- **WHEN** a valid credential has reached the shared App Group and the user activates an open task's Mac widget checkbox
+- **THEN** the existing narrow completion intent updates the authoritative task and reconciles the widget without opening the app
+
+### Requirement: Compact macOS Widget Density
+The macOS widget SHALL preserve the shared Tasks row semantics while fitting ten rows with comfortable outer padding.
+
+#### Scenario: Render ten Mac widget rows
+- **WHEN** the macOS large widget renders its maximum ten tasks
+- **THEN** each row uses one point less minimum vertical height than the corresponding iOS large-widget row without changing the shared controls, labels, or list order
