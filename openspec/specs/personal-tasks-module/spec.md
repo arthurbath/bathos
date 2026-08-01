@@ -1037,7 +1037,7 @@ The system SHALL model lifecycle, record disposition, planning destination, Toda
 - **THEN** the system restores valid prior hierarchy and active state, falling back to Anytime with no Today membership when the prior placement is no longer valid
 
 ### Requirement: Temporal Planning Semantics
-The system SHALL store Start Date as a future-only deferral calendar fact, store Deadline independently while treating a reached deadline as an implicit activation date only when no explicit Start exists, retain day horizons for active Today work, reset unfinished Today tasks for owner-local daily re-planning, derive activation and Today from the owner's IANA planning time zone, and store reminder times as unambiguous instants resolved on the current Start intent.
+The system SHALL store Start Date as a future-only deferral calendar fact for user-authored planning, store Deadline independently while treating it as an implicit Start only until a deadline without an explicit Start reaches the owner-local planning date, materialize that activation date as Start for deadline-derived Today work, retain day horizons for active Today work, reset unfinished Today tasks for owner-local daily re-planning, derive activation and Today from the owner's IANA planning time zone, and store reminder times as unambiguous instants resolved on the current Start intent.
 
 #### Scenario: Start date and deadline coexist in either order
 - **WHEN** a to-do has both a start date and a deadline
@@ -1053,7 +1053,11 @@ The system SHALL store Start Date as a future-only deferral calendar fact, store
 
 #### Scenario: Activate a reached deadline without an explicit Start
 - **WHEN** an open, present Anytime to-do has no Start or Today horizon and its deadline reaches the owner-local planning date
-- **THEN** local and server activation converge on Today Inbox, preserve the deadline, include the task in Today and Anytime, and append one accepted system-authored revision transition
+- **THEN** local and server activation assign the owner-local planning date as Start, converge on Today Inbox, preserve the deadline, include the task in Today and Anytime, and append one accepted system-authored revision transition
+
+#### Scenario: Catch up deadline-derived activation
+- **WHEN** a deadline-only task is overdue when activation resumes after one or more missed owner-local dates
+- **THEN** local and server activation assign the current owner-local planning date as Start rather than backdating Start to the stale deadline
 
 #### Scenario: Prefer an explicit Start over deadline activation
 - **WHEN** a to-do has a future Start and a deadline that is today or overdue

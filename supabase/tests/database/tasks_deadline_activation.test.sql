@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(18);
+SELECT plan(19);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -104,8 +104,8 @@ SELECT is(
 SELECT is(
   (SELECT start_date FROM public.tasks_todos
     WHERE id = 'd5000000-0000-4000-8000-000000000020'),
-  NULL::date,
-  'does not materialize the implicit deadline as a stored Start'
+  DATE '2099-01-02',
+  'materializes the reached implicit deadline as the Today Start'
 );
 SELECT is(
   (SELECT deadline FROM public.tasks_todos
@@ -206,6 +206,12 @@ SELECT is(
     WHERE id = 'd5000000-0000-4000-8000-000000000022'),
   'inbox',
   'places overdue deadline-only work in Today Inbox during catch-up'
+);
+SELECT is(
+  (SELECT start_date FROM public.tasks_todos
+    WHERE id = 'd5000000-0000-4000-8000-000000000022'),
+  DATE '2099-01-04',
+  'materializes the catch-up planning date rather than the stale deadline'
 );
 SELECT is(
   (SELECT start_date FROM public.tasks_todos

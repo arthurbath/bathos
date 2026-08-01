@@ -189,7 +189,7 @@ describe('task repository', () => {
       }),
       expect.objectContaining({
         id: 'deadline-only',
-        start_date: null,
+        start_date: '2026-07-20',
         deadline: '2026-07-20',
         today_section: 'inbox',
         last_mutation_channel: 'native',

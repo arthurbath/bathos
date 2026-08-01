@@ -10,6 +10,7 @@ Tasks currently presents several planning surfaces with inconsistent identity, o
 - Render the current-day star whenever Today is visible in a shared calendar, including adjacent-month overflow cells.
 - Restore native-feeling iOS scrolling without displacing fixed controls or weakening task drag behavior, and disable native web-view back/forward swipe navigation.
 - Remove retired Template tables from the active PowerSync rule surface and verify the approved Tasks publication remains exactly 17 tables.
+- Materialize the owner-local activation date as Start when a deadline-only Upcoming task reaches Today, while keeping future deadlines implicit.
 
 ## Capabilities
 

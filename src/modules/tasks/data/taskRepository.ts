@@ -457,7 +457,7 @@ export class TaskRepository {
            AND lifecycle = 'open'
            AND disposition = 'present'
            AND (
-             (start_date IS NOT NULL AND start_date <= ?)
+             (start_date IS NOT NULL AND start_date <= ? AND today_section IS NULL)
              OR (
                start_date IS NULL
                AND today_section IS NULL
@@ -473,10 +473,13 @@ export class TaskRepository {
       const occurredAt = this.now();
       const activated: TaskTodo[] = [];
       for (const current of dueTasks) {
+        const materializedDeadlineStart = current.start_date === null
+          ? reachedDate
+          : null;
         activated.push(await updateOwnedTask(
           transaction,
           current,
-          { start_date: null, today_section: 'inbox' },
+          { start_date: materializedDeadlineStart, today_section: 'inbox' },
           this.createId(),
           occurredAt,
           { channel: 'native', actorType: 'system' },

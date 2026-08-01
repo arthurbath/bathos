@@ -30,6 +30,64 @@ WHERE upcoming_order_key IS NULL;
 ALTER TABLE public.tasks_recurrence_definitions
   ALTER COLUMN upcoming_order_key SET DEFAULT 'a0';
 
+-- A deadline remains only an implicit Start while it is in the future. Once it
+-- reaches the owner's planning date, activation materializes that date and
+-- assigns Today Inbox. Ordinary user mutations still preserve the established
+-- future-only Start contract; this dual state is reserved for system activation.
+ALTER TABLE public.tasks_todos
+  DROP CONSTRAINT tasks_todos_planning_placement_valid,
+  ADD CONSTRAINT tasks_todos_planning_placement_valid CHECK (
+    (destination = 'someday' AND start_date IS NULL AND today_section IS NULL)
+    OR destination = 'anytime'
+  );
+
+CREATE OR REPLACE FUNCTION tasks_private.normalize_root_planning()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  _planning_date date;
+  _automatic_activation boolean := COALESCE(
+    current_setting('garden.bath.tasks_activation', true), ''
+  ) = 'on';
+BEGIN
+  IF NEW.destination = 'someday' THEN
+    NEW.start_date := NULL;
+    NEW.today_section := NULL;
+    RETURN NEW;
+  END IF;
+
+  IF NEW.start_date IS NOT NULL THEN
+    IF NEW.lifecycle = 'open' AND NEW.disposition = 'present' THEN
+      SELECT (clock_timestamp() AT TIME ZONE COALESCE(settings.planning_timezone, 'UTC'))::date
+      INTO _planning_date
+      FROM public.tasks_user_settings AS settings
+      WHERE settings.owner_id = NEW.owner_id;
+      _planning_date := COALESCE(
+        _planning_date,
+        (clock_timestamp() AT TIME ZONE 'UTC')::date
+      );
+      IF NEW.start_date <= _planning_date
+        AND NOT (_automatic_activation AND NEW.today_section IS NOT NULL) THEN
+        RAISE EXCEPTION 'Start must be later than today in the owner planning time zone'
+          USING ERRCODE = '22023';
+      END IF;
+    END IF;
+    IF NOT (_automatic_activation AND NEW.today_section IS NOT NULL) THEN
+      NEW.today_section := NULL;
+    END IF;
+  ELSIF NEW.today_section IS NOT NULL THEN
+    NEW.start_date := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION tasks_private.normalize_root_planning()
+FROM PUBLIC, anon, authenticated;
+
 ALTER TABLE public.tasks_todos
   ADD CONSTRAINT tasks_todos_upcoming_order_key_valid CHECK (
     upcoming_order_key IS NULL
@@ -261,6 +319,7 @@ BEGIN
           (
             task.start_date IS NOT NULL
             AND task.start_date <= _planning_date
+            AND task.today_section IS NULL
           )
           OR (
             task.start_date IS NULL
@@ -280,7 +339,10 @@ BEGIN
         ELSE tasks_private.next_task_order_key(_next_order_key)
       END;
       UPDATE public.tasks_todos AS task
-      SET start_date = NULL,
+      SET start_date = CASE
+            WHEN task.start_date IS NULL THEN _planning_date
+            ELSE NULL
+          END,
           today_section = 'inbox',
           order_key = _next_order_key,
           revision = task.revision + 1,

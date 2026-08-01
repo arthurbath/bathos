@@ -86,3 +86,18 @@ Active Tasks sync configuration SHALL omit the retired Template tables and SHALL
 #### Scenario: Reconnect an older client
 - **WHEN** a client reconnects after the rules no longer reference retired Template tables
 - **THEN** ordinary Tasks data synchronizes without recreating compatibility tables or treating the retired-table warning as a task-data failure
+
+### Requirement: Deadline-Derived Today Start
+Tasks SHALL treat a future deadline as an implicit Start only while the task has no explicit Start and the deadline remains ahead of the owner-local planning date. When that deadline reaches or passes the planning date, local and server activation SHALL persist the activation date as Start and place the task in Today Inbox.
+
+#### Scenario: Keep a future deadline implicit
+- **WHEN** an open, present Anytime task has no Start or Today horizon and a future deadline
+- **THEN** the Start remains visibly and persistently unset
+
+#### Scenario: Materialize a reached deadline
+- **WHEN** the task's deadline reaches the owner-local planning date
+- **THEN** activation assigns the owner-local planning date as Start, assigns Today Inbox, preserves the deadline, and records one accepted system mutation
+
+#### Scenario: Catch up a missed deadline activation
+- **WHEN** activation resumes after one or more missed owner-local dates
+- **THEN** the task receives the current owner-local planning date as Start rather than backdating Start to the overdue deadline
