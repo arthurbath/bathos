@@ -113,6 +113,7 @@ export function TaskStartPickerPanel({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const reminderRef = useRef<HTMLInputElement>(null);
+  const reminderClearButtonRef = useRef<HTMLButtonElement>(null);
   const reminderHourButtonRef = useRef<HTMLButtonElement>(null);
   const firstHorizonRef = useRef<HTMLButtonElement>(null);
   const initialFocusTimerRef = useRef<number | null>(null);
@@ -332,6 +333,17 @@ export function TaskStartPickerPanel({
       return;
     }
 
+    if (
+      target === reminderRef.current
+      && event.shiftKey
+      && !event.altKey
+      && !event.ctrlKey
+      && !event.metaKey
+      && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+    ) {
+      return;
+    }
+
     const horizon = target.closest<HTMLButtonElement>('[data-task-start-horizon]');
     if (horizon) {
       const horizons = Array.from(panelRef.current?.querySelectorAll<HTMLButtonElement>(
@@ -354,10 +366,26 @@ export function TaskStartPickerPanel({
         event.key === 'ArrowRight'
         && reminderRef.current.selectionStart === reminderInput.length
         && reminderRef.current.selectionEnd === reminderInput.length
-        && !reminderHourButtonRef.current?.disabled
       ) {
-        reminderHourButtonRef.current?.focus();
+        const trailingTarget = reminderClearButtonRef.current
+          ?? (!reminderHourButtonRef.current?.disabled ? reminderHourButtonRef.current : null);
+        trailingTarget?.focus();
       }
+      else return;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    const reminderClearButton = target.closest<HTMLButtonElement>(
+      '[data-task-reminder-clear]',
+    );
+    if (reminderClearButton) {
+      if (event.key === 'ArrowLeft') focusReminderInput();
+      else if (event.key === 'ArrowRight' && !reminderHourButtonRef.current?.disabled) {
+        reminderHourButtonRef.current?.focus();
+      } else if (event.key === 'ArrowUp') focusCalendarDay('last');
+      else if (event.key === 'ArrowDown') focusFooterAction('last');
       else return;
       event.preventDefault();
       event.stopPropagation();
@@ -368,7 +396,10 @@ export function TaskStartPickerPanel({
       '[data-task-reminder-hour-trigger]',
     );
     if (reminderHourButton) {
-      if (event.key === 'ArrowLeft') focusReminderInput();
+      if (event.key === 'ArrowLeft') {
+        if (reminderClearButtonRef.current) reminderClearButtonRef.current.focus();
+        else focusReminderInput();
+      }
       else if (event.key === 'ArrowUp') focusCalendarDay('last');
       else if (event.key === 'ArrowDown') focusFooterAction('last');
       else return;
@@ -485,6 +516,17 @@ export function TaskStartPickerPanel({
       if (option.localTime !== reminderTime.slice(0, 5)) {
         await onReminderChange(option.localTime);
       }
+    } catch {
+      setReminderInput(committedReminderDisplay);
+    }
+  };
+
+  const clearReminderInput = async () => {
+    reminderInputConfirmedRef.current = true;
+    setReminderHourMenuOpen(false);
+    setReminderInput('');
+    try {
+      if (reminderTime) await onReminderChange('');
     } catch {
       setReminderInput(committedReminderDisplay);
     }
@@ -619,8 +661,22 @@ export function TaskStartPickerPanel({
             />
             <InputGroupAddon
               align="inline-end"
-              className="h-full p-0"
+              className="h-full gap-0 p-0"
             >
+              {reminderInput.length > 0 ? (
+                <InputGroupButton
+                  ref={reminderClearButtonRef}
+                  size="icon-xs"
+                  aria-label="Clear Reminder"
+                  data-task-reminder-clear
+                  disabled={reminderDisabled}
+                  className="h-full w-7 rounded-none bg-transparent text-muted-foreground hover:bg-transparent hover:text-muted-foreground disabled:bg-transparent disabled:text-muted-foreground/40 disabled:opacity-100"
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={() => void clearReminderInput()}
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden />
+                </InputGroupButton>
+              ) : null}
               <DropdownMenu
                 modal={false}
                 open={reminderHourMenuOpen}

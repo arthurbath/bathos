@@ -1,5 +1,5 @@
 import * as React from "react";
-import { addDays, format, isSameMonth } from "date-fns";
+import { addDays, addMonths, format, isSameMonth } from "date-fns";
 import { ChevronLeft, ChevronRight, Star } from "lucide-react";
 import {
   Button as DayPickerButton,
@@ -272,6 +272,7 @@ function MonthPicker({
   const nextYearButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const monthButtonRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const pendingYearButtonFocusRef = React.useRef<"previous" | "next" | null>(null);
+  const pendingMonthFocusIndexRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -279,6 +280,8 @@ function MonthPicker({
         prevYearButtonRef.current?.focus();
       } else if (pendingYearButtonFocusRef.current === "next") {
         nextYearButtonRef.current?.focus();
+      } else if (pendingMonthFocusIndexRef.current !== null) {
+        monthButtonRefs.current[pendingMonthFocusIndexRef.current]?.focus();
       } else {
         const preferredMonth = year === initialFocusMonth.getFullYear()
           && isMonthSelectable(year, initialFocusMonth.getMonth(), minimumDate)
@@ -289,6 +292,7 @@ function MonthPicker({
         }
       }
       pendingYearButtonFocusRef.current = null;
+      pendingMonthFocusIndexRef.current = null;
     }, 0);
     return () => window.clearTimeout(timer);
   }, [initialFocusMonth, minimumDate, year]);
@@ -308,14 +312,46 @@ function MonthPicker({
     if (firstSelectable !== null) focusMonthAt(firstSelectable);
   };
 
-  const pageYear = (position: "previous" | "next") => {
+  const pageYear = (
+    position: "previous" | "next",
+    focusTarget: { type: "pager"; position: "previous" | "next" }
+      | { type: "month"; monthIndex: number } = { type: "pager", position },
+  ) => {
     const nextYear = position === "previous" ? year - 1 : year + 1;
-    if (firstSelectableMonthIndex(nextYear, minimumDate) === null) return;
-    pendingYearButtonFocusRef.current = position;
+    const firstSelectable = firstSelectableMonthIndex(nextYear, minimumDate);
+    if (firstSelectable === null) return false;
+    if (focusTarget.type === "pager") {
+      pendingYearButtonFocusRef.current = focusTarget.position;
+      pendingMonthFocusIndexRef.current = null;
+    } else {
+      pendingYearButtonFocusRef.current = null;
+      pendingMonthFocusIndexRef.current = isMonthSelectable(
+        nextYear,
+        focusTarget.monthIndex,
+        minimumDate,
+      ) ? focusTarget.monthIndex : firstSelectable;
+    }
     onYearChange(nextYear);
+    return true;
   };
 
   const handleMonthGridKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, monthIndex: number) => {
+    if (
+      event.shiftKey
+      && !event.altKey
+      && !event.ctrlKey
+      && !event.metaKey
+      && (event.key === "ArrowLeft" || event.key === "ArrowRight")
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      pageYear(event.key === "ArrowLeft" ? "previous" : "next", {
+        type: "month",
+        monthIndex,
+      });
+      return;
+    }
+    if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
     if (event.key === "ArrowLeft") {
       event.preventDefault();
       const previousMonth = findSelectableMonth(monthIndex, -1, year, minimumDate);
@@ -353,6 +389,22 @@ function MonthPicker({
     event: React.KeyboardEvent<HTMLButtonElement>,
     position: "previous" | "next",
   ) => {
+    if (
+      event.shiftKey
+      && !event.altKey
+      && !event.ctrlKey
+      && !event.metaKey
+      && (event.key === "ArrowLeft" || event.key === "ArrowRight")
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      pageYear(event.key === "ArrowLeft" ? "previous" : "next", {
+        type: "pager",
+        position,
+      });
+      return;
+    }
+    if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
     if (event.key === "ArrowLeft" && position === "previous") {
       event.preventDefault();
       pageYear("previous");
@@ -561,10 +613,54 @@ function Calendar({
     onMonthChange?.(normalized);
   }, [fromDate, isControlledMonth, onMonthChange]);
 
+  const pageDayCalendar = React.useCallback((
+    position: "previous" | "next",
+    focusedElement: HTMLButtonElement,
+  ): boolean => {
+    const root = rootRef.current;
+    if (!root) return false;
+    const pagerName = position === "previous" ? "previous-month" : "next-month";
+    const pager = root.querySelector<HTMLButtonElement>(`button[name="${pagerName}"]`);
+    if (!canReceiveCalendarFocus(pager)) return false;
+
+    const nextMonth = addMonths(displayMonth, position === "previous" ? -1 : 1);
+    if (focusedElement.getAttribute("name") === "day") {
+      const focusedDate = parseCalendarDateValue(focusedElement.dataset.calendarDate);
+      if (!focusedDate) return false;
+      setPendingDayFocusDate(calendarDateInMonth(nextMonth, focusedDate.getDate(), fromDate));
+    } else {
+      pendingMonthNavFocusRef.current = focusedElement.getAttribute("name") === "previous-month"
+        ? "previous"
+        : "next";
+    }
+    commitMonthChange(nextMonth);
+    return true;
+  }, [commitMonthChange, displayMonth, fromDate]);
+
   const rootKeyDownCapture: React.KeyboardEventHandler<HTMLDivElement> = (event) => {
     if (event.key === "Tab" && !allowTabExit) {
       event.preventDefault();
       event.stopPropagation();
+    }
+    if (
+      viewMode === "day"
+      && event.shiftKey
+      && !event.altKey
+      && !event.ctrlKey
+      && !event.metaKey
+      && (event.key === "ArrowLeft" || event.key === "ArrowRight")
+      && event.target instanceof HTMLButtonElement
+      && ["day", "previous-month", "next-month"].includes(
+        event.target.getAttribute("name") ?? "",
+      )
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      pageDayCalendar(
+        event.key === "ArrowLeft" ? "previous" : "next",
+        event.target,
+      );
+      return;
     }
     if (
       viewMode === "day"
@@ -588,7 +684,14 @@ function Calendar({
       event.target.click();
       return;
     }
-    if (viewMode === "day" && (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")) {
+    if (
+      viewMode === "day"
+      && !event.shiftKey
+      && !event.altKey
+      && !event.ctrlKey
+      && !event.metaKey
+      && (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")
+    ) {
       const root = event.currentTarget as HTMLElement;
       const activeElement = event.target instanceof HTMLElement ? event.target : null;
       if (
@@ -728,6 +831,16 @@ function firstSelectableDateInMonth(month: Date, minimumDate?: Date): Date {
     return minimumDate;
   }
   return new Date(month.getFullYear(), month.getMonth(), 1);
+}
+
+function calendarDateInMonth(month: Date, preferredDay: number, minimumDate?: Date): Date {
+  const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const candidate = new Date(
+    month.getFullYear(),
+    month.getMonth(),
+    Math.min(preferredDay, lastDay),
+  );
+  return minimumDate && candidate < minimumDate ? minimumDate : candidate;
 }
 
 function isMonthSelectable(year: number, monthIndex: number, minimumDate?: Date): boolean {

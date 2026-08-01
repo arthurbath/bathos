@@ -143,6 +143,66 @@ describe('useTaskRecurrences', () => {
     expect(result.current.definitions[0]).toEqual(updated);
   });
 
+  it('retains the optimistic prototype rank while rebasing one revision conflict', async () => {
+    const definition = taskRecurrenceDefinitionFixture({ upcoming_order_key: 'a0' });
+    const conflicted = {
+      ...definition,
+      name: 'Updated Elsewhere',
+      record_revision: definition.record_revision + 1,
+      client_mutation_id: 'mutation-conflict',
+    };
+    const accepted = {
+      ...conflicted,
+      upcoming_order_key: 'a1',
+      record_revision: conflicted.record_revision + 1,
+      client_mutation_id: 'mutation-reorder',
+    };
+    definitionRows = [definition];
+    revisionRows = [taskRecurrenceRevisionFixture({ recurrence_id: definition.id })];
+    let resolveRetry!: (value: {
+      outcome: 'accepted';
+      definition: TaskRecurrenceDefinition;
+    }) => void;
+    const retryResult = new Promise<{
+      outcome: 'accepted';
+      definition: TaskRecurrenceDefinition;
+    }>((resolve) => {
+      resolveRetry = resolve;
+    });
+    const reorderProjection = vi.fn()
+      .mockResolvedValueOnce({ outcome: 'conflict', definition: conflicted })
+      .mockReturnValueOnce(retryResult);
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'connected',
+      planningTimeZone,
+      recurrenceService: {
+        evaluate: vi.fn(), createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn(),
+        reorderProjection,
+      },
+    });
+
+    const { result } = renderHook(() => useTaskRecurrences('owner-a'));
+    let reorderRequest!: ReturnType<typeof result.current.reorderProjection>;
+    await act(async () => {
+      reorderRequest = result.current.reorderProjection(definition, 'a1');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(reorderProjection).toHaveBeenNthCalledWith(1, definition, 'a1');
+    expect(reorderProjection).toHaveBeenNthCalledWith(2, conflicted, 'a1');
+    expect(result.current.definitions[0]).toEqual({
+      ...conflicted,
+      upcoming_order_key: 'a1',
+    });
+
+    await act(async () => {
+      resolveRetry({ outcome: 'accepted', definition: accepted });
+      await reorderRequest;
+    });
+    expect(result.current.definitions[0]).toEqual(accepted);
+  });
+
   it('skips a legacy recurrence revision that has not received its prototype snapshot yet', () => {
     const definition = taskRecurrenceDefinitionFixture();
     definitionRows = [definition];

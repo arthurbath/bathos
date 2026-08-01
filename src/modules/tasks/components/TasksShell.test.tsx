@@ -2455,6 +2455,9 @@ describe('TasksShell', () => {
       expect(dialog.textContent).toContain('⌃1');
       expect(dialog.textContent).toContain('⌃6');
       expect(dialog.textContent).toContain('Clear Start');
+      expect(dialog.textContent).toContain('Set Today / Cycle Horizon');
+      expect(dialog.textContent).toContain('Edit Reminder Time');
+      expect(dialog.textContent).toContain('Start Bulk Selection With Task');
       expect(dialog.textContent).toContain('Set Start to Someday');
       expect(dialog.textContent).toContain('⌘Z / ⌃Z');
       expect(dialog.textContent).toContain('⌃Z / ⌥⇧Z');
@@ -2466,6 +2469,7 @@ describe('TasksShell', () => {
       expect(dialog.textContent).toContain('⌃G⌥⇧G');
       expect(dialog.textContent).toContain('⌃X⌥⇧X');
       expect(dialog.textContent).toContain('⌃B⌥⇧B');
+      expect(dialog.textContent).toContain('⌃Y⌥⇧Y');
       expect(dialog.textContent).not.toContain('⌃N');
       expect(dialog.textContent).toContain('⌘Return / ⌘Escape');
       expect(dialog.textContent).toContain('Select Multiple');
@@ -3799,6 +3803,85 @@ describe('TasksShell', () => {
     const { container, root } = renderShell('/tasks/config');
     try {
       expect(container.querySelector('button[aria-label="Select Tasks"]')).toBeNull();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('starts selection mode with the keyboard-focused task', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+    try {
+      const row = container.querySelector<HTMLElement>('[data-task-row-id="task-a"]')!;
+      await act(async () => {
+        row.focus();
+        row.dispatchEvent(new KeyboardEvent('keydown', {
+          key: ' ', bubbles: true, cancelable: true,
+        }));
+      });
+      expect(row).toHaveAttribute('aria-current', 'true');
+
+      const selectionEvent = new KeyboardEvent('keydown', {
+        key: 'b', altKey: true, shiftKey: true, bubbles: true, cancelable: true,
+      });
+      await act(async () => {
+        window.dispatchEvent(selectionEvent);
+        await Promise.resolve();
+      });
+
+      expect(selectionEvent.defaultPrevented).toBe(true);
+      expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
+        '1 Task',
+      );
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+      expect(row).not.toHaveAttribute('aria-current');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('closes an open task before starting selection mode with it', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      expect(container.querySelector('#task-title-task-a')).not.toBeNull();
+
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'b', altKey: true, shiftKey: true, bubbles: true, cancelable: true,
+        }));
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
+          '1 Task',
+        );
+      });
+      expect(container.querySelector('#task-title-task-a')).toBeNull();
+      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
+        .toHaveAttribute('aria-checked', 'true');
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('suppresses targeted selection entry when no task is current', async () => {
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+    try {
+      const selectionEvent = new KeyboardEvent('keydown', {
+        key: 'b', altKey: true, shiftKey: true, bubbles: true, cancelable: true,
+      });
+      await act(async () => window.dispatchEvent(selectionEvent));
+
+      expect(selectionEvent.defaultPrevented).toBe(true);
+      expect(container.querySelector('[aria-label="Task Selection"]')).toBeNull();
+      expect(container.querySelector('#task-title-task-a')).toBeNull();
     } finally {
       cleanup(root, container);
     }
@@ -5724,17 +5807,16 @@ describe('TasksShell', () => {
         target.dispatchEvent(drop);
         await Promise.resolve();
       });
-      expect(taskList.reorderTaskTo).toHaveBeenCalledWith(
+      expect(taskList.updateTask).toHaveBeenCalledWith(
         'task-deadline-only',
-        'task-target-date',
-        'before',
-        {
+        expect.objectContaining({
           destination: 'anytime',
           start_date: '2026-07-22',
           today_section: null,
-        },
+          upcoming_order_key: expect.any(String),
+        }),
       );
-      expect(taskList.updateTask).not.toHaveBeenCalled();
+      expect(taskList.reorderTaskTo).not.toHaveBeenCalled();
       expect(saveReminder).toHaveBeenCalledWith({
         rootType: 'todo',
         rootId: deadlineOnlyTask.id,
@@ -9113,7 +9195,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('moves from the end of Reminder to its hour action and keeps nested menu keys local', async () => {
+  it('moves through Reminder clear and hour actions while keeping nested menu keys local', async () => {
     const user = userEvent.setup();
     const futureTask = taskTodoFixture({
       ...task,
@@ -9153,6 +9235,9 @@ describe('TasksShell', () => {
       const hourButton = document.querySelector<HTMLButtonElement>(
         '[data-task-reminder-hour-trigger]',
       )!;
+      const clearButton = document.querySelector<HTMLButtonElement>(
+        '[data-task-reminder-clear]',
+      )!;
 
       time.setSelectionRange(2, 2);
       await act(async () => {
@@ -9167,6 +9252,15 @@ describe('TasksShell', () => {
       time.setSelectionRange(time.value.length, time.value.length);
       await act(async () => {
         time.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      expect(document.activeElement).toBe(clearButton);
+
+      await act(async () => {
+        clearButton.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'ArrowRight',
           bubbles: true,
           cancelable: true,
@@ -9194,9 +9288,89 @@ describe('TasksShell', () => {
           cancelable: true,
         }));
       });
+      expect(document.activeElement).toBe(clearButton);
+
+      await act(async () => {
+        clearButton.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
       expect(document.activeElement).toBe(time);
       expect(time.selectionStart).toBe(time.value.length);
       expect(time.selectionEnd).toBe(time.value.length);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('keeps Shift+horizontal arrows native in Reminder and clears a value inline', async () => {
+    const user = userEvent.setup();
+    const cancelReminder = vi.fn().mockResolvedValue(undefined);
+    const futureTask = taskTodoFixture({
+      ...task,
+      start_date: '2026-07-24',
+      today_section: null,
+    });
+    const activeReminder = taskReminderFixture({
+      root_type: 'todo',
+      task_id: 'task-a',
+      local_time: '09:00:00',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [futureTask] });
+    mockTaskReminders.mockReturnValue({
+      reminders: [activeReminder],
+      byRootId: new Map([['task-a', activeReminder]]),
+      dueItems: [],
+      mode: 'connected',
+      planningTimeZone: 'America/Los_Angeles',
+      loading: false,
+      error: null,
+      save: vi.fn(),
+      cancel: cancelReminder,
+      acknowledge: vi.fn(),
+      claimDue: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
+      });
+      await act(async () => {
+        requestTaskStartPickerOpenForTest(container, 'task-a', 'reminder');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      const time = document.querySelector<HTMLInputElement>('#task-start-reminder-task-a')!;
+      const clearButton = document.querySelector<HTMLButtonElement>('[data-task-reminder-clear]')!;
+      const hourButton = document.querySelector<HTMLButtonElement>('[data-task-reminder-hour-trigger]')!;
+      expect(clearButton).toBeTruthy();
+      expect(clearButton.compareDocumentPosition(hourButton) & Node.DOCUMENT_POSITION_FOLLOWING)
+        .toBeTruthy();
+
+      for (const key of ['ArrowLeft', 'ArrowRight']) {
+        const selectionEvent = new KeyboardEvent('keydown', {
+          key,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        await act(async () => {
+          time.focus();
+          time.dispatchEvent(selectionEvent);
+        });
+        expect(selectionEvent.defaultPrevented).toBe(false);
+        expect(document.activeElement).toBe(time);
+      }
+      expect(document.querySelector('[data-task-start-picker]')).toBeTruthy();
+
+      await user.click(clearButton);
+      expect(time).toHaveValue('');
+      expect(cancelReminder).toHaveBeenCalledWith(activeReminder);
+      expect(document.querySelector('[data-task-reminder-clear]')).toBeNull();
+      expect(document.querySelector('[data-task-start-picker]')).toBeTruthy();
     } finally {
       cleanup(root, container);
     }
@@ -10332,14 +10506,16 @@ describe('TasksShell', () => {
     const definition = taskRecurrenceDefinitionFixture({
       id: 'recurrence-prototype',
       name: 'Quarterly Review',
-      next_occurrence_date: '2026-08-01',
+      next_occurrence_date: '2026-08-04',
     });
     const revision = taskRecurrenceRevisionFixture({
       recurrence_id: definition.id,
       rule_mode: 'calendar',
       frequency: 'monthly',
-      start_date: '2026-08-01',
+      start_date: '2026-08-04',
       rule_config: { monthly_kind: 'day_of_month', month_day: 1 },
+      deadline_offset_days: 3,
+      target_area_id: 'area-work',
       prototype_snapshot: {
         version: 2,
         kind: 'todo',
@@ -10348,15 +10524,30 @@ describe('TasksShell', () => {
           title: 'Quarterly Review',
           notes: 'Prototype notes',
           primary_link: null,
-          actionability: 'actionable',
+          actionability: 'rechecking',
           destination: 'anytime',
           today_section: null,
           order_key: 'a0',
           start_offset_days: 0,
           deadline_offset_days: null,
-          checklist: [],
+          checklist: [{
+            node_id: 'prototype-quarterly-review-checklist',
+            title: 'Prepare packet',
+            completed: false,
+            order_key: '000000001024',
+          }],
         },
       },
+    });
+    mockTaskHierarchy.mockReturnValue({
+      areas: [{ id: 'area-work', title: 'Work' }],
+      loading: false,
+      error: null,
+    });
+    const editRecurrence = vi.fn().mockResolvedValue({
+      outcome: 'accepted',
+      definition: { ...definition, current_revision: 2, record_revision: 2 },
+      revision: { ...revision, revision: 2 },
     });
     mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [] });
     mockTaskRecurrences.mockReturnValue({
@@ -10376,7 +10567,7 @@ describe('TasksShell', () => {
       loading: false,
       error: null,
       createFromTask: vi.fn(),
-      edit: vi.fn(),
+      edit: editRecurrence,
       setStatus: vi.fn(),
       evaluate: vi.fn(),
     });
@@ -10392,6 +10583,13 @@ describe('TasksShell', () => {
       expect(row).not.toHaveAttribute('draggable');
       expect(row.querySelector('[data-task-drag-handle]')).toHaveAttribute('draggable', 'true');
       expect(row).toHaveAttribute('data-task-row-id', `recurrence:${definition.id}`);
+      expect(row.querySelector('[data-task-metadata-kind="area"]')).toHaveTextContent('Work');
+      expect(row.querySelector('[data-task-metadata-kind="actionability"]'))
+        .toHaveAttribute('aria-label', 'Rechecking');
+      expect(row.querySelector('[data-task-metadata-kind="deadline"]'))
+        .toHaveAttribute('aria-label', 'Deadline Aug 4');
+      expect(row.querySelector('[data-task-metadata-kind="notes"]')).toBeTruthy();
+      expect(row.querySelector('[data-task-metadata-kind="checklist"]')).toBeTruthy();
 
       const actions = row.querySelector<HTMLButtonElement>(
         'button[aria-label="Actions for Quarterly Review"]',
@@ -10410,13 +10608,34 @@ describe('TasksShell', () => {
           bubbles: true,
           cancelable: true,
         }));
-        row.querySelector<HTMLButtonElement>(
-          'button[aria-label="Edit Repeat for Quarterly Review"]',
-        )?.click();
+        row.querySelector<HTMLButtonElement>('button[aria-label="Open Quarterly Review"]')?.click();
       });
-      expect(document.querySelector('[role="dialog"]')).toHaveTextContent('Edit Repeat');
-      expect(document.querySelector<HTMLInputElement>('[placeholder="Summary"]')?.value)
-        .toBe('Quarterly Review');
+      const editor = row.querySelector<HTMLElement>('[data-task-recurrence-prototype-editor]')!;
+      const summary = editor.querySelector<HTMLInputElement>('input[aria-label="Summary"]')!;
+      expect(summary.value).toBe('Quarterly Review');
+      expect(editor.querySelector('button[aria-label="Start"]')).toBeNull();
+      expect(editor.querySelector('button[aria-label="Deadline"]')).toBeNull();
+      await act(async () => {
+        setInputValue(summary, 'Quarterly Review Updated');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 400));
+      });
+      expect(editRecurrence).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'Quarterly Review Updated',
+        ruleMode: revision.rule_mode,
+        frequency: revision.frequency,
+        deadlineOffsetDays: revision.deadline_offset_days,
+        prototypeSnapshot: expect.objectContaining({
+          root: expect.objectContaining({ title: 'Quarterly Review Updated' }),
+        }),
+      }));
+      const editRepeat = Array.from(editor.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.trim() === 'Edit Repeat')!;
+      await act(async () => editRepeat.click());
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      expect(dialog).toHaveTextContent('Edit Repeat');
+      expect(dialog.querySelector('input[aria-label="Summary"]')).toBeNull();
+      expect(dialog.querySelector('input[aria-label="Primary Link"]')).toBeNull();
+      expect(dialog.querySelector('[aria-label="Checklist"]')).toBeNull();
     } finally {
       cleanup(root, container);
       vi.unstubAllGlobals();
@@ -10506,6 +10725,218 @@ describe('TasksShell', () => {
     }
   });
 
+  it('uses recurrence prototypes as Upcoming section-edge reorder targets', async () => {
+    const definition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-edge-target',
+      name: 'Edge Target',
+      next_occurrence_date: '2026-08-01',
+      upcoming_order_key: 'a1',
+    });
+    const revision = taskRecurrenceRevisionFixture({
+      recurrence_id: definition.id,
+      start_date: '2026-08-01',
+    });
+    const ordinaryTask = taskTodoFixture({
+      id: 'task-edge-source',
+      title: 'Edge Source',
+      start_date: '2026-08-01',
+      today_section: null,
+      upcoming_order_key: 'a0',
+    });
+    const taskList = { ...defaultTaskList(), tasks: [ordinaryTask] };
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskRecurrences.mockReturnValue({
+      definitions: [definition],
+      revisions: new Map([[definition.id, revision]]),
+      occurrences: [],
+      openOccurrenceDefinitionIds: new Set(),
+      openOccurrenceByDefinitionId: new Map(),
+      calendarPrototypes: [{ definition, revision, scheduledDate: '2026-08-01' }],
+      evaluationFailures: new Set(),
+      planningDate: '2026-07-20',
+      mode: 'connected',
+      loading: false,
+      error: null,
+      createFromTask: vi.fn(),
+      edit: vi.fn(),
+      setStatus: vi.fn(),
+      evaluate: vi.fn(),
+      reorderProjection: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      const source = container.querySelector<HTMLElement>(
+        `[data-task-row-id="${ordinaryTask.id}"]`,
+      )!;
+      const sourceHandle = source.querySelector<HTMLElement>('[data-task-drag-handle]')!;
+      const section = container.querySelector<HTMLElement>('[data-task-upcoming-section]')!;
+      const dropSurface = container.querySelector<HTMLElement>('[data-task-module-drop-surface]')!;
+      const dataTransfer = {
+        effectAllowed: 'none', dropEffect: 'none', setData: vi.fn(), getData: vi.fn(() => ''),
+      } as unknown as DataTransfer;
+      vi.spyOn(section, 'getBoundingClientRect').mockReturnValue({
+        top: 0, bottom: 100, height: 100, left: 0, right: 100, width: 100,
+        x: 0, y: 0, toJSON: () => ({}),
+      });
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperties(dragOver, {
+        dataTransfer: { value: dataTransfer },
+        clientY: { value: 90 },
+      });
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+
+      await act(async () => {
+        sourceHandle.dispatchEvent(dragStart);
+        section.dispatchEvent(dragOver);
+        dropSurface.dispatchEvent(drop);
+        await Promise.resolve();
+      });
+
+      expect(taskList.updateTask).toHaveBeenCalledWith(
+        ordinaryTask.id,
+        { upcoming_order_key: expect.any(String) },
+      );
+      expect(
+        taskList.updateTask.mock.calls[0][1].upcoming_order_key.localeCompare(
+          definition.upcoming_order_key ?? '',
+        ),
+      ).toBeGreaterThan(0);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('keeps a cross-section ordinary drop positioned around its prototype target', async () => {
+    const definition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-cross-section-target',
+      name: 'August Prototype',
+      next_occurrence_date: '2026-08-01',
+      upcoming_order_key: 'a1',
+    });
+    const revision = taskRecurrenceRevisionFixture({
+      recurrence_id: definition.id,
+      start_date: '2026-08-01',
+    });
+    const ordinaryTask = taskTodoFixture({
+      id: 'task-cross-section-source',
+      title: 'Tomorrow Task',
+      start_date: '2026-07-21',
+      today_section: null,
+      upcoming_order_key: 'a0',
+    });
+    const taskList = { ...defaultTaskList(), tasks: [ordinaryTask] };
+    mockTaskList.mockReturnValue(taskList);
+    mockTaskRecurrences.mockReturnValue({
+      definitions: [definition],
+      revisions: new Map([[definition.id, revision]]),
+      occurrences: [],
+      openOccurrenceDefinitionIds: new Set(),
+      openOccurrenceByDefinitionId: new Map(),
+      calendarPrototypes: [{ definition, revision, scheduledDate: '2026-08-01' }],
+      evaluationFailures: new Set(),
+      planningDate: '2026-07-20',
+      mode: 'connected', loading: false, error: null,
+      createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn(), evaluate: vi.fn(),
+      reorderProjection: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      const source = container.querySelector<HTMLElement>(
+        `[data-task-row-id="${ordinaryTask.id}"]`,
+      )!;
+      const sourceHandle = source.querySelector<HTMLElement>('[data-task-drag-handle]')!;
+      const target = container.querySelector<HTMLElement>(
+        `[data-task-recurrence-prototype="${definition.id}"]`,
+      )!;
+      const dropSurface = container.querySelector<HTMLElement>('[data-task-module-drop-surface]')!;
+      const dataTransfer = {
+        effectAllowed: 'none', dropEffect: 'none', setData: vi.fn(), getData: vi.fn(() => ''),
+      } as unknown as DataTransfer;
+      vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({
+        top: 0, bottom: 100, height: 100, left: 0, right: 100, width: 100,
+        x: 0, y: 0, toJSON: () => ({}),
+      });
+      const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+      const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
+      Object.defineProperties(dragOver, {
+        dataTransfer: { value: dataTransfer },
+        clientY: { value: 25 },
+      });
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+
+      await act(async () => {
+        sourceHandle.dispatchEvent(dragStart);
+        target.dispatchEvent(dragOver);
+        dropSurface.dispatchEvent(drop);
+        await Promise.resolve();
+      });
+
+      expect(taskList.updateTask).toHaveBeenCalledWith(
+        ordinaryTask.id,
+        expect.objectContaining({
+          destination: 'anytime',
+          start_date: '2026-08-01',
+          today_section: null,
+          upcoming_order_key: expect.any(String),
+        }),
+      );
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('uses the same stable identity tie-breaker to render mixed Upcoming rows', () => {
+    const definition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-tied-order',
+      name: 'Tied Prototype',
+      next_occurrence_date: '2026-08-01',
+      upcoming_order_key: 'a0',
+    });
+    const revision = taskRecurrenceRevisionFixture({
+      recurrence_id: definition.id,
+      start_date: '2026-08-01',
+    });
+    const ordinaryTask = taskTodoFixture({
+      id: 'task-tied-order',
+      title: 'Tied Task',
+      start_date: '2026-08-01',
+      today_section: null,
+      upcoming_order_key: 'a0',
+    });
+    mockTaskList.mockReturnValue({ ...defaultTaskList(), tasks: [ordinaryTask] });
+    mockTaskRecurrences.mockReturnValue({
+      definitions: [definition],
+      revisions: new Map([[definition.id, revision]]),
+      occurrences: [], openOccurrenceDefinitionIds: new Set(),
+      openOccurrenceByDefinitionId: new Map(),
+      calendarPrototypes: [{ definition, revision, scheduledDate: '2026-08-01' }],
+      evaluationFailures: new Set(), planningDate: '2026-07-20',
+      mode: 'connected', loading: false, error: null,
+      createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn(), evaluate: vi.fn(),
+      reorderProjection: vi.fn(),
+    });
+    const { container, root } = renderShell('/tasks/upcoming');
+
+    try {
+      const rowIds = Array.from(container.querySelectorAll<HTMLElement>(
+        '[data-task-planning-list] > [data-task-row-id]',
+      )).map((row) => row.dataset.taskRowId);
+      expect(rowIds).toEqual([
+        `recurrence:${definition.id}`,
+        ordinaryTask.id,
+      ]);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('keeps a deferred recurrence instance ordinary while its prototype advances independently', () => {
     const definition = taskRecurrenceDefinitionFixture({
       id: 'recurrence-independent',
@@ -10583,7 +11014,7 @@ describe('TasksShell', () => {
       expect(prototypeRow.querySelector('[data-task-completion-control]')).toBeNull();
       expect(instanceRow.querySelector('[data-task-title-control]')).toBeTruthy();
       expect(prototypeRow.querySelector(
-        'button[aria-label="Edit Repeat for Exercise"]',
+        'button[aria-label="Open Exercise"]',
       )).toBeTruthy();
     } finally {
       cleanup(root, container);
@@ -11849,7 +12280,7 @@ describe('TasksShell', () => {
         container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
       });
       const shortcut = new KeyboardEvent('keydown', {
-        key: 'r',
+        key: 't',
         altKey: true,
         shiftKey: true,
         bubbles: true,
@@ -11889,7 +12320,7 @@ describe('TasksShell', () => {
       await act(async () => {
         container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
         window.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'r',
+          key: 't',
           altKey: true,
           shiftKey: true,
           bubbles: true,
@@ -11937,7 +12368,7 @@ describe('TasksShell', () => {
       }
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'r',
+          key: 't',
           altKey: true,
           shiftKey: true,
           bubbles: true,
@@ -11990,7 +12421,7 @@ describe('TasksShell', () => {
       await act(async () => {
         container.querySelector<HTMLButtonElement>('[data-task-id="task-a"]')?.click();
         window.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 't',
+          key: 'r',
           altKey: true,
           shiftKey: true,
           bubbles: true,
@@ -12202,7 +12633,7 @@ describe('TasksShell', () => {
       });
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'b', altKey: true, shiftKey: true, bubbles: true, cancelable: true,
+          key: 'y', altKey: true, shiftKey: true, bubbles: true, cancelable: true,
         }));
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
@@ -12492,7 +12923,7 @@ describe('TasksShell', () => {
     const { container, root } = renderShell('/tasks/anytime');
     const invokeReminderShortcut = async () => {
       const shortcut = new KeyboardEvent('keydown', {
-        key: 'b',
+        key: 'y',
         altKey: true,
         shiftKey: true,
         bubbles: true,

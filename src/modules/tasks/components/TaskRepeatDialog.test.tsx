@@ -192,7 +192,7 @@ describe('TaskRepeatDialog', () => {
     }
   });
 
-  it('hydrates and revises an after-completion schedule as Next Occurrence', async () => {
+  it('revises only an after-completion cadence and leaves prototype metadata to the drawer', async () => {
     const task = taskTodoFixture({ id: 'task-after-edit', title: 'Water Plants' });
     const definition = taskRecurrenceDefinitionFixture({
       id: 'recurrence-after-edit',
@@ -220,10 +220,10 @@ describe('TaskRepeatDialog', () => {
       expect(document.body).toHaveTextContent('Next Occurrence');
       expect(document.body).not.toHaveTextContent('Next Start');
       expect(document.body).not.toHaveTextContent('Ends');
-      const repeatName = document.querySelector<HTMLInputElement>(
-        'input[aria-label="Summary"]',
-      )!;
-      await act(async () => setInput(repeatName, 'Water All Plants'));
+      expect(document.querySelector('input[aria-label="Summary"]')).toBeNull();
+      expect(document.querySelector('[aria-label="Prototype Content"]')).toBeNull();
+      expect(document.querySelector('input[aria-label="Primary Link"]')).toBeNull();
+      expect(document.querySelector('[aria-label="Checklist"]')).toBeNull();
 
       await act(async () => {
         document.querySelector<HTMLButtonElement>(
@@ -235,7 +235,7 @@ describe('TaskRepeatDialog', () => {
       expect(edit).toHaveBeenCalledWith(expect.objectContaining({
         definition,
         revision,
-        name: 'Water All Plants',
+        name: definition.name,
         ruleMode: 'after_completion',
         frequency: 'monthly',
         intervalCount: 2,
@@ -243,10 +243,9 @@ describe('TaskRepeatDialog', () => {
         endMode: 'never',
         endAfterCount: null,
         endOnDate: null,
-        prototypeSnapshot: expect.objectContaining({
-          root: expect.objectContaining({ title: 'Water All Plants' }),
-        }),
       }));
+      expect(edit.mock.calls[0]?.[0]).not.toHaveProperty('prototypeSnapshot');
+      expect(edit.mock.calls[0]?.[0]).not.toHaveProperty('targetAreaId');
       expect(createFromTask).not.toHaveBeenCalled();
       expect(evaluate).not.toHaveBeenCalled();
     } finally {

@@ -327,10 +327,26 @@ export function useTaskRecurrences(ownerId: string) {
       upcoming_order_key: upcomingOrderKey,
     };
     setOptimisticDefinitions((current) => ({ ...current, [definition.id]: optimistic }));
+    let rollbackDefinition = definition;
     try {
-      const result = await recurrenceService.reorderProjection(definition, upcomingOrderKey);
+      let result = await recurrenceService.reorderProjection(definition, upcomingOrderKey);
       if (result.outcome === 'conflict') {
-        throw new Error('The recurrence changed before its position could be updated');
+        rollbackDefinition = result.definition;
+        setOptimisticDefinitions((current) => ({
+          ...current,
+          [definition.id]: {
+            ...result.definition,
+            upcoming_order_key: upcomingOrderKey,
+          },
+        }));
+        result = await recurrenceService.reorderProjection(
+          result.definition,
+          upcomingOrderKey,
+        );
+      }
+      if (result.outcome === 'conflict') {
+        rollbackDefinition = result.definition;
+        throw new Error('The recurrence changed again before its position could be updated');
       }
       setOptimisticDefinitions((current) => ({
         ...current,
@@ -338,7 +354,10 @@ export function useTaskRecurrences(ownerId: string) {
       }));
       return result;
     } catch (error) {
-      setOptimisticDefinitions((current) => ({ ...current, [definition.id]: definition }));
+      setOptimisticDefinitions((current) => ({
+        ...current,
+        [definition.id]: rollbackDefinition,
+      }));
       throw error;
     }
   }, [mode, recurrenceService]);

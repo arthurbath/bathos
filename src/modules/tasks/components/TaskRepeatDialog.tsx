@@ -17,8 +17,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -28,7 +26,6 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/hooks/use-toast';
-import { TASK_ICONS } from '@/modules/tasks/components/taskIconography';
 import { getTaskRecurrencePreviewDates } from '@/modules/tasks/domain/taskRecurrenceDates';
 import {
   addTaskCalendarDays,
@@ -42,7 +39,6 @@ import type {
 import type {
   TaskRecurrenceDefinition,
   TaskRecurrenceFrequency,
-  TaskRecurrencePrototypeSnapshot,
   TaskRecurrenceRevision,
   TaskRecurrenceRuleConfig,
   TaskRecurrenceRuleMode,
@@ -105,7 +101,6 @@ export function TaskRepeatDialog({
   definition = null,
   revision = null,
   onEdit,
-  areas = [],
 }: {
   task: TaskTodo | null;
   planningDate: string;
@@ -155,12 +150,6 @@ export function TaskRepeatDialog({
   const [reminderTime, setReminderTime] = useState('12:00');
   const [addDeadline, setAddDeadline] = useState(task?.deadline != null);
   const [deadlineOffsetDays, setDeadlineOffsetDays] = useState(0);
-  const [prototypeSnapshot, setPrototypeSnapshot] = useState<
-    TaskRecurrencePrototypeSnapshot | null
-  >(revision?.prototype_snapshot ?? null);
-  const [targetAreaId, setTargetAreaId] = useState<string | null>(
-    revision?.target_area_id ?? null,
-  );
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
@@ -225,10 +214,6 @@ export function TaskRepeatDialog({
       ? revision.deadline_offset_days !== null
       : task?.deadline != null);
     setDeadlineOffsetDays(revision?.deadline_offset_days ?? 0);
-    setPrototypeSnapshot(revision
-      ? clonePrototypeSnapshot(revision.prototype_snapshot)
-      : null);
-    setTargetAreaId(revision?.target_area_id ?? null);
     setPending(false);
   }, [definition, open, planningDate, revision, task]);
 
@@ -309,7 +294,7 @@ export function TaskRepeatDialog({
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    const normalizedName = name.trim();
+    const normalizedName = editing ? definition.name : name.trim();
     if (
       pending
       || mode !== 'connected'
@@ -333,10 +318,6 @@ export function TaskRepeatDialog({
             endOnDate: null,
             reminderLocalTime: addReminder ? reminderTime : null,
             deadlineOffsetDays: addDeadline ? deadlineOffsetDays : null,
-            targetAreaId,
-            prototypeSnapshot: prototypeSnapshot
-              ? normalizePrototypeChecklist(prototypeSnapshot)
-              : revision.prototype_snapshot,
           })
         : task
           ? await recurrenceService.createFromTask({
@@ -385,30 +366,16 @@ export function TaskRepeatDialog({
             onSubmit={save}
             className="space-y-4"
           >
-            <label className="space-y-1 text-sm">
-              <span>{editing ? 'Summary' : 'Repeat Name'}</span>
-              <Input
-                value={name}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setName(value);
-                  setPrototypeSnapshot((current) => current ? {
-                    ...current,
-                    root: { ...current.root, title: value },
-                  } : current);
-                }}
-                placeholder={editing ? 'Summary' : 'Repeat Name'}
-                aria-label={editing ? 'Summary' : 'Repeat Name'}
-              />
-            </label>
-            {editing && prototypeSnapshot ? (
-              <PrototypeContentFields
-                snapshot={prototypeSnapshot}
-                areas={areas}
-                targetAreaId={targetAreaId}
-                onTargetAreaChange={setTargetAreaId}
-                onChange={setPrototypeSnapshot}
-              />
+            {!editing ? (
+              <label className="space-y-1 text-sm">
+                <span>Repeat Name</span>
+                <Input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Repeat Name"
+                  aria-label="Repeat Name"
+                />
+              </label>
             ) : null}
             <div className="grid grid-cols-[auto_1fr] items-center gap-3">
               <span className="text-sm font-medium">Repeat</span>
@@ -770,171 +737,6 @@ function recurrenceRuleConfigRecord(
   value: TaskRecurrenceRuleConfig | null | undefined,
 ): Record<string, unknown> {
   return value && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function PrototypeContentFields({
-  snapshot,
-  areas,
-  targetAreaId,
-  onTargetAreaChange,
-  onChange,
-}: {
-  snapshot: TaskRecurrencePrototypeSnapshot;
-  areas: ReadonlyArray<{ id: string; title: string }>;
-  targetAreaId: string | null;
-  onTargetAreaChange: (areaId: string | null) => void;
-  onChange: (snapshot: TaskRecurrencePrototypeSnapshot) => void;
-}) {
-  const updateRoot = (
-    patch: Partial<TaskRecurrencePrototypeSnapshot['root']>,
-  ) => onChange({ ...snapshot, root: { ...snapshot.root, ...patch } });
-  const insertChecklistItem = (index: number) => {
-    const checklist = [...snapshot.root.checklist];
-    checklist.splice(index, 0, {
-      node_id: crypto.randomUUID(),
-      title: '',
-      completed: false,
-      order_key: prototypeChecklistOrderKey(index),
-    });
-    updateRoot({ checklist });
-  };
-
-  return (
-    <section className="space-y-3 rounded-md border border-border p-3" aria-label="Prototype Content">
-      <Textarea
-        rows={2}
-        value={snapshot.root.notes}
-        onChange={(event) => updateRoot({ notes: event.target.value })}
-        placeholder="Notes"
-        aria-label="Notes"
-      />
-      <Input
-        value={snapshot.root.primary_link ?? ''}
-        onChange={(event) => updateRoot({ primary_link: event.target.value || null })}
-        placeholder="Primary Link"
-        aria-label="Primary Link"
-      />
-      <div className={`grid gap-3 ${areas.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-        {areas.length > 0 ? (
-          <Select
-            value={targetAreaId ?? 'none'}
-            onValueChange={(value) => onTargetAreaChange(value === 'none' ? null : value)}
-          >
-            <SelectTrigger aria-label="Area"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No Area</SelectItem>
-              {areas.map((area) => (
-                <SelectItem key={area.id} value={area.id}>{area.title}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
-        <Select
-          value={snapshot.root.actionability}
-          onValueChange={(value) => updateRoot({
-            actionability: value as TaskRecurrencePrototypeSnapshot['root']['actionability'],
-          })}
-        >
-          <SelectTrigger aria-label="Actionability"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ready">Ready</SelectItem>
-            <SelectItem value="rechecking">Rechecking</SelectItem>
-            <SelectItem value="waiting">Waiting</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-1" aria-label="Checklist">
-        {snapshot.root.checklist.map((item, index) => (
-          <div key={item.node_id} className="flex items-center gap-2">
-            <Checkbox
-              checked={item.completed}
-              onCheckedChange={(checked) => updateRoot({
-                checklist: snapshot.root.checklist.map((candidate) => (
-                  candidate.node_id === item.node_id
-                    ? { ...candidate, completed: checked === true }
-                    : candidate
-                )),
-              })}
-              aria-label={`Mark ${item.title || 'Item'} ${item.completed ? 'Incomplete' : 'Complete'}`}
-            />
-            <Input
-              value={item.title}
-              placeholder="Item"
-              aria-label={`Checklist Item ${index + 1}`}
-              data-bathos-field-return-owned="true"
-              onChange={(event) => updateRoot({
-                checklist: snapshot.root.checklist.map((candidate) => (
-                  candidate.node_id === item.node_id
-                    ? { ...candidate, title: event.target.value }
-                    : candidate
-                )),
-              })}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter') return;
-                event.preventDefault();
-                insertChecklistItem(index + 1);
-              }}
-            />
-            <Button
-              type="button"
-              variant="clear"
-              size="icon"
-              aria-label={`Delete Checklist Item ${index + 1}`}
-              onClick={() => updateRoot({
-                checklist: snapshot.root.checklist.filter(
-                  (candidate) => candidate.node_id !== item.node_id,
-                ),
-              })}
-            >
-              <TASK_ICONS.Delete aria-hidden="true" />
-            </Button>
-          </div>
-        ))}
-        <Button
-          type="button"
-          variant="clear"
-          className="justify-start"
-          onClick={() => insertChecklistItem(snapshot.root.checklist.length)}
-        >
-          Add Checklist Item
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-function clonePrototypeSnapshot(
-  snapshot: TaskRecurrencePrototypeSnapshot,
-): TaskRecurrencePrototypeSnapshot {
-  return {
-    ...snapshot,
-    root: {
-      ...snapshot.root,
-      checklist: snapshot.root.checklist.map((item) => ({ ...item })),
-    },
-  };
-}
-
-function normalizePrototypeChecklist(
-  snapshot: TaskRecurrencePrototypeSnapshot,
-): TaskRecurrencePrototypeSnapshot {
-  return {
-    ...snapshot,
-    root: {
-      ...snapshot.root,
-      checklist: snapshot.root.checklist
-        .filter((item) => item.title.trim())
-        .map((item, index) => ({
-          ...item,
-          title: item.title.trim(),
-          order_key: prototypeChecklistOrderKey(index),
-        })),
-    },
-  };
-}
-
-function prototypeChecklistOrderKey(index: number): string {
-  return String((index + 1) * 1024).padStart(12, '0');
 }
 
 function recurrenceOrdinal(value: unknown, date: string): MonthlyOrdinal {

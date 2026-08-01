@@ -31,6 +31,7 @@ function taskInsertEntry(
     today_section: todaySection,
     actionability: 'actionable',
     order_key: 'a0',
+    upcoming_order_key: 'a0',
     start_date: null,
     deadline: null,
     entry_channel: 'web',
@@ -234,6 +235,7 @@ describe('task sync connector', () => {
         deleted_at: null,
         today_section: 'later',
         actionability: 'actionable',
+        upcoming_order_key: 'a0',
         start_date: null,
         deadline: null,
         source_kind: null,
@@ -285,6 +287,26 @@ describe('task sync connector', () => {
       1,
       expect.objectContaining({ revision: 2, client_mutation_id: 'mutation-b' }),
     );
+    expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it('uploads an Upcoming reorder rank instead of rejecting it as an unknown field', async () => {
+    const { complete, connector, database, remoteStore } = createHarness(taskPatchEntry({
+      upcoming_order_key: 'a0V',
+    }));
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.updateTask).toHaveBeenCalledWith(
+      'task-a',
+      1,
+      expect.objectContaining({
+        upcoming_order_key: 'a0V',
+        revision: 2,
+        client_mutation_id: 'mutation-b',
+      }),
+    );
+    expect(database.execute).not.toHaveBeenCalled();
     expect(complete).toHaveBeenCalledOnce();
   });
 

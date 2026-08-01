@@ -97,8 +97,9 @@ describe('getTaskKeyboardCommand', () => {
       q: 'close-task',
       w: 'open-previous',
       e: 'open-start-date',
-      r: 'cycle-horizon',
-      t: 'clear-start',
+      r: 'clear-start',
+      t: 'cycle-horizon',
+      y: 'focus-reminder',
       a: 'capture',
       s: 'open-next',
       d: 'open-deadline',
@@ -107,7 +108,7 @@ describe('getTaskKeyboardCommand', () => {
       x: 'toggle-completion',
       c: 'open-checklist',
       v: 'cycle-area',
-      b: 'focus-reminder',
+      b: 'start-selection',
     };
     for (const [key, command] of Object.entries(bindings)) {
       expect(getTaskKeyboardCommand(gesture({ key, ctrlKey: true }), true)).toBe(command);
@@ -129,10 +130,20 @@ describe('getTaskKeyboardCommand', () => {
       gesture({ key: 'z', ctrlKey: true, shiftKey: true }),
       false,
     )).toBe('redo');
+    expect(getTaskKeyboardCommand(gesture({ key: 'y', ctrlKey: true }), true))
+      .toBe('focus-reminder');
+    expect(getTaskKeyboardCommand(gesture({ key: 'y', metaKey: true }), true))
+      .toBe('redo');
+    expect(getTaskKeyboardCommand(gesture({ key: 'y', ctrlKey: true }), false))
+      .toBe('redo');
+    expect(getTaskKeyboardCommand(
+      gesture({ key: 'y', altKey: true, shiftKey: true }),
+      false,
+    )).toBe('focus-reminder');
   });
 
   it('leaves former Windows Control+Shift task chords unbound', () => {
-    for (const key of ['q', 'w', 'e', 'r', 't', 'a', 's', 'd', 'f', 'g', 'x', 'c', 'v', 'b']) {
+    for (const key of ['q', 'w', 'e', 'r', 't', 'y', 'a', 's', 'd', 'f', 'g', 'x', 'c', 'v', 'b']) {
       expect(getTaskKeyboardCommand(
         gesture({ key, ctrlKey: true, shiftKey: true }),
         false,

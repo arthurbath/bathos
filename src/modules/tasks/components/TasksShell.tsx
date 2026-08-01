@@ -169,6 +169,10 @@ import { TaskSyncDiagnosticsDialog } from '@/modules/tasks/components/TaskSyncDi
 import { TaskChecklistEditor } from '@/modules/tasks/components/TaskChecklistEditor';
 import { TaskRepeatDialog } from '@/modules/tasks/components/TaskRepeatDialog';
 import {
+  CalendarRecurrencePrototypeRow,
+  WaitingRecurrenceRow,
+} from '@/modules/tasks/components/TaskRecurrencePrototypeRow';
+import {
   getTaskReminderAvailability,
   getTaskReminderUnavailableMessage,
   type TaskReminderAvailability,
@@ -262,6 +266,11 @@ type TaskDropIndicator = {
   targetAreaId?: string | null;
   targetUpcomingSectionKey?: string;
   targetUpcomingStartDate?: string;
+};
+
+type UpcomingSectionDropRow = {
+  taskId: string | null;
+  recurrenceId: string | null;
 };
 
 const TaskMarkdownNotes = lazy(async () => {
@@ -1394,7 +1403,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setBulkMode(true);
   }, [setOpenTask]);
 
-  const enterTaskSelectionFromTouchSwipe = useCallback(async (taskId: string) => {
+  const enterTaskSelectionWithTask = useCallback(async (taskId: string) => {
     if (
       !bulkEligible
       || bulkMode
@@ -1411,6 +1420,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setBulkSelectionAnchorId(taskId);
     setBulkMode(true);
   }, [bulkEligible, bulkMode, setOpenTask]);
+
+  const enterTaskSelectionFromTouchSwipe = useCallback(
+    (taskId: string) => enterTaskSelectionWithTask(taskId),
+    [enterTaskSelectionWithTask],
+  );
 
   const applyTaskQuickFilter = useCallback(async (nextFilter: TaskQuickFilter) => {
     if (nextFilter === taskQuickFilter) return;
@@ -2646,6 +2660,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         void openTaskCommandField('reminder');
         return;
       }
+      if (command === 'start-selection') {
+        if (bulkMode || !bulkEligible) return;
+        const target = getTaskCommandTargets()[0];
+        if (!target || target.id === NEW_TASK_DRAFT_ID) return;
+        void enterTaskSelectionWithTask(target.id);
+        return;
+      }
       if (command === 'open-next') {
         openRelativeTask(1);
         return;
@@ -2696,6 +2717,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     bulkEligible,
     bulkMode,
     clearTaskSelection,
+    enterTaskSelectionWithTask,
     focusTaskRow,
     closeOpenTaskToFocus,
     getTaskCommandTargets,
@@ -2933,45 +2955,66 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             const sourceDate = draggedTask
               ? getTaskUpcomingDate(draggedTask, planningDate)
               : null;
-            if (
-              sourceDate !== null
-              && getTaskUpcomingGroup(sourceDate, planningDate).key
-                === indicator.targetUpcomingSectionKey
-            ) {
-              await updateTask(draggedTaskId, { upcoming_order_key: upcomingOrderKey });
+            if (draggedTask && sourceDate !== null) {
+              const movesToTargetSection = getTaskUpcomingGroup(sourceDate, planningDate).key
+                !== indicator.targetUpcomingSectionKey;
+              await updateTask(draggedTaskId, {
+                upcoming_order_key: upcomingOrderKey,
+                ...(movesToTargetSection && indicator.targetUpcomingStartDate
+                  ? {
+                      destination: 'anytime' as const,
+                      start_date: indicator.targetUpcomingStartDate,
+                      today_section: null,
+                    }
+                  : {}),
+              });
+              if (movesToTargetSection) {
+                await rescheduleTaskReminders([draggedTask]);
+              }
               return;
             }
           }
           if (draggedTaskIds.length > 1) {
             const draggedRows = renderedPlanningTasks
               .filter((task) => draggedTaskIds.includes(task.id))
-              .flatMap((task) => {
-                const upcomingDate = getTaskUpcomingDate(task, planningDate);
-                return upcomingDate !== null
-                  && getTaskUpcomingGroup(upcomingDate, planningDate).key
-                    === indicator.targetUpcomingSectionKey
-                  ? [{
-                      id: `task:${task.id}`,
-                      taskId: task.id,
-                      orderKey: task.upcoming_order_key ?? task.order_key,
-                    }]
-                  : [];
-              })
-              .sort(compareTaskOrder);
+              .map((task) => ({
+                id: `task:${task.id}`,
+                task,
+                taskId: task.id,
+                orderKey: task.upcoming_order_key ?? task.order_key,
+              }));
             const targetIndex = orderedRows.findIndex(({ id }) => id === targetRowId);
             if (draggedRows.length === draggedTaskIds.length && targetIndex >= 0) {
               const insertionIndex = targetIndex + (indicator.placement === 'after' ? 1 : 0);
               let previousKey = orderedRows[insertionIndex - 1]?.orderKey ?? null;
               const nextKey = orderedRows[insertionIndex]?.orderKey ?? null;
-              const patches = draggedRows.map(({ taskId }) => {
+              const movedBetweenSections: TaskTodo[] = [];
+              const patches = draggedRows.map(({ task, taskId }) => {
                 const upcomingOrderKey = generateTaskOrderKey(previousKey, nextKey);
                 previousKey = upcomingOrderKey;
+                const upcomingDate = getTaskUpcomingDate(task, planningDate);
+                const movesToTargetSection = upcomingDate !== null
+                  && getTaskUpcomingGroup(upcomingDate, planningDate).key
+                    !== indicator.targetUpcomingSectionKey;
+                if (movesToTargetSection) movedBetweenSections.push(task);
                 return {
                   taskId,
-                  patch: { upcoming_order_key: upcomingOrderKey },
+                  patch: {
+                    upcoming_order_key: upcomingOrderKey,
+                    ...(movesToTargetSection && indicator.targetUpcomingStartDate
+                      ? {
+                          destination: 'anytime' as const,
+                          start_date: indicator.targetUpcomingStartDate,
+                          today_section: null,
+                        }
+                      : {}),
+                  },
                 };
               });
               await applyTaskPatches(patches);
+              if (movedBetweenSections.length > 0) {
+                await rescheduleTaskReminders(movedBetweenSections);
+              }
               return;
             }
           }
@@ -3934,7 +3977,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                       onCreate={(startDate) => {
                         void beginTaskCreation({ startDate });
                       }}
-                      onSectionDragOver={(section, sectionTasks, placement) => {
+                      onSectionDragOver={(section, sectionRows, placement) => {
                         const draggedTaskId = activeDraggedTaskIdRef.current;
                         if (draggedTaskId === null) return;
                         const draggedRecurrenceId = activeDraggedRecurrenceIdRef.current;
@@ -3951,13 +3994,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                           ) return;
                         }
                         const draggedIds = new Set(activeDraggedTaskIdsRef.current);
-                        const candidates = sectionTasks.filter(({ id }) => !draggedIds.has(id));
-                        const targetTask = placement === 'before'
+                        const candidates = sectionRows.filter((row) => (
+                          row.recurrenceId !== draggedRecurrenceId
+                          && (row.taskId === null || !draggedIds.has(row.taskId))
+                        ));
+                        const targetRow = placement === 'before'
                           ? candidates[0] ?? null
                           : candidates.at(-1) ?? null;
                         updateTaskDropIndicator({
                           draggedTaskId,
-                          targetTaskId: targetTask?.id ?? null,
+                          targetTaskId: targetRow?.taskId ?? null,
+                          targetRecurrenceId: targetRow?.recurrenceId ?? null,
                           placement,
                           targetUpcomingSectionKey: section.key,
                           targetUpcomingStartDate: section.date,
@@ -3983,13 +4030,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                           const draggedTask = renderedPlanningTasks.find(
                             ({ id }) => id === draggedTaskId,
                           );
-                          const sourceDate = draggedTask
-                            ? getTaskUpcomingDate(draggedTask, planningDate)
-                            : null;
-                          if (
-                            sourceDate === null
-                            || getTaskUpcomingGroup(sourceDate, planningDate).key !== section.key
-                          ) return;
+                          if (!draggedTask || getTaskUpcomingDate(draggedTask, planningDate) === null) {
+                            return;
+                          }
                         } else {
                           const sourcePrototype = recurrences.calendarPrototypes.find(
                             ({ definition }) => definition.id
@@ -5503,7 +5546,7 @@ function UpcomingTaskSections({
   onCreate: (startDate: string) => void;
   onSectionDragOver: (
     section: { key: string; date: string },
-    sectionTasks: TaskTodo[],
+    sectionRows: UpcomingSectionDropRow[],
     placement: 'before' | 'after',
   ) => void;
   onPrototypeDragStart: (
@@ -5578,7 +5621,24 @@ function UpcomingTaskSections({
         ].sort((left, right) => {
           if (left.kind === 'task' && left.entry.item.id === NEW_TASK_DRAFT_ID) return -1;
           if (right.kind === 'task' && right.entry.item.id === NEW_TASK_DRAFT_ID) return 1;
-          return left.orderKey.localeCompare(right.orderKey);
+          const leftId = left.kind === 'task'
+            ? `task:${left.entry.item.id}`
+            : `recurrence:${left.prototype.definition.id}`;
+          const rightId = right.kind === 'task'
+            ? `task:${right.entry.item.id}`
+            : `recurrence:${right.prototype.definition.id}`;
+          return compareTaskOrder(
+            { id: leftId, orderKey: left.orderKey },
+            { id: rightId, orderKey: right.orderKey },
+          );
+        });
+        const sectionDropRows = orderedRows.flatMap<UpcomingSectionDropRow>((row) => {
+          if (row.kind === 'task') {
+            return row.entry.item.id === NEW_TASK_DRAFT_ID
+              ? []
+              : [{ taskId: row.entry.item.id, recurrenceId: null }];
+          }
+          return [{ taskId: null, recurrenceId: row.prototype.definition.id }];
         });
         const sectionDropPlacement = dropIndicator?.targetUpcomingSectionKey === section.key
           && dropIndicator.targetTaskId === null
@@ -5600,7 +5660,7 @@ function UpcomingTaskSections({
               const bounds = event.currentTarget.getBoundingClientRect();
               onSectionDragOver(
                 section,
-                sectionTasks,
+                sectionDropRows,
                 event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after',
               );
             }}
@@ -5641,6 +5701,7 @@ function UpcomingTaskSections({
                     key={`recurrence:${row.prototype.definition.id}`}
                     definition={row.prototype.definition}
                     revision={row.prototype.revision}
+                    scheduledDate={row.prototype.scheduledDate}
                     planningDate={planningDate}
                     onEdit={onEditRecurrence}
                     areas={areas}
@@ -5669,247 +5730,6 @@ function UpcomingTaskSections({
         );
       })}
     </div>
-  );
-}
-
-function WaitingRecurrenceRow({
-  definition,
-  revision,
-  planningDate,
-  onEdit,
-  areas,
-  focusRequested,
-  onFocusFulfilled,
-  onGoToInstance,
-}: {
-  definition: TaskRecurrenceDefinition;
-  revision: TaskRecurrenceRevision;
-  planningDate: string;
-  onEdit: NonNullable<Parameters<typeof TaskRepeatDialog>[0]['onEdit']>;
-  areas: ReadonlyArray<{ id: string; title: string }>;
-  focusRequested: boolean;
-  onFocusFulfilled: () => void;
-  onGoToInstance: () => void;
-}) {
-  const [repeatOpen, setRepeatOpen] = useState(false);
-  const rowRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (!focusRequested) return;
-    const timer = window.setTimeout(() => {
-      alignOpenedTaskToVisibleContent(rowRef.current, 'smooth');
-      rowRef.current?.focus({ preventScroll: true });
-      onFocusFulfilled();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [focusRequested, onFocusFulfilled]);
-
-  return (
-    <>
-      <article
-        ref={rowRef}
-        className="flex h-11 items-center gap-2 px-1 pr-1.5 text-[15px] text-foreground focus:rounded-md focus:bg-info/10 focus:outline-none"
-        data-task-waiting-recurrence
-        data-task-recurrence-prototype={definition.id}
-        tabIndex={-1}
-      >
-        <span
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground"
-          aria-label="Repeating Schedule"
-        >
-          <TASK_ICONS.Recurrence className="h-5 w-5" aria-hidden="true" />
-        </span>
-        <button
-          type="button"
-          className="flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus:outline-none"
-          onClick={() => setRepeatOpen(true)}
-          aria-label={`Edit Repeat for ${definition.name}`}
-        >
-          <span className="truncate">{definition.name}</span>
-          <span
-            className="mt-px flex items-center text-xs leading-4 text-muted-foreground"
-            data-task-row-metadata
-          >
-            <span
-              className="rounded bg-foreground/[0.08] px-1.5 py-0.5"
-              data-task-metadata-kind="recurrence-waiting"
-            >
-              Waiting
-            </span>
-          </span>
-        </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="clear"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground"
-              aria-label={`Actions for ${definition.name}`}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setRepeatOpen(true)}>
-              Edit Repeat
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={onGoToInstance}>
-              Go to Instance
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </article>
-      <TaskRepeatDialog
-        task={null}
-        definition={definition}
-        revision={revision}
-        planningDate={planningDate}
-        open={repeatOpen}
-        onOpenChange={setRepeatOpen}
-        onEdit={onEdit}
-        areas={areas}
-      />
-    </>
-  );
-}
-
-function CalendarRecurrencePrototypeRow({
-  definition,
-  revision,
-  planningDate,
-  onEdit,
-  areas,
-  focusRequested,
-  onFocusFulfilled,
-  dragPlacement,
-  onDragStart,
-  onDragOver,
-  onDragEnd,
-}: {
-  definition: TaskRecurrenceDefinition;
-  revision: TaskRecurrenceRevision;
-  planningDate: string;
-  onEdit: NonNullable<Parameters<typeof TaskRepeatDialog>[0]['onEdit']>;
-  areas: ReadonlyArray<{ id: string; title: string }>;
-  focusRequested: boolean;
-  onFocusFulfilled: () => void;
-  dragPlacement: 'before' | 'after' | null;
-  onDragStart: () => void;
-  onDragOver: (placement: 'before' | 'after') => void;
-  onDragEnd: () => void;
-}) {
-  const [repeatOpen, setRepeatOpen] = useState(false);
-  const prototype = revision.prototype_snapshot.root;
-  const rowRef = useRef<HTMLElement>(null);
-  const suppressClickUntilRef = useRef(0);
-
-  useEffect(() => {
-    if (!focusRequested) return;
-    const timer = window.setTimeout(() => {
-      alignOpenedTaskToVisibleContent(rowRef.current, 'smooth');
-      rowRef.current?.focus({ preventScroll: true });
-      onFocusFulfilled();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [focusRequested, onFocusFulfilled]);
-
-  return (
-    <>
-      <article
-        ref={rowRef}
-        className="relative flex h-11 items-center gap-2 px-1 pr-1.5 text-[15px] text-foreground focus:rounded-md focus:bg-info/10 focus:outline-none"
-        data-task-recurrence-prototype={definition.id}
-        data-task-row-id={`recurrence:${definition.id}`}
-        data-drag-placement={dragPlacement ?? undefined}
-        tabIndex={-1}
-        onDragOver={(event) => {
-          event.preventDefault();
-          event.dataTransfer.dropEffect = 'move';
-          const bounds = event.currentTarget.getBoundingClientRect();
-          onDragOver(event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after');
-        }}
-      >
-        {dragPlacement ? (
-          <span
-            aria-hidden="true"
-            data-task-drop-indicator
-            className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 bg-info ${
-              dragPlacement === 'before' ? 'top-0' : 'bottom-0'
-            }`}
-          />
-        ) : null}
-        <span
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground"
-          aria-label="Repeating Schedule"
-        >
-          <TASK_ICONS.Recurrence className="h-5 w-5" aria-hidden="true" />
-        </span>
-        <button
-          type="button"
-          draggable
-          data-task-drag-handle="true"
-          onDragStart={(event) => {
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('application/x-bathos-recurrence-id', definition.id);
-            event.dataTransfer.setData('text/plain', definition.id);
-            suppressClickUntilRef.current = Date.now() + 1_000;
-            onDragStart();
-          }}
-          onDragEnd={() => {
-            suppressClickUntilRef.current = Date.now() + 250;
-            onDragEnd();
-          }}
-          className="flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus:outline-none"
-          onClick={(event) => {
-            if (Date.now() <= suppressClickUntilRef.current) {
-              event.preventDefault();
-              return;
-            }
-            setRepeatOpen(true);
-          }}
-          aria-label={`Edit Repeat for ${prototype.title}`}
-        >
-          <span className="truncate">{prototype.title}</span>
-          {prototype.checklist.length > 0 ? (
-            <span
-              className="mt-px flex items-center text-xs leading-4 text-muted-foreground"
-              data-task-row-metadata
-            >
-              <TASK_ICONS.TaskChecklist className="h-3.5 w-3.5" aria-hidden="true" />
-            </span>
-          ) : null}
-        </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="clear"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground"
-              aria-label={`Actions for ${prototype.title}`}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setRepeatOpen(true)}>
-              Edit Repeat
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </article>
-      <TaskRepeatDialog
-        task={null}
-        definition={definition}
-        revision={revision}
-        planningDate={planningDate}
-        open={repeatOpen}
-        onOpenChange={setRepeatOpen}
-        onEdit={onEdit}
-        areas={areas}
-      />
-    </>
   );
 }
 

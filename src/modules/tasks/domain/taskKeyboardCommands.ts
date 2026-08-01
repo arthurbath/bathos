@@ -23,6 +23,7 @@ export type TaskKeyboardCommand =
   | 'cycle-actionability'
   | 'cycle-area'
   | 'focus-reminder'
+  | 'start-selection'
   | 'open-deadline'
   | 'open-checklist'
   | 'open-previous'
@@ -37,8 +38,9 @@ const taskControlCommands: Record<string, TaskKeyboardCommand> = {
   q: 'close-task',
   w: 'open-previous',
   e: 'open-start-date',
-  r: 'cycle-horizon',
-  t: 'clear-start',
+  r: 'clear-start',
+  t: 'cycle-horizon',
+  y: 'focus-reminder',
   a: 'capture',
   s: 'open-next',
   d: 'open-deadline',
@@ -48,7 +50,7 @@ const taskControlCommands: Record<string, TaskKeyboardCommand> = {
   x: 'toggle-completion',
   c: 'open-checklist',
   v: 'cycle-area',
-  b: 'focus-reminder',
+  b: 'start-selection',
 };
 
 const applicationCommands: Record<string, TaskKeyboardCommand> = {

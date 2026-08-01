@@ -53,7 +53,7 @@ The system SHALL store Start and a Today horizon as mutually exclusive planning 
 Tasks SHALL make accepted metadata changes visible immediately in an open task while deferring list membership, filtering, grouping, and automatic-sort reconciliation until that task's editor closes.
 
 #### Scenario: Cycle an existing Today horizon
-- **WHEN** Control+R on Mac or Alt+Shift+R on Windows targets work already in Today
+- **WHEN** Control+T on Mac or Alt+Shift+T on Windows targets work already in Today
 - **THEN** Tasks cycles Now to Next, Next to Later, Later to Now, and Inbox to Now while keeping the work in Today
 
 #### Scenario: Cycle work not currently in Today
@@ -711,6 +711,14 @@ Tasks SHALL expose a point-and-click entry into task selection mode on every sel
 - **WHEN** a user activates Select Tasks from Today, Upcoming, Anytime, Someday, or Done while selection mode is inactive
 - **THEN** Tasks closes any open task editor, clears lightweight task focus and the range anchor, enters selection mode with zero selected tasks, shows circular selection controls, and presents the fixed toolbar reporting `0 Tasks`
 
+#### Scenario: Enter selection mode with the current task command
+- **WHEN** selection mode is inactive on a selection-capable list and Control+B on Mac or Alt+Shift+B on Windows targets the currently open or keyboard-focused task
+- **THEN** Tasks flushes and closes any open editor, clears lightweight and DOM focus, enters selection mode with exactly that task selected, establishes it as the range anchor, and presents the fixed selection toolbar
+
+#### Scenario: Ignore targeted selection entry without an eligible task
+- **WHEN** the targeted selection command is invoked without an open or keyboard-focused selectable task, with an untitled creation draft, outside a selection-capable list, or while selection mode is already active
+- **THEN** Tasks suppresses the matching browser command without changing selection membership or task state
+
 #### Scenario: Omit selection entry from non-list surfaces
 - **WHEN** a user views Config, Templates, Search, or an Area-detail surface
 - **THEN** Tasks does not present the Select Tasks action
@@ -933,11 +941,11 @@ The Tasks interface SHALL present a single autosaving Start control for Today ho
 - **THEN** Tasks closes Start, restores its trigger focus and pre-open provisional field state, and leaves the containing task editor open
 
 #### Scenario: Open Start from the reminder command
-- **WHEN** Control+B on Mac or Alt+Shift+B on Windows targets one open to-do outside selection mode
+- **WHEN** Control+Y on Mac or Alt+Shift+Y on Windows targets one open to-do outside selection mode
 - **THEN** Tasks opens Start with Reminder prefocused and suppresses the matching browser command
 
 #### Scenario: Ignore the reminder command in selection mode
-- **WHEN** selection mode is active and the user presses Control+B on Mac or Alt+Shift+B on Windows with zero, one, or many selected to-dos
+- **WHEN** selection mode is active and the user presses Control+Y on Mac or Alt+Shift+Y on Windows with zero, one, or many selected to-dos
 - **THEN** Tasks suppresses the matching browser command without opening a reminder surface, changing selection membership, or mutating any task or reminder
 
 #### Scenario: Keep Reminder available before planning
@@ -1982,16 +1990,16 @@ The system SHALL provide a platform-aware keyboard contract for full-editor crea
 - **WHEN** Control+E on Mac or Alt+Shift+E on Windows targets an open task or nonempty eligible selection
 - **THEN** Tasks opens or applies the Start planning surface without changing Deadline, actionability, or organization
 #### Scenario: Clear Start directly
-- **WHEN** Control+T on Mac or Alt+Shift+T on Windows targets an open task or nonempty eligible selection
+- **WHEN** Control+R on Mac or Alt+Shift+R on Windows targets an open task or nonempty eligible selection
 - **THEN** Tasks moves each target to unplanned Anytime, clears Start and day horizon, cancels Start-dependent reminders, and preserves Deadline, actionability, and organization
 #### Scenario: Set Start to Someday directly
 - **WHEN** Control+G on Mac or Alt+Shift+G on Windows targets an open task or nonempty eligible selection
 - **THEN** Tasks moves each target to Someday, clears calendar Start and day horizon, cancels Start-dependent reminders, and preserves Deadline, actionability, and organization
 #### Scenario: Cycle day horizon
-- **WHEN** Control+R on Mac or Alt+Shift+R on Windows targets one or more eligible tasks
+- **WHEN** Control+T on Mac or Alt+Shift+T on Windows targets one or more eligible tasks
 - **THEN** each task moves to Today when needed and cycles through the supported Today horizon sequence without changing Deadline or organization
 #### Scenario: Open reminder planning
-- **WHEN** Control+B on Mac or Alt+Shift+B on Windows targets one eligible task
+- **WHEN** Control+Y on Mac or Alt+Shift+Y on Windows targets one eligible task
 - **THEN** Tasks opens Start with Reminder editable, and a valid reminder on unplanned work first assigns Today Inbox before reminder persistence
 #### Scenario: Open the next visible task
 - **WHEN** the user presses Control+S on Mac or Alt+Shift+S on Windows

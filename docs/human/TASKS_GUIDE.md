@@ -64,8 +64,9 @@ Cut, Copy, Paste, and Select All remain native when an editable text control own
 | Open/Close Task | `⌃Q` | `⌥⇧Q` |
 | Open the Previous Task | `⌃W` | `⌥⇧W` |
 | Choose Start | `⌃E` | `⌥⇧E` |
-| Cycle Day Horizon | `⌃R` | `⌥⇧R` |
-| Clear Start | `⌃T` | `⌥⇧T` |
+| Clear Start | `⌃R` | `⌥⇧R` |
+| Set Today / Cycle Horizon | `⌃T` | `⌥⇧T` |
+| Edit Reminder Time | `⌃Y` | `⌥⇧Y` |
 | New Task | `⌃A` | `⌥⇧A` |
 | Open the Next Task | `⌃S` | `⌥⇧S` |
 | Choose Deadline | `⌃D` | `⌥⇧D` |
@@ -74,7 +75,7 @@ Cut, Copy, Paste, and Select All remain native when an editable text control own
 | Toggle Done | `⌃X` | `⌥⇧X` |
 | Edit Checklist | `⌃C` | `⌥⇧C` |
 | Choose Area | `⌃V` | `⌥⇧V` |
-| Edit Reminder Time | `⌃B` | `⌥⇧B` |
+| Start Bulk Selection With Task | `⌃B` | `⌥⇧B` |
 
 Tab and Shift+Tab follow the native page order through each closed task row and its available completion, title, source-link, and actions controls, then continue beyond the task list. Starting granular Tab traversal clears any whole-task focus without interrupting the browser's focus movement. When no task is focused, open, or multiply selected and no nested surface owns the keyboard, press Space from the Tasks page background to focus the first visible task without opening it. Space on a task row reached by Tab promotes that same row into whole-task focus without advancing. After whole-task focus is established, Space advances, Shift+Space reverses, and Up or Down moves through visible tasks. These whole-task movements wrap at both ends and scroll the destination into view. Held Space does not repeat movement. Space retains its native behavior on task controls, links, editors, dialogs, menus, popovers, and unrelated page controls. Escape relinquishes focus from a collapsed task row or one of its granular controls when no nested surface owns Escape. Return opens a whole-task-focused closed task. Open/Close Task opens a focused closed task or closes an open task and returns focus to its row. When completion, lifecycle, menu, or task-owned dialog actions return to the collapsed list, focus lands on the complete task row or its same-position fallback rather than a nested row control.
 

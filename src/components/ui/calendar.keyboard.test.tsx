@@ -286,6 +286,93 @@ describe('Calendar keyboard navigation', () => {
     }
   });
 
+  it('pages months with Shift+horizontal arrows only from day values and month pagers', async () => {
+    function Harness() {
+      const [month, setMonth] = React.useState(new Date(2026, 3, 1));
+      return (
+        <Calendar
+          mode="single"
+          month={month}
+          selected={new Date(2026, 3, 15)}
+          onMonthChange={setMonth}
+          onSelect={() => {}}
+        />
+      );
+    }
+
+    const { container, root } = mount(<Harness />);
+    try {
+      const aprilFifteenth = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-04-15"]',
+      );
+      act(() => {
+        aprilFifteenth?.focus();
+        aprilFifteenth?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await flushUi();
+
+      expect(container.textContent).toContain('May 2026');
+      expect(document.activeElement).toBe(container.querySelector(
+        'button[name="day"][data-calendar-date="2026-05-15"]',
+      ));
+
+      const nextMonth = container.querySelector<HTMLButtonElement>('button[name="next-month"]');
+      act(() => {
+        nextMonth?.focus();
+        nextMonth?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await flushUi();
+
+      expect(container.textContent).toContain('April 2026');
+      expect(document.activeElement).toBe(container.querySelector('button[name="next-month"]'));
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('keeps a bounded day calendar on its earliest page for Shift+Left', async () => {
+    const fromDate = new Date(2026, 6, 24);
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 6, 1)}
+        fromDate={fromDate}
+        selected={fromDate}
+        onSelect={() => {}}
+      />,
+    );
+    try {
+      const selected = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-07-24"]',
+      );
+      act(() => {
+        selected?.focus();
+        selected?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await flushUi();
+
+      expect(container.textContent).toContain('July 2026');
+      expect(document.activeElement).toBe(selected);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it('keeps vertical focus in the visible grid and exits below its final row without paging', async () => {
     const onDayGridExitDown = vi.fn(() => true);
     function Harness() {
@@ -786,6 +873,62 @@ describe('Calendar keyboard navigation', () => {
       expect(nextYearHeaderButton?.className).toBe(nextMonthButton?.className);
       expect(captionButton?.className).not.toContain('hover:');
       expect(yearLabel?.className).not.toBe(captionButton?.className);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('pages years with Shift+horizontal arrows from month values and year pagers', async () => {
+    function Harness() {
+      const [month, setMonth] = React.useState(new Date(2026, 3, 1));
+      return (
+        <Calendar
+          mode="single"
+          month={month}
+          selected={new Date(2026, 3, 4)}
+          onMonthChange={setMonth}
+          onSelect={() => {}}
+        />
+      );
+    }
+
+    const { container, root } = mount(<Harness />);
+    try {
+      act(() => {
+        container.querySelector<HTMLButtonElement>('button[name="caption-month-year"]')?.click();
+      });
+      await flushUi();
+
+      const april = Array.from(container.querySelectorAll<HTMLButtonElement>('button[name="month"]'))
+        .find((button) => button.textContent?.includes('Apr'));
+      act(() => {
+        april?.focus();
+        april?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await flushUi();
+
+      expect(container.textContent).toContain('2027');
+      expect(document.activeElement?.textContent).toContain('Apr');
+
+      const nextYear = container.querySelector<HTMLButtonElement>('button[name="next-year"]');
+      act(() => {
+        nextYear?.focus();
+        nextYear?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
+      await flushUi();
+
+      expect(container.textContent).toContain('2026');
+      expect(document.activeElement).toBe(container.querySelector('button[name="next-year"]'));
     } finally {
       unmount(root, container);
     }
