@@ -118,8 +118,9 @@ LaunchServices database or unregister unrelated applications.
   Anytime, Someday, Done, and Settings.
 - Unmodified Escape is consumed while the Tasks window is active, forwarded
   once to the web surface, and does not exit native full screen.
-- The main window remains eligible for native macOS Split View and can resize
-  down to a 360-point mobile-class content width.
+- The main window explicitly remains eligible for native macOS Split View and
+  full-screen tiling, can resize down to a 360-point mobile-class content
+  width, and reasserts that policy after scene and full-screen transitions.
 - Internal Tasks, account, and authentication routes stay in the persistent web
   view. Other BathOS modules, ordinary web URLs, and approved external protocols
   open in the system's default application.

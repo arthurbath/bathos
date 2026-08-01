@@ -30,6 +30,10 @@ final class TasksMacTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
+        window.collectionBehavior = [
+            .fullScreenNone,
+            .fullScreenDisallowsTiling,
+        ]
 
         TasksMacWindowPolicy.apply(to: window)
 
@@ -37,7 +41,40 @@ final class TasksMacTests: XCTestCase {
         XCTAssertEqual(TasksMacWindowPolicy.minimumSize.height, 420)
         XCTAssertTrue(window.styleMask.contains(.resizable))
         XCTAssertTrue(window.collectionBehavior.contains(.fullScreenPrimary))
+        XCTAssertTrue(window.collectionBehavior.contains(.fullScreenAllowsTiling))
+        XCTAssertFalse(window.collectionBehavior.contains(.fullScreenNone))
+        XCTAssertFalse(window.collectionBehavior.contains(.fullScreenDisallowsTiling))
         XCTAssertEqual(window.minSize, TasksMacWindowPolicy.minimumSize)
+    }
+
+    func testWindowPolicyObserverRestoresSplitViewEligibilityAfterTransition() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1_100, height: 780),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let observer = TasksMacWindowPolicyObserver()
+        observer.attach(to: window)
+
+        window.styleMask.remove(.resizable)
+        window.collectionBehavior.remove(.fullScreenPrimary)
+        window.collectionBehavior.remove(.fullScreenAllowsTiling)
+        window.collectionBehavior.insert(.fullScreenDisallowsTiling)
+        window.minSize = NSSize(width: 900, height: 700)
+
+        NotificationCenter.default.post(
+            name: NSWindow.didExitFullScreenNotification,
+            object: window
+        )
+
+        XCTAssertTrue(window.styleMask.contains(.resizable))
+        XCTAssertTrue(window.collectionBehavior.contains(.fullScreenPrimary))
+        XCTAssertTrue(window.collectionBehavior.contains(.fullScreenAllowsTiling))
+        XCTAssertFalse(window.collectionBehavior.contains(.fullScreenDisallowsTiling))
+        XCTAssertEqual(window.minSize, TasksMacWindowPolicy.minimumSize)
+
+        observer.stopObserving()
     }
 
     func testMacHostUsesTheUnifiedTasksIdentity() {

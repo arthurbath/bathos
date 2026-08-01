@@ -216,6 +216,81 @@ describe('useTaskList optimistic display', () => {
     }
   });
 
+  it('removes concurrent deletions together and restores only the rejected task', async () => {
+    const secondTask = taskTodoFixture({
+      ...originalTask,
+      id: 'task-b',
+      title: 'Second task',
+      order_key: 'a1',
+      client_mutation_id: 'mutation-b',
+    });
+    queryData = [originalTask, secondTask];
+    const firstDeletion = deferred<TaskTodo>();
+    const secondDeletion = deferred<TaskTodo>();
+    const repository = {
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      transitionTask: vi.fn().mockImplementation(
+        (_ownerId: string, taskId: string) => (
+          taskId === 'task-a' ? firstDeletion.promise : secondDeletion.promise
+        ),
+      ),
+    };
+    mocks.useTasksRuntime.mockReturnValue({ repository, planningTimeZone: 'UTC' });
+    const { container, root } = renderHookHarness();
+
+    try {
+      let firstPromise!: Promise<TaskTodo>;
+      let secondPromise!: Promise<TaskTodo>;
+      act(() => {
+        firstPromise = latest.transitionTask(
+          'task-a',
+          'delete',
+          undefined,
+          { operationId: 'bulk-delete-operation' },
+        );
+        secondPromise = latest.transitionTask(
+          'task-b',
+          'delete',
+          undefined,
+          { operationId: 'bulk-delete-operation' },
+        );
+      });
+
+      expect(latest.tasks).toEqual([]);
+      expect(repository.transitionTask).toHaveBeenNthCalledWith(
+        1,
+        'owner-a',
+        'task-a',
+        'delete',
+        { operationId: 'bulk-delete-operation' },
+      );
+      expect(repository.transitionTask).toHaveBeenNthCalledWith(
+        2,
+        'owner-a',
+        'task-b',
+        'delete',
+        { operationId: 'bulk-delete-operation' },
+      );
+
+      await act(async () => {
+        firstDeletion.resolve({
+          ...originalTask,
+          disposition: 'deleted',
+          deleted_at: '2026-07-20T04:02:00.000Z',
+          revision: 2,
+          client_mutation_id: 'mutation-deleted',
+        });
+        secondDeletion.reject(new Error('write failed'));
+        await Promise.allSettled([firstPromise, secondPromise]);
+      });
+
+      expect(latest.tasks).toEqual([secondTask]);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('reserves completion before persistence and settles the exact accepted mutation', async () => {
     const pendingCompletion = deferred<TaskTodo>();
     const commit = vi.fn();

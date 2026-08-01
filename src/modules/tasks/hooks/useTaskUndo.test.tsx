@@ -309,6 +309,44 @@ describe('useTaskUndo', () => {
     }
   });
 
+  it('keeps a newer undo available with widget and template-era history retained', () => {
+    const templateBefore = {
+      ...snapshotTask(taskTodoFixture({ title: 'Title 0' })),
+      source_kind: 'template',
+      source_title: 'Retired template provenance',
+      source_external_id: 'retired-template-id',
+    };
+    const templateAfter = {
+      ...templateBefore,
+      title: 'Title 1',
+    };
+    const retained = historyRow(0, {
+      mutation_channel: 'widget',
+      before_state: JSON.stringify(templateBefore),
+      after_state: JSON.stringify(templateAfter),
+    });
+    const current = historyRow(1);
+    const taskData = [taskTodoFixture({ title: 'Title 2' })];
+    mocks.useQuery.mockImplementation((sql: string) => ({
+      data: sql.includes('tasks_history_events') ? [current, retained] : taskData,
+      isLoading: false,
+      error: null,
+    }));
+    mocks.useTasksRuntime.mockReturnValue({
+      repository: { undoTask: vi.fn(), redoTask: vi.fn() },
+    });
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.error).toBeNull();
+      expect(latest.undoDepth).toBe(2);
+      expect(latest.event?.id).toBe(current.id);
+      expect(latest.available).toBe(true);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('withholds the latest movement during projection skew without skipping it', () => {
     const older = historyRow(0);
     const newer = historyRow(1);

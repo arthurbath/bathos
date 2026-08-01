@@ -185,14 +185,10 @@ export function TaskChecklistEditor({
   }, [cancelScheduledSave, checklist]);
 
   const beginChecklist = useCallback(() => {
-    const finalUnchecked = [...checklist.items]
-      .reverse()
-      .find(({ completed }) => !completed);
-    if (finalUnchecked) {
-      requestInputFocus(finalUnchecked.id, 'end');
-      return;
-    }
-    updateDraftIndex(checklist.items.length);
+    const firstCompletedIndex = checklist.items.findIndex(({ completed }) => completed);
+    updateDraftIndex(
+      firstCompletedIndex === -1 ? checklist.items.length : firstCompletedIndex,
+    );
     updateDraftTitle('');
     requestInputFocus(DRAFT_ID, 'start');
   }, [checklist.items, requestInputFocus, updateDraftIndex, updateDraftTitle]);

@@ -163,10 +163,17 @@ describe('task repository', () => {
     );
   });
 
-  it('activates reached local start dates into Today Inbox', async () => {
+  it('activates reached explicit and deadline-implied start dates into Today Inbox', async () => {
     const { repository, transaction } = createHarness(null);
     vi.mocked(transaction.getAll).mockResolvedValueOnce([
       { ...existingTask, start_date: '2026-07-20' },
+      {
+        ...existingTask,
+        id: 'deadline-only',
+        today_section: null,
+        start_date: null,
+        deadline: '2026-07-20',
+      },
     ]);
 
     await expect(
@@ -180,15 +187,26 @@ describe('task repository', () => {
         last_actor_type: 'system',
         revision: 2,
       }),
+      expect.objectContaining({
+        id: 'deadline-only',
+        start_date: null,
+        deadline: '2026-07-20',
+        today_section: 'inbox',
+        last_mutation_channel: 'native',
+        last_actor_type: 'system',
+        revision: 2,
+      }),
     ]);
     expect(transaction.getAll).toHaveBeenCalledWith(
-      expect.stringContaining('start_date <= ?'),
-      ['owner-a', '2026-07-20'],
+      expect.stringMatching(
+        /start_date IS NULL[\s\S]*today_section IS NULL[\s\S]*deadline <= \?/,
+      ),
+      ['owner-a', '2026-07-20', '2026-07-20'],
     );
-    expect(transaction.execute).toHaveBeenCalledWith(
-      expect.stringContaining('UPDATE tasks_todos'),
-      expect.arrayContaining([null, 'native', 'system', 'task-a', 'owner-a']),
-    );
+    expect(
+      vi.mocked(transaction.execute).mock.calls.filter(([query]) =>
+        String(query).includes('UPDATE tasks_todos')),
+    ).toHaveLength(2);
   });
 
   it('establishes a local rollover baseline without rewriting ambiguous tasks', async () => {
@@ -614,6 +632,63 @@ describe('task repository', () => {
     expect(result.map(({ client_mutation_id }) => client_mutation_id))
       .toEqual(['mutation-new', 'mutation-next']);
     expect(transaction.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('applies Area and Actionability patches atomically to mixed terminal tasks', async () => {
+    const completedTask = taskTodoFixture({
+      ...existingTask,
+      id: 'task-completed',
+      lifecycle: 'completed',
+      completed_at: timestamp,
+      client_mutation_id: 'mutation-completed',
+    });
+    const deletedTask = taskTodoFixture({
+      ...existingTask,
+      id: 'task-deleted',
+      disposition: 'deleted',
+      deleted_at: timestamp,
+      deletion_root_id: 'task-deleted',
+      client_mutation_id: 'mutation-deleted',
+    });
+    const { repository, database, transaction } = createHarness(null);
+    vi.mocked(transaction.getOptional)
+      .mockResolvedValueOnce(completedTask)
+      .mockResolvedValueOnce(deletedTask);
+
+    const result = await repository.applyTaskPatches('owner-a', [
+      { taskId: 'task-completed', patch: { actionability: 'waiting' } },
+      { taskId: 'task-deleted', patch: { actionability: 'waiting' } },
+    ]);
+
+    expect(database.writeTransaction).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'task-completed',
+        lifecycle: 'completed',
+        actionability: 'waiting',
+      }),
+      expect.objectContaining({
+        id: 'task-deleted',
+        disposition: 'deleted',
+        actionability: 'waiting',
+      }),
+    ]);
+    expect(result.map(({ last_operation_id }) => last_operation_id))
+      .toEqual(['task-new', 'task-new']);
+  });
+
+  it('rejects non-organization bulk patches for terminal tasks', async () => {
+    const completedTask = taskTodoFixture({
+      ...existingTask,
+      lifecycle: 'completed',
+      completed_at: timestamp,
+    });
+    const { repository, transaction } = createHarness(completedTask);
+
+    await expect(repository.applyTaskPatches('owner-a', [
+      { taskId: completedTask.id, patch: { title: 'Changed in bulk' } },
+    ])).rejects.toThrow('Terminal bulk edits apply only to Area and Actionability');
+    expect(transaction.execute).not.toHaveBeenCalled();
   });
 
   it('moves a task into one owned Area without changing planning order', async () => {

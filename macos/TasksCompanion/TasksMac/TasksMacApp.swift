@@ -63,31 +63,91 @@ enum TasksMacWindowPolicy {
 
     static func apply(to window: NSWindow) {
         window.styleMask.insert(.resizable)
-        window.collectionBehavior.insert(.fullScreenPrimary)
+        window.collectionBehavior.remove(.fullScreenNone)
+        window.collectionBehavior.remove(.fullScreenDisallowsTiling)
+        window.collectionBehavior.formUnion([
+            .fullScreenPrimary,
+            .fullScreenAllowsTiling,
+        ])
         window.minSize = minimumSize
     }
 }
 
 private struct TasksMacWindowConfigurator: NSViewRepresentable {
+    func makeCoordinator() -> TasksMacWindowPolicyObserver {
+        TasksMacWindowPolicyObserver()
+    }
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
+        let coordinator = context.coordinator
         DispatchQueue.main.async {
-            configure(view)
+            coordinator.attach(to: view.window)
         }
         return view
     }
 
     func updateNSView(_ view: NSView, context: Context) {
+        let coordinator = context.coordinator
         DispatchQueue.main.async {
-            configure(view)
+            coordinator.attach(to: view.window)
         }
     }
 
-    private func configure(_ view: NSView) {
-        guard let window = view.window else {
+    static func dismantleNSView(
+        _ view: NSView,
+        coordinator: TasksMacWindowPolicyObserver
+    ) {
+        coordinator.stopObserving()
+    }
+}
+
+final class TasksMacWindowPolicyObserver {
+    private weak var window: NSWindow?
+    private var notificationTokens: [NSObjectProtocol] = []
+
+    private let observedNotifications: [Notification.Name] = [
+        NSWindow.didBecomeMainNotification,
+        NSWindow.didEnterFullScreenNotification,
+        NSWindow.didExitFullScreenNotification,
+        NSWindow.didChangeScreenNotification,
+    ]
+
+    func attach(to window: NSWindow?) {
+        guard let window else {
             return
         }
+
+        if self.window !== window {
+            stopObserving()
+            self.window = window
+            notificationTokens = observedNotifications.map { name in
+                NotificationCenter.default.addObserver(
+                    forName: name,
+                    object: window,
+                    queue: .main
+                ) { notification in
+                    guard let window = notification.object as? NSWindow else {
+                        return
+                    }
+                    TasksMacWindowPolicy.apply(to: window)
+                }
+            }
+        }
+
         TasksMacWindowPolicy.apply(to: window)
+    }
+
+    func stopObserving() {
+        for token in notificationTokens {
+            NotificationCenter.default.removeObserver(token)
+        }
+        notificationTokens.removeAll()
+        window = nil
+    }
+
+    deinit {
+        stopObserving()
     }
 }
 

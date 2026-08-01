@@ -1,5 +1,5 @@
 import * as React from "react";
-import { format, isSameMonth } from "date-fns";
+import { addDays, format, isSameMonth } from "date-fns";
 import { ChevronLeft, ChevronRight, Star } from "lucide-react";
 import {
   Button as DayPickerButton,
@@ -26,7 +26,7 @@ export type CalendarProps = SingleDayPickerProps & {
 
 type CalendarViewMode = "day" | "month";
 const CALENDAR_VIEWPORT_WIDTH_CLASS = "box-border w-[276px]";
-const CALENDAR_DAY_VIEWPORT_CLASS = `${CALENDAR_VIEWPORT_WIDTH_CLASS} min-h-[318px]`;
+const CALENDAR_DAY_VIEWPORT_CLASS = `${CALENDAR_VIEWPORT_WIDTH_CLASS} min-h-[238px]`;
 const CALENDAR_CAPTION_CLASS = "flex justify-center pt-1 relative items-center";
 const CALENDAR_NAV_CLASS = "space-x-1 flex items-center";
 const CALENDAR_NAV_BUTTON_CLASS = "h-7 w-7 bg-transparent p-0 opacity-50 enabled:!cursor-pointer  disabled:!cursor-not-allowed";
@@ -49,7 +49,7 @@ function CalendarDay({ date, displayMonth }: DayProps) {
       aria-hidden="true"
       className={cn(
         "h-3.5 w-3.5",
-        dayRender.activeModifiers.selected ? "text-primary-foreground" : "text-warning",
+        dayRender.activeModifiers.disabled ? "text-muted-foreground" : "text-warning",
       )}
       data-calendar-current-date-icon="true"
     />
@@ -146,7 +146,8 @@ function focusCalendarArrowTarget(
   activeElement: HTMLElement,
   key: string,
   onDayGridExitDown?: () => boolean,
-  onOutsideMonthDate?: (date: Date) => void,
+  onGridEndpointPage?: (date: Date, position: "previous" | "next") => void,
+  onHeaderPage?: (position: "previous" | "next") => void,
 ): boolean {
   const previousMonthButton = root.querySelector<HTMLButtonElement>('button[name="previous-month"]');
   const nextMonthButton = root.querySelector<HTMLButtonElement>('button[name="next-month"]');
@@ -161,9 +162,21 @@ function focusCalendarArrowTarget(
 
     let target: HTMLButtonElement | null | undefined;
     if (key === "ArrowLeft") {
-      target = colIndex > 0 ? rows[rowIndex][colIndex - 1] : (rows[rowIndex - 1]?.at(-1) ?? previousMonthButton);
+      if (rowIndex === 0 && colIndex === 0) {
+        const currentDate = parseCalendarDateValue(activeElement.dataset.calendarDate);
+        if (!currentDate || !canReceiveCalendarFocus(previousMonthButton)) return false;
+        onGridEndpointPage?.(addDays(currentDate, -1), "previous");
+        return true;
+      }
+      target = colIndex > 0 ? rows[rowIndex][colIndex - 1] : rows[rowIndex - 1]?.at(-1);
     } else if (key === "ArrowRight") {
-      target = colIndex < rows[rowIndex].length - 1 ? rows[rowIndex][colIndex + 1] : (rows[rowIndex + 1]?.[0] ?? nextMonthButton);
+      if (rowIndex === rows.length - 1 && colIndex === rows[rowIndex].length - 1) {
+        const currentDate = parseCalendarDateValue(activeElement.dataset.calendarDate);
+        if (!currentDate || !canReceiveCalendarFocus(nextMonthButton)) return false;
+        onGridEndpointPage?.(addDays(currentDate, 1), "next");
+        return true;
+      }
+      target = colIndex < rows[rowIndex].length - 1 ? rows[rowIndex][colIndex + 1] : rows[rowIndex + 1]?.[0];
     } else if (key === "ArrowUp") {
       target = findEnabledDayInColumn(rows, rowIndex - 1, colIndex, -1)
         ?? getCalendarHeaderTarget(
@@ -180,23 +193,16 @@ function focusCalendarArrowTarget(
       }
     }
 
-    if (!target) return false;
-    if (
-      target.getAttribute("name") === "day"
-      && target.className.includes("day-outside")
-      && canReceiveCalendarFocus(target)
-    ) {
-      const outsideDate = parseCalendarDateValue(target.dataset.calendarDate);
-      if (outsideDate) {
-        onOutsideMonthDate?.(outsideDate);
-        return true;
-      }
-    }
+    if (!canReceiveCalendarFocus(target)) return false;
     target.focus();
     return true;
   }
 
   if (activeElement === previousMonthButton) {
+    if (key === "ArrowLeft" && canReceiveCalendarFocus(previousMonthButton)) {
+      onHeaderPage?.("previous");
+      return true;
+    }
     if (key === "ArrowRight" && captionButton) {
       captionButton.focus();
       return true;
@@ -210,6 +216,10 @@ function focusCalendarArrowTarget(
   }
 
   if (activeElement === nextMonthButton) {
+    if (key === "ArrowRight" && canReceiveCalendarFocus(nextMonthButton)) {
+      onHeaderPage?.("next");
+      return true;
+    }
     if (key === "ArrowLeft" && captionButton) {
       captionButton.focus();
       return true;
@@ -245,14 +255,16 @@ function focusCalendarArrowTarget(
 
 function MonthPicker({
   year,
-  activeMonth,
+  selectedDate,
+  initialFocusMonth,
   minimumDate,
   currentDate,
   onYearChange,
   onMonthSelect,
 }: {
   year: number;
-  activeMonth: number | null;
+  selectedDate?: Date;
+  initialFocusMonth: Date;
   minimumDate?: Date;
   currentDate: Date;
   onYearChange: (nextYear: number) => void;
@@ -270,9 +282,9 @@ function MonthPicker({
       } else if (pendingYearButtonFocusRef.current === "next") {
         nextYearButtonRef.current?.focus();
       } else {
-        const preferredMonth = activeMonth !== null
-          && isMonthSelectable(year, activeMonth, minimumDate)
-          ? activeMonth
+        const preferredMonth = year === initialFocusMonth.getFullYear()
+          && isMonthSelectable(year, initialFocusMonth.getMonth(), minimumDate)
+          ? initialFocusMonth.getMonth()
           : firstSelectableMonthIndex(year, minimumDate);
         if (preferredMonth !== null) {
           monthButtonRefs.current[preferredMonth]?.focus();
@@ -281,7 +293,7 @@ function MonthPicker({
       pendingYearButtonFocusRef.current = null;
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [activeMonth, minimumDate, year]);
+  }, [initialFocusMonth, minimumDate, year]);
 
   const focusMonthAt = (index: number): boolean => {
     const candidate = monthButtonRefs.current[index];
@@ -343,6 +355,16 @@ function MonthPicker({
     event: React.KeyboardEvent<HTMLButtonElement>,
     position: "previous" | "next",
   ) => {
+    if (event.key === "ArrowLeft" && position === "previous") {
+      event.preventDefault();
+      pageYear("previous");
+      return;
+    }
+    if (event.key === "ArrowRight" && position === "next") {
+      event.preventDefault();
+      pageYear("next");
+      return;
+    }
     if (event.key === "ArrowRight" && position === "previous") {
       event.preventDefault();
       nextYearButtonRef.current?.focus();
@@ -405,7 +427,8 @@ function MonthPicker({
         <div className="grid grid-cols-3 gap-2">
           {Array.from({ length: 12 }, (_, monthIndex) => {
             const monthDate = new Date(year, monthIndex, 1);
-            const isSelected = monthIndex === activeMonth;
+            const isSelected = selectedDate?.getFullYear() === year
+              && selectedDate.getMonth() === monthIndex;
             const isCurrentMonth = isSameMonth(monthDate, currentDate);
             const isDisabled = !isMonthSelectable(year, monthIndex, minimumDate);
             return (
@@ -421,8 +444,8 @@ function MonthPicker({
                 className={cn(
                   buttonVariants({ variant: "clear" }),
                   "h-9 gap-1.5 px-0 enabled:!cursor-pointer disabled:!cursor-not-allowed",
-                  isSelected && "border border-primary bg-primary/10 text-primary",
-                  isDisabled && "text-muted-foreground opacity-50",
+                  isSelected && "!bg-accent text-accent-foreground",
+                  isDisabled && "!text-muted-foreground",
                 )}
                 onClick={() => onMonthSelect(monthIndex)}
                 onKeyDown={(event) => handleMonthGridKeyDown(event, monthIndex)}
@@ -431,7 +454,10 @@ function MonthPicker({
                 {isCurrentMonth ? (
                   <Star
                     aria-hidden="true"
-                    className="h-3.5 w-3.5 text-warning"
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      isDisabled ? "text-muted-foreground" : "text-warning",
+                    )}
                     data-calendar-current-month-icon="true"
                   />
                 ) : null}
@@ -476,9 +502,8 @@ function Calendar({
   );
   const [viewMode, setViewMode] = React.useState<CalendarViewMode>("day");
   const [monthPickerYear, setMonthPickerYear] = React.useState<number>(displayMonth.getFullYear());
-  const [monthPickerActiveMonth, setMonthPickerActiveMonth] = React.useState<number | null>(displayMonth.getMonth());
   const [pendingDayFocusDate, setPendingDayFocusDate] = React.useState<Date | null>(null);
-  const pendingPreviousMonthFocusRef = React.useRef(false);
+  const pendingMonthNavFocusRef = React.useRef<"previous" | "next" | null>(null);
   const initialFocusTime = initialFocusDate?.valueOf();
 
   React.useEffect(() => {
@@ -505,20 +530,27 @@ function Calendar({
   }, [initialFocusRequestKey, initialFocusTime, viewMode]);
 
   React.useEffect(() => {
-    if (!pendingPreviousMonthFocusRef.current || viewMode !== "day") return;
+    if (!pendingMonthNavFocusRef.current || viewMode !== "day") return;
     const timer = window.setTimeout(() => {
       const previousMonthButton = rootRef.current?.querySelector<HTMLButtonElement>(
         'button[name="previous-month"]',
       );
+      const nextMonthButton = rootRef.current?.querySelector<HTMLButtonElement>(
+        'button[name="next-month"]',
+      );
       const captionButton = rootRef.current?.querySelector<HTMLButtonElement>(
         'button[name="caption-month-year"]',
       );
-      if (previousMonthButton?.disabled) {
+      const pendingPosition = pendingMonthNavFocusRef.current;
+      const requestedButton = pendingPosition === "previous"
+        ? previousMonthButton
+        : nextMonthButton;
+      if (!canReceiveCalendarFocus(requestedButton)) {
         captionButton?.focus();
       } else {
-        previousMonthButton?.focus();
+        requestedButton.focus();
       }
-      pendingPreviousMonthFocusRef.current = false;
+      pendingMonthNavFocusRef.current = null;
     }, 0);
     return () => window.clearTimeout(timer);
   }, [displayMonth, viewMode]);
@@ -540,9 +572,12 @@ function Calendar({
       viewMode === "day"
       && (event.key === "Enter" || event.key === " ")
       && event.target instanceof HTMLButtonElement
-      && event.target.getAttribute("name") === "previous-month"
+      && (event.target.getAttribute("name") === "previous-month"
+        || event.target.getAttribute("name") === "next-month")
     ) {
-      pendingPreviousMonthFocusRef.current = true;
+      pendingMonthNavFocusRef.current = event.target.getAttribute("name") === "previous-month"
+        ? "previous"
+        : "next";
     }
     if (
       viewMode === "day"
@@ -565,9 +600,17 @@ function Calendar({
           activeElement,
           event.key,
           onDayGridExitDown,
-          (outsideDate) => {
-            commitMonthChange(outsideDate);
-            setPendingDayFocusDate(outsideDate);
+          (endpointDate) => {
+            commitMonthChange(endpointDate);
+            setPendingDayFocusDate(endpointDate);
+          },
+          (position) => {
+            const button = root.querySelector<HTMLButtonElement>(
+              `button[name="${position === "previous" ? "previous-month" : "next-month"}"]`,
+            );
+            if (!canReceiveCalendarFocus(button)) return;
+            pendingMonthNavFocusRef.current = position;
+            button.click();
           },
         )
       ) {
@@ -583,11 +626,11 @@ function Calendar({
       {viewMode === "month" ? (
         <MonthPicker
           year={monthPickerYear}
-          activeMonth={monthPickerActiveMonth}
+          selectedDate={props.selected}
+          initialFocusMonth={displayMonth}
           minimumDate={fromDate}
           currentDate={resolvedToday}
           onYearChange={(nextYear) => {
-            setMonthPickerActiveMonth(null);
             setMonthPickerYear(nextYear);
           }}
           onMonthSelect={(nextMonthIndex) => {
@@ -607,11 +650,11 @@ function Calendar({
           defaultMonth={displayMonth}
           fromDate={fromDate}
           today={resolvedToday}
-          className={cn("p-3", CALENDAR_DAY_VIEWPORT_CLASS, className)}
+          className={cn("p-2", CALENDAR_DAY_VIEWPORT_CLASS, className)}
           onMonthChange={commitMonthChange}
           classNames={{
             months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-            month: "space-y-4",
+            month: "space-y-2",
             caption: CALENDAR_CAPTION_CLASS,
             caption_label: "text-sm font-medium",
             nav: CALENDAR_NAV_CLASS,
@@ -623,20 +666,19 @@ function Calendar({
             nav_button_next: CALENDAR_NAV_NEXT_CLASS,
             table: "w-full border-collapse space-y-1",
             head_row: "flex",
-            head_cell: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
-            row: "flex w-full mt-2",
-            cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+            head_cell: "flex h-8 w-9 items-center justify-center rounded-md text-[0.8rem] font-normal text-muted-foreground",
+            row: "flex w-full mt-0",
+            cell: "h-8 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20",
             day: cn(
               buttonVariants({ variant: "clear" }),
-              "h-9 w-9 p-0 font-normal enabled:!cursor-pointer disabled:!cursor-not-allowed aria-selected:opacity-100",
+              "h-8 w-9 p-0 font-normal enabled:!cursor-pointer disabled:!cursor-not-allowed aria-selected:opacity-100",
             ),
             day_range_end: "day-range-end",
             day_selected:
-              "bg-primary text-primary-foreground   focus:bg-primary focus:text-primary-foreground",
-            day_today: "bg-accent text-accent-foreground",
-            day_outside:
-              "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
-            day_disabled: "text-muted-foreground opacity-50",
+              "rounded-md !bg-accent text-accent-foreground focus:!bg-accent focus:text-accent-foreground",
+            day_today: "text-accent-foreground",
+            day_outside: "day-outside !text-muted-foreground",
+            day_disabled: "!text-muted-foreground italic",
             day_range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
             day_hidden: "invisible",
             ...classNames,
@@ -654,7 +696,6 @@ function Calendar({
                 className={CALENDAR_HEADER_BUTTON_CLASS}
                 onClick={() => {
                   setMonthPickerYear(displayMonth.getFullYear());
-                  setMonthPickerActiveMonth(displayMonth.getMonth());
                   setViewMode("month");
                 }}
               >

@@ -91,7 +91,7 @@ INSERT INTO public.tasks_todos (
   'a1000000-0000-4000-8000-000000000001',
   'a1000000-0000-4000-8000-000000000004',
   'Exercise', 'Prototype notes', 'https://example.test/exercise', 'actionable',
-  'anytime', 'a0', '2026-08-01', NULL,
+  'anytime', 'a0', '2099-08-01', NULL,
   'a1000000-0000-4000-8000-000000000011'
 );
 
@@ -118,7 +118,7 @@ SELECT set_config(
   'test.calendar_recurrence',
   public.tasks_create_recurrence_from_task(
     'a1000000-0000-4000-8000-000000000010',
-    'Exercise', 'calendar', 'daily', 1, '2026-08-01', '{}'::jsonb,
+    'Exercise', 'calendar', 'daily', 1, '2099-08-01', '{}'::jsonb,
     'never', NULL, NULL, NULL, NULL,
     'a1000000-0000-4000-8000-000000000016'
   )::text,
@@ -135,7 +135,7 @@ SELECT is(
     current_setting('test.calendar_recurrence')::jsonb
       #>> '{occurrence,scheduled_date}'
   )::date,
-  '2026-08-01'::date,
+  '2099-08-01'::date,
   'adopts the source task as the reached ordinary instance'
 );
 SELECT is(
@@ -143,7 +143,7 @@ SELECT is(
     current_setting('test.calendar_recurrence')::jsonb
       #>> '{definition,next_occurrence_date}'
   )::date,
-  '2026-08-02'::date,
+  '2099-08-02'::date,
   'places the virtual prototype on its next spawn date'
 );
 SELECT is(
@@ -193,7 +193,7 @@ SELECT is(
 SELECT lives_ok(
   $$
     UPDATE public.tasks_todos
-    SET start_date = '2026-08-02',
+    SET start_date = '2099-08-02',
         today_section = NULL,
         revision = revision + 1,
         client_mutation_id = 'a1000000-0000-4000-8000-000000000018'
@@ -207,7 +207,7 @@ SELECT is(
     FROM public.tasks_recurrence_occurrences
     WHERE root_id = 'a1000000-0000-4000-8000-000000000010'
   ),
-  '2026-08-01'::date,
+  '2099-08-01'::date,
   'keeps the instance recurrence date immutable after deferral'
 );
 SELECT is(
@@ -215,7 +215,7 @@ SELECT is(
     SELECT start_date FROM public.tasks_todos
     WHERE id = 'a1000000-0000-4000-8000-000000000010'
   ),
-  '2026-08-02'::date,
+  '2099-08-02'::date,
   'keeps the deferred instance accessible on its chosen Upcoming date'
 );
 SELECT is(
@@ -225,7 +225,7 @@ SELECT is(
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
     )::uuid
   ),
-  '2026-08-02'::date,
+  '2099-08-02'::date,
   'does not mistake deferred instance placement for prototype placement'
 );
 
@@ -236,7 +236,7 @@ SELECT set_config(
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
     )::uuid,
     2,
-    'Exercise', 'calendar', 'daily', 1, '2026-08-01', 'UTC',
+    'Exercise', 'calendar', 'daily', 1, '2099-08-01', 'UTC',
     'latest', 100, 'a1000000-0000-4000-8000-000000000004', '{}'::jsonb,
     'never', NULL, NULL, NULL, NULL,
     jsonb_set(
@@ -275,7 +275,7 @@ SELECT set_config(
     (
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
     )::uuid,
-    '2026-08-02',
+    '2099-08-02',
     'a1000000-0000-4000-8000-000000000020'
   )::text,
   false
@@ -305,7 +305,7 @@ SELECT is(
       ON occurrence.root_id = task.id AND occurrence.owner_id = task.owner_id
     WHERE occurrence.recurrence_id = (
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid AND occurrence.scheduled_date = '2026-08-02'
+    )::uuid AND occurrence.scheduled_date = '2099-08-02'
   ),
   'Prototype Exercise',
   'spawns from the prototype rather than from the edited prior instance'
@@ -318,7 +318,7 @@ SELECT is(
       ON occurrence.root_id = task.id AND occurrence.owner_id = task.owner_id
     WHERE occurrence.recurrence_id = (
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid AND occurrence.scheduled_date = '2026-08-02'
+    )::uuid AND occurrence.scheduled_date = '2099-08-02'
   ),
   'https://example.test/exercise',
   'spawns the prototype Primary Link rather than the prior instance edit'
@@ -331,7 +331,7 @@ SELECT results_eq(
       ON occurrence.root_id = item.task_id AND occurrence.owner_id = item.owner_id
     WHERE occurrence.recurrence_id = (
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid AND occurrence.scheduled_date = '2026-08-02'
+    )::uuid AND occurrence.scheduled_date = '2099-08-02'
     ORDER BY item.order_key
   $$,
   $$VALUES ('Warm up'::text, true), ('Work out'::text, false)$$,
@@ -345,7 +345,7 @@ SELECT is(
       ON occurrence.root_id = task.id AND occurrence.owner_id = task.owner_id
     WHERE occurrence.recurrence_id = (
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
-    )::uuid AND occurrence.scheduled_date = '2026-08-02'
+    )::uuid AND occurrence.scheduled_date = '2099-08-02'
   ),
   'open:present',
   'spawns a normal open task instance'
@@ -357,7 +357,7 @@ SELECT is(
       current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
     )::uuid
   ),
-  '2026-08-03'::date,
+  '2099-08-03'::date,
   'moves the virtual prototype to the following cadence date'
 );
 

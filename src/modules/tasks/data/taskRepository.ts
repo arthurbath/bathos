@@ -452,10 +452,17 @@ export class TaskRepository {
            AND destination = 'anytime'
            AND lifecycle = 'open'
            AND disposition = 'present'
-           AND start_date IS NOT NULL
-           AND start_date <= ?
-         ORDER BY start_date, order_key, id`,
-        [ownerId, reachedDate],
+           AND (
+             (start_date IS NOT NULL AND start_date <= ?)
+             OR (
+               start_date IS NULL
+               AND today_section IS NULL
+               AND deadline IS NOT NULL
+               AND deadline <= ?
+             )
+           )
+         ORDER BY COALESCE(start_date, deadline), order_key, id`,
+        [ownerId, reachedDate, reachedDate],
       );
       const occurredAt = this.now();
       const activated: TaskTodo[] = [];
@@ -719,10 +726,19 @@ export class TaskRepository {
 
       for (const input of uniqueInputs) {
         const current = await getOwnedTask(transaction, ownerId, input.taskId);
-        if (current.lifecycle !== 'open' || current.disposition !== 'present') {
-          throw new InvalidTaskMutationError('Bulk movement applies only to open, present tasks');
-        }
         const patch = normalizeEditablePatch(input.patch);
+        const isOpenPresent = current.lifecycle === 'open'
+          && current.disposition === 'present';
+        const isTerminal = current.disposition === 'deleted'
+          || current.lifecycle !== 'open';
+        const isTerminalOrganizationPatch = Object.keys(patch).every(
+          (key) => key === 'area_id' || key === 'actionability',
+        );
+        if (!isOpenPresent && !(isTerminal && isTerminalOrganizationPatch)) {
+          throw new InvalidTaskMutationError(
+            'Terminal bulk edits apply only to Area and Actionability',
+          );
+        }
         const destination = patch.destination ?? current.destination;
         const todaySection = patch.today_section === undefined
           ? current.today_section

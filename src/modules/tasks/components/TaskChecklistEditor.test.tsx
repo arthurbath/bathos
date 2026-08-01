@@ -181,26 +181,21 @@ describe('TaskChecklistEditor', () => {
     }
   });
 
-  it('focuses an existing checklist from the task command request', async () => {
+  it('inserts and focuses a shortcut draft before the first completed item', async () => {
     const completed = taskChecklistItemFixture({
       id: 'item-completed',
       title: 'Completed step',
       completed: true,
-    });
-    const firstUnchecked = taskChecklistItemFixture({
-      id: 'item-first',
-      title: 'First unchecked',
-      order_key: 'a1',
-    });
-    const finalUnchecked = taskChecklistItemFixture({
-      id: 'item-final',
-      title: 'Final unchecked',
       order_key: 'a2',
     });
+    const unchecked = taskChecklistItemFixture({
+      id: 'item-first',
+      title: 'Unchecked step',
+      order_key: 'a1',
+    });
     mockUseTaskChecklist.mockReturnValue(checklistModel([
+      unchecked,
       completed,
-      firstUnchecked,
-      finalUnchecked,
     ]));
     const { container, root } = renderEditor('task-draft');
     try {
@@ -210,25 +205,34 @@ describe('TaskChecklistEditor', () => {
         }));
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       });
-      expect(document.activeElement).toBe(
-        container.querySelectorAll<HTMLInputElement>(
-          'input[aria-label="Checklist Item"]',
-        )[2],
-      );
-      expect((document.activeElement as HTMLInputElement).selectionStart)
-        .toBe('Final unchecked'.length);
+      const rows = container.querySelectorAll<HTMLElement>('[data-checklist-item-id]');
+      expect([...rows].map((row) => row.dataset.checklistItemId)).toEqual([
+        'item-first',
+        'draft',
+        'item-completed',
+      ]);
+      const draft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      expect(document.activeElement).toBe(draft);
+      expect(draft.selectionStart).toBe(0);
     } finally {
       cleanup(root, container);
     }
   });
 
-  it('creates an empty row when the checklist shortcut has no unchecked item', async () => {
-    const completed = taskChecklistItemFixture({
-      id: 'item-completed',
-      title: 'Completed step',
-      completed: true,
+  it('appends and focuses a shortcut draft when no items are completed', async () => {
+    const first = taskChecklistItemFixture({
+      id: 'item-first',
+      title: 'First step',
+      order_key: 'a1',
     });
-    mockUseTaskChecklist.mockReturnValue(checklistModel([completed]));
+    const second = taskChecklistItemFixture({
+      id: 'item-second',
+      title: 'Second step',
+      order_key: 'a2',
+    });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([first, second]));
     const { container, root } = renderEditor('task-draft');
     try {
       await act(async () => {
@@ -240,6 +244,12 @@ describe('TaskChecklistEditor', () => {
       const draft = container.querySelector<HTMLInputElement>(
         'input[aria-label="New Checklist Item"]',
       )!;
+      const rows = container.querySelectorAll<HTMLElement>('[data-checklist-item-id]');
+      expect([...rows].map((row) => row.dataset.checklistItemId)).toEqual([
+        'item-first',
+        'item-second',
+        'draft',
+      ]);
       expect(document.activeElement).toBe(draft);
       expect(draft.selectionStart).toBe(0);
     } finally {

@@ -6,12 +6,14 @@ import {
   createTaskUndoPatch,
   deletedCreationSnapshotMatches,
   parseTaskHistoryEvent,
+  TaskHistoryReconstructionError,
   UnsafeTaskRedoError,
   UnsafeTaskUndoError,
   type TaskHistoryEvent,
   type TaskHistorySnapshot,
   type TaskHistoryStorageRow,
 } from '@/modules/tasks/domain/taskHistory';
+import { reportTaskHistoryReconstructionFailure } from '@/modules/tasks/runtime/taskHistoryReporting';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
 import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
@@ -68,6 +70,7 @@ export function useTaskUndo(ownerId: string) {
   const pendingForwardMutationsRef = useRef<PendingForwardMutation[]>([]);
   const forwardMutationSequenceRef = useRef(0);
   const historyRequestPendingRef = useRef(false);
+  const reportedHistoryErrorRef = useRef<string | null>(null);
   const [cursor, setCursor] = useState<TaskHistoryCursor>(emptyCursor);
   const [pending, setPending] = useState(false);
   const [projectionWaitPending, setProjectionWaitPending] = useState(false);
@@ -105,6 +108,17 @@ export function useTaskUndo(ownerId: string) {
   const redoSafe = redoEvent !== null
     && redoTasks.length === historyOperationEvents(redoEvent).length
     && taskHistoryOperationIsSafe(redoTasks, redoEvent, 'redo');
+
+  useEffect(() => {
+    if (!(parsed.error instanceof TaskHistoryReconstructionError)) {
+      reportedHistoryErrorRef.current = null;
+      return;
+    }
+    const diagnosticKey = `${parsed.error.eventId}:${parsed.error.reason}`;
+    if (reportedHistoryErrorRef.current === diagnosticKey) return;
+    reportedHistoryErrorRef.current = diagnosticKey;
+    reportTaskHistoryReconstructionFailure(parsed.error, query.data.length);
+  }, [parsed.error, query.data.length]);
 
   useEffect(() => {
     const next = projectedCursorRef.current;
@@ -601,7 +615,7 @@ function compareHistoryEvents(left: TaskHistoryEvent, right: TaskHistoryEvent): 
   return left.occurred_at.localeCompare(right.occurred_at) || left.id.localeCompare(right.id);
 }
 
-function parseHistoryEvents(rows: readonly TaskHistoryStorageRow[]): {
+export function parseHistoryEvents(rows: readonly TaskHistoryStorageRow[]): {
   events: TaskHistoryEvent[];
   error: Error | null;
 } {
@@ -610,9 +624,10 @@ function parseHistoryEvents(rows: readonly TaskHistoryStorageRow[]): {
     try {
       events.push(parseTaskHistoryEvent(row));
     } catch (error) {
+      const cause = error instanceof Error ? error : new Error('Task history could not be read');
       return {
         events: [],
-        error: error instanceof Error ? error : new Error('Task history could not be read'),
+        error: new TaskHistoryReconstructionError(row.id, cause),
       };
     }
   }

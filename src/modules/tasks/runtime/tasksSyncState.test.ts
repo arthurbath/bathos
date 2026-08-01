@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   observeTasksSyncState,
   resolveTasksSyncState,
+  shouldReleaseTasksStartupRefresh,
   type TasksPowerSyncStatus,
 } from './tasksSyncState';
 
@@ -52,5 +53,77 @@ describe('tasksSyncState', () => {
     observeTasksSyncState(source, onStateChanged, () => false);
 
     expect(onStateChanged).toHaveBeenCalledWith('offline');
+  });
+
+  it('forwards raw status so startup freshness can distinguish cached and current syncs', () => {
+    const baseline = new Date('2026-07-31T16:00:00.000Z');
+    const currentStatus = {
+      connected: false,
+      connecting: false,
+      hasSynced: true,
+      lastSyncedAt: baseline,
+    };
+    const observed = vi.fn();
+    const source = {
+      currentStatus,
+      registerListener: vi.fn(() => vi.fn()),
+    };
+
+    observeTasksSyncState(source, vi.fn(), () => true, observed);
+
+    expect(observed).toHaveBeenCalledWith(currentStatus);
+  });
+
+  it('keeps startup loading through cached status and releases on a new completed sync', () => {
+    const baseline = new Date('2026-07-31T16:00:00.000Z');
+
+    expect(shouldReleaseTasksStartupRefresh({
+      browserOnline: true,
+      baselineCaptured: true,
+      baselineLastSyncedAt: baseline.getTime(),
+      status: {
+        connected: true,
+        connecting: false,
+        hasSynced: true,
+        lastSyncedAt: baseline,
+      },
+    })).toBe(false);
+    expect(shouldReleaseTasksStartupRefresh({
+      browserOnline: true,
+      baselineCaptured: true,
+      baselineLastSyncedAt: baseline.getTime(),
+      status: {
+        connected: true,
+        connecting: false,
+        hasSynced: true,
+        lastSyncedAt: new Date('2026-07-31T16:00:02.000Z'),
+      },
+    })).toBe(true);
+  });
+
+  it('releases startup loading for offline and download-failure fallbacks', () => {
+    const baseline = Date.parse('2026-07-31T16:00:00.000Z');
+    const cachedStatus = {
+      connected: false,
+      connecting: false,
+      hasSynced: true,
+      lastSyncedAt: new Date(baseline),
+    };
+
+    expect(shouldReleaseTasksStartupRefresh({
+      browserOnline: false,
+      baselineCaptured: true,
+      baselineLastSyncedAt: baseline,
+      status: cachedStatus,
+    })).toBe(true);
+    expect(shouldReleaseTasksStartupRefresh({
+      browserOnline: true,
+      baselineCaptured: true,
+      baselineLastSyncedAt: baseline,
+      status: {
+        ...cachedStatus,
+        dataFlowStatus: { downloadError: new Error('unavailable') },
+      },
+    })).toBe(true);
   });
 });

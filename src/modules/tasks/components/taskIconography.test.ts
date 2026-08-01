@@ -17,6 +17,7 @@ import {
   SquareCheck,
   SquareCheckBig,
   SquareDashed,
+  SquareX,
   Star,
   Zap,
 } from 'lucide-react';
@@ -43,6 +44,8 @@ describe('Tasks iconography', () => {
     expect(TASK_ICONS.OpenTask).toBe(Square);
     expect(TASK_ICONS.SomedayTask).toBe(SquareDashed);
     expect(TASK_ICONS.CompletedTask).toBe(SquareCheck);
+    expect(TASK_ICONS.DeletedTask).toBe(SquareX);
+    expect(TASK_ICON_NAMES.DeletedTask).toBe('SquareX');
     expect(TASK_ICONS.Selection).toBe(Circle);
     expect(TASK_ICONS.Selected).toBe(CircleCheck);
     expect(TASK_ICONS.Area).toBe(Layers3);

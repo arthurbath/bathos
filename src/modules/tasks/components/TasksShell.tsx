@@ -135,6 +135,7 @@ import {
   type DeletedTaskHierarchyRoot,
 } from '@/modules/tasks/hooks/useTaskDeletedHierarchyRoots';
 import { useTasksRuntime } from '@/modules/tasks/runtime/tasksRuntimeContext';
+import { reportTaskBulkDeleteFailure } from '@/modules/tasks/runtime/taskBulkMutationReporting';
 import {
   getNativeTaskDeepLinkId,
   getNativeNewTaskSignal,
@@ -183,6 +184,7 @@ import { useModuleBasePath } from '@/platform/hooks/useHostModule';
 import {
   deriveTaskAreaSections,
   getTaskEffectiveAreaId,
+  type TaskAreaSection,
 } from '@/modules/tasks/domain/taskAreaViews';
 import { projectTaskBulkDrop } from '@/modules/tasks/domain/taskBulkDrop';
 import { getAutomaticTaskDropTarget } from '@/modules/tasks/domain/taskAutomaticOrder';
@@ -520,6 +522,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     recurrenceService,
     mode,
     syncState,
+    startupRefreshPending,
     pendingUploadCount,
     portabilityService,
     planningTimeZone,
@@ -912,7 +915,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     () => isMacLikeTaskPlatform(globalThis.navigator?.platform ?? ''),
     [],
   );
-  const doneRoots = deletedHierarchyRoots.roots;
+  const doneRoots = useMemo(
+    () => deletedHierarchyRoots.roots.filter((root) => root.root_type !== 'checklist_item'),
+    [deletedHierarchyRoots.roots],
+  );
   const doneTaskGroups = useMemo(() => {
     const groups = new Map<string, TaskTodo[]>();
     for (const task of filteredTasks) {
@@ -1579,6 +1585,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (target.closest('[data-task-row-id], [data-task-bulk-selection-surface]')) return;
+      if (document.querySelector('[data-task-bulk-selection-surface][data-state="open"]')) {
+        return;
+      }
       if (
         bulkCommandMode !== null
         && target.closest(
@@ -2097,14 +2106,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   ]);
 
   const openTaskCommandField = useCallback(async (
-    mode: TaskBulkCommandMode,
+    mode: TaskBulkCommandMode | 'reminder',
   ) => {
     const targets = getTaskCommandTargets();
-    if (bulkMode && bulkSelection.size >= 1) {
-      const eligibleTargets = mode === 'reminder'
-        ? targets.filter((task) => task.start_date !== null || task.today_section !== null)
-        : targets;
-      if (eligibleTargets.length === 0) return;
+    if (bulkMode) {
+      if (mode === 'reminder' || bulkSelection.size < 1 || targets.length === 0) return;
       commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
@@ -2236,18 +2242,37 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (targets.length === 0 || bulkPending) return;
     setBulkPending(true);
     try {
-      for (const task of targets) {
-        await transitionTask(task.id, 'delete');
-      }
+      const operationId = globalThis.crypto.randomUUID();
+      const results = await Promise.allSettled(targets.map((task) => (
+        transitionTask(task.id, 'delete', undefined, { operationId })
+      )));
       if (selectedTaskIdRef.current !== null) await setOpenTask(null);
       if (!bulkMode) clearTaskSelection();
-    } catch (deleteError) {
-      showTaskError(
-        targets.length === 1
-          ? 'Task Could Not Be Deleted'
-          : 'Tasks Could Not Be Deleted',
-        deleteError,
+      const failedResults = results.filter(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
       );
+      if (failedResults.length > 0) {
+        const deleteError = new Error(
+          failedResults.length === targets.length
+            ? targets.length === 1
+              ? 'The task could not be deleted and has been restored.'
+              : 'The selected tasks could not be deleted and have been restored.'
+            : `${failedResults.length} selected ${failedResults.length === 1 ? 'task' : 'tasks'} could not be deleted and ${failedResults.length === 1 ? 'has' : 'have'} been restored.`,
+        );
+        reportTaskBulkDeleteFailure({
+          requestedCount: targets.length,
+          succeededCount: targets.length - failedResults.length,
+          failedCount: failedResults.length,
+          view,
+          browserOnline: globalThis.navigator.onLine,
+        }, failedResults.map((result) => result.reason));
+        showTaskError(
+          targets.length === 1
+            ? 'Task Could Not Be Deleted'
+            : 'Tasks Could Not Be Deleted',
+          deleteError,
+        );
+      }
     } finally {
       setBulkPending(false);
     }
@@ -2258,6 +2283,50 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     getTaskCommandTargets,
     setOpenTask,
     transitionTask,
+    view,
+  ]);
+
+  const runBulkReopen = useCallback(async () => {
+    const targets = getTaskCommandTargets().filter((task) => (
+      task.disposition === 'deleted' || task.lifecycle !== 'open'
+    ));
+    if (view !== 'done' || targets.length === 0 || bulkPending) return;
+
+    const operationId = globalThis.crypto.randomUUID();
+    const reservations = new Map(targets.map((task) => [
+      task.id,
+      reserveForwardMutation(task),
+    ]));
+    setBulkPending(true);
+    try {
+      const results = await Promise.allSettled(targets.map((task) => (
+        transitionTask(
+          task.id,
+          task.disposition === 'deleted' ? 'restore' : 'reopen',
+          reservations.get(task.id),
+          { operationId },
+        )
+      )));
+      const failedResults = results.filter(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
+      );
+      if (failedResults.length > 0) {
+        showTaskError(
+          targets.length === 1
+            ? 'Task Could Not Be Reopened'
+            : 'Tasks Could Not Be Reopened',
+          failedResults[0].reason,
+        );
+      }
+    } finally {
+      setBulkPending(false);
+    }
+  }, [
+    bulkPending,
+    getTaskCommandTargets,
+    reserveForwardMutation,
+    transitionTask,
+    view,
   ]);
 
   useEffect(() => {
@@ -3250,12 +3319,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           try {
             await transitionTask(task.id, restoreTransition, reservation);
           } catch (restoreError) {
-            showTaskError(
-              terminalState === 'deleted'
-                ? 'Task Could Not Be Restored'
-                : 'Task Could Not Be Reopened',
-              restoreError,
-            );
+            showTaskError('Task Could Not Be Reopened', restoreError);
             throw restoreError;
           }
         }}
@@ -3309,9 +3373,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     errorTitle: string,
   ): Promise<boolean> => {
     if (bulkPending) return false;
-    const targets = getTaskCommandTargets().filter(
-      (task) => task.lifecycle === 'open' && task.disposition === 'present',
-    );
+    const targets = getTaskCommandTargets().filter((task) => (
+      (task.lifecycle === 'open' && task.disposition === 'present')
+      || (view === 'done' && (task.disposition === 'deleted' || task.lifecycle !== 'open'))
+    ));
     if (targets.length === 0) return false;
     setBulkPending(true);
     try {
@@ -3353,34 +3418,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     );
   };
 
-  const applyBulkReminder = async (localTime: string) => {
-    setBulkPending(true);
-    try {
-      const targets = getTaskCommandTargets().filter(
-        (task) => task.start_date !== null || task.today_section !== null,
-      );
-      if (!localTime) {
-        await cancelTaskReminders(targets);
-        setBulkCommandMode(null);
-        return;
-      }
-      for (const task of targets) {
-        await reminders.save({
-          rootType: 'todo',
-          rootId: task.id,
-          reminder: reminders.byRootId.get(task.id) ?? null,
-          localTime,
-          ambiguityChoice: 'earlier',
-        });
-      }
-      setBulkCommandMode(null);
-    } catch (commandError) {
-      showTaskError('Selected Reminders Could Not Be Saved', commandError);
-    } finally {
-      setBulkPending(false);
-    }
-  };
-
   const bulkCommandTargets = bulkCommandMode === null ? [] : getTaskCommandTargets();
   const bulkStartFirst = bulkCommandTargets[0];
   const bulkStartHasOneIntent = bulkStartFirst !== undefined
@@ -3405,12 +3442,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     ? bulkDeadlineFirst
     : '';
   const selectedBulkTasks = selectableTasks.filter((task) => bulkSelection.has(task.id));
-  const bulkEditsAvailable = selectedBulkTasks.length > 0
+  const bulkActiveEditsAvailable = selectedBulkTasks.length > 0
     && selectedBulkTasks.every(
       (task) => task.lifecycle === 'open' && task.disposition === 'present',
     );
-  const bulkTemporalEditsAvailable = bulkEditsAvailable
-    && selectedBulkTasks.length > 0;
+  const bulkTerminalEditsAvailable = view === 'done'
+    && selectedBulkTasks.length > 0
+    && selectedBulkTasks.every(
+      (task) => task.disposition === 'deleted' || task.lifecycle !== 'open',
+    );
+  const bulkOrganizationEditsAvailable = bulkActiveEditsAvailable
+    || bulkTerminalEditsAvailable;
+  const bulkTemporalEditsAvailable = bulkActiveEditsAvailable;
   const bulkActionabilityFirst = selectedBulkTasks[0]?.actionability ?? null;
   const bulkActionabilityValue = bulkActionabilityFirst !== null
     && selectedBulkTasks.every((task) => task.actionability === bulkActionabilityFirst)
@@ -3587,7 +3630,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             </section>
           ) : null}
 
-          {view === 'search' ? (
+          {startupRefreshPending && view !== 'config' ? (
+            <div className="flex min-h-40 items-center justify-center">
+              <LoadingSpinner label="Loading Tasks" />
+            </div>
+          ) : view === 'search' ? (
             <TaskSearchResultsView
               query={searchQuery}
               basePath={basePath}
@@ -3926,8 +3973,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           selectedCount={bulkSelection.size}
           totalCount={selectableTasks.length}
           pending={bulkPending}
-          editsAvailable={bulkEditsAvailable}
+          organizationEditsAvailable={bulkOrganizationEditsAvailable}
           temporalEditsAvailable={bulkTemporalEditsAvailable}
+          deleteAvailable={bulkActiveEditsAvailable}
+          reopenAvailable={bulkTerminalEditsAvailable}
           areas={hierarchy.areas}
           actionability={bulkActionabilityValue}
           onSelectAll={() => {
@@ -3942,6 +3991,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           onArea={(areaId) => void applyBulkOrganization({ area_id: areaId })}
           onActionability={(actionability) => void applyBulkActionability(actionability)}
           onDelete={() => void runDeleteShortcut()}
+          onReopen={() => void runBulkReopen()}
           onCancel={clearTaskSelection}
         />
       ) : null}
@@ -3999,20 +4049,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <TaskBulkCommandDialog
         mode={bulkCommandMode}
         pending={bulkPending}
-        selectedCount={bulkCommandMode === 'reminder'
-          ? tasks.filter((task) => (
-            bulkSelection.has(task.id)
-            && (task.start_date !== null || task.today_section !== null)
-          )).length
-          : bulkSelection.size}
+        selectedCount={bulkSelection.size}
         hierarchy={hierarchy}
         planningDate={planningDate}
         reminderTimeZone={reminders.planningTimeZone}
-        reminderIncludesToday={tasks.some((task) => (
-          bulkSelection.has(task.id)
-          && task.start_date === null
-          && task.today_section !== null
-        ))}
         startTask={bulkStartTask}
         startClearEnabled={bulkCommandTargets.some((task) => (
           task.destination === 'someday'
@@ -4027,7 +4067,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onApplyStart={applyBulkCommandStart}
         onApplyDeadline={applyBulkCommandDeadline}
         onApplyOrganization={applyBulkOrganization}
-        onApplyReminder={applyBulkReminder}
       />
     </div>
   );
@@ -4099,8 +4138,10 @@ function TaskBulkToolbar({
   selectedCount,
   totalCount,
   pending,
-  editsAvailable,
+  organizationEditsAvailable,
   temporalEditsAvailable,
+  deleteAvailable,
+  reopenAvailable,
   areas,
   actionability,
   onSelectAll,
@@ -4109,13 +4150,16 @@ function TaskBulkToolbar({
   onArea,
   onActionability,
   onDelete,
+  onReopen,
   onCancel,
 }: {
   selectedCount: number;
   totalCount: number;
   pending: boolean;
-  editsAvailable: boolean;
+  organizationEditsAvailable: boolean;
   temporalEditsAvailable: boolean;
+  deleteAvailable: boolean;
+  reopenAvailable: boolean;
   areas: TaskHierarchyModel['areas'];
   actionability: TaskTodo['actionability'] | null;
   onSelectAll: () => void;
@@ -4124,6 +4168,7 @@ function TaskBulkToolbar({
   onArea: (areaId: string | null) => void;
   onActionability: (actionability: TaskTodo['actionability']) => void;
   onDelete: () => void;
+  onReopen: () => void;
   onCancel: () => void;
 }) {
   return (
@@ -4162,16 +4207,18 @@ function TaskBulkToolbar({
         >
           {temporalEditsAvailable ? (
             <>
-              <DropdownMenuItem disabled={!editsAvailable} onSelect={onStart}>
+              <DropdownMenuItem onSelect={onStart}>
                 Start...
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={!editsAvailable} onSelect={onDeadline}>
+              <DropdownMenuItem onSelect={onDeadline}>
                 Deadline...
               </DropdownMenuItem>
             </>
           ) : null}
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger disabled={!editsAvailable}>Area</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger disabled={!organizationEditsAvailable}>
+              Area
+            </DropdownMenuSubTrigger>
             <DropdownMenuSubContent data-task-bulk-selection-surface>
               <DropdownMenuItem onSelect={() => onArea(null)}>
                 No Area
@@ -4184,7 +4231,7 @@ function TaskBulkToolbar({
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger disabled={!editsAvailable}>
+            <DropdownMenuSubTrigger disabled={!organizationEditsAvailable}>
               Actionability
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent data-task-bulk-selection-surface>
@@ -4208,14 +4255,20 @@ function TaskBulkToolbar({
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
-            disabled={!editsAvailable}
-            onSelect={onDelete}
-          >
-            Delete
-          </DropdownMenuItem>
+          {deleteAvailable || reopenAvailable ? <DropdownMenuSeparator /> : null}
+          {deleteAvailable ? (
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onSelect={onDelete}
+            >
+              Delete
+            </DropdownMenuItem>
+          ) : null}
+          {reopenAvailable ? (
+            <DropdownMenuItem onSelect={onReopen}>
+              Reopen
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
       <Button
@@ -4788,11 +4841,13 @@ function DoneTaskRow({
           : `Reopen Canceled ${task.title}`}
         disabled={pending}
         data-task-completion-control={completed ? true : undefined}
-        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${
+          completed ? 'text-success' : 'text-muted-foreground'
+        }`}
         onClick={() => void run(onReopen)}
       >
         {completed ? (
-          <TASK_ICONS.Task className="h-6 w-6" aria-hidden="true" />
+          <TASK_ICONS.CompletedTask className="h-6 w-6" aria-hidden="true" />
         ) : (
           <TASK_ICONS.Canceled className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
         )}
@@ -4955,7 +5010,7 @@ function DeletedTaskRow({
       <button
         type="button"
         disabled={restoring}
-        aria-label={`Restore ${task.title}`}
+        aria-label={`Reopen ${task.title}`}
         className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
         onClick={() => {
           setRestoring(true);
@@ -4965,7 +5020,7 @@ function DeletedTaskRow({
             .finally(() => setRestoring(false));
         }}
       >
-        <TASK_ICONS.Reopen className="h-5 w-5" aria-hidden="true" />
+        <TASK_ICONS.DeletedTask className="h-5 w-5" aria-hidden="true" />
       </button>
       <div className="min-w-0 flex-1">
         <p
@@ -5047,6 +5102,48 @@ function TodayTaskSections({
   );
 }
 
+type RetainedTaskAreaSlot = {
+  taskId: string;
+  areaId: string | null;
+  index: number;
+};
+
+function getTaskAreaSlot(
+  sections: readonly TaskAreaSection[],
+  taskId: string,
+): RetainedTaskAreaSlot | null {
+  for (const section of sections) {
+    const index = section.tasks.findIndex(({ id }) => id === taskId);
+    if (index !== -1) return { taskId, areaId: section.areaId, index };
+  }
+  return null;
+}
+
+function retainTaskAreaSlot(
+  sections: readonly TaskAreaSection[],
+  retainedSlot: RetainedTaskAreaSlot | null,
+): TaskAreaSection[] {
+  if (retainedSlot === null) return [...sections];
+  const retainedTask = sections
+    .flatMap(({ tasks }) => tasks)
+    .find(({ id }) => id === retainedSlot.taskId);
+  if (!retainedTask) return [...sections];
+
+  return sections.map((section) => {
+    const tasks = section.tasks.filter(({ id }) => id !== retainedSlot.taskId);
+    if (section.areaId !== retainedSlot.areaId) return { ...section, tasks };
+    const insertionIndex = Math.min(retainedSlot.index, tasks.length);
+    return {
+      ...section,
+      tasks: [
+        ...tasks.slice(0, insertionIndex),
+        retainedTask,
+        ...tasks.slice(insertionIndex),
+      ],
+    };
+  });
+}
+
 function TaskAreaSections({
   view,
   automaticSort,
@@ -5078,11 +5175,20 @@ function TaskAreaSections({
     retainedTaskId,
     retainedTaskPlacement,
   ));
-  const sections = deriveTaskAreaSections(
+  const projectedSections = deriveTaskAreaSections(
     placementTasks,
     areas,
     automaticSort,
   );
+  const retainedSlotRef = useRef<RetainedTaskAreaSlot | null>(null);
+  if (view !== 'anytime' || retainedTaskId === null) {
+    retainedSlotRef.current = null;
+  } else if (retainedSlotRef.current?.taskId !== retainedTaskId) {
+    retainedSlotRef.current = getTaskAreaSlot(projectedSections, retainedTaskId);
+  }
+  const sections = view === 'anytime'
+    ? retainTaskAreaSlot(projectedSections, retainedSlotRef.current)
+    : projectedSections;
   const unassigned = sections[0];
   const areaSections = sections.slice(1);
   if (placementTasks.length === 0) return null;
@@ -5675,6 +5781,10 @@ function TaskRow({
     && isTaskCalendarDate(task.deadline)
     && isTaskCalendarDate(planningDate)
     && task.deadline <= planningDate;
+  const taskIsChecked = terminalState === 'completed'
+    || completionRequested
+    || completionGraceActive
+    || terminalSettling;
 
   useEffect(() => {
     setVisibleTitle(task.title);
@@ -6309,7 +6419,7 @@ function TaskRow({
             role={terminalState === 'completed' ? 'checkbox' : undefined}
             aria-checked={terminalState === 'completed' ? true : undefined}
             aria-label={`${terminalState === 'deleted'
-              ? 'Restore'
+              ? 'Reopen'
               : terminalState === 'completed'
                 ? 'Mark Incomplete'
                 : terminalState === 'canceled'
@@ -6330,16 +6440,15 @@ function TaskRow({
               }
               toggleCompletionGrace();
             }}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${
+              taskIsChecked ? 'text-success' : 'text-muted-foreground'
+            }`}
           >
             {terminalState === 'deleted' ? (
-              <TASK_ICONS.Reopen className="h-5 w-5" aria-hidden="true" />
+              <TASK_ICONS.DeletedTask className="h-5 w-5" aria-hidden="true" />
             ) : terminalState === 'canceled' ? (
               <TASK_ICONS.Canceled className="h-5 w-5" aria-hidden="true" />
-            ) : terminalState === 'completed'
-              || completionRequested
-              || completionGraceActive
-              || terminalSettling ? (
+            ) : taskIsChecked ? (
               <TASK_ICONS.CompletedTask className="h-6 w-6" aria-hidden="true" />
             ) : (
               task.destination === 'someday' ? (
@@ -6611,7 +6720,7 @@ function TaskRow({
               <DropdownMenuItem
                 onSelect={() => void runTerminalAction(onComplete, false, 50, false)}
               >
-                {terminalState === 'deleted' ? 'Restore' : 'Reopen'}
+                Reopen
               </DropdownMenuItem>
             ) : (
               <DropdownMenuItem
@@ -6735,7 +6844,6 @@ function TaskRow({
                 onRequestClose={() => setTemporalPicker(null)}
                 onTabExit={() => setTemporalPicker(null)}
                 todayDate={planningDate}
-                minDate={planningDate}
                 clearable
                 clearLabel="Clear"
                 commandScope="task-deadline"
@@ -6847,7 +6955,7 @@ function TaskEditor({
   }, [task.destination, task.start_date, task.today_section]);
 
   useEffect(() => {
-    setChecklistContentPresent(hasChecklistItems);
+    if (hasChecklistItems) setChecklistContentPresent(true);
   }, [hasChecklistItems, task.id]);
 
   useLayoutEffect(() => {
@@ -7263,10 +7371,10 @@ function TaskEditor({
             decorationClassName={deadlineUrgent ? 'text-destructive' : undefined}
             className={cn('text-sm', deadlineUrgent && 'text-destructive')}
             todayDate={planningDate}
-            minDate={planningDate}
             clearable
             clearLabel="Clear"
             panelCommandScope="task-deadline"
+            popoverAlign="end"
             popoverPlacement={quickEntry ? 'viewport-center' : 'anchored'}
           />
         </div>

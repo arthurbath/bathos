@@ -36,6 +36,8 @@ import {
 import {
   observeTasksSyncState,
   resolveTasksSyncState,
+  shouldReleaseTasksStartupRefresh,
+  type TasksPowerSyncStatus,
 } from '@/modules/tasks/runtime/tasksSyncState';
 import { prepareTasksForSignOut } from '@/modules/tasks/runtime/taskSignOut';
 import { TasksSyncReliabilityObserver } from '@/modules/tasks/runtime/TasksSyncReliabilityObserver';
@@ -60,6 +62,8 @@ import {
   waitForTasksRuntimeInitialization,
 } from '@/modules/tasks/runtime/taskRuntimeRecovery';
 
+export const TASKS_STARTUP_REFRESH_TIMEOUT_MS = 15_000;
+
 export function TasksRuntimeProvider({
   ownerId,
   children,
@@ -67,13 +71,17 @@ export function TasksRuntimeProvider({
   ownerId: string;
   children: ReactNode;
 }) {
+  const configuredEndpoint = import.meta.env.VITE_TASKS_POWERSYNC_ENDPOINT?.trim();
   const [state, setState] = useState<
     | { status: 'loading' }
     | { status: 'ready'; mode: 'local' | 'connected'; planningTimeZone: string }
     | { status: 'error' }
   >({ status: 'loading' });
   const [syncState, setSyncState] = useState<TasksSyncState>(
-    import.meta.env.VITE_TASKS_POWERSYNC_ENDPOINT?.trim() ? 'connecting' : 'local',
+    configuredEndpoint ? 'connecting' : 'local',
+  );
+  const [startupRefreshPending, setStartupRefreshPending] = useState(
+    () => Boolean(configuredEndpoint) && window.navigator.onLine !== false,
   );
   const [offlineLaunchState, setOfflineLaunchState] = useState<TasksOfflineLaunchState>('preparing');
   const [pendingUploadCount, setPendingUploadCount] = useState(0);
@@ -128,17 +136,55 @@ export function TasksRuntimeProvider({
     let disposeStatusListener: (() => void) | undefined;
     let queuePoll: ReturnType<typeof setInterval> | undefined;
     let activationPoll: ReturnType<typeof setInterval> | undefined;
-    const endpoint = import.meta.env.VITE_TASKS_POWERSYNC_ENDPOINT?.trim();
+    let startupRefreshTimeout: ReturnType<typeof setTimeout> | undefined;
+    let startupSyncBaseline: number | null = null;
+    let startupSyncBaselineCaptured = false;
+    const endpoint = configuredEndpoint;
     const isBrowserOnline = () => window.navigator.onLine !== false;
     const isCurrentGeneration = () => isCurrentTasksRuntimeGeneration(
       active,
       runtimeGenerationRef.current,
       generation,
     );
+    const releaseStartupRefresh = () => {
+      if (startupRefreshTimeout !== undefined) {
+        clearTimeout(startupRefreshTimeout);
+        startupRefreshTimeout = undefined;
+      }
+      if (isCurrentGeneration()) {
+        setStartupRefreshPending(false);
+      }
+    };
+    const beginStartupRefresh = () => {
+      if (!endpoint || !isBrowserOnline()) {
+        releaseStartupRefresh();
+        return;
+      }
+      setStartupRefreshPending(true);
+      startupRefreshTimeout = setTimeout(
+        releaseStartupRefresh,
+        TASKS_STARTUP_REFRESH_TIMEOUT_MS,
+      );
+    };
+    const observeStartupFreshness = (status: TasksPowerSyncStatus) => {
+      if (shouldReleaseTasksStartupRefresh({
+        browserOnline: isBrowserOnline(),
+        baselineCaptured: startupSyncBaselineCaptured,
+        baselineLastSyncedAt: startupSyncBaseline,
+        status,
+      })) {
+        releaseStartupRefresh();
+      }
+    };
     const refreshBrowserNetworkState = () => {
       if (!isCurrentGeneration() || !endpoint) return;
+      if (!isBrowserOnline()) {
+        releaseStartupRefresh();
+      }
       setSyncState(resolveTasksSyncState(database.currentStatus, isBrowserOnline()));
     };
+
+    beginStartupRefresh();
 
     window.addEventListener('offline', refreshBrowserNetworkState);
     window.addEventListener('online', refreshBrowserNetworkState);
@@ -239,6 +285,12 @@ export function TasksRuntimeProvider({
         if (endpoint) {
           const connector = createTasksSupabaseConnector({ endpoint, supabase });
           setSyncState('connecting');
+          const baselineLastSyncedAt = database.currentStatus.lastSyncedAt;
+          startupSyncBaseline = baselineLastSyncedAt instanceof Date
+            && !Number.isNaN(baselineLastSyncedAt.getTime())
+            ? baselineLastSyncedAt.getTime()
+            : null;
+          startupSyncBaselineCaptured = true;
           disposeStatusListener = observeTasksSyncState(
             database,
             (nextSyncState) => {
@@ -249,6 +301,7 @@ export function TasksRuntimeProvider({
               void refreshQueueDepth().catch(() => undefined);
             },
             isBrowserOnline,
+            observeStartupFreshness,
           );
           await refreshQueueDepth();
           queuePoll = setInterval(() => {
@@ -260,6 +313,7 @@ export function TasksRuntimeProvider({
             await database.connect(connector);
           } catch {
             if (isCurrentGeneration()) {
+              releaseStartupRefresh();
               setSyncState('offline');
               setState({
                 status: 'ready',
@@ -269,6 +323,7 @@ export function TasksRuntimeProvider({
             }
           }
         } else {
+          releaseStartupRefresh();
           setSyncState('local');
           setPendingUploadCount(0);
         }
@@ -302,9 +357,12 @@ export function TasksRuntimeProvider({
       if (activationPoll !== undefined) {
         clearInterval(activationPoll);
       }
+      if (startupRefreshTimeout !== undefined) {
+        clearTimeout(startupRefreshTimeout);
+      }
       void database.close().catch(() => undefined);
     };
-  }, [database, hierarchyRepository, ownerId, recoveryController, repository]);
+  }, [configuredEndpoint, database, hierarchyRepository, ownerId, recoveryController, repository]);
 
   const prepareForSignOut = useCallback(async () => {
     await prepareTasksForSignOut({
@@ -326,6 +384,7 @@ export function TasksRuntimeProvider({
       portabilityService,
       mode: state.status === 'ready' ? state.mode : 'local',
       syncState,
+      startupRefreshPending,
       offlineLaunchState,
       pendingUploadCount,
       planningTimeZone: state.status === 'ready' ? state.planningTimeZone : 'UTC',
@@ -342,6 +401,7 @@ export function TasksRuntimeProvider({
       permanentDeletionService,
       portabilityService,
       syncState,
+      startupRefreshPending,
       offlineLaunchState,
       pendingUploadCount,
       state,

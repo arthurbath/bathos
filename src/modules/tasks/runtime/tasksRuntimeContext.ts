@@ -22,6 +22,7 @@ export type TasksRuntimeValue = {
   portabilityService: TaskPortabilityService;
   mode: 'local' | 'connected';
   syncState: TasksSyncState;
+  startupRefreshPending: boolean;
   offlineLaunchState: TasksOfflineLaunchState;
   pendingUploadCount: number;
   planningTimeZone: string;

@@ -88,6 +88,20 @@ export class InvalidTaskHistoryError extends Error {
   }
 }
 
+export class TaskHistoryReconstructionError extends Error {
+  readonly eventId: string;
+  readonly reason: string;
+  readonly cause: Error;
+
+  constructor(eventId: string, cause: Error) {
+    super(`Task history event ${eventId} could not be decoded`);
+    this.name = 'TaskHistoryReconstructionError';
+    this.eventId = eventId;
+    this.reason = cause.message;
+    this.cause = cause;
+  }
+}
+
 export class UnsafeTaskUndoError extends Error {
   constructor(message = 'The requested undo is no longer safe') {
     super(message);
@@ -260,6 +274,13 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
           'Today section',
         ) as TaskTodaySection;
   const todaySection = startDate ? null : mappedTodaySection;
+  const legacySourceKind = parsed.source_kind;
+  const templateEraSnapshot = legacySourceKind === 'template';
+  const sourceKind = legacySourceKind === undefined
+    || legacySourceKind === null
+    || templateEraSnapshot
+    ? null
+    : requireEnum(legacySourceKind, taskSourceKinds, 'source kind') as TaskSourceKind;
 
   return {
     title: requireText(parsed.title, 'title'),
@@ -288,12 +309,16 @@ function parseTaskHistorySnapshot(value: unknown): TaskHistorySnapshot {
     start_date: startDate,
     deadline: optionalTextOrMissing(parsed.deadline, 'deadline'),
     primary_link: optionalTextOrMissing(parsed.primary_link, 'primary_link'),
-    source_kind: parsed.source_kind === null
+    source_kind: sourceKind,
+    source_url: templateEraSnapshot
       ? null
-      : requireEnum(parsed.source_kind, taskSourceKinds, 'source kind') as TaskSourceKind,
-    source_url: optionalText(parsed.source_url, 'source_url'),
-    source_title: optionalText(parsed.source_title, 'source_title'),
-    source_external_id: optionalText(parsed.source_external_id, 'source_external_id'),
+      : optionalTextOrMissing(parsed.source_url, 'source_url'),
+    source_title: templateEraSnapshot
+      ? null
+      : optionalTextOrMissing(parsed.source_title, 'source_title'),
+    source_external_id: templateEraSnapshot
+      ? null
+      : optionalTextOrMissing(parsed.source_external_id, 'source_external_id'),
   };
 }
 

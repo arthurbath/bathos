@@ -49,6 +49,14 @@ describe('Calendar keyboard navigation', () => {
       const weekdayLabels = Array.from(container.querySelectorAll('thead th'))
         .map((cell) => cell.textContent?.trim());
       expect(weekdayLabels).toEqual(['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']);
+      const firstWeekday = container.querySelector('thead th');
+      expect(firstWeekday).toHaveClass(
+        'flex',
+        'h-8',
+        'w-9',
+        'items-center',
+        'justify-center',
+      );
 
       const weekRows = Array.from(container.querySelectorAll('tbody tr'));
       expect(weekRows).toHaveLength(6);
@@ -60,6 +68,83 @@ describe('Calendar keyboard navigation', () => {
       expect(
         weekRows.at(-1)?.querySelectorAll('.day-outside'),
       ).toHaveLength(7);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('italicizes disabled dates across month boundaries without styling selectable outside dates', () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 3, 1)}
+        selected={new Date(2026, 3, 2)}
+        disabled={{ before: new Date(2026, 3, 2) }}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      const disabledCurrentMonth = getDayButton(container, '1');
+      const disabledOutsideMonth = getDayButton(container, '31', { outside: true });
+      const selectableOutsideMonth = Array.from(
+        container.querySelectorAll<HTMLButtonElement>('button[name="day"].day-outside'),
+      ).find((button) => !button.disabled);
+
+      expect(disabledCurrentMonth).toBeDisabled();
+      expect(disabledCurrentMonth).toHaveClass('italic');
+      expect(disabledCurrentMonth).not.toHaveClass('opacity-50');
+      expect(disabledOutsideMonth).toBeDisabled();
+      expect(disabledOutsideMonth).toHaveClass('italic');
+      expect(disabledOutsideMonth).not.toHaveClass('opacity-50');
+      expect(selectableOutsideMonth).toBeTruthy();
+      expect(selectableOutsideMonth).not.toHaveClass('italic');
+      expect(selectableOutsideMonth).toHaveClass('!text-muted-foreground');
+      expect(selectableOutsideMonth).not.toHaveClass('opacity-50');
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('keeps adjacent-month selection, focus, and Today styling fully opaque', () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 7, 1)}
+        today={new Date(2026, 6, 31)}
+        selected={new Date(2026, 6, 31)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      const selectedToday = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-07-31"]',
+      );
+      const adjacentDate = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-07-30"]',
+      );
+
+      expect(selectedToday).toHaveClass(
+        'day-outside',
+        '!text-muted-foreground',
+        'rounded-md',
+        '!bg-accent',
+      );
+      expect(selectedToday).not.toHaveClass('opacity-50', 'aria-selected:opacity-30');
+      expect(selectedToday?.className).not.toContain('aria-selected:bg-accent/50');
+      expect(selectedToday?.textContent?.trim()).toBe('31');
+      expect(selectedToday?.querySelector('[data-calendar-current-date-icon="true"]'))
+        .toBeFalsy();
+
+      act(() => {
+        adjacentDate?.focus();
+      });
+      expect(document.activeElement).toBe(adjacentDate);
+      expect(adjacentDate).toHaveClass('!text-muted-foreground');
+      expect(adjacentDate).not.toHaveClass('opacity-50', '!bg-accent');
+      expect(adjacentDate?.className).toContain('focus:border-ring');
+      expect(adjacentDate?.className).toContain('focus:ring-2');
     } finally {
       unmount(root, container);
     }
@@ -129,7 +214,7 @@ describe('Calendar keyboard navigation', () => {
     }
   });
 
-  it('pages to the adjacent month when arrow navigation reaches a legal outside day', async () => {
+  it('keeps horizontal focus inside the visible six-week grid and pages only at its endpoints', async () => {
     function Harness() {
       const [month, setMonth] = React.useState(new Date(2026, 3, 1));
       return (
@@ -146,7 +231,9 @@ describe('Calendar keyboard navigation', () => {
     const { container, root } = mount(<Harness />);
 
     try {
-      const aprilFirst = getDayButton(container, '1');
+      const aprilFirst = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-04-01"]',
+      );
       expect(aprilFirst).toBeTruthy();
 
       act(() => {
@@ -154,12 +241,36 @@ describe('Calendar keyboard navigation', () => {
         aprilFirst?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
       });
       await flushUi();
-      const marchThirtyFirst = getDayButton(container, '31');
+      const marchThirtyFirst = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-03-31"]',
+      );
       expect(document.activeElement).toBe(marchThirtyFirst);
-      expect(container.textContent).toContain('March 2026');
+      expect(container.textContent).toContain('April 2026');
 
       act(() => {
-        marchThirtyFirst?.dispatchEvent(new KeyboardEvent('keydown', {
+        const topLeftDate = container.querySelector<HTMLButtonElement>(
+          'button[name="day"][data-calendar-date="2026-03-30"]',
+        );
+        topLeftDate?.focus();
+        topLeftDate?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          bubbles: true,
+        }));
+      });
+      await flushUi();
+
+      expect(container.textContent).toContain('March 2026');
+      expect(document.activeElement).toBe(
+        container.querySelector('button[name="day"][data-calendar-date="2026-03-29"]'),
+      );
+
+      const bottomRightDate = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-04-05"]',
+      );
+      expect(bottomRightDate).toBeTruthy();
+      act(() => {
+        bottomRightDate?.focus();
+        bottomRightDate?.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'ArrowRight',
           bubbles: true,
         }));
@@ -167,13 +278,16 @@ describe('Calendar keyboard navigation', () => {
       await flushUi();
 
       expect(container.textContent).toContain('April 2026');
-      expect(document.activeElement).toBe(getDayButton(container, '1'));
+      expect(document.activeElement).toBe(
+        container.querySelector('button[name="day"][data-calendar-date="2026-04-06"]'),
+      );
     } finally {
       unmount(root, container);
     }
   });
 
-  it('pages vertically when week navigation reaches a legal adjacent-month date', async () => {
+  it('keeps vertical focus in the visible grid and exits below its final row without paging', async () => {
+    const onDayGridExitDown = vi.fn(() => true);
     function Harness() {
       const [month, setMonth] = React.useState(new Date(2026, 6, 1));
       return (
@@ -183,6 +297,7 @@ describe('Calendar keyboard navigation', () => {
           today={new Date(2026, 0, 1)}
           selected={new Date(2026, 6, 31)}
           onMonthChange={setMonth}
+          onDayGridExitDown={onDayGridExitDown}
           onSelect={() => {}}
         />
       );
@@ -201,8 +316,10 @@ describe('Calendar keyboard navigation', () => {
       });
       await flushUi();
 
-      expect(container.textContent).toContain('August 2026');
-      expect(document.activeElement).toBe(getDayButton(container, '7'));
+      expect(container.textContent).toContain('July 2026');
+      expect(document.activeElement).toBe(
+        container.querySelector('button[name="day"][data-calendar-date="2026-08-07"]'),
+      );
 
       act(() => {
         (document.activeElement as HTMLButtonElement | null)?.dispatchEvent(
@@ -214,14 +331,26 @@ describe('Calendar keyboard navigation', () => {
       });
       await flushUi();
 
-      expect(container.textContent).toContain('July 2026');
       expect(document.activeElement).toBe(getDayButton(container, '31'));
+
+      const finalVisibleFriday = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2026-08-07"]',
+      );
+      act(() => {
+        finalVisibleFriday?.focus();
+        finalVisibleFriday?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowDown',
+          bubbles: true,
+        }));
+      });
+      expect(onDayGridExitDown).toHaveBeenCalledTimes(1);
+      expect(container.textContent).toContain('July 2026');
     } finally {
       unmount(root, container);
     }
   });
 
-  it('allows arrowing up to the next-month button and paging with enter', async () => {
+  it('allows arrowing up to the next-month button and pages header controls with their outward arrows', async () => {
     function Harness() {
       const [month, setMonth] = React.useState(new Date(2026, 3, 1));
       return (
@@ -250,11 +379,34 @@ describe('Calendar keyboard navigation', () => {
       expect(document.activeElement).toBe(nextMonthButton);
 
       act(() => {
-        nextMonthButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        nextMonthButton?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          bubbles: true,
+        }));
       });
       await flushUi();
 
       expect(container.textContent).toContain('May 2026');
+      expect(document.activeElement).toBe(
+        container.querySelector('button[name="next-month"]'),
+      );
+
+      const previousMonthButton = container.querySelector<HTMLButtonElement>(
+        'button[name="previous-month"]',
+      );
+      act(() => {
+        previousMonthButton?.focus();
+        previousMonthButton?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          bubbles: true,
+        }));
+      });
+      await flushUi();
+
+      expect(container.textContent).toContain('April 2026');
+      expect(document.activeElement).toBe(
+        container.querySelector('button[name="previous-month"]'),
+      );
     } finally {
       unmount(root, container);
     }
@@ -586,7 +738,16 @@ describe('Calendar keyboard navigation', () => {
       const initialDayPicker = container.querySelector('.rdp') as HTMLElement | null;
       expect(initialDayPicker?.className).toContain('box-border');
       expect(initialDayPicker?.className).toContain('w-[276px]');
-      expect(initialDayPicker?.className).toContain('min-h-[318px]');
+      expect(initialDayPicker?.className).toContain('min-h-[238px]');
+      const dayRows = Array.from(container.querySelectorAll('tbody tr'));
+      const firstDayCell = dayRows[0]?.querySelector('td') as HTMLElement | null;
+      const firstDayButton = dayRows[0]?.querySelector('button[name="day"]') as HTMLButtonElement | null;
+      expect(dayRows).toHaveLength(6);
+      expect(dayRows[0]?.className).toContain('mt-0');
+      expect(firstDayCell?.className).toContain('h-8');
+      expect(firstDayCell?.className).toContain('w-9');
+      expect(firstDayButton?.className).toContain('h-8');
+      expect(firstDayButton?.className).toContain('w-9');
 
       const captionButton = container.querySelector('button[name="caption-month-year"]') as HTMLButtonElement | null;
       const previousMonthButton = container.querySelector('button[name="previous-month"]') as HTMLButtonElement | null;
@@ -613,7 +774,7 @@ describe('Calendar keyboard navigation', () => {
       const monthPicker = container.querySelector('[data-calendar-month-picker="true"]') as HTMLElement | null;
       expect(monthPicker?.className).toContain('box-border');
       expect(monthPicker?.className).toContain('w-[276px]');
-      expect(monthPicker?.className).not.toContain('min-h-[318px]');
+      expect(monthPicker?.className).not.toContain('min-h-[238px]');
       const monthPickerCaption = container.querySelector('[data-calendar-month-picker-caption="true"]') as HTMLElement | null;
       const monthPickerNav = container.querySelector('[data-calendar-month-picker-nav="true"]') as HTMLElement | null;
       const previousYearHeaderButton = container.querySelector('button[name="previous-year"]') as HTMLButtonElement | null;
@@ -705,6 +866,62 @@ describe('Calendar keyboard navigation', () => {
     }
   });
 
+  it('pages the month picker years with outward arrows on the year navigation buttons', async () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 3, 1)}
+        selected={new Date(2026, 3, 4)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      act(() => {
+        container.querySelector<HTMLButtonElement>(
+          'button[name="caption-month-year"]',
+        )?.click();
+      });
+      await flushUi();
+
+      const nextYearButton = container.querySelector<HTMLButtonElement>(
+        'button[name="next-year"]',
+      );
+      act(() => {
+        nextYearButton?.focus();
+        nextYearButton?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          bubbles: true,
+        }));
+      });
+      await flushUi();
+
+      expect(container.textContent).toContain('2027');
+      expect(document.activeElement).toBe(
+        container.querySelector('button[name="next-year"]'),
+      );
+
+      const previousYearButton = container.querySelector<HTMLButtonElement>(
+        'button[name="previous-year"]',
+      );
+      act(() => {
+        previousYearButton?.focus();
+        previousYearButton?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'ArrowLeft',
+          bubbles: true,
+        }));
+      });
+      await flushUi();
+
+      expect(container.textContent).toContain('2026');
+      expect(document.activeElement).toBe(
+        container.querySelector('button[name="previous-year"]'),
+      );
+    } finally {
+      unmount(root, container);
+    }
+  });
+
   it('keeps focus on the year paging button after enter activates it', async () => {
     function Harness() {
       const [month, setMonth] = React.useState(new Date(2026, 3, 1));
@@ -744,7 +961,7 @@ describe('Calendar keyboard navigation', () => {
     }
   });
 
-  it('clears the entry-month active styling after paging years and does not restore it when paging back', async () => {
+  it('keeps committed-month styling tied to the selected date while paging years', async () => {
     function Harness() {
       const [month, setMonth] = React.useState(new Date(2026, 3, 1));
       return (
@@ -769,7 +986,8 @@ describe('Calendar keyboard navigation', () => {
 
       const aprilButton = Array.from(container.querySelectorAll('button[name="month"]'))
         .find((button) => button.textContent?.trim() === 'Apr') as HTMLButtonElement | undefined;
-      expect(aprilButton?.className).toContain('border-primary');
+      expect(aprilButton).toHaveClass('!bg-accent', 'text-accent-foreground');
+      expect(aprilButton?.className).not.toContain('border-primary');
 
       const nextYearButton = container.querySelector('button[name="next-year"]') as HTMLButtonElement | null;
       act(() => {
@@ -779,7 +997,7 @@ describe('Calendar keyboard navigation', () => {
 
       const april2027Button = Array.from(container.querySelectorAll('button[name="month"]'))
         .find((button) => button.textContent?.trim() === 'Apr') as HTMLButtonElement | undefined;
-      expect(april2027Button?.className).not.toContain('border-primary');
+      expect(april2027Button).not.toHaveClass('!bg-accent');
 
       const previousYearButton = container.querySelector('button[name="previous-year"]') as HTMLButtonElement | null;
       act(() => {
@@ -790,6 +1008,7 @@ describe('Calendar keyboard navigation', () => {
       const april2026Button = Array.from(container.querySelectorAll('button[name="month"]'))
         .find((button) => button.textContent?.trim() === 'Apr') as HTMLButtonElement | undefined;
       expect(container.textContent).toContain('2026');
+      expect(april2026Button).toHaveClass('!bg-accent', 'text-accent-foreground');
       expect(april2026Button?.className).not.toContain('border-primary');
     } finally {
       unmount(root, container);
@@ -898,9 +1117,12 @@ describe('Calendar keyboard navigation', () => {
         'button[name="month"]',
       ));
       expect(months.slice(0, 6).every((month) => month.disabled)).toBe(true);
+      expect(months.slice(0, 6).every((month) => !month.classList.contains('opacity-50')))
+        .toBe(true);
       expect(months[6]).not.toBeDisabled();
       expect(months[6]).toHaveAttribute('aria-label', 'July 2026');
-      expect(months[6]?.className).toContain('border-primary');
+      expect(months[6]).toHaveClass('!bg-accent', 'text-accent-foreground');
+      expect(months[6]?.className).not.toContain('border-primary');
       expect(container.querySelector<HTMLButtonElement>(
         'button[name="previous-year"]',
       )).toBeDisabled();
@@ -945,7 +1167,7 @@ describe('Calendar keyboard navigation', () => {
     }
   });
 
-  it('replaces an in-month current date number with an accessible star while preserving selection styling', () => {
+  it('keeps a selectable Today star yellow while selected and preserves independent focus styling', () => {
     const { container, root } = mount(
       <Calendar
         mode="single"
@@ -968,14 +1190,134 @@ describe('Calendar keyboard navigation', () => {
         '[data-calendar-current-date-icon="true"]',
       );
       expect(currentDateIcon).toBeTruthy();
-      expect(currentDateIcon?.classList.contains('text-primary-foreground')).toBe(true);
-      expect(currentDateIcon?.classList.contains('text-warning')).toBe(false);
-      expect(today?.className).toContain('bg-accent');
-      expect(today?.className).toContain('bg-primary');
+      expect(currentDateIcon?.classList.contains('text-warning')).toBe(true);
+      expect(currentDateIcon?.classList.contains('text-primary-foreground')).toBe(false);
+      expect(today).toHaveClass('rounded-md', '!bg-accent', 'text-accent-foreground');
+      expect(today?.className).not.toContain('bg-primary');
+      expect(today?.className).toContain('focus:border-ring');
+      expect(today?.className).toContain('focus:ring-2');
       expect(today?.className).toContain('enabled:!cursor-pointer');
       expect(container.querySelector<HTMLButtonElement>(
         'button[name="next-month"]',
       )?.className).toContain('enabled:!cursor-pointer');
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('keeps an unselected selectable Today visually ordinary except for its yellow star', () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2030, 2, 1)}
+        today={new Date(2030, 2, 14)}
+        selected={new Date(2030, 2, 13)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      const today = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][aria-current="date"]',
+      );
+      const currentDateIcon = today?.querySelector(
+        '[data-calendar-current-date-icon="true"]',
+      );
+
+      expect(today).not.toHaveClass('!bg-accent');
+      expect(currentDateIcon).toBeTruthy();
+      expect(currentDateIcon?.classList.contains('text-warning')).toBe(true);
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('does not add committed-value background styling to an unselected focused date', () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2030, 2, 1)}
+        today={new Date(2030, 2, 14)}
+        selected={new Date(2030, 2, 14)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      const unselected = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][data-calendar-date="2030-03-15"]',
+      );
+      act(() => {
+        unselected?.focus();
+      });
+
+      expect(document.activeElement).toBe(unselected);
+      expect(unselected).not.toHaveClass('!bg-accent');
+      expect(unselected?.className).toContain('focus:border-ring');
+      expect(unselected?.className).toContain('focus:ring-2');
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('uses disabled gray for an unavailable Today star', () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2030, 2, 1)}
+        today={new Date(2030, 2, 14)}
+        selected={new Date(2030, 2, 15)}
+        disabled={{ before: new Date(2030, 2, 15) }}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      const today = container.querySelector<HTMLButtonElement>(
+        'button[name="day"][aria-current="date"]',
+      );
+      const currentDateIcon = today?.querySelector(
+        '[data-calendar-current-date-icon="true"]',
+      );
+
+      expect(today).toBeDisabled();
+      expect(currentDateIcon).toHaveClass('text-muted-foreground');
+      expect(currentDateIcon).not.toHaveClass('text-warning');
+    } finally {
+      unmount(root, container);
+    }
+  });
+
+  it('uses disabled gray for an unavailable current-month star', async () => {
+    const { container, root } = mount(
+      <Calendar
+        mode="single"
+        month={new Date(2026, 7, 1)}
+        today={new Date(2026, 6, 23)}
+        fromDate={new Date(2026, 7, 1)}
+        selected={new Date(2026, 7, 1)}
+        onSelect={() => {}}
+      />,
+    );
+
+    try {
+      act(() => {
+        container.querySelector<HTMLButtonElement>(
+          'button[name="caption-month-year"]',
+        )?.click();
+      });
+      await flushUi();
+
+      const julyButton = Array.from(container.querySelectorAll<HTMLButtonElement>(
+        'button[name="month"]',
+      )).find((button) => button.textContent?.includes('Jul'));
+      const currentMonthIcon = julyButton?.querySelector(
+        '[data-calendar-current-month-icon="true"]',
+      );
+
+      expect(julyButton).toBeDisabled();
+      expect(currentMonthIcon).toHaveClass('text-muted-foreground');
+      expect(currentMonthIcon).not.toHaveClass('text-warning');
     } finally {
       unmount(root, container);
     }

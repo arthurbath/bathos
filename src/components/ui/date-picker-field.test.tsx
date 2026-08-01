@@ -400,6 +400,8 @@ describe('DatePickerField', () => {
       const clear = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button'))
         .find((button) => button.textContent?.trim() === 'Clear');
       expect(clear).toBeTruthy();
+      expect(clear).toHaveAttribute('data-date-picker-clear');
+      expect(clear).toHaveClass('h-9');
 
       act(() => {
         clear?.click();

@@ -1,31 +1,14 @@
-import type { LucideIcon } from 'lucide-react';
-
 import {
-  TASK_ICONS,
   TASK_PRIMARY_LINK_ICONS,
   TASK_PRIMARY_LINK_LABELS,
 } from '@/modules/tasks/components/taskIconography';
-import type { TaskSourceKind, TaskTodo } from '@/modules/tasks/types/tasks';
+import type { TaskTodo } from '@/modules/tasks/types/tasks';
 import {
   getTaskPrimaryLinkHref,
   getTaskPrimaryLinkIconKind,
   getTaskPrimaryLinkKind,
   taskPrimaryLinkOpensBrowserTab,
 } from '@/modules/tasks/domain/taskPrimaryLink';
-
-type SourcePresentation = {
-  icon: LucideIcon;
-  label: string;
-};
-
-const sourcePresentations: Record<TaskSourceKind, SourcePresentation> = {
-  webpage: { icon: TASK_ICONS.WebpageSource, label: 'Webpage' },
-  mail_message: { icon: TASK_ICONS.MailSource, label: 'Mail Message' },
-  file: { icon: TASK_ICONS.FileSource, label: 'File' },
-  selected_text: { icon: TASK_ICONS.SelectedTextSource, label: 'Selected Text' },
-  reading_item: { icon: TASK_ICONS.ReadingItemSource, label: 'Reading Item' },
-  other: { icon: TASK_ICONS.OtherSource, label: 'Source' },
-};
 
 export function TaskSourceIndicator({
   task,
@@ -37,7 +20,7 @@ export function TaskSourceIndicator({
   const primaryLinkKind = getTaskPrimaryLinkKind(task.primary_link);
   const primaryLinkIconKind = getTaskPrimaryLinkIconKind(task.primary_link);
   const href = getTaskPrimaryLinkHref(task.primary_link);
-  const className = `inline-flex ${compact ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`;
+  const className = `inline-flex ${compact ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`;
   if (primaryLinkKind !== null && primaryLinkIconKind !== null && href !== null) {
     const Icon = TASK_PRIMARY_LINK_ICONS[primaryLinkIconKind];
     const label = `Open ${TASK_PRIMARY_LINK_LABELS[primaryLinkIconKind]} for ${task.title}`;
@@ -49,25 +32,12 @@ export function TaskSourceIndicator({
         rel={opensBrowserTab ? 'noopener noreferrer' : undefined}
         aria-label={label}
         title={task.primary_link?.trim() || label}
-        className={className}
+        className={`${className} text-info`}
       >
         <Icon className="h-4 w-4" aria-hidden="true" />
       </a>
     );
   }
 
-  if (!task.source_kind) return null;
-
-  const presentation = sourcePresentations[task.source_kind] ?? sourcePresentations.other;
-  const Icon = presentation.icon;
-  const accessibleLabel = `${presentation.label} Source for ${task.title}`;
-  const title = task.source_title?.trim()
-    ? `${presentation.label}: ${task.source_title.trim()}`
-    : accessibleLabel;
-  const content = <Icon className="h-4 w-4" aria-hidden="true" />;
-  return (
-    <span className={className} role="img" aria-label={accessibleLabel} title={title}>
-      {content}
-    </span>
-  );
+  return null;
 }

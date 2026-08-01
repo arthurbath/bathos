@@ -92,6 +92,35 @@ describe('task history', () => {
     expect(createTaskUndoPatch(waiting, event)).toMatchObject({ actionability: 'actionable' });
   });
 
+  it('accepts widget history and normalizes retained template-era provenance', () => {
+    const templateSnapshot = {
+      ...snapshotTask(currentTask),
+      source_kind: 'template',
+      source_url: null,
+      source_title: 'Retired template provenance',
+      source_external_id: 'retired-template-id',
+    };
+    const event = parseTaskHistoryEvent(historyRow({
+      mutation_channel: 'widget',
+      before_state: JSON.stringify(templateSnapshot),
+      after_state: JSON.stringify(templateSnapshot),
+    }));
+
+    expect(event.mutation_channel).toBe('widget');
+    expect(event.before_state).toMatchObject({
+      source_kind: null,
+      source_url: null,
+      source_title: null,
+      source_external_id: null,
+    });
+    expect(event.after_state).toMatchObject({
+      source_kind: null,
+      source_url: null,
+      source_title: null,
+      source_external_id: null,
+    });
+  });
+
   it('allows an older source revision when the complete current snapshot still matches', () => {
     const event = parseTaskHistoryEvent(historyRow());
 

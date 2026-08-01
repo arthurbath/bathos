@@ -358,7 +358,7 @@ private struct TaskListWidgetView: View {
     private func primaryLinkLabel(_ primaryLink: TaskWidgetPrimaryLink) -> some View {
         Image(systemName: primaryLink.systemImageName)
         .font(.system(size: 13))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.blue)
         .frame(width: 28, height: 28)
         .contentShape(Rectangle())
     }

@@ -79,6 +79,7 @@ export type TaskStartPickerProps = {
   reminderTime: string;
   reminderTimeZone: string;
   reminderDisabled: boolean;
+  showReminder?: boolean;
   reminderUnavailableMessage?: string | null;
   planningDate: string;
   onPlanningChange: (selection: PlanningSelection) => Promise<void>;
@@ -93,6 +94,7 @@ export function TaskStartPickerPanel({
   reminderTime,
   reminderTimeZone,
   reminderDisabled,
+  showReminder = true,
   reminderUnavailableMessage,
   planningDate,
   onPlanningChange,
@@ -158,13 +160,14 @@ export function TaskStartPickerPanel({
   }, [active]);
 
   const focusReminderInput = useCallback(() => {
+    if (!showReminder) return false;
     const input = reminderRef.current;
     if (!input || input.disabled) return false;
     input.focus();
     const end = input.value.length;
     input.setSelectionRange(end, end);
     return true;
-  }, []);
+  }, [showReminder]);
 
   const focusCurrentStartChoice = useCallback(() => {
     const selectedHorizon = panelRef.current?.querySelector<HTMLButtonElement>(
@@ -490,7 +493,7 @@ export function TaskStartPickerPanel({
   return (
     <div
       ref={panelRef}
-      className="mx-auto w-[min(20rem,calc(100vw-2rem))]"
+      className="mx-auto box-border w-[276px] max-w-[calc(100vw-2rem)]"
       data-task-start-picker
       onKeyDownCapture={handlePanelKeyDownCapture}
       onPointerDownCapture={() => {
@@ -499,8 +502,14 @@ export function TaskStartPickerPanel({
         initialFocusTimerRef.current = null;
       }}
     >
-      <div className="space-y-2 p-3">
-        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div
+        className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-stretch gap-1.5 px-2 py-1.5"
+        data-task-start-today-layout
+      >
+        <div
+          className="flex items-center justify-center text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground [writing-mode:vertical-rl] rotate-180"
+          data-task-start-today-rail
+        >
           Today
         </div>
         <div className="grid grid-cols-4 gap-1">
@@ -520,7 +529,7 @@ export function TaskStartPickerPanel({
                 aria-pressed={selected}
                 data-task-start-horizon={id}
                 className={cn(
-                  'h-auto min-w-0 flex-col gap-1 px-1.5 py-2 text-xs',
+                  'h-auto min-w-0 flex-col gap-1 px-1.5 py-1 text-xs',
                   selected && 'bg-accent text-accent-foreground',
                 )}
                 onClick={() => void onPlanningChange({
@@ -570,109 +579,119 @@ export function TaskStartPickerPanel({
         />
       </div>
 
-      <div className="space-y-3 border-t border-[hsl(var(--grid-sticky-line))] p-3">
-        <InputGroup data-disabled={reminderDisabled ? 'true' : undefined}>
-          <InputGroupInput
-            ref={reminderRef}
-            id={`task-start-reminder-${task.id}`}
-            type="text"
-            inputMode="text"
-            autoComplete="off"
-            value={reminderInput}
-            placeholder="No Reminder"
-            aria-label="Reminder Time"
-            decoration={<TASK_ICONS.Reminder />}
-            data-bathos-field-return-owned="true"
-            disabled={reminderDisabled}
-            onChange={(event) => {
-              reminderInputConfirmedRef.current = false;
-              setReminderInput(event.target.value);
-            }}
-            onBlur={() => {
-              if (!reminderInputConfirmedRef.current) void commitReminderInput();
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') return;
-              event.preventDefault();
-              event.stopPropagation();
-              if (reminderInputConfirmedRef.current) {
-                onRequestClose();
-                return;
-              }
-              void commitReminderInput();
-            }}
-          />
-          <InputGroupAddon
-            align="inline-end"
-            className="h-full p-0"
+      {showReminder ? (
+        <div className="space-y-2 border-t border-[hsl(var(--grid-sticky-line))] px-2 py-1.5">
+          <InputGroup
+            className="h-9"
+            data-disabled={reminderDisabled ? 'true' : undefined}
+            data-task-start-reminder-group
           >
-            <DropdownMenu
-              open={reminderHourMenuOpen}
-              onOpenChange={(nextOpen) => {
-                if (nextOpen && reminderHourMenuDisabled) return;
-                if (nextOpen) setReminderHourNow(new Date());
-                setReminderHourMenuOpen(nextOpen);
+            <InputGroupInput
+              ref={reminderRef}
+              id={`task-start-reminder-${task.id}`}
+              type="text"
+              inputMode="text"
+              autoComplete="off"
+              value={reminderInput}
+              placeholder="No Reminder"
+              aria-label="Reminder Time"
+              decoration={<TASK_ICONS.Reminder />}
+              className="h-9 py-1.5"
+              data-bathos-field-return-owned="true"
+              disabled={reminderDisabled}
+              onChange={(event) => {
+                reminderInputConfirmedRef.current = false;
+                setReminderInput(event.target.value);
               }}
+              onBlur={() => {
+                if (!reminderInputConfirmedRef.current) void commitReminderInput();
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                event.stopPropagation();
+                if (reminderInputConfirmedRef.current) {
+                  onRequestClose();
+                  return;
+                }
+                void commitReminderInput();
+              }}
+            />
+            <InputGroupAddon
+              align="inline-end"
+              className="h-full p-0"
             >
-              <DropdownMenuTrigger asChild>
-                <InputGroupButton
-                  ref={reminderHourButtonRef}
-                  size="icon-sm"
-                  aria-label="Choose Reminder Hour"
-                  data-task-reminder-hour-trigger
-                  disabled={reminderHourMenuDisabled}
-                  className="h-full w-10 rounded-none rounded-r-md border-l border-[hsl(var(--grid-sticky-line))] bg-muted/15 text-muted-foreground hover:bg-muted/35 hover:text-foreground disabled:bg-transparent disabled:text-muted-foreground/40 disabled:opacity-100"
-                >
-                  <AlarmClock aria-hidden />
-                </InputGroupButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="max-h-[min(20rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto"
-                data-task-reminder-hour-menu
-                onEscapeKeyDown={(event) => event.stopPropagation()}
+              <DropdownMenu
+                modal={false}
+                open={reminderHourMenuOpen}
+                onOpenChange={(nextOpen) => {
+                  if (nextOpen && reminderHourMenuDisabled) return;
+                  if (nextOpen) setReminderHourNow(new Date());
+                  setReminderHourMenuOpen(nextOpen);
+                }}
               >
-                <DropdownMenuGroup>
-                  <DropdownMenuRadioGroup
-                    value={reminderTime.slice(0, 5)}
-                    onValueChange={(localTime) => {
-                      const option = reminderHourOptions.find(
-                        (candidate) => candidate.localTime === localTime,
-                      );
-                      if (option) void applyReminderHour(option);
-                    }}
+                <DropdownMenuTrigger asChild>
+                  <InputGroupButton
+                    ref={reminderHourButtonRef}
+                    size="icon-sm"
+                    aria-label="Choose Reminder Hour"
+                    data-task-reminder-hour-trigger
+                    disabled={reminderHourMenuDisabled}
+                    className="h-full w-10 rounded-none rounded-r-md border-0 border-l border-[hsl(var(--grid-sticky-line))] bg-transparent text-foreground disabled:bg-transparent disabled:text-muted-foreground/40 disabled:opacity-100"
                   >
-                    {reminderHourOptions.map((option) => (
-                      <DropdownMenuRadioItem
-                        key={option.localTime}
-                        value={option.localTime}
-                      >
-                        {option.displayTime}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </InputGroupAddon>
-        </InputGroup>
-        {reminderUnavailableMessage ? (
-          <p className="text-xs text-warning">{reminderUnavailableMessage}</p>
-        ) : null}
-        {reminder?.resolution_kind === 'gap_forward' ? (
-          <p className="text-xs text-warning">
-            Adjusted to the first valid time after the daylight-saving gap.
-          </p>
-        ) : null}
-      </div>
+                    <AlarmClock aria-hidden />
+                  </InputGroupButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="max-h-[min(20rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto"
+                  data-task-editor-owned-surface="true"
+                  data-task-reminder-hour-menu
+                  onEscapeKeyDown={(event) => event.stopPropagation()}
+                >
+                  <DropdownMenuGroup>
+                    <DropdownMenuRadioGroup
+                      value={reminderTime.slice(0, 5)}
+                      onValueChange={(localTime) => {
+                        const option = reminderHourOptions.find(
+                          (candidate) => candidate.localTime === localTime,
+                        );
+                        if (option) void applyReminderHour(option);
+                      }}
+                    >
+                      {reminderHourOptions.map((option) => (
+                        <DropdownMenuRadioItem
+                          key={option.localTime}
+                          value={option.localTime}
+                        >
+                          {option.displayTime}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </InputGroupAddon>
+          </InputGroup>
+          {reminderUnavailableMessage ? (
+            <p className="text-xs text-warning">{reminderUnavailableMessage}</p>
+          ) : null}
+          {reminder?.resolution_kind === 'gap_forward' ? (
+            <p className="text-xs text-warning">
+              Adjusted to the first valid time after the daylight-saving gap.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div
-        className="relative grid grid-cols-2 gap-0 border-t border-[hsl(var(--grid-sticky-line))] p-2"
+        className="relative grid grid-cols-2 gap-0 border-t border-[hsl(var(--grid-sticky-line))] p-1"
         data-task-start-footer
       >
         <Button
           type="button"
           variant="clear"
+          size="sm"
           data-task-start-clear
           data-task-start-footer-action
           className="relative w-full justify-center gap-2 text-muted-foreground"
@@ -687,6 +706,7 @@ export function TaskStartPickerPanel({
         <Button
           type="button"
           variant="clear"
+          size="sm"
           aria-pressed={task.destination === 'someday'}
           data-task-start-someday
           data-task-start-footer-action

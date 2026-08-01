@@ -189,11 +189,13 @@ export function DatePickerPanel({
         initialFocus
       />
       {clearable ? (
-        <div className="border-t border-[hsl(var(--grid-sticky-line))] p-2">
+        <div className="border-t border-[hsl(var(--grid-sticky-line))] p-1">
           <Button
             ref={clearButtonRef}
             type="button"
             variant="clear"
+            size="sm"
+            data-date-picker-clear
             className="w-full justify-start gap-2 text-muted-foreground"
             disabled={clearEnabled === undefined ? !value : !clearEnabled}
             onClick={() => {

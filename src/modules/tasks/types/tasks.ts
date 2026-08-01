@@ -11,6 +11,7 @@ export const taskEntryChannels = [
   'mail_automation',
   'browser_capture',
   'native',
+  'widget',
   'import',
 ] as const;
 export const taskSourceKinds = [

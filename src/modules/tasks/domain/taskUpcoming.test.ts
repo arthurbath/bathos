@@ -14,6 +14,20 @@ describe('task Upcoming projection', () => {
     }, '2026-07-26')).toBe('2026-08-03');
   });
 
+  it('uses a future Deadline as an implicit controlling date without a Start', () => {
+    expect(getTaskUpcomingDate({
+      start_date: null,
+      deadline: '2026-08-01',
+    }, '2026-07-26')).toBe('2026-08-01');
+  });
+
+  it('stops projecting a deadline-only task once its Deadline is reached', () => {
+    expect(getTaskUpcomingDate({
+      start_date: null,
+      deadline: '2026-08-01',
+    }, '2026-08-01')).toBeNull();
+  });
+
   it('groups tasks by controlling date without a Project root', () => {
     const sections = getTaskUpcomingSections([
       taskTodoFixture({ id: 'later', start_date: '2026-07-29' }),

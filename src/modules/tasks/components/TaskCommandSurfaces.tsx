@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -16,9 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { toast } from '@/hooks/use-toast';
-import { resolveTaskReminderTimeInput } from '@/modules/tasks/domain/taskReminderTimeInput';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
 import { isMacLikeTaskPlatform } from '@/modules/tasks/domain/taskSelection';
 import type { TaskHierarchyModel } from '@/modules/tasks/hooks/useTaskHierarchy';
@@ -28,7 +24,7 @@ import {
   type PlanningSelection,
 } from '@/modules/tasks/components/TaskStartPicker';
 
-export type TaskBulkCommandMode = 'start' | 'deadline' | 'organization' | 'reminder';
+export type TaskBulkCommandMode = 'start' | 'deadline' | 'organization';
 
 export function TaskBulkCommandDialog({
   mode,
@@ -37,7 +33,6 @@ export function TaskBulkCommandDialog({
   hierarchy,
   planningDate,
   reminderTimeZone,
-  reminderIncludesToday,
   onOpenChange,
   startTask,
   startClearEnabled,
@@ -46,7 +41,6 @@ export function TaskBulkCommandDialog({
   onApplyStart,
   onApplyDeadline,
   onApplyOrganization,
-  onApplyReminder,
 }: {
   mode: TaskBulkCommandMode | null;
   selectedCount: number;
@@ -54,7 +48,6 @@ export function TaskBulkCommandDialog({
   hierarchy: TaskHierarchyModel;
   planningDate: string;
   reminderTimeZone: string;
-  reminderIncludesToday: boolean;
   onOpenChange: (open: boolean) => void;
   startTask: Pick<TaskTodo, 'id' | 'title' | 'destination' | 'start_date' | 'today_section'>;
   startClearEnabled: boolean;
@@ -63,55 +56,20 @@ export function TaskBulkCommandDialog({
   onApplyStart: (selection: PlanningSelection) => Promise<void>;
   onApplyDeadline: (value: string) => Promise<void>;
   onApplyOrganization: (patch: EditableTaskPatch) => Promise<void>;
-  onApplyReminder: (localTime: string) => Promise<void>;
 }) {
-  const [reminderTime, setReminderTime] = useState('');
-  const [confirmedReminderTime, setConfirmedReminderTime] = useState<string | null>(null);
   const organizationRef = useRef<HTMLSelectElement>(null);
-  const reminderRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (mode === null) return;
     const timer = window.setTimeout(() => {
       if (mode === 'organization') organizationRef.current?.focus();
-      else if (mode === 'reminder') reminderRef.current?.focus();
     }, 0);
     return () => window.clearTimeout(timer);
   }, [mode]);
-  useEffect(() => {
-    if (mode !== 'reminder') {
-      setReminderTime('');
-      setConfirmedReminderTime(null);
-    }
-  }, [mode]);
-  const resolveBulkReminderTime = () => {
-    const resolved = resolveTaskReminderTimeInput(reminderTime, {
-      today: reminderIncludesToday,
-      timeZone: reminderTimeZone,
-    });
-    if (!resolved) {
-      setReminderTime('');
-      setConfirmedReminderTime(null);
-      toast({
-        title: 'Not Allowed.',
-      });
-      return null;
-    }
-    setReminderTime(resolved.displayTime);
-    setConfirmedReminderTime(resolved.localTime);
-    return resolved.localTime;
-  };
-  const submitBulkReminder = () => {
-    const localTime = confirmedReminderTime ?? resolveBulkReminderTime();
-    if (!localTime) return;
-    void onApplyReminder(localTime);
-  };
   const title = mode === 'start'
     ? "Set Start"
     : mode === 'deadline'
       ? 'Set Deadline'
-      : mode === 'organization'
-        ? 'Move Selected To'
-        : 'Set Reminder Time';
+      : 'Move Selected To';
 
   return (
     <Dialog open={mode !== null} onOpenChange={onOpenChange}>
@@ -131,9 +89,10 @@ export function TaskBulkCommandDialog({
             reminderTime=""
             reminderTimeZone={reminderTimeZone}
             reminderDisabled={pending}
+            showReminder={false}
             planningDate={planningDate}
             onPlanningChange={onApplyStart}
-            onReminderChange={onApplyReminder}
+            onReminderChange={async () => undefined}
             onClear={() => onApplyStart({
               destination: 'anytime',
               startDate: null,
@@ -188,45 +147,6 @@ export function TaskBulkCommandDialog({
                 </optgroup>
               ) : null}
             </select>
-          ) : mode === 'reminder' ? (
-            <div
-              className="flex items-center gap-2"
-            >
-              <Input
-                ref={reminderRef}
-                type="text"
-                inputMode="text"
-                autoComplete="off"
-                value={reminderTime}
-                placeholder="No Reminder"
-                aria-label="Reminder Time"
-                data-bathos-field-return-owned="true"
-                disabled={pending}
-                className="w-32 shrink-0"
-                onChange={(event) => {
-                  setReminderTime(event.target.value);
-                  setConfirmedReminderTime(null);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter') return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (confirmedReminderTime !== null) {
-                    void onApplyReminder(confirmedReminderTime);
-                    return;
-                  }
-                  resolveBulkReminderTime();
-                }}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!reminderTime.trim() || pending}
-                onClick={submitBulkReminder}
-              >
-                Apply
-              </Button>
-            </div>
           ) : null}
         </DialogBody>
         )}

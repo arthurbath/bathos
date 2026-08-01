@@ -12,6 +12,7 @@ The registry source is `src/modules/tasks/components/taskIconography.ts`. Icons 
 | OpenTask | `Square` | An ordinary open task checkbox |
 | SomedayTask | `SquareDashed` | A Someday task checkbox |
 | CompletedTask | `SquareCheck` | A completed task checkbox |
+| DeletedTask | `SquareX` | A recoverably deleted task control |
 | Selection | `Circle` | An available task or checklist-item selection control |
 | Selected | `CircleCheck` | A selected task or checklist item |
 | Area | `Layers3` | An area and the Areas section in Settings; this is the three-layer Stack glyph |

@@ -37,6 +37,8 @@ describe('TaskSourceIndicator', () => {
       expect(link?.rel).toBe('noopener noreferrer');
       expect(link?.getAttribute('aria-label')).toBe('Open Primary Link for Read the brief');
       expect(link?.title).toBe('https://example.test/brief');
+      expect(link).toHaveClass('text-info');
+      expect(link).not.toHaveClass('text-muted-foreground');
       expect(link?.querySelector('svg')).toHaveClass('lucide-link-2');
     } finally {
       cleanup(root, container);
@@ -136,7 +138,7 @@ describe('TaskSourceIndicator', () => {
     }
   });
 
-  it('keeps typed provenance visible without linking missing or unsafe source URLs', () => {
+  it('renders no summary-row icon for source provenance without a Primary Link', () => {
     const { container, root } = renderIndicator(taskTodoFixture({
       title: 'Review selection',
       source_kind: 'selected_text',
@@ -145,14 +147,13 @@ describe('TaskSourceIndicator', () => {
 
     try {
       expect(container.querySelector('a')).toBeNull();
-      expect(container.querySelector('[aria-label="Selected Text Source for Review selection"]'))
-        .toBeTruthy();
+      expect(container.childElementCount).toBe(0);
     } finally {
       cleanup(root, container);
     }
   });
 
-  it('renders nothing for a task without structured source provenance', () => {
+  it('renders nothing for a task without a Primary Link', () => {
     const { container, root } = renderIndicator(taskTodoFixture());
 
     try {
@@ -162,16 +163,15 @@ describe('TaskSourceIndicator', () => {
     }
   });
 
-  it('falls back safely when persisted provenance predates the current source vocabulary', () => {
+  it('does not synthesize a summary-row icon from legacy provenance', () => {
     const { container, root } = renderIndicator(taskTodoFixture({
       title: 'Imported task',
-      source_kind: 'legacy_import' as TaskTodo['source_kind'],
+      source_kind: 'other',
       source_title: 'Earlier source',
     }));
 
     try {
-      expect(container.querySelector('[aria-label="Source Source for Imported task"]'))
-        .toBeTruthy();
+      expect(container.childElementCount).toBe(0);
     } finally {
       cleanup(root, container);
     }
