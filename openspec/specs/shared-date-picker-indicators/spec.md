@@ -3,19 +3,13 @@
 ## Purpose
 
 Define the current-period indicators that every BathOS date picker inherits from the shared Calendar while preserving selection, eligibility, and accessibility semantics.
-
 ## Requirements
-
 ### Requirement: Shared Current-Period Star Indicators
 Every BathOS date picker that uses the shared Calendar SHALL identify the resolved current day and current month with Lucide's `Star` icon while preserving independent selection styling, selected-state contrast, and complete accessible names.
 
-#### Scenario: Mark the current day in its own month
-- **WHEN** the resolved current date is visible in the day calendar for the month to which that date belongs
-- **THEN** the date control shows a Star icon in place of its numeric day label, retains its complete accessible date name, and exposes the current-date semantic
-
-#### Scenario: Keep an outside current date numeric
-- **WHEN** the resolved current date appears only as an outside-day cell in an adjacent displayed month
-- **THEN** the outside-day cell retains its numeric label and does not show the current-date Star icon
+#### Scenario: Mark the current day wherever visible
+- **WHEN** the resolved current date is visible in the day calendar either in its own month or as an outside-day cell in an adjacent displayed month
+- **THEN** that date control shows a Star icon in place of its numeric day label, retains its complete accessible date name, and exposes the current-date semantic
 
 #### Scenario: Mark the current month
 - **WHEN** the month picker displays the year containing the resolved current date
@@ -29,9 +23,11 @@ Every BathOS date picker that uses the shared Calendar SHALL identify the resolv
 - **WHEN** the current day or current month is also the selected value
 - **THEN** the Star icon and the existing subtle selected-value highlight appear together without changing selection semantics
 
-#### Scenario: Contrast a selected current day
-- **WHEN** the current day is selected and its day control uses a light selected background
-- **THEN** the Star uses the dark selected-foreground color rather than the ordinary yellow current-period color
+#### Scenario: Preserve current-day eligibility styling
+- **WHEN** the current day is selectable
+- **THEN** its Star uses the semantic yellow current-period color regardless of selected-value or outside-month status
+- **WHEN** the current day is not selectable
+- **THEN** its Star uses the same solid muted text color as another disabled date without dimming its focus border
 
 #### Scenario: Apply the convention to Tasks date pickers
 - **WHEN** a user opens either Start or Deadline in BathOS Tasks

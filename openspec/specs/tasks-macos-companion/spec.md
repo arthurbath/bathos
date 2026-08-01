@@ -291,3 +291,10 @@ The macOS widget SHALL preserve the shared Tasks row semantics while fitting ten
 #### Scenario: Render ten Mac widget rows
 - **WHEN** the macOS large widget renders its maximum ten tasks
 - **THEN** each row uses one point less minimum vertical height than the corresponding iOS large-widget row without changing the shared controls, labels, or list order
+
+### Requirement: macOS Upcoming Widget Rank
+The macOS widget SHALL use the same authoritative Upcoming rank as the web list before truncating its projection.
+
+#### Scenario: Render more than ten Upcoming rows
+- **WHEN** Upcoming contains ordinary tasks and recurrence prototypes sharing controlling dates
+- **THEN** the widget displays the first ten rows in controlling-date and Upcoming-rank order

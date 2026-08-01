@@ -869,7 +869,7 @@ final class TasksCompanionTests: XCTestCase {
         scrollView.bounces = false
         scrollView.alwaysBounceVertical = false
         scrollView.alwaysBounceHorizontal = true
-        scrollView.directionalLockEnabled = false
+        scrollView.isDirectionalLockEnabled = false
         scrollView.contentInsetAdjustmentBehavior = .automatic
 
         TasksWebViewScrollPolicy.apply(to: scrollView)
@@ -877,7 +877,7 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertTrue(scrollView.bounces)
         XCTAssertTrue(scrollView.alwaysBounceVertical)
         XCTAssertFalse(scrollView.alwaysBounceHorizontal)
-        XCTAssertTrue(scrollView.directionalLockEnabled)
+        XCTAssertTrue(scrollView.isDirectionalLockEnabled)
         XCTAssertEqual(scrollView.decelerationRate, .normal)
         XCTAssertEqual(scrollView.contentInsetAdjustmentBehavior, .never)
     }
@@ -901,6 +901,7 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertEqual(shakeCount, 2)
     }
 
+    @MainActor
     func testTaskUndoNativeCommandUsesTheVersionedTasksEvent() {
         XCTAssertTrue(
             TasksBrowserModel.taskUndoCommandJavaScript.contains(

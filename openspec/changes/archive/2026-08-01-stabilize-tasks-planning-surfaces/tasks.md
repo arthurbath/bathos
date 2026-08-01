@@ -24,7 +24,7 @@
 
 - [x] 4.1 Add focused database, TypeScript, UI, native bridge, and widget tests for every changed contract
 - [x] 4.2 Run database tests, application tests, TypeScript, lint, build, strict OpenSpec validation, and rendered browser QA
-- [ ] 4.3 Refresh the private production backup, run exact preflight, apply pending migrations, normalize PowerSync, and verify production parity
-- [ ] 4.4 Sync and archive the OpenSpec change, commit and push all intended work, and prove a clean synchronized repository
-- [ ] 4.5 Publish the matching Lovable release, rebuild and install matching iOS/macOS companions, and verify installed behavior
-- [ ] 4.6 Deliver the assumptions, decisions, limitations, and closeout evidence report
+- [x] 4.3 Refresh the private production backup, run exact preflight, apply pending migrations, normalize PowerSync, and verify production parity
+- [x] 4.4 Sync and archive the OpenSpec change, commit and push all intended work, and prove a clean synchronized repository
+- [x] 4.5 Publish the matching Lovable release, rebuild and install matching iOS/macOS companions, and verify installed behavior
+- [x] 4.6 Deliver the assumptions, decisions, limitations, and closeout evidence report
