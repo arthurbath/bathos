@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(63);
+SELECT plan(74);
 
 SELECT has_table('public', 'tasks_recurrence_definitions', 'stores recurrence prototypes');
 SELECT has_table('public', 'tasks_recurrence_revisions', 'stores immutable prototype revisions');
@@ -562,6 +562,200 @@ SELECT throws_ok(
   '22023',
   'Recurrence cannot be evaluated beyond the planning date',
   'rejects recurrence evaluation beyond the owner planning date'
+);
+
+-- A cadence date can be a Deadline whose projected Start occurs earlier. The
+-- owner-local activation job must generate that work on the Start date even
+-- when no client is open, then advance the prototype by cadence.
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub', '', true);
+INSERT INTO public.tasks_recurrence_definitions (
+  id, owner_id, name, status, current_revision, record_revision,
+  evaluated_through_date, next_occurrence_date, upcoming_order_key,
+  last_mutation_channel, last_actor_type, client_mutation_id
+) VALUES (
+  'a1000000-0000-4000-8000-000000000060',
+  'a1000000-0000-4000-8000-000000000001',
+  'Manage debt, budgets', 'active', 1, 1,
+  current_date - 1, current_date + 4, 'a6',
+  'native', 'system', 'a1000000-0000-4000-8000-000000000061'
+);
+INSERT INTO public.tasks_recurrence_revisions (
+  id, owner_id, recurrence_id, revision, name, rule_mode, frequency,
+  interval_count, start_date, planning_timezone, missed_policy,
+  catch_up_limit, target_area_id, client_mutation_id, rule_config,
+  end_mode, end_after_count, end_on_date, reminder_local_time,
+  deadline_offset_days, prototype_snapshot
+)
+SELECT
+  'a1000000-0000-4000-8000-000000000062', revision.owner_id,
+  'a1000000-0000-4000-8000-000000000060', 1,
+  'Manage debt, budgets', 'calendar', 'monthly', 1,
+  current_date + 4, revision.planning_timezone, 'all', 100,
+  revision.target_area_id,
+  'a1000000-0000-4000-8000-000000000063',
+  jsonb_build_object(
+    'monthly_kind', 'day_of_month',
+    'month_day', extract(day FROM current_date + 4)::integer
+  ),
+  'never', NULL, NULL, '08:00'::time, 4,
+  jsonb_set(
+    jsonb_set(
+      jsonb_set(
+        revision.prototype_snapshot,
+        '{root,title}',
+        '"Manage debt, budgets"'::jsonb
+      ),
+      '{root,start_offset_days}',
+      '-4'::jsonb
+    ),
+    '{root,deadline_offset_days}',
+    '0'::jsonb
+  )
+FROM public.tasks_recurrence_revisions AS revision
+WHERE revision.recurrence_id = (
+  current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+)::uuid
+  AND revision.revision = 2;
+
+SELECT is(
+  tasks_private.recurrence_spawn_date(
+    current_date + 4,
+    4
+  ),
+  current_date,
+  'computes the projected Start as the recurrence spawn date'
+);
+
+SELECT set_config(
+  'test.early_start_activation',
+  tasks_private.activate_due_roots(clock_timestamp(),
+    'a1000000-0000-4000-8000-000000000001')::text,
+  false
+);
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000001', true
+);
+SELECT is(
+  (current_setting('test.early_start_activation')::jsonb
+    ->> 'generated_recurrence_instances')::integer,
+  1,
+  'background activation generates the reached recurrence instance'
+);
+SELECT is(
+  (
+    SELECT occurrence.scheduled_date
+    FROM public.tasks_recurrence_occurrences AS occurrence
+    WHERE occurrence.recurrence_id =
+      'a1000000-0000-4000-8000-000000000060'
+  ),
+  current_date + 4,
+  'keeps the cadence date on the generated occurrence receipt'
+);
+SELECT is(
+  (
+    SELECT task.start_date
+    FROM public.tasks_todos AS task
+    JOIN public.tasks_recurrence_occurrences AS occurrence
+      ON occurrence.root_id = task.id
+     AND occurrence.owner_id = task.owner_id
+    WHERE occurrence.recurrence_id =
+      'a1000000-0000-4000-8000-000000000060'
+  ),
+  current_date,
+  'persists the reached projected Start on the generated task'
+);
+SELECT is(
+  (
+    SELECT task.deadline
+    FROM public.tasks_todos AS task
+    JOIN public.tasks_recurrence_occurrences AS occurrence
+      ON occurrence.root_id = task.id
+     AND occurrence.owner_id = task.owner_id
+    WHERE occurrence.recurrence_id =
+      'a1000000-0000-4000-8000-000000000060'
+  ),
+  current_date + 4,
+  'preserves the cadence date as the generated task Deadline'
+);
+SELECT is(
+  (
+    SELECT task.today_section
+    FROM public.tasks_todos AS task
+    JOIN public.tasks_recurrence_occurrences AS occurrence
+      ON occurrence.root_id = task.id
+     AND occurrence.owner_id = task.owner_id
+    WHERE occurrence.recurrence_id =
+      'a1000000-0000-4000-8000-000000000060'
+  ),
+  'inbox',
+  'places the generated task in Today Inbox'
+);
+SELECT is(
+  (
+    SELECT reminder.local_time::text
+    FROM public.tasks_reminders AS reminder
+    JOIN public.tasks_recurrence_occurrences AS occurrence
+      ON occurrence.root_id = reminder.task_id
+     AND occurrence.owner_id = reminder.owner_id
+    WHERE occurrence.recurrence_id =
+      'a1000000-0000-4000-8000-000000000060'
+      AND reminder.status = 'active'
+  ),
+  '08:00:00',
+  'background activation inherits the prototype reminder'
+);
+SELECT ok(
+  (
+    SELECT definition.next_occurrence_date
+    FROM public.tasks_recurrence_definitions AS definition
+    WHERE definition.id = 'a1000000-0000-4000-8000-000000000060'
+  ) > current_date + 4,
+  'advances the prototype to its next monthly cadence date'
+);
+
+RESET ROLE;
+SELECT set_config(
+  'test.early_start_retry',
+  tasks_private.activate_due_roots(clock_timestamp(),
+    'a1000000-0000-4000-8000-000000000001')::text,
+  false
+);
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000001', true
+);
+SELECT is(
+  (current_setting('test.early_start_retry')::jsonb
+    ->> 'generated_recurrence_instances')::integer,
+  0,
+  'repeated background activation creates no duplicate instance'
+);
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.tasks_recurrence_occurrences AS occurrence
+    WHERE occurrence.recurrence_id =
+      'a1000000-0000-4000-8000-000000000060'
+  ),
+  1::bigint,
+  'stores exactly one occurrence for the reached cadence event'
+);
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.tasks_recurrence_definitions AS definition
+    JOIN public.tasks_recurrence_revisions AS revision
+      ON revision.owner_id = definition.owner_id
+     AND revision.recurrence_id = definition.id
+     AND revision.revision = definition.current_revision
+    WHERE definition.id = 'a1000000-0000-4000-8000-000000000060'
+      AND definition.next_occurrence_date
+        - COALESCE(revision.deadline_offset_days, 0) <= current_date
+  ),
+  0::bigint,
+  'leaves no reached prototype in Upcoming after activation'
 );
 
 INSERT INTO public.tasks_todos (

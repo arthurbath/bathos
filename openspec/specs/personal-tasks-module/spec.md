@@ -1124,7 +1124,7 @@ The system SHALL store Start Date as a future-only deferral calendar fact for us
 - **THEN** the interface converts the stored instant for display without moving the scheduled instant
 
 ### Requirement: Recurrence Integrity
-The system SHALL keep revisioned recurrence definitions separate from task instances, SHALL present one permanent recurrence prototype only in Upcoming while the definition remains active and has a knowable next spawn date, SHALL support calendar and after-completion schedules, and SHALL assign every logical recurrence event a deterministic unique identity.
+The system SHALL keep revisioned recurrence definitions separate from task instances, SHALL present one permanent recurrence prototype only in Upcoming while the definition remains active and has a knowable next spawn date, SHALL support calendar and after-completion schedules, SHALL assign every logical recurrence event a deterministic unique identity, and SHALL generate due instances through owner-local background activation without requiring an open client.
 
 #### Scenario: Apply Repeat to an existing task
 - **WHEN** a user saves a recurrence on an ordinary task
@@ -1143,8 +1143,8 @@ The system SHALL keep revisioned recurrence definitions separate from task insta
 - **THEN** the recurrence produces no occurrence beyond that boundary
 
 #### Scenario: Generate a recurring instance
-- **WHEN** an active recurrence prototype reaches a spawn date
-- **THEN** the authoritative server transaction creates no more than one ordinary task instance for that logical recurrence event and advances the prototype to its next knowable spawn date
+- **WHEN** an active recurrence prototype reaches its spawn date in the owner's planning time zone
+- **THEN** the authoritative server activation creates no more than one ordinary task instance for that logical recurrence event and advances the prototype to its next knowable spawn date without requiring a foreground client
 
 #### Scenario: Inherit prototype metadata
 - **WHEN** a recurrence prototype spawns a task instance
@@ -1152,7 +1152,11 @@ The system SHALL keep revisioned recurrence definitions separate from task insta
 
 #### Scenario: Derive Start from a repeating Deadline
 - **WHEN** a recurrence includes deadlines and specifies that work starts a nonnegative number of days earlier
-- **THEN** each schedule date becomes the task Deadline and the generated task Start is that many owner-local dates earlier
+- **THEN** each cadence date becomes the task Deadline, the spawn date is that many owner-local dates earlier, and the generated task persists that spawn date as its Start
+
+#### Scenario: Activate an early-Start recurrence at midnight
+- **WHEN** owner-local midnight makes a calendar recurrence's spawn date current while its cadence Deadline remains in the future
+- **THEN** background activation creates the ordinary instance in Today Inbox with the current Start and future Deadline and advances the prototype to its next cadence bucket
 
 #### Scenario: Inherit a recurrence reminder
 - **WHEN** a recurrence enables a valid reminder time
@@ -1181,6 +1185,10 @@ The system SHALL keep revisioned recurrence definitions separate from task insta
 #### Scenario: Present a dated recurrence prototype
 - **WHEN** an active recurrence has a knowable future spawn date
 - **THEN** Upcoming presents exactly one prototype in the date bucket determined by its future Start when present or otherwise its future Deadline
+
+#### Scenario: Exclude a reached prototype from Upcoming
+- **WHEN** a recurrence prototype's spawn date is on or before the owner's planning date
+- **THEN** Upcoming does not present that prototype in a current-day or past date bucket after activation commits
 
 #### Scenario: Distinguish an Upcoming recurrence prototype
 - **WHEN** a future recurrence prototype appears in an Upcoming date bucket
@@ -1227,7 +1235,7 @@ The system SHALL keep revisioned recurrence definitions separate from task insta
 - **THEN** the server derives due work and the next future prototype from its durable occurrence history without duplicating earlier logical events
 
 #### Scenario: Evaluate missed calendar events
-- **WHEN** a calendar recurrence has one or more missed events
+- **WHEN** a calendar recurrence has one or more missed spawn dates
 - **THEN** the generator applies the definition's explicit `skip`, `latest`, or `all` policy to spawned instances and defaults to `latest`
 
 #### Scenario: Edit a recurrence definition
@@ -1251,26 +1259,30 @@ The system SHALL keep revisioned recurrence definitions separate from task insta
 - **THEN** the client assigns the already authenticated owner to the parsed result while synchronized recurrence rows continue to validate their stored owner identifier
 
 ### Requirement: Recurrence Spawn Boundary
-Tasks SHALL materialize an ordinary recurrence instance only when its logical occurrence date has reached the owner's current planning date and SHALL keep unreached work solely as a virtual Upcoming prototype.
+Tasks SHALL materialize an ordinary recurrence instance only when its computed spawn date has reached the owner's current planning date, SHALL keep the cadence date as the durable recurrence cursor and generated Deadline where applicable, and SHALL keep unreached work solely as a virtual Upcoming prototype.
 
 #### Scenario: Convert a task before its first spawn date
-- **WHEN** a user applies Repeat to an ordinary task with a first occurrence later than the owner's current planning date
+- **WHEN** a user applies Repeat to an ordinary task with a first spawn date later than the owner's current planning date
 - **THEN** the system preserves the task's editable content in the recurrence prototype, removes the ordinary source task from task lists, and presents no ordinary occurrence before that date
 
 #### Scenario: Convert a task on its first spawn date
-- **WHEN** a user applies Repeat to an ordinary task whose first occurrence is the owner's current planning date
+- **WHEN** a user applies Repeat to an ordinary task whose first spawn date is the owner's current planning date
 - **THEN** the system adopts that task as the reached initial ordinary instance and advances the virtual prototype according to its cadence
+
+#### Scenario: Evaluate through the planning date
+- **WHEN** an authenticated client or background activation evaluates recurrence through the owner's current planning date
+- **THEN** the evaluator generates every occurrence selected by missed policy whose computed spawn date has reached that planning date
 
 #### Scenario: Reject future recurrence evaluation
 - **WHEN** any client asks the authoritative recurrence evaluator to generate through a date later than the owner's current planning date
 - **THEN** the evaluator rejects the request without creating an occurrence or advancing the prototype
 
 #### Scenario: Repair an unreached adopted projection
-- **WHEN** migration data contains an open adopted occurrence whose immutable scheduled date is later than the owner's current planning date
-- **THEN** the system preserves its current task and checklist content in the prototype, removes the premature task and occurrence, and rewinds the prototype to that scheduled date
+- **WHEN** migration data contains an open adopted occurrence whose immutable spawn date is later than the owner's current planning date
+- **THEN** the system preserves its current task and checklist content in the prototype, removes the premature task and occurrence, and rewinds the prototype to its cadence date
 
 #### Scenario: Preserve a reached instance deferred into the future
-- **WHEN** an ordinary recurrence instance has an immutable scheduled date on or before the owner's planning date and the user later assigns it a future Start
+- **WHEN** an ordinary recurrence instance has an immutable spawn date on or before the owner's planning date and the user later assigns it a future Start
 - **THEN** recurrence cleanup preserves that ordinary instance and its editable metadata
 
 ### Requirement: Explicit Monthly Recurrence Cadence

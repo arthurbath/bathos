@@ -59,10 +59,10 @@ describe('useTaskRecurrences', () => {
 
   afterEach(() => vi.useRealTimers());
 
-  it('evaluates an active definition when its next prototype date has been reached', async () => {
+  it('evaluates through planning date when an early-Start prototype has been reached', async () => {
     const stale = taskRecurrenceDefinitionFixture({
       evaluated_through_date: '2026-07-18',
-      next_occurrence_date: '2026-07-19',
+      next_occurrence_date: '2026-07-23',
     });
     const evaluated = { ...stale, evaluated_through_date: '2026-07-19', record_revision: 2 };
     const recurrenceService = {
@@ -73,7 +73,7 @@ describe('useTaskRecurrences', () => {
       createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn(),
     };
     definitionRows = [stale];
-    revisionRows = [taskRecurrenceRevisionFixture()];
+    revisionRows = [taskRecurrenceRevisionFixture({ deadline_offset_days: 4 })];
     occurrenceRows = [taskRecurrenceOccurrenceFixture()];
     mocks.useTasksRuntime.mockReturnValue({ mode: 'connected', planningTimeZone, recurrenceService });
 

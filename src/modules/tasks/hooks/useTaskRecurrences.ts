@@ -184,11 +184,7 @@ export function useTaskRecurrences(ownerId: string) {
   }, []);
 
   const runEvaluation = useCallback(async (recurrenceId: string) => {
-    const revision = revisions.get(recurrenceId);
-    const throughDate = revision?.rule_mode === 'calendar'
-      && revision.deadline_offset_days
-      ? addTaskCalendarDays(planningDate, revision.deadline_offset_days)
-      : planningDate;
+    const throughDate = planningDate;
     const key = `${recurrenceId}:${throughDate}`;
     evaluationRequests.current.add(key);
     try {
@@ -208,7 +204,6 @@ export function useTaskRecurrences(ownerId: string) {
     planningDate,
     recordEvaluationFailure,
     recurrenceService,
-    revisions,
   ]);
 
   const evaluate = useCallback(async (definition: TaskRecurrenceDefinition) => {
@@ -220,20 +215,18 @@ export function useTaskRecurrences(ownerId: string) {
     if (mode !== 'connected') return;
     for (const definition of definitions) {
       const revision = revisions.get(definition.id);
-      const throughDate = revision?.rule_mode === 'calendar'
-        && revision.deadline_offset_days
-        ? addTaskCalendarDays(planningDate, revision.deadline_offset_days)
-        : planningDate;
+      const throughDate = planningDate;
+      const spawnDate = definition.next_occurrence_date && revision?.deadline_offset_days
+        ? addTaskCalendarDays(
+            definition.next_occurrence_date,
+            -revision.deadline_offset_days,
+          )
+        : definition.next_occurrence_date;
       const key = `${definition.id}:${throughDate}`;
       if (
         definition.status !== 'active'
-        || (
-          definition.evaluated_through_date >= throughDate
-          && (
-            definition.next_occurrence_date === null
-            || definition.next_occurrence_date > throughDate
-          )
-        )
+        || spawnDate === null
+        || spawnDate > throughDate
         || evaluationRequests.current.has(key)
       ) continue;
       evaluationRequests.current.add(key);
