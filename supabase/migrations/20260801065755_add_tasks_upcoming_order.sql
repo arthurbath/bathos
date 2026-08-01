@@ -8,10 +8,17 @@ ALTER TABLE public.tasks_todos
 ALTER TABLE public.tasks_recurrence_definitions
   ADD COLUMN upcoming_order_key text;
 
+-- These are migration-only metadata backfills. Do not manufacture user-facing
+-- revisions, mutation receipts, or history events for values that did not
+-- previously exist. This mirrors the established Tasks migration convention
+-- for adding derived columns to revisioned records.
+ALTER TABLE public.tasks_todos DISABLE TRIGGER USER;
 UPDATE public.tasks_todos
 SET upcoming_order_key = order_key
 WHERE upcoming_order_key IS NULL;
+ALTER TABLE public.tasks_todos ENABLE TRIGGER USER;
 
+ALTER TABLE public.tasks_recurrence_definitions DISABLE TRIGGER USER;
 UPDATE public.tasks_recurrence_definitions AS definition
 SET upcoming_order_key = NULLIF(
   revision.prototype_snapshot #>> '{root,order_key}',
@@ -26,6 +33,7 @@ WHERE revision.owner_id = definition.owner_id
 UPDATE public.tasks_recurrence_definitions
 SET upcoming_order_key = 'a0'
 WHERE upcoming_order_key IS NULL;
+ALTER TABLE public.tasks_recurrence_definitions ENABLE TRIGGER USER;
 
 ALTER TABLE public.tasks_recurrence_definitions
   ALTER COLUMN upcoming_order_key SET DEFAULT 'a0';
