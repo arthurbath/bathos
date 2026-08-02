@@ -4,8 +4,9 @@
     {
       "layers" : [
         {
-          "image-name" : "Tasks Symbol.png",
-          "name" : "Tasks Symbol"
+          "hidden" : false,
+          "image-name" : "Tasks Symbol 2.png",
+          "name" : "Tasks"
         }
       ],
       "shadow" : {

@@ -12,6 +12,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     static let configureQuickEntryShortcutMessageType =
         "configure-quick-entry-shortcut"
     static let quickEntryFinishedMessageType = "quick-entry-finished"
+    static let contentReadyMessageType = "content-ready"
     static let newTaskSummaryInputIdentifier = "task-title-task-draft:new"
     static let newTaskSummaryFocusJavaScript = """
     (() => {
@@ -98,15 +99,22 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     var quickEntryDidFinish: ((_ committed: Bool) -> Void)?
 
     private let coldStartRecoveryDelayNanoseconds: UInt64
+    private let contentReadyFallbackDelayNanoseconds: UInt64
     private let inPageNavigator: InPageNavigator
     private var coldStartRecoveryTask: Task<Void, Never>?
+    private var contentReadyFallbackTask: Task<Void, Never>?
     private var isPerformingColdStartRecovery = false
+    private var navigationDidFinish = false
+    private var contentReadyReceived = false
 
     init(
         coldStartRecoveryDelayNanoseconds: UInt64 = 400_000_000,
+        contentReadyFallbackDelayNanoseconds: UInt64 = 2_000_000_000,
         inPageNavigator: @escaping InPageNavigator = TasksBrowserModel.navigateInPage
     ) {
         self.coldStartRecoveryDelayNanoseconds = coldStartRecoveryDelayNanoseconds
+        self.contentReadyFallbackDelayNanoseconds =
+            contentReadyFallbackDelayNanoseconds
         self.inPageNavigator = inPageNavigator
     }
 
@@ -143,6 +151,12 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         cancelColdStartRecovery()
         requestedURL = nextURL
         loadError = nil
+        if hasLoadedContent, let webView {
+            isLoading = false
+            inPageNavigator(webView, nextURL)
+            return
+        }
+        resetContentReadiness()
         isLoading = true
         hasLoadedContent = false
         webView?.load(URLRequest(url: nextURL))
@@ -194,15 +208,37 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     }
 
     func didStartLoading() {
+        if !hasLoadedContent {
+            resetContentReadiness()
+        }
         isLoading = true
         loadError = nil
     }
 
     func didFinishLoading() {
         cancelColdStartRecovery()
-        isLoading = false
-        hasLoadedContent = true
         loadError = nil
+        navigationDidFinish = true
+        if contentReadyReceived {
+            revealReadyContent()
+            return
+        }
+        scheduleContentReadyFallback()
+    }
+
+    func didBecomeContentReady() {
+        contentReadyReceived = true
+        guard navigationDidFinish else {
+            return
+        }
+        revealReadyContent()
+    }
+
+    func performContentReadyFallback() {
+        guard navigationDidFinish, !hasLoadedContent else {
+            return
+        }
+        revealReadyContent()
     }
 
     func didFailLoading(_ error: Error) {
@@ -243,6 +279,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
 
     func didTerminateWebContent() {
         cancelColdStartRecovery()
+        resetContentReadiness()
         hasLoadedContent = false
         loadError = nil
         isLoading = true
@@ -260,6 +297,37 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         coldStartRecoveryTask?.cancel()
         coldStartRecoveryTask = nil
         isPerformingColdStartRecovery = false
+    }
+
+    private func scheduleContentReadyFallback() {
+        contentReadyFallbackTask?.cancel()
+        contentReadyFallbackTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+            try? await Task.sleep(
+                nanoseconds: self.contentReadyFallbackDelayNanoseconds
+            )
+            guard !Task.isCancelled else {
+                return
+            }
+            self.performContentReadyFallback()
+        }
+    }
+
+    private func revealReadyContent() {
+        contentReadyFallbackTask?.cancel()
+        contentReadyFallbackTask = nil
+        isLoading = false
+        hasLoadedContent = true
+        loadError = nil
+    }
+
+    private func resetContentReadiness() {
+        contentReadyFallbackTask?.cancel()
+        contentReadyFallbackTask = nil
+        navigationDidFinish = false
+        contentReadyReceived = false
     }
 
     static func navigateInPage(_ webView: WKWebView, to url: URL) {
@@ -378,6 +446,11 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             Self.recordBridgeDiagnostic(
                 "Accepted: \(envelope.type); committed=\(request.committed)"
             )
+            return
+        }
+        if envelope.type == Self.contentReadyMessageType {
+            didBecomeContentReady()
+            Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
             return
         }
         if envelope.type == Self.newTaskSummaryFocusMessageType {

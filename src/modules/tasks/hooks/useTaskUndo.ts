@@ -19,8 +19,8 @@ import type { TaskTodo } from '@/modules/tasks/types/tasks';
 
 export const TASK_HISTORY_LIMIT = 100;
 const TASK_HISTORY_REPLAY_LIMIT = 500;
-export const TASK_HISTORY_PROJECTION_WAIT_MS = 5_000;
-const TASK_HISTORY_PROJECTION_POLL_MS = 25;
+export const TASK_HISTORY_PROJECTION_WAIT_MS = 30_000;
+const TASK_HISTORY_PROJECTION_POLL_MS = 100;
 
 const taskHistoryQuery = `
   SELECT event.*
@@ -67,6 +67,7 @@ export function useTaskUndo(ownerId: string) {
   const projectedCursorKeyRef = useRef('');
   const projectedEventsRef = useRef<TaskHistoryEvent[]>([]);
   const taskProjectionRef = useRef<TaskTodo[]>([]);
+  const historyRefreshRef = useRef(query.refresh);
   const pendingForwardMutationsRef = useRef<PendingForwardMutation[]>([]);
   const forwardMutationSequenceRef = useRef(0);
   const historyRequestPendingRef = useRef(false);
@@ -99,6 +100,9 @@ export function useTaskUndo(ownerId: string) {
       : 'SELECT * FROM tasks_todos WHERE 0 = 1',
     tipTaskIds.length > 0 ? [ownerId, ...tipTaskIds] : [],
   );
+  historyRefreshRef.current = query.refresh;
+  const taskRefreshRef = useRef(taskQuery.refresh);
+  taskRefreshRef.current = taskQuery.refresh;
   taskProjectionRef.current = taskQuery.data;
   const undoTasks = historyOperationTasks(taskQuery.data, undoEvent);
   const redoTasks = historyOperationTasks(taskQuery.data, redoEvent);
@@ -351,7 +355,10 @@ export function useTaskUndo(ownerId: string) {
           }
           return null;
         }
-        await waitForTaskHistoryProjection();
+        await refreshTaskHistoryProjection(
+          historyRefreshRef.current,
+          taskRefreshRef.current,
+        );
       }
     } finally {
       historyRequestPendingRef.current = false;
@@ -381,7 +388,10 @@ export function useTaskUndo(ownerId: string) {
           return await applyRedoEvent(event);
         }
         if (Date.now() >= deadline) return null;
-        await waitForTaskHistoryProjection();
+        await refreshTaskHistoryProjection(
+          historyRefreshRef.current,
+          taskRefreshRef.current,
+        );
       }
     } finally {
       historyRequestPendingRef.current = false;
@@ -405,6 +415,7 @@ export function useTaskUndo(ownerId: string) {
     redoEvent,
     undoDepth: cursor.undo.length,
     redoDepth: cursor.redo.length,
+    forwardMutationPending: pendingForwardMutations.length > 0,
     undo,
     redo,
     undoWhenAvailable,
@@ -432,10 +443,20 @@ function taskHistoryEventSupportsMovement(event: TaskHistoryEvent): boolean {
     && (event.transition === 'create' || event.before_state !== null);
 }
 
-function waitForTaskHistoryProjection(): Promise<void> {
-  return new Promise((resolve) => {
+async function refreshTaskHistoryProjection(
+  refreshHistory: ((signal?: AbortSignal) => Promise<void>) | undefined,
+  refreshTasks: ((signal?: AbortSignal) => Promise<void>) | undefined,
+): Promise<void> {
+  // PowerSync can commit the local mutation without notifying both watched
+  // projections in the same render generation. Refresh both guards while an
+  // exact undo reservation is waiting so the user never needs to reload.
+  await new Promise<void>((resolve) => {
     globalThis.setTimeout(resolve, TASK_HISTORY_PROJECTION_POLL_MS);
   });
+  await Promise.allSettled([
+    refreshHistory?.(),
+    refreshTasks?.(),
+  ].filter((refresh): refresh is Promise<void> => refresh !== undefined));
 }
 
 export function taskHistoryMovementIsSafe(

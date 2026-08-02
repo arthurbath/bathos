@@ -1,38 +1,34 @@
 import {
-  Suspense,
-  lazy,
   useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
   type DragEvent,
+  type MouseEvent,
   type ReactNode,
 } from 'react';
-import { ExternalLink, MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
+  TaskChecklistEditorSurface,
+  type TaskChecklistEditorController,
+  type TaskChecklistEditorItem,
+} from '@/modules/tasks/components/TaskChecklistEditor';
+import { TaskMetadataDrawerFields } from '@/modules/tasks/components/TaskMetadataDrawerFields';
+import { TASK_OPEN_ROW_HIGHLIGHT_SURFACE_CLASS } from '@/modules/tasks/components/taskPlanningStyles';
+import {
   TASK_ICONS,
-  TASK_PRIMARY_LINK_ICONS,
-  TASK_PRIMARY_LINK_LABELS,
 } from '@/modules/tasks/components/taskIconography';
 import { TaskRepeatDialog } from '@/modules/tasks/components/TaskRepeatDialog';
 import type {
@@ -43,39 +39,34 @@ import {
   formatTaskCompactCalendarDayOffset,
   formatTaskRelativeCalendarDate,
 } from '@/modules/tasks/domain/taskDates';
+import { planChecklistGroupMove } from '@/modules/tasks/domain/taskChecklistOrder';
 import {
-  getTaskPrimaryLinkHref,
-  getTaskPrimaryLinkIconKind,
-  taskPrimaryLinkOpensBrowserTab,
-} from '@/modules/tasks/domain/taskPrimaryLink';
+  buildRecurrencePrototypeEditInput,
+  type RecurrencePrototypeMetadataPatch,
+} from '@/modules/tasks/domain/taskRecurrencePrototypeEdit';
 import type {
-  TaskActionability,
   TaskRecurrenceDefinition,
   TaskRecurrencePrototypeChecklistItem,
-  TaskRecurrencePrototypeSnapshot,
   TaskRecurrenceRevision,
 } from '@/modules/tasks/types/tasks';
 
-const TaskMarkdownNotes = lazy(async () => {
-  const module = await import('@/modules/tasks/components/TaskMarkdownNotes');
-  return { default: module.TaskMarkdownNotes };
-});
-
 const TEXT_AUTOSAVE_DELAY_MS = 350;
-
-type RecurrencePrototypeMetadataPatch = {
-  root?: Partial<TaskRecurrencePrototypeSnapshot['root']>;
-  targetAreaId?: string | null;
-};
 
 type PrototypeRowSharedProps = {
   definition: TaskRecurrenceDefinition;
   revision: TaskRecurrenceRevision;
   planningDate: string;
   onEdit: (input: TaskRecurrenceEditInput) => Promise<TaskRecurrenceSaveResult>;
+  onDelete: (definition: TaskRecurrenceDefinition) => Promise<unknown>;
   areas: ReadonlyArray<{ id: string; title: string }>;
   focusRequested: boolean;
   onFocusFulfilled: () => void;
+  editorOpen: boolean;
+  onEditorOpenChange: (open: boolean) => Promise<boolean>;
+  onRegisterEditorFlush: (
+    definitionId: string,
+    flush: (() => Promise<void>) | null,
+  ) => void;
 };
 
 export function WaitingRecurrenceRow({
@@ -97,6 +88,8 @@ export function CalendarRecurrencePrototypeRow({
   onDragStart,
   onDragOver,
   onDragEnd,
+  bulkSelection,
+  onSelect,
   ...props
 }: PrototypeRowSharedProps & {
   scheduledDate: string;
@@ -104,6 +97,11 @@ export function CalendarRecurrencePrototypeRow({
   onDragStart: () => void;
   onDragOver: (placement: 'before' | 'after') => void;
   onDragEnd: () => void;
+  bulkSelection?: {
+    selected: boolean;
+    onToggle: (event: MouseEvent<HTMLElement>) => void;
+  };
+  onSelect: (event: MouseEvent<HTMLElement>) => void;
 }) {
   return (
     <RecurrencePrototypeRow
@@ -113,6 +111,8 @@ export function CalendarRecurrencePrototypeRow({
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
+      bulkSelection={bulkSelection}
+      onSelect={onSelect}
     />
   );
 }
@@ -123,15 +123,21 @@ function RecurrencePrototypeRow({
   scheduledDate = null,
   planningDate,
   onEdit,
+  onDelete,
   areas,
   focusRequested,
   onFocusFulfilled,
+  editorOpen,
+  onEditorOpenChange,
+  onRegisterEditorFlush,
   waiting = false,
   onGoToInstance,
   dragPlacement = null,
   onDragStart,
   onDragOver,
   onDragEnd,
+  bulkSelection,
+  onSelect,
 }: PrototypeRowSharedProps & {
   scheduledDate?: string | null;
   waiting?: boolean;
@@ -140,11 +146,16 @@ function RecurrencePrototypeRow({
   onDragStart?: () => void;
   onDragOver?: (placement: 'before' | 'after') => void;
   onDragEnd?: () => void;
+  bulkSelection?: {
+    selected: boolean;
+    onToggle: (event: MouseEvent<HTMLElement>) => void;
+  };
+  onSelect?: (event: MouseEvent<HTMLElement>) => void;
 }) {
-  const [editorOpen, setEditorOpen] = useState(false);
   const [repeatOpen, setRepeatOpen] = useState(false);
   const [visibleTitle, setVisibleTitle] = useState(definition.name);
   const rowRef = useRef<HTMLElement>(null);
+  const actionMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const suppressClickUntilRef = useRef(0);
   const editorFlushRef = useRef<() => Promise<void>>(async () => undefined);
   const currentDefinitionRef = useRef(definition);
@@ -202,7 +213,23 @@ function RecurrencePrototypeRow({
   const closeEditor = async () => {
     await editorFlushRef.current();
     await saveQueueRef.current;
-    setEditorOpen(false);
+    await onEditorOpenChange(false);
+  };
+
+  const deletePrototype = async () => {
+    try {
+      await editorFlushRef.current();
+      await saveQueueRef.current;
+      await onEditorOpenChange(false);
+      setRepeatOpen(false);
+      await onDelete(currentDefinitionRef.current);
+    } catch (error) {
+      toast({
+        title: 'Repeating Task Could Not Be Deleted',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    }
   };
 
   const draggable = !waiting && onDragStart && onDragOver && onDragEnd;
@@ -212,8 +239,10 @@ function RecurrencePrototypeRow({
       <article
         ref={rowRef}
         className={cn(
-          'relative text-[15px] text-foreground focus:outline-none',
-          editorOpen ? 'rounded-md bg-info/10' : 'focus:rounded-md focus:bg-info/10',
+          'relative grid overflow-hidden text-[15px] text-foreground transition-[grid-template-rows,opacity,background-color,border-radius] ease-out focus:outline-none motion-reduce:transition-none',
+          editorOpen || bulkSelection?.selected
+            ? 'rounded-md bg-info/10'
+            : 'focus-visible:rounded-md focus-visible:bg-info/10',
         )}
         data-task-waiting-recurrence={waiting ? 'true' : undefined}
         data-task-recurrence-prototype={definition.id}
@@ -243,13 +272,34 @@ function RecurrencePrototypeRow({
             )}
           />
         ) : null}
+        <div
+          className={TASK_OPEN_ROW_HIGHLIGHT_SURFACE_CLASS}
+          data-task-open-highlight-surface
+        >
         <div className="flex h-11 items-center gap-2 px-1 pr-1.5">
-          <span
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground"
-            aria-label="Repeating Schedule"
-          >
-            <TASK_ICONS.Recurrence className="h-5 w-5" aria-hidden="true" />
-          </span>
+          {bulkSelection ? (
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={bulkSelection.selected}
+              aria-label={`${bulkSelection.selected ? 'Deselect' : 'Select'} ${visibleTitle}`}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-info focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/65"
+              onClick={bulkSelection.onToggle}
+            >
+              {bulkSelection.selected ? (
+                <TASK_ICONS.Selected className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <TASK_ICONS.Selection className="h-5 w-5" aria-hidden="true" />
+              )}
+            </button>
+          ) : (
+            <span
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground"
+              aria-label="Repeating Schedule"
+            >
+              <TASK_ICONS.Recurrence className="h-5 w-5" aria-hidden="true" />
+            </span>
+          )}
           <button
             type="button"
             draggable={Boolean(draggable)}
@@ -275,11 +325,14 @@ function RecurrencePrototypeRow({
                 event.preventDefault();
                 return;
               }
-              if (editorOpen) void closeEditor();
-              else setEditorOpen(true);
+              if (onSelect) {
+                onSelect(event);
+              } else if (editorOpen) void closeEditor();
+              else void onEditorOpenChange(true);
             }}
             aria-label={`Open ${visibleTitle}`}
-            aria-expanded={editorOpen}
+            aria-expanded={bulkSelection ? undefined : editorOpen}
+            aria-pressed={bulkSelection?.selected}
           >
             <span className="truncate">{visibleTitle}</span>
             <RecurrencePrototypeMetadata
@@ -290,9 +343,10 @@ function RecurrencePrototypeRow({
               waiting={waiting}
             />
           </button>
-          <DropdownMenu>
+          {!bulkSelection ? <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
+                ref={actionMenuTriggerRef}
                 type="button"
                 variant="clear"
                 size="icon"
@@ -302,7 +356,16 @@ function RecurrencePrototypeRow({
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent
+              align="end"
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                const trigger = actionMenuTriggerRef.current;
+                window.queueMicrotask(() => {
+                  if (document.activeElement === trigger) trigger?.blur();
+                });
+              }}
+            >
               <DropdownMenuItem onSelect={() => void openRepeatEditor()}>
                 Edit Repeat
               </DropdownMenuItem>
@@ -311,11 +374,18 @@ function RecurrencePrototypeRow({
                   Go to Instance
                 </DropdownMenuItem>
               ) : null}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onSelect={() => void deletePrototype()}
+              >
+                Delete
+              </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu> : null}
         </div>
         {editorOpen ? (
-          <RecurrencePrototypeEditor
+          <SharedRecurrencePrototypeEditor
             definition={definition}
             revision={revision}
             areas={areas}
@@ -323,10 +393,12 @@ function RecurrencePrototypeRow({
             onTitleChange={setVisibleTitle}
             onRegisterFlush={(flush) => {
               editorFlushRef.current = flush ?? (async () => undefined);
+              onRegisterEditorFlush(definition.id, flush);
             }}
             onEditRepeat={() => void openRepeatEditor()}
           />
         ) : null}
+        </div>
       </article>
       <TaskRepeatDialog
         task={null}
@@ -340,31 +412,6 @@ function RecurrencePrototypeRow({
       />
     </>
   );
-}
-
-function buildRecurrencePrototypeEditInput(
-  definition: TaskRecurrenceDefinition,
-  revision: TaskRecurrenceRevision,
-  patch: RecurrencePrototypeMetadataPatch,
-): TaskRecurrenceEditInput {
-  const root = { ...revision.prototype_snapshot.root, ...patch.root };
-  return {
-    definition,
-    revision,
-    name: root.title.trim() || definition.name,
-    ruleMode: revision.rule_mode,
-    frequency: revision.frequency,
-    intervalCount: revision.interval_count,
-    scheduleDate: revision.start_date,
-    ruleConfig: revision.rule_config,
-    endMode: revision.end_mode,
-    endAfterCount: revision.end_after_count,
-    endOnDate: revision.end_on_date,
-    reminderLocalTime: revision.reminder_local_time,
-    deadlineOffsetDays: revision.deadline_offset_days,
-    prototypeSnapshot: { ...revision.prototype_snapshot, root },
-    ...('targetAreaId' in patch ? { targetAreaId: patch.targetAreaId } : {}),
-  };
 }
 
 function RecurrencePrototypeMetadata({
@@ -472,7 +519,7 @@ function MetadataIcon({
   );
 }
 
-function RecurrencePrototypeEditor({
+function SharedRecurrencePrototypeEditor({
   definition,
   revision,
   areas,
@@ -493,19 +540,19 @@ function RecurrencePrototypeEditor({
   const [title, setTitle] = useState(prototype.title);
   const [notes, setNotes] = useState(prototype.notes);
   const [primaryLink, setPrimaryLink] = useState(prototype.primary_link ?? '');
-  const [primaryLinkDisclosed, setPrimaryLinkDisclosed] = useState(prototype.primary_link !== null);
   const [actionability, setActionability] = useState(prototype.actionability);
   const [targetAreaId, setTargetAreaId] = useState(revision.target_area_id);
   const [checklist, setChecklist] = useState(prototype.checklist);
-  const [focusPrimaryLink, setFocusPrimaryLink] = useState(false);
+  const [checklistContentPresent, setChecklistContentPresent] = useState(
+    prototype.checklist.length > 0,
+  );
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const primaryLinkInputRef = useRef<HTMLInputElement>(null);
-  const checklistInputRefs = useRef(new Map<string, HTMLInputElement>());
   const textRootPatchRef = useRef<Partial<TaskRecurrencePrototypeSnapshot['root']>>({});
   const saveTimerRef = useRef<number | null>(null);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const checklistFlushRef = useRef<(() => Promise<void>) | null>(null);
 
-  const flush = useCallback(async () => {
+  const flushRoot = useCallback(async () => {
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
@@ -519,35 +566,32 @@ function RecurrencePrototypeEditor({
     await saveQueueRef.current;
   }, [onSave]);
 
+  const flush = useCallback(async () => {
+    await flushRoot();
+    await checklistFlushRef.current?.();
+  }, [flushRoot]);
+
   const scheduleRootPatch = useCallback((root: Partial<TaskRecurrencePrototypeSnapshot['root']>) => {
     textRootPatchRef.current = { ...textRootPatchRef.current, ...root };
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null;
-      void flush();
+      void flushRoot();
     }, TEXT_AUTOSAVE_DELAY_MS);
-  }, [flush]);
+  }, [flushRoot]);
 
   const saveImmediate = useCallback(async (patch: RecurrencePrototypeMetadataPatch) => {
-    await flush();
+    await flushRoot();
     const save = saveQueueRef.current.then(() => onSave(patch));
     saveQueueRef.current = save.catch(() => undefined);
     await save;
-  }, [flush, onSave]);
+  }, [flushRoot, onSave]);
 
   useLayoutEffect(() => {
-    titleInputRef.current?.focus({ preventScroll: true });
     const input = titleInputRef.current;
-    input?.setSelectionRange(input.value.length, input.value.length);
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!focusPrimaryLink) return;
-    const input = primaryLinkInputRef.current;
     input?.focus({ preventScroll: true });
     input?.setSelectionRange(input.value.length, input.value.length);
-    setFocusPrimaryLink(false);
-  }, [focusPrimaryLink, primaryLinkDisclosed]);
+  }, []);
 
   useLayoutEffect(() => {
     onRegisterFlush(flush);
@@ -559,332 +603,183 @@ function RecurrencePrototypeEditor({
     void flush();
   }, [flush]);
 
-  const primaryLinkHref = getTaskPrimaryLinkHref(primaryLink);
-  const primaryLinkKind = getTaskPrimaryLinkIconKind(primaryLink);
-  const PrimaryLinkIcon = primaryLinkKind === null
-    ? TASK_ICONS.PrimaryLink
-    : TASK_PRIMARY_LINK_ICONS[primaryLinkKind];
-  const primaryLinkLabel = primaryLinkKind === null
-    ? 'Primary Link'
-    : TASK_PRIMARY_LINK_LABELS[primaryLinkKind];
-  const pairedDisclosures = !primaryLinkDisclosed && checklist.length === 0;
-  const ActionabilityIcon = actionability === 'waiting'
-    ? TASK_ICONS.Waiting
-    : actionability === 'rechecking'
-      ? TASK_ICONS.Rechecking
-      : TASK_ICONS.Ready;
-
-  const updateChecklist = (
-    next: TaskRecurrencePrototypeChecklistItem[],
-    focus?: { id: string; position: number },
+  const persistChecklist = useCallback(async (
+    nextItems: readonly TaskChecklistEditorItem[],
   ) => {
-    const ordered = next.map((item, index) => ({
-      ...item,
+    const ordered = nextItems.map((item, index) => ({
+      node_id: item.id,
+      title: item.title,
+      completed: item.completed,
       order_key: String((index + 1) * 1024).padStart(12, '0'),
     }));
     setChecklist(ordered);
-    scheduleRootPatch({
-      checklist: ordered
-        .filter((item) => item.title.trim())
-        .map((item) => ({ ...item, title: item.title.trim() })),
-    });
-    if (!focus) return;
-    window.requestAnimationFrame(() => {
-      const input = checklistInputRefs.current.get(focus.id);
-      input?.focus({ preventScroll: true });
-      input?.setSelectionRange(focus.position, focus.position);
-    });
-  };
+    setChecklistContentPresent(ordered.length > 0);
+    await saveImmediate({ root: { checklist: ordered } });
+    return ordered.map(prototypeChecklistEditorItem);
+  }, [saveImmediate]);
 
-  const focusChecklist = (item: TaskRecurrencePrototypeChecklistItem, position: number) => {
-    const input = checklistInputRefs.current.get(item.node_id);
-    input?.focus({ preventScroll: true });
-    input?.setSelectionRange(position, position);
-  };
-
-  const insertChecklistItem = (index: number, value = '') => {
-    const item: TaskRecurrencePrototypeChecklistItem = {
-      node_id: crypto.randomUUID(),
-      title: value,
-      completed: false,
-      order_key: '',
-    };
-    const next = [...checklist];
-    next.splice(index, 0, item);
-    updateChecklist(next, { id: item.node_id, position: 0 });
+  const checklistController: TaskChecklistEditorController = {
+    items: checklist.map(prototypeChecklistEditorItem),
+    loading: false,
+    createItem: async (itemTitle, destinationIndex = checklist.length) => {
+      const item: TaskChecklistEditorItem = {
+        id: crypto.randomUUID(),
+        title: itemTitle,
+        completed: false,
+        order_key: '',
+      };
+      const next = checklist.map(prototypeChecklistEditorItem);
+      next.splice(Math.max(0, Math.min(destinationIndex, next.length)), 0, item);
+      const saved = await persistChecklist(next);
+      return saved.find(({ id }) => id === item.id) ?? item;
+    },
+    createItems: async (titles, destinationIndex = checklist.length) => {
+      const created = titles.map((itemTitle) => ({
+        id: crypto.randomUUID(),
+        title: itemTitle.trim(),
+        completed: false,
+        order_key: '',
+      })).filter(({ title: itemTitle }) => itemTitle.length > 0);
+      const next = checklist.map(prototypeChecklistEditorItem);
+      next.splice(Math.max(0, Math.min(destinationIndex, next.length)), 0, ...created);
+      const saved = await persistChecklist(next);
+      const createdIds = new Set(created.map(({ id }) => id));
+      return saved.filter(({ id }) => createdIds.has(id));
+    },
+    createItemCopies: async (items, destinationIndex = checklist.length) => {
+      const created = items.map((item) => ({
+        id: crypto.randomUUID(),
+        title: item.title.trim(),
+        completed: item.completed,
+        order_key: '',
+      })).filter(({ title: itemTitle }) => itemTitle.length > 0);
+      const next = checklist.map(prototypeChecklistEditorItem);
+      next.splice(Math.max(0, Math.min(destinationIndex, next.length)), 0, ...created);
+      const saved = await persistChecklist(next);
+      const createdIds = new Set(created.map(({ id }) => id));
+      return saved.filter(({ id }) => createdIds.has(id));
+    },
+    updateItem: async (itemId, patch) => {
+      const next = checklist.map(prototypeChecklistEditorItem).map((item) => (
+        item.id === itemId
+          ? {
+              ...item,
+              ...('title' in patch ? { title: patch.title ?? item.title } : {}),
+              ...('completed' in patch ? { completed: patch.completed ?? item.completed } : {}),
+              ...('order_key' in patch ? { order_key: patch.order_key ?? item.order_key } : {}),
+            }
+          : item
+      ));
+      const saved = await persistChecklist(next);
+      const item = saved.find(({ id }) => id === itemId);
+      if (!item) throw new Error('The checklist item no longer exists');
+      return item;
+    },
+    setCompleted: async (item, completed) => {
+      const next = checklist.map(prototypeChecklistEditorItem)
+        .filter(({ id }) => id !== item.id);
+      const changed = { ...item, completed };
+      if (completed) next.push(changed);
+      else next.splice(
+        Math.max(0, checklist.findIndex(({ node_id }) => node_id === item.id)),
+        0,
+        changed,
+      );
+      const saved = await persistChecklist(next);
+      return saved.find(({ id }) => id === item.id) ?? changed;
+    },
+    deleteItem: async (itemId) => {
+      await persistChecklist(
+        checklist.map(prototypeChecklistEditorItem).filter(({ id }) => id !== itemId),
+      );
+    },
+    deleteItems: async (itemIds) => {
+      const deleted = new Set(itemIds);
+      await persistChecklist(
+        checklist.map(prototypeChecklistEditorItem).filter(({ id }) => !deleted.has(id)),
+      );
+    },
+    reorderItems: async (itemIds, destinationIndex) => {
+      const current = checklist.map(prototypeChecklistEditorItem);
+      const move = planChecklistGroupMove(
+        current.map(({ id }) => id),
+        itemIds,
+        destinationIndex,
+      );
+      const byId = new Map(current.map((item) => [item.id, item]));
+      return persistChecklist(move.orderedIds.flatMap((id) => {
+        const item = byId.get(id);
+        return item ? [item] : [];
+      }));
+    },
   };
 
   return (
-    <div className="flex flex-col gap-3 px-2 pb-3 sm:px-3.5" data-task-recurrence-prototype-editor>
-      <Input
-        ref={titleInputRef}
-        value={title}
-        aria-label="Summary"
-        placeholder="New Task"
-        onChange={(event) => {
-          const value = event.target.value;
+    <div data-task-recurrence-prototype-editor>
+      <TaskMetadataDrawerFields
+        editorId={`recurrence-${definition.id}`}
+        title={title}
+        notes={notes}
+        primaryLink={primaryLink}
+        checklistContentPresent={checklistContentPresent}
+        renderChecklist={(layout) => (
+          <TaskChecklistEditorSurface
+            controller={checklistController}
+            focusRequestTaskId={`recurrence:${definition.id}`}
+            emptyActionLayout={layout}
+            onContentPresenceChange={setChecklistContentPresent}
+            onRegisterFlush={(nextFlush) => {
+              checklistFlushRef.current = nextFlush;
+            }}
+          />
+        )}
+        temporalFields={(
+          <Button type="button" variant="outline" className="w-full" onClick={onEditRepeat}>
+            Edit Repeat
+          </Button>
+        )}
+        areas={areas}
+        areaId={targetAreaId}
+        actionability={actionability}
+        onTitleChange={(value) => {
           setTitle(value);
           onTitleChange(value);
           if (value.trim()) scheduleRootPatch({ title: value.trim() });
         }}
+        onNotesChange={(value) => {
+          setNotes(value);
+          scheduleRootPatch({ notes: value });
+        }}
+        onPrimaryLinkChange={(value) => {
+          setPrimaryLink(value);
+          scheduleRootPatch({ primary_link: value || null });
+        }}
+        onPrimaryLinkCleared={() => {
+          setPrimaryLink('');
+          void saveImmediate({ root: { primary_link: null } });
+        }}
+        onAreaChange={(areaId) => {
+          setTargetAreaId(areaId);
+          void saveImmediate({ targetAreaId: areaId });
+        }}
+        onActionabilityChange={(value) => {
+          setActionability(value);
+          void saveImmediate({ root: { actionability: value } });
+        }}
+        titleInputRef={titleInputRef}
+        className="pt-[6px]"
       />
-      <Suspense fallback={<div className="min-h-16" aria-label="Loading Task Notes" />}>
-        <TaskMarkdownNotes
-          id={`task-recurrence-notes-${definition.id}`}
-          notes={notes}
-          onChange={(value) => {
-            setNotes(value);
-            scheduleRootPatch({ notes: value });
-          }}
-          disabled={false}
-        />
-      </Suspense>
-      <div
-        data-task-editor-disclosures
-        data-layout={pairedDisclosures ? 'paired' : 'stacked'}
-        className={pairedDisclosures ? 'relative grid grid-cols-2 gap-0' : 'flex flex-col gap-3'}
-      >
-        {primaryLinkDisclosed ? (
-          <div className="flex gap-2">
-            <Input
-              ref={primaryLinkInputRef}
-              type="url"
-              value={primaryLink}
-              aria-label="Primary Link"
-              placeholder="Primary Link"
-              decoration={<PrimaryLinkIcon />}
-              inputMode="url"
-              onChange={(event) => {
-                const value = event.target.value;
-                setPrimaryLink(value);
-                scheduleRootPatch({ primary_link: value || null });
-              }}
-            />
-            {primaryLink.length > 0 ? (
-              <Button
-                asChild={primaryLinkHref !== null}
-                type={primaryLinkHref === null ? 'button' : undefined}
-                variant="outline"
-                size="icon"
-                className="h-10 w-10 shrink-0 border-input bg-background"
-                aria-label={`Open ${primaryLinkLabel}`}
-                disabled={primaryLinkHref === null}
-              >
-                {primaryLinkHref === null ? (
-                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                ) : (
-                  <a
-                    href={primaryLinkHref}
-                    target={taskPrimaryLinkOpensBrowserTab(primaryLink) ? '_blank' : undefined}
-                    rel={taskPrimaryLinkOpensBrowserTab(primaryLink) ? 'noopener noreferrer' : undefined}
-                  >
-                    <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                  </a>
-                )}
-              </Button>
-            ) : null}
-          </div>
-        ) : (
-          <DisclosureButton
-            label="Add Primary Link"
-            icon={<TASK_ICONS.PrimaryLink className="h-4 w-4" aria-hidden="true" />}
-            paired={pairedDisclosures}
-            onClick={() => {
-              setPrimaryLinkDisclosed(true);
-              setFocusPrimaryLink(true);
-            }}
-          />
-        )}
-        {checklist.length === 0 ? (
-          <DisclosureButton
-            label="Add Checklist"
-            icon={<TASK_ICONS.TaskChecklist className="h-4 w-4" aria-hidden="true" />}
-            paired={pairedDisclosures}
-            onClick={() => insertChecklistItem(0)}
-          />
-        ) : (
-          <div className="space-y-1" aria-label="Checklist">
-            {checklist.map((item, index) => (
-              <div key={item.node_id} className="flex items-center gap-2">
-                <Checkbox
-                  checked={item.completed}
-                  onCheckedChange={(checked) => updateChecklist(checklist.map((candidate) => (
-                    candidate.node_id === item.node_id
-                      ? { ...candidate, completed: checked === true }
-                      : candidate
-                  )))}
-                  aria-label={`Mark ${item.title || 'Item'} ${item.completed ? 'Incomplete' : 'Complete'}`}
-                />
-                <Input
-                  ref={(input) => {
-                    if (input) checklistInputRefs.current.set(item.node_id, input);
-                    else checklistInputRefs.current.delete(item.node_id);
-                  }}
-                  value={item.title}
-                  placeholder="Item"
-                  aria-label={`Checklist Item ${index + 1}`}
-                  data-bathos-field-return-owned="true"
-                  onChange={(event) => updateChecklist(checklist.map((candidate) => (
-                    candidate.node_id === item.node_id
-                      ? { ...candidate, title: event.target.value }
-                      : candidate
-                  )))}
-                  onKeyDown={(event) => {
-                    const start = event.currentTarget.selectionStart ?? 0;
-                    const end = event.currentTarget.selectionEnd ?? start;
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      const inserted: TaskRecurrencePrototypeChecklistItem = {
-                        node_id: crypto.randomUUID(),
-                        title: item.title.slice(end),
-                        completed: false,
-                        order_key: '',
-                      };
-                      const next = checklist.map((candidate) => (
-                        candidate.node_id === item.node_id
-                          ? { ...candidate, title: item.title.slice(0, start) }
-                          : candidate
-                      ));
-                      next.splice(index + 1, 0, inserted);
-                      updateChecklist(next, { id: inserted.node_id, position: 0 });
-                      return;
-                    }
-                    if (event.key === 'ArrowUp' && index > 0) {
-                      event.preventDefault();
-                      const previous = checklist[index - 1];
-                      focusChecklist(previous, previous.title.length);
-                    } else if (event.key === 'ArrowDown' && index < checklist.length - 1) {
-                      event.preventDefault();
-                      const next = checklist[index + 1];
-                      focusChecklist(next, next.title.length);
-                    } else if (event.key === 'ArrowLeft' && start === 0 && end === 0 && index > 0) {
-                      event.preventDefault();
-                      const previous = checklist[index - 1];
-                      focusChecklist(previous, previous.title.length);
-                    } else if (
-                      event.key === 'ArrowRight'
-                      && start === item.title.length
-                      && end === start
-                      && index < checklist.length - 1
-                    ) {
-                      event.preventDefault();
-                      focusChecklist(checklist[index + 1], 0);
-                    } else if (event.key === 'Backspace' && start === 0 && end === 0 && index > 0) {
-                      event.preventDefault();
-                      const previous = checklist[index - 1];
-                      const boundary = previous.title.length;
-                      updateChecklist(
-                        checklist
-                          .filter((candidate) => candidate.node_id !== item.node_id)
-                          .map((candidate) => candidate.node_id === previous.node_id
-                            ? { ...candidate, title: `${previous.title}${item.title}` }
-                            : candidate),
-                        { id: previous.node_id, position: boundary },
-                      );
-                    } else if (
-                      event.key === 'Delete'
-                      && start === item.title.length
-                      && end === start
-                      && index < checklist.length - 1
-                    ) {
-                      event.preventDefault();
-                      const following = checklist[index + 1];
-                      const boundary = item.title.length;
-                      updateChecklist(
-                        checklist
-                          .filter((candidate) => candidate.node_id !== following.node_id)
-                          .map((candidate) => candidate.node_id === item.node_id
-                            ? { ...candidate, title: `${item.title}${following.title}` }
-                            : candidate),
-                        { id: item.node_id, position: boundary },
-                      );
-                    }
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-        {pairedDisclosures ? (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-2 left-1/2 w-px bg-[hsl(var(--grid-sticky-line)/0.35)]"
-          />
-        ) : null}
-      </div>
-      <Button type="button" variant="outline" className="w-full" onClick={onEditRepeat}>
-        Edit Repeat
-      </Button>
-      <div className={cn('grid gap-3', areas.length > 0 ? 'grid-cols-2' : 'grid-cols-1')}>
-        {areas.length > 0 ? (
-          <Select
-            value={targetAreaId ?? 'none'}
-            onValueChange={(value) => {
-              const next = value === 'none' ? null : value;
-              setTargetAreaId(next);
-              void saveImmediate({ targetAreaId: next });
-            }}
-          >
-            <SelectTrigger aria-label="Area" decoration={<TASK_ICONS.Area />}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent data-task-editor-owned-surface="true">
-              <SelectItem value="none">No Area</SelectItem>
-              {areas.map((area) => (
-                <SelectItem key={area.id} value={area.id}>{area.title}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
-        <Select
-          value={actionability}
-          onValueChange={(value) => {
-            const next = value as TaskActionability;
-            setActionability(next);
-            void saveImmediate({ root: { actionability: next } });
-          }}
-        >
-          <SelectTrigger
-            aria-label="Actionability"
-            decoration={<ActionabilityIcon />}
-            decorationClassName={actionability === 'actionable' ? undefined : 'text-admin'}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent data-task-editor-owned-surface="true">
-            <SelectItem value="actionable">Ready</SelectItem>
-            <SelectItem value="rechecking">Rechecking</SelectItem>
-            <SelectItem value="waiting">Waiting</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
     </div>
   );
 }
 
-function DisclosureButton({
-  label,
-  icon,
-  paired,
-  onClick,
-}: {
-  label: string;
-  icon: ReactNode;
-  paired: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      className={cn(
-        'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        paired ? 'w-full justify-center' : 'w-fit justify-start',
-      )}
-      onClick={onClick}
-    >
-      {icon}
-      {label}
-    </button>
-  );
+function prototypeChecklistEditorItem(
+  item: TaskRecurrencePrototypeChecklistItem,
+): TaskChecklistEditorItem {
+  return {
+    id: item.node_id,
+    title: item.title,
+    completed: item.completed,
+    order_key: item.order_key,
+  };
 }

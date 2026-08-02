@@ -99,6 +99,7 @@ struct TasksWebView: View {
         ZStack {
             TasksWebViewRepresentable(model: model)
                 .background(Color(uiColor: TasksCompanionAppearance.applicationBackground))
+                .opacity(model.hasLoadedContent ? 1 : 0)
 
             if model.isLoading && !model.hasLoadedContent {
                 ProgressView()

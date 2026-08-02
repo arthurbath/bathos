@@ -14,6 +14,7 @@ import {
   getNativeTaskDeepLinkId,
   hasNativeNewTaskSignal,
   isTaskNativeQuickEntry,
+  publishTaskNativeContentReady,
   publishTaskNativeWidgetSnapshot,
   publishTaskNativeWidgetCredential,
   requestTaskNativeNewTaskSummaryFocus,
@@ -479,6 +480,18 @@ describe('taskNativeWidgetBridge', () => {
     expect(requestTaskNativeNewTaskSummaryFocus(bridgeWindow(messages))).toBe(true);
     expect(messages).toEqual([{
       type: 'focus-new-task-summary',
+      schemaVersion: 2,
+    }]);
+  });
+
+  it('announces meaningful web content only to the current companion bridge', () => {
+    const messages: unknown[] = [];
+
+    expect(publishTaskNativeContentReady({} as Window)).toBe(false);
+    expect(publishTaskNativeContentReady(bridgeWindow(messages, 1))).toBe(false);
+    expect(publishTaskNativeContentReady(bridgeWindow(messages))).toBe(true);
+    expect(messages).toEqual([{
+      type: 'content-ready',
       schemaVersion: 2,
     }]);
   });

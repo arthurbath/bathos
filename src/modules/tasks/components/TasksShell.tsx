@@ -65,6 +65,10 @@ import type { TaskRecurrenceEditInput } from '@/modules/tasks/data/taskRecurrenc
 import type { TaskPortabilityService } from '@/modules/tasks/data/taskPortability';
 import { TaskClipboardService } from '@/modules/tasks/data/taskClipboardService';
 import {
+  TASK_PERMANENT_DELETION_CONFIRMATION,
+  type TaskPermanentDeletionPreview,
+} from '@/modules/tasks/data/taskPermanentDeletionService';
+import {
   TASK_ICONS,
   TASK_PRIMARY_LINK_ICONS,
   TASK_PRIMARY_LINK_LABELS,
@@ -102,6 +106,7 @@ import {
   TaskQuickFindDialog,
   TaskSearchResultsView,
 } from '@/modules/tasks/components/TaskQuickFind';
+import { TaskPermanentDeletionDialog } from '@/modules/tasks/components/TaskPermanentDeletionDialog';
 import {
   getTaskTodayMembershipSection,
   getTodayTaskSection,
@@ -142,6 +147,7 @@ import {
   isTaskNativeQuickEntry,
   removeNativeNewTaskSignal,
   removeNativeTaskDeepLink,
+  publishTaskNativeContentReady,
   requestTaskNativeNewTaskSummaryFocus,
   configureTaskNativeQuickEntryShortcut,
   finishTaskNativeQuickEntry,
@@ -160,13 +166,21 @@ import {
   getTaskPrimaryLinkIconKind,
   taskPrimaryLinkOpensBrowserTab,
 } from '@/modules/tasks/domain/taskPrimaryLink';
+import {
+  buildRecurrencePrototypeEditInput,
+  type RecurrencePrototypeMetadataPatch,
+} from '@/modules/tasks/domain/taskRecurrencePrototypeEdit';
 import { TaskAreaDetailView } from '@/modules/tasks/components/TaskAreaDetailView';
 import { TaskAreaSettings } from '@/modules/tasks/components/TaskAreaSettings';
 import { TaskDataPortabilityDialog } from '@/modules/tasks/components/TaskDataPortabilityDialog';
-import { TASK_PLANNING_LIST_CLASS } from '@/modules/tasks/components/taskPlanningStyles';
+import {
+  TASK_OPEN_ROW_HIGHLIGHT_SURFACE_CLASS,
+  TASK_PLANNING_LIST_CLASS,
+} from '@/modules/tasks/components/taskPlanningStyles';
 import { TaskSourceIndicator } from '@/modules/tasks/components/TaskSourceIndicator';
 import { TaskSyncDiagnosticsDialog } from '@/modules/tasks/components/TaskSyncDiagnosticsDialog';
 import { TaskChecklistEditor } from '@/modules/tasks/components/TaskChecklistEditor';
+import { TaskMetadataDrawerFields } from '@/modules/tasks/components/TaskMetadataDrawerFields';
 import { TaskRepeatDialog } from '@/modules/tasks/components/TaskRepeatDialog';
 import {
   CalendarRecurrencePrototypeRow,
@@ -194,7 +208,6 @@ import { projectTaskBulkDrop } from '@/modules/tasks/domain/taskBulkDrop';
 import { getAutomaticTaskDropTarget } from '@/modules/tasks/domain/taskAutomaticOrder';
 import {
   compareTaskOrder,
-  generateTaskDropOrderKey,
   generateTaskOrderKey,
 } from '@/modules/tasks/domain/taskOrder';
 import {
@@ -273,6 +286,61 @@ type UpcomingSectionDropRow = {
   recurrenceId: string | null;
 };
 
+type DatedRecurrencePrototype = {
+  definition: TaskRecurrenceDefinition;
+  revision: TaskRecurrenceRevision;
+  scheduledDate: string;
+};
+
+const recurrenceSelectionId = (definitionId: string) => `recurrence:${definitionId}`;
+const isRecurrenceSelectionId = (selectionId: string) => (
+  selectionId.startsWith('recurrence:')
+);
+const recurrenceIdFromSelection = (selectionId: string) => (
+  isRecurrenceSelectionId(selectionId) ? selectionId.slice('recurrence:'.length) : null
+);
+
+function getUpcomingSelectableRowIds(
+  tasks: readonly TaskTodo[],
+  recurrencePrototypes: readonly DatedRecurrencePrototype[],
+  planningDate: string,
+): string[] {
+  const sections = new Map<string, {
+    date: string;
+    rows: Array<{ id: string; orderKey: string }>;
+  }>();
+  const append = (date: string, row: { id: string; orderKey: string }) => {
+    const group = getTaskUpcomingGroup(date, planningDate);
+    const existing = sections.get(group.key);
+    if (existing) existing.rows.push(row);
+    else {
+      sections.set(group.key, {
+        date: getTaskUpcomingCanonicalStart(group, planningDate),
+        rows: [row],
+      });
+    }
+  };
+  for (const task of tasks) {
+    if (task.id === NEW_TASK_DRAFT_ID) continue;
+    const date = getTaskUpcomingDate(task, planningDate);
+    if (date === null) continue;
+    append(date, {
+      id: task.id,
+      orderKey: task.upcoming_order_key ?? task.order_key,
+    });
+  }
+  for (const prototype of recurrencePrototypes) {
+    append(prototype.scheduledDate, {
+      id: recurrenceSelectionId(prototype.definition.id),
+      orderKey: prototype.definition.upcoming_order_key
+        ?? prototype.revision.prototype_snapshot.root.order_key,
+    });
+  }
+  return [...sections.values()]
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .flatMap(({ rows }) => rows.sort(compareTaskOrder).map(({ id }) => id));
+}
+
 const TaskMarkdownNotes = lazy(async () => {
   const module = await import('@/modules/tasks/components/TaskMarkdownNotes');
   return { default: module.TaskMarkdownNotes };
@@ -284,7 +352,7 @@ const TASK_POST_CLOSE_SETTLE_DELAY_MS = 180;
 const TASK_PLACEMENT_ANIMATION_DURATION_MS = 240;
 const TASK_TERMINAL_SETTLE_DELAY_MS = 180;
 const TASK_TERMINAL_EXIT_ANIMATION_DURATION_MS = 220;
-const TASK_COMPLETION_GRACE_DELAY_MS = 3_000;
+const TASK_COMPLETION_GRACE_DELAY_MS = 2_000;
 export const TASK_NATIVE_COMMAND_EVENT = 'bathos:tasks-native-command';
 const TASK_VIEW_TRANSITION_MINIMUM_MS = 120;
 const TASK_LIST_BOTTOM_CLEARANCE_CLASS = 'pb-[calc(env(safe-area-inset-bottom)+11rem)] md:pb-36';
@@ -511,6 +579,10 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const view = getTaskViewFromPath(location.pathname);
   const nativeQuickEntry = getDeclaredNativePlatform() === 'macos'
     && isTaskNativeQuickEntry(location.search);
+
+  useEffect(() => {
+    publishTaskNativeContentReady();
+  }, []);
   const areaId = getTaskAreaIdFromPath(location.pathname);
   const quickFindListEligible = view !== 'config' && view !== 'search';
   useEffect(() => {
@@ -536,6 +608,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     hierarchyRepository,
     reminderService,
     recurrenceService,
+    permanentDeletionService,
     mode,
     syncState,
     startupRefreshPending,
@@ -546,6 +619,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   } = useTasksRuntime();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTaskIdRef = useRef<string | null>(null);
+  const [openRecurrencePrototypeId, setOpenRecurrencePrototypeId] = useState<string | null>(null);
+  const openRecurrencePrototypeIdRef = useRef<string | null>(null);
+  const recurrencePrototypeEditorFlushRef = useRef<{
+    definitionId: string;
+    flush: () => Promise<void>;
+  } | null>(null);
   const latestTaskMetadataRef = useRef(new Map<string, TaskTodo>());
   const metadataMutationHandlerRef = useRef<(
     mutations: readonly TaskMetadataMutation[],
@@ -570,6 +649,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const activeDraggedTaskIdRef = useRef<string | null>(null);
   const activeDraggedTaskIdsRef = useRef<string[]>([]);
   const activeDraggedRecurrenceIdRef = useRef<string | null>(null);
+  const activeDraggedRecurrenceIdsRef = useRef<string[]>([]);
   taskDropIndicatorRef.current = taskDropIndicator;
   const updateTaskDropIndicator = useCallback((indicator: TaskDropIndicator | null) => {
     taskDropIndicatorRef.current = indicator;
@@ -579,6 +659,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     activeDraggedTaskIdRef.current = null;
     activeDraggedTaskIdsRef.current = [];
     activeDraggedRecurrenceIdRef.current = null;
+    activeDraggedRecurrenceIdsRef.current = [];
     updateTaskDropIndicator(null);
   }, [updateTaskDropIndicator, view]);
   const deletedHierarchyRoots = useTaskDeletedHierarchyRoots(userId);
@@ -588,6 +669,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     pending: taskUndoPending,
     event: taskUndoEvent,
     redoEvent: taskRedoEvent,
+    forwardMutationPending: taskForwardMutationPending,
     undoWhenAvailable: undoLastTaskChange,
     redoWhenAvailable: redoLastTaskChange,
     reserveForwardMutation,
@@ -702,11 +784,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   retainedTaskPlacementRef.current = retainedTaskPlacement;
   transitionTaskRef.current = transitionTask;
   const [creationDraft, setCreationDraft] = useState<TaskCreationDraft | null>(null);
+  const [permanentlyDeletedTaskIds, setPermanentlyDeletedTaskIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [permanentDeletionPreview, setPermanentDeletionPreview] = useState<
+    TaskPermanentDeletionPreview | null
+  >(null);
+  const [permanentDeletionPending, setPermanentDeletionPending] = useState(false);
   const tasks = useMemo(
-    () => creationDraft?.persistedTaskId
-      ? projectedTasks.filter((task) => task.id !== creationDraft.persistedTaskId)
-      : projectedTasks,
-    [creationDraft?.persistedTaskId, projectedTasks],
+    () => projectedTasks.filter((task) => (
+      task.id !== creationDraft?.persistedTaskId
+      && !permanentlyDeletedTaskIds.has(task.id)
+    )),
+    [creationDraft?.persistedTaskId, permanentlyDeletedTaskIds, projectedTasks],
   );
   const filteredTasks = useMemo(
     () => !bulkEligible || taskQuickFilter === 'all'
@@ -766,6 +856,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           && task.lifecycle === 'open'
     )),
     [filteredTasks, view],
+  );
+  const selectableRowIds = useMemo(
+    () => view === 'upcoming'
+      ? getUpcomingSelectableRowIds(
+          selectableTasks,
+          recurrences.datedPrototypes,
+          planningDate,
+        )
+      : selectableTasks.map(({ id }) => id),
+    [planningDate, recurrences.datedPrototypes, selectableTasks, view],
   );
   const taskClipboardService = useMemo(() => new TaskClipboardService(
     database,
@@ -1023,7 +1123,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       await flushOpenTaskEditor();
       const taskEventTime = taskUndoEvent?.occurred_at ?? '';
       const checklistEventTime = checklistUndo.event?.occurred_at ?? '';
-      if (checklistEventTime > taskEventTime) {
+      if (!taskForwardMutationPending && checklistEventTime > taskEventTime) {
         const event = await checklistUndo.undo();
         if (event === null) showTaskHistoryBoundaryToast('undo');
         else {
@@ -1051,6 +1151,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [
     checklistUndo,
     flushOpenTaskEditor,
+    taskForwardMutationPending,
     taskUndoEvent?.occurred_at,
     undoLastTaskChange,
   ]);
@@ -1245,11 +1346,35 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     taskEditorAutosaveRef.current = { taskId, flush };
   }, []);
 
+  const closeOpenRecurrencePrototype = useCallback(async (): Promise<boolean> => {
+    const definitionId = openRecurrencePrototypeIdRef.current;
+    if (definitionId === null) return true;
+    const registered = recurrencePrototypeEditorFlushRef.current;
+    if (registered?.definitionId === definitionId) {
+      try {
+        await registered.flush();
+      } catch {
+        return false;
+      }
+    }
+    if (openRecurrencePrototypeIdRef.current !== definitionId) return false;
+    openRecurrencePrototypeIdRef.current = null;
+    setOpenRecurrencePrototypeId(null);
+    if (recurrencePrototypeEditorFlushRef.current?.definitionId === definitionId) {
+      recurrencePrototypeEditorFlushRef.current = null;
+    }
+    return true;
+  }, []);
+
   const setOpenTask = useCallback(async (
     taskId: string | null,
     clearPageFocus = false,
   ): Promise<boolean> => {
     const sequence = ++openTaskSequenceRef.current;
+    if (
+      openRecurrencePrototypeIdRef.current !== null
+      && !await closeOpenRecurrencePrototype()
+    ) return false;
     const currentTaskId = selectedTaskIdRef.current;
     if (currentTaskId === taskId) return true;
     const autosave = currentTaskId !== null
@@ -1388,7 +1513,36 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     taskQuickFilter,
     transitionTask,
     userId,
+    closeOpenRecurrencePrototype,
   ]);
+
+  const setOpenRecurrencePrototype = useCallback(async (
+    definitionId: string | null,
+  ): Promise<boolean> => {
+    if (openRecurrencePrototypeIdRef.current === definitionId) return true;
+    if (definitionId !== null) {
+      const closedTask = await setOpenTask(null);
+      if (!closedTask) return false;
+    }
+    const closedPrototype = await closeOpenRecurrencePrototype();
+    if (!closedPrototype) return false;
+    openRecurrencePrototypeIdRef.current = definitionId;
+    setOpenRecurrencePrototypeId(definitionId);
+    return true;
+  }, [closeOpenRecurrencePrototype, setOpenTask]);
+
+  const registerRecurrencePrototypeEditorFlush = useCallback((
+    definitionId: string,
+    flush: (() => Promise<void>) | null,
+  ) => {
+    if (flush === null) {
+      if (recurrencePrototypeEditorFlushRef.current?.definitionId === definitionId) {
+        recurrencePrototypeEditorFlushRef.current = null;
+      }
+      return;
+    }
+    recurrencePrototypeEditorFlushRef.current = { definitionId, flush };
+  }, []);
 
   useEffect(() => {
     const nativeTaskId = getNativeTaskDeepLinkId(location.search);
@@ -1673,7 +1827,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     const handleOutsideTaskPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      if (target.closest('[data-task-row-id], [data-task-bulk-selection-surface]')) return;
+      if (target.closest(
+        '[data-task-row-id], [data-task-bulk-selection-surface], [data-task-selection-entry]',
+      )) return;
       if (document.querySelector('[data-task-bulk-selection-surface][data-state="open"]')) {
         return;
       }
@@ -1710,7 +1866,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, []);
 
   useEffect(() => {
-    if (selectedTaskId === null) return undefined;
+    if (selectedTaskId === null || nativeQuickEntry) return undefined;
 
     const handleOutsidePointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -1738,7 +1894,31 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
     document.addEventListener('pointerdown', handleOutsidePointerDown, true);
     return () => document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
-  }, [selectedTaskId, setOpenTask]);
+  }, [nativeQuickEntry, selectedTaskId, setOpenTask]);
+
+  useEffect(() => {
+    if (openRecurrencePrototypeId === null) return undefined;
+
+    const handleOutsidePrototypePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (document.querySelector(
+        '[data-task-editor-owned-surface="true"][data-state="open"]',
+      )) return;
+      const prototypeRow = target.closest<HTMLElement>('[data-task-recurrence-prototype]');
+      if (prototypeRow?.dataset.taskRecurrencePrototype === openRecurrencePrototypeId) return;
+      if (target.closest('[data-task-title-control]')) return;
+      if (target.closest(
+        '[data-radix-popper-content-wrapper], [role="dialog"], [role="menu"], [role="listbox"]',
+      )) return;
+      void closeOpenRecurrencePrototype();
+    };
+
+    document.addEventListener('pointerdown', handleOutsidePrototypePointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePrototypePointerDown, true);
+    };
+  }, [closeOpenRecurrencePrototype, openRecurrencePrototypeId]);
 
   useEffect(() => {
     if (previousViewRef.current === view) return;
@@ -1750,13 +1930,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       && draft?.view === view
     ) return;
     void setOpenTask(null);
-  }, [clearTaskSelection, setOpenTask, view]);
+    void closeOpenRecurrencePrototype();
+  }, [clearTaskSelection, closeOpenRecurrencePrototype, setOpenTask, view]);
 
   useEffect(() => {
     const previousVisibleIds = visibleTaskIdsRef.current;
     const nextVisibleIds = renderedPlanningTasks.map(({ id }) => id);
     const focusableIds = new Set(nextVisibleIds);
-    const selectableIds = new Set(selectableTasks.map(({ id }) => id));
+    const selectableIds = new Set(selectableRowIds);
     const remainingSelection = new Set(
       Array.from(bulkSelection).filter((taskId) => selectableIds.has(taskId)),
     );
@@ -1787,7 +1968,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     bulkSelection,
     focusTaskRow,
     renderedPlanningTasks,
-    selectableTasks,
+    selectableRowIds,
   ]);
 
   useEffect(() => {
@@ -1864,6 +2045,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   const getTaskCommandTargets = useCallback((): TaskTodo[] => {
     if (bulkMode && bulkSelection.size >= 1) {
+      if (Array.from(bulkSelection).some(isRecurrenceSelectionId)) return [];
       return selectableTasks.filter((task) => bulkSelection.has(task.id));
     }
     const taskId = selectedTaskIdRef.current ?? focusedTaskIdRef.current;
@@ -2325,18 +2507,32 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   ]);
 
   const runDeleteShortcut = useCallback(async () => {
-    const targets = getTaskCommandTargets().filter((task) => (
+    const taskTargets = bulkMode
+      ? selectableTasks.filter((task) => bulkSelection.has(task.id))
+      : getTaskCommandTargets();
+    const targets = taskTargets.filter((task) => (
       task.id !== NEW_TASK_DRAFT_ID
       && task.lifecycle === 'open'
       && task.disposition === 'present'
     ));
-    if (targets.length === 0 || bulkPending) return;
+    const recurrenceTargets = bulkMode && view === 'upcoming'
+      ? recurrences.datedPrototypes.filter(({ definition }) => (
+          bulkSelection.has(recurrenceSelectionId(definition.id))
+        ))
+      : [];
+    const requestedCount = targets.length + recurrenceTargets.length;
+    if (requestedCount === 0 || bulkPending) return;
     setBulkPending(true);
     try {
       const operationId = globalThis.crypto.randomUUID();
-      const results = await Promise.allSettled(targets.map((task) => (
-        transitionTask(task.id, 'delete', undefined, { operationId })
-      )));
+      const results = await Promise.allSettled([
+        ...targets.map((task) => (
+          transitionTask(task.id, 'delete', undefined, { operationId })
+        )),
+        ...recurrenceTargets.map(({ definition }) => (
+          recurrences.setStatus(definition, 'archived')
+        )),
+      ]);
       if (selectedTaskIdRef.current !== null) await setOpenTask(null);
       if (!bulkMode) clearTaskSelection();
       const failedResults = results.filter(
@@ -2344,21 +2540,21 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       );
       if (failedResults.length > 0) {
         const deleteError = new Error(
-          failedResults.length === targets.length
-            ? targets.length === 1
+          failedResults.length === requestedCount
+            ? requestedCount === 1
               ? 'The task could not be deleted and has been restored.'
               : 'The selected tasks could not be deleted and have been restored.'
             : `${failedResults.length} selected ${failedResults.length === 1 ? 'task' : 'tasks'} could not be deleted and ${failedResults.length === 1 ? 'has' : 'have'} been restored.`,
         );
         reportTaskBulkDeleteFailure({
-          requestedCount: targets.length,
-          succeededCount: targets.length - failedResults.length,
+          requestedCount,
+          succeededCount: requestedCount - failedResults.length,
           failedCount: failedResults.length,
           view,
           browserOnline: globalThis.navigator.onLine,
         }, failedResults.map((result) => result.reason));
         showTaskError(
-          targets.length === 1
+          requestedCount === 1
             ? 'Task Could Not Be Deleted'
             : 'Tasks Could Not Be Deleted',
           deleteError,
@@ -2370,8 +2566,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, [
     bulkPending,
     bulkMode,
+    bulkSelection,
     clearTaskSelection,
     getTaskCommandTargets,
+    recurrences,
+    selectableTasks,
     setOpenTask,
     transitionTask,
     view,
@@ -2618,12 +2817,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         if (
           isTaskEditableTarget(event.target)
           || !bulkEligible
-          || selectableTasks.length === 0
+          || selectableRowIds.length === 0
         ) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         if (event.isComposing) return;
-        const visibleTaskIds = selectableTasks.map(({ id }) => id);
+        const visibleTaskIds = selectableRowIds;
         void setOpenTask(null).then((closed) => {
           if (!closed) return;
           if (visibleTaskIds.length === 1) {
@@ -2803,6 +3002,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     runTaskUndo,
     setOpenTask,
     taskHistoryPending,
+    selectableRowIds,
     selectableTasks,
     quickFindOpen,
     updateTaskDropIndicator,
@@ -2841,7 +3041,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       selectedIds: bulkSelection,
     }, {
       taskId,
-      visibleTaskIds: selectableTasks.map(({ id }) => id),
+      visibleTaskIds: selectableRowIds,
       metaKey: source === 'selection-control' ? false : event.metaKey,
       ctrlKey: source === 'selection-control' ? false : event.ctrlKey,
       shiftKey: source === 'selection-control' ? false : event.shiftKey,
@@ -2870,6 +3070,45 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     });
   };
 
+  const handleRecurrencePrototypePointerSelection = (
+    event: MouseEvent<HTMLElement>,
+    definitionId: string,
+    source: 'activation' | 'selection-control' = 'activation',
+  ) => {
+    const selectionId = recurrenceSelectionId(definitionId);
+    const next = applyTaskSelectionGesture({
+      active: bulkMode,
+      anchorId: bulkSelectionAnchorId,
+      focusedId: null,
+      selectedIds: bulkSelection,
+    }, {
+      taskId: selectionId,
+      visibleTaskIds: selectableRowIds,
+      metaKey: source === 'selection-control' ? false : event.metaKey,
+      ctrlKey: source === 'selection-control' ? false : event.ctrlKey,
+      shiftKey: source === 'selection-control' ? false : event.shiftKey,
+      macLikePlatform,
+    });
+    if (!bulkEligible || next === null) {
+      void setOpenRecurrencePrototype(
+        openRecurrencePrototypeIdRef.current === definitionId ? null : definitionId,
+      );
+      return;
+    }
+    event.preventDefault();
+    if (source === 'activation' && document.activeElement === event.currentTarget) {
+      event.currentTarget.blur();
+    }
+    void setOpenTask(null).then((closed) => {
+      if (!closed) return;
+      focusedTaskIdRef.current = null;
+      setFocusedTaskId(null);
+      setBulkMode(next.active);
+      setBulkSelectionAnchorId(next.anchorId);
+      setBulkSelection(next.selectedIds);
+    });
+  };
+
   const handleDoneTaskPointerSelection = (
     event: MouseEvent<HTMLElement>,
     taskId: string,
@@ -2882,7 +3121,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       selectedIds: bulkSelection,
     }, {
       taskId,
-      visibleTaskIds: selectableTasks.map(({ id }) => id),
+      visibleTaskIds: selectableRowIds,
       metaKey: source === 'selection-control' ? false : event.metaKey,
       ctrlKey: source === 'selection-control' ? false : event.ctrlKey,
       shiftKey: source === 'selection-control' ? false : event.shiftKey,
@@ -2923,7 +3162,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       selectedIds: bulkSelection,
     }, {
       taskId,
-      visibleTaskIds: selectableTasks.map(({ id }) => id),
+      visibleTaskIds: selectableRowIds,
       metaKey: false,
       ctrlKey: false,
       shiftKey: false,
@@ -2940,14 +3179,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   const commitActiveTaskDrop = async () => {
     const draggedTaskId = activeDraggedTaskIdRef.current;
-    const draggedRecurrenceId = activeDraggedRecurrenceIdRef.current;
     const draggedTaskIds = activeDraggedTaskIdsRef.current;
+    const draggedRecurrenceIds = activeDraggedRecurrenceIdsRef.current;
     const indicator = taskDropIndicatorRef.current;
     if (
       draggedTaskId === null
       || indicator === null
       || indicator.draggedTaskId !== draggedTaskId
-      || (draggedTaskIds.length === 0 && draggedRecurrenceId === null)
+      || (draggedTaskIds.length === 0 && draggedRecurrenceIds.length === 0)
     ) return;
     try {
       if (view === 'upcoming' && indicator.targetUpcomingSectionKey) {
@@ -2956,124 +3195,111 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           : indicator.targetTaskId
             ? `task:${indicator.targetTaskId}`
             : null;
-        const sourceRowId = draggedRecurrenceId
-          ? `recurrence:${draggedRecurrenceId}`
-          : `task:${draggedTaskId}`;
-        if (targetRowId !== null && targetRowId !== sourceRowId) {
-          const draggedRowIds = new Set(
-            draggedRecurrenceId
-              ? [`recurrence:${draggedRecurrenceId}`]
-              : draggedTaskIds.map((taskId) => `task:${taskId}`),
+        const draggedTaskIdSet = new Set(draggedTaskIds);
+        const eligibleRecurrenceIds = new Set(draggedRecurrenceIds.filter((definitionId) => {
+          const prototype = recurrences.datedPrototypes.find(
+            ({ definition }) => definition.id === definitionId,
           );
-          const orderedRows = [
-            ...renderedPlanningTasks.flatMap((task) => {
-              const upcomingDate = getTaskUpcomingDate(task, planningDate);
-              return upcomingDate !== null
-                && getTaskUpcomingGroup(upcomingDate, planningDate).key
-                  === indicator.targetUpcomingSectionKey
-                ? [{
-                    id: `task:${task.id}`,
-                    orderKey: task.upcoming_order_key ?? task.order_key,
-                  }]
-                : [];
-            }),
-            ...recurrences.datedPrototypes.flatMap((prototype) => {
-              const sectionKey = getTaskUpcomingGroup(
-                prototype.scheduledDate,
-                planningDate,
-              ).key;
-              return sectionKey === indicator.targetUpcomingSectionKey
-                ? [{
-                    id: `recurrence:${prototype.definition.id}`,
-                    orderKey: prototype.definition.upcoming_order_key
-                      ?? prototype.revision.prototype_snapshot.root.order_key,
-                  }]
-                : [];
-            }),
-          ].filter(({ id }) => !draggedRowIds.has(id)).sort(compareTaskOrder);
-          const upcomingOrderKey = generateTaskDropOrderKey(
-            orderedRows,
-            targetRowId,
-            indicator.placement,
-          );
-          if (draggedRecurrenceId !== null) {
+          return prototype !== undefined
+            && getTaskUpcomingGroup(prototype.scheduledDate, planningDate).key
+              === indicator.targetUpcomingSectionKey;
+        }));
+        const draggedRowIds = new Set([
+          ...draggedTaskIds.map((taskId) => `task:${taskId}`),
+          ...Array.from(eligibleRecurrenceIds, (definitionId) => (
+            `recurrence:${definitionId}`
+          )),
+        ]);
+        const orderedRows = [
+          ...renderedPlanningTasks.flatMap((task) => {
+            const upcomingDate = getTaskUpcomingDate(task, planningDate);
+            return upcomingDate !== null
+              && getTaskUpcomingGroup(upcomingDate, planningDate).key
+                === indicator.targetUpcomingSectionKey
+              ? [{
+                  id: `task:${task.id}`,
+                  orderKey: task.upcoming_order_key ?? task.order_key,
+                }]
+              : [];
+          }),
+          ...recurrences.datedPrototypes.flatMap((prototype) => (
+            getTaskUpcomingGroup(prototype.scheduledDate, planningDate).key
+              === indicator.targetUpcomingSectionKey
+              ? [{
+                  id: `recurrence:${prototype.definition.id}`,
+                  orderKey: prototype.definition.upcoming_order_key
+                    ?? prototype.revision.prototype_snapshot.root.order_key,
+                }]
+              : []
+          )),
+        ].filter(({ id }) => !draggedRowIds.has(id)).sort(compareTaskOrder);
+        const targetRowIndex = targetRowId === null
+          ? null
+          : orderedRows.findIndex(({ id }) => id === targetRowId);
+        if (targetRowIndex !== null && targetRowIndex < 0) return;
+        const targetIndex = targetRowIndex === null
+          ? (indicator.placement === 'before' ? 0 : orderedRows.length)
+          : targetRowIndex + (indicator.placement === 'after' ? 1 : 0);
+
+        const selectedRowIds = selectableRowIds.filter((selectionId) => (
+          draggedTaskIdSet.has(selectionId)
+          || (
+            isRecurrenceSelectionId(selectionId)
+            && eligibleRecurrenceIds.has(recurrenceIdFromSelection(selectionId) ?? '')
+          )
+        ));
+        if (selectedRowIds.length === 0) return;
+        let previousKey = orderedRows[targetIndex - 1]?.orderKey ?? null;
+        const nextKey = orderedRows[targetIndex]?.orderKey ?? null;
+        const movedBetweenSections: TaskTodo[] = [];
+        const taskPatches: Array<{ taskId: string; patch: EditableTaskPatch }> = [];
+        const prototypeReorders: Array<Promise<unknown>> = [];
+        for (const selectionId of selectedRowIds) {
+          const upcomingOrderKey = generateTaskOrderKey(previousKey, nextKey);
+          previousKey = upcomingOrderKey;
+          const recurrenceId = recurrenceIdFromSelection(selectionId);
+          if (recurrenceId !== null) {
             const prototype = recurrences.datedPrototypes.find(
-              ({ definition }) => definition.id === draggedRecurrenceId,
+              ({ definition }) => definition.id === recurrenceId,
             );
             if (prototype) {
-              await recurrences.reorderProjection(prototype.definition, upcomingOrderKey);
+              prototypeReorders.push(
+                recurrences.reorderProjection(prototype.definition, upcomingOrderKey),
+              );
             }
-            return;
+            continue;
           }
-          if (draggedTaskIds.length === 1) {
-            const draggedTask = renderedPlanningTasks.find(({ id }) => id === draggedTaskId);
-            const sourceDate = draggedTask
-              ? getTaskUpcomingDate(draggedTask, planningDate)
-              : null;
-            if (draggedTask && sourceDate !== null) {
-              const movesToTargetSection = getTaskUpcomingGroup(sourceDate, planningDate).key
-                !== indicator.targetUpcomingSectionKey;
-              await updateTask(draggedTaskId, {
-                upcoming_order_key: upcomingOrderKey,
-                ...(movesToTargetSection && indicator.targetUpcomingStartDate
-                  ? {
-                      destination: 'anytime' as const,
-                      start_date: indicator.targetUpcomingStartDate,
-                      today_section: null,
-                    }
-                  : {}),
-              });
-              if (movesToTargetSection) {
-                await rescheduleTaskReminders([draggedTask]);
-              }
-              return;
-            }
-          }
-          if (draggedTaskIds.length > 1) {
-            const draggedRows = renderedPlanningTasks
-              .filter((task) => draggedTaskIds.includes(task.id))
-              .map((task) => ({
-                id: `task:${task.id}`,
-                task,
-                taskId: task.id,
-                orderKey: task.upcoming_order_key ?? task.order_key,
-              }));
-            const targetIndex = orderedRows.findIndex(({ id }) => id === targetRowId);
-            if (draggedRows.length === draggedTaskIds.length && targetIndex >= 0) {
-              const insertionIndex = targetIndex + (indicator.placement === 'after' ? 1 : 0);
-              let previousKey = orderedRows[insertionIndex - 1]?.orderKey ?? null;
-              const nextKey = orderedRows[insertionIndex]?.orderKey ?? null;
-              const movedBetweenSections: TaskTodo[] = [];
-              const patches = draggedRows.map(({ task, taskId }) => {
-                const upcomingOrderKey = generateTaskOrderKey(previousKey, nextKey);
-                previousKey = upcomingOrderKey;
-                const upcomingDate = getTaskUpcomingDate(task, planningDate);
-                const movesToTargetSection = upcomingDate !== null
-                  && getTaskUpcomingGroup(upcomingDate, planningDate).key
-                    !== indicator.targetUpcomingSectionKey;
-                if (movesToTargetSection) movedBetweenSections.push(task);
-                return {
-                  taskId,
-                  patch: {
-                    upcoming_order_key: upcomingOrderKey,
-                    ...(movesToTargetSection && indicator.targetUpcomingStartDate
-                      ? {
-                          destination: 'anytime' as const,
-                          start_date: indicator.targetUpcomingStartDate,
-                          today_section: null,
-                        }
-                      : {}),
-                  },
-                };
-              });
-              await applyTaskPatches(patches);
-              if (movedBetweenSections.length > 0) {
-                await rescheduleTaskReminders(movedBetweenSections);
-              }
-              return;
-            }
-          }
+          const task = renderedPlanningTasks.find(({ id }) => id === selectionId);
+          if (!task) continue;
+          const upcomingDate = getTaskUpcomingDate(task, planningDate);
+          const movesToTargetSection = upcomingDate !== null
+            && getTaskUpcomingGroup(upcomingDate, planningDate).key
+              !== indicator.targetUpcomingSectionKey;
+          if (movesToTargetSection) movedBetweenSections.push(task);
+          taskPatches.push({
+            taskId: task.id,
+            patch: {
+              upcoming_order_key: upcomingOrderKey,
+              ...(movesToTargetSection && indicator.targetUpcomingStartDate
+                ? {
+                    destination: 'anytime' as const,
+                    start_date: indicator.targetUpcomingStartDate,
+                    today_section: null,
+                  }
+                : {}),
+            },
+          });
         }
+        const taskWrite = taskPatches.length === 1 && prototypeReorders.length === 0
+          ? updateTask(taskPatches[0].taskId, taskPatches[0].patch)
+          : taskPatches.length > 0
+            ? applyTaskPatches(taskPatches)
+            : Promise.resolve();
+        await Promise.all([taskWrite, ...prototypeReorders]);
+        if (movedBetweenSections.length > 0) {
+          await rescheduleTaskReminders(movedBetweenSections);
+        }
+        return;
       }
       const selectedIds = new Set(draggedTaskIds);
       const selectedTasks = tasks.filter(({ id }) => selectedIds.has(id));
@@ -3217,6 +3443,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       activeDraggedTaskIdRef.current = null;
       activeDraggedTaskIdsRef.current = [];
       activeDraggedRecurrenceIdRef.current = null;
+      activeDraggedRecurrenceIdsRef.current = [];
       updateTaskDropIndicator(null);
     }
   };
@@ -3352,12 +3579,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           if (openTaskId !== null && openTaskId !== task.id) {
             void setOpenTask(null);
           }
-          const draggedIds = bulkMode && bulkSelection.has(task.id)
-            ? tasks.filter((candidate) => bulkSelection.has(candidate.id)).map(({ id }) => id)
+          const selectionIds = bulkMode && bulkSelection.has(task.id)
+            ? Array.from(bulkSelection)
             : [task.id];
+          const draggedIds = selectionIds.filter((id) => !isRecurrenceSelectionId(id));
+          const draggedRecurrenceIds = selectionIds.flatMap((id) => {
+            const recurrenceId = recurrenceIdFromSelection(id);
+            return recurrenceId === null ? [] : [recurrenceId];
+          });
           activeDraggedTaskIdRef.current = task.id;
           activeDraggedTaskIdsRef.current = draggedIds;
           activeDraggedRecurrenceIdRef.current = null;
+          activeDraggedRecurrenceIdsRef.current = draggedRecurrenceIds;
           updateTaskDropIndicator(automaticSortActive || view === 'upcoming' ? {
             draggedTaskId: task.id,
             targetTaskId: task.id,
@@ -3372,20 +3605,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           if (draggedTaskId === null) return;
           if (activeDraggedTaskIdsRef.current.includes(task.id)) return;
           if (view === 'upcoming') {
-            const draggedRecurrenceId = activeDraggedRecurrenceIdRef.current;
-            if (draggedRecurrenceId !== null) {
-              const sourcePrototype = recurrences.datedPrototypes.find(
-                ({ definition }) => definition.id === draggedRecurrenceId,
-              );
-              if (
-                !sourcePrototype
-                || !targetUpcomingSection
-                || getTaskUpcomingGroup(
-                  sourcePrototype.scheduledDate,
-                  planningDate,
-                ).key !== targetUpcomingSection.key
-              ) return;
-            }
             updateTaskDropIndicator({
               draggedTaskId,
               targetTaskId: task.id,
@@ -3436,6 +3655,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           activeDraggedTaskIdRef.current = null;
           activeDraggedTaskIdsRef.current = [];
           activeDraggedRecurrenceIdRef.current = null;
+          activeDraggedRecurrenceIdsRef.current = [];
           updateTaskDropIndicator(null);
         }}
         planningDate={planningDate}
@@ -3561,6 +3781,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             throw restoreError;
           }
         }}
+        onPermanentDelete={async () => {
+          try {
+            const preview = await permanentDeletionService.preview('todo', task.id);
+            setPermanentDeletionPreview(preview);
+          } catch (previewError) {
+            showTaskError('Task Could Not Be Prepared for Permanent Deletion', previewError);
+            throw previewError;
+          }
+        }}
         draggableTask={false}
         dragPlacement={null}
         onTaskDragStart={() => undefined}
@@ -3577,6 +3806,32 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         terminalState={terminalState}
       />
     );
+  };
+
+  const confirmPermanentDeletion = async () => {
+    const preview = permanentDeletionPreview;
+    if (preview === null || permanentDeletionPending) return;
+    setPermanentDeletionPending(true);
+    try {
+      if (
+        selectedTaskIdRef.current === preview.root.id
+        && !await setOpenTask(null, true)
+      ) return;
+      await permanentDeletionService.execute(
+        preview,
+        TASK_PERMANENT_DELETION_CONFIRMATION,
+      );
+      setPermanentlyDeletedTaskIds((current) => {
+        const next = new Set(current);
+        next.add(preview.root.id);
+        return next;
+      });
+      setPermanentDeletionPreview(null);
+    } catch (deleteError) {
+      showTaskError('Task Could Not Be Permanently Deleted', deleteError);
+    } finally {
+      setPermanentDeletionPending(false);
+    }
   };
 
   const searchQuery = view === 'search'
@@ -3609,19 +3864,39 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const applyBulkEditablePatch = async (
     patch: EditableTaskPatch,
     errorTitle: string,
+    prototypePatch?: RecurrencePrototypeMetadataPatch,
   ): Promise<boolean> => {
     if (bulkPending) return false;
-    const targets = getTaskCommandTargets().filter((task) => (
+    const taskTargets = bulkMode
+      ? selectableTasks.filter((task) => bulkSelection.has(task.id))
+      : getTaskCommandTargets();
+    const targets = taskTargets.filter((task) => (
       (task.lifecycle === 'open' && task.disposition === 'present')
       || (view === 'done' && (task.disposition === 'deleted' || task.lifecycle !== 'open'))
     ));
-    if (targets.length === 0) return false;
+    const recurrenceTargets = prototypePatch !== undefined && view === 'upcoming'
+      ? recurrences.datedPrototypes.filter(({ definition }) => (
+          bulkSelection.has(recurrenceSelectionId(definition.id))
+        ))
+      : [];
+    if (targets.length === 0 && recurrenceTargets.length === 0) return false;
     setBulkPending(true);
     try {
-      await applyTaskPatches(targets.map((task) => ({
-        taskId: task.id,
-        patch,
-      })));
+      await Promise.all([
+        targets.length > 0
+          ? applyTaskPatches(targets.map((task) => ({
+              taskId: task.id,
+              patch,
+            })))
+          : Promise.resolve(),
+        ...recurrenceTargets.map(({ definition, revision }) => (
+          recurrences.edit(buildRecurrencePrototypeEditInput(
+            definition,
+            revision,
+            prototypePatch ?? {},
+          ))
+        )),
+      ]);
       return true;
     } catch (commandError) {
       showTaskError(errorTitle, commandError);
@@ -3641,10 +3916,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (applied) setBulkCommandMode(null);
   };
 
-  const applyBulkOrganization = async (patch: EditableTaskPatch) => {
+  const applyBulkOrganization = async (areaId: string | null) => {
     const applied = await applyBulkEditablePatch(
-      patch,
+      { area_id: areaId },
       'Selected Tasks Could Not Be Moved',
+      { targetAreaId: areaId },
     );
     if (applied) setBulkCommandMode(null);
   };
@@ -3653,6 +3929,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     await applyBulkEditablePatch(
       { actionability },
       'Selected Tasks Could Not Be Updated',
+      { root: { actionability } },
     );
   };
 
@@ -3680,23 +3957,53 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     ? bulkDeadlineFirst
     : '';
   const selectedBulkTasks = selectableTasks.filter((task) => bulkSelection.has(task.id));
-  const bulkActiveEditsAvailable = selectedBulkTasks.length > 0
+  const selectedBulkRecurrencePrototypes = view === 'upcoming'
+    ? recurrences.datedPrototypes.filter(({ definition }) => (
+        bulkSelection.has(recurrenceSelectionId(definition.id))
+      ))
+    : [];
+  const bulkSelectionContainsOnlyTasks = selectedBulkTasks.length === bulkSelection.size;
+  const bulkSelectionContainsOnlySupportedRows = selectedBulkTasks.length
+    + selectedBulkRecurrencePrototypes.length === bulkSelection.size;
+  const bulkActiveEditsAvailable = bulkSelectionContainsOnlyTasks
+    && selectedBulkTasks.length > 0
+    && selectedBulkTasks.every(
+      (task) => task.lifecycle === 'open' && task.disposition === 'present',
+    );
+  const bulkUpcomingSharedEditsAvailable = view === 'upcoming'
+    && bulkSelectionContainsOnlySupportedRows
+    && bulkSelection.size > 0
     && selectedBulkTasks.every(
       (task) => task.lifecycle === 'open' && task.disposition === 'present',
     );
   const bulkTerminalEditsAvailable = view === 'done'
+    && bulkSelectionContainsOnlyTasks
     && selectedBulkTasks.length > 0
     && selectedBulkTasks.every(
       (task) => task.disposition === 'deleted' || task.lifecycle !== 'open',
     );
   const bulkOrganizationEditsAvailable = bulkActiveEditsAvailable
+    || bulkUpcomingSharedEditsAvailable
     || bulkTerminalEditsAvailable;
   const bulkTemporalEditsAvailable = bulkActiveEditsAvailable;
-  const bulkActionabilityFirst = selectedBulkTasks[0]?.actionability ?? null;
+  const bulkDeleteAvailable = bulkActiveEditsAvailable || bulkUpcomingSharedEditsAvailable;
+  const selectedBulkActionabilities = [
+    ...selectedBulkTasks.map((task) => task.actionability),
+    ...selectedBulkRecurrencePrototypes.map(
+      ({ revision }) => revision.prototype_snapshot.root.actionability,
+    ),
+  ];
+  const bulkActionabilityFirst = selectedBulkActionabilities[0] ?? null;
   const bulkActionabilityValue = bulkActionabilityFirst !== null
-    && selectedBulkTasks.every((task) => task.actionability === bulkActionabilityFirst)
+    && selectedBulkActionabilities.every(
+      (actionability) => actionability === bulkActionabilityFirst,
+    )
     ? bulkActionabilityFirst
     : null;
+  const bulkEditAvailable = bulkOrganizationEditsAvailable
+    || bulkTemporalEditsAvailable
+    || bulkDeleteAvailable
+    || bulkTerminalEditsAvailable;
 
   return (
     <div
@@ -3766,7 +4073,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         data-task-list-bottom-clearance
         className={`mx-auto w-full ${
           nativeQuickEntry
-            ? 'max-w-none p-3'
+            ? 'max-w-none px-5 py-3'
             : `max-w-3xl px-4 pt-8 md:pt-10 ${TASK_LIST_BOTTOM_CLEARANCE_CLASS}`
         } ${
           touchListElasticActive ? '' : 'transition-transform duration-200 ease-out'
@@ -3817,19 +4124,24 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 >
                   <TASK_ICONS.Redo className="h-4 w-4" aria-hidden="true" />
                 </Button>
-                {!bulkMode ? (
-                  <Button
-                    type="button"
-                    variant="clear"
-                    size="icon"
-                    aria-label="Select Tasks"
-                    className="h-9 w-9 text-muted-foreground"
-                    onClick={() => void enterEmptyTaskSelectionMode()}
-                    data-task-selection-entry
-                  >
-                    <TASK_ICONS.MultiSelect className="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                ) : null}
+                <Button
+                  type="button"
+                  variant="clear"
+                  size="icon"
+                  aria-label="Select Tasks"
+                  aria-pressed={bulkMode}
+                  className={cn(
+                    'h-9 w-9 text-muted-foreground',
+                    bulkMode && 'rounded-md bg-info/10 text-info',
+                  )}
+                  onClick={() => {
+                    if (bulkMode) clearTaskSelection();
+                    else void enterEmptyTaskSelectionMode();
+                  }}
+                  data-task-selection-entry
+                >
+                  <TASK_ICONS.MultiSelect className="h-4 w-4" aria-hidden="true" />
+                </Button>
                 <Button
                   type="button"
                   variant="clear"
@@ -4043,6 +4355,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         : null}
                       onRecurrenceFocused={handleRecurrenceFocusFulfilled}
                       onEditRecurrence={recurrences.edit}
+                      onDeleteRecurrence={(definition) => (
+                        recurrences.setStatus(definition, 'archived')
+                      )}
+                      openRecurrencePrototypeId={openRecurrencePrototypeId}
+                      onRecurrencePrototypeOpenChange={(definitionId, open) => (
+                        setOpenRecurrencePrototype(open ? definitionId : null)
+                      )}
+                      onRegisterRecurrencePrototypeEditorFlush={
+                        registerRecurrencePrototypeEditorFlush
+                      }
                       areas={hierarchy.areas}
                       planningDate={planningDate}
                       retainedTaskId={retainedTaskId}
@@ -4054,22 +4376,13 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                       onSectionDragOver={(section, sectionRows, placement) => {
                         const draggedTaskId = activeDraggedTaskIdRef.current;
                         if (draggedTaskId === null) return;
-                        const draggedRecurrenceId = activeDraggedRecurrenceIdRef.current;
-                        if (draggedRecurrenceId !== null) {
-                          const sourcePrototype = recurrences.datedPrototypes.find(
-                            ({ definition }) => definition.id === draggedRecurrenceId,
-                          );
-                          if (
-                            !sourcePrototype
-                            || getTaskUpcomingGroup(
-                              sourcePrototype.scheduledDate,
-                              planningDate,
-                            ).key !== section.key
-                          ) return;
-                        }
                         const draggedIds = new Set(activeDraggedTaskIdsRef.current);
+                        const draggedRecurrenceIds = new Set(
+                          activeDraggedRecurrenceIdsRef.current,
+                        );
                         const candidates = sectionRows.filter((row) => (
-                          row.recurrenceId !== draggedRecurrenceId
+                          (row.recurrenceId === null
+                            || !draggedRecurrenceIds.has(row.recurrenceId))
                           && (row.taskId === null || !draggedIds.has(row.taskId))
                         ));
                         const targetRow = placement === 'before'
@@ -4085,9 +4398,20 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         });
                       }}
                       onPrototypeDragStart={(prototype, section) => {
+                        const prototypeSelectionId = recurrenceSelectionId(prototype.id);
+                        const selectionIds = bulkMode
+                          && bulkSelection.has(prototypeSelectionId)
+                          ? Array.from(bulkSelection)
+                          : [prototypeSelectionId];
                         activeDraggedTaskIdRef.current = prototype.id;
-                        activeDraggedTaskIdsRef.current = [];
+                        activeDraggedTaskIdsRef.current = selectionIds.filter(
+                          (id) => !isRecurrenceSelectionId(id),
+                        );
                         activeDraggedRecurrenceIdRef.current = prototype.id;
+                        activeDraggedRecurrenceIdsRef.current = selectionIds.flatMap((id) => {
+                          const recurrenceId = recurrenceIdFromSelection(id);
+                          return recurrenceId === null ? [] : [recurrenceId];
+                        });
                         updateTaskDropIndicator({
                           draggedTaskId: prototype.id,
                           targetTaskId: null,
@@ -4099,26 +4423,20 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                       }}
                       onPrototypeDragOver={(prototype, section, placement) => {
                         const draggedTaskId = activeDraggedTaskIdRef.current;
-                        if (draggedTaskId === null || draggedTaskId === prototype.id) return;
-                        if (activeDraggedRecurrenceIdRef.current === null) {
+                        if (
+                          draggedTaskId === null
+                          || activeDraggedRecurrenceIdsRef.current.includes(prototype.id)
+                        ) return;
+                        if (
+                          activeDraggedRecurrenceIdRef.current === null
+                          && activeDraggedTaskIdsRef.current.length === 1
+                        ) {
                           const draggedTask = renderedPlanningTasks.find(
                             ({ id }) => id === draggedTaskId,
                           );
                           if (!draggedTask || getTaskUpcomingDate(draggedTask, planningDate) === null) {
                             return;
                           }
-                        } else {
-                          const sourcePrototype = recurrences.datedPrototypes.find(
-                            ({ definition }) => definition.id
-                              === activeDraggedRecurrenceIdRef.current,
-                          );
-                          if (
-                            !sourcePrototype
-                            || getTaskUpcomingGroup(
-                              sourcePrototype.scheduledDate,
-                              planningDate,
-                            ).key !== section.key
-                          ) return;
                         }
                         updateTaskDropIndicator({
                           draggedTaskId,
@@ -4133,8 +4451,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         activeDraggedTaskIdRef.current = null;
                         activeDraggedTaskIdsRef.current = [];
                         activeDraggedRecurrenceIdRef.current = null;
+                        activeDraggedRecurrenceIdsRef.current = [];
                         updateTaskDropIndicator(null);
                       }}
+                      bulkMode={bulkMode}
+                      bulkSelection={bulkSelection}
+                      onPrototypeSelect={handleRecurrencePrototypePointerSelection}
                       renderTask={renderActiveTask}
                     />
                     {waitingRecurrences.length > 0 ? (
@@ -4159,7 +4481,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                                 revision={revision}
                                 planningDate={planningDate}
                                 onEdit={recurrences.edit}
+                                onDelete={(recurrence) => (
+                                  recurrences.setStatus(recurrence, 'archived')
+                                )}
                                 areas={hierarchy.areas}
+                                editorOpen={openRecurrencePrototypeId === definition.id}
+                                onEditorOpenChange={(open) => (
+                                  setOpenRecurrencePrototype(open ? definition.id : null)
+                                )}
+                                onRegisterEditorFlush={registerRecurrencePrototypeEditorFlush}
                                 focusRequested={searchTarget?.kind === 'recurrence'
                                   && searchTarget.definitionId === definition.id}
                                 onFocusFulfilled={() => {
@@ -4254,6 +4584,18 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 {quickFilterHasNoMatches ? <TaskQuickFilterEmptyState /> : null}
               </div>
             )}
+            {view === 'done'
+              && !cachelessTaskListLoading
+              && !taskListRouteSettling
+              && !hierarchy.loading
+              && !deletedHierarchyRoots.loading
+              && !error
+              && !hierarchy.error
+              && !deletedHierarchyRoots.error ? (
+                <p className="pt-8 text-center text-xs text-muted-foreground">
+                  Items in Done are permanently deleted after 30 days.
+                </p>
+              ) : null}
           </section>}
         </div>
       </main>
@@ -4266,20 +4608,26 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             data-task-floating-create-boundary
             className={[
               'pointer-events-none fixed inset-x-0 bottom-[calc(var(--mobile-bottom-nav-bottom-offset)+4.75rem)] z-30 mx-auto flex w-full max-w-3xl justify-end px-4 transition-opacity duration-200 ease-out md:bottom-6',
-              selectedTaskId !== null ? 'opacity-0' : 'opacity-100',
+              selectedTaskId !== null || openRecurrencePrototypeId !== null
+                ? 'opacity-0'
+                : 'opacity-100',
             ].join(' ')}
           >
             <Button
               type="button"
               variant="success"
               aria-label="New Task"
-              aria-hidden={selectedTaskId !== null ? true : undefined}
-              disabled={selectedTaskId !== null}
+              aria-hidden={selectedTaskId !== null || openRecurrencePrototypeId !== null
+                ? true
+                : undefined}
+              disabled={selectedTaskId !== null || openRecurrencePrototypeId !== null}
               data-task-floating-create
               onClick={() => void beginTaskCreation(floatingTaskCreationPlacement)}
               className={[
                 'h-12 w-12 rounded-full border border-success bg-success/85 p-0 text-success-foreground backdrop-blur-sm disabled:opacity-100 supports-[backdrop-filter]:bg-success/75  [&_svg]:size-6',
-                selectedTaskId !== null ? 'pointer-events-none' : 'pointer-events-auto',
+                selectedTaskId !== null || openRecurrencePrototypeId !== null
+                  ? 'pointer-events-none'
+                  : 'pointer-events-auto',
               ].join(' ')}
             >
               <TASK_ICONS.AddTask aria-hidden="true" />
@@ -4290,16 +4638,17 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       {bulkMode ? (
         <TaskBulkToolbar
           selectedCount={bulkSelection.size}
-          totalCount={selectableTasks.length}
+          totalCount={selectableRowIds.length}
           pending={bulkPending}
+          editAvailable={bulkEditAvailable}
           organizationEditsAvailable={bulkOrganizationEditsAvailable}
           temporalEditsAvailable={bulkTemporalEditsAvailable}
-          deleteAvailable={bulkActiveEditsAvailable}
+          deleteAvailable={bulkDeleteAvailable}
           reopenAvailable={bulkTerminalEditsAvailable}
           areas={hierarchy.areas}
           actionability={bulkActionabilityValue}
           onSelectAll={() => {
-            const ids = selectableTasks.map(({ id }) => id);
+            const ids = selectableRowIds;
             focusedTaskIdRef.current = null;
             setFocusedTaskId(null);
             setBulkSelection(new Set(ids));
@@ -4307,7 +4656,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           }}
           onStart={() => setBulkCommandMode('start')}
           onDeadline={() => setBulkCommandMode('deadline')}
-          onArea={(areaId) => void applyBulkOrganization({ area_id: areaId })}
+          onArea={(areaId) => void applyBulkOrganization(areaId)}
           onActionability={(actionability) => void applyBulkActionability(actionability)}
           onDelete={() => void runDeleteShortcut()}
           onReopen={() => void runBulkReopen()}
@@ -4324,6 +4673,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           hrefForPath={(path) => `${basePath}${path}`}
         />
       ) : null}
+      <TaskPermanentDeletionDialog
+        preview={permanentDeletionPreview}
+        pending={permanentDeletionPending}
+        onCancel={() => setPermanentDeletionPreview(null)}
+        onConfirm={confirmPermanentDeletion}
+      />
       {!nativeQuickEntry ? <TaskQuickFindDialog
         open={quickFindOpen}
         initialQuery={quickFindInitialQuery}
@@ -4385,7 +4740,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         }}
         onApplyStart={applyBulkCommandStart}
         onApplyDeadline={applyBulkCommandDeadline}
-        onApplyOrganization={applyBulkOrganization}
+        onApplyOrganization={(patch) => applyBulkOrganization(patch.area_id ?? null)}
       />
     </div>
   );
@@ -4457,6 +4812,7 @@ function TaskBulkToolbar({
   selectedCount,
   totalCount,
   pending,
+  editAvailable,
   organizationEditsAvailable,
   temporalEditsAvailable,
   deleteAvailable,
@@ -4475,6 +4831,7 @@ function TaskBulkToolbar({
   selectedCount: number;
   totalCount: number;
   pending: boolean;
+  editAvailable: boolean;
   organizationEditsAvailable: boolean;
   temporalEditsAvailable: boolean;
   deleteAvailable: boolean;
@@ -4514,7 +4871,7 @@ function TaskBulkToolbar({
             type="button"
             variant="outline"
             size="sm"
-            disabled={pending || selectedCount === 0}
+            disabled={pending || selectedCount === 0 || !editAvailable}
           >
             Edit...
           </Button>
@@ -5591,6 +5948,10 @@ function UpcomingTaskSections({
   focusRecurrenceId,
   onRecurrenceFocused,
   onEditRecurrence,
+  onDeleteRecurrence,
+  openRecurrencePrototypeId,
+  onRecurrencePrototypeOpenChange,
+  onRegisterRecurrencePrototypeEditorFlush,
   areas,
   planningDate,
   retainedTaskId,
@@ -5601,6 +5962,9 @@ function UpcomingTaskSections({
   onPrototypeDragStart,
   onPrototypeDragOver,
   onPrototypeDragEnd,
+  bulkMode,
+  bulkSelection,
+  onPrototypeSelect,
   renderTask,
 }: {
   tasks: TaskTodo[];
@@ -5612,6 +5976,16 @@ function UpcomingTaskSections({
   focusRecurrenceId: string | null;
   onRecurrenceFocused: (definitionId: string) => void;
   onEditRecurrence: NonNullable<Parameters<typeof TaskRepeatDialog>[0]['onEdit']>;
+  onDeleteRecurrence: (definition: TaskRecurrenceDefinition) => Promise<unknown>;
+  openRecurrencePrototypeId: string | null;
+  onRecurrencePrototypeOpenChange: (
+    definitionId: string,
+    open: boolean,
+  ) => Promise<boolean>;
+  onRegisterRecurrencePrototypeEditorFlush: (
+    definitionId: string,
+    flush: (() => Promise<void>) | null,
+  ) => void;
   areas: ReadonlyArray<{ id: string; title: string }>;
   planningDate: string;
   retainedTaskId: string | null;
@@ -5633,6 +6007,13 @@ function UpcomingTaskSections({
     placement: 'before' | 'after',
   ) => void;
   onPrototypeDragEnd: () => void;
+  bulkMode: boolean;
+  bulkSelection: ReadonlySet<string>;
+  onPrototypeSelect: (
+    event: MouseEvent<HTMLElement>,
+    definitionId: string,
+    source?: 'activation' | 'selection-control',
+  ) => void;
   renderTask: (
     task: TaskTodo,
     sectionTasks: TaskTodo[],
@@ -5778,7 +6159,14 @@ function UpcomingTaskSections({
                     scheduledDate={row.prototype.scheduledDate}
                     planningDate={planningDate}
                     onEdit={onEditRecurrence}
+                    onDelete={onDeleteRecurrence}
                     areas={areas}
+                    editorOpen={openRecurrencePrototypeId === row.prototype.definition.id}
+                    onEditorOpenChange={(open) => onRecurrencePrototypeOpenChange(
+                      row.prototype.definition.id,
+                      open,
+                    )}
+                    onRegisterEditorFlush={onRegisterRecurrencePrototypeEditorFlush}
                     focusRequested={focusRecurrenceId === row.prototype.definition.id}
                     onFocusFulfilled={() => {
                       onRecurrenceFocused(row.prototype.definition.id);
@@ -5797,6 +6185,20 @@ function UpcomingTaskSections({
                       placement,
                     )}
                     onDragEnd={onPrototypeDragEnd}
+                    bulkSelection={bulkMode ? {
+                      selected: bulkSelection.has(
+                        recurrenceSelectionId(row.prototype.definition.id),
+                      ),
+                      onToggle: (event) => onPrototypeSelect(
+                        event,
+                        row.prototype.definition.id,
+                        'selection-control',
+                      ),
+                    } : undefined}
+                    onSelect={(event) => onPrototypeSelect(
+                      event,
+                      row.prototype.definition.id,
+                    )}
                   />
                 ))}
             </div>
@@ -5848,6 +6250,7 @@ function TaskRow({
   onSaveReminder,
   onCancelReminder,
   onDelete,
+  onPermanentDelete,
   terminalState,
 }: {
   task: TaskTodo;
@@ -5897,6 +6300,7 @@ function TaskRow({
   }) => Promise<void>;
   onCancelReminder: () => Promise<void>;
   onDelete: (reservation?: TaskForwardMutationReservation) => Promise<void>;
+  onPermanentDelete?: () => Promise<void>;
   terminalState?: 'completed' | 'canceled' | 'deleted';
 }) {
   const [pending, setPending] = useState(false);
@@ -5922,6 +6326,7 @@ function TaskRow({
   const editorScrollFrameRef = useRef<number | null>(null);
   const editorUnmountTimerRef = useRef<number | null>(null);
   const titleButtonRef = useRef<HTMLButtonElement>(null);
+  const actionMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const suppressClickUntilRef = useRef(0);
   const touchSelectionGestureRef = useRef<{
     pointerId: number;
@@ -5936,6 +6341,7 @@ function TaskRow({
   const completionGraceActiveRef = useRef(false);
   const completionGraceTimerRef = useRef<number | null>(null);
   const completionGraceReservationRef = useRef<TaskForwardMutationReservation | undefined>();
+  const completionGraceRestoreFocusRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
   const inBulkSelection = bulkSelection !== undefined;
@@ -6190,6 +6596,7 @@ function TaskRow({
     clearCompletionGraceTimer();
     completionGraceReservationRef.current?.cancel();
     completionGraceReservationRef.current = undefined;
+    completionGraceRestoreFocusRef.current = false;
     completionGraceActiveRef.current = false;
     setCompletionGraceActive(false);
   }, [clearCompletionGraceTimer]);
@@ -6198,25 +6605,28 @@ function TaskRow({
     if (!completionGraceActiveRef.current) return;
     clearCompletionGraceTimer();
     const reservation = completionGraceReservationRef.current;
+    const restoreFocusAfterAction = completionGraceRestoreFocusRef.current;
     completionGraceReservationRef.current = undefined;
+    completionGraceRestoreFocusRef.current = false;
     completionGraceActiveRef.current = false;
     setCompletionGraceActive(false);
     void runTerminalAction(
       onCompleteRef.current,
       true,
       0,
-      true,
+      restoreFocusAfterAction,
       reservation,
       true,
     );
   };
 
-  const toggleCompletionGrace = () => {
+  const toggleCompletionGrace = (restoreFocusAfterAction: boolean) => {
     if (completionGraceActiveRef.current) {
       cancelCompletionGrace();
       return;
     }
     completionGraceReservationRef.current = reserveTerminalMutation();
+    completionGraceRestoreFocusRef.current = restoreFocusAfterAction;
     completionGraceActiveRef.current = true;
     setCompletionGraceActive(true);
     completionGraceTimerRef.current = window.setTimeout(
@@ -6236,6 +6646,7 @@ function TaskRow({
     clearCompletionGraceTimer();
     const reservation = completionGraceReservationRef.current;
     completionGraceReservationRef.current = undefined;
+    completionGraceRestoreFocusRef.current = false;
     completionGraceActiveRef.current = false;
     void onCompleteRef.current(reservation).catch(() => reservation?.cancel());
   }, [clearCompletionGraceTimer]);
@@ -6526,7 +6937,10 @@ function TaskRow({
           }`}
         />
       ) : null}
-      <div className="relative min-h-0 overflow-hidden bg-inherit">
+      <div
+        className={TASK_OPEN_ROW_HIGHLIGHT_SURFACE_CLASS}
+        data-task-open-highlight-surface
+      >
       {!quickEntry ? <>
       <span
         aria-hidden="true"
@@ -6597,7 +7011,7 @@ function TaskRow({
                   : 'Complete'} ${taskLabel}`}
             aria-pressed={selected && !terminalState ? completionRequested : undefined}
             data-task-completion-control
-            onClick={() => {
+            onClick={(event) => {
               if (terminalState) {
                 void runTerminalAction(onComplete);
                 return;
@@ -6606,7 +7020,7 @@ function TaskRow({
                 onToggleDeferredCompletion();
                 return;
               }
-              toggleCompletionGrace();
+              toggleCompletionGrace(event.detail === 0);
             }}
             className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${
               taskIsChecked ? 'text-success' : 'text-muted-foreground'
@@ -6712,7 +7126,7 @@ function TaskRow({
               ) : null}
               {reminder && (task.start_date || task.today_section) ? (
                 <span
-                  className="inline-flex shrink-0 items-center gap-1 text-info"
+                  className="inline-flex shrink-0 items-center gap-1 text-muted-foreground"
                   aria-label={`Reminder ${formatReminderRowTime(reminder)}`}
                   data-task-metadata-kind="reminder"
                 >
@@ -6809,6 +7223,7 @@ function TaskRow({
             >
               <DropdownMenuTrigger asChild>
                 <Button
+                  ref={actionMenuTriggerRef}
                   type="button"
                   variant="clear"
                   size="icon"
@@ -6823,6 +7238,10 @@ function TaskRow({
                 align="end"
                 onCloseAutoFocus={(event) => {
                   event.preventDefault();
+                  const trigger = actionMenuTriggerRef.current;
+                  window.queueMicrotask(() => {
+                    if (document.activeElement === trigger) trigger?.blur();
+                  });
                   onClearTaskFocus();
                 }}
               >
@@ -6885,11 +7304,21 @@ function TaskRow({
             ) : null}
             <DropdownMenuSeparator />
             {terminalState ? (
-              <DropdownMenuItem
-                onSelect={() => void runTerminalAction(onComplete, false, 50, false)}
-              >
-                Reopen
-              </DropdownMenuItem>
+              <>
+                <DropdownMenuItem
+                  onSelect={() => void runTerminalAction(onComplete, false, 50, false)}
+                >
+                  Reopen
+                </DropdownMenuItem>
+                {onPermanentDelete ? (
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={() => void run(onPermanentDelete)}
+                  >
+                    Delete Permanently...
+                  </DropdownMenuItem>
+                ) : null}
+              </>
             ) : (
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
@@ -7062,7 +7491,6 @@ function TaskEditor({
   onRegisterAutosave,
   onTitleChange,
   showTemporalFields = true,
-  afterFields = null,
   quickEntry = false,
 }: {
   task: TaskTodo;
@@ -7083,7 +7511,6 @@ function TaskEditor({
   onRegisterAutosave: (taskId: string, flush: () => Promise<void>) => void;
   onTitleChange: (title: string) => void;
   showTemporalFields?: boolean;
-  afterFields?: ReactNode;
   quickEntry?: boolean;
 }) {
   const [title, setTitle] = useState(task.title);
@@ -7097,16 +7524,11 @@ function TaskEditor({
   const [reminderTime, setReminderTime] = useState(reminder?.local_time.slice(0, 5) ?? '');
   const acceptedOrganization = taskOrganizationValue(task);
   const [organization, setOrganization] = useState(acceptedOrganization);
-  const [primaryLinkDisclosed, setPrimaryLinkDisclosed] = useState(
-    () => (task.primary_link?.length ?? 0) > 0,
-  );
   const [checklistContentPresent, setChecklistContentPresent] = useState(
     hasChecklistItems,
   );
-  const [focusPrimaryLink, setFocusPrimaryLink] = useState(false);
   const [nativeSummaryCaptureActive, setNativeSummaryCaptureActive] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const primaryLinkInputRef = useRef<HTMLInputElement>(null);
   const operationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const lastOperationRef = useRef<Promise<void>>(Promise.resolve());
   const pendingTextPatchRef = useRef<EditableTaskPatch>({});
@@ -7147,15 +7569,6 @@ function TaskEditor({
       setNativeSummaryCaptureActive(requestTaskNativeNewTaskSummaryFocus());
     }
   }, [task.id]);
-
-  useLayoutEffect(() => {
-    if (!focusPrimaryLink) return;
-    const input = primaryLinkInputRef.current;
-    if (input === null) return;
-    input.focus({ preventScroll: true });
-    input.setSelectionRange(input.value.length, input.value.length);
-    setFocusPrimaryLink(false);
-  }, [focusPrimaryLink, primaryLinkDisclosed]);
 
   const enqueueOperation = useCallback((operation: () => Promise<void>) => {
     const run = operationQueueRef.current.then(operation);
@@ -7318,204 +7731,41 @@ function TaskEditor({
     });
   };
 
-  const primaryLinkHref = getTaskPrimaryLinkHref(primaryLink);
-  const primaryLinkIconKind = getTaskPrimaryLinkIconKind(primaryLink);
-  const PrimaryLinkIcon = primaryLinkIconKind === null
-    ? TASK_ICONS.PrimaryLink
-    : TASK_PRIMARY_LINK_ICONS[primaryLinkIconKind];
-  const primaryLinkLabel = primaryLinkIconKind === null
-    ? 'Primary Link'
-    : TASK_PRIMARY_LINK_LABELS[primaryLinkIconKind];
-  const primaryLinkOpensBrowserTab = taskPrimaryLinkOpensBrowserTab(primaryLink);
-  const pairedMetadataDisclosures = !primaryLinkDisclosed && !checklistContentPresent;
-  const ActionabilityIcon = actionability === 'waiting'
-    ? TASK_ICONS.Waiting
-    : actionability === 'rechecking'
-      ? TASK_ICONS.Rechecking
-      : TASK_ICONS.Ready;
   const deadlineUrgent = deadline !== '' && deadline <= planningDate;
 
-  const summaryInput = (
-    <div
-      className="relative w-full"
-      data-task-native-summary-capture={nativeSummaryCaptureActive ? 'true' : undefined}
-    >
-      <Input
-        ref={titleInputRef}
-        id={`task-title-${task.id}`}
-        data-task-editor-title
-        autoFocus={task.id === NEW_TASK_DRAFT_ID}
-        aria-label="Summary"
-        placeholder="New Task"
-        aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Q Alt+Shift+Q"
-        value={title}
-        className={cn(
-          nativeSummaryCaptureActive && 'border-ring ring-2 ring-ring/65',
-        )}
-        onPointerDown={() => setNativeSummaryCaptureActive(false)}
-        onChange={(event) => {
-          const nextTitle = event.target.value;
-          setTitle(nextTitle);
-          onTitleChange(nextTitle);
-          const normalizedTitle = nextTitle.trim();
-          if (normalizedTitle) scheduleTextPatch({ title: normalizedTitle });
-          else removePendingTextField('title');
-        }}
-        onKeyDown={(event) => {
-          if (
-            event.key !== 'ArrowRight'
-            || event.shiftKey
-            || event.metaKey
-            || event.ctrlKey
-            || event.altKey
-            || event.nativeEvent.isComposing
-            || event.currentTarget.selectionStart !== event.currentTarget.value.length
-            || event.currentTarget.selectionEnd !== event.currentTarget.value.length
-          ) {
-            return;
-          }
-          if (focusTaskNotesAtStart(task.id)) event.preventDefault();
-        }}
-      />
-      {nativeSummaryCaptureActive ? (
-        <span
-          aria-hidden="true"
-          data-task-native-summary-caret
-          className="pointer-events-none absolute inset-y-0 left-3 right-3 flex min-w-0 items-center overflow-hidden whitespace-pre text-sm text-transparent"
-        >
-          <span className="inline-flex max-w-full items-center after:ml-px after:h-4 after:w-px after:shrink-0 after:animate-pulse after:bg-foreground after:content-['']">
-            {title}
-          </span>
-        </span>
-      ) : null}
-    </div>
-  );
-
   return (
-    <div
-      className={quickEntry
-        ? 'flex flex-col gap-2 p-1'
-        : 'flex flex-col gap-3 px-2 pb-3 sm:px-3.5'}
-      data-task-editor-form
-    >
-      {summaryInput}
-      <Suspense fallback={<div className="min-h-16" aria-label="Loading Task Notes" />}>
-        <TaskMarkdownNotes
-          id={`task-notes-${task.id}`}
-          notes={notes}
-          onChange={(nextNotes) => {
-            setNotes(nextNotes);
-            scheduleTextPatch({ notes: nextNotes });
-          }}
-          disabled={false}
+    <TaskMetadataDrawerFields
+      editorId={task.id}
+      title={title}
+      notes={notes}
+      primaryLink={primaryLink}
+      checklistContentPresent={checklistContentPresent}
+      renderChecklist={(layout) => checklistTaskId !== null ? (
+        <TaskChecklistEditor
+          ownerId={task.owner_id}
+          taskId={checklistTaskId}
+          focusRequestTaskId={task.id}
+          emptyActionLayout={layout}
+          onContentPresenceChange={setChecklistContentPresent}
+          onRegisterFlush={registerChecklistFlush}
         />
-      </Suspense>
-      <div
-        data-task-editor-disclosures
-        data-layout={pairedMetadataDisclosures ? 'paired' : 'stacked'}
-        className={pairedMetadataDisclosures
-          ? 'relative grid grid-cols-2 gap-0'
-          : 'flex flex-col gap-3'}
-      >
-        {primaryLinkDisclosed ? (
-          <div className="flex gap-2">
-            <Input
-              ref={primaryLinkInputRef}
-              id={`task-primary-link-${task.id}`}
-              type="url"
-              value={primaryLink}
-              aria-label="Primary Link"
-              placeholder="Primary Link"
-              decoration={<PrimaryLinkIcon />}
-              inputMode="url"
-              onChange={(event) => {
-                const nextPrimaryLink = event.target.value;
-                setPrimaryLink(nextPrimaryLink);
-                scheduleTextPatch({ primary_link: nextPrimaryLink || null });
-              }}
-              onBlur={() => {
-                if (primaryLink !== '' || task.primary_link === null) return;
-                removePendingTextField('primary_link');
-                void persistImmediateTaskPatch({ primary_link: null });
-              }}
-            />
-            {primaryLink.length > 0 ? (
-              <Button
-                asChild={primaryLinkHref !== null}
-                type={primaryLinkHref === null ? 'button' : undefined}
-                variant="outline"
-                size="icon"
-                className="h-10 w-10 shrink-0 border-input bg-background"
-                aria-label={`Open ${primaryLinkLabel}`}
-                disabled={primaryLinkHref === null}
-              >
-                {primaryLinkHref === null ? (
-                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                ) : (
-                  <a
-                    href={primaryLinkHref}
-                    target={primaryLinkOpensBrowserTab ? '_blank' : undefined}
-                    rel={primaryLinkOpensBrowserTab ? 'noopener noreferrer' : undefined}
-                    title={primaryLink}
-                  >
-                    <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                  </a>
-                )}
-              </Button>
-            ) : null}
-          </div>
-        ) : (
-          <button
-            type="button"
-            aria-label="Add Primary Link"
-            data-task-primary-link-disclosure
-            className={[
-              'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              pairedMetadataDisclosures ? 'w-full justify-center' : 'w-fit justify-start',
-            ].join(' ')}
-            onClick={() => {
-              setPrimaryLinkDisclosed(true);
-              setFocusPrimaryLink(true);
-            }}
-          >
-            <TASK_ICONS.PrimaryLink className="h-4 w-4" aria-hidden="true" />
-            Add Primary Link
-          </button>
-        )}
-        {checklistTaskId !== null ? (
-          <TaskChecklistEditor
-            ownerId={task.owner_id}
-            taskId={checklistTaskId}
-            focusRequestTaskId={task.id}
-            emptyActionLayout={pairedMetadataDisclosures ? 'paired' : 'standalone'}
-            onContentPresenceChange={setChecklistContentPresent}
-            onRegisterFlush={registerChecklistFlush}
-          />
-        ) : onRequestChecklist ? (
-          <button
-            type="button"
-            aria-label="Add Checklist"
-            data-task-checklist-disclosure
-            className={[
-              'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              pairedMetadataDisclosures ? 'w-full justify-center' : 'w-fit justify-start',
-            ].join(' ')}
-            onClick={() => void onRequestChecklist()}
-          >
-            <TASK_ICONS.TaskChecklist className="h-4 w-4" aria-hidden="true" />
-            Add Checklist
-          </button>
-        ) : null}
-        {pairedMetadataDisclosures ? (
-          <span
-            aria-hidden="true"
-            data-task-editor-disclosure-divider
-            className="pointer-events-none absolute inset-y-2 left-1/2 w-px bg-[hsl(var(--grid-sticky-line)/0.35)]"
-          />
-        ) : null}
-      </div>
-      {showTemporalFields ? (
-      <div data-task-editor-temporal-grid className="grid grid-cols-2 gap-3">
+      ) : onRequestChecklist ? (
+        <button
+          type="button"
+          aria-label="Add Checklist"
+          data-task-checklist-disclosure
+          className={cn(
+            'inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            layout === 'paired' ? 'w-full justify-center' : 'w-fit justify-start',
+          )}
+          onClick={() => void onRequestChecklist()}
+        >
+          <TASK_ICONS.TaskChecklist className="h-4 w-4" aria-hidden="true" />
+          Add Checklist
+        </button>
+      ) : null}
+      temporalFields={showTemporalFields ? (
+        <div data-task-editor-temporal-grid className="grid grid-cols-2 gap-3">
         <div className="min-w-0">
           <TaskStartPickerField
             task={{
@@ -7562,65 +7812,72 @@ function TaskEditor({
             popoverPlacement={quickEntry ? 'viewport-center' : 'anchored'}
           />
         </div>
-      </div>
-      ) : null}
-      <div
-        data-task-editor-identity-grid
-        className={`grid gap-3 ${hierarchy.areas.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}
-      >
-        {hierarchy.areas.length > 0 ? (
-          <div className="min-w-0">
-            <Select
-              value={organization}
-              onValueChange={(nextOrganization) => {
-                setOrganization(nextOrganization);
-                void persistImmediateTaskPatch(parseTaskOrganization(nextOrganization));
-              }}
-              disabled={hierarchy.loading}
-            >
-              <SelectTrigger
-                id={`task-organization-${task.id}`}
-                aria-label="Area"
-                decoration={<TASK_ICONS.Area />}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent data-task-editor-owned-surface="true">
-                <SelectItem value="none">No Area</SelectItem>
-                {hierarchy.areas.map((area) => (
-                  <SelectItem key={area.id} value={`area:${area.id}`}>{area.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : null}
-        <div className="min-w-0">
-          <Select
-            value={actionability}
-            onValueChange={(value) => {
-              const nextActionability = value as TaskTodo['actionability'];
-              setActionability(nextActionability);
-              void persistImmediateTaskPatch({ actionability: nextActionability });
-            }}
-          >
-            <SelectTrigger
-              id={`task-actionability-${task.id}`}
-              aria-label="Actionability"
-              decoration={<ActionabilityIcon />}
-              decorationClassName={actionability === 'actionable' ? undefined : 'text-admin'}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent data-task-editor-owned-surface="true">
-              <SelectItem value="actionable">Ready</SelectItem>
-              <SelectItem value="rechecking">Rechecking</SelectItem>
-              <SelectItem value="waiting">Waiting</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
-      </div>
-      {afterFields}
-    </div>
+      ) : null}
+      areas={hierarchy.areas}
+      areasLoading={hierarchy.loading}
+      areaId={organization.startsWith('area:') ? organization.slice(5) : null}
+      actionability={actionability}
+      onTitleChange={(nextTitle) => {
+        setTitle(nextTitle);
+        onTitleChange(nextTitle);
+        const normalizedTitle = nextTitle.trim();
+        if (normalizedTitle) scheduleTextPatch({ title: normalizedTitle });
+        else removePendingTextField('title');
+      }}
+      onNotesChange={(nextNotes) => {
+        setNotes(nextNotes);
+        scheduleTextPatch({ notes: nextNotes });
+      }}
+      onPrimaryLinkChange={(nextPrimaryLink) => {
+        setPrimaryLink(nextPrimaryLink);
+        scheduleTextPatch({ primary_link: nextPrimaryLink || null });
+      }}
+      onPrimaryLinkCleared={() => {
+        if (task.primary_link === null) return;
+        removePendingTextField('primary_link');
+        void persistImmediateTaskPatch({ primary_link: null });
+      }}
+      onAreaChange={(areaId) => {
+        const nextOrganization = areaId === null ? 'none' : `area:${areaId}`;
+        setOrganization(nextOrganization);
+        void persistImmediateTaskPatch(parseTaskOrganization(nextOrganization));
+      }}
+      onActionabilityChange={(nextActionability) => {
+        setActionability(nextActionability);
+        void persistImmediateTaskPatch({ actionability: nextActionability });
+      }}
+      titleInputRef={titleInputRef}
+      titleAutoFocus={task.id === NEW_TASK_DRAFT_ID}
+      titleClassName={cn(nativeSummaryCaptureActive && 'border-ring ring-2 ring-ring/65')}
+      onTitlePointerDown={() => setNativeSummaryCaptureActive(false)}
+      onTitleKeyDown={(event) => {
+        if (
+          event.key !== 'ArrowRight'
+          || event.shiftKey
+          || event.metaKey
+          || event.ctrlKey
+          || event.altKey
+          || event.nativeEvent.isComposing
+          || event.currentTarget.selectionStart !== event.currentTarget.value.length
+          || event.currentTarget.selectionEnd !== event.currentTarget.value.length
+        ) return;
+        if (focusTaskNotesAtStart(task.id)) event.preventDefault();
+      }}
+      titleOverlay={nativeSummaryCaptureActive ? (
+        <span
+          aria-hidden="true"
+          data-task-native-summary-caret
+          className="pointer-events-none absolute inset-y-0 left-3 right-3 flex min-w-0 items-center overflow-hidden whitespace-pre text-sm text-transparent"
+        >
+          <span className="inline-flex max-w-full items-center after:ml-px after:h-4 after:w-px after:shrink-0 after:animate-pulse after:bg-foreground after:content-['']">
+            {title}
+          </span>
+        </span>
+      ) : null}
+      nativeSummaryCaptureActive={nativeSummaryCaptureActive}
+      quickEntry={quickEntry}
+    />
   );
 }
 

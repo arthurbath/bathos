@@ -109,10 +109,13 @@ final class TasksMacTests: XCTestCase {
     func testMacHostUsesTheCompiledModernAppIcon() {
         XCTAssertEqual(
             Bundle.main.object(forInfoDictionaryKey: "CFBundleIconName") as? String,
-            "AppIcon"
+            "Tasks Apple Native Icon"
         )
         XCTAssertNotNil(
-            Bundle.main.url(forResource: "AppIcon", withExtension: "icns")
+            Bundle.main.url(
+                forResource: "Tasks Apple Native Icon",
+                withExtension: "icns"
+            )
         )
     }
 
@@ -313,6 +316,22 @@ final class TasksMacTests: XCTestCase {
             panel.contentMaxSize,
             TasksMacQuickEntryPanelPolicy.contentSize
         )
+        XCTAssertFalse(panel.isOpaque)
+        XCTAssertEqual(panel.backgroundColor, .clear)
+        XCTAssertTrue(panel.hasShadow)
+        XCTAssertEqual(
+            panel.contentView?.layer?.cornerRadius,
+            TasksMacQuickEntryPanelPolicy.cornerRadius
+        )
+        XCTAssertEqual(
+            panel.contentView?.layer?.borderWidth,
+            TasksMacQuickEntryPanelPolicy.borderWidth
+        )
+        XCTAssertEqual(
+            panel.contentView?.layer?.borderColor,
+            TasksMacQuickEntryPanelPolicy.borderColor.cgColor
+        )
+        XCTAssertTrue(panel.contentView?.layer?.masksToBounds == true)
     }
 
     func testGlobalQuickEntryCancellationDispatchesTheOwnedWebEvent() {

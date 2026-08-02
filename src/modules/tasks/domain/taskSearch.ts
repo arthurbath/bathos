@@ -9,6 +9,7 @@ export type TaskSearchDocument = {
   hierarchyLabel: string | null;
   normalizedTitle: string;
   normalizedNotes: string;
+  normalizedPrimaryLink: string;
   normalizedSourceTitle: string;
   normalizedSourceUrl: string;
   normalizedHierarchyLabel: string;
@@ -19,6 +20,7 @@ export type TaskSearchRankFields = Pick<
   TaskSearchDocument,
   | 'normalizedTitle'
   | 'normalizedNotes'
+  | 'normalizedPrimaryLink'
   | 'normalizedSourceTitle'
   | 'normalizedSourceUrl'
   | 'normalizedHierarchyLabel'
@@ -34,6 +36,7 @@ export function createTaskSearchDocuments(
     const hierarchyLabel = getIndexedTaskHierarchyLabel(task, areaTitles);
     const normalizedTitle = normalizeSearchValue(task.title);
     const normalizedNotes = normalizeSearchValue(task.notes);
+    const normalizedPrimaryLink = normalizeSearchValue(task.primary_link);
     const normalizedSourceTitle = normalizeSearchValue(task.source_title);
     const normalizedSourceUrl = normalizeSearchValue(task.source_url);
     const normalizedHierarchyLabel = normalizeSearchValue(hierarchyLabel);
@@ -42,12 +45,14 @@ export function createTaskSearchDocuments(
       hierarchyLabel,
       normalizedTitle,
       normalizedNotes,
+      normalizedPrimaryLink,
       normalizedSourceTitle,
       normalizedSourceUrl,
       normalizedHierarchyLabel,
       normalizedText: [
         normalizedTitle,
         normalizedNotes,
+        normalizedPrimaryLink,
         normalizedSourceTitle,
         normalizedSourceUrl,
         normalizedHierarchyLabel,
@@ -86,8 +91,9 @@ export function getTaskSearchRank(
   if (document.normalizedSourceTitle.includes(normalizedQuery)) return 3;
   if (document.normalizedHierarchyLabel.includes(normalizedQuery)) return 4;
   if (document.normalizedNotes.includes(normalizedQuery)) return 5;
-  if (document.normalizedSourceUrl.includes(normalizedQuery)) return 6;
-  return 7;
+  if (document.normalizedPrimaryLink.includes(normalizedQuery)) return 6;
+  if (document.normalizedSourceUrl.includes(normalizedQuery)) return 7;
+  return 8;
 }
 
 function normalizeSearchValue(value: string | null | undefined): string {

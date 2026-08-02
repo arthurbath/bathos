@@ -100,6 +100,11 @@ export type TaskNativeNewTaskSummaryFocusMessage = {
   schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
 };
 
+export type TaskNativeContentReadyMessage = {
+  type: 'content-ready';
+  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
+};
+
 export type TaskNativeQuickEntryShortcut = {
   code: string;
   command: boolean;
@@ -294,6 +299,18 @@ export function requestTaskNativeNewTaskSummaryFocus(
     type: 'focus-new-task-summary',
     schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
   } satisfies TaskNativeNewTaskSummaryFocusMessage);
+  return true;
+}
+
+export function publishTaskNativeContentReady(
+  target: Window = window,
+): boolean {
+  const handler = getTasksNativeMessageHandler(target);
+  if (!handler || getTasksNativeInstallationId(target) === null) return false;
+  handler.postMessage({
+    type: 'content-ready',
+    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
+  } satisfies TaskNativeContentReadyMessage);
   return true;
 }
 

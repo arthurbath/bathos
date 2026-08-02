@@ -25,6 +25,11 @@ describe('task search indexing', () => {
         notes: 'Review the Figma prototype',
       }),
       taskTodoFixture({
+        id: 'primary-link-match',
+        title: 'Open design reference',
+        primary_link: 'https://figma.com/design/primary-link-example',
+      }),
+      taskTodoFixture({
         id: 'url-match',
         title: 'Meter Source Cert Relevance',
         source_url: 'https://figma.com/design/example',
@@ -43,8 +48,24 @@ describe('task search indexing', () => {
     expect(ranked.map(({ task }) => task.id)).toEqual([
       'summary-match',
       'notes-match',
+      'primary-link-match',
       'url-match',
     ]);
+  });
+
+  it('includes tasks whose editable Primary Link contains the query', () => {
+    const documents = createTaskSearchDocuments([
+      taskTodoFixture({
+        id: 'primary-link-only',
+        title: 'Review the design reference',
+        primary_link: 'obsidian://open?vault=Work&file=Figma%20Notes',
+      }),
+    ], { areas: [] });
+
+    const matches = filterTaskSearchDocuments(documents, 'figma');
+
+    expect(matches.map(({ task }) => task.id)).toEqual(['primary-link-only']);
+    expect(matches[0].normalizedPrimaryLink).toContain('figma');
   });
 
   it('orders exact and prefix summary matches before other summary matches', () => {

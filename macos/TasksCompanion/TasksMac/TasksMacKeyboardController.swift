@@ -485,7 +485,7 @@ final class TasksMacQuickEntryPanelController: NSObject {
         panel.hidesOnDeactivate = false
         panel.collectionBehavior =
             TasksMacQuickEntryPanelPolicy.collectionBehavior
-        panel.backgroundColor = TasksMacAppearance.applicationBackground
+        panel.backgroundColor = .clear
         panel.contentViewController = NSHostingController(
             rootView: TasksMacWebView(model: browserModel)
         )
@@ -529,6 +529,9 @@ final class TasksMacQuickEntryPanelController: NSObject {
 
 enum TasksMacQuickEntryPanelPolicy {
     static let contentSize = NSSize(width: 520, height: 560)
+    static let cornerRadius: CGFloat = 18
+    static let borderWidth: CGFloat = 1
+    static let borderColor = NSColor(calibratedWhite: 0.20, alpha: 1)
     static let collectionBehavior: NSWindow.CollectionBehavior = [
         .canJoinAllSpaces,
         .fullScreenAuxiliary,
@@ -539,6 +542,19 @@ enum TasksMacQuickEntryPanelPolicy {
         panel.contentMinSize = contentSize
         panel.contentMaxSize = contentSize
         panel.setContentSize(contentSize)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.contentView?.wantsLayer = true
+        guard let layer = panel.contentView?.layer else {
+            return
+        }
+        layer.backgroundColor = TasksMacAppearance.applicationBackground.cgColor
+        layer.cornerRadius = cornerRadius
+        layer.cornerCurve = .continuous
+        layer.borderWidth = borderWidth
+        layer.borderColor = borderColor.cgColor
+        layer.masksToBounds = true
     }
 
     static let cancelJavaScript = """

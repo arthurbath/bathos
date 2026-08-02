@@ -30,6 +30,54 @@ const DRAFT_ID = 'draft';
 
 type CaretPosition = 'start' | 'end' | number;
 
+export type TaskChecklistEditorItem = Pick<
+  TaskChecklistItem,
+  'id' | 'title' | 'completed' | 'order_key'
+>;
+
+export type TaskChecklistEditorController = {
+  items: TaskChecklistEditorItem[];
+  loading: boolean;
+  createItem: (
+    title: string,
+    destinationIndex?: number,
+    context?: { occurredAt?: string; operationId?: string },
+  ) => Promise<TaskChecklistEditorItem>;
+  createItems: (
+    titles: readonly string[],
+    destinationIndex?: number,
+    context?: { occurredAt?: string; operationId?: string },
+  ) => Promise<TaskChecklistEditorItem[]>;
+  createItemCopies: (
+    items: readonly TaskChecklistClipboardItem[],
+    destinationIndex?: number,
+    context?: { occurredAt?: string; operationId?: string },
+  ) => Promise<TaskChecklistEditorItem[]>;
+  updateItem: (
+    itemId: string,
+    patch: { title?: string; completed?: boolean; completed_at?: string | null; order_key?: string },
+    context?: { occurredAt?: string; operationId?: string },
+  ) => Promise<TaskChecklistEditorItem>;
+  setCompleted: (
+    item: TaskChecklistEditorItem,
+    completed: boolean,
+    context?: { occurredAt?: string; operationId?: string },
+  ) => Promise<TaskChecklistEditorItem>;
+  deleteItem: (
+    itemId: string,
+    context?: { occurredAt?: string; operationId?: string },
+  ) => Promise<unknown>;
+  deleteItems: (
+    itemIds: readonly string[],
+    context?: { occurredAt?: string; operationId?: string },
+  ) => Promise<unknown>;
+  reorderItems: (
+    itemIds: readonly string[],
+    destinationIndex: number,
+    context?: { occurredAt?: string; operationId?: string },
+  ) => Promise<TaskChecklistEditorItem[]>;
+};
+
 function isEligibleHorizontalBoundaryGesture(
   event: Pick<KeyboardEvent<HTMLInputElement>, 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>,
 ) {
@@ -53,6 +101,30 @@ export function TaskChecklistEditor({
   onRegisterFlush?: (flush: (() => Promise<void>) | null) => void;
 }) {
   const checklist = useTaskChecklist(ownerId, taskId);
+  return (
+    <TaskChecklistEditorSurface
+      controller={checklist as unknown as TaskChecklistEditorController}
+      focusRequestTaskId={focusRequestTaskId}
+      emptyActionLayout={emptyActionLayout}
+      onContentPresenceChange={onContentPresenceChange}
+      onRegisterFlush={onRegisterFlush}
+    />
+  );
+}
+
+export function TaskChecklistEditorSurface({
+  controller: checklist,
+  focusRequestTaskId,
+  emptyActionLayout = 'standalone',
+  onContentPresenceChange,
+  onRegisterFlush,
+}: {
+  controller: TaskChecklistEditorController;
+  focusRequestTaskId: string;
+  emptyActionLayout?: 'paired' | 'standalone';
+  onContentPresenceChange?: (present: boolean) => void;
+  onRegisterFlush?: (flush: (() => Promise<void>) | null) => void;
+}) {
   const [draftIndex, setDraftIndex] = useState<number | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [editingTitles, setEditingTitles] = useState<Record<string, string>>({});
@@ -162,7 +234,7 @@ export function TaskChecklistEditor({
   }, []);
 
   const saveTitle = useCallback((
-    item: TaskChecklistItem,
+    item: TaskChecklistEditorItem,
     title: string,
   ) => {
     cancelScheduledSave(item.id);
@@ -172,7 +244,7 @@ export function TaskChecklistEditor({
   }, [cancelScheduledSave, checklist]);
 
   const scheduleTitleSave = useCallback((
-    item: TaskChecklistItem,
+    item: TaskChecklistEditorItem,
     title: string,
   ) => {
     cancelScheduledSave(item.id);
@@ -315,7 +387,7 @@ export function TaskChecklistEditor({
   };
 
   const splitPersistedItem = (
-    item: TaskChecklistItem,
+    item: TaskChecklistEditorItem,
     title: string,
     index: number,
     selectionStart: number,
@@ -370,7 +442,7 @@ export function TaskChecklistEditor({
   };
 
   const pasteIntoPersistedItem = async (
-    item: TaskChecklistItem,
+    item: TaskChecklistEditorItem,
     title: string,
     index: number,
     selectionStart: number,
@@ -552,7 +624,7 @@ export function TaskChecklistEditor({
   }, [checklist.items, draftIndex, requestInputFocus]);
 
   const joinPrevious = async (
-    item: TaskChecklistItem,
+    item: TaskChecklistEditorItem,
     title: string,
     index: number,
   ) => {
@@ -577,7 +649,7 @@ export function TaskChecklistEditor({
   };
 
   const joinNext = async (
-    item: TaskChecklistItem,
+    item: TaskChecklistEditorItem,
     title: string,
     index: number,
   ) => {
@@ -1212,7 +1284,7 @@ function ChecklistRow({
   onDragOver,
   onDrop,
 }: {
-  item: TaskChecklistItem;
+  item: TaskChecklistEditorItem;
   title: string;
   selectionActive: boolean;
   selected: boolean;

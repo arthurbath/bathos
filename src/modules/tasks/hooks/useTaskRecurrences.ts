@@ -300,19 +300,29 @@ export function useTaskRecurrences(ownerId: string) {
     status: 'active' | 'paused' | 'archived',
   ) => {
     if (mode !== 'connected') throw new Error('Recurrence changes require connected task storage');
-    const result = await recurrenceService.setStatus(definition, status);
-    if (result.outcome === 'conflict') {
-      throw new Error('The recurrence changed before its status could be updated');
+    if (status === 'archived') {
+      setOptimisticDefinitions((current) => ({ ...current, [definition.id]: null }));
     }
-    setOptimisticDefinitions((current) => ({
-      ...current,
-      [definition.id]: status === 'archived' ? null : result.definition,
-    }));
-    clearEvaluationFailure(definition.id);
-    if (status === 'active') {
-      await runEvaluation(definition.id).catch(() => undefined);
+    try {
+      const result = await recurrenceService.setStatus(definition, status);
+      if (result.outcome === 'conflict') {
+        throw new Error('The recurrence changed before its status could be updated');
+      }
+      setOptimisticDefinitions((current) => ({
+        ...current,
+        [definition.id]: status === 'archived' ? null : result.definition,
+      }));
+      clearEvaluationFailure(definition.id);
+      if (status === 'active') {
+        await runEvaluation(definition.id).catch(() => undefined);
+      }
+      return result;
+    } catch (error) {
+      if (status === 'archived') {
+        setOptimisticDefinitions((current) => ({ ...current, [definition.id]: definition }));
+      }
+      throw error;
     }
-    return result;
   }, [clearEvaluationFailure, mode, recurrenceService, runEvaluation]);
 
   const reorderProjection = useCallback(async (

@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(23);
+SELECT plan(30);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -153,8 +153,8 @@ SELECT throws_ok(
       'todo', 'a1000000-0000-4000-8000-000000000030'
     )
   $$,
-  '22023', 'The deleted task root is unavailable',
-  'does not reveal another owner''s deleted root'
+  '22023', 'The Done task root is unavailable',
+  'does not reveal another owner''s Done task root'
 );
 SELECT set_config(
   'request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000001', true
@@ -238,6 +238,105 @@ SELECT throws_ok(
 );
 
 INSERT INTO public.tasks_todos (
+  id, owner_id, title, destination, order_key, lifecycle, completed_at,
+  client_mutation_id
+) VALUES (
+  'a1000000-0000-4000-8000-000000000100',
+  'a1000000-0000-4000-8000-000000000001',
+  'Completed task', 'anytime', 'a0', 'completed',
+  '2026-07-20T20:00:00Z',
+  'a1000000-0000-4000-8000-000000000101'
+);
+INSERT INTO public.tasks_checklist_items (
+  id, owner_id, task_id, title, order_key, client_mutation_id
+) VALUES (
+  'a1000000-0000-4000-8000-000000000110',
+  'a1000000-0000-4000-8000-000000000001',
+  'a1000000-0000-4000-8000-000000000100',
+  'Completed task checklist item', 'a0',
+  'a1000000-0000-4000-8000-000000000111'
+);
+INSERT INTO public.tasks_todos (
+  id, owner_id, title, destination, order_key, lifecycle, canceled_at,
+  client_mutation_id
+) VALUES (
+  'a1000000-0000-4000-8000-000000000120',
+  'a1000000-0000-4000-8000-000000000001',
+  'Canceled task', 'anytime', 'a0', 'canceled',
+  '2026-07-20T20:01:00Z',
+  'a1000000-0000-4000-8000-000000000121'
+);
+INSERT INTO public.tasks_todos (
+  id, owner_id, title, destination, order_key, client_mutation_id
+) VALUES (
+  'a1000000-0000-4000-8000-000000000130',
+  'a1000000-0000-4000-8000-000000000001',
+  'Active task', 'anytime', 'a0',
+  'a1000000-0000-4000-8000-000000000131'
+);
+
+SELECT set_config(
+  'test.completed_preview',
+  public.tasks_preview_permanent_deletion(
+    'todo', 'a1000000-0000-4000-8000-000000000100'
+  )::text,
+  false
+);
+SELECT is(
+  current_setting('test.completed_preview')::jsonb #>> '{root,title}',
+  'Completed task',
+  'previews a completed task that is already in Done'
+);
+SELECT is(
+  jsonb_array_length(
+    current_setting('test.completed_preview')::jsonb #> '{hierarchy,todos}'
+  ),
+  1,
+  'limits a completed task scope to its own task root'
+);
+SELECT is(
+  jsonb_array_length(
+    current_setting('test.completed_preview')::jsonb
+      #> '{hierarchy,checklist_items}'
+  ),
+  1,
+  'includes a completed task checklist in the preview'
+);
+SELECT is(
+  public.tasks_permanently_delete(
+    'todo', 'a1000000-0000-4000-8000-000000000100',
+    current_setting('test.completed_preview')::jsonb ->> 'scope_digest',
+    'a1000000-0000-4000-8000-000000000140', 'PERMANENTLY DELETE'
+  ) ->> 'outcome',
+  'accepted',
+  'permanently deletes a completed task after confirmation'
+);
+SELECT is(
+  (SELECT count(*) FROM public.tasks_todos
+   WHERE id = 'a1000000-0000-4000-8000-000000000100')
+  + (SELECT count(*) FROM public.tasks_checklist_items
+     WHERE id = 'a1000000-0000-4000-8000-000000000110'),
+  0::bigint,
+  'erases the completed task and its checklist'
+);
+SELECT is(
+  public.tasks_preview_permanent_deletion(
+    'todo', 'a1000000-0000-4000-8000-000000000120'
+  ) #>> '{root,title}',
+  'Canceled task',
+  'previews a legacy canceled task that is already in Done'
+);
+SELECT throws_ok(
+  $$
+    SELECT public.tasks_preview_permanent_deletion(
+      'todo', 'a1000000-0000-4000-8000-000000000130'
+    )
+  $$,
+  '22023', 'The Done task root is unavailable',
+  'rejects permanent deletion for an active task'
+);
+
+INSERT INTO public.tasks_todos (
   id, owner_id, title, destination, order_key, disposition, deleted_at,
   deletion_root_id, client_mutation_id
 ) VALUES (
@@ -274,8 +373,8 @@ RESET ROLE;
 SELECT is(
   (SELECT count(*) FROM tasks_private.permanent_deletion_receipts
    WHERE owner_id = 'a1000000-0000-4000-8000-000000000001'),
-  2::bigint,
-  'retains content-free receipts for both accepted requests'
+  3::bigint,
+  'retains content-free receipts for every accepted request'
 );
 
 SELECT * FROM finish();

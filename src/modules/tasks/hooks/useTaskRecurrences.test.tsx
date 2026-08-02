@@ -143,6 +143,44 @@ describe('useTaskRecurrences', () => {
     expect(result.current.definitions[0]).toEqual(updated);
   });
 
+  it('optimistically hides an archived prototype and restores it when deletion fails', async () => {
+    const definition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-delete-failure',
+      next_occurrence_date: '2026-08-01',
+    });
+    definitionRows = [definition];
+    revisionRows = [taskRecurrenceRevisionFixture({ recurrence_id: definition.id })];
+    let rejectStatus!: (reason?: unknown) => void;
+    const setStatus = vi.fn(() => new Promise<never>((_resolve, reject) => {
+      rejectStatus = reject;
+    }));
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'connected',
+      planningTimeZone,
+      recurrenceService: {
+        evaluate: vi.fn(),
+        createFromTask: vi.fn(),
+        edit: vi.fn(),
+        setStatus,
+        reorderProjection: vi.fn(),
+      },
+    });
+
+    const { result } = renderHook(() => useTaskRecurrences('owner-a'));
+    let deletion!: Promise<unknown>;
+    await act(async () => {
+      deletion = result.current.setStatus(definition, 'archived');
+      await Promise.resolve();
+    });
+    expect(result.current.definitions).toEqual([]);
+
+    await act(async () => {
+      rejectStatus(new Error('write failed'));
+      await expect(deletion).rejects.toThrow('write failed');
+    });
+    expect(result.current.definitions).toEqual([definition]);
+  });
+
   it('retains the optimistic prototype rank while rebasing one revision conflict', async () => {
     const definition = taskRecurrenceDefinitionFixture({ upcoming_order_key: 'a0' });
     const conflicted = {

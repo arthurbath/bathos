@@ -975,8 +975,12 @@ The Tasks interface SHALL keep an active task's ellipsis menu limited to Start, 
 The Tasks interface SHALL end ellipsis-menu interaction without retaining or transferring whole-task keyboard focus.
 
 #### Scenario: Dismiss the ellipsis menu
-- **WHEN** a user opens a task's ellipsis menu and dismisses it without selecting an action
+- **WHEN** a user opens an ordinary task or recurrence prototype ellipsis menu and dismisses it without selecting an action
 - **THEN** Tasks closes the menu, prevents focus restoration to its trigger, and leaves no task with whole-task focus
+
+#### Scenario: Dismiss the ellipsis menu with a pointer outside
+- **WHEN** a user dismisses an ordinary task or recurrence prototype ellipsis menu by clicking or tapping outside it
+- **THEN** Tasks closes the menu without returning keyboard focus to the ellipsis trigger
 
 #### Scenario: Complete a direct menu action
 - **WHEN** a user selects an Area, Actionability, or recoverable Delete action from a task's ellipsis menu
@@ -2407,6 +2411,11 @@ The system SHALL provide typing-only Quick Find as the primary Tasks search entr
 - **WHEN** Quick Find has a nonblank query
 - **THEN** the palette shows at most three matching to-dos without task checkboxes, row borders, a visible title, or a visible close control
 
+#### Scenario: Include and distinguish Done results
+- **WHEN** a Quick Find query matches a retained task from Done
+- **THEN** Quick Find includes that task in its relevance-ranked compact results
+- **AND** labels a deleted task `Deleted` and every other terminal task `Completed`
+
 #### Scenario: Offer exhaustive results conditionally
 - **WHEN** the full Search page would return at least one result for the current query
 - **THEN** Quick Find shows `See All Results` after its compact results
@@ -2414,8 +2423,8 @@ The system SHALL provide typing-only Quick Find as the primary Tasks search entr
 - **THEN** Quick Find omits `See All Results`
 
 #### Scenario: Prioritize summary matches
-- **WHEN** a query matches one to-do's summary and only ancillary metadata such as notes, source details, or Area on other to-dos
-- **THEN** Quick Find ranks the summary match ahead of every ancillary-metadata match
+- **WHEN** a query matches one to-do's Summary and only ancillary metadata such as Primary Link, Notes, source details, or Area on other to-dos
+- **THEN** Quick Find ranks the Summary match ahead of every ancillary-metadata match regardless of lifecycle
 
 #### Scenario: Distinguish a recurrence definition
 - **WHEN** a Quick Find result represents the Upcoming recurrence definition rather than a materialized task instance
@@ -3474,6 +3483,14 @@ Tasks SHALL reserve every user-editable forward task mutation before asynchronou
 - **WHEN** the completion write has returned but its exact history event or completed task snapshot has not yet projected locally
 - **THEN** Tasks waits within a bounded interval for both projections and reopens the task into its retained prior planning state
 
+#### Scenario: Make an accepted deletion the newest undo action
+- **WHEN** a user recoverably deletes a task and the accepted delete transition moves it to Done
+- **THEN** Tasks exposes that exact deletion as the newest undo intent instead of reporting Nothing to Undo or selecting an older history event
+
+#### Scenario: Undo deletion while history is projecting
+- **WHEN** the delete write has returned but its exact history event or deleted task snapshot has not yet projected locally and the user invokes Undo
+- **THEN** Tasks retains the request for that deletion within the bounded projection interval and restores the task hierarchy to its retained prior planning state as soon as both projections agree
+
 #### Scenario: Match equivalent synchronized terminal timestamps
 - **WHEN** a local task projection and its authoritative history snapshot encode the same completion, cancellation, or deletion instant with different valid ISO time-zone spellings
 - **THEN** Tasks treats those terminal timestamps as equal for guarded undo while continuing to reject malformed values and genuinely different instants
@@ -3499,10 +3516,10 @@ Tasks SHALL reserve every user-editable forward task mutation before asynchronou
 - **THEN** the accepted mutation participates in the same guarded undo and redo chain
 
 ### Requirement: Directly recoverable Done task controls
-Done SHALL present retained completed, canceled, and deleted tasks as fully inspectable, editable, selectable, and recoverable task states, grouped by their owner-local terminal-entry day and never drag-reorderable. Done MUST NOT present deleted checklist items as list entries, while their deletion history remains available to undo.
+Done SHALL present retained completed, canceled, and deleted tasks as fully inspectable, editable, selectable, recoverable, and explicitly removable task states, grouped by their owner-local terminal-entry day and never drag-reorderable. Done MUST NOT present deleted checklist items as list entries, while their deletion history remains available to undo.
 
 #### Scenario: Delete a task from its menu
-- **WHEN** a user activates Delete in a task's ellipsis menu
+- **WHEN** a user activates Delete in a task's ellipsis menu outside Done
 - **THEN** Tasks recoverably deletes the task hierarchy and presents its root in Done as trashed
 
 #### Scenario: Delete an open task
@@ -3514,7 +3531,7 @@ Done SHALL present retained completed, canceled, and deleted tasks as fully insp
 - **THEN** Tasks recoverably deletes that task
 
 #### Scenario: Delete selected tasks
-- **WHEN** a user presses Delete with one or more tasks explicitly selected
+- **WHEN** a user presses Delete with one or more tasks explicitly selected outside Done
 - **THEN** Tasks applies the guarded recoverable deletion transition to every selected task and retains each accepted deletion in task history
 
 #### Scenario: Reopen a completed task by unchecking it
@@ -3529,9 +3546,22 @@ Done SHALL present retained completed, canceled, and deleted tasks as fully insp
 - **WHEN** Done presents a recoverably deleted task root
 - **THEN** its leading icon-only control persistently shows a neutral-gray Lucide `SquareX`, is labeled `Reopen`, and reopens the task through the existing hierarchy-safe transition according to its current planning metadata
 
-#### Scenario: Offer the same recovery action in task menus
+#### Scenario: Offer Done task actions
 - **WHEN** a user opens the ellipsis menu for a completed, canceled, or deleted task in Done
-- **THEN** the recovery action is labeled `Reopen`
+- **THEN** the menu offers `Reopen` and `Delete Permanently...`
+
+#### Scenario: Preview permanent deletion
+- **WHEN** a user activates `Delete Permanently...` for a retained Done task
+- **THEN** Tasks obtains the owner-authorized server scope and presents a destructive confirmation containing the task identity and the number of records that will be erased
+- **AND** no task data is erased before confirmation
+
+#### Scenario: Confirm permanent deletion
+- **WHEN** a user confirms a fresh permanent-deletion preview for a retained completed, canceled, or deleted task
+- **THEN** the server permanently erases that task content graph, preserves only required content-free safety receipts, and converges the removal to synchronized clients
+
+#### Scenario: Reject ineligible or stale permanent deletion
+- **WHEN** permanent deletion targets an active task, a task owned by another user, an unsupported root, or a scope changed since preview
+- **THEN** the server rejects the request without deleting task data and Tasks reports the failure
 
 #### Scenario: Hide deleted checklist items
 - **WHEN** checklist-item deletion history remains available for undo
@@ -3547,7 +3577,7 @@ Done SHALL present retained completed, canceled, and deleted tasks as fully insp
 
 #### Scenario: Present terminal bulk actions
 - **WHEN** one or more completed, canceled, or deleted tasks are selected in Done and the user opens Edit
-- **THEN** Tasks offers Area, Actionability, and Reopen, keeps the Area and Actionability submenus operable, omits Delete, and does not offer terminal-ineligible Start or Deadline actions
+- **THEN** Tasks offers Area, Actionability, and Reopen, keeps the Area and Actionability submenus operable, omits recoverable Delete, and does not offer terminal-ineligible Start or Deadline actions
 
 #### Scenario: Reopen a mixed terminal selection
 - **WHEN** the user chooses Reopen for a selection containing any mix of completed, canceled, and deleted tasks
@@ -3559,7 +3589,7 @@ Done SHALL present retained completed, canceled, and deleted tasks as fully insp
 
 #### Scenario: Preserve task-row interaction in Done
 - **WHEN** a retained task appears in Done
-- **THEN** its title, source link, terminal date, whole-task focus, selection behavior, and direct recovery control remain operable without exposing permanent deletion
+- **THEN** its title, source link, terminal date, whole-task focus, selection behavior, direct recovery control, and permanent-deletion menu remain operable
 
 #### Scenario: Group terminal work by day
 - **WHEN** Done presents retained terminal tasks
@@ -3569,9 +3599,13 @@ Done SHALL present retained completed, canceled, and deleted tasks as fully insp
 - **WHEN** a user views Done
 - **THEN** Tasks exposes no single-task or multi-task drag reordering
 
+#### Scenario: Explain Done retention
+- **WHEN** a user views Done
+- **THEN** a subtle footer states that items in Done are permanently deleted after 30 days
+
 #### Scenario: Retain terminal work for purge
 - **WHEN** a task is completed, canceled, or deleted
-- **THEN** its existing completion, cancellation, or deletion timestamp remains the Done grouping and 31-day retention timestamp until the task is recovered or purged
+- **THEN** its existing completion, cancellation, or deletion timestamp remains the Done grouping and 31-day retention timestamp until the task is recovered, manually deleted permanently, or automatically purged
 
 ### Requirement: Project-Free Task Hierarchy
 The Tasks module SHALL organize active owner work through optional Areas, tasks, and task checklist items without a Project entity, Project relationship, Project planning root, or Project-specific application surface.
@@ -4278,15 +4312,15 @@ Tasks SHALL expose no reusable Template entity, view, route, navigation action, 
 - **THEN** no template collection appears in the PowerSync schema, publication, or owner-scoped stream
 
 ### Requirement: Closed-task completion has an accidental-click grace period
-When a user marks a closed ordinary to-do complete from a list, Tasks SHALL show it as checked in place for three seconds before beginning terminal exit motion and persistence.
+When a user marks a closed ordinary to-do complete from a list, Tasks SHALL show it as checked in place for two seconds before beginning terminal exit motion and persistence.
 
 #### Scenario: User confirms completion by waiting
-- **WHEN** the user checks a closed ordinary to-do and does not interact with its completion control for three seconds
+- **WHEN** the user checks a closed ordinary to-do and does not interact with its completion control for two seconds
 - **THEN** the row SHALL remain visibly checked during the grace period
 - **AND** Tasks SHALL then run the established completion exit and persistence behavior
 
 #### Scenario: User cancels accidental completion
-- **WHEN** the user checks a closed ordinary to-do and checks the same completion control again before three seconds elapse
+- **WHEN** the user checks a closed ordinary to-do and checks the same completion control again before two seconds elapse
 - **THEN** Tasks SHALL restore the unchecked state in place
 - **AND** Tasks SHALL NOT persist a completion mutation
 
@@ -4706,3 +4740,131 @@ The Tasks Start picker SHALL provide an inline clear action whenever Reminder co
 #### Scenario: Recover from a failed clear
 - **WHEN** clearing a persisted Reminder fails
 - **THEN** Tasks restores the last committed display value and retains the existing failure feedback behavior
+
+### Requirement: Recurrence prototypes can be deleted from Upcoming
+Tasks SHALL expose a Delete action on each dated or waiting recurrence prototype in Upcoming, SHALL retire that prototype from future recurrence generation, and SHALL leave already generated ordinary task instances unchanged.
+
+#### Scenario: Delete a dated recurrence prototype
+- **WHEN** a user activates Delete from the ellipsis menu of a dated recurrence prototype
+- **THEN** Tasks archives the recurrence definition and removes the prototype from Upcoming without changing any already generated instance
+
+#### Scenario: Delete a waiting recurrence prototype
+- **WHEN** a user activates Delete from the ellipsis menu of a waiting after-completion recurrence prototype
+- **THEN** Tasks archives the recurrence definition and removes the prototype from the Repeating Tasks section without changing its outstanding ordinary instance
+
+#### Scenario: Recurrence prototype deletion fails
+- **WHEN** the authoritative recurrence status mutation rejects or fails
+- **THEN** Tasks keeps or restores the prototype in Upcoming and reports that the repeating task could not be deleted
+
+### Requirement: Unified Task-Like Recurrence Prototype Editing
+Tasks SHALL present ordinary task metadata in an opened recurrence prototype through the same task metadata and checklist interaction components used by an opened ordinary task, while applying only the explicit capability differences required by recurrence.
+
+#### Scenario: Present shared prototype metadata controls
+- **WHEN** a user opens a recurrence prototype in Upcoming
+- **THEN** Summary, Notes, Primary Link, Area, Actionability, disclosure layout, spacing, input sizing, focus treatment, and open-row blue highlight use the same components and presentation rules as an opened ordinary task
+
+#### Scenario: Edit a prototype checklist
+- **WHEN** a user adds, edits, splits, joins, pastes, cuts, copies, completes, reopens, selects, deletes, or reorders checklist items in an opened recurrence prototype
+- **THEN** Tasks uses the same checklist controls, sizes, keyboard behavior, pointer behavior, selection behavior, and ordering behavior as an ordinary task checklist
+- **AND** accepted checklist state is persisted in the current recurrence prototype snapshot for later generated instances
+
+#### Scenario: Preserve recurrence-specific exceptions
+- **WHEN** a recurrence prototype is presented or opened
+- **THEN** Tasks uses the recurrence symbol instead of a completion checkbox, excludes the prototype from task bulk selection and completion, omits editable Start and Deadline fields, and presents one full-width Edit Repeat control in their place
+
+#### Scenario: Keep one inline editor open
+- **WHEN** an ordinary task or recurrence prototype is open in Upcoming and the user opens a different ordinary task or recurrence prototype
+- **THEN** Tasks flushes and closes the current editor before opening the requested editor
+- **AND** no ordinary task and recurrence prototype are open simultaneously
+
+#### Scenario: Carry future drawer refinements uniformly
+- **WHEN** a shared metadata drawer component or shared checklist component changes
+- **THEN** the changed component is used by both ordinary task and recurrence prototype editors without a prototype-only visual substitute
+
+### Requirement: Closed task completion preserves interaction-origin focus intent
+Tasks SHALL distinguish pointer completion from keyboard completion when a closed task leaves an active list, without changing completion persistence, grace, animation, or error recovery.
+
+#### Scenario: Complete a closed task by pointer
+- **WHEN** a user clicks a closed task's completion checkbox
+- **THEN** Tasks completes and removes that task without moving whole-task keyboard focus to another task
+
+#### Scenario: Complete a closed task by keyboard shortcut
+- **WHEN** a user invokes the task completion keyboard shortcut on a keyboard-focused closed task
+- **THEN** Tasks completes and removes that task and moves whole-task keyboard focus to the next eligible task using the established list fallback order
+
+### Requirement: Reminder metadata uses neutral secondary styling
+Tasks SHALL present a reminder's icon and time in the second task-row metadata line using the regular muted gray metadata color, while preserving semantic blue for a task-row Primary Link that opens an external website or application.
+
+#### Scenario: Present Reminder beside other metadata
+- **WHEN** a task row displays Reminder metadata
+- **THEN** both the Reminder icon and its time text use the regular muted gray metadata color
+- **AND** the Reminder does not use the semantic blue reserved for an external link affordance
+
+#### Scenario: Preserve external Primary Link styling
+- **WHEN** the same task row also displays a Primary Link action
+- **THEN** that Primary Link icon retains the semantic blue link treatment
+
+### Requirement: Dated recurrence prototype selection
+Tasks SHALL include every dated recurrence prototype in the Upcoming list's transient row-selection model alongside ordinary tasks while retaining recurrence-owned scheduling behavior.
+
+#### Scenario: Enter selection from a prototype
+- **WHEN** selection mode is inactive and a user Command-clicks a dated prototype on Mac, Control-clicks it on Windows, or Shift-clicks it as a new selection target
+- **THEN** Tasks closes any open editor, enters selection mode, selects only that prototype, establishes it as the range anchor, and does not open the prototype editor
+
+#### Scenario: Extend a mixed range
+- **WHEN** selection mode is active and a user Shift-clicks an ordinary task or dated prototype with an existing anchor
+- **THEN** Tasks selects the contiguous visible range across ordinary task and prototype rows in their rendered Upcoming order
+
+#### Scenario: Toggle a prototype in active selection
+- **WHEN** selection mode is active and the user activates a prototype summary or its circular selection control
+- **THEN** Tasks toggles that prototype's membership without opening its editor and applies the same zero-selection exit behavior used by ordinary task rows
+
+#### Scenario: Present a selected prototype
+- **WHEN** a dated prototype renders while selection mode is active
+- **THEN** it replaces its recurrence control with the canonical circular selected or unselected control, uses the canonical selected-row highlight when selected, communicates its selection state accessibly, and hides its ellipsis action button
+
+#### Scenario: Select all Upcoming rows
+- **WHEN** selection mode is active on Upcoming and the user activates Select All
+- **THEN** Tasks selects every visible eligible ordinary task and dated recurrence prototype and includes both kinds in the reported count
+
+#### Scenario: Edit metadata shared by tasks and prototypes
+- **WHEN** a selection contains one or more dated recurrence prototypes
+- **THEN** Tasks keeps Edit enabled and offers Area, Actionability, and Delete while omitting Start and Deadline
+
+#### Scenario: Apply a shared metadata edit
+- **WHEN** the user chooses an Area or Actionability value for a mixed or prototype-only Upcoming selection
+- **THEN** Tasks applies that value to every selected ordinary task and recurrence prototype through the appropriate guarded persistence path and keeps every still-visible row selected
+
+#### Scenario: Delete any Upcoming selection
+- **WHEN** the user chooses Delete for any non-empty Upcoming selection of ordinary tasks, recurrence instances, and dated recurrence prototypes
+- **THEN** Tasks moves every selected ordinary task or recurrence instance to Done, archives every selected recurrence prototype, removes successful targets from Upcoming, and restores any target whose mutation fails
+
+### Requirement: Mixed Upcoming group reordering
+Tasks SHALL allow a selected group containing ordinary tasks and dated recurrence prototypes to reorder through the Upcoming list while preserving every prototype's recurrence-owned date.
+
+#### Scenario: Reorder a mixed group within one day
+- **WHEN** selected ordinary tasks and dated prototypes are dragged to another position in their shared Upcoming day bucket
+- **THEN** Tasks assigns the group consecutive Upcoming order keys in its existing visible relative order and persists ordinary-task and prototype ordering through their respective guarded mutation paths
+
+#### Scenario: Start a group drag from a prototype
+- **WHEN** a selected dated prototype begins a native drag
+- **THEN** Tasks drags the complete selected group rather than only that prototype
+
+#### Scenario: Reject illegal prototype movement across days
+- **WHEN** a selected group contains prototypes from days other than the target day and is dropped into the target day bucket
+- **THEN** Tasks leaves those prototypes in their recurrence-owned buckets without changing their occurrence dates or Upcoming order keys for the target bucket
+
+#### Scenario: Move eligible ordinary tasks during a cross-day drop
+- **WHEN** a mixed selected group is dropped into another Upcoming day bucket
+- **THEN** Tasks may move selected ordinary tasks through the existing cross-day planning behavior while every schedule-ineligible prototype remains in its original bucket
+
+### Requirement: Selection lasso toggle
+Tasks SHALL keep the top-right selection lasso available as a visible toggle throughout selection-capable list interaction.
+
+#### Scenario: Show active lasso state
+- **WHEN** selection mode is active
+- **THEN** the lasso remains visible, exposes an accessible pressed state, and uses the established information highlight to indicate that selection mode is active
+
+#### Scenario: Cancel selection with the lasso
+- **WHEN** the user activates the lasso while selection mode is active
+- **THEN** Tasks clears selection membership and its anchor and returns to ordinary list interaction

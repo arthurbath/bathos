@@ -1,5 +1,6 @@
 import React from 'react';
 import { act } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -561,6 +562,148 @@ describe('useTaskUndo', () => {
       expect(undone).toEqual(reopenedTask);
       expect(repository.undoTask).toHaveBeenCalledTimes(1);
       expect(repository.undoTask).toHaveBeenCalledWith('owner-a', completionEvent.id);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('exposes an accepted recoverable deletion as the newest undo action', async () => {
+    const beforeDeletion = taskTodoFixture({
+      title: 'Task to delete',
+      revision: 2,
+      client_mutation_id: 'mutation-before-delete',
+    });
+    const deletedTask = taskTodoFixture({
+      ...beforeDeletion,
+      disposition: 'deleted',
+      deleted_at: '2026-07-20T05:00:00.000Z',
+      deletion_root_id: beforeDeletion.id,
+      revision: 3,
+      client_mutation_id: 'mutation-delete',
+      updated_at: '2026-07-20T05:00:00.000Z',
+    });
+    const deletionEvent = historyRow(1, {
+      id: 'event-delete',
+      client_mutation_id: deletedTask.client_mutation_id,
+      base_revision: 2,
+      result_revision: 3,
+      transition: 'delete',
+      occurred_at: deletedTask.updated_at,
+      before_state: JSON.stringify(snapshotTask(beforeDeletion)),
+      after_state: JSON.stringify(snapshotTask(deletedTask)),
+    });
+    const restoredTask = taskTodoFixture({
+      ...beforeDeletion,
+      revision: 4,
+      client_mutation_id: 'mutation-undo-delete',
+    });
+    const repository = {
+      undoTask: vi.fn().mockResolvedValue(restoredTask),
+      redoTask: vi.fn(),
+    };
+    mocks.useQuery.mockImplementation((sql: string) => ({
+      data: sql.includes('tasks_history_events') ? [deletionEvent] : [deletedTask],
+      isLoading: false,
+      error: null,
+    }));
+    mocks.useTasksRuntime.mockReturnValue({ repository });
+    const { container, root } = renderHookHarness();
+
+    try {
+      expect(latest.event?.id).toBe(deletionEvent.id);
+      expect(latest.available).toBe(true);
+
+      await act(async () => {
+        await expect(latest.undoWhenAvailable(0)).resolves.toEqual(restoredTask);
+      });
+      expect(repository.undoTask).toHaveBeenCalledWith('owner-a', deletionEvent.id);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('retains immediate deletion undo across independently arriving projections', async () => {
+    const older = historyRow(0);
+    const beforeDeletion = taskTodoFixture({
+      title: 'Task to delete',
+      revision: 2,
+      client_mutation_id: 'mutation-before-delete',
+    });
+    const deletedTask = taskTodoFixture({
+      ...beforeDeletion,
+      disposition: 'deleted',
+      deleted_at: '2026-07-20T05:00:00.000Z',
+      deletion_root_id: beforeDeletion.id,
+      revision: 3,
+      client_mutation_id: 'mutation-delete',
+      updated_at: '2026-07-20T05:00:00.000Z',
+    });
+    const deletionEvent = historyRow(1, {
+      id: 'event-delete',
+      client_mutation_id: deletedTask.client_mutation_id,
+      base_revision: 2,
+      result_revision: 3,
+      transition: 'delete',
+      occurred_at: deletedTask.updated_at,
+      before_state: JSON.stringify(snapshotTask(beforeDeletion)),
+      after_state: JSON.stringify(snapshotTask(deletedTask)),
+    });
+    const restoredTask = taskTodoFixture({
+      ...beforeDeletion,
+      revision: 4,
+      client_mutation_id: 'mutation-undo-delete',
+    });
+    let historyData = [older];
+    let taskData = [beforeDeletion];
+    let harnessRoot: Root | null = null;
+    let taskRefreshCount = 0;
+    const refreshHistory = vi.fn(async () => {
+      historyData = [deletionEvent, older];
+      if (harnessRoot) flushSync(() => harnessRoot?.render(<Harness />));
+    });
+    const refreshTasks = vi.fn(async () => {
+      taskRefreshCount += 1;
+      if (taskRefreshCount < 2) return;
+      taskData = [deletedTask];
+      if (harnessRoot) flushSync(() => harnessRoot?.render(<Harness />));
+    });
+    const repository = {
+      undoTask: vi.fn().mockResolvedValue(restoredTask),
+      redoTask: vi.fn(),
+    };
+    mocks.useQuery.mockImplementation((sql: string) => ({
+      data: sql.includes('tasks_history_events') ? historyData : taskData,
+      isLoading: false,
+      error: null,
+      refresh: sql.includes('tasks_history_events') ? refreshHistory : refreshTasks,
+    }));
+    mocks.useTasksRuntime.mockReturnValue({ repository });
+    const { container, root } = renderHookHarness();
+    harnessRoot = root;
+
+    try {
+      let reservation!: ReturnType<typeof latest.reserveForwardMutation>;
+      act(() => {
+        reservation = latest.reserveForwardMutation(beforeDeletion);
+      });
+      act(() => {
+        reservation.commit(deletedTask);
+      });
+
+      let undoPromise!: Promise<TaskTodo | null>;
+      act(() => {
+        undoPromise = latest.undoWhenAvailable(500);
+      });
+
+      let deletionUndoResult: TaskTodo | null = null;
+      await act(async () => {
+        deletionUndoResult = await undoPromise;
+      });
+      expect(deletionUndoResult).toEqual(restoredTask);
+      expect(refreshHistory).toHaveBeenCalled();
+      expect(refreshTasks).toHaveBeenCalledTimes(2);
+      expect(repository.undoTask).toHaveBeenCalledOnce();
+      expect(repository.undoTask).toHaveBeenCalledWith('owner-a', deletionEvent.id);
     } finally {
       cleanup(root, container);
     }

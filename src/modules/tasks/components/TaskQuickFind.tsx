@@ -77,7 +77,8 @@ function getTaskQuickFindRoute(task: TaskTodo, planningDate: string): TaskPlanni
 }
 
 function taskDetail(task: TaskTodo, route: TaskPlanningRoute): string {
-  if (task.lifecycle !== 'open') return task.lifecycle === 'completed' ? 'Completed' : 'Canceled';
+  if (task.disposition === 'deleted') return 'Deleted';
+  if (task.lifecycle !== 'open') return 'Completed';
   return route[0].toUpperCase() + route.slice(1);
 }
 
@@ -118,8 +119,9 @@ function createQuickFindResults(
     const fields = {
       normalizedTitle: normalize(prototype.title),
       normalizedNotes: normalize(prototype.notes),
+      normalizedPrimaryLink: normalize(prototype.primary_link ?? ''),
       normalizedSourceTitle: '',
-      normalizedSourceUrl: normalize(prototype.primary_link ?? ''),
+      normalizedSourceUrl: '',
       normalizedHierarchyLabel: normalize(
         revision.target_area_id ? areaTitles.get(revision.target_area_id) ?? '' : '',
       ),
@@ -213,7 +215,14 @@ export function TaskQuickFindDialog({
     ],
   );
   const results = allResults.slice(0, 3);
-  const showAllResults = allResults.length > 0;
+  const showAllResults = useMemo(() => {
+    const normalizedQuery = normalize(deferredQuery);
+    if (!normalizedQuery) return false;
+    return filterTaskSearchDocuments(
+      createTaskSearchDocuments(tasks, hierarchy),
+      normalizedQuery,
+    ).length > 0;
+  }, [deferredQuery, hierarchy, tasks]);
   const resultIdentity = results.map(({ id, activation }) => `${id}:${activation}`).join('|');
   useEffect(() => {
     setActiveIndex(0);

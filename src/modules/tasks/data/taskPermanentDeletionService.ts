@@ -66,7 +66,7 @@ export class TaskPermanentDeletionService {
     rootId: string,
   ): Promise<TaskPermanentDeletionPreview> {
     if (!isRootType(rootType) || !rootId.trim()) {
-      throw new InvalidTaskPermanentDeletionError('A deleted task is required');
+      throw new InvalidTaskPermanentDeletionError('A task in Done is required');
     }
     const { data, error } = await this.client.rpc('tasks_preview_permanent_deletion', {
       _root_type: rootType,

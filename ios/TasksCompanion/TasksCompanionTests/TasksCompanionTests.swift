@@ -972,6 +972,8 @@ final class TasksCompanionTests: XCTestCase {
     func testFinishedContentIgnoresAStaleFailureAndRecoversAfterTermination() {
         let model = TasksBrowserModel()
         model.didFinishLoading()
+        XCTAssertFalse(model.hasLoadedContent)
+        model.didBecomeContentReady()
         XCTAssertTrue(model.hasLoadedContent)
 
         model.didFailLoading(URLError(.notConnectedToInternet))
@@ -994,6 +996,7 @@ final class TasksCompanionTests: XCTestCase {
         let webView = WKWebView()
         model.webView = webView
         model.didFinishLoading()
+        model.didBecomeContentReady()
         let route = TaskNativeRoute.task(UUID(), list: .today)
 
         model.open(route)
@@ -1005,18 +1008,43 @@ final class TasksCompanionTests: XCTestCase {
     }
 
     @MainActor
-    func testPresentationResetHidesStaleContentBehindLoadingState() {
-        let model = TasksBrowserModel()
+    func testPresentationReusesHealthyContentForQuickEntry() {
+        var navigatedURL: URL?
+        let model = TasksBrowserModel(
+            inPageNavigator: { _, url in
+                navigatedURL = url
+            }
+        )
+        model.webView = WKWebView()
         model.didFinishLoading()
+        model.didBecomeContentReady()
         XCTAssertTrue(model.hasLoadedContent)
 
         let nextURL = TaskNativeRoute.newTask.webURL
         model.prepareForPresentation(of: nextURL)
 
         XCTAssertEqual(model.requestedURL, nextURL)
+        XCTAssertEqual(navigatedURL, nextURL)
+        XCTAssertTrue(model.hasLoadedContent)
+        XCTAssertFalse(model.isLoading)
+        XCTAssertNil(model.loadError)
+    }
+
+    @MainActor
+    func testNavigationWaitsForWebReadinessAndHasABoundedFallback() {
+        let model = TasksBrowserModel(
+            contentReadyFallbackDelayNanoseconds: 60_000_000_000
+        )
+
+        model.didFinishLoading()
+
         XCTAssertFalse(model.hasLoadedContent)
         XCTAssertTrue(model.isLoading)
-        XCTAssertNil(model.loadError)
+
+        model.performContentReadyFallback()
+
+        XCTAssertTrue(model.hasLoadedContent)
+        XCTAssertFalse(model.isLoading)
     }
 
     @MainActor
