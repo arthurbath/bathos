@@ -38,6 +38,8 @@ Ordinary task drawers already establish the desired interaction: text fields aut
 
 8. **Treat the ordinary-task Upcoming rank as a synchronized mutable field.** `tasks_todos.upcoming_order_key` participates in the same durable PowerSync upload contract as `order_key`. Task inserts preserve an explicit Upcoming rank and task updates may upload a changed Upcoming rank. Rejecting that column as unknown creates a misleading optimistic reorder followed by an authoritative snap-back, so connector coverage exercises the real CRUD parser rather than only the task-list hook.
 
+9. **Project dated prototypes by schedule knowledge rather than rule mode.** Calendar and after-completion definitions use the same dated Upcoming projection whenever the authoritative definition exposes a future `next_occurrence_date`. The client derives the generated instance Start by subtracting the revision's Deadline offset and admits the prototype only when that projected Start is after the owner's planning date. An after-completion definition belongs in the waiting section only while an outstanding open instance prevents the server from deriving that next date.
+
 ## Risks / Trade-offs
 
 - **[Rapid autosaves could conflict on immutable revisions]** -> Queue mutations per opened prototype and advance the local definition/revision base after every accepted response.
@@ -47,3 +49,4 @@ Ordinary task drawers already establish the desired interaction: text fields aut
 - **[A recurrence revision can change while its prototype is being dragged]** -> Treat Upcoming rank as an orthogonal last-intent mutation and retry once with the authoritative definition returned by the conflict response.
 - **[Mixed rows can expose a placement the persistence layer cannot address]** -> Share one stable mixed-row projection across rendering, direct row targets, bucket-edge targets, and fractional-key generation.
 - **[A local ordinary-task reorder can snap back after upload]** -> Admit `upcoming_order_key` through the task insert and update CRUD parsers and verify the synchronized browser flow through reload.
+- **[An after-completion prototype can disappear between waiting and dated projections]** -> Make the dated projection recurrence-mode-independent and cover the completion transition with a focused regression test.

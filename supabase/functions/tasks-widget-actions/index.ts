@@ -36,6 +36,16 @@ const handler = createTasksWidgetActionsHandler({
         'tasks_read_widget_snapshot',
         { _raw_token: rawToken },
       ),
+      createInboxTask: async (input) => client.rpc('tasks_create_inbox_from_watch', {
+        _raw_token: input.rawToken,
+        _summary: input.summary,
+        _client_mutation_id: input.clientMutationId,
+        _operation_id: input.operationId,
+      }),
+      todayProgress: async (rawToken) => client.rpc(
+        'tasks_read_today_progress_for_watch',
+        { _raw_token: rawToken },
+      ),
       revoke: async (rawToken) => client.rpc(
         'tasks_revoke_widget_completion_credential',
         { _raw_token: rawToken },

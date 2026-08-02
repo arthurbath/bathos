@@ -43,6 +43,11 @@ The system SHALL keep revisioned recurrence definitions separate from task insta
 - **WHEN** a user completes the latest instance of after-completion work
 - **THEN** the system preserves the recurrence definition and derives exactly one next prototype date from the authoritative completion date
 
+#### Scenario: Present the scheduled successor after after-completion work enters Done
+- **WHEN** the latest after-completion instance enters Done and the authoritative definition derives a future next occurrence
+- **THEN** Upcoming removes the prototype from the waiting section and presents it exactly once in the date bucket for the projected Start of its next generated instance
+- **AND** Quick Find and direct recurrence navigation resolve to that same visible prototype row
+
 #### Scenario: Trash an after-completion instance
 - **WHEN** a user trashes the latest instance of after-completion work
 - **THEN** the system treats the authoritative trash date as its Done date and derives exactly one next prototype date from it
@@ -61,7 +66,7 @@ The system SHALL keep revisioned recurrence definitions separate from task insta
 
 #### Scenario: Present a dated recurrence prototype
 - **WHEN** an active recurrence has a knowable future spawn date
-- **THEN** Upcoming presents exactly one prototype in the date bucket determined by its future Start when present or otherwise its future Deadline
+- **THEN** Upcoming presents exactly one prototype regardless of whether its rule mode is calendar or after completion, in the date bucket determined by its future Start when present or otherwise its future Deadline
 
 #### Scenario: Present recurrence prototype metadata
 - **WHEN** a recurrence prototype appears in Upcoming

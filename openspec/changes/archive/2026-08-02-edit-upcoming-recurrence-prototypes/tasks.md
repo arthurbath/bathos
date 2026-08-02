@@ -27,4 +27,10 @@
 - [x] 5.4 Add regression coverage for mixed boundaries, prototype targets, tied keys, conflict reconciliation, and persistent optimistic placement.
 - [x] 5.5 Run focused tests, build, lint, and OpenSpec validation.
 - [x] 5.6 Add `upcoming_order_key` to the durable task insert and update upload contract with connector-level regression coverage.
-- [ ] 5.7 Reproduce and verify an ordinary-task drop among prototypes through the live synchronized browser flow, including the post-sync delay and reload.
+- [x] 5.7 Reproduce and verify an ordinary-task drop among prototypes through the live synchronized browser flow, including the post-sync delay and reload.
+
+## 6. After-Completion Prototype Visibility Repair
+
+- [x] 6.1 Project any active recurrence with a knowable future spawn date into Upcoming, independent of rule mode, while retaining unknown after-completion successors in Repeating Tasks.
+- [x] 6.2 Add regression coverage for an after-completion prototype becoming dated after its latest instance enters Done and for excluding reached projected Start dates.
+- [x] 6.3 Run focused recurrence tests, build, lint, and OpenSpec validation.

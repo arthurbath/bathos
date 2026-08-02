@@ -13,6 +13,7 @@ struct TasksCompanionApp: App {
                 .ignoresSafeArea(.container, edges: .bottom)
                 .onOpenURL(perform: handleURL)
                 .onAppear {
+                    TaskWatchConnectivityCoordinator.shared.activate()
                     consumeNewTaskControlRequest()
                 }
                 .onChange(of: scenePhase) { _, newPhase in

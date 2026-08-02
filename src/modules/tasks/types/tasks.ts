@@ -12,6 +12,7 @@ export const taskEntryChannels = [
   'browser_capture',
   'native',
   'widget',
+  'watch',
   'import',
 ] as const;
 export const taskSourceKinds = [

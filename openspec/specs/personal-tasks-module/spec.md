@@ -1174,13 +1174,18 @@ The system SHALL keep revisioned recurrence definitions separate from task insta
 - **WHEN** a user completes the latest instance of after-completion work
 - **THEN** the system preserves the recurrence definition and derives exactly one next prototype date from the authoritative completion date
 
+#### Scenario: Present the scheduled successor after after-completion work enters Done
+- **WHEN** the latest after-completion instance enters Done and the authoritative definition derives a future next occurrence
+- **THEN** Upcoming removes the prototype from the waiting section and presents it exactly once in the date bucket for the projected Start of its next generated instance
+- **AND** Quick Find and direct recurrence navigation resolve to that same visible prototype row
+
 #### Scenario: Trash an after-completion instance
 - **WHEN** a user trashes the latest instance of after-completion work
 - **THEN** the system treats the authoritative trash date as its Done date and derives exactly one next prototype date from it
 
 #### Scenario: Present waiting after-completion work
 - **WHEN** an active after-completion recurrence has an outstanding open instance and therefore cannot yet derive its successor
-- **THEN** Upcoming presents the prototype once in a non-draggable Repeating Tasks section after its dated buckets, with Waiting in second-row metadata
+- **THEN** Upcoming presents the prototype once in a non-draggable Repeating Tasks section after its dated buckets, with Waiting plus its applicable Area, non-Ready Actionability, Notes, and Checklist metadata in the second row
 
 #### Scenario: Restore the outstanding after-completion instance
 - **WHEN** the latest completed or trashed instance is restored before its successor reaches its spawn date
@@ -1192,7 +1197,12 @@ The system SHALL keep revisioned recurrence definitions separate from task insta
 
 #### Scenario: Present a dated recurrence prototype
 - **WHEN** an active recurrence has a knowable future spawn date
-- **THEN** Upcoming presents exactly one prototype in the date bucket determined by its future Start when present or otherwise its future Deadline
+- **THEN** Upcoming presents exactly one prototype regardless of whether its rule mode is calendar or after completion, in the date bucket determined by its future Start when present or otherwise its future Deadline
+
+#### Scenario: Present recurrence prototype metadata
+- **WHEN** a recurrence prototype appears in Upcoming
+- **THEN** its second row presents its applicable Area, non-Ready Actionability, Notes, and Checklist metadata using the same order, symbols, colors, and omission rules as an ordinary task
+- **AND** a dated prototype with a generated-instance Deadline rule presents that next Deadline using the ordinary relative Deadline treatment
 
 #### Scenario: Exclude a reached prototype from Upcoming
 - **WHEN** a recurrence prototype's spawn date is on or before the owner's planning date
@@ -1200,7 +1210,17 @@ The system SHALL keep revisioned recurrence definitions separate from task insta
 
 #### Scenario: Distinguish an Upcoming recurrence prototype
 - **WHEN** a future recurrence prototype appears in an Upcoming date bucket
-- **THEN** its leading control is the recurrence symbol rather than a checkbox and it cannot be completed, bulk-mutated, dragged, or directly assigned different task metadata
+- **THEN** its leading control is the recurrence symbol rather than a checkbox and it cannot be completed, bulk-mutated, or dragged into another date bucket
+
+#### Scenario: Open a recurrence prototype
+- **WHEN** a user activates a dated or waiting recurrence prototype in Upcoming
+- **THEN** Tasks opens an inline metadata drawer that allows Summary, Notes, Primary Link, Area, Actionability, and Checklist editing through ordinary task-editor paradigms
+- **AND** the drawer omits editable Start and Deadline controls and presents one full-width Edit Repeat button in their place
+
+#### Scenario: Save ordinary prototype metadata
+- **WHEN** the user changes ordinary metadata in an opened recurrence prototype
+- **THEN** Tasks autosaves the current prototype snapshot as a new recurrence revision without changing cadence or any already generated instance
+- **AND** later instances inherit the newly accepted prototype metadata
 
 #### Scenario: Present a spawned instance in Upcoming
 - **WHEN** an already-spawned recurrence instance remains or becomes eligible for Upcoming because of its editable Start or Deadline
@@ -1215,8 +1235,9 @@ The system SHALL keep revisioned recurrence definitions separate from task insta
 - **THEN** the prototype remains represented in Upcoming at the next valid cadence date without causing the spawned instance to appear as repeating
 
 #### Scenario: Edit Repeat from Upcoming
-- **WHEN** a user activates a recurrence prototype or chooses Edit Repeat
-- **THEN** Tasks opens the recurrence editor with the current prototype name and revision schedule values and saves accepted name or schedule changes as a new recurrence revision
+- **WHEN** a user chooses Edit Repeat from an opened prototype or its ellipsis menu
+- **THEN** Tasks opens a separate recurrence editor containing cadence, next-occurrence, reminder, and generated-instance Deadline controls but no ordinary prototype metadata fields
+- **AND** Save commits the complete cadence change atomically as a new recurrence revision while Cancel commits none of it
 
 #### Scenario: Keep the next occurrence current or future
 - **WHEN** a user creates or edits recurrence scheduling
@@ -3080,39 +3101,31 @@ The Tasks module SHALL provide one synchronized, owner-scoped preference that op
 - **THEN** its options appear as Ready, Rechecking, then Waiting
 
 ### Requirement: Upcoming Date-Section Ordering
-The Tasks module SHALL permit manual ordering of ordinary tasks and scheduled recurrence projections inside each visible Upcoming date section and SHALL convert eligible cross-section ordinary-task drops into future Start planning.
+The Tasks module SHALL permit manual ordering of ordinary tasks and scheduled recurrence prototypes inside each visible Upcoming date section through one stable mixed-row order.
 
-#### Scenario: Manually order tasks inside one Upcoming section
-- **WHEN** a user drags an Upcoming ordinary task before or after another ordinary task or recurrence projection in the same visible day, month, or year section
-- **THEN** Tasks persists the selected manual order without changing either task's Start or Deadline
+#### Scenario: Preserve a direct mixed-row drop
+- **WHEN** a user drags an ordinary task or scheduled recurrence prototype before or after any eligible row in its current Upcoming date section
+- **THEN** Tasks persists the exact displayed placement and retains it through asynchronous save and synchronization
 
-#### Scenario: Reorder a recurrence projection
-- **WHEN** a user drags a scheduled recurrence projection before or after an ordinary task or another recurrence projection in its current visible date section
-- **THEN** Tasks persists the selected manual order without changing the recurrence cadence, projected Start, Deadline, or recurrence identity
+#### Scenario: Upload an ordinary task's Upcoming rank
+- **WHEN** an ordinary task reorder changes `upcoming_order_key` in the local synchronized database
+- **THEN** the Tasks mutation connector uploads that rank as a supported mutable task field instead of rejecting the queued mutation and restoring the prior remote rank
 
-#### Scenario: Keep recurrence projections in their cadence date
-- **WHEN** a user drags a scheduled recurrence projection across another visible Upcoming date section
-- **THEN** Tasks does not move the projection into that section or change its cadence-controlled date
+#### Scenario: Preserve a section-edge drop around prototypes
+- **WHEN** a user drops at the beginning or end of an Upcoming date section containing ordinary tasks, recurrence prototypes, or both
+- **THEN** Tasks derives the boundary from the complete displayed mixed-row sequence rather than from ordinary tasks alone
 
-#### Scenario: Move a task to another Upcoming section
-- **WHEN** a user drags an ordinary Upcoming task into another visible date section
-- **THEN** Tasks assigns the destination section's canonical future date as the task's Start, clears any Today horizon, and persists the selected manual position inside that section
+#### Scenario: Preserve an ordinary task's cross-section prototype placement
+- **WHEN** a user drags an ordinary task from one Upcoming date section before or after a recurrence prototype in another date section
+- **THEN** Tasks moves the ordinary task to the target date section and persists its requested placement relative to the prototype
 
-#### Scenario: Move a deadline-only task to another Upcoming section
-- **WHEN** an ordinary task appears in Upcoming only because of its Deadline and the user drops it into a different Upcoming section
-- **THEN** Tasks assigns the destination section date as its Start and retains its existing Deadline
+#### Scenario: Reconcile a concurrent prototype revision
+- **WHEN** a prototype metadata save or recurrence evaluation advances the recurrence revision while an Upcoming reorder is being committed
+- **THEN** Tasks retries the orthogonal rank mutation against the authoritative recurrence definition without flashing the prototype back to its stale position
 
-#### Scenario: Prefer Start over Deadline exactly once
-- **WHEN** an open task has both a future Start and a future Deadline
-- **THEN** Upcoming displays it once in the section controlled by Start and does not also display it in the Deadline section
-
-#### Scenario: Drop into an Upcoming section without another task
-- **WHEN** the destination Upcoming section contains no task row that can serve as a manual-order target
-- **THEN** dropping an ordinary task on the section still assigns its canonical future Start and places the task as that section's only manually ordered task
-
-#### Scenario: Reschedule a reminder after an Upcoming move
-- **WHEN** an ordinary task with a reminder moves to another Upcoming section
-- **THEN** Tasks reschedules the reminder against the task's newly assigned Start
+#### Scenario: Order tied mixed rows consistently
+- **WHEN** ordinary tasks or recurrence prototypes share the same fractional order key
+- **THEN** rendering and reorder calculations apply the same stable identity tie-breaker
 
 ### Requirement: Bulk Task Drag Group
 On Today, Upcoming, Anytime, and Someday, the system SHALL allow a pointer drag that begins on a selected task to move the complete current task selection. The system SHALL derive group order from the tasks' current visual order rather than selection order and SHALL close a different open task through the safe autosave boundary when dragging begins.
@@ -4672,3 +4685,24 @@ Tasks SHALL hide persistent mobile navigation while a software keyboard material
 #### Scenario: Dismiss the software keyboard
 - **WHEN** the editable focus or keyboard-induced viewport contraction ends
 - **THEN** mobile navigation returns to its stable safe-area position
+
+### Requirement: Direct Reminder clearing
+The Tasks Start picker SHALL provide an inline clear action whenever Reminder contains a value, positioned after the value and before the alarm-clock menu button.
+
+#### Scenario: Present the Reminder clear action
+- **WHEN** Reminder contains a displayed value
+- **THEN** a small X action appears inside the trailing portion of the input before Alarm
+- **AND** the input reserves space so neither trailing action covers the displayed value
+
+#### Scenario: Clear Reminder immediately
+- **WHEN** the user activates the Reminder X with pointer, Space, or Return
+- **THEN** Tasks immediately clears the displayed Reminder and persists the cleared reminder intent
+- **AND** Start remains open
+
+#### Scenario: Hide the clear action for an empty Reminder
+- **WHEN** Reminder contains no displayed value
+- **THEN** the inline X is absent and Alarm retains its existing position and behavior
+
+#### Scenario: Recover from a failed clear
+- **WHEN** clearing a persisted Reminder fails
+- **THEN** Tasks restores the last committed display value and retains the existing failure feedback behavior

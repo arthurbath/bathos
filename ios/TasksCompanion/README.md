@@ -1,17 +1,21 @@
 # Tasks iOS Companion
 
-This Xcode project contains the thin native BathOS Tasks companion, its configurable Home Screen and Lock Screen widgets, and its New Task system control.
+This Xcode project contains the thin native BathOS Tasks companion, its configurable Home Screen and Lock Screen widgets, its New Task system control, and its focused Apple Watch capture companion.
 
 ## Targets
 
 - `TasksCompanion`: SwiftUI application containing the production Tasks web application in `WKWebView`
 - `TasksWidgets`: configurable WidgetKit extension for Today, Upcoming, Anytime, and Someday, plus the New Task system control on iOS 18 and later
+- `TasksWatch`: watchOS application for adding a task to Today Inbox through the system text-entry interface
+- `TasksWatchWidgets`: accessory-circular complication showing completed explicit-Today tasks as a share of all non-deleted explicit-Today tasks
 - `TasksCompanionTests`: dependency-free tests for cache validation and deep-link routing
 
 ## Identifiers
 
 - App: `garden.bath.tasks`
 - Widget extension: `garden.bath.tasks.widgets`
+- Watch app: `garden.bath.tasks.watchkitapp`
+- Watch complication: `garden.bath.tasks.watchkitapp.widgets`
 - Shared App Group: `group.garden.bath.tasks`
 - Apple development team: `SPJYXE7ZA3`
 - URL scheme: `bathostasks`
@@ -19,13 +23,23 @@ This Xcode project contains the thin native BathOS Tasks companion, its configur
 ## Apple Team Setup
 
 1. Select an eligible Apple Developer team for the app and widget targets.
-2. Register both bundle identifiers.
-3. Enable the App Groups capability for both identifiers.
-4. Add `group.garden.bath.tasks` to both targets.
+2. Register the iPhone app, iPhone widget, Watch app, and Watch complication bundle identifiers.
+3. Enable the App Groups capability for all four identifiers.
+4. Add `group.garden.bath.tasks` to all four targets.
 5. Let Xcode create or download the corresponding development provisioning profiles.
 6. Build and install the `TasksCompanion` scheme on the intended iPhone.
 
 Do not replace the checked-in App Group identifier or create a second shared container for local development. App and widget must use the same entitlement.
+
+## Apple Watch
+
+The Watch app intentionally has one job. Its plus button opens the standard watchOS text-entry interface, and submitting non-empty text creates an owned task with an explicit Start date of the owner's current planning day and the Inbox Today horizon. It does not download or display task lists.
+
+The accessory-circular complication uses the system circular gauge with a simple checkmark. Its denominator is every present, non-deleted task whose explicit Start date equals the owner's current planning day. Its numerator is the completed subset. Trashed tasks and recurrence projections are excluded. Tapping the complication opens the Watch app.
+
+The iPhone transfers the existing expiring widget credential to its paired Watch through `WatchConnectivity`. The credential grants only the bounded Watch capture and aggregate-progress operations at the Edge Function boundary. The Watch refreshes progress when its app becomes active and asks WidgetKit for another timeline after 30 minutes. watchOS ultimately schedules background refreshes according to its system budget, so the requested interval is not a guarantee.
+
+Production acceptance requires applying `20260801195000_add_tasks_watch_capture_and_progress.sql`, deploying `tasks-widget-actions` with the matching backward-compatible handler, rebuilding the automatically signed companion, installing it on the paired iPhone and Watch, and verifying capture, sign-out clearing, owner replacement, complication progress, and offline cached rendering on physical hardware.
 
 ## Local Validation
 

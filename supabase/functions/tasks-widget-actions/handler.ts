@@ -12,6 +12,13 @@ export type WidgetActionRpcClient = {
     operationId: string;
   }) => Promise<{ data: unknown; error: unknown | null }>;
   snapshot: (rawToken: string) => Promise<{ data: unknown; error: unknown | null }>;
+  createInboxTask: (input: {
+    rawToken: string;
+    summary: string;
+    clientMutationId: string;
+    operationId: string;
+  }) => Promise<{ data: unknown; error: unknown | null }>;
+  todayProgress: (rawToken: string) => Promise<{ data: unknown; error: unknown | null }>;
   revoke: (rawToken: string) => Promise<{ data: unknown; error: unknown | null }>;
 };
 
@@ -32,6 +39,7 @@ type JsonRecord = Record<string, unknown>;
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const widgetTokenPattern = /^twc_[A-Za-z0-9_-]{43}$/;
+const planningDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 const jsonHeaders = {
   'Content-Type': 'application/json',
   'Cache-Control': 'no-store',
@@ -133,7 +141,9 @@ export function createTasksWidgetActionsHandler(dependencies: HandlerDependencie
 
     const body = await parseBody(request);
     const action = body?.action;
-    if (!body || !['issue', 'complete', 'snapshot', 'revoke'].includes(String(action))) {
+    if (!body || ![
+      'issue', 'complete', 'snapshot', 'createInboxTask', 'todayProgress', 'revoke',
+    ].includes(String(action))) {
       return response(400, { error: 'Invalid request' });
     }
 
@@ -243,6 +253,89 @@ export function createTasksWidgetActionsHandler(dependencies: HandlerDependencie
         return response(500, { error: 'Widget could not be refreshed' });
       }
       return response(200, snapshot);
+    }
+
+    if (action === 'todayProgress') {
+      const result = await rpc.todayProgress(rawToken);
+      if (result.error) {
+        logError('Watch Today progress read failed');
+        return response(500, { error: 'Today progress could not be refreshed' });
+      }
+      const progress = parseRpcData(result.data);
+      if (!progress) {
+        return response(500, { error: 'Today progress could not be refreshed' });
+      }
+      if (progress.outcome === 'rejected') {
+        return response(401, {
+          error: 'Today progress could not be refreshed',
+          code: progress.code,
+        });
+      }
+      if (
+        progress.type !== 'todayProgress'
+        || progress.schemaVersion !== 1
+        || typeof progress.ownerId !== 'string'
+        || !uuidPattern.test(progress.ownerId)
+        || typeof progress.generatedAt !== 'string'
+        || Number.isNaN(Date.parse(progress.generatedAt))
+        || typeof progress.planningDate !== 'string'
+        || !planningDatePattern.test(progress.planningDate)
+        || typeof progress.completedCount !== 'number'
+        || typeof progress.totalCount !== 'number'
+        || progress.completedCount < 0
+        || progress.totalCount < progress.completedCount
+      ) {
+        return response(500, { error: 'Today progress could not be refreshed' });
+      }
+      return response(200, progress);
+    }
+
+    if (action === 'createInboxTask') {
+      const summary = body.summary;
+      const clientMutationId = body.clientMutationId;
+      const operationId = body.operationId;
+      if (
+        typeof summary !== 'string'
+        || summary.trim().length === 0
+        || summary.trim().length > 500
+        || typeof clientMutationId !== 'string'
+        || typeof operationId !== 'string'
+        || !uuidPattern.test(clientMutationId)
+        || !uuidPattern.test(operationId)
+      ) {
+        return response(400, { error: 'Invalid request' });
+      }
+      const result = await rpc.createInboxTask({
+        rawToken,
+        summary: summary.trim(),
+        clientMutationId,
+        operationId,
+      });
+      if (result.error) {
+        logError('Watch Inbox task creation failed');
+        return response(500, { error: 'Task could not be created' });
+      }
+      const outcome = parseRpcData(result.data);
+      if (!outcome) return response(500, { error: 'Task could not be created' });
+      if (outcome.outcome === 'rejected') {
+        return response(
+          outcome.code === 'invalid_credential' ? 401 : 409,
+          { error: 'Task could not be created', code: outcome.code },
+        );
+      }
+      if (
+        !['accepted', 'already_applied'].includes(String(outcome.outcome))
+        || typeof outcome.taskId !== 'string'
+        || !uuidPattern.test(outcome.taskId)
+        || typeof outcome.planningDate !== 'string'
+        || !planningDatePattern.test(outcome.planningDate)
+        || typeof outcome.revision !== 'number'
+        || !Number.isInteger(outcome.revision)
+        || outcome.revision < 1
+      ) {
+        return response(500, { error: 'Task could not be created' });
+      }
+      return response(200, outcome);
     }
 
     const taskId = body.taskId;

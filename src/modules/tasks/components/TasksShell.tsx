@@ -693,7 +693,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     areas: hierarchy.areas,
     automaticListSorting: automaticListSorting.enabled,
     quickFilter: taskQuickFilter,
-    recurrencePrototypes: recurrences.calendarPrototypes,
+    recurrencePrototypes: recurrences.datedPrototypes,
   });
   const projectedTasksRef = useRef(projectedTasks);
   const retainedTaskPlacementRef = useRef(retainedTaskPlacement);
@@ -968,7 +968,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     : view === 'upcoming'
       ? filteredTasks.length === 0
         && waitingRecurrences.length === 0
-        && recurrences.calendarPrototypes.length === 0
+        && recurrences.datedPrototypes.length === 0
     : filteredTasks.length === 0);
   const serverReplacementAvailable = mode === 'connected'
     && syncState === 'connected'
@@ -1853,7 +1853,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       current?.kind === 'task' && current.taskId === target.id ? null : current
     ));
   }, [
-    recurrences.calendarPrototypes,
+    recurrences.datedPrototypes,
     location.pathname,
     searchTarget,
     setOpenTask,
@@ -2977,7 +2977,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   }]
                 : [];
             }),
-            ...recurrences.calendarPrototypes.flatMap((prototype) => {
+            ...recurrences.datedPrototypes.flatMap((prototype) => {
               const sectionKey = getTaskUpcomingGroup(
                 prototype.scheduledDate,
                 planningDate,
@@ -2997,7 +2997,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             indicator.placement,
           );
           if (draggedRecurrenceId !== null) {
-            const prototype = recurrences.calendarPrototypes.find(
+            const prototype = recurrences.datedPrototypes.find(
               ({ definition }) => definition.id === draggedRecurrenceId,
             );
             if (prototype) {
@@ -3374,7 +3374,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           if (view === 'upcoming') {
             const draggedRecurrenceId = activeDraggedRecurrenceIdRef.current;
             if (draggedRecurrenceId !== null) {
-              const sourcePrototype = recurrences.calendarPrototypes.find(
+              const sourcePrototype = recurrences.datedPrototypes.find(
                 ({ definition }) => definition.id === draggedRecurrenceId,
               );
               if (
@@ -4037,7 +4037,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                   <>
                     <UpcomingTaskSections
                       tasks={renderedPlanningTasks}
-                      recurrencePrototypes={recurrences.calendarPrototypes}
+                      recurrencePrototypes={recurrences.datedPrototypes}
                       focusRecurrenceId={searchTarget?.kind === 'recurrence'
                         ? searchTarget.definitionId
                         : null}
@@ -4056,7 +4056,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                         if (draggedTaskId === null) return;
                         const draggedRecurrenceId = activeDraggedRecurrenceIdRef.current;
                         if (draggedRecurrenceId !== null) {
-                          const sourcePrototype = recurrences.calendarPrototypes.find(
+                          const sourcePrototype = recurrences.datedPrototypes.find(
                             ({ definition }) => definition.id === draggedRecurrenceId,
                           );
                           if (
@@ -4108,7 +4108,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                             return;
                           }
                         } else {
-                          const sourcePrototype = recurrences.calendarPrototypes.find(
+                          const sourcePrototype = recurrences.datedPrototypes.find(
                             ({ definition }) => definition.id
                               === activeDraggedRecurrenceIdRef.current,
                           );

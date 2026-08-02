@@ -410,6 +410,9 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             let changed: Bool
             if envelope.type == "clear" {
                 changed = try store.clear()
+#if os(iOS)
+                TaskWatchConnectivityCoordinator.shared.publish(nil)
+#endif
                 if let credentialStore = TaskWidgetCredentialStore() {
                     let credential = try? credentialStore.load()
                     _ = try? credentialStore.clear()
@@ -440,6 +443,9 @@ final class TasksBrowserModel: NSObject, ObservableObject {
                     return
                 }
                 try credentialStore.store(credential)
+#if os(iOS)
+                TaskWatchConnectivityCoordinator.shared.publish(credential)
+#endif
                 changed = false
             } else {
                 Self.recordBridgeDiagnostic("Rejected: unsupported message type")

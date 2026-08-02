@@ -713,7 +713,7 @@ describe('TasksShell', () => {
       occurrences: [],
       openOccurrenceDefinitionIds: new Set(),
       openOccurrenceByDefinitionId: new Map(),
-      calendarPrototypes: [],
+      datedPrototypes: [],
       evaluationFailures: new Set(),
       planningDate: '2026-07-20',
       mode: 'local',
@@ -2234,14 +2234,14 @@ describe('TasksShell', () => {
     }
   });
 
-  it('focuses an Upcoming recurrence prototype from Quick Find without opening repeat management', async () => {
+  it('focuses a scheduled after-completion prototype from Quick Find without opening repeat management', async () => {
     const definition = taskRecurrenceDefinitionFixture({
       id: 'recurrence-search',
     });
     const revision = taskRecurrenceRevisionFixture({
       recurrence_id: definition.id,
       revision: 1,
-      rule_mode: 'calendar',
+      rule_mode: 'after_completion',
       prototype_snapshot: {
         version: 2,
         kind: 'todo',
@@ -2272,7 +2272,7 @@ describe('TasksShell', () => {
       occurrences: [],
       openOccurrenceDefinitionIds: new Set(),
       openOccurrenceByDefinitionId: new Map(),
-      calendarPrototypes: [{
+      datedPrototypes: [{
         definition,
         revision,
         scheduledDate: '2026-07-27',
@@ -10616,7 +10616,7 @@ describe('TasksShell', () => {
           deadline: null,
         },
       ]]),
-      calendarPrototypes: [],
+      datedPrototypes: [],
       evaluationFailures: new Set(),
       planningDate: '2026-07-20',
       mode: 'connected',
@@ -10725,7 +10725,7 @@ describe('TasksShell', () => {
       occurrences: [],
       openOccurrenceDefinitionIds: new Set(),
       openOccurrenceByDefinitionId: new Map(),
-      calendarPrototypes: [{
+      datedPrototypes: [{
         definition,
         revision,
         scheduledDate: '2026-08-01',
@@ -10837,7 +10837,7 @@ describe('TasksShell', () => {
       occurrences: [],
       openOccurrenceDefinitionIds: new Set(),
       openOccurrenceByDefinitionId: new Map(),
-      calendarPrototypes: [{ definition, revision, scheduledDate: '2026-08-01' }],
+      datedPrototypes: [{ definition, revision, scheduledDate: '2026-08-01' }],
       evaluationFailures: new Set(),
       planningDate: '2026-07-20',
       mode: 'connected',
@@ -10920,7 +10920,7 @@ describe('TasksShell', () => {
       occurrences: [],
       openOccurrenceDefinitionIds: new Set(),
       openOccurrenceByDefinitionId: new Map(),
-      calendarPrototypes: [{ definition, revision, scheduledDate: '2026-08-01' }],
+      datedPrototypes: [{ definition, revision, scheduledDate: '2026-08-01' }],
       evaluationFailures: new Set(),
       planningDate: '2026-07-20',
       mode: 'connected',
@@ -11005,7 +11005,7 @@ describe('TasksShell', () => {
       occurrences: [],
       openOccurrenceDefinitionIds: new Set(),
       openOccurrenceByDefinitionId: new Map(),
-      calendarPrototypes: [{ definition, revision, scheduledDate: '2026-08-01' }],
+      datedPrototypes: [{ definition, revision, scheduledDate: '2026-08-01' }],
       evaluationFailures: new Set(),
       planningDate: '2026-07-20',
       mode: 'connected', loading: false, error: null,
@@ -11085,7 +11085,7 @@ describe('TasksShell', () => {
       revisions: new Map([[definition.id, revision]]),
       occurrences: [], openOccurrenceDefinitionIds: new Set(),
       openOccurrenceByDefinitionId: new Map(),
-      calendarPrototypes: [{ definition, revision, scheduledDate: '2026-08-01' }],
+      datedPrototypes: [{ definition, revision, scheduledDate: '2026-08-01' }],
       evaluationFailures: new Set(), planningDate: '2026-07-20',
       mode: 'connected', loading: false, error: null,
       createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn(), evaluate: vi.fn(),
@@ -11152,7 +11152,7 @@ describe('TasksShell', () => {
       occurrences: [],
       openOccurrenceDefinitionIds: new Set(),
       openOccurrenceByDefinitionId: new Map(),
-      calendarPrototypes: [{
+      datedPrototypes: [{
         definition,
         revision,
         scheduledDate: '2026-08-08',
@@ -11222,7 +11222,7 @@ describe('TasksShell', () => {
       occurrences: [],
       openOccurrenceDefinitionIds: new Set(),
       openOccurrenceByDefinitionId: new Map(),
-      calendarPrototypes: [],
+      datedPrototypes: [],
       evaluationFailures: new Set(),
       planningDate: '2026-07-20',
       mode: 'connected',
@@ -11313,7 +11313,7 @@ describe('TasksShell', () => {
       occurrences: [],
       openOccurrenceDefinitionIds: new Set([definition.id]),
       openOccurrenceByDefinitionId: new Map(),
-      calendarPrototypes: [],
+      datedPrototypes: [],
       evaluationFailures: new Set(),
       planningDate: '2026-07-20',
       mode: 'connected',

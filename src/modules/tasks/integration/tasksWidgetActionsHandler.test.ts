@@ -16,6 +16,8 @@ function setup(overrides?: {
   issue?: WidgetActionRpcClient['issue'];
   complete?: WidgetActionRpcClient['complete'];
   snapshot?: WidgetActionRpcClient['snapshot'];
+  createInboxTask?: WidgetActionRpcClient['createInboxTask'];
+  todayProgress?: WidgetActionRpcClient['todayProgress'];
   revoke?: WidgetActionRpcClient['revoke'];
 }) {
   const rpc: WidgetActionRpcClient = {
@@ -38,6 +40,27 @@ function setup(overrides?: {
           { id: 'someday', title: 'Someday', totalCount: 0, truncated: false, tasks: [] },
           { id: 'done', title: 'Done', totalCount: 0, truncated: false, tasks: [] },
         ],
+      },
+      error: null,
+    })),
+    createInboxTask: overrides?.createInboxTask ?? vi.fn(async () => ({
+      data: {
+        outcome: 'accepted',
+        taskId: '9b000000-0000-4000-8000-000000000070',
+        planningDate: '2026-08-01',
+        revision: 1,
+      },
+      error: null,
+    })),
+    todayProgress: overrides?.todayProgress ?? vi.fn(async () => ({
+      data: {
+        type: 'todayProgress',
+        schemaVersion: 1,
+        ownerId: '9b000000-0000-4000-8000-000000000001',
+        generatedAt: '2026-08-01T20:00:00.000Z',
+        planningDate: '2026-08-01',
+        completedCount: 3,
+        totalCount: 5,
       },
       error: null,
     })),
@@ -132,6 +155,47 @@ describe('tasks widget action handler', () => {
     });
     expect(rpc.snapshot).toHaveBeenCalledWith(`twc_${'A'.repeat(43)}`);
     expect(rpc.complete).not.toHaveBeenCalled();
+  });
+
+  it('creates one Inbox task through the narrow watch action', async () => {
+    const { handler, rpc } = setup();
+    const response = await handler(new Request('https://example.test', {
+      method: 'POST',
+      headers: {
+        Authorization: `Widget twc_${'A'.repeat(43)}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'createInboxTask',
+        summary: 'Capture from Apple Watch',
+        clientMutationId: '9b000000-0000-4000-8000-000000000060',
+        operationId: '9b000000-0000-4000-8000-000000000061',
+      }),
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ outcome: 'accepted' });
+    expect(rpc.createInboxTask).toHaveBeenCalledWith(expect.objectContaining({
+      summary: 'Capture from Apple Watch',
+    }));
+  });
+
+  it('reads aggregate Today progress without task content', async () => {
+    const { handler, rpc } = setup();
+    const response = await handler(new Request('https://example.test', {
+      method: 'POST',
+      headers: {
+        Authorization: `Widget twc_${'A'.repeat(43)}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'todayProgress' }),
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      type: 'todayProgress',
+      completedCount: 3,
+      totalCount: 5,
+    });
+    expect(rpc.todayProgress).toHaveBeenCalledOnce();
   });
 
   it('does not return content when a snapshot credential is rejected', async () => {

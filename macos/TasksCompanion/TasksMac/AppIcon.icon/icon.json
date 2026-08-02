@@ -1,7 +1,7 @@
 {
   "color-space-for-untagged-svg-colors" : "display-p3",
   "fill" : {
-    "automatic-gradient" : "extended-srgb:0.05098,0.05098,0.05098,1.00000"
+    "solid" : "extended-srgb:0.05098,0.05098,0.05098,1.00000"
   },
   "groups" : [
     {
@@ -40,10 +40,6 @@
           }
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
       "translucency" : {
         "enabled" : false,
         "value" : 0.5
@@ -51,6 +47,8 @@
     }
   ],
   "supported-platforms" : {
-    "squares" : "shared"
+    "squares" : [
+      "macOS"
+    ]
   }
 }

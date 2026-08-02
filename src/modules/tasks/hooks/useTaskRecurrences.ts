@@ -368,22 +368,22 @@ export function useTaskRecurrences(ownerId: string) {
     occurrences,
     openOccurrenceDefinitionIds,
     openOccurrenceByDefinitionId,
-    calendarPrototypes: definitions.flatMap((definition) => {
+    datedPrototypes: definitions.flatMap((definition) => {
       const revision = revisions.get(definition.id);
-      return definition.status === 'active'
-        && revision?.rule_mode === 'calendar'
-        && definition.next_occurrence_date !== null
-        && definition.next_occurrence_date > planningDate
-        ? [{
-            definition,
-            revision,
-            scheduledDate: revision.deadline_offset_days
-              ? addTaskCalendarDays(
-                  definition.next_occurrence_date,
-                  -revision.deadline_offset_days,
-                )
-              : definition.next_occurrence_date,
-          }]
+      if (
+        definition.status !== 'active'
+        || revision === undefined
+        || definition.next_occurrence_date === null
+      ) return [];
+
+      const scheduledDate = revision.deadline_offset_days
+        ? addTaskCalendarDays(
+            definition.next_occurrence_date,
+            -revision.deadline_offset_days,
+          )
+        : definition.next_occurrence_date;
+      return scheduledDate > planningDate
+        ? [{ definition, revision, scheduledDate }]
         : [];
     }),
     evaluationFailures,

@@ -108,7 +108,7 @@ describe('useTaskRecurrences', () => {
     const { result } = renderHook(() => useTaskRecurrences('owner-a'));
     expect(result.current.openOccurrenceByDefinitionId.get(definition.id)?.root_id)
       .toBe('deferred-instance');
-    expect(result.current.calendarPrototypes).toEqual([{
+    expect(result.current.datedPrototypes).toEqual([{
       definition,
       revision: revisionRows[0],
       scheduledDate: '2026-07-27',
@@ -246,7 +246,55 @@ describe('useTaskRecurrences', () => {
 
     const { result } = renderHook(() => useTaskRecurrences('owner-a'));
     expect(result.current.openOccurrenceDefinitionIds).toEqual(new Set([definition.id]));
-    expect(result.current.calendarPrototypes).toEqual([]);
+    expect(result.current.datedPrototypes).toEqual([]);
+  });
+
+  it('dates an after-completion prototype once its completed instance yields a successor', () => {
+    const definition = taskRecurrenceDefinitionFixture({
+      id: 'recurrence-after-completion',
+      next_occurrence_date: '2026-07-27',
+    });
+    const revision = taskRecurrenceRevisionFixture({
+      recurrence_id: definition.id,
+      rule_mode: 'after_completion',
+      deadline_offset_days: 3,
+    });
+    definitionRows = [definition];
+    revisionRows = [revision];
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'local', planningTimeZone,
+      recurrenceService: { evaluate: vi.fn(), createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn() },
+    });
+
+    const { result } = renderHook(() => useTaskRecurrences('owner-a'));
+
+    expect(result.current.openOccurrenceDefinitionIds).toEqual(new Set());
+    expect(result.current.datedPrototypes).toEqual([{
+      definition,
+      revision,
+      scheduledDate: '2026-07-24',
+    }]);
+  });
+
+  it('excludes a prototype whose projected Start has reached the planning date', () => {
+    const definition = taskRecurrenceDefinitionFixture({
+      next_occurrence_date: '2026-07-22',
+    });
+    definitionRows = [definition];
+    revisionRows = [taskRecurrenceRevisionFixture({
+      recurrence_id: definition.id,
+      rule_mode: 'after_completion',
+      deadline_offset_days: 3,
+    })];
+    mocks.useTasksRuntime.mockReturnValue({
+      mode: 'local', planningTimeZone,
+      recurrenceService: { evaluate: vi.fn(), createFromTask: vi.fn(), edit: vi.fn(), setStatus: vi.fn() },
+    });
+
+    const { result } = renderHook(() => useTaskRecurrences('owner-a'));
+
+    expect(result.current.planningDate).toBe('2026-07-19');
+    expect(result.current.datedPrototypes).toEqual([]);
   });
 
   it('keeps recurrence mutations unavailable in local-only mode', async () => {
