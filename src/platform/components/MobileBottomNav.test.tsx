@@ -1,5 +1,5 @@
 import { CalendarDays, Inbox, Settings, Trash2 } from 'lucide-react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -38,6 +38,10 @@ describe('MobileBottomNav', () => {
     setNavigatorProperty('userAgent', 'Mozilla/5.0');
     setNavigatorProperty('maxTouchPoints', 0);
     setNavigatorProperty('standalone', false);
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: undefined,
+    });
   });
 
   it('preserves the existing direct-link path when no overflow is supplied', async () => {
@@ -192,6 +196,63 @@ describe('MobileBottomNav', () => {
     expect(document.documentElement).not.toHaveAttribute(
       'data-mobile-bottom-nav-installed-touch',
     );
+  });
+
+  it('hides while an editable control owns a contracted touch viewport', async () => {
+    setNavigatorProperty('platform', 'iPhone');
+    setNavigatorProperty('maxTouchPoints', 5);
+    const visualViewport = new EventTarget() as VisualViewport;
+    Object.defineProperties(visualViewport, {
+      height: { configurable: true, value: 800, writable: true },
+      width: { configurable: true, value: 390 },
+      offsetLeft: { configurable: true, value: 0 },
+      scale: { configurable: true, value: 1 },
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 800,
+    });
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: visualViewport,
+    });
+
+    render(
+      <>
+        <input aria-label="Summary" />
+        <MobileBottomNav
+          items={primaryItems}
+          isActive={(path) => path === '/today'}
+          onNavigate={vi.fn()}
+        />
+      </>,
+    );
+
+    expect(await screen.findByRole('navigation', { name: 'Mobile navigation' }))
+      .toBeInTheDocument();
+    await act(async () => {
+      screen.getByRole('textbox', { name: 'Summary' }).focus();
+      Object.defineProperty(visualViewport, 'height', {
+        configurable: true,
+        value: 430,
+      });
+      visualViewport.dispatchEvent(new Event('resize'));
+    });
+    await waitFor(() => expect(screen.queryByRole('navigation', {
+      name: 'Mobile navigation',
+    })).not.toBeInTheDocument());
+    expect(document.documentElement).not.toHaveAttribute('data-mobile-bottom-nav-visible');
+
+    await act(async () => {
+      screen.getByRole('textbox', { name: 'Summary' }).blur();
+      Object.defineProperty(visualViewport, 'height', {
+        configurable: true,
+        value: 800,
+      });
+      visualViewport.dispatchEvent(new Event('resize'));
+    });
+    expect(await screen.findByRole('navigation', { name: 'Mobile navigation' }))
+      .toBeInTheDocument();
   });
 
   it('renders four direct destinations plus one keyboard-accessible More control', async () => {

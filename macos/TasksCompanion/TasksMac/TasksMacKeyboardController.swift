@@ -36,7 +36,7 @@ final class TasksMacKeyboardController: ObservableObject {
             return self.shortcutRegistrar.configure(shortcut)
         }
         shortcutRegistrar.onTrigger = { [weak self] in
-            self?.quickEntryPanel.show()
+            self?.quickEntryPanel.toggle()
         }
         guard keyMonitor == nil else {
             return
@@ -432,6 +432,7 @@ final class TasksMacQuickEntryPanelController: NSObject {
     private let onFinish: (Bool) -> Void
     private let browserModel = TasksBrowserModel()
     private lazy var panel: TasksMacQuickEntryPanel = makePanel()
+    private var cancellationPending = false
 
     init(onFinish: @escaping (Bool) -> Void) {
         self.onFinish = onFinish
@@ -440,13 +441,25 @@ final class TasksMacQuickEntryPanelController: NSObject {
             guard let self else {
                 return
             }
+            self.cancellationPending = false
             self.panel.orderOut(nil)
             self.onFinish(committed)
         }
     }
 
+    func toggle() {
+        if panel.isVisible {
+            requestCancellation()
+        } else {
+            show()
+        }
+    }
+
     func show() {
-        browserModel.openWebURL(TasksMacQuickEntryPanelPolicy.webURL)
+        cancellationPending = false
+        browserModel.prepareForPresentation(
+            of: TasksMacQuickEntryPanelPolicy.webURL
+        )
         TasksMacQuickEntryPanelPolicy.apply(to: panel)
         panel.center()
         NSApp.activate(ignoringOtherApps: true)
@@ -459,12 +472,13 @@ final class TasksMacQuickEntryPanelController: NSObject {
                 origin: .zero,
                 size: TasksMacQuickEntryPanelPolicy.contentSize
             ),
-            styleMask: [.titled, .fullSizeContentView],
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
+        panel.onCancel = { [weak self] in
+            self?.requestCancellation()
+        }
         panel.isMovableByWindowBackground = true
         panel.isFloatingPanel = true
         panel.level = .floating
@@ -478,10 +492,43 @@ final class TasksMacQuickEntryPanelController: NSObject {
         TasksMacQuickEntryPanelPolicy.apply(to: panel)
         return panel
     }
+
+    private func requestCancellation() {
+        guard panel.isVisible, !cancellationPending else {
+            return
+        }
+        cancellationPending = true
+        guard browserModel.hasLoadedContent else {
+            cancellationPending = false
+            panel.orderOut(nil)
+            onFinish(false)
+            return
+        }
+        guard let webView = browserModel.webView else {
+            cancellationPending = false
+            panel.orderOut(nil)
+            onFinish(false)
+            return
+        }
+        webView.evaluateJavaScript(
+            TasksMacQuickEntryPanelPolicy.cancelJavaScript
+        ) { [weak self] result, error in
+            Task { @MainActor in
+                guard let self else {
+                    return
+                }
+                if error != nil || (result as? Bool) != true {
+                    self.cancellationPending = false
+                    self.panel.orderOut(nil)
+                    self.onFinish(false)
+                }
+            }
+        }
+    }
 }
 
 enum TasksMacQuickEntryPanelPolicy {
-    static let contentSize = NSSize(width: 560, height: 680)
+    static let contentSize = NSSize(width: 520, height: 560)
     static let collectionBehavior: NSWindow.CollectionBehavior = [
         .canJoinAllSpaces,
         .fullScreenAuxiliary,
@@ -494,6 +541,17 @@ enum TasksMacQuickEntryPanelPolicy {
         panel.setContentSize(contentSize)
     }
 
+    static let cancelJavaScript = """
+    (() => {
+      const event = new CustomEvent(
+        "bathos:tasks-native-quick-entry-cancel",
+        { cancelable: true }
+      );
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    })();
+    """
+
     static let webURL = URL(
         string: "https://\(TaskCompanionConstants.trustedWebHost)"
             + "/tasks/today?native_new_task=1&native_quick_entry=1"
@@ -501,6 +559,12 @@ enum TasksMacQuickEntryPanelPolicy {
 }
 
 final class TasksMacQuickEntryPanel: NSPanel {
+    var onCancel: (() -> Void)?
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    override func cancelOperation(_ sender: Any?) {
+        onCancel?()
+    }
 }

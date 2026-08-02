@@ -4557,16 +4557,16 @@ Tasks SHALL persist one Upcoming-specific rank for every ordinary task and dated
 - **WHEN** the web bridge or native credential endpoint projects Upcoming for an Apple-platform widget
 - **THEN** ordinary tasks and virtual recurrence prototypes are ordered by controlling date and Upcoming rank before the leading ten rows are selected
 
-### Requirement: Open Task Inline Summary Composition
-An open ordinary task SHALL replace its closed-row title, metadata, trailing actions, and duplicate editor Summary field with the live Summary input beside its completion control.
+### Requirement: Open task retains a summary-row drag handle
+Tasks SHALL keep the ordinary rendered summary row visible while its metadata drawer is open and SHALL limit task-level drag initiation to that summary row.
 
-#### Scenario: Open a task
-- **WHEN** an ordinary task metadata drawer opens
-- **THEN** its Summary input occupies the summary row beside the completion control, receives the existing autosave and undo behavior, and no second Summary input or row ellipsis is rendered
+#### Scenario: Reorder an open task from its summary
+- **WHEN** a user presses and drags the rendered summary region of an open task
+- **THEN** Tasks closes the metadata drawer as dragging begins and reorders the task among its eligible peers
 
-#### Scenario: Close a task
-- **WHEN** the ordinary task metadata drawer closes
-- **THEN** the row restores its closed Summary, metadata, links, and eligible trailing actions
+#### Scenario: Edit Summary without initiating drag
+- **WHEN** a user interacts with the Summary input inside the open metadata drawer
+- **THEN** the input edits the task title normally and does not act as a task-level drag source
 
 #### Scenario: Reveal an opened destination
 - **WHEN** a task opens through direct interaction, keyboard traversal, creation, or Quick Find
@@ -4635,3 +4635,40 @@ Tasks SHALL treat a future deadline as an implicit Start only while the task has
 #### Scenario: Catch up a missed deadline activation
 - **WHEN** activation resumes after one or more missed owner-local dates
 - **THEN** the task receives the current owner-local planning date as Start rather than backdating Start to the overdue deadline
+
+### Requirement: Modified-click selection starts from the clicked task
+Tasks SHALL begin a new modified-click selection context from the task the user clicked rather than implicitly including a different open or keyboard-focused task.
+
+#### Scenario: Command-click a different task
+- **WHEN** selection mode is inactive and a user Command-clicks a task other than the currently open or keyboard-focused task
+- **THEN** Tasks flushes and closes any open editor, clears the prior lightweight focus, enters selection mode, and selects only the clicked task
+
+#### Scenario: Shift-click a different task before selection mode exists
+- **WHEN** selection mode is inactive and a user Shift-clicks a task while a different task is open or keyboard-focused
+- **THEN** Tasks closes and clears the prior task state, enters selection mode, and selects only the clicked task as the new range anchor
+
+#### Scenario: Explicitly start selection from the current task
+- **WHEN** a user invokes the documented Control+B current-task selection command
+- **THEN** Tasks begins selection mode with the currently open or keyboard-focused task selected according to the existing command contract
+
+### Requirement: Task history traversal provides immediate progress feedback
+Tasks SHALL acknowledge every accepted undo or redo invocation immediately and SHALL prevent competing task interactions until the requested history traversal settles.
+
+#### Scenario: Process undo
+- **WHEN** a user invokes undo and Tasks begins resolving the history request
+- **THEN** a centered spinner overlay appears immediately and remains until undo succeeds, reaches a neutral boundary, or fails
+
+#### Scenario: Process redo
+- **WHEN** a user invokes redo and Tasks begins resolving the history request
+- **THEN** the same centered spinner overlay appears immediately, prevents duplicate traversal input, and clears when the request settles
+
+### Requirement: Hide mobile navigation for software-keyboard editing
+Tasks SHALL hide persistent mobile navigation while a software keyboard materially reduces the visual viewport around an editable control and SHALL otherwise preserve navigation in portrait and landscape layouts.
+
+#### Scenario: Focus a field with the software keyboard visible
+- **WHEN** a touch-device native or PWA Tasks surface focuses an editable field and its visual viewport contracts for the software keyboard
+- **THEN** the mobile navigation is removed from view without shifting into the keyboard area
+
+#### Scenario: Dismiss the software keyboard
+- **WHEN** the editable focus or keyboard-induced viewport contraction ends
+- **THEN** mobile navigation returns to its stable safe-area position

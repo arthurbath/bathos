@@ -86,6 +86,7 @@ A system-authored accessible name or tooltip title that labels a button or input
 - Decorations identify the control's concept. They are muted, noninteractive, hidden from assistive technology, and never replace the control's programmatic name or useful placeholder.
 - Shared controls reserve a fixed leading content area for decorations. Long values may truncate, clip, or scroll inside the remaining content area, but must never render underneath or displace the decoration.
 - Decoration support is shared, but modules adopt it intentionally. A decoration is not required on every control.
+- Ordinary non-DataGrid text inputs, textareas, selects, date triggers, and composite input groups use the shared solid muted-gray `--input` outline at rest. The focus border and ring remain brighter and must not change the control's dimensions. DataGrid editors retain their borderless-until-focused convention.
 
 ## Spacing and Sizing
 

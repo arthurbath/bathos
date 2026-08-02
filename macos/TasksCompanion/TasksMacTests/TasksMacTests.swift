@@ -270,7 +270,7 @@ final class TasksMacTests: XCTestCase {
     func testGlobalQuickEntryPanelUsesTheAuthoritativeWebEditorOnAllSpaces() {
         let policy = TasksMacQuickEntryPanelPolicy.self
 
-        XCTAssertEqual(policy.contentSize, NSSize(width: 560, height: 680))
+        XCTAssertEqual(policy.contentSize, NSSize(width: 520, height: 560))
         XCTAssertEqual(policy.webURL.host, "os.bath.garden")
         XCTAssertEqual(policy.webURL.path, "/tasks/today")
         XCTAssertEqual(
@@ -312,6 +312,14 @@ final class TasksMacTests: XCTestCase {
         XCTAssertEqual(
             panel.contentMaxSize,
             TasksMacQuickEntryPanelPolicy.contentSize
+        )
+    }
+
+    func testGlobalQuickEntryCancellationDispatchesTheOwnedWebEvent() {
+        XCTAssertTrue(
+            TasksMacQuickEntryPanelPolicy.cancelJavaScript.contains(
+                "bathos:tasks-native-quick-entry-cancel"
+            )
         )
     }
 

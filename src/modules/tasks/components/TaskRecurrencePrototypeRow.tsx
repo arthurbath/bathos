@@ -666,7 +666,7 @@ function RecurrencePrototypeEditor({
                 type={primaryLinkHref === null ? 'button' : undefined}
                 variant="outline"
                 size="icon"
-                className="h-10 w-10 shrink-0 border-[hsl(var(--grid-sticky-line))] bg-background"
+                className="h-10 w-10 shrink-0 border-input bg-background"
                 aria-label={`Open ${primaryLinkLabel}`}
                 disabled={primaryLinkHref === null}
               >

@@ -86,6 +86,8 @@ describe("Select interaction contract", () => {
       const trigger = container.querySelector("#decorated-select");
       const decoration = trigger?.querySelector("[data-control-decoration]");
       expect(trigger).toHaveAttribute("aria-label", "Area");
+      expect(trigger).toHaveClass("border-input", "focus:border-ring", "focus:ring-ring/65");
+      expect(trigger).not.toHaveClass("border-[hsl(var(--grid-sticky-line))]");
       expect(decoration).toHaveAttribute("aria-hidden", "true");
       expect(decoration).toHaveClass("pointer-events-none", "shrink-0");
       expect(decoration?.querySelector("svg")).toHaveClass("lucide-layers");

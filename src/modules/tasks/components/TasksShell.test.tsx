@@ -2650,6 +2650,106 @@ describe('TasksShell', () => {
     }
   });
 
+  it('shows immediate blocking progress while task history traversal is unresolved', async () => {
+    let resolveUndo: ((value: typeof task) => void) | null = null;
+    const undo = vi.fn(() => new Promise<typeof task>((resolve) => {
+      resolveUndo = resolve;
+    }));
+    mockTaskUndo.mockReturnValue({
+      available: true,
+      redoAvailable: false,
+      pending: false,
+      loading: false,
+      error: null,
+      event: { id: 'event-update', occurred_at: '2026-07-20T18:00:00.000Z' },
+      redoEvent: null,
+      undo: vi.fn(),
+      redo: vi.fn(),
+      undoWhenAvailable: undo,
+      redoWhenAvailable: vi.fn().mockResolvedValue(null),
+      reserveForwardMutation: vi.fn(),
+      registerForwardMutation: vi.fn(),
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Undo Last Task Change"]',
+        )?.click();
+        await Promise.resolve();
+      });
+      const progress = container.querySelector<HTMLElement>(
+        '[data-task-history-pending="undo"]',
+      );
+      expect(progress).toBeTruthy();
+      expect(progress).toHaveTextContent('Undoing Task Change');
+      expect(container.querySelector('button[aria-label="Undo Last Task Change"]'))
+        .toBeDisabled();
+
+      await act(async () => {
+        resolveUndo?.(task);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(container.querySelector(
+        '[data-task-history-pending]',
+      )).toBeNull());
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('shows immediate blocking progress while task redo is unresolved', async () => {
+    let resolveRedo: ((value: typeof task) => void) | null = null;
+    const redo = vi.fn(() => new Promise<typeof task>((resolve) => {
+      resolveRedo = resolve;
+    }));
+    mockTaskUndo.mockReturnValue({
+      available: false,
+      redoAvailable: true,
+      pending: false,
+      loading: false,
+      error: null,
+      event: null,
+      redoEvent: { id: 'event-redo', occurred_at: '2026-07-20T18:00:00.000Z' },
+      undo: vi.fn(),
+      redo: vi.fn(),
+      undoWhenAvailable: vi.fn().mockResolvedValue(null),
+      redoWhenAvailable: redo,
+      reserveForwardMutation: vi.fn(),
+      registerForwardMutation: vi.fn(),
+    });
+    mockTaskList.mockReturnValue(defaultTaskList());
+    const { container, root } = renderShell();
+
+    try {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Redo Last Task Change"]',
+        )?.click();
+        await Promise.resolve();
+      });
+      const progress = container.querySelector<HTMLElement>(
+        '[data-task-history-pending="redo"]',
+      );
+      expect(progress).toBeTruthy();
+      expect(progress).toHaveTextContent('Redoing Task Change');
+      expect(container.querySelector('button[aria-label="Redo Last Task Change"]'))
+        .toBeDisabled();
+
+      await act(async () => {
+        resolveRedo?.(task);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(container.querySelector(
+        '[data-task-history-pending]',
+      )).toBeNull());
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('invokes history from the list toolbar and omits the controls from Settings', async () => {
     const undo = vi.fn().mockResolvedValue(undefined);
     const redo = vi.fn().mockResolvedValue(undefined);
@@ -4283,7 +4383,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('includes a keyboard-focused task when a modified click starts selection', async () => {
+  it('replaces a keyboard-focused task when a modified click starts selection', async () => {
     const secondTask = taskTodoFixture({
       ...task,
       id: 'task-b',
@@ -4310,10 +4410,9 @@ describe('TasksShell', () => {
         );
       });
       expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
-        '2 Tasks',
+        '1 Task',
       );
-      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
-        .toHaveAttribute('aria-checked', 'true');
+      expect(container.querySelector('[aria-label="Deselect Existing task"]')).toBeNull();
       expect(container.querySelector('[aria-label="Deselect Second task"]'))
         .toHaveAttribute('aria-checked', 'true');
       expect(firstRow).not.toHaveAttribute('aria-current');
@@ -4322,7 +4421,7 @@ describe('TasksShell', () => {
     }
   });
 
-  it('counts an open task as the first selection and keeps the remaining task closed', async () => {
+  it('closes an open task and selects only the modified-clicked task', async () => {
     const secondTask = taskTodoFixture({
       ...task,
       id: 'task-b',
@@ -4346,10 +4445,9 @@ describe('TasksShell', () => {
       });
 
       expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
-        '2 Tasks',
+        '1 Task',
       );
-      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
-        .toHaveAttribute('aria-checked', 'true');
+      expect(container.querySelector('[aria-label="Deselect Existing task"]')).toBeNull();
       expect(container.querySelector('[aria-label="Deselect Second task"]'))
         .toHaveAttribute('aria-checked', 'true');
       await waitForTaskEditorExit(container);
@@ -4361,12 +4459,9 @@ describe('TasksShell', () => {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
 
-      expect(container.querySelector('[aria-label="Task Selection"]')).toHaveTextContent(
-        '1 Task',
-      );
+      expect(container.querySelector('[aria-label="Task Selection"]')).toBeNull();
       expect(container.querySelector('#task-title-task-a')).toBeNull();
-      expect(container.querySelector('[aria-label="Deselect Existing task"]'))
-        .toHaveAttribute('aria-checked', 'true');
+      expect(container.querySelector('[aria-label="Deselect Existing task"]')).toBeNull();
     } finally {
       cleanup(root, container);
     }
@@ -5400,6 +5495,9 @@ describe('TasksShell', () => {
       expect(summary).not.toHaveAttribute('draggable');
       expect(dragHandle).toHaveAttribute('draggable', 'true');
       expect(editor).not.toHaveAttribute('draggable');
+      expect(summary).toHaveTextContent('Existing task');
+      expect(summary.querySelector('#task-title-task-a')).toBeNull();
+      expect(editor.querySelector('#task-title-task-a')).toBe(titleInput);
 
       const setData = vi.fn();
       let dragPreview: HTMLElement | null = null;
@@ -6025,7 +6123,9 @@ describe('TasksShell', () => {
       expect(quickEntry.container.querySelector('[data-task-completion-control]')).toBeNull();
       expect(quickEntry.container.querySelector('[data-task-row-trailing-controls]')).toBeNull();
       expect(quickEntry.container.querySelector('[data-task-editor-form]'))
-        .toHaveClass('gap-2', 'px-1', 'pb-1');
+        .toHaveClass('gap-2', 'p-1');
+      expect(quickEntry.container.querySelector('[data-task-quick-entry-actions]'))
+        .toHaveTextContent('Save');
       expect(quickEntry.container.querySelector('[data-task-editor-temporal-grid]')).toBeTruthy();
       expect(quickEntry.container.querySelector('[data-task-editor-identity-grid]')).toBeTruthy();
       expect(quickEntry.container.querySelector('[data-task-primary-link-disclosure]')).toBeTruthy();
@@ -6235,6 +6335,75 @@ describe('TasksShell', () => {
         });
       });
       expect(taskList.createTask).not.toHaveBeenCalled();
+    } finally {
+      cleanup(quickEntry.root, quickEntry.container);
+      Reflect.deleteProperty(window, '__bathosNativeApp');
+      Reflect.deleteProperty(window, '__bathosTasksNative');
+      Reflect.deleteProperty(window, 'webkit');
+    }
+  });
+
+  it('deletes a persisted native Mac quick-entry draft when native cancellation is requested', async () => {
+    const messages: unknown[] = [];
+    const taskList = defaultTaskList();
+    Object.assign(window, {
+      __bathosNativeApp: {
+        schemaVersion: 2,
+        moduleId: 'tasks',
+        platform: 'macos',
+        quickEntryShortcut: '⌃⌥Space',
+      },
+      __bathosTasksNative: {
+        schemaVersion: 2,
+        installationId: '30000000-0000-4000-8000-000000000001',
+      },
+      webkit: {
+        messageHandlers: {
+          bathosTasksWidget: {
+            postMessage: (message: unknown) => messages.push(message),
+          },
+        },
+      },
+    });
+    mockTaskList.mockReturnValue(taskList);
+    const quickEntry = renderShell(
+      '/tasks/today?native_new_task=1&native_quick_entry=1',
+    );
+
+    try {
+      const titleInput = await waitFor(() => {
+        const input = document.getElementById(
+          `task-title-${NEW_TASK_DRAFT_ID}`,
+        ) as HTMLInputElement | null;
+        expect(input).toBeTruthy();
+        return input!;
+      });
+      await act(async () => {
+        setInputValue(titleInput, 'Discard this capture');
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 425));
+      });
+      expect(taskList.createTask).toHaveBeenCalled();
+
+      const cancelEvent = new CustomEvent(
+        'bathos:tasks-native-quick-entry-cancel',
+        { cancelable: true },
+      );
+      await act(async () => {
+        window.dispatchEvent(cancelEvent);
+      });
+
+      expect(cancelEvent.defaultPrevented).toBe(true);
+      await waitFor(() => {
+        expect(taskList.transitionTask).toHaveBeenCalledWith(
+          'task-created',
+          'delete',
+        );
+        expect(messages).toContainEqual({
+          type: 'quick-entry-finished',
+          schemaVersion: 2,
+          committed: false,
+        });
+      });
     } finally {
       cleanup(quickEntry.root, quickEntry.container);
       Reflect.deleteProperty(window, '__bathosNativeApp');
@@ -7096,7 +7265,7 @@ describe('TasksShell', () => {
       expect(start.querySelector('[data-control-decoration] svg')).toBeTruthy();
       expect(deadline.querySelector('[data-control-decoration] svg')).toHaveClass('lucide-flag');
       expect(notes).toHaveClass(
-        'border-[hsl(var(--grid-sticky-line))]',
+        'border-input',
         'focus:border-ring',
         'focus:ring-ring/65',
       );
@@ -7106,8 +7275,8 @@ describe('TasksShell', () => {
         .toHaveClass('lucide-arrow-big-right-dash');
       expect(organization.querySelector('[data-control-decoration] svg'))
         .toHaveClass('lucide-layers');
-      expect(actionability).toHaveClass('border-[hsl(var(--grid-sticky-line))]');
-      expect(organization).toHaveClass('border-[hsl(var(--grid-sticky-line))]');
+      expect(actionability).toHaveClass('border-input');
+      expect(organization).toHaveClass('border-input');
       expect(Array.from(editor.querySelectorAll<HTMLElement>([
         '#task-notes-task-a',
         '#task-primary-link-task-a',
@@ -12974,7 +13143,7 @@ describe('TasksShell', () => {
         'a[aria-label="Open Primary Link"]',
       )!;
       expect(input).toHaveAttribute('type', 'url');
-      expect(input).toHaveClass('border-[hsl(var(--grid-sticky-line))]');
+      expect(input).toHaveClass('border-input');
       expect(container.querySelector('[aria-label="Clear Primary Link"]')).toBeNull();
       expect(openLink).toHaveAttribute('href', 'https://example.test');
       expect(openLink).toHaveAttribute('target', '_blank');

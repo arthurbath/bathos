@@ -37,6 +37,38 @@ function isTouchDevice(targetWindow: Window): boolean {
     || /Android|iPhone|iPad|iPod/i.test(`${platform} ${userAgent}`);
 }
 
+function isSoftwareKeyboardEditable(target: Element | null): target is HTMLElement {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  if (target instanceof HTMLTextAreaElement) return !target.disabled && !target.readOnly;
+  if (!(target instanceof HTMLInputElement) || target.disabled || target.readOnly) return false;
+  return ![
+    'button',
+    'checkbox',
+    'color',
+    'file',
+    'hidden',
+    'image',
+    'radio',
+    'range',
+    'reset',
+    'submit',
+  ].includes(target.type);
+}
+
+function mobileSoftwareKeyboardIsVisible({
+  activeElement,
+  baselineHeight,
+  visualViewportHeight,
+}: {
+  activeElement: Element | null;
+  baselineHeight: number;
+  visualViewportHeight: number;
+}): boolean {
+  return isSoftwareKeyboardEditable(activeElement)
+    && baselineHeight - visualViewportHeight >= 120;
+}
+
 export function MobileBottomNav({
   items,
   isActive,
@@ -48,12 +80,60 @@ export function MobileBottomNav({
 }: MobileBottomNavProps) {
   const [mounted, setMounted] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const [softwareKeyboardVisible, setSoftwareKeyboardVisible] = useState(false);
   const [viewportStyle, setViewportStyle] = useState<{ left: number; width: number; zoom: number } | null>(null);
   const baseDprRef = useRef(1);
+  const baselineViewportHeightRef = useRef(0);
 
   useEffect(() => {
     baseDprRef.current = window.devicePixelRatio || 1;
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const updateKeyboardVisibility = () => {
+      const visualViewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      if (!isTouchDevice(window)) {
+        setSoftwareKeyboardVisible(false);
+        return;
+      }
+      if (!isSoftwareKeyboardEditable(document.activeElement)) {
+        baselineViewportHeightRef.current = Math.max(
+          baselineViewportHeightRef.current,
+          visualViewportHeight,
+          window.innerHeight,
+        );
+        setSoftwareKeyboardVisible(false);
+        return;
+      }
+      const baselineHeight = Math.max(
+        baselineViewportHeightRef.current,
+        window.innerHeight,
+      );
+      setSoftwareKeyboardVisible(mobileSoftwareKeyboardIsVisible({
+        activeElement: document.activeElement,
+        baselineHeight,
+        visualViewportHeight,
+      }));
+    };
+
+    baselineViewportHeightRef.current = Math.max(
+      window.visualViewport?.height ?? 0,
+      window.innerHeight,
+    );
+    const visualViewport = window.visualViewport;
+    document.addEventListener('focusin', updateKeyboardVisibility);
+    document.addEventListener('focusout', updateKeyboardVisibility);
+    visualViewport?.addEventListener('resize', updateKeyboardVisibility);
+    window.addEventListener('resize', updateKeyboardVisibility);
+    updateKeyboardVisibility();
+
+    return () => {
+      document.removeEventListener('focusin', updateKeyboardVisibility);
+      document.removeEventListener('focusout', updateKeyboardVisibility);
+      visualViewport?.removeEventListener('resize', updateKeyboardVisibility);
+      window.removeEventListener('resize', updateKeyboardVisibility);
+    };
   }, []);
 
   useEffect(() => {
@@ -94,12 +174,16 @@ export function MobileBottomNav({
 
   useEffect(() => {
     const root = document.documentElement;
-    root.setAttribute('data-mobile-bottom-nav-visible', 'true');
+    if (softwareKeyboardVisible) {
+      root.removeAttribute('data-mobile-bottom-nav-visible');
+    } else {
+      root.setAttribute('data-mobile-bottom-nav-visible', 'true');
+    }
 
     return () => {
       root.removeAttribute('data-mobile-bottom-nav-visible');
     };
-  }, []);
+  }, [softwareKeyboardVisible]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -114,7 +198,7 @@ export function MobileBottomNav({
     };
   }, [installedTouch]);
 
-  if (!mounted) return null;
+  if (!mounted || softwareKeyboardVisible) return null;
 
   const hasOverflow = overflowItems.length > 0;
   const overflowActive = overflowItems.some(({ path }) => isActive(path));

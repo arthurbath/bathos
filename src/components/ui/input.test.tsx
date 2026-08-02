@@ -28,6 +28,8 @@ describe('Input decoration contract', () => {
       expect(input).toHaveAttribute('aria-label', 'Primary Link');
       expect(input).toHaveAttribute('placeholder', 'Primary Link');
       expect(input).toHaveClass('pl-9');
+      expect(input).toHaveClass('border-input', 'focus:border-ring', 'focus:ring-ring/65');
+      expect(input).not.toHaveClass('border-[hsl(var(--grid-sticky-line))]');
       expect(decoration).toHaveAttribute('aria-hidden', 'true');
       expect(decoration).toHaveClass('pointer-events-none', 'absolute');
       expect(decoration?.querySelector('svg')).toHaveClass('lucide-link-2');

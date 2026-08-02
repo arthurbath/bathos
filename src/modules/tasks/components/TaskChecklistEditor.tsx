@@ -655,6 +655,7 @@ export function TaskChecklistEditor({
       ctrlKey: event.ctrlKey,
       shiftKey: event.shiftKey,
       macLikePlatform: isMacLikePlatform(globalThis.navigator?.platform ?? ''),
+      includeFocusedOnActivation: true,
     });
     if (next === null) return;
 

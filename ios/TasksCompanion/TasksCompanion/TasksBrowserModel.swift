@@ -139,6 +139,15 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         webView?.load(URLRequest(url: nextURL))
     }
 
+    func prepareForPresentation(of nextURL: URL) {
+        cancelColdStartRecovery()
+        requestedURL = nextURL
+        loadError = nil
+        isLoading = true
+        hasLoadedContent = false
+        webView?.load(URLRequest(url: nextURL))
+    }
+
     func retry() {
         cancelColdStartRecovery()
         loadError = nil

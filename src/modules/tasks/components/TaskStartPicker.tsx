@@ -693,7 +693,7 @@ export function TaskStartPickerPanel({
                     aria-label="Choose Reminder Hour"
                     data-task-reminder-hour-trigger
                     disabled={reminderHourMenuDisabled}
-                    className="h-full w-10 rounded-none rounded-r-md border-0 border-l border-[hsl(var(--grid-sticky-line))] bg-transparent text-foreground disabled:bg-transparent disabled:text-muted-foreground/40 disabled:opacity-100"
+                    className="h-full w-10 rounded-none rounded-r-md border-0 border-l border-input bg-transparent text-foreground disabled:bg-transparent disabled:text-muted-foreground/40 disabled:opacity-100"
                   >
                     <AlarmClock aria-hidden />
                   </InputGroupButton>
@@ -867,7 +867,7 @@ export function TaskStartPickerField({
           variant="outline"
           aria-label="Start"
           className={cn(
-            'h-10 w-full justify-start rounded-md border-[hsl(var(--grid-sticky-line))] bg-background px-3 text-left font-normal ',
+            'h-10 w-full justify-start rounded-md border-input bg-background px-3 text-left font-normal',
             props.task.destination !== 'someday'
               && props.task.start_date === null
               && props.task.today_section === null

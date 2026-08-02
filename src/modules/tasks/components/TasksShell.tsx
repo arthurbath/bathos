@@ -15,7 +15,7 @@ import {
   type RefObject,
   type TouchEvent as ReactTouchEvent,
 } from 'react';
-import { createPortal, flushSync } from 'react-dom';
+import { flushSync } from 'react-dom';
 import {
   ExternalLink,
   MoreHorizontal,
@@ -594,7 +594,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     registerForwardMutation,
   } = useTaskUndo(userId);
   const checklistUndo = useTaskChecklistUndo(userId);
-  const taskHistoryPending = taskUndoPending || checklistUndo.pending;
+  const historyOperationPendingRef = useRef(false);
+  const [historyOperation, setHistoryOperation] = useState<'undo' | 'redo' | null>(null);
+  const taskHistoryPending = taskUndoPending
+    || checklistUndo.pending
+    || historyOperation !== null;
   const taskHistoryUndoAvailable = taskUndoAvailable || checklistUndo.available;
   const historyRouteRef = useRef<Array<'task' | 'checklist'>>([]);
   const [historyRedoInvalidated, setHistoryRedoInvalidated] = useState(false);
@@ -924,6 +928,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const forcedTaskDomFocusIdRef = useRef<string | null>(null);
   const visibleTaskIdsRef = useRef<string[]>([]);
   const creationDraftRef = useRef<TaskCreationDraft | null>(null);
+  const nativeQuickEntryCommitRequestedRef = useRef(false);
   const deferredCompletionTaskIdsRef = useRef<Set<string>>(new Set());
   const taskEditorAutosaveRef = useRef<{
     taskId: string;
@@ -1011,6 +1016,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   }, []);
 
   const runTaskUndo = useCallback(async () => {
+    if (historyOperationPendingRef.current) return;
+    historyOperationPendingRef.current = true;
+    setHistoryOperation('undo');
     try {
       await flushOpenTaskEditor();
       const taskEventTime = taskUndoEvent?.occurred_at ?? '';
@@ -1036,6 +1044,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       } else {
         showTaskError('Task Change Could Not Be Undone', undoError);
       }
+    } finally {
+      historyOperationPendingRef.current = false;
+      setHistoryOperation(null);
     }
   }, [
     checklistUndo,
@@ -1045,6 +1056,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   ]);
 
   const runTaskRedo = useCallback(async () => {
+    if (historyOperationPendingRef.current) return;
+    historyOperationPendingRef.current = true;
+    setHistoryOperation('redo');
     try {
       await flushOpenTaskEditor();
       if (historyRedoInvalidated) {
@@ -1079,6 +1093,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       } else {
         showTaskError('Task Change Could Not Be Redone', redoError);
       }
+    } finally {
+      historyOperationPendingRef.current = false;
+      setHistoryOperation(null);
     }
   }, [
     checklistUndo,
@@ -1257,6 +1274,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       document.activeElement.blur();
     }
     const closingCreationDraft = currentTaskId === NEW_TASK_DRAFT_ID;
+    const committingNativeQuickEntry = closingCreationDraft
+      && nativeQuickEntry
+      && nativeQuickEntryCommitRequestedRef.current;
+    const cancellingNativeQuickEntry = closingCreationDraft
+      && nativeQuickEntry
+      && !committingNativeQuickEntry;
     const exitingEmptyCreationDraft = closingCreationDraft
       && creationDraftRef.current?.persistedTaskId === null;
     const completingCreationDraft = closingCreationDraft
@@ -1305,7 +1328,9 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setClosingTaskId(
       shouldSettleBeforeProjection && !closingCreationDraft ? currentTaskId : null,
     );
-    if (currentTaskId !== null) finalizeDeferredCompletion(currentTaskId);
+    if (currentTaskId !== null && !cancellingNativeQuickEntry) {
+      finalizeDeferredCompletion(currentTaskId);
+    }
     if (closingCreationDraft) {
       await waitForTaskMotion(TASK_EDITOR_EXPANSION_DURATION_MS);
       if (openTaskSequenceRef.current !== sequence) return false;
@@ -1322,9 +1347,24 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     setClosingTaskId(null);
     if (closingCreationDraft) {
-      finishCreationDraft(completingCreationDraft);
+      if (cancellingNativeQuickEntry) {
+        const persistedTaskId = creationDraftRef.current?.persistedTaskId ?? null;
+        if (persistedTaskId !== null) {
+          try {
+            await transitionTask(persistedTaskId, 'delete');
+          } catch (deleteError) {
+            showTaskError('Quick Entry Could Not Be Canceled', deleteError);
+            nativeQuickEntryCommitRequestedRef.current = false;
+            return false;
+          }
+        }
+      }
+      finishCreationDraft(completingCreationDraft || cancellingNativeQuickEntry);
       if (nativeQuickEntry) {
-        finishTaskNativeQuickEntry(!exitingEmptyCreationDraft);
+        finishTaskNativeQuickEntry(
+          committingNativeQuickEntry && !exitingEmptyCreationDraft,
+        );
+        nativeQuickEntryCommitRequestedRef.current = false;
       }
     }
     if (currentTaskId !== null) latestTaskMetadataRef.current.delete(currentTaskId);
@@ -1346,6 +1386,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     nativeQuickEntry,
     taskListView,
     taskQuickFilter,
+    transitionTask,
     userId,
   ]);
 
@@ -1523,6 +1564,31 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     }
     return true;
   }, [focusTaskRow, setOpenTask]);
+
+  const commitNativeQuickEntry = useCallback(async (): Promise<boolean> => {
+    nativeQuickEntryCommitRequestedRef.current = true;
+    const closed = await setOpenTask(null);
+    if (!closed) nativeQuickEntryCommitRequestedRef.current = false;
+    return closed;
+  }, [setOpenTask]);
+
+  const cancelNativeQuickEntry = useCallback(async (): Promise<boolean> => {
+    nativeQuickEntryCommitRequestedRef.current = false;
+    return setOpenTask(null);
+  }, [setOpenTask]);
+
+  useEffect(() => {
+    if (!nativeQuickEntry) return;
+    const cancel = (event: Event) => {
+      event.preventDefault();
+      void cancelNativeQuickEntry();
+    };
+    window.addEventListener('bathos:tasks-native-quick-entry-cancel', cancel);
+    return () => window.removeEventListener(
+      'bathos:tasks-native-quick-entry-cancel',
+      cancel,
+    );
+  }, [cancelNativeQuickEntry, nativeQuickEntry]);
 
   const openRelativeTask = useCallback((direction: -1 | 1) => {
     const rows = Array.from(document.querySelectorAll<HTMLElement>(
@@ -2768,26 +2834,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     taskId: string,
     source: 'activation' | 'selection-control' = 'activation',
   ) => {
-    const platformModifier = macLikePlatform ? event.metaKey : event.ctrlKey;
-    const openTaskId = selectedTaskIdRef.current;
-    const selectionState = !bulkMode
-      && openTaskId !== null
-      && openTaskId !== NEW_TASK_DRAFT_ID
-      && openTaskId !== taskId
-      && (platformModifier || event.shiftKey)
-      ? {
-          active: false,
-          anchorId: openTaskId,
-          focusedId: openTaskId,
-          selectedIds: new Set<string>(),
-        }
-      : {
-          active: bulkMode,
-          anchorId: bulkSelectionAnchorId,
-          focusedId: focusedTaskId,
-          selectedIds: bulkSelection,
-        };
-    const next = applyTaskSelectionGesture(selectionState, {
+    const next = applyTaskSelectionGesture({
+      active: bulkMode,
+      anchorId: bulkSelectionAnchorId,
+      focusedId: focusedTaskId,
+      selectedIds: bulkSelection,
+    }, {
       taskId,
       visibleTaskIds: selectableTasks.map(({ id }) => id),
       metaKey: source === 'selection-control' ? false : event.metaKey,
@@ -2848,12 +2900,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (source === 'activation' && document.activeElement === event.currentTarget) {
       event.currentTarget.blur();
     }
-    focusedTaskIdRef.current = next.focusedId;
-    setFocusedTaskId(next.focusedId);
-    setBulkMode(next.active);
-    setBulkSelectionAnchorId(next.anchorId);
-    setBulkSelection(next.selectedIds);
-    if (next.focusedId !== null) focusTaskRow(next.focusedId);
+    void setOpenTask(null).then((closed) => {
+      if (!closed) return;
+      focusedTaskIdRef.current = next.focusedId;
+      setFocusedTaskId(next.focusedId);
+      setBulkMode(next.active);
+      setBulkSelectionAnchorId(next.anchorId);
+      setBulkSelection(next.selectedIds);
+      if (next.focusedId !== null) focusTaskRow(next.focusedId);
+    });
   };
 
   const toggleTaskFromKeyboard = (taskId: string) => {
@@ -3215,7 +3270,12 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           void enterTaskSelectionFromTouchSwipe(task.id);
         }}
         onActivate={() => toggleTaskFromKeyboard(task.id)}
-        onCloseEditor={closeOpenTaskToFocus}
+        onCloseEditor={nativeQuickEntry && isCreationDraft
+          ? commitNativeQuickEntry
+          : closeOpenTaskToFocus}
+        onCancelEditor={nativeQuickEntry && isCreationDraft
+          ? cancelNativeQuickEntry
+          : closeOpenTaskToFocus}
         onFocusTask={() => {
           if (!bulkMode) focusTaskRow(task.id);
         }}
@@ -3461,6 +3521,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         }}
         onActivate={() => toggleTaskFromKeyboard(task.id)}
         onCloseEditor={closeOpenTaskToFocus}
+        onCancelEditor={closeOpenTaskToFocus}
         onFocusTask={() => {
           if (!bulkMode) focusTaskRow(task.id);
         }}
@@ -3676,6 +3737,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           <TASK_ICONS.Search className="h-5 w-5 text-muted-foreground" />
         </div>
       ) : null}
+      {historyOperation !== null ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-background/45 backdrop-blur-[1px]"
+          data-task-history-pending={historyOperation}
+          aria-live="polite"
+        >
+          <LoadingSpinner
+            label={historyOperation === 'undo'
+              ? 'Undoing Task Change'
+              : 'Redoing Task Change'}
+          />
+        </div>
+      ) : null}
       {!nativeQuickEntry ? (
         <ToplineHeader
           title="Tasks"
@@ -3692,7 +3766,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         data-task-list-bottom-clearance
         className={`mx-auto w-full ${
           nativeQuickEntry
-            ? 'max-w-none p-2'
+            ? 'max-w-none p-3'
             : `max-w-3xl px-4 pt-8 md:pt-10 ${TASK_LIST_BOTTOM_CLEARANCE_CLASS}`
         } ${
           touchListElasticActive ? '' : 'transition-transform duration-200 ease-out'
@@ -5748,6 +5822,7 @@ function TaskRow({
   onTouchSwipeSelect,
   onActivate,
   onCloseEditor,
+  onCancelEditor,
   onFocusTask,
   onRestoreTaskFocus,
   onClearTaskFocus,
@@ -5789,6 +5864,7 @@ function TaskRow({
   onTouchSwipeSelect: () => void;
   onActivate: () => void;
   onCloseEditor: () => Promise<boolean>;
+  onCancelEditor: () => Promise<boolean>;
   onFocusTask: () => void;
   onRestoreTaskFocus: (taskId: string | null) => void;
   onClearTaskFocus: () => void;
@@ -5839,7 +5915,6 @@ function TaskRow({
   const [editorMounted, setEditorMounted] = useState(selected);
   const [editorExpanded, setEditorExpanded] = useState(selected);
   const [visibleTitle, setVisibleTitle] = useState(task.title);
-  const [summaryInputTarget, setSummaryInputTarget] = useState<HTMLElement | null>(null);
   const articleRef = useRef<HTMLElement>(null);
   const editorRegionRef = useRef<HTMLDivElement>(null);
   const editorAnimationFrameRef = useRef<number | null>(null);
@@ -6552,21 +6627,6 @@ function TaskRow({
             )}
           </button>
         )}
-        {selected && !bulkSelection ? (
-          <div
-            ref={setSummaryInputTarget}
-            draggable={draggableTask && !pending}
-            data-task-drag-handle={draggableTask ? 'true' : undefined}
-            data-task-id={task.id}
-            onDragStart={handleSummaryDragStart}
-            onDragEnd={() => {
-              onTaskDragEnd();
-              suppressClickUntilRef.current = Date.now() + 250;
-            }}
-            className={`flex h-full min-w-0 flex-1 items-center overflow-hidden ${draggableTask && !pending ? 'cursor-grab active:cursor-grabbing' : ''}`}
-            data-task-open-summary-input
-          />
-        ) : (
         <button
           ref={titleButtonRef}
           type="button"
@@ -6731,7 +6791,6 @@ function TaskRow({
             </span>
           ) : null}
         </button>
-        )}
         {!bulkSelection && !selected ? (
           <div className="flex shrink-0 items-center gap-0.5" data-task-row-trailing-controls>
             <TaskSourceIndicator task={task} compact />
@@ -6878,7 +6937,6 @@ function TaskRow({
               onCancelReminder={onCancelReminder}
               onRegisterAutosave={onRegisterAutosave}
               onTitleChange={setVisibleTitle}
-              summaryInputTarget={quickEntry ? null : summaryInputTarget}
               showTemporalFields
               quickEntry={quickEntry}
             />
@@ -6891,14 +6949,26 @@ function TaskRow({
             >
               Close Task
             </button>
+            {quickEntry ? (
+              <div className="flex justify-end px-1 pt-1" data-task-quick-entry-actions>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending || visibleTitle.trim().length === 0}
+                  onClick={() => void onCloseEditor()}
+                >
+                  Save
+                </Button>
+              </div>
+            ) : null}
             <button
               type="button"
               tabIndex={-1}
               data-bathos-form-cancel="true"
               className="sr-only"
-              onClick={() => void onCloseEditor()}
+              onClick={() => void onCancelEditor()}
             >
-              Close Task
+              Cancel Task
             </button>
           </div>
         </div>
@@ -6991,7 +7061,6 @@ function TaskEditor({
   onCancelReminder,
   onRegisterAutosave,
   onTitleChange,
-  summaryInputTarget = null,
   showTemporalFields = true,
   afterFields = null,
   quickEntry = false,
@@ -7013,7 +7082,6 @@ function TaskEditor({
   onCancelReminder: () => Promise<void>;
   onRegisterAutosave: (taskId: string, flush: () => Promise<void>) => void;
   onTitleChange: (title: string) => void;
-  summaryInputTarget?: HTMLElement | null;
   showTemporalFields?: boolean;
   afterFields?: ReactNode;
   quickEntry?: boolean;
@@ -7282,7 +7350,6 @@ function TaskEditor({
         aria-keyshortcuts="Meta+Enter Meta+Escape Control+Enter Control+Q Alt+Shift+Q"
         value={title}
         className={cn(
-          summaryInputTarget !== null && 'h-9 border-[hsl(var(--grid-sticky-line))] bg-background px-3',
           nativeSummaryCaptureActive && 'border-ring ring-2 ring-ring/65',
         )}
         onPointerDown={() => setNativeSummaryCaptureActive(false)}
@@ -7327,13 +7394,11 @@ function TaskEditor({
   return (
     <div
       className={quickEntry
-        ? 'flex flex-col gap-2 px-1 pb-1'
+        ? 'flex flex-col gap-2 p-1'
         : 'flex flex-col gap-3 px-2 pb-3 sm:px-3.5'}
       data-task-editor-form
     >
-      {summaryInputTarget === null
-        ? summaryInput
-        : createPortal(summaryInput, summaryInputTarget)}
+      {summaryInput}
       <Suspense fallback={<div className="min-h-16" aria-label="Loading Task Notes" />}>
         <TaskMarkdownNotes
           id={`task-notes-${task.id}`}
@@ -7380,7 +7445,7 @@ function TaskEditor({
                 type={primaryLinkHref === null ? 'button' : undefined}
                 variant="outline"
                 size="icon"
-                className="h-10 w-10 shrink-0 border-[hsl(var(--grid-sticky-line))] bg-background"
+                className="h-10 w-10 shrink-0 border-input bg-background"
                 aria-label={`Open ${primaryLinkLabel}`}
                 disabled={primaryLinkHref === null}
               >

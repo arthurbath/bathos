@@ -13,7 +13,7 @@ const InputGroup = React.forwardRef<HTMLDivElement, React.ComponentProps<"div">>
       data-slot="input-group"
       role="group"
       className={cn(
-        "group/input-group relative flex h-10 min-w-0 w-full items-center rounded-md border border-[hsl(var(--grid-sticky-line))] bg-background outline-none transition-[color,box-shadow] has-[>textarea]:h-auto",
+        "group/input-group relative flex h-10 min-w-0 w-full items-center rounded-md border border-input bg-background outline-none transition-[color,box-shadow] has-[>textarea]:h-auto",
         "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/65",
         "has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-2 has-[[data-slot][aria-invalid=true]]:ring-destructive/20",
         className,

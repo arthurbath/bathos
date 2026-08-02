@@ -14,6 +14,7 @@ export type TaskSelectionGesture = {
   ctrlKey: boolean;
   shiftKey: boolean;
   macLikePlatform: boolean;
+  includeFocusedOnActivation?: boolean;
 };
 
 export function applyTaskSelectionGesture(
@@ -46,7 +47,27 @@ export function applyTaskSelectionGesture(
     };
   };
 
-  if (!current.active && current.focusedId === null) {
+  if (!current.active && gesture.includeFocusedOnActivation && current.focusedId) {
+    const anchorId = current.anchorId ?? current.focusedId;
+    if (gesture.shiftKey) {
+      const anchorIndex = gesture.visibleTaskIds.indexOf(anchorId);
+      const taskIndex = gesture.visibleTaskIds.indexOf(gesture.taskId);
+      if (anchorIndex >= 0 && taskIndex >= 0) {
+        const start = Math.min(anchorIndex, taskIndex);
+        const end = Math.max(anchorIndex, taskIndex);
+        return normalize(
+          new Set(gesture.visibleTaskIds.slice(start, end + 1)),
+          anchorId,
+        );
+      }
+    }
+
+    const selectedIds = new Set([current.focusedId]);
+    selectedIds.add(gesture.taskId);
+    return normalize(selectedIds, anchorId);
+  }
+
+  if (!current.active) {
     return normalize(new Set([gesture.taskId]), gesture.taskId);
   }
 
@@ -62,14 +83,6 @@ export function applyTaskSelectionGesture(
         anchorId,
       );
     }
-  }
-
-  if (
-    !current.active
-    && current.focusedId === gesture.taskId
-    && platformModifier
-  ) {
-    return normalize(new Set([gesture.taskId]), anchorId);
   }
 
   const selectedIds = current.active

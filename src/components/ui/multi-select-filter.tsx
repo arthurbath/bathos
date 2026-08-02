@@ -255,7 +255,7 @@ export function MultiSelectFilter<TValue extends string>({
           variant="outline"
           size="sm"
           className={cn(
-            'h-8 justify-between gap-2 border-[hsl(var(--grid-sticky-line))] bg-background px-3 text-sm font-normal text-foreground ',
+            'h-8 justify-between gap-2 border-input bg-background px-3 text-sm font-normal text-foreground',
             triggerClassName,
           )}
           aria-label={label}

@@ -1005,6 +1005,21 @@ final class TasksCompanionTests: XCTestCase {
     }
 
     @MainActor
+    func testPresentationResetHidesStaleContentBehindLoadingState() {
+        let model = TasksBrowserModel()
+        model.didFinishLoading()
+        XCTAssertTrue(model.hasLoadedContent)
+
+        let nextURL = TaskNativeRoute.newTask.webURL
+        model.prepareForPresentation(of: nextURL)
+
+        XCTAssertEqual(model.requestedURL, nextURL)
+        XCTAssertFalse(model.hasLoadedContent)
+        XCTAssertTrue(model.isLoading)
+        XCTAssertNil(model.loadError)
+    }
+
+    @MainActor
     func testInPageNavigationAcceptsNativeNewTaskRouteWithoutCrashing() {
         TasksBrowserModel.navigateInPage(
             WKWebView(),

@@ -42,7 +42,7 @@ describe('task selection gestures', () => {
     });
   });
 
-  it('incorporates keyboard focus when a later modified click starts selection', () => {
+  it('replaces prior keyboard focus when a later modified click starts selection', () => {
     const selected = applyTaskSelectionGesture({
       active: false,
       anchorId: 'b',
@@ -58,7 +58,26 @@ describe('task selection gestures', () => {
     })!;
     expect(selected.active).toBe(true);
     expect(selected.focusedId).toBeNull();
-    expect([...selected.selectedIds]).toEqual(['b', 'c']);
+    expect(selected.anchorId).toBe('c');
+    expect([...selected.selectedIds]).toEqual(['c']);
+  });
+
+  it('can preserve a focused item when a nested collection activates selection', () => {
+    const selected = applyTaskSelectionGesture({
+      active: false,
+      anchorId: 'a',
+      focusedId: 'a',
+      selectedIds: new Set(),
+    }, {
+      taskId: 'c',
+      visibleTaskIds: ['a', 'b', 'c'],
+      metaKey: true,
+      ctrlKey: false,
+      shiftKey: false,
+      macLikePlatform: true,
+      includeFocusedOnActivation: true,
+    })!;
+    expect([...selected.selectedIds]).toEqual(['a', 'c']);
   });
 
   it('leaves an ordinary click on another task available for opening', () => {
