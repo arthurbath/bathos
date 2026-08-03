@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { toast } from '@/hooks/use-toast';
+import { shouldHandleWithBrowser } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
 import {
   TaskChecklistEditorSurface,
@@ -47,6 +48,7 @@ import {
 import type {
   TaskRecurrenceDefinition,
   TaskRecurrencePrototypeChecklistItem,
+  TaskRecurrencePrototypeSnapshot,
   TaskRecurrenceRevision,
 } from '@/modules/tasks/types/tasks';
 
@@ -67,17 +69,27 @@ type PrototypeRowSharedProps = {
     definitionId: string,
     flush: (() => Promise<void>) | null,
   ) => void;
+  navigationHref?: string;
+  focused?: boolean;
+  onFocusRow?: () => void;
+  onMoveFocus?: (direction: -1 | 1) => void;
+  onActivate?: () => void;
 };
 
 export function WaitingRecurrenceRow({
   onGoToInstance,
+  onSelect,
   ...props
-}: PrototypeRowSharedProps & { onGoToInstance: () => void }) {
+}: PrototypeRowSharedProps & {
+  onGoToInstance: () => void;
+  onSelect?: (event: MouseEvent<HTMLElement>) => void;
+}) {
   return (
     <RecurrencePrototypeRow
       {...props}
       waiting
       onGoToInstance={onGoToInstance}
+      onSelect={onSelect}
     />
   );
 }
@@ -93,15 +105,15 @@ export function CalendarRecurrencePrototypeRow({
   ...props
 }: PrototypeRowSharedProps & {
   scheduledDate: string;
-  dragPlacement: 'before' | 'after' | null;
-  onDragStart: () => void;
-  onDragOver: (placement: 'before' | 'after') => void;
-  onDragEnd: () => void;
+  dragPlacement?: 'before' | 'after' | null;
+  onDragStart?: () => void;
+  onDragOver?: (placement: 'before' | 'after') => void;
+  onDragEnd?: () => void;
   bulkSelection?: {
     selected: boolean;
     onToggle: (event: MouseEvent<HTMLElement>) => void;
   };
-  onSelect: (event: MouseEvent<HTMLElement>) => void;
+  onSelect?: (event: MouseEvent<HTMLElement>) => void;
 }) {
   return (
     <RecurrencePrototypeRow
@@ -130,6 +142,11 @@ function RecurrencePrototypeRow({
   editorOpen,
   onEditorOpenChange,
   onRegisterEditorFlush,
+  navigationHref,
+  focused = false,
+  onFocusRow,
+  onMoveFocus,
+  onActivate,
   waiting = false,
   onGoToInstance,
   dragPlacement = null,
@@ -242,19 +259,35 @@ function RecurrencePrototypeRow({
           'relative grid overflow-hidden text-[15px] text-foreground transition-[grid-template-rows,opacity,background-color,border-radius] ease-out focus:outline-none motion-reduce:transition-none',
           editorOpen || bulkSelection?.selected
             ? 'rounded-md bg-info/10'
-            : 'focus-visible:rounded-md focus-visible:bg-info/10',
+            : focused
+              ? 'rounded-md bg-info/10'
+              : 'focus-visible:rounded-md focus-visible:bg-info/10',
         )}
         data-task-waiting-recurrence={waiting ? 'true' : undefined}
         data-task-recurrence-prototype={definition.id}
         data-task-row-id={waiting ? undefined : `recurrence:${definition.id}`}
         data-task-recurrence-scheduled-date={scheduledDate ?? undefined}
         data-drag-placement={dragPlacement ?? undefined}
-        tabIndex={-1}
+        tabIndex={focused ? 0 : -1}
+        data-task-row-focus-target={navigationHref ? true : undefined}
         onKeyDown={(event) => {
-          if (event.key !== 'Escape' || !editorOpen) return;
-          event.preventDefault();
-          void closeEditor();
+          if (event.target !== event.currentTarget) return;
+          if (event.key === 'Escape' && editorOpen) {
+            event.preventDefault();
+            void closeEditor();
+            return;
+          }
+          if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && focused) {
+            event.preventDefault();
+            onMoveFocus?.(event.key === 'ArrowUp' ? -1 : 1);
+            return;
+          }
+          if (event.key === 'Enter' && focused) {
+            event.preventDefault();
+            onActivate?.();
+          }
         }}
+        onFocus={onFocusRow}
         onDragOver={draggable ? (event) => {
           event.preventDefault();
           event.dataTransfer.dropEffect = 'move';
@@ -300,7 +333,32 @@ function RecurrencePrototypeRow({
               <TASK_ICONS.Recurrence className="h-5 w-5" aria-hidden="true" />
             </span>
           )}
-          <button
+          {navigationHref ? <a
+            href={navigationHref}
+            className="flex h-full min-w-0 flex-1 flex-col justify-center text-left font-normal focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={(event) => {
+              if (Date.now() <= suppressClickUntilRef.current) {
+                event.preventDefault();
+                return;
+              }
+              if (shouldHandleWithBrowser(event)) return;
+              if (onSelect) {
+                onSelect(event);
+              } else if (editorOpen) void closeEditor();
+              else void onEditorOpenChange(true);
+            }}
+            aria-label={`Open ${visibleTitle}`}
+            aria-pressed={bulkSelection?.selected}
+          >
+            <span className="truncate">{visibleTitle}</span>
+            <RecurrencePrototypeMetadata
+              definition={definition}
+              revision={revision}
+              areas={areas}
+              planningDate={planningDate}
+              waiting={waiting}
+            />
+          </a> : <button
             type="button"
             draggable={Boolean(draggable)}
             data-task-drag-handle={draggable ? 'true' : undefined}
@@ -342,7 +400,7 @@ function RecurrencePrototypeRow({
               planningDate={planningDate}
               waiting={waiting}
             />
-          </button>
+          </button>}
           {!bulkSelection ? <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -643,7 +701,7 @@ function SharedRecurrencePrototypeEditor({
       const next = checklist.map(prototypeChecklistEditorItem);
       next.splice(Math.max(0, Math.min(destinationIndex, next.length)), 0, ...created);
       const saved = await persistChecklist(next);
-      const createdIds = new Set(created.map(({ id }) => id));
+      const createdIds = new Set<string>(created.map(({ id }) => id));
       return saved.filter(({ id }) => createdIds.has(id));
     },
     createItemCopies: async (items, destinationIndex = checklist.length) => {
@@ -656,7 +714,7 @@ function SharedRecurrencePrototypeEditor({
       const next = checklist.map(prototypeChecklistEditorItem);
       next.splice(Math.max(0, Math.min(destinationIndex, next.length)), 0, ...created);
       const saved = await persistChecklist(next);
-      const createdIds = new Set(created.map(({ id }) => id));
+      const createdIds = new Set<string>(created.map(({ id }) => id));
       return saved.filter(({ id }) => createdIds.has(id));
     },
     updateItem: async (itemId, patch) => {
@@ -735,7 +793,7 @@ function SharedRecurrencePrototypeEditor({
         )}
         temporalFields={(
           <Button type="button" variant="outline" className="w-full" onClick={onEditRepeat}>
-            Edit Repeat
+            Edit Repeat...
           </Button>
         )}
         areas={areas}

@@ -1,5 +1,8 @@
+import type { TaskTodaySection } from '@/modules/tasks/types/tasks';
+
 export const TASK_START_PICKER_OPEN_EVENT = 'bathos:task-start-picker-open';
 export const TASK_START_PICKER_ADVANCE_EVENT = 'bathos:task-start-picker-advance';
+export const TASK_START_PICKER_FOCUS_HORIZON_EVENT = 'bathos:task-start-picker-focus-horizon';
 export const TASK_ROW_TEMPORAL_PICKER_OPEN_EVENT = 'bathos:task-row-temporal-picker-open';
 
 export type TaskStartPickerFocusTarget = 'start' | 'reminder';
@@ -17,6 +20,16 @@ export function requestTaskStartPickerOpen(
 
 export function requestTaskStartPickerAdvance(picker: HTMLElement): void {
   picker.dispatchEvent(new CustomEvent(TASK_START_PICKER_ADVANCE_EVENT));
+}
+
+export function requestTaskStartPickerFocusHorizon(
+  picker: HTMLElement,
+  horizon: TaskTodaySection,
+): void {
+  picker.dispatchEvent(new CustomEvent<TaskTodaySection>(
+    TASK_START_PICKER_FOCUS_HORIZON_EVENT,
+    { detail: horizon },
+  ));
 }
 
 export function requestTaskRowTemporalPickerOpen(

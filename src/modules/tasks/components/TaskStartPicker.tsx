@@ -59,6 +59,7 @@ import type {
 } from '@/modules/tasks/types/tasks';
 import {
   TASK_START_PICKER_ADVANCE_EVENT,
+  TASK_START_PICKER_FOCUS_HORIZON_EVENT,
   TASK_START_PICKER_OPEN_EVENT,
   type TaskStartPickerFocusTarget,
 } from './taskStartPickerEvents';
@@ -258,6 +259,27 @@ export function TaskStartPickerPanel({
     panel.addEventListener(TASK_START_PICKER_ADVANCE_EVENT, handleAdvance);
     return () => panel.removeEventListener(TASK_START_PICKER_ADVANCE_EVENT, handleAdvance);
   }, [active, advanceStartFocus]);
+
+  useEffect(() => {
+    if (!active) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const handleFocusHorizon = (event: Event) => {
+      const request = event as CustomEvent<TaskTodaySection>;
+      if (initialFocusTimerRef.current !== null) {
+        window.clearTimeout(initialFocusTimerRef.current);
+        initialFocusTimerRef.current = null;
+      }
+      panel.querySelector<HTMLButtonElement>(
+        `[data-task-start-horizon="${request.detail}"]`,
+      )?.focus({ preventScroll: true });
+    };
+    panel.addEventListener(TASK_START_PICKER_FOCUS_HORIZON_EVENT, handleFocusHorizon);
+    return () => panel.removeEventListener(
+      TASK_START_PICKER_FOCUS_HORIZON_EVENT,
+      handleFocusHorizon,
+    );
+  }, [active]);
 
   useEffect(() => {
     if (reminderHourMenuDisabled) setReminderHourMenuOpen(false);
@@ -537,6 +559,7 @@ export function TaskStartPickerPanel({
       ref={panelRef}
       className="mx-auto box-border w-[276px] max-w-[calc(100vw-2rem)]"
       data-task-start-picker
+      data-task-start-picker-task-id={task.id}
       onKeyDownCapture={handlePanelKeyDownCapture}
       onPointerDownCapture={() => {
         if (initialFocusTimerRef.current === null) return;

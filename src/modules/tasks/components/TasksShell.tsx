@@ -58,7 +58,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { handleClientSideLinkNavigation } from '@/lib/navigation';
+import { handleClientSideLinkNavigation, shouldHandleWithBrowser } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
 import type { EditableTaskPatch } from '@/modules/tasks/data/taskRepository';
 import type { TaskRecurrenceEditInput } from '@/modules/tasks/data/taskRecurrenceService';
@@ -96,6 +96,7 @@ import {
 } from '@/modules/tasks/components/taskHorizonPresentation';
 import {
   requestTaskStartPickerAdvance,
+  requestTaskStartPickerFocusHorizon,
   requestTaskStartPickerOpen,
   requestTaskRowTemporalPickerOpen,
   TASK_ROW_TEMPORAL_PICKER_OPEN_EVENT,
@@ -105,6 +106,7 @@ import {
 import {
   TaskQuickFindDialog,
   TaskSearchResultsView,
+  type TaskSearchResult,
 } from '@/modules/tasks/components/TaskQuickFind';
 import { TaskPermanentDeletionDialog } from '@/modules/tasks/components/TaskPermanentDeletionDialog';
 import {
@@ -243,7 +245,10 @@ import {
   getTaskDepartureToast,
   type TaskDeparture,
 } from '@/modules/tasks/domain/taskDepartureNotice';
-import { getTaskPlanningRoute } from '@/modules/tasks/domain/taskPlanningRoute';
+import {
+  getTaskPlanningRoute,
+  type TaskPlanningRoute,
+} from '@/modules/tasks/domain/taskPlanningRoute';
 import { getNextTaskActionability } from '@/modules/tasks/domain/taskActionability';
 import { getNextTaskAreaId } from '@/modules/tasks/domain/taskAreaCycle';
 import { formatTaskReminderTimeDisplay } from '@/modules/tasks/domain/taskReminderTimeInput';
@@ -619,6 +624,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   } = useTasksRuntime();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTaskIdRef = useRef<string | null>(null);
+  const creationDraftRef = useRef<TaskCreationDraft | null>(null);
   const [openRecurrencePrototypeId, setOpenRecurrencePrototypeId] = useState<string | null>(null);
   const openRecurrencePrototypeIdRef = useRef<string | null>(null);
   const recurrencePrototypeEditorFlushRef = useRef<{
@@ -811,9 +817,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     mutations: readonly TaskMetadataMutation[],
   ) => {
     const immediateDepartures: TaskDeparture[] = [];
+    const openEditorTaskId = selectedTaskIdRef.current === NEW_TASK_DRAFT_ID
+      ? creationDraftRef.current?.persistedTaskId ?? null
+      : selectedTaskIdRef.current;
     for (const { before, after } of mutations) {
-      if (selectedTaskIdRef.current === after.id) {
-        latestTaskMetadataRef.current.set(after.id, after);
+      if (openEditorTaskId === after.id) {
+        if (selectedTaskIdRef.current !== NEW_TASK_DRAFT_ID) {
+          latestTaskMetadataRef.current.set(after.id, after);
+        }
         continue;
       }
       const departure = classifyTaskDeparture({
@@ -1027,7 +1038,6 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
   const focusedTaskIdRef = useRef<string | null>(null);
   const forcedTaskDomFocusIdRef = useRef<string | null>(null);
   const visibleTaskIdsRef = useRef<string[]>([]);
-  const creationDraftRef = useRef<TaskCreationDraft | null>(null);
   const nativeQuickEntryCommitRequestedRef = useRef(false);
   const deferredCompletionTaskIdsRef = useRef<Set<string>>(new Set());
   const taskEditorAutosaveRef = useRef<{
@@ -2023,13 +2033,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (location.pathname !== searchTarget.targetPath.split(/[?#]/, 1)[0]) return;
     const target = tasks.find(({ id }) => id === searchTarget.taskId);
     if (!target) return;
-    if (target.lifecycle === 'open') {
-      void setOpenTask(target.id);
-    } else {
-      document.querySelector<HTMLElement>(
-        `[data-task-search-id="${target.id}"]`,
-      )?.focus();
-    }
+    void setOpenTask(target.id);
     setSearchTarget((current) => (
       current?.kind === 'task' && current.taskId === target.id ? null : current
     ));
@@ -2134,6 +2138,15 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           todaySection,
           startDate: null,
         });
+      }
+      if (targets.length === 1) {
+        const targetId = targets[0]?.id;
+        const activeStartPicker = Array.from(document.querySelectorAll<HTMLElement>(
+          '[data-task-start-picker][data-task-start-picker-task-id]',
+        )).find((picker) => picker.dataset.taskStartPickerTaskId === targetId);
+        if (activeStartPicker) {
+          requestTaskStartPickerFocusHorizon(activeStartPicker, todaySection);
+        }
       }
     } catch (shortcutError) {
       showTaskError('Task Command Could Not Be Applied', shortcutError);
@@ -2784,6 +2797,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         return;
       }
       if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (view === 'search') return;
         const commandDelete = macLikePlatform ? event.metaKey : event.ctrlKey;
         const openTask = selectedTaskIdRef.current !== null;
         const closedTaskSelection = !openTask
@@ -2800,6 +2814,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       }
       const command = getTaskKeyboardCommand(event, macLikePlatform);
       if (command === null) return;
+      if (view === 'search') return;
       if (command === 'keyboard-help' && event.isComposing) return;
       if (
         (command === 'copy' || command === 'cut' || command === 'paste')
@@ -3453,6 +3468,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     sectionTasks: TaskTodo[],
     targetAreaId?: string | null,
     targetUpcomingSection?: { key: string; startDate: string },
+    searchRow?: {
+      route: TaskPlanningRoute;
+      href: string;
+      focused: boolean;
+      onFocus: () => void;
+      onMoveFocus: (direction: -1 | 1) => void;
+      onActivate: () => void;
+    },
   ) => {
     const isCreationDraft = task.id === NEW_TASK_DRAFT_ID;
     const persistedDraftTaskId = isCreationDraft
@@ -3467,6 +3490,8 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <TaskRow
         key={task.id}
         task={task}
+        navigationHref={searchRow?.href}
+        touchActionsEnabled={!searchRow}
         quickEntry={nativeQuickEntry && isCreationDraft}
         draftExiting={isCreationDraft && closingTaskId === task.id}
         hasChecklistItems={checklistTaskIds.has(persistedDraftTaskId ?? task.id)}
@@ -3489,14 +3514,19 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           }, 0);
         } : undefined}
         hierarchy={hierarchy}
-        showAreaMetadata={view !== 'anytime'}
-        selected={selectedTaskId === task.id}
-        focused={focusedTaskId === task.id}
-        onSelect={(event) => handleTaskPointerSelection(event, task.id)}
+        showAreaMetadata={searchRow ? searchRow.route !== 'anytime' : view !== 'anytime'}
+        selected={searchRow ? false : selectedTaskId === task.id}
+        focused={searchRow ? searchRow.focused : focusedTaskId === task.id}
+        onSelect={searchRow ? (event) => {
+          event.preventDefault();
+          setSearchTarget({ kind: 'task', taskId: task.id, targetPath: searchRow.href });
+          navigate(searchRow.href);
+        } : (event) => handleTaskPointerSelection(event, task.id)}
         onTouchSwipeSelect={() => {
+          if (searchRow) return;
           void enterTaskSelectionFromTouchSwipe(task.id);
         }}
-        onActivate={() => toggleTaskFromKeyboard(task.id)}
+        onActivate={searchRow?.onActivate ?? (() => toggleTaskFromKeyboard(task.id))}
         onCloseEditor={nativeQuickEntry && isCreationDraft
           ? commitNativeQuickEntry
           : closeOpenTaskToFocus}
@@ -3504,18 +3534,24 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           ? cancelNativeQuickEntry
           : closeOpenTaskToFocus}
         onFocusTask={() => {
+          if (searchRow) {
+            searchRow.onFocus();
+            return;
+          }
           if (!bulkMode) focusTaskRow(task.id);
         }}
         onRestoreTaskFocus={(taskId) => focusTaskRow(taskId, true)}
-        onClearTaskFocus={clearWholeTaskFocusPreservingDomFocus}
-        onMoveFocus={(direction, wrap) => moveTaskRowFocus(task.id, direction, wrap)}
+        onClearTaskFocus={searchRow ? () => undefined : clearWholeTaskFocusPreservingDomFocus}
+        onMoveFocus={searchRow
+          ? (direction) => searchRow.onMoveFocus(direction)
+          : (direction, wrap) => moveTaskRowFocus(task.id, direction, wrap)}
         onRegisterAutosave={registerTaskEditorAutosave}
         completionRequested={deferredCompletionTaskIds.has(task.id)}
         onToggleDeferredCompletion={() => toggleDeferredCompletion(task.id)}
         reserveTerminalMutation={() => (
           isCreationDraft ? undefined : reserveForwardMutation(task)
         )}
-        bulkSelection={bulkMode && !isCreationDraft ? {
+        bulkSelection={!searchRow && bulkMode && !isCreationDraft ? {
           selected: bulkSelection.has(task.id),
           onKeyboardToggle: () => toggleTaskFromKeyboard(task.id),
           onToggle: (event) => handleTaskPointerSelection(
@@ -3557,7 +3593,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
             throw completeError;
           }
         }}
-        draggableTask={!isCreationDraft
+        draggableTask={!searchRow && !isCreationDraft
           && (
             view === 'today'
             || view === 'upcoming'
@@ -3659,7 +3695,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           updateTaskDropIndicator(null);
         }}
         planningDate={planningDate}
-        todayMarker={view === 'anytime'
+        todayMarker={(searchRow?.route ?? view) === 'anytime'
           ? getTaskTodayMembershipSection(task, planningDate) ?? undefined
           : undefined}
         todayMarkerContext="Today"
@@ -3717,7 +3753,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     );
   };
 
-  const renderDoneTask = (task: TaskTodo) => {
+  const renderDoneTask = (
+    task: TaskTodo,
+    searchRow?: {
+      href: string;
+      focused: boolean;
+      onFocus: () => void;
+      onMoveFocus: (direction: -1 | 1) => void;
+      onActivate: () => void;
+    },
+  ) => {
     const terminalState = task.disposition === 'deleted'
       ? 'deleted' as const
       : task.lifecycle === 'completed'
@@ -3728,31 +3773,44 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       <TaskRow
         key={task.id}
         task={task}
+        navigationHref={searchRow?.href}
+        touchActionsEnabled={!searchRow}
         draftExiting={false}
         hasChecklistItems={checklistTaskIds.has(task.id)}
         checklistTaskId={task.id}
         hierarchy={hierarchy}
         showAreaMetadata
-        selected={selectedTaskId === task.id}
-        focused={focusedTaskId === task.id}
-        onSelect={(event) => handleDoneTaskPointerSelection(event, task.id)}
+        selected={searchRow ? false : selectedTaskId === task.id}
+        focused={searchRow ? searchRow.focused : focusedTaskId === task.id}
+        onSelect={searchRow ? (event) => {
+          event.preventDefault();
+          setSearchTarget({ kind: 'task', taskId: task.id, targetPath: searchRow.href });
+          navigate(searchRow.href);
+        } : (event) => handleDoneTaskPointerSelection(event, task.id)}
         onTouchSwipeSelect={() => {
+          if (searchRow) return;
           void enterTaskSelectionFromTouchSwipe(task.id);
         }}
-        onActivate={() => toggleTaskFromKeyboard(task.id)}
+        onActivate={searchRow?.onActivate ?? (() => toggleTaskFromKeyboard(task.id))}
         onCloseEditor={closeOpenTaskToFocus}
         onCancelEditor={closeOpenTaskToFocus}
         onFocusTask={() => {
+          if (searchRow) {
+            searchRow.onFocus();
+            return;
+          }
           if (!bulkMode) focusTaskRow(task.id);
         }}
         onRestoreTaskFocus={(taskId) => focusTaskRow(taskId, true)}
-        onClearTaskFocus={clearWholeTaskFocusPreservingDomFocus}
-        onMoveFocus={(direction, wrap) => moveTaskRowFocus(task.id, direction, wrap)}
+        onClearTaskFocus={searchRow ? () => undefined : clearWholeTaskFocusPreservingDomFocus}
+        onMoveFocus={searchRow
+          ? (direction) => searchRow.onMoveFocus(direction)
+          : (direction, wrap) => moveTaskRowFocus(task.id, direction, wrap)}
         onRegisterAutosave={registerTaskEditorAutosave}
         completionRequested={terminalState === 'completed'}
         onToggleDeferredCompletion={() => undefined}
         reserveTerminalMutation={() => reserveForwardMutation(task)}
-        bulkSelection={bulkMode ? {
+        bulkSelection={!searchRow && bulkMode ? {
           selected: bulkSelection.has(task.id),
           onKeyboardToggle: () => toggleTaskFromKeyboard(task.id),
           onToggle: (event) => handleDoneTaskPointerSelection(
@@ -3804,6 +3862,100 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         onCancelReminder={async () => undefined}
         onDelete={async () => undefined}
         terminalState={terminalState}
+      />
+    );
+  };
+
+  const renderSearchResult = (
+    result: TaskSearchResult,
+    navigation: {
+      focused: boolean;
+      onFocus: () => void;
+      onMoveFocus: (direction: -1 | 1) => void;
+      onActivate: () => void;
+    },
+  ) => {
+    if (result.kind === 'todo') {
+      const searchRow = {
+        route: result.route,
+        href: result.href,
+        ...navigation,
+      };
+      return result.route === 'done'
+        ? renderDoneTask(result.task, searchRow)
+        : renderActiveTask(
+            result.task,
+            [result.task],
+            undefined,
+            undefined,
+            searchRow,
+          );
+    }
+
+    const waitingDefinition = waitingRecurrences.find(({ id }) => id === result.definition.id);
+    const occurrence = recurrences.openOccurrenceByDefinitionId.get(result.definition.id);
+    const scheduledPrototype = recurrences.datedPrototypes.find(({ definition }) => (
+      definition.id === result.definition.id
+    ));
+    const commonProps = {
+      definition: result.definition,
+      revision: result.revision,
+      planningDate,
+      onEdit: recurrences.edit,
+      onDelete: (definition: TaskRecurrenceDefinition) => (
+        recurrences.setStatus(definition, 'archived')
+      ),
+      areas: hierarchy.areas,
+      focusRequested: false,
+      onFocusFulfilled: () => undefined,
+      editorOpen: false,
+      onEditorOpenChange: async () => false,
+      onRegisterEditorFlush: () => undefined,
+      navigationHref: result.href,
+      focused: navigation.focused,
+      onFocusRow: navigation.onFocus,
+      onMoveFocus: navigation.onMoveFocus,
+      onActivate: navigation.onActivate,
+      onSelect: (event: MouseEvent<HTMLElement>) => {
+        event.preventDefault();
+        setSearchTarget({
+          kind: 'recurrence',
+          definitionId: result.definition.id,
+        });
+        navigate(result.href);
+      },
+    };
+
+    if (waitingDefinition && occurrence) {
+      return (
+        <WaitingRecurrenceRow
+          key={result.definition.id}
+          {...commonProps}
+          onGoToInstance={() => {
+            const targetView = occurrence.start_date
+              && occurrence.start_date > planningDate
+              ? 'upcoming'
+              : occurrence.destination === 'someday'
+                ? 'someday'
+                : occurrence.today_section
+                  ? 'today'
+                  : 'anytime';
+            const parameters = new URLSearchParams({
+              native_task: occurrence.root_id,
+            });
+            navigate(`${basePath}/${targetView}?${parameters.toString()}`);
+          }}
+        />
+      );
+    }
+
+    return (
+      <CalendarRecurrencePrototypeRow
+        key={result.definition.id}
+        {...commonProps}
+        scheduledDate={scheduledPrototype?.scheduledDate
+          ?? result.definition.next_occurrence_date
+          ?? planningDate}
       />
     );
   };
@@ -4204,6 +4356,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
               tasks={taskSearch.tasks}
               hierarchy={hierarchy}
               planningDate={planningDate}
+              recurrences={searchableRecurrences}
               loading={taskSearch.loading}
               error={taskSearch.error}
               onQueryChange={(query) => {
@@ -4216,6 +4369,14 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                 setSearchTarget({ kind: 'task', taskId: task.id, targetPath: path });
                 navigate(path);
               }}
+              onSelectRecurrence={(definition, path) => {
+                setSearchTarget({
+                  kind: 'recurrence',
+                  definitionId: definition.id,
+                });
+                navigate(path);
+              }}
+              renderResult={renderSearchResult}
             />
           ) : view === 'area' && areaId ? (
             <TaskAreaDetailView
@@ -4321,7 +4482,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
                             {formatTaskDateControlLabel(group.day, planningDate)}
                           </h3>
                           <div className={TASK_PLANNING_LIST_CLASS} data-task-planning-list>
-                            {group.tasks.map(renderDoneTask)}
+                            {group.tasks.map((task) => renderDoneTask(task))}
                           </div>
                         </section>
                       ))}
@@ -6252,6 +6413,8 @@ function TaskRow({
   onDelete,
   onPermanentDelete,
   terminalState,
+  navigationHref,
+  touchActionsEnabled = true,
 }: {
   task: TaskTodo;
   quickEntry?: boolean;
@@ -6302,6 +6465,8 @@ function TaskRow({
   onDelete: (reservation?: TaskForwardMutationReservation) => Promise<void>;
   onPermanentDelete?: () => Promise<void>;
   terminalState?: 'completed' | 'canceled' | 'deleted';
+  navigationHref?: string;
+  touchActionsEnabled?: boolean;
 }) {
   const [pending, setPending] = useState(false);
   const [temporalPicker, setTemporalPicker] = useState<{
@@ -6325,7 +6490,6 @@ function TaskRow({
   const editorRevealTimerRef = useRef<number | null>(null);
   const editorScrollFrameRef = useRef<number | null>(null);
   const editorUnmountTimerRef = useRef<number | null>(null);
-  const titleButtonRef = useRef<HTMLButtonElement>(null);
   const actionMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const suppressClickUntilRef = useRef(0);
   const touchSelectionGestureRef = useRef<{
@@ -6750,6 +6914,8 @@ function TaskRow({
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
     if (
+      !touchActionsEnabled
+      ||
       inBulkSelection
       || event.pointerType !== 'touch'
       || event.isPrimary === false
@@ -6834,6 +7000,7 @@ function TaskRow({
       setTouchSwipeOffset(0);
     }
   };
+  const TitleControl = navigationHref ? 'a' : 'button';
 
   return (
     <article
@@ -6844,6 +7011,7 @@ function TaskRow({
       aria-current={focused ? 'true' : undefined}
       aria-keyshortcuts="Enter Space Shift+Space ArrowUp ArrowDown"
       data-task-row-id={task.id}
+      data-task-search-id={task.id}
       data-task-row-focus-target
       onClick={(event) => {
         const target = event.target instanceof Element ? event.target : null;
@@ -6942,6 +7110,7 @@ function TaskRow({
         data-task-open-highlight-surface
       >
       {!quickEntry ? <>
+      {touchActionsEnabled ? <>
       <span
         aria-hidden="true"
         data-task-swipe-affordance="start"
@@ -6958,6 +7127,7 @@ function TaskRow({
       >
         <TASK_ICONS.MultiSelect className="h-5 w-5" />
       </span>
+      </> : null}
       <div
         className={`relative z-[1] flex h-11 touch-pan-y items-center gap-2 overflow-hidden pl-1 pr-1.5 ${
           touchSwipeActive ? '' : 'transition-transform duration-200 ease-out'
@@ -6969,10 +7139,10 @@ function TaskRow({
             ? 'right'
             : undefined}
         style={{ transform: `translate3d(${touchSwipeOffset}px, 0, 0)` }}
-        onPointerDown={handleTouchSelectionPointerDown}
-        onPointerMove={handleTouchSelectionPointerMove}
-        onPointerUp={handleTouchSelectionPointerUp}
-        onPointerCancel={handleTouchSelectionPointerCancel}
+        onPointerDown={touchActionsEnabled ? handleTouchSelectionPointerDown : undefined}
+        onPointerMove={touchActionsEnabled ? handleTouchSelectionPointerMove : undefined}
+        onPointerUp={touchActionsEnabled ? handleTouchSelectionPointerUp : undefined}
+        onPointerCancel={touchActionsEnabled ? handleTouchSelectionPointerCancel : undefined}
         onClickCapture={(event) => {
           if (Date.now() > suppressClickUntilRef.current) return;
           event.preventDefault();
@@ -7041,17 +7211,19 @@ function TaskRow({
             )}
           </button>
         )}
-        <button
-          ref={titleButtonRef}
-          type="button"
-          onClick={(event) => {
+        <TitleControl
+          type={navigationHref ? undefined : 'button'}
+          href={navigationHref}
+          onClick={(event: MouseEvent<HTMLElement>) => {
             if (Date.now() <= suppressClickUntilRef.current) {
               event.preventDefault();
               return;
             }
+            if (navigationHref && shouldHandleWithBrowser(event)) return;
+            event.preventDefault();
             onSelect(event);
           }}
-          onKeyDown={(event) => {
+          onKeyDown={(event: ReactKeyboardEvent<HTMLElement>) => {
             if (event.nativeEvent.isComposing) {
               return;
             }
@@ -7204,7 +7376,7 @@ function TaskRow({
               ) : null}
             </span>
           ) : null}
-        </button>
+        </TitleControl>
         {!bulkSelection && !selected ? (
           <div className="flex shrink-0 items-center gap-0.5" data-task-row-trailing-controls>
             <TaskSourceIndicator task={task} compact />

@@ -1,5 +1,6 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {
+  useCallback,
   useDeferredValue,
   useEffect,
   useId,
@@ -9,6 +10,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
+  type ReactNode,
 } from 'react';
 
 import {
@@ -36,7 +38,7 @@ import type {
   TaskTodo,
 } from '@/modules/tasks/types/tasks';
 
-type QuickFindResult =
+export type TaskSearchResult =
   | {
       kind: 'todo';
       id: string;
@@ -44,6 +46,7 @@ type QuickFindResult =
       detail: string;
       href: string;
       task: TaskTodo;
+      route: TaskPlanningRoute;
       activation: 'open';
       rank: number;
     }
@@ -54,6 +57,7 @@ type QuickFindResult =
       detail: string;
       href: string;
       definition: TaskRecurrenceDefinition;
+      revision: TaskRecurrenceRevision;
       activation: 'focus-recurrence';
       rank: number;
     };
@@ -82,21 +86,21 @@ function taskDetail(task: TaskTodo, route: TaskPlanningRoute): string {
   return route[0].toUpperCase() + route.slice(1);
 }
 
-function createQuickFindResults(
+export function createTaskSearchResults(
   query: string,
   basePath: string,
   tasks: readonly TaskTodo[],
   hierarchy: TaskHierarchyModel,
   planningDate: string,
   recurrences: readonly TaskQuickFindRecurrence[],
-): QuickFindResult[] {
+): TaskSearchResult[] {
   const normalizedQuery = normalize(query);
   if (!normalizedQuery) return [];
   const documents = filterTaskSearchDocuments(
     createTaskSearchDocuments(tasks, hierarchy),
     normalizedQuery,
   );
-  const taskResults: QuickFindResult[] = rankTaskSearchDocuments(
+  const taskResults: TaskSearchResult[] = rankTaskSearchDocuments(
     documents,
     normalizedQuery,
   ).map((document) => {
@@ -109,12 +113,13 @@ function createQuickFindResults(
         detail: taskDetail(task, route),
         href: `${basePath}/${route}`,
         task,
+        route,
         activation: 'open',
         rank: getTaskSearchRank(document, normalizedQuery),
       };
     });
   const areaTitles = new Map(hierarchy.areas.map(({ id, title }) => [id, title]));
-  const recurrenceResults: QuickFindResult[] = recurrences.flatMap(({ definition, revision }) => {
+  const recurrenceResults: TaskSearchResult[] = recurrences.flatMap(({ definition, revision }) => {
     const prototype = revision.prototype_snapshot.root;
     const fields = {
       normalizedTitle: normalize(prototype.title),
@@ -134,6 +139,7 @@ function createQuickFindResults(
       detail: 'Repeating Task',
       href: `${basePath}/upcoming`,
       definition,
+      revision,
       activation: 'focus-recurrence' as const,
       rank: getTaskSearchRank(fields, normalizedQuery),
     }];
@@ -197,7 +203,7 @@ export function TaskQuickFindDialog({
   }, [initialQuery, open]);
   const deferredQuery = useDeferredValue(query);
   const allResults = useMemo(
-    () => createQuickFindResults(
+    () => createTaskSearchResults(
       deferredQuery,
       basePath,
       tasks,
@@ -216,19 +222,19 @@ export function TaskQuickFindDialog({
   );
   const results = allResults.slice(0, 3);
   const showAllResults = useMemo(() => {
-    const normalizedQuery = normalize(deferredQuery);
-    if (!normalizedQuery) return false;
-    return filterTaskSearchDocuments(
-      createTaskSearchDocuments(tasks, hierarchy),
-      normalizedQuery,
-    ).length > 0;
-  }, [deferredQuery, hierarchy, tasks]);
+    return normalize(deferredQuery).length > 0 && allResults.length > 0;
+  }, [allResults.length, deferredQuery]);
   const resultIdentity = results.map(({ id, activation }) => `${id}:${activation}`).join('|');
   useEffect(() => {
     setActiveIndex(0);
   }, [deferredQuery, resultIdentity]);
   const continueHref = `${basePath}/search?q=${encodeURIComponent(query.trim())}`;
   const optionCount = results.length + (showAllResults ? 1 : 0);
+  const hasSecondaryContent = loading
+    || Boolean(error)
+    || Boolean(normalize(query))
+    || results.length > 0
+    || showAllResults;
   const activeOptionId = optionCount === 0
     ? undefined
     : activeIndex < results.length
@@ -239,7 +245,7 @@ export function TaskQuickFindDialog({
     setQuery('');
   };
 
-  const activate = (event: MouseEvent<HTMLAnchorElement>, result: QuickFindResult) => {
+  const activate = (event: MouseEvent<HTMLAnchorElement>, result: TaskSearchResult) => {
     if (shouldHandleWithBrowser(event)) return;
     event.preventDefault();
     if (result.kind === 'todo') onSelectTask(result.task, result.href);
@@ -309,7 +315,7 @@ export function TaskQuickFindDialog({
             event.preventDefault();
             close();
           }}
-          className="fixed left-1/2 z-50 flex max-h-[calc(var(--bathos-modal-vv-height,100dvh)-5rem)] w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-2 overflow-hidden rounded-xl border border-border bg-popover p-2 focus:outline-none"
+          className="fixed left-1/2 z-50 flex max-h-[calc(var(--bathos-modal-vv-height,100dvh)-5rem)] w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-border bg-popover p-2 focus:outline-none"
           style={{
             ...viewportStyle,
             top: 'calc(var(--bathos-modal-vv-top, 0px) + 4rem)',
@@ -338,7 +344,12 @@ export function TaskQuickFindDialog({
               className="h-11 pl-9"
             />
           </div>
-          <div id={listboxId} role="listbox" aria-label="Quick Find Results" className="space-y-0.5">
+          <div
+            id={listboxId}
+            role="listbox"
+            aria-label="Quick Find Results"
+            className={cn('space-y-0.5', hasSecondaryContent && 'mt-2')}
+          >
             {loading ? (
               <div className="flex min-h-20 items-center justify-center"><LoadingSpinner /></div>
             ) : error ? (
@@ -405,38 +416,108 @@ export function TaskSearchResultsView({
   tasks,
   hierarchy,
   planningDate,
+  recurrences,
   loading,
   error,
   onQueryChange,
   onSelectTask,
+  onSelectRecurrence,
+  renderResult,
 }: {
   query: string;
   basePath: string;
   tasks: TaskTodo[];
   hierarchy: TaskHierarchyModel;
   planningDate: string;
+  recurrences: TaskQuickFindRecurrence[];
   loading: boolean;
   error: unknown;
   onQueryChange: (query: string) => void;
   onSelectTask: (task: TaskTodo, path: string) => void;
+  onSelectRecurrence: (definition: TaskRecurrenceDefinition, path: string) => void;
+  renderResult: (
+    result: TaskSearchResult,
+    navigation: {
+      focused: boolean;
+      onFocus: () => void;
+      onMoveFocus: (direction: -1 | 1) => void;
+      onActivate: () => void;
+    },
+  ) => ReactNode;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const [focusedResultIndex, setFocusedResultIndex] = useState<number | null>(null);
   const deferredQuery = useDeferredValue(normalize(query));
-  const documents = useMemo(
-    () => createTaskSearchDocuments(tasks, hierarchy),
-    [hierarchy, tasks],
-  );
   const results = useMemo(
-    () => filterTaskSearchDocuments(documents, deferredQuery),
-    [deferredQuery, documents],
+    () => createTaskSearchResults(
+      deferredQuery,
+      basePath,
+      tasks,
+      hierarchy,
+      planningDate,
+      recurrences,
+    ),
+    [basePath, deferredQuery, hierarchy, planningDate, recurrences, tasks],
   );
+
+  const focusResult = useCallback((index: number) => {
+    if (results.length === 0) return;
+    const nextIndex = Math.max(0, Math.min(index, results.length - 1));
+    setFocusedResultIndex(nextIndex);
+    window.requestAnimationFrame(() => {
+      const wrapper = resultsRef.current?.querySelector<HTMLElement>(
+        `[data-task-search-result-index="${nextIndex}"]`,
+      );
+      wrapper?.querySelector<HTMLElement>(
+        '[data-task-row-focus-target], [data-task-recurrence-prototype]',
+      )?.focus({ preventScroll: true });
+    });
+  }, [results.length]);
+
+  const moveResultFocus = useCallback((index: number, direction: -1 | 1) => {
+    if (direction < 0 && index === 0) {
+      setFocusedResultIndex(null);
+      inputRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    focusResult(Math.max(0, Math.min(index + direction, results.length - 1)));
+  }, [focusResult, results.length]);
+
+  useEffect(() => {
+    setFocusedResultIndex(null);
+  }, [deferredQuery]);
+
+  useEffect(() => {
+    if (focusedResultIndex === null) return;
+    if (results.length === 0) {
+      setFocusedResultIndex(null);
+      inputRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (focusedResultIndex >= results.length) focusResult(results.length - 1);
+  }, [focusResult, focusedResultIndex, results.length]);
+
+  const activateResult = (result: TaskSearchResult) => {
+    if (result.kind === 'todo') onSelectTask(result.task, result.href);
+    else onSelectRecurrence(result.definition, result.href);
+  };
+
   return (
     <div className="space-y-5">
       <div className="relative">
         <TASK_ICONS.Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <Input
+          ref={inputRef}
           autoFocus
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || event.key !== 'ArrowDown') return;
+            if (results.length === 0) return;
+            event.preventDefault();
+            focusResult(0);
+          }}
           aria-label="Search All Tasks"
           placeholder="Search All Tasks"
           className="pl-9"
@@ -455,27 +536,22 @@ export function TaskSearchResultsView({
         ) : results.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">No matching tasks</p>
         ) : (
-          <div className="divide-y divide-[hsl(var(--grid-sticky-line))] border-y border-[hsl(var(--grid-sticky-line))]">
-            {results.map(({ task }) => {
-              const route = getTaskQuickFindRoute(task, planningDate);
-              const href = `${basePath}/${route}`;
-              return (
-                <a
-                  key={task.id}
-                  href={href}
-                  onClick={(event) => {
-                    if (shouldHandleWithBrowser(event)) return;
-                    event.preventDefault();
-                    onSelectTask(task, href);
-                  }}
-                  className="flex h-16 flex-col justify-center overflow-hidden px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                  data-task-compact-row
-                >
-                  <span className="block truncate text-sm font-medium text-foreground">{task.title}</span>
-                  <span className="mt-1 block truncate text-xs text-muted-foreground">{taskDetail(task, route)}</span>
-                </a>
-              );
-            })}
+          <div ref={resultsRef} className="space-y-0.5" data-task-search-results>
+            {results.map((result, index) => (
+              <div
+                key={`${result.kind}:${result.id}`}
+                data-task-search-result-index={index}
+                data-task-search-result-kind={result.kind}
+                onFocusCapture={() => setFocusedResultIndex(index)}
+              >
+                {renderResult(result, {
+                  focused: focusedResultIndex === index,
+                  onFocus: () => focusResult(index),
+                  onMoveFocus: (direction) => moveResultFocus(index, direction),
+                  onActivate: () => activateResult(result),
+                })}
+              </div>
+            ))}
           </div>
         )}
       </section>
