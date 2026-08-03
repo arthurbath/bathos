@@ -133,45 +133,38 @@ describe.skipIf(!integrationEnabled)('Tasks multi-client convergence integration
 
     await activeDatabase.connect(connector);
     await waitForUploadQueue(activeDatabase, 0, 60_000);
-    const convergedAfterMcp = await waitForLocalTask(
+    const convergedAfterReplay = await waitForLocalTask(
       activeDatabase,
       taskId,
-      (task) => task.revision === 2 && task.title === 'MCP Edit Wins First',
+      (task) => task.revision === 3 && task.title === 'Offline Web Edit',
     );
-    expect(convergedAfterMcp).toMatchObject({
+    expect(convergedAfterReplay).toMatchObject({
       entry_channel: 'raycast',
-      last_mutation_channel: 'mcp',
-      last_actor_type: 'automation',
+      last_mutation_channel: 'web',
+      last_actor_type: 'user',
     });
-    const issue = await activeDatabase.getOptional<SyncIssue>(
-      `SELECT task_id, kind, operation, local_revision, remote_revision, code
-       FROM tasks_sync_issues
-       WHERE task_id = ?
-       ORDER BY detected_at DESC
-       LIMIT 1`,
-      [taskId],
-    );
+    const issue = await waitForSyncIssue(activeDatabase, taskId);
     expect(issue).toEqual({
       task_id: taskId,
       kind: 'conflict',
       operation: 'PATCH',
       local_revision: 2,
-      remote_revision: 2,
-      code: 'revision_conflict',
+      remote_revision: 3,
+      code: 'revision_conflict_recovered',
     });
 
     await activeDatabase.disconnect();
     const webWinner = await repository.updateTask(ownerId, taskId, {
       title: 'Offline Web Edit Wins Second',
     });
-    expect(webWinner).toMatchObject({ title: 'Offline Web Edit Wins Second', revision: 3 });
+    expect(webWinner).toMatchObject({ title: 'Offline Web Edit Wins Second', revision: 4 });
     await activeDatabase.connect(connector);
     await waitForUploadQueue(activeDatabase, 0, 60_000);
-    await waitForRemoteTask(supabase, taskId, 3, 'Offline Web Edit Wins Second');
+    await waitForRemoteTask(supabase, taskId, 4, 'Offline Web Edit Wins Second');
 
     const staleMcp = await updateTaskData({
       task_id: taskId,
-      expected_revision: 2,
+      expected_revision: 3,
       client_mutation_id: crypto.randomUUID(),
       title: 'Stale MCP Edit Must Not Win',
     }, auth);
@@ -181,10 +174,10 @@ describe.skipIf(!integrationEnabled)('Tasks multi-client convergence integration
         mutation_channel: 'mcp',
         outcome: 'conflict',
         code: 'revision_conflict',
-        base_revision: 2,
-        result_revision: 3,
+        base_revision: 3,
+        result_revision: 4,
       },
-      task: { title: 'Offline Web Edit Wins Second', revision: 3 },
+      task: { title: 'Offline Web Edit Wins Second', revision: 4 },
     });
 
     const raycastReplay = await createTaskData(raycastInput, auth);
@@ -196,14 +189,14 @@ describe.skipIf(!integrationEnabled)('Tasks multi-client convergence integration
         title: 'Offline Web Edit Wins Second',
         entry_channel: 'raycast',
         last_mutation_channel: 'web',
-        revision: 3,
+        revision: 4,
       },
     });
 
     const finalLocal = await waitForLocalTask(
       activeDatabase,
       taskId,
-      (task) => task.revision === 3 && task.title === 'Offline Web Edit Wins Second',
+      (task) => task.revision === 4 && task.title === 'Offline Web Edit Wins Second',
     );
     expect(finalLocal.entry_channel).toBe('raycast');
     const localCopies = await activeDatabase.getAll<{ id: string }>(
@@ -280,4 +273,25 @@ async function waitForRemoteTask(
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`Remote task ${taskId} did not reach the expected state`);
+}
+
+async function waitForSyncIssue(
+  database: PowerSyncDatabase,
+  taskId: string,
+  timeoutMs = 5_000,
+): Promise<SyncIssue | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const issue = await database.getOptional<SyncIssue>(
+      `SELECT task_id, kind, operation, local_revision, remote_revision, code
+       FROM tasks_sync_issues
+       WHERE task_id = ?
+       ORDER BY detected_at DESC
+       LIMIT 1`,
+      [taskId],
+    );
+    if (issue !== null) return issue;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return null;
 }

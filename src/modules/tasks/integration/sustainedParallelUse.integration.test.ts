@@ -116,6 +116,7 @@ describe.skipIf(!integrationEnabled)('Tasks sustained parallel-use integration',
       ]);
 
       let authoritativeTitle: string;
+      let authoritativeRevision: number;
       if (cycles % 2 === 1) {
         await primary.database.disconnect();
         await primary.repository.updateTask(ownerId, taskId, {
@@ -128,12 +129,14 @@ describe.skipIf(!integrationEnabled)('Tasks sustained parallel-use integration',
           title: `MCP Edit ${cycles}`,
         }, auth);
         expect(mcpWinner.mutation_outcome).toBe('applied');
-        authoritativeTitle = `MCP Edit ${cycles}`;
+        authoritativeTitle = `Offline Web Edit ${cycles}`;
+        authoritativeRevision = 3;
         await primary.database.connect(connector);
         await waitForUploadQueue(primary.database, 0, 60_000);
         offlineConflictReceipts += 1;
       } else {
         authoritativeTitle = `Web Edit ${cycles}`;
+        authoritativeRevision = 2;
         await primary.repository.updateTask(ownerId, taskId, {
           title: authoritativeTitle,
         });
@@ -152,18 +155,18 @@ describe.skipIf(!integrationEnabled)('Tasks sustained parallel-use integration',
         waitForLocalTask(
           primary.database,
           taskId,
-          (task) => task.revision === 2 && task.title === authoritativeTitle,
+          (task) => task.revision === authoritativeRevision && task.title === authoritativeTitle,
         ),
         waitForLocalTask(
           secondary.database,
           taskId,
-          (task) => task.revision === 2 && task.title === authoritativeTitle,
+          (task) => task.revision === authoritativeRevision && task.title === authoritativeTitle,
         ),
       ]);
 
       const transitionInput = {
         task_id: taskId,
-        expected_revision: 2,
+        expected_revision: authoritativeRevision,
         client_mutation_id: crypto.randomUUID(),
         transition: 'complete' as const,
       };
@@ -176,12 +179,12 @@ describe.skipIf(!integrationEnabled)('Tasks sustained parallel-use integration',
         waitForLocalTask(
           primary.database,
           taskId,
-          (task) => task.revision === 3 && task.lifecycle === 'completed',
+          (task) => task.revision === authoritativeRevision + 1 && task.lifecycle === 'completed',
         ),
         waitForLocalTask(
           secondary.database,
           taskId,
-          (task) => task.revision === 3 && task.lifecycle === 'completed',
+          (task) => task.revision === authoritativeRevision + 1 && task.lifecycle === 'completed',
         ),
       ]);
 
@@ -191,7 +194,7 @@ describe.skipIf(!integrationEnabled)('Tasks sustained parallel-use integration',
         await waitForLocalTask(
           secondary.database,
           taskId,
-          (task) => task.revision === 3 && task.lifecycle === 'completed',
+          (task) => task.revision === authoritativeRevision + 1 && task.lifecycle === 'completed',
         );
         console.info(
           `[tasks-sustained] cycles=${cycles} elapsed_ms=${Date.now() - startedAt} restarts=${clientRestarts}`,
@@ -220,8 +223,7 @@ describe.skipIf(!integrationEnabled)('Tasks sustained parallel-use integration',
       .from('tasks_todos')
       .select('id', { count: 'exact', head: true })
       .eq('owner_id', ownerId)
-      .eq('lifecycle', 'completed')
-      .eq('revision', 3);
+      .eq('lifecycle', 'completed');
     expect(completedTaskCountError).toBeNull();
     expect(completedTaskCount).toBe(cycles);
 
@@ -230,12 +232,12 @@ describe.skipIf(!integrationEnabled)('Tasks sustained parallel-use integration',
       .select('id', { count: 'exact', head: true })
       .eq('owner_id', ownerId);
     expect(historyCountError).toBeNull();
-    expect(historyCount).toBe(cycles * 3);
+    expect(historyCount).toBe((cycles * 3) + Math.ceil(cycles / 2));
 
     const primaryConflictCount = await primary.database.getOptional<SyncIssueCount>(
       `SELECT COUNT(*) AS count
        FROM tasks_sync_issues
-       WHERE kind = 'conflict' AND code = 'revision_conflict'`,
+       WHERE kind = 'conflict' AND code = 'revision_conflict_recovered'`,
     );
     expect(Number(primaryConflictCount?.count ?? 0)).toBe(offlineConflictReceipts);
 

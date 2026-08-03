@@ -17,6 +17,8 @@ const supportedUploadTables = new Set([
   'tasks_hierarchy_operations',
 ]);
 
+const taskPatchUploadAttemptLimit = 4;
+
 type HierarchyTable =
   | 'tasks_areas'
   | 'tasks_checklist_items';
@@ -144,11 +146,7 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
           outcome = await this.options.remoteStore.insertTask(parseTaskInsert(entry));
         } else if (entry.op === UpdateType.PATCH) {
           const patch = parseTaskUpdate(entry);
-          outcome = await this.options.remoteStore.updateTask(
-            entry.id,
-            requirePositiveInteger(patch.revision, 'revision') - 1,
-            patch,
-          );
+          outcome = await this.uploadTaskPatch(database, entry, patch);
         } else {
           throw new InvalidTasksCrudEntryError('Unsupported task mutation operation');
         }
@@ -208,6 +206,65 @@ export class TasksSyncConnector implements PowerSyncBackendConnector {
         code: outcome.code,
       }, this.now());
     }
+  }
+
+  private async uploadTaskPatch(
+    database: AbstractPowerSyncDatabase,
+    entry: CrudEntry,
+    originalPatch: TaskUpdate,
+  ): Promise<TasksRemoteWriteOutcome> {
+    const originalRevision = requirePositiveInteger(originalPatch.revision, 'revision');
+    let baseRevision = originalRevision - 1;
+    let patch = originalPatch;
+    let encounteredConflict = false;
+
+    for (let attempt = 1; attempt <= taskPatchUploadAttemptLimit; attempt += 1) {
+      const outcome = await this.options.remoteStore.updateTask(entry.id, baseRevision, patch);
+
+      if (outcome.status !== 'conflict') {
+        if (outcome.status === 'applied' || outcome.status === 'already_applied') {
+          if (encounteredConflict) {
+            await recordSyncIssue(database, entry, {
+              kind: 'conflict',
+              code: 'revision_conflict_recovered',
+              remoteRevision: requirePositiveInteger(patch.revision, 'revision'),
+            }, this.now());
+          } else if (outcome.status === 'already_applied') {
+            await resolvePendingConflictReceipt(database, entry, this.now());
+          }
+        }
+        return outcome;
+      }
+
+      encounteredConflict = true;
+      const canRebase = outcome.remoteRevision !== null
+        && Number.isSafeInteger(outcome.remoteRevision)
+        && outcome.remoteRevision >= 1
+        && attempt < taskPatchUploadAttemptLimit;
+      if (!canRebase) {
+        await recordSyncIssue(database, entry, {
+          kind: 'conflict',
+          code: 'revision_conflict_retry_pending',
+          remoteRevision: outcome.remoteRevision,
+        }, this.now());
+        throw new TasksTransientSyncError(
+          'Task revision conflict remains queued for retry',
+          'revision_conflict_retry_pending',
+        );
+      }
+
+      baseRevision = outcome.remoteRevision as number;
+      patch = {
+        ...originalPatch,
+        revision: baseRevision + 1,
+        updated_at: this.now(),
+      };
+    }
+
+    throw new TasksTransientSyncError(
+      'Task revision conflict remains queued for retry',
+      'revision_conflict_retry_pending',
+    );
   }
 }
 
@@ -283,11 +340,9 @@ export class TasksSupabaseRemoteStore implements TasksRemoteStore {
       return { status: 'applied' };
     }
 
-    const expectedRevision = requirePositiveInteger(patch.revision, 'revision');
     const expectedMutationId = requireText(patch.client_mutation_id, 'client_mutation_id');
     const current = await this.getRemoteState(taskId, expectedMutationId);
     return current?.id === taskId &&
-      current.revision === expectedRevision &&
       current.client_mutation_id === expectedMutationId
       ? { status: 'already_applied' }
       : { status: 'conflict', remoteRevision: current?.revision ?? null };
@@ -772,7 +827,7 @@ async function recordSyncIssue(
   detectedAt: string,
 ): Promise<void> {
   await database.execute(
-    `INSERT OR IGNORE INTO tasks_sync_issues
+    `INSERT OR REPLACE INTO tasks_sync_issues
       (id, task_id, kind, operation, local_revision, remote_revision, detected_at, code)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
@@ -785,6 +840,19 @@ async function recordSyncIssue(
       detectedAt,
       issue.code,
     ],
+  );
+}
+
+async function resolvePendingConflictReceipt(
+  database: AbstractPowerSyncDatabase,
+  entry: CrudEntry,
+  detectedAt: string,
+): Promise<void> {
+  await database.execute(
+    `UPDATE tasks_sync_issues
+     SET detected_at = ?, code = 'revision_conflict_recovered'
+     WHERE id = ? AND kind = 'conflict' AND code = 'revision_conflict_retry_pending'`,
+    [detectedAt, `crud-${entry.clientId}`],
   );
 }
 

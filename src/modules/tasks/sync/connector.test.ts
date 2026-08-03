@@ -7,6 +7,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  TasksSupabaseRemoteStore,
   TasksSyncConnector,
   TasksTransientSyncError,
   type TasksRemoteStore,
@@ -113,7 +114,9 @@ function hierarchyOperationEntry() {
 
 function createHarness(
   entry: CrudEntry | CrudEntry[],
-  outcome: TasksRemoteWriteOutcome | Error = { status: 'applied' },
+  outcome: TasksRemoteWriteOutcome | Error | Array<TasksRemoteWriteOutcome | Error> = {
+    status: 'applied',
+  },
 ) {
   const complete = vi.fn().mockResolvedValue(undefined);
   const transaction = {
@@ -124,7 +127,13 @@ function createHarness(
     getNextCrudTransaction: vi.fn().mockResolvedValue(transaction),
     execute: vi.fn().mockResolvedValue({ rows: undefined, rowsAffected: 1 }),
   } as unknown as AbstractPowerSyncDatabase;
-  const resolve = () => (outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome));
+  const outcomes = Array.isArray(outcome) ? [...outcome] : [outcome];
+  const resolve = () => {
+    const nextOutcome = outcomes.shift() ?? outcomes.at(-1) ?? { status: 'applied' as const };
+    return nextOutcome instanceof Error
+      ? Promise.reject(nextOutcome)
+      : Promise.resolve(nextOutcome);
+  };
   const remoteStore: TasksRemoteStore = {
     insertTask: vi.fn(resolve),
     updateTask: vi.fn(resolve),
@@ -331,7 +340,7 @@ describe('task sync connector', () => {
     await invalid.connector.uploadData(invalid.database);
     expect(invalid.remoteStore.updateTask).not.toHaveBeenCalled();
     expect(invalid.database.execute).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT OR IGNORE INTO tasks_sync_issues'),
+      expect.stringContaining('INSERT OR REPLACE INTO tasks_sync_issues'),
       expect.arrayContaining(['invalid_local_mutation']),
     );
   });
@@ -358,17 +367,144 @@ describe('task sync connector', () => {
     );
   });
 
-  it('records content-free conflict diagnostics and drains the handled transaction', async () => {
-    const { complete, connector, database } = createHarness(taskPatchEntry(), {
+  it('rebases a stale field-level patch and drains it only after recovery', async () => {
+    const { complete, connector, database, remoteStore } = createHarness(taskPatchEntry({
+      deadline: '2026-08-05',
+    }), [
+      { status: 'conflict', remoteRevision: 3 },
+      { status: 'applied' },
+    ]);
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.updateTask).toHaveBeenNthCalledWith(
+      1,
+      'task-a',
+      1,
+      expect.objectContaining({
+        title: 'Revised task',
+        deadline: '2026-08-05',
+        revision: 2,
+        client_mutation_id: 'mutation-b',
+      }),
+    );
+    expect(remoteStore.updateTask).toHaveBeenNthCalledWith(
+      2,
+      'task-a',
+      3,
+      expect.objectContaining({
+        title: 'Revised task',
+        deadline: '2026-08-05',
+        revision: 4,
+        client_mutation_id: 'mutation-b',
+        updated_at: detectedAt,
+      }),
+    );
+    expect(vi.mocked(remoteStore.updateTask).mock.calls[1]?.[2]).not.toHaveProperty('start_date');
+    expect(database.execute).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR REPLACE INTO tasks_sync_issues'),
+      [
+        'crud-2',
+        'task-a',
+        'conflict',
+        'PATCH',
+        2,
+        4,
+        detectedAt,
+        'revision_conflict_recovered',
+      ],
+    );
+    expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it('preserves a planning edit that races due-task activation', async () => {
+    const { connector, database, remoteStore } = createHarness(taskPatchEntry({
+      start_date: '2026-08-05',
+      deadline: '2026-08-07',
+      today_section: null,
+    }), [
+      { status: 'conflict', remoteRevision: 80 },
+      { status: 'applied' },
+    ]);
+
+    await connector.uploadData(database);
+
+    expect(remoteStore.updateTask).toHaveBeenNthCalledWith(
+      2,
+      'task-a',
+      80,
+      expect.objectContaining({
+        start_date: '2026-08-05',
+        deadline: '2026-08-07',
+        today_section: null,
+        revision: 81,
+        client_mutation_id: 'mutation-b',
+      }),
+    );
+    const rebasedPatch = vi.mocked(remoteStore.updateTask).mock.calls[1]?.[2];
+    expect(rebasedPatch).not.toHaveProperty('area_id');
+    expect(rebasedPatch).not.toHaveProperty('actionability');
+    expect(rebasedPatch).not.toHaveProperty('primary_link');
+  });
+
+  it('keeps a repeatedly conflicting task patch queued after bounded retries', async () => {
+    const { complete, connector, database, remoteStore } = createHarness(taskPatchEntry(), [
+      { status: 'conflict', remoteRevision: 3 },
+      { status: 'conflict', remoteRevision: 4 },
+      { status: 'conflict', remoteRevision: 5 },
+      { status: 'conflict', remoteRevision: 6 },
+    ]);
+
+    await expect(connector.uploadData(database)).rejects.toMatchObject({
+      name: 'TasksTransientSyncError',
+      code: 'revision_conflict_retry_pending',
+    });
+
+    expect(remoteStore.updateTask).toHaveBeenCalledTimes(4);
+    expect(database.execute).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR REPLACE INTO tasks_sync_issues'),
+      [
+        'crud-2',
+        'task-a',
+        'conflict',
+        'PATCH',
+        2,
+        6,
+        detectedAt,
+        'revision_conflict_retry_pending',
+      ],
+    );
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it('keeps a patch queued when the authoritative task is unavailable', async () => {
+    const { complete, connector, database, remoteStore } = createHarness(taskPatchEntry(), {
       status: 'conflict',
-      remoteRevision: 3,
+      remoteRevision: null,
+    });
+
+    await expect(connector.uploadData(database)).rejects.toMatchObject({
+      code: 'revision_conflict_retry_pending',
+    });
+
+    expect(remoteStore.updateTask).toHaveBeenCalledTimes(1);
+    expect(database.execute).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR REPLACE INTO tasks_sync_issues'),
+      expect.arrayContaining(['revision_conflict_retry_pending']),
+    );
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it('marks a pending receipt recovered when a prior rebased write is already applied', async () => {
+    const { complete, connector, database } = createHarness(taskPatchEntry(), {
+      status: 'already_applied',
     });
 
     await connector.uploadData(database);
 
     expect(database.execute).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT OR IGNORE INTO tasks_sync_issues'),
-      ['crud-2', 'task-a', 'conflict', 'PATCH', 2, 3, detectedAt, 'revision_conflict'],
+      expect.stringContaining("code = 'revision_conflict_recovered'"),
+      [detectedAt, 'crud-2'],
     );
     expect(complete).toHaveBeenCalledOnce();
   });
@@ -382,7 +518,7 @@ describe('task sync connector', () => {
     expect(remoteStore.insertTask).not.toHaveBeenCalled();
     expect(remoteStore.updateTask).not.toHaveBeenCalled();
     expect(database.execute).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT OR IGNORE INTO tasks_sync_issues'),
+      expect.stringContaining('INSERT OR REPLACE INTO tasks_sync_issues'),
       [
         'crud-3',
         'task-a',
@@ -408,7 +544,7 @@ describe('task sync connector', () => {
 
     expect(remoteStore.insertTask).not.toHaveBeenCalled();
     expect(database.execute).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT OR IGNORE INTO tasks_sync_issues'),
+      expect.stringContaining('INSERT OR REPLACE INTO tasks_sync_issues'),
       [
         'crud-7',
         'legacy-a',
@@ -432,7 +568,7 @@ describe('task sync connector', () => {
 
     expect(remoteStore.updateTask).not.toHaveBeenCalled();
     expect(database.execute).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT OR IGNORE INTO tasks_sync_issues'),
+      expect.stringContaining('INSERT OR REPLACE INTO tasks_sync_issues'),
       [
         'crud-2',
         'task-a',
@@ -466,5 +602,43 @@ describe('task sync connector', () => {
 
     await expect(connector.fetchCredentials()).resolves.toMatchObject({ token: 'token' });
     await expect(mismatched.fetchCredentials()).rejects.toThrow('does not match');
+  });
+});
+
+describe('Tasks Supabase remote store', () => {
+  it('recognizes the original mutation identity after its revision was rebased', async () => {
+    const updateMaybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const updateQuery = {
+      eq: vi.fn(),
+      select: vi.fn().mockReturnValue({ maybeSingle: updateMaybeSingle }),
+    };
+    updateQuery.eq.mockReturnValue(updateQuery);
+    const readMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: 'task-a',
+        revision: 4,
+        client_mutation_id: 'mutation-b',
+      },
+      error: null,
+    });
+    const readQuery = {
+      eq: vi.fn().mockReturnValue({ maybeSingle: readMaybeSingle }),
+    };
+    const table = {
+      update: vi.fn().mockReturnValue(updateQuery),
+      select: vi.fn().mockReturnValue(readQuery),
+    };
+    const supabase = { from: vi.fn().mockReturnValue(table) };
+    const store = new TasksSupabaseRemoteStore(supabase as never);
+
+    await expect(store.updateTask('task-a', 1, {
+      title: 'Revised task',
+      revision: 2,
+      client_mutation_id: 'mutation-b',
+      updated_at: detectedAt,
+    })).resolves.toEqual({ status: 'already_applied' });
+
+    expect(table.update).toHaveBeenCalledWith(expect.objectContaining({ revision: 2 }));
+    expect(readQuery.eq).toHaveBeenCalledWith('id', 'task-a');
   });
 });
