@@ -1151,8 +1151,28 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertEqual(model.requestedURL, nextURL)
         XCTAssertEqual(navigatedURL, nextURL)
         XCTAssertTrue(model.hasLoadedContent)
+        XCTAssertFalse(model.quickEntryPresentationReady)
         XCTAssertFalse(model.isLoading)
         XCTAssertNil(model.loadError)
+    }
+
+    @MainActor
+    func testQuickEntryPresentationHasABoundedCompatibilityFallback() {
+        var readyCount = 0
+        let model = TasksBrowserModel(
+            quickEntryPresentationFallbackDelayNanoseconds: 60_000_000_000
+        )
+        model.quickEntryPresentationDidBecomeReady = {
+            readyCount += 1
+        }
+
+        model.prepareForPresentation(of: TaskNativeRoute.newTask.webURL)
+        XCTAssertFalse(model.quickEntryPresentationReady)
+
+        model.performQuickEntryPresentationFallback()
+
+        XCTAssertTrue(model.quickEntryPresentationReady)
+        XCTAssertEqual(readyCount, 1)
     }
 
     @MainActor

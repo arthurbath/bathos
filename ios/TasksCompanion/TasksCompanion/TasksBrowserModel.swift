@@ -12,6 +12,9 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     static let configureQuickEntryShortcutMessageType =
         "configure-quick-entry-shortcut"
     static let quickEntryFinishedMessageType = "quick-entry-finished"
+    static let quickEntryReadyMessageType = "quick-entry-ready"
+    static let quickEntryDismissRequestedMessageType =
+        "quick-entry-dismiss-requested"
     static let contentReadyMessageType = "content-ready"
     static let newTaskSummaryInputIdentifier = "task-title-task-draft:new"
     static let newTaskSummaryFocusJavaScript = """
@@ -88,6 +91,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
     @Published private(set) var requestedURL = TaskNativeRoute.list(.today).webURL
     @Published private(set) var isLoading = true
     @Published private(set) var hasLoadedContent = false
+    @Published private(set) var quickEntryPresentationReady = true
     @Published private(set) var loadError: String?
 
     weak var webView: WKWebView?
@@ -97,24 +101,32 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         TaskQuickEntryShortcutPayload
     ) -> TaskQuickEntryShortcutResponse)?
     var quickEntryDidFinish: ((_ committed: Bool) -> Void)?
+    var quickEntryPresentationDidBecomeReady: (() -> Void)?
+    var quickEntryDismissalRequested: (() -> Void)?
 
     private let coldStartRecoveryDelayNanoseconds: UInt64
     private let contentReadyFallbackDelayNanoseconds: UInt64
+    private let quickEntryPresentationFallbackDelayNanoseconds: UInt64
     private let inPageNavigator: InPageNavigator
     private var coldStartRecoveryTask: Task<Void, Never>?
     private var contentReadyFallbackTask: Task<Void, Never>?
+    private var quickEntryPresentationFallbackTask: Task<Void, Never>?
     private var isPerformingColdStartRecovery = false
     private var navigationDidFinish = false
     private var contentReadyReceived = false
+    private var quickEntryReadyReceived = false
 
     init(
         coldStartRecoveryDelayNanoseconds: UInt64 = 400_000_000,
         contentReadyFallbackDelayNanoseconds: UInt64 = 2_000_000_000,
+        quickEntryPresentationFallbackDelayNanoseconds: UInt64 = 12_000_000_000,
         inPageNavigator: @escaping InPageNavigator = TasksBrowserModel.navigateInPage
     ) {
         self.coldStartRecoveryDelayNanoseconds = coldStartRecoveryDelayNanoseconds
         self.contentReadyFallbackDelayNanoseconds =
             contentReadyFallbackDelayNanoseconds
+        self.quickEntryPresentationFallbackDelayNanoseconds =
+            quickEntryPresentationFallbackDelayNanoseconds
         self.inPageNavigator = inPageNavigator
     }
 
@@ -149,6 +161,7 @@ final class TasksBrowserModel: NSObject, ObservableObject {
 
     func prepareForPresentation(of nextURL: URL) {
         cancelColdStartRecovery()
+        beginQuickEntryPresentation()
         requestedURL = nextURL
         loadError = nil
         if hasLoadedContent, let webView {
@@ -160,6 +173,12 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         isLoading = true
         hasLoadedContent = false
         webView?.load(URLRequest(url: nextURL))
+    }
+
+    func cancelQuickEntryPresentation() {
+        quickEntryPresentationFallbackTask?.cancel()
+        quickEntryPresentationFallbackTask = nil
+        quickEntryPresentationReady = false
     }
 
     func retry() {
@@ -221,6 +240,9 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         navigationDidFinish = true
         if contentReadyReceived {
             revealReadyContent()
+            if quickEntryReadyReceived {
+                revealQuickEntryPresentation()
+            }
             return
         }
         scheduleContentReadyFallback()
@@ -239,6 +261,13 @@ final class TasksBrowserModel: NSObject, ObservableObject {
             return
         }
         revealReadyContent()
+    }
+
+    func performQuickEntryPresentationFallback() {
+        guard !quickEntryPresentationReady else {
+            return
+        }
+        revealQuickEntryPresentation()
     }
 
     func didFailLoading(_ error: Error) {
@@ -328,6 +357,34 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         contentReadyFallbackTask = nil
         navigationDidFinish = false
         contentReadyReceived = false
+    }
+
+    private func beginQuickEntryPresentation() {
+        quickEntryPresentationFallbackTask?.cancel()
+        quickEntryReadyReceived = false
+        quickEntryPresentationReady = false
+        quickEntryPresentationFallbackTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+            try? await Task.sleep(
+                nanoseconds: self.quickEntryPresentationFallbackDelayNanoseconds
+            )
+            guard !Task.isCancelled else {
+                return
+            }
+            self.performQuickEntryPresentationFallback()
+        }
+    }
+
+    private func revealQuickEntryPresentation() {
+        guard !quickEntryPresentationReady else {
+            return
+        }
+        quickEntryPresentationFallbackTask?.cancel()
+        quickEntryPresentationFallbackTask = nil
+        quickEntryPresentationReady = true
+        quickEntryPresentationDidBecomeReady?()
     }
 
     static func navigateInPage(_ webView: WKWebView, to url: URL) {
@@ -450,6 +507,20 @@ final class TasksBrowserModel: NSObject, ObservableObject {
         }
         if envelope.type == Self.contentReadyMessageType {
             didBecomeContentReady()
+            Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
+            return
+        }
+        if envelope.type == Self.quickEntryReadyMessageType {
+            quickEntryReadyReceived = true
+            didBecomeContentReady()
+            if navigationDidFinish || hasLoadedContent {
+                revealQuickEntryPresentation()
+            }
+            Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
+            return
+        }
+        if envelope.type == Self.quickEntryDismissRequestedMessageType {
+            quickEntryDismissalRequested?()
             Self.recordBridgeDiagnostic("Accepted: \(envelope.type)")
             return
         }

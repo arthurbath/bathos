@@ -289,6 +289,7 @@ final class TasksMacTests: XCTestCase {
         XCTAssertTrue(policy.collectionBehavior.contains(.canJoinAllSpaces))
         XCTAssertTrue(policy.collectionBehavior.contains(.fullScreenAuxiliary))
         XCTAssertTrue(policy.collectionBehavior.contains(.transient))
+        XCTAssertEqual(policy.dragRegionHeight, 44)
     }
 
     func testGlobalQuickEntryPanelCannotCollapseToHostedIntrinsicSize() {
@@ -319,6 +320,7 @@ final class TasksMacTests: XCTestCase {
         XCTAssertFalse(panel.isOpaque)
         XCTAssertEqual(panel.backgroundColor, .clear)
         XCTAssertTrue(panel.hasShadow)
+        XCTAssertTrue(panel.isMovableByWindowBackground)
         XCTAssertEqual(
             panel.contentView?.layer?.cornerRadius,
             TasksMacQuickEntryPanelPolicy.cornerRadius

@@ -433,6 +433,8 @@ final class TasksMacQuickEntryPanelController: NSObject {
     private let browserModel = TasksBrowserModel()
     private lazy var panel: TasksMacQuickEntryPanel = makePanel()
     private var cancellationPending = false
+    private var presentationPending = false
+    private var cancellationFallback: DispatchWorkItem?
 
     init(onFinish: @escaping (Bool) -> Void) {
         self.onFinish = onFinish
@@ -442,13 +444,22 @@ final class TasksMacQuickEntryPanelController: NSObject {
                 return
             }
             self.cancellationPending = false
+            self.cancellationFallback?.cancel()
+            self.cancellationFallback = nil
+            self.presentationPending = false
             self.panel.orderOut(nil)
             self.onFinish(committed)
+        }
+        browserModel.quickEntryPresentationDidBecomeReady = { [weak self] in
+            self?.finishPresentation()
+        }
+        browserModel.quickEntryDismissalRequested = { [weak self] in
+            self?.hideForWebDismissal()
         }
     }
 
     func toggle() {
-        if panel.isVisible {
+        if panel.isVisible || presentationPending {
             requestCancellation()
         } else {
             show()
@@ -456,14 +467,40 @@ final class TasksMacQuickEntryPanelController: NSObject {
     }
 
     func show() {
+        let warmPresentation = browserModel.hasLoadedContent
         cancellationPending = false
+        cancellationFallback?.cancel()
+        cancellationFallback = nil
+        presentationPending = true
         browserModel.prepareForPresentation(
             of: TasksMacQuickEntryPanelPolicy.webURL
         )
         TasksMacQuickEntryPanelPolicy.apply(to: panel)
         panel.center()
         NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        if !warmPresentation {
+            panel.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private func finishPresentation() {
+        guard presentationPending, !cancellationPending else {
+            return
+        }
+        presentationPending = false
+        TasksMacQuickEntryPanelPolicy.apply(to: panel)
+        if !panel.isVisible {
+            panel.center()
+            NSApp.activate(ignoringOtherApps: true)
+            panel.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private func hideForWebDismissal() {
+        presentationPending = false
+        cancellationPending = true
+        browserModel.cancelQuickEntryPresentation()
+        panel.orderOut(nil)
     }
 
     private func makePanel() -> TasksMacQuickEntryPanel {
@@ -487,29 +524,40 @@ final class TasksMacQuickEntryPanelController: NSObject {
             TasksMacQuickEntryPanelPolicy.collectionBehavior
         panel.backgroundColor = .clear
         panel.contentViewController = NSHostingController(
-            rootView: TasksMacWebView(model: browserModel)
+            rootView: TasksMacQuickEntryPanelContent(model: browserModel)
         )
         TasksMacQuickEntryPanelPolicy.apply(to: panel)
         return panel
     }
 
     private func requestCancellation() {
-        guard panel.isVisible, !cancellationPending else {
+        guard (panel.isVisible || presentationPending), !cancellationPending else {
             return
         }
         cancellationPending = true
+        presentationPending = false
+        browserModel.cancelQuickEntryPresentation()
+        panel.orderOut(nil)
         guard browserModel.hasLoadedContent else {
             cancellationPending = false
-            panel.orderOut(nil)
             onFinish(false)
             return
         }
         guard let webView = browserModel.webView else {
             cancellationPending = false
-            panel.orderOut(nil)
             onFinish(false)
             return
         }
+        let fallback = DispatchWorkItem { [weak self] in
+            guard let self, self.cancellationPending else {
+                return
+            }
+            self.cancellationPending = false
+            self.cancellationFallback = nil
+            self.onFinish(false)
+        }
+        cancellationFallback = fallback
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: fallback)
         webView.evaluateJavaScript(
             TasksMacQuickEntryPanelPolicy.cancelJavaScript
         ) { [weak self] result, error in
@@ -518,8 +566,9 @@ final class TasksMacQuickEntryPanelController: NSObject {
                     return
                 }
                 if error != nil || (result as? Bool) != true {
+                    self.cancellationFallback?.cancel()
+                    self.cancellationFallback = nil
                     self.cancellationPending = false
-                    self.panel.orderOut(nil)
                     self.onFinish(false)
                 }
             }
@@ -527,11 +576,44 @@ final class TasksMacQuickEntryPanelController: NSObject {
     }
 }
 
+private struct TasksMacQuickEntryPanelContent: View {
+    @ObservedObject var model: TasksBrowserModel
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            TasksMacWebView(
+                model: model,
+                waitsForQuickEntryPresentation: true
+            )
+
+            TasksMacQuickEntryDragRegion()
+                .frame(height: TasksMacQuickEntryPanelPolicy.dragRegionHeight)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+private struct TasksMacQuickEntryDragRegion: NSViewRepresentable {
+    func makeNSView(context: Context) -> TasksMacQuickEntryDragView {
+        TasksMacQuickEntryDragView()
+    }
+
+    func updateNSView(
+        _ nsView: TasksMacQuickEntryDragView,
+        context: Context
+    ) {}
+}
+
+private final class TasksMacQuickEntryDragView: NSView {
+    override var mouseDownCanMoveWindow: Bool { true }
+}
+
 enum TasksMacQuickEntryPanelPolicy {
     static let contentSize = NSSize(width: 520, height: 560)
     static let cornerRadius: CGFloat = 18
     static let borderWidth: CGFloat = 1
     static let borderColor = NSColor(calibratedWhite: 0.20, alpha: 1)
+    static let dragRegionHeight: CGFloat = 44
     static let collectionBehavior: NSWindow.CollectionBehavior = [
         .canJoinAllSpaces,
         .fullScreenAuxiliary,
@@ -545,6 +627,7 @@ enum TasksMacQuickEntryPanelPolicy {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
+        panel.isMovableByWindowBackground = true
         panel.contentView?.wantsLayer = true
         guard let layer = panel.contentView?.layer else {
             return

@@ -6606,12 +6606,24 @@ describe('TasksShell', () => {
   });
 
   it('renders the native Mac quick-entry route as only the ordinary new-task editor', async () => {
+    const messages: unknown[] = [];
     Object.assign(window, {
       __bathosNativeApp: {
         schemaVersion: 2,
         moduleId: 'tasks',
         platform: 'macos',
         quickEntryShortcut: '⌃⌥Space',
+      },
+      __bathosTasksNative: {
+        schemaVersion: 2,
+        installationId: '30000000-0000-4000-8000-000000000001',
+      },
+      webkit: {
+        messageHandlers: {
+          bathosTasksWidget: {
+            postMessage: (message: unknown) => messages.push(message),
+          },
+        },
       },
     });
     mockTaskList.mockReturnValue(defaultTaskList());
@@ -6623,6 +6635,12 @@ describe('TasksShell', () => {
         const titleInput = document.getElementById(`task-title-${NEW_TASK_DRAFT_ID}`);
         expect(titleInput).toBeTruthy();
         expect(quickEntry.container.contains(titleInput)).toBe(true);
+      });
+      await waitFor(() => {
+        expect(messages).toContainEqual({
+          type: 'quick-entry-ready',
+          schemaVersion: 2,
+        });
       });
       expect(quickEntry.container.querySelector('[data-topline-header]')).toBeNull();
       expect(quickEntry.container.querySelector('[data-testid="mobile-nav"]')).toBeNull();
@@ -6636,9 +6654,18 @@ describe('TasksShell', () => {
       expect(quickEntry.container.querySelector('[data-task-editor-form]'))
         .toHaveClass('gap-2', 'p-1');
       expect(quickEntry.container.querySelector('[data-task-space-entry-surface]'))
-        .toHaveClass('px-5', 'py-3');
+        .toHaveClass('px-8', 'py-3');
       expect(quickEntry.container.querySelector('[data-task-quick-entry-actions]'))
-        .toHaveTextContent('Save');
+        .toHaveTextContent('CancelSave');
+      const quickEntryActions = quickEntry.container.querySelector(
+        '[data-task-quick-entry-actions]',
+      );
+      expect(quickEntryActions?.querySelector('button:first-child'))
+        .toHaveClass('bg-background', 'border-primary');
+      expect(quickEntryActions?.querySelector('button:last-child'))
+        .toHaveClass('bg-primary');
+      expect(quickEntryActions?.querySelector('button:first-child')).not.toBeDisabled();
+      expect(quickEntryActions?.querySelector('button:last-child')).toBeDisabled();
       expect(quickEntry.container.querySelector('[data-task-editor-temporal-grid]')).toBeTruthy();
       expect(quickEntry.container.querySelector('[data-task-editor-identity-grid]')).toBeTruthy();
       expect(quickEntry.container.querySelector('[data-task-primary-link-disclosure]')).toBeTruthy();
@@ -6688,6 +6715,8 @@ describe('TasksShell', () => {
     } finally {
       cleanup(quickEntry.root, quickEntry.container);
       Reflect.deleteProperty(window, '__bathosNativeApp');
+      Reflect.deleteProperty(window, '__bathosTasksNative');
+      Reflect.deleteProperty(window, 'webkit');
     }
   });
 
@@ -6743,6 +6772,54 @@ describe('TasksShell', () => {
       )).toBeTruthy();
     } finally {
       document.removeEventListener('bathos:task-checklist-focus', recordFocusRequest);
+      cleanup(quickEntry.root, quickEntry.container);
+      Reflect.deleteProperty(window, '__bathosNativeApp');
+    }
+  });
+
+  it('creates the temporary quick-entry parent when checklist is requested before Summary', async () => {
+    Object.assign(window, {
+      __bathosNativeApp: {
+        schemaVersion: 2,
+        moduleId: 'tasks',
+        platform: 'macos',
+        quickEntryShortcut: '⌃⌥Space',
+      },
+    });
+    const taskList = defaultTaskList();
+    mockTaskList.mockReturnValue(taskList);
+    const quickEntry = renderShell(
+      '/tasks/today?native_new_task=1&native_quick_entry=1',
+    );
+
+    try {
+      await waitFor(() => {
+        expect(document.getElementById(`task-title-${NEW_TASK_DRAFT_ID}`)).toBeTruthy();
+      });
+      const addChecklist = quickEntry.container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Add Checklist"]',
+      )!;
+
+      await act(async () => {
+        addChecklist.click();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+
+      expect(taskList.createTask).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'New Task',
+      }));
+      expect(document.getElementById(`task-title-${NEW_TASK_DRAFT_ID}`))
+        .toHaveValue('');
+      await waitFor(() => {
+        expect(quickEntry.container.querySelector('[data-task-checklist]')).toBeTruthy();
+        expect(quickEntry.container.querySelector(
+          'input[aria-label="New Checklist Item"]',
+        )).toBeTruthy();
+      });
+      const actions = quickEntry.container.querySelector('[data-task-quick-entry-actions]');
+      expect(actions?.querySelector('button:first-child')).not.toBeDisabled();
+      expect(actions?.querySelector('button:last-child')).toBeDisabled();
+    } finally {
       cleanup(quickEntry.root, quickEntry.container);
       Reflect.deleteProperty(window, '__bathosNativeApp');
     }

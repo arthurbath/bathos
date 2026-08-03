@@ -150,6 +150,8 @@ import {
   removeNativeNewTaskSignal,
   removeNativeTaskDeepLink,
   publishTaskNativeContentReady,
+  publishTaskNativeQuickEntryReady,
+  requestTaskNativeQuickEntryDismissal,
   requestTaskNativeNewTaskSummaryFocus,
   configureTaskNativeQuickEntryShortcut,
   finishTaskNativeQuickEntry,
@@ -1221,6 +1223,47 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     setCreationDraft(next);
   }, []);
 
+  const persistCreationDraft = useCallback(async (
+    draft: TaskCreationDraft,
+    allowEmptyTitle = false,
+  ): Promise<TaskCreationDraft> => {
+    if (draft.persistedTaskId !== null) return draft;
+    if (!allowEmptyTitle && !draft.task.title.trim()) return draft;
+
+    const creationInput = getTaskCreationInput(draft);
+    const created = await createTask({
+      ...creationInput,
+      title: allowEmptyTitle && !creationInput.title.trim()
+        ? 'New Task'
+        : creationInput.title,
+    });
+    let next: TaskCreationDraft = {
+      ...draft,
+      persistedTaskId: created.id,
+      task: {
+        ...created,
+        title: draft.task.title,
+        id: NEW_TASK_DRAFT_ID,
+      },
+    };
+    replaceCreationDraft(next);
+    if (next.pendingReminder !== null) {
+      try {
+        await reminders.save({
+          rootType: 'todo',
+          rootId: created.id,
+          reminder: null,
+          ...next.pendingReminder,
+        });
+        next = { ...next, pendingReminder: null };
+        replaceCreationDraft(next);
+      } catch (reminderError) {
+        showTaskError('Reminder Could Not Be Saved', reminderError);
+      }
+    }
+    return next;
+  }, [createTask, reminders, replaceCreationDraft]);
+
   const saveCreationDraftPatch = useCallback(async (patch: EditableTaskPatch) => {
     const current = creationDraftRef.current;
     if (current === null) throw new Error('No task draft is open');
@@ -1229,32 +1272,11 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       patch,
       planningDate,
     );
-    let next = applyTaskCreationDraftPatch(current, normalizedPatch);
+    const next = applyTaskCreationDraftPatch(current, normalizedPatch);
     replaceCreationDraft(next);
 
     if (next.persistedTaskId === null) {
-      if (!next.task.title.trim()) return;
-      const created = await createTask(getTaskCreationInput(next));
-      next = {
-        ...next,
-        persistedTaskId: created.id,
-        task: { ...created, id: NEW_TASK_DRAFT_ID },
-      };
-      replaceCreationDraft(next);
-      if (next.pendingReminder !== null) {
-        try {
-          await reminders.save({
-            rootType: 'todo',
-            rootId: created.id,
-            reminder: null,
-            ...next.pendingReminder,
-          });
-          next = { ...next, pendingReminder: null };
-          replaceCreationDraft(next);
-        } catch (reminderError) {
-          showTaskError('Reminder Could Not Be Saved', reminderError);
-        }
-      }
+      await persistCreationDraft(next);
       return;
     }
 
@@ -1263,7 +1285,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
       ...next,
       task: { ...updated, id: NEW_TASK_DRAFT_ID },
     });
-  }, [createTask, planningDate, reminders, replaceCreationDraft, updateTask]);
+  }, [persistCreationDraft, planningDate, replaceCreationDraft, updateTask]);
 
   const saveCreationDraftReminder = useCallback(async (input: {
     localTime: string;
@@ -1466,7 +1488,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     if (currentTaskId !== null && !cancellingNativeQuickEntry) {
       finalizeDeferredCompletion(currentTaskId);
     }
-    if (closingCreationDraft) {
+    if (closingCreationDraft && !nativeQuickEntry) {
       await waitForTaskMotion(TASK_EDITOR_EXPANSION_DURATION_MS);
       if (openTaskSequenceRef.current !== sequence) return false;
       if (exitingEmptyCreationDraft) {
@@ -1738,6 +1760,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
 
   const cancelNativeQuickEntry = useCallback(async (): Promise<boolean> => {
     nativeQuickEntryCommitRequestedRef.current = false;
+    requestTaskNativeQuickEntryDismissal();
     return setOpenTask(null);
   }, [setOpenTask]);
 
@@ -1830,6 +1853,23 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
     location.search,
     navigate,
   ]);
+
+  const nativeQuickEntryEditorReady = nativeQuickEntry
+    && !loading
+    && selectedTaskId === NEW_TASK_DRAFT_ID
+    && creationDraft !== null;
+
+  useEffect(() => {
+    if (!nativeQuickEntryEditorReady) return;
+    const frame = window.requestAnimationFrame(() => {
+      const title = document.getElementById(`task-title-${NEW_TASK_DRAFT_ID}`);
+      const editor = document.querySelector('[data-task-quick-entry-editor="true"]');
+      if (title instanceof HTMLInputElement && editor !== null) {
+        publishTaskNativeQuickEntryReady();
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [nativeQuickEntryEditorReady]);
 
   useEffect(() => {
     if (!bulkMode && focusedTaskId === null) return undefined;
@@ -3499,12 +3539,16 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
           task.id === NEW_TASK_DRAFT_ID ? null : task.id
         )}
         onRequestChecklist={isCreationDraft ? async () => {
-          if (taskEditorAutosaveRef.current?.taskId === NEW_TASK_DRAFT_ID) {
-            await taskEditorAutosaveRef.current.flush();
-          }
-          if (creationDraftRef.current?.persistedTaskId === null) {
-            document.getElementById(`task-title-${NEW_TASK_DRAFT_ID}`)?.focus();
-            requestTaskNativeNewTaskSummaryFocus();
+          try {
+            if (taskEditorAutosaveRef.current?.taskId === NEW_TASK_DRAFT_ID) {
+              await taskEditorAutosaveRef.current.flush();
+            }
+            const current = creationDraftRef.current;
+            if (current?.persistedTaskId === null) {
+              await persistCreationDraft(current, true);
+            }
+          } catch (checklistError) {
+            showTaskError('Checklist Could Not Be Added', checklistError);
             return;
           }
           window.setTimeout(() => {
@@ -4225,7 +4269,7 @@ export function TasksShell({ userId, displayName, onSignOut }: TasksShellProps) 
         data-task-list-bottom-clearance
         className={`mx-auto w-full ${
           nativeQuickEntry
-            ? 'max-w-none px-5 py-3'
+            ? 'max-w-none px-8 py-3'
             : `max-w-3xl px-4 pt-8 md:pt-10 ${TASK_LIST_BOTTOM_CLEARANCE_CLASS}`
         } ${
           touchListElasticActive ? '' : 'transition-transform duration-200 ease-out'
@@ -6595,8 +6639,8 @@ function TaskRow({
       return cancelScheduledMotion;
     }
 
-    const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-      ?? true;
+    const reducedMotion = quickEntry
+      || (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? true);
     if (selected) {
       setEditorMounted(true);
       if (reducedMotion) {
@@ -6635,7 +6679,7 @@ function TaskRow({
       setEditorMounted(false);
     }, TASK_EDITOR_EXPANSION_DURATION_MS);
     return cancelScheduledMotion;
-  }, [inBulkSelection, selected]);
+  }, [inBulkSelection, quickEntry, selected]);
 
   useLayoutEffect(() => {
     const region = editorRegionRef.current;
@@ -7551,10 +7595,16 @@ function TaskRow({
               Close Task
             </button>
             {quickEntry ? (
-              <div className="flex justify-end px-1 pt-1" data-task-quick-entry-actions>
+              <div className="flex justify-end gap-2 px-1 pt-1" data-task-quick-entry-actions>
                 <Button
                   type="button"
                   variant="outline"
+                  onClick={() => void onCancelEditor()}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
                   disabled={pending || visibleTitle.trim().length === 0}
                   onClick={() => void onCloseEditor()}
                 >

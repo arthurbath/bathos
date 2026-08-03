@@ -105,6 +105,16 @@ export type TaskNativeContentReadyMessage = {
   schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
 };
 
+export type TaskNativeQuickEntryReadyMessage = {
+  type: 'quick-entry-ready';
+  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
+};
+
+export type TaskNativeQuickEntryDismissalMessage = {
+  type: 'quick-entry-dismiss-requested';
+  schemaVersion: typeof TASK_NATIVE_WIDGET_SCHEMA_VERSION;
+};
+
 export type TaskNativeQuickEntryShortcut = {
   code: string;
   command: boolean;
@@ -311,6 +321,30 @@ export function publishTaskNativeContentReady(
     type: 'content-ready',
     schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
   } satisfies TaskNativeContentReadyMessage);
+  return true;
+}
+
+export function publishTaskNativeQuickEntryReady(
+  target: Window = window,
+): boolean {
+  const handler = getTasksNativeMessageHandler(target);
+  if (!handler || getTasksNativeInstallationId(target) === null) return false;
+  handler.postMessage({
+    type: 'quick-entry-ready',
+    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
+  } satisfies TaskNativeQuickEntryReadyMessage);
+  return true;
+}
+
+export function requestTaskNativeQuickEntryDismissal(
+  target: Window = window,
+): boolean {
+  const handler = getTasksNativeMessageHandler(target);
+  if (!handler || getTasksNativeInstallationId(target) === null) return false;
+  handler.postMessage({
+    type: 'quick-entry-dismiss-requested',
+    schemaVersion: TASK_NATIVE_WIDGET_SCHEMA_VERSION,
+  } satisfies TaskNativeQuickEntryDismissalMessage);
   return true;
 }
 

@@ -15,8 +15,10 @@ import {
   hasNativeNewTaskSignal,
   isTaskNativeQuickEntry,
   publishTaskNativeContentReady,
+  publishTaskNativeQuickEntryReady,
   publishTaskNativeWidgetSnapshot,
   publishTaskNativeWidgetCredential,
+  requestTaskNativeQuickEntryDismissal,
   requestTaskNativeNewTaskSummaryFocus,
   removeNativeNewTaskSignal,
   removeNativeTaskDeepLink,
@@ -492,6 +494,30 @@ describe('taskNativeWidgetBridge', () => {
     expect(publishTaskNativeContentReady(bridgeWindow(messages))).toBe(true);
     expect(messages).toEqual([{
       type: 'content-ready',
+      schemaVersion: 2,
+    }]);
+  });
+
+  it('announces a mounted quick-entry editor only to the current companion bridge', () => {
+    const messages: unknown[] = [];
+
+    expect(publishTaskNativeQuickEntryReady({} as Window)).toBe(false);
+    expect(publishTaskNativeQuickEntryReady(bridgeWindow(messages, 1))).toBe(false);
+    expect(publishTaskNativeQuickEntryReady(bridgeWindow(messages))).toBe(true);
+    expect(messages).toEqual([{
+      type: 'quick-entry-ready',
+      schemaVersion: 2,
+    }]);
+  });
+
+  it('requests immediate quick-entry dismissal only through the current companion bridge', () => {
+    const messages: unknown[] = [];
+
+    expect(requestTaskNativeQuickEntryDismissal({} as Window)).toBe(false);
+    expect(requestTaskNativeQuickEntryDismissal(bridgeWindow(messages, 1))).toBe(false);
+    expect(requestTaskNativeQuickEntryDismissal(bridgeWindow(messages))).toBe(true);
+    expect(messages).toEqual([{
+      type: 'quick-entry-dismiss-requested',
       schemaVersion: 2,
     }]);
   });

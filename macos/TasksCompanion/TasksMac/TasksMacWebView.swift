@@ -63,6 +63,12 @@ enum TasksMacWebNavigationPolicy {
 
 struct TasksMacWebView: View {
     @ObservedObject var model: TasksBrowserModel
+    var waitsForQuickEntryPresentation = false
+
+    private var contentIsVisible: Bool {
+        model.hasLoadedContent
+            && (!waitsForQuickEntryPresentation || model.quickEntryPresentationReady)
+    }
 
     var body: some View {
         ZStack {
@@ -70,16 +76,16 @@ struct TasksMacWebView: View {
                 .ignoresSafeArea()
 
             TasksMacWebViewRepresentable(model: model)
-                .opacity(model.hasLoadedContent ? 1 : 0)
+                .opacity(contentIsVisible ? 1 : 0)
 
-            if model.isLoading && !model.hasLoadedContent {
+            if !contentIsVisible && model.loadError == nil {
                 ProgressView()
                     .controlSize(.large)
                     .tint(.white)
                     .accessibilityLabel("Loading Tasks")
             }
 
-            if let loadError = model.loadError, !model.hasLoadedContent {
+            if let loadError = model.loadError, !contentIsVisible {
                 VStack(spacing: 16) {
                     Image(systemName: "wifi.slash")
                         .font(.title)
