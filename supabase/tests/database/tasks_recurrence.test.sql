@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(74);
+SELECT plan(76);
 
 SELECT has_table('public', 'tasks_recurrence_definitions', 'stores recurrence prototypes');
 SELECT has_table('public', 'tasks_recurrence_revisions', 'stores immutable prototype revisions');
@@ -607,7 +607,58 @@ SELECT
         '"Manage debt, budgets"'::jsonb
       ),
       '{root,start_offset_days}',
-      '-4'::jsonb
+      '-1'::jsonb
+    ),
+    '{root,deadline_offset_days}',
+    '0'::jsonb
+  )
+FROM public.tasks_recurrence_revisions AS revision
+WHERE revision.recurrence_id = (
+  current_setting('test.calendar_recurrence')::jsonb #>> '{definition,id}'
+)::uuid
+  AND revision.revision = 2;
+
+-- A second fixture mirrors historical recurrence snapshots that omitted the
+-- Start offset entirely even though the accepted revision retained the rule.
+INSERT INTO public.tasks_recurrence_definitions (
+  id, owner_id, name, status, current_revision, record_revision,
+  evaluated_through_date, next_occurrence_date, upcoming_order_key,
+  last_mutation_channel, last_actor_type, client_mutation_id
+) VALUES (
+  'a1000000-0000-4000-8000-000000000070',
+  'a1000000-0000-4000-8000-000000000001',
+  'Diary', 'active', 1, 1,
+  current_date - 1, current_date + 4, 'a7',
+  'native', 'system', 'a1000000-0000-4000-8000-000000000071'
+);
+INSERT INTO public.tasks_recurrence_revisions (
+  id, owner_id, recurrence_id, revision, name, rule_mode, frequency,
+  interval_count, start_date, planning_timezone, missed_policy,
+  catch_up_limit, target_area_id, client_mutation_id, rule_config,
+  end_mode, end_after_count, end_on_date, reminder_local_time,
+  deadline_offset_days, prototype_snapshot
+)
+SELECT
+  'a1000000-0000-4000-8000-000000000072', revision.owner_id,
+  'a1000000-0000-4000-8000-000000000070', 1,
+  'Diary', 'calendar', 'monthly', 1,
+  current_date + 4, revision.planning_timezone, 'all', 100,
+  revision.target_area_id,
+  'a1000000-0000-4000-8000-000000000073',
+  jsonb_build_object(
+    'monthly_kind', 'day_of_month',
+    'month_day', extract(day FROM current_date + 4)::integer
+  ),
+  'never', NULL, NULL, NULL, 4,
+  jsonb_set(
+    jsonb_set(
+      jsonb_set(
+        revision.prototype_snapshot,
+        '{root,title}',
+        '"Diary"'::jsonb
+      ),
+      '{root,start_offset_days}',
+      'null'::jsonb
     ),
     '{root,deadline_offset_days}',
     '0'::jsonb
@@ -640,8 +691,8 @@ SELECT set_config(
 SELECT is(
   (current_setting('test.early_start_activation')::jsonb
     ->> 'generated_recurrence_instances')::integer,
-  1,
-  'background activation generates the reached recurrence instance'
+  2,
+  'background activation generates both reached recurrence instances'
 );
 SELECT is(
   (
@@ -664,7 +715,7 @@ SELECT is(
       'a1000000-0000-4000-8000-000000000060'
   ),
   current_date,
-  'persists the reached projected Start on the generated task'
+  'ignores a stale snapshot offset when persisting the generated Start'
 );
 SELECT is(
   (
@@ -678,6 +729,32 @@ SELECT is(
   ),
   current_date + 4,
   'preserves the cadence date as the generated task Deadline'
+);
+SELECT is(
+  (
+    SELECT task.start_date
+    FROM public.tasks_todos AS task
+    JOIN public.tasks_recurrence_occurrences AS occurrence
+      ON occurrence.root_id = task.id
+     AND occurrence.owner_id = task.owner_id
+    WHERE occurrence.recurrence_id =
+      'a1000000-0000-4000-8000-000000000070'
+  ),
+  current_date,
+  'derives the generated Start when the snapshot offset is missing'
+);
+SELECT is(
+  (
+    SELECT task.deadline
+    FROM public.tasks_todos AS task
+    JOIN public.tasks_recurrence_occurrences AS occurrence
+      ON occurrence.root_id = task.id
+     AND occurrence.owner_id = task.owner_id
+    WHERE occurrence.recurrence_id =
+      'a1000000-0000-4000-8000-000000000070'
+  ),
+  current_date + 4,
+  'preserves the generated Deadline when the snapshot Start is missing'
 );
 SELECT is(
   (
