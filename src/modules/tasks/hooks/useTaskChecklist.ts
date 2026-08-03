@@ -141,16 +141,52 @@ export function useTaskChecklist(ownerId: string, taskId: string) {
     completed: boolean,
     context?: TaskMutationContext,
   ) => {
+    const occurredAt = context?.occurredAt ?? new Date().toISOString();
+    const operationId = context?.operationId ?? globalThis.crypto.randomUUID();
     const lastKey = items.filter(({ id }) => id !== item.id).at(-1)?.order_key ?? null;
     const patch: TaskChecklistItemPatch = completed
       ? {
           completed: true,
-          completed_at: new Date().toISOString(),
+          completed_at: occurredAt,
           order_key: generateTaskOrderKey(lastKey, null),
         }
       : { completed: false, completed_at: null };
-    return updateItem(item.id, patch, context);
-  }, [items, updateItem]);
+    const optimisticMutationId = `optimistic-checklist-completion-${globalThis.crypto.randomUUID()}`;
+    const projected = {
+      ...item,
+      ...patch,
+      last_operation_id: operationId,
+      revision: item.revision + 1,
+      client_mutation_id: optimisticMutationId,
+      updated_at: occurredAt,
+    };
+
+    setOptimistic((current) => ({ ...current, [item.id]: projected }));
+
+    try {
+      const saved = await hierarchyRepository.updateChecklistItem(
+        ownerId,
+        item.id,
+        patch,
+        { ...context, occurredAt, operationId },
+      );
+      setOptimistic((current) => (
+        current[item.id]?.client_mutation_id === optimisticMutationId
+          ? { ...current, [item.id]: saved }
+          : current
+      ));
+      notifyTaskChecklistForwardMutation();
+      return saved;
+    } catch (error) {
+      setOptimistic((current) => {
+        if (current[item.id]?.client_mutation_id !== optimisticMutationId) return current;
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
+      throw error;
+    }
+  }, [hierarchyRepository, items, ownerId]);
 
   const deleteItem = useCallback(async (itemId: string, context?: TaskMutationContext) => {
     const mutationContext = {

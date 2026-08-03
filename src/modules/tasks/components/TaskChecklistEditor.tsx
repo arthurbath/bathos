@@ -147,8 +147,8 @@ export function TaskChecklistEditorSurface({
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const editingTitlesRef = useRef<Record<string, string>>({});
   const persistedTitlesRef = useRef(new Map<string, string>());
-  const previousRowTops = useRef(new Map<string, number>());
-  const animateNextCompletionReorderRef = useRef(false);
+  const pendingCompletionRowTopsRef = useRef<Map<string, number> | null>(null);
+  const completionAnimationsRef = useRef<Animation[]>([]);
   const saveTimers = useRef(new Map<string, number>());
   const pendingInsertRef = useRef(false);
   const pendingDraftMutationRef = useRef<Promise<unknown> | null>(null);
@@ -320,6 +320,7 @@ export function TaskChecklistEditorSurface({
   }, [checklist.items]);
 
   useEffect(() => () => {
+    for (const animation of completionAnimationsRef.current) animation.cancel();
     for (const timer of saveTimers.current.values()) window.clearTimeout(timer);
     for (const item of itemsRef.current) {
       const value = editingTitlesRef.current[item.id]?.trim() ?? item.title.trim();
@@ -327,24 +328,41 @@ export function TaskChecklistEditorSurface({
     }
   }, []);
 
-  useLayoutEffect(() => {
-    const shouldAnimate = animateNextCompletionReorderRef.current;
-    const nextTops = new Map<string, number>();
+  const prepareCompletionAnimation = useCallback(() => {
+    const previousTops = new Map<string, number>();
     for (const [id, row] of rowRefs.current) {
-      const top = row.getBoundingClientRect().top;
-      nextTops.set(id, top);
-      const previousTop = previousRowTops.current.get(id);
-      if (!shouldAnimate || previousTop === undefined || previousTop === top) continue;
-      row.animate(
+      previousTops.set(id, row.getBoundingClientRect().top);
+    }
+    for (const animation of completionAnimationsRef.current) animation.cancel();
+    completionAnimationsRef.current = [];
+    pendingCompletionRowTopsRef.current = globalThis.matchMedia?.(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
+      ? null
+      : previousTops;
+  }, []);
+
+  useLayoutEffect(() => {
+    const previousTops = pendingCompletionRowTopsRef.current;
+    if (previousTops === null) return;
+    pendingCompletionRowTopsRef.current = null;
+
+    const animations: Animation[] = [];
+    for (const [id, row] of rowRefs.current) {
+      const previousTop = previousTops.get(id);
+      if (previousTop === undefined) continue;
+      const nextTop = row.getBoundingClientRect().top;
+      const offset = previousTop - nextTop;
+      if (Math.abs(offset) < 0.5) continue;
+      animations.push(row.animate(
         [
-          { transform: `translateY(${previousTop - top}px)` },
+          { transform: `translateY(${offset}px)` },
           { transform: 'translateY(0)' },
         ],
         { duration: 220, easing: 'ease-out' },
-      );
+      ));
     }
-    previousRowTops.current = nextTops;
-    if (shouldAnimate) animateNextCompletionReorderRef.current = false;
+    completionAnimationsRef.current = animations;
   }, [checklist.items, draftIndex]);
 
   useLayoutEffect(() => {
@@ -1048,12 +1066,19 @@ export function TaskChecklistEditorSurface({
         moveInputFocus(DRAFT_ID, direction, position)
       )}
       onBlur={() => {
-        if (draftTitle.trim()) {
-          trackDraftMutation(
-            commitDraft({ keepFollowingDraft: false }),
-            'Checklist Item Could Not Be Saved',
-          );
+        if (!draftTitleRef.current.trim()) {
+          if (draggedIdsRef.current.includes(DRAFT_ID)) return;
+          updateDraftIndex(null);
+          updateDraftTitle('');
+          if (focusedItemIdRef.current === DRAFT_ID) {
+            focusedItemIdRef.current = null;
+          }
+          return;
         }
+        trackDraftMutation(
+          commitDraft({ keepFollowingDraft: false }),
+          'Checklist Item Could Not Be Saved',
+        );
       }}
       onFocus={() => {
         focusedItemIdRef.current = DRAFT_ID;
@@ -1103,15 +1128,15 @@ export function TaskChecklistEditorSurface({
               if (node) inputRefs.current.set(item.id, node);
               else inputRefs.current.delete(item.id);
             }}
-            showDropBefore={dropIndex === index}
+            showDropBefore={dropIndex === index && draftIndex !== index}
             canJoinPrevious={index > 0 || draftIndex === index}
             canJoinNext={index < checklist.items.length - 1 || draftIndex === index + 1}
             onComplete={async (completed) => {
-              animateNextCompletionReorderRef.current = completed;
+              if (completed) prepareCompletionAnimation();
               try {
                 return await checklist.setCompleted(item, completed);
               } catch (error) {
-                animateNextCompletionReorderRef.current = false;
+                pendingCompletionRowTopsRef.current = null;
                 throw error;
               }
             }}
@@ -1227,7 +1252,11 @@ export function TaskChecklistEditorSurface({
           onDrop={(event) => handleDrop(event, checklist.items.length)}
         >
           {dropIndex === checklist.items.length && draggedIds.length > 0 ? (
-            <div className="absolute inset-x-0 top-0 h-0.5 bg-info" aria-hidden="true" />
+            <div
+              data-checklist-drop-indicator
+              className="absolute inset-x-0 top-0 h-0.5 bg-info"
+              aria-hidden="true"
+            />
           ) : null}
         </div>
       ) : null}
@@ -1452,7 +1481,11 @@ function ChecklistRow({
       onDrop={onDrop}
     >
       {showDropBefore ? (
-        <span className="absolute inset-x-0 -top-0.5 h-0.5 bg-info" aria-hidden="true" />
+        <span
+          data-checklist-drop-indicator
+          className="absolute inset-x-0 -top-0.5 h-0.5 bg-info"
+          aria-hidden="true"
+        />
       ) : null}
       {selectionActive ? (
         <button
@@ -1667,6 +1700,7 @@ function DraftChecklistRow({
       onClickCapture={onClickCapture}
       onDragStart={(event) => {
         event.stopPropagation();
+        onDragStart();
         const activeElement = document.activeElement;
         if (
           activeElement instanceof HTMLElement
@@ -1679,7 +1713,6 @@ function DraftChecklistRow({
           'application/x-bathos-checklist-item',
           DRAFT_ID,
         );
-        onDragStart();
       }}
       onDragEnd={(event) => {
         event.stopPropagation();
@@ -1689,7 +1722,11 @@ function DraftChecklistRow({
       onDrop={onDrop}
     >
       {showDropBefore ? (
-        <span className="absolute inset-x-0 -top-0.5 h-0.5 bg-info" aria-hidden="true" />
+        <span
+          data-checklist-drop-indicator
+          className="absolute inset-x-0 -top-0.5 h-0.5 bg-info"
+          aria-hidden="true"
+        />
       ) : null}
       <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground">
         <TASK_ICONS.OpenTask className="h-4 w-4" aria-hidden="true" />

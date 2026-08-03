@@ -285,6 +285,43 @@ describe('TaskChecklistEditor', () => {
     }
   });
 
+  it('removes a blank checklist draft as soon as focus leaves it', async () => {
+    const item = taskChecklistItemFixture({ id: 'item-a', title: 'First step' });
+    mockUseTaskChecklist.mockReturnValue(checklistModel([item]));
+    const { container, root } = renderEditor();
+    try {
+      const existing = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Checklist Item"]',
+      )!;
+      act(() => {
+        existing.focus();
+        existing.setSelectionRange(existing.value.length, existing.value.length);
+      });
+      await act(async () => {
+        existing.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForAnimationFrames();
+      });
+
+      const draft = container.querySelector<HTMLInputElement>(
+        'input[aria-label="New Checklist Item"]',
+      )!;
+      act(() => setInput(draft, '   '));
+      expect(draft.value).toBe('   ');
+      expect(document.activeElement).toBe(draft);
+
+      act(() => existing.focus());
+
+      expect(container.querySelector('input[aria-label="New Checklist Item"]')).toBeNull();
+      expect(createItem).not.toHaveBeenCalled();
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
   it('pastes rich multiline text into a persisted item as adjacent checklist items', async () => {
     const item = taskChecklistItemFixture({
       id: 'item-existing',
@@ -441,6 +478,168 @@ describe('TaskChecklistEditor', () => {
     }
   });
 
+  it('animates one exact checklist reorder transaction when an item is completed', async () => {
+    let modelItems = [
+      taskChecklistItemFixture({
+        id: 'item-a',
+        title: 'First open item',
+        completed: false,
+        order_key: 'a0',
+      }),
+      taskChecklistItemFixture({
+        id: 'item-b',
+        title: 'Second open item',
+        completed: false,
+        order_key: 'a1',
+      }),
+      taskChecklistItemFixture({
+        id: 'item-c',
+        title: 'Existing completed item',
+        completed: true,
+        order_key: 'a2',
+      }),
+    ];
+    let rowTops: Record<string, number> = {
+      'item-a': 0,
+      'item-b': 40,
+      'item-c': 80,
+    };
+    mockUseTaskChecklist.mockImplementation(() => checklistModel(modelItems));
+    setCompleted.mockImplementation(async (item, completed) => {
+      const completedItem = {
+        ...item,
+        completed,
+        completed_at: '2026-08-02T12:00:00.000Z',
+        order_key: 'z0',
+      };
+      modelItems = [modelItems[1], modelItems[2], completedItem];
+      rowTops = {
+        'item-b': 0,
+        'item-c': 40,
+        'item-a': 80,
+      };
+      return completedItem;
+    });
+    const { container, root } = renderEditor();
+
+    try {
+      const animateById = new Map<string, ReturnType<typeof vi.fn>>();
+      for (const row of container.querySelectorAll<HTMLElement>('[data-checklist-item-id]')) {
+        const id = row.dataset.checklistItemId!;
+        const animate = vi.fn(() => ({ cancel: vi.fn() }) as unknown as Animation);
+        animateById.set(id, animate);
+        Object.defineProperty(row, 'getBoundingClientRect', {
+          configurable: true,
+          value: vi.fn(() => ({ top: rowTops[id] } as DOMRect)),
+        });
+        Object.defineProperty(row, 'animate', {
+          configurable: true,
+          value: animate,
+        });
+      }
+      const complete = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Complete First open item"]',
+      )!;
+
+      await act(async () => {
+        complete.click();
+        root.render(<TaskChecklistEditor ownerId="owner-a" taskId="task-a" />);
+        await Promise.resolve();
+      });
+
+      expect(setCompleted).toHaveBeenCalledTimes(1);
+      expect(animateById.get('item-a')).toHaveBeenCalledWith(
+        [
+          { transform: 'translateY(-80px)' },
+          { transform: 'translateY(0)' },
+        ],
+        { duration: 220, easing: 'ease-out' },
+      );
+      expect(animateById.get('item-b')).toHaveBeenCalledWith(
+        [
+          { transform: 'translateY(40px)' },
+          { transform: 'translateY(0)' },
+        ],
+        { duration: 220, easing: 'ease-out' },
+      );
+      expect(animateById.get('item-c')).toHaveBeenCalledTimes(1);
+
+      modelItems = [...modelItems];
+      await act(async () => {
+        root.render(<TaskChecklistEditor ownerId="owner-a" taskId="task-a" />);
+        await Promise.resolve();
+      });
+
+      expect(animateById.get('item-a')).toHaveBeenCalledTimes(1);
+      expect(animateById.get('item-b')).toHaveBeenCalledTimes(1);
+      expect(animateById.get('item-c')).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup(root, container);
+    }
+  });
+
+  it('reorders completed checklist items without row animation for reduced motion', async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+    let modelItems = [
+      taskChecklistItemFixture({
+        id: 'item-a',
+        title: 'First open item',
+        completed: false,
+        order_key: 'a0',
+      }),
+      taskChecklistItemFixture({
+        id: 'item-b',
+        title: 'Second open item',
+        completed: false,
+        order_key: 'a1',
+      }),
+    ];
+    mockUseTaskChecklist.mockImplementation(() => checklistModel(modelItems));
+    setCompleted.mockImplementation(async (item, completed) => {
+      const completedItem = { ...item, completed, order_key: 'z0' };
+      modelItems = [modelItems[1], completedItem];
+      return completedItem;
+    });
+    const { container, root } = renderEditor();
+
+    try {
+      const animations: ReturnType<typeof vi.fn>[] = [];
+      for (const row of container.querySelectorAll<HTMLElement>('[data-checklist-item-id]')) {
+        const animate = vi.fn(() => ({ cancel: vi.fn() }) as unknown as Animation);
+        animations.push(animate);
+        Object.defineProperty(row, 'animate', {
+          configurable: true,
+          value: animate,
+        });
+      }
+      const complete = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Complete First open item"]',
+      )!;
+
+      await act(async () => {
+        complete.click();
+        root.render(<TaskChecklistEditor ownerId="owner-a" taskId="task-a" />);
+        await Promise.resolve();
+      });
+
+      expect(setCompleted).toHaveBeenCalledTimes(1);
+      expect(animations.every((animate) => animate.mock.calls.length === 0)).toBe(true);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+      cleanup(root, container);
+    }
+  });
+
   it('owns unmodified Return, inserts one draft input, and ignores composition', async () => {
     const { container, root } = renderEditor();
     const bubbledKeyDown = vi.fn();
@@ -576,16 +775,6 @@ describe('TaskChecklistEditor', () => {
       const draft = container.querySelector<HTMLInputElement>(
         'input[aria-label="New Checklist Item"]',
       )!;
-      persisted[0].focus();
-      persisted[0].setSelectionRange(2, 2);
-      await act(async () => {
-        persisted[0].dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'ArrowDown',
-          bubbles: true,
-          cancelable: true,
-        }));
-        await waitForAnimationFrames();
-      });
       expect(document.activeElement).toBe(draft);
       expect(draft.selectionStart).toBe(draft.value.length);
 
@@ -599,6 +788,7 @@ describe('TaskChecklistEditor', () => {
       });
       expect(document.activeElement).toBe(persisted[1]);
       expect(persisted[1].selectionStart).toBe(persisted[1].value.length);
+      expect(container.querySelector('input[aria-label="New Checklist Item"]')).toBeNull();
 
       await act(async () => {
         persisted[1].dispatchEvent(new KeyboardEvent('keydown', {
@@ -608,8 +798,8 @@ describe('TaskChecklistEditor', () => {
         }));
         await waitForAnimationFrames();
       });
-      expect(document.activeElement).toBe(draft);
-      expect(draft.selectionStart).toBe(draft.value.length);
+      expect(document.activeElement).toBe(persisted[0]);
+      expect(persisted[0].selectionStart).toBe(persisted[0].value.length);
     } finally {
       cleanup(root, container);
     }
@@ -657,20 +847,10 @@ describe('TaskChecklistEditor', () => {
       });
       expect(document.activeElement).toBe(persisted[0]);
       expect(persisted[0].selectionStart).toBe(persisted[0].value.length);
+      expect(container.querySelector('input[aria-label="New Checklist Item"]')).toBeNull();
 
       await act(async () => {
         persisted[0].dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'ArrowRight',
-          bubbles: true,
-          cancelable: true,
-        }));
-        await waitForAnimationFrames();
-      });
-      expect(document.activeElement).toBe(draft);
-      expect(draft.selectionStart).toBe(0);
-
-      await act(async () => {
-        draft.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'ArrowRight',
           bubbles: true,
           cancelable: true,
@@ -688,8 +868,8 @@ describe('TaskChecklistEditor', () => {
         }));
         await waitForAnimationFrames();
       });
-      expect(document.activeElement).toBe(draft);
-      expect(draft.selectionStart).toBe(draft.value.length);
+      expect(document.activeElement).toBe(persisted[0]);
+      expect(persisted[0].selectionStart).toBe(persisted[0].value.length);
     } finally {
       cleanup(root, container);
     }
@@ -726,6 +906,7 @@ describe('TaskChecklistEditor', () => {
       });
       expect(document.activeElement).toBe(persisted[0]);
       expect(persisted[0].selectionStart).toBe(persisted[0].value.length);
+      expect(container.querySelector('input[aria-label="New Checklist Item"]')).toBeNull();
 
       await act(async () => {
         persisted[0].dispatchEvent(new KeyboardEvent('keydown', {
@@ -768,18 +949,6 @@ describe('TaskChecklistEditor', () => {
 
       await act(async () => {
         persisted[0].dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'ArrowRight',
-          altKey: true,
-          bubbles: true,
-          cancelable: true,
-        }));
-        await waitForAnimationFrames();
-      });
-      expect(document.activeElement).toBe(draft);
-      expect(draft.selectionStart).toBe(0);
-
-      await act(async () => {
-        draft.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'ArrowRight',
           altKey: true,
           bubbles: true,
@@ -1292,6 +1461,17 @@ describe('TaskChecklistEditor', () => {
       const dragStart = new Event('dragstart', { bubbles: true, cancelable: true });
       Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
       await act(async () => draftInput.dispatchEvent(dragStart));
+
+      const secondRow = container.querySelector<HTMLElement>(
+        '[data-checklist-item-id="item-b"]',
+      )!;
+      const sharedBoundaryDragOver = new Event('dragover', {
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(sharedBoundaryDragOver, 'dataTransfer', { value: dataTransfer });
+      await act(async () => secondRow.dispatchEvent(sharedBoundaryDragOver));
+      expect(container.querySelectorAll('[data-checklist-drop-indicator]')).toHaveLength(1);
 
       const firstRow = firstInput.closest('div')!;
       const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
