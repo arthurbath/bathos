@@ -64,7 +64,10 @@ enum TaskWidgetPresentationPolicy {
     }
 
     static func largeWidgetNewTaskURL(for listID: TaskWidgetListID) -> URL {
-        TaskNativeRoute.newTaskInList(listID).deepLinkURL
+        if listID == .today {
+            return TaskNativeRoute.newTask.deepLinkURL
+        }
+        return TaskNativeRoute.newTaskInList(listID).deepLinkURL
     }
 
     static func upcomingDateLabel(

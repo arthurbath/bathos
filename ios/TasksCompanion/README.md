@@ -7,7 +7,7 @@ This Xcode project contains the thin native BathOS Tasks companion, its configur
 - `TasksCompanion`: SwiftUI application containing the production Tasks web application in `WKWebView`
 - `TasksWidgets`: configurable WidgetKit extension for Today, Upcoming, Anytime, and Someday, plus the New Task system control on iOS 18 and later
 - `TasksWatch`: watchOS application for adding a task to Today Inbox through the system text-entry interface
-- `TasksWatchWidgets`: accessory-circular complication showing completed explicit-Today tasks as a share of all non-deleted explicit-Today tasks
+- `TasksWatchWidgets`: accessory-circular complication showing completed Today tasks as a share of the current planning day's non-deleted Today tasks
 - `TasksCompanionTests`: dependency-free tests for cache validation and deep-link routing
 
 ## Identifiers
@@ -35,11 +35,11 @@ Do not replace the checked-in App Group identifier or create a second shared con
 
 The Watch app intentionally has one job. Its plus button opens the standard watchOS text-entry interface, and submitting non-empty text creates an owned task with an explicit Start date of the owner's current planning day and the Inbox Today horizon. It does not download or display task lists.
 
-The accessory-circular complication uses the system circular gauge with a simple checkmark. Its denominator is every present, non-deleted task whose explicit Start date equals the owner's current planning day. Its numerator is the completed subset. Trashed tasks and recurrence projections are excluded. Tapping the complication opens the Watch app.
+The accessory-circular complication uses one solid circular track with a high-contrast clockwise progress stroke beginning at 12 o'clock and a bold centered checkmark. Its denominator is the current set of open Today-horizon tasks plus Today-horizon tasks completed on the owner's current planning day. Its numerator is the completed subset. Canceled tasks, deleted tasks, stale completions, future tasks, and recurrence projections are excluded. Tapping the complication opens the Watch app.
 
-The iPhone transfers the existing expiring widget credential to its paired Watch through `WatchConnectivity`. The credential grants only the bounded Watch capture and aggregate-progress operations at the Edge Function boundary. The Watch refreshes progress when its app becomes active and asks WidgetKit for another timeline after 30 minutes. watchOS ultimately schedules background refreshes according to its system budget, so the requested interval is not a guarantee.
+The iPhone transfers the existing expiring widget credential to its paired Watch through `WatchConnectivity`. If that capability is missing or rejected, the Watch requests a replacement in the background without sending task content through the phone. The credential grants only the bounded Watch capture and aggregate-progress operations at the Edge Function boundary, and the Watch sends captured task summaries directly to that HTTPS boundary. The Watch refreshes progress when its app becomes active and asks WidgetKit for another timeline after 30 minutes. watchOS ultimately schedules background refreshes according to its system budget, so the requested interval is not a guarantee.
 
-Production acceptance requires applying `20260801195000_add_tasks_watch_capture_and_progress.sql`, deploying `tasks-widget-actions` with the matching backward-compatible handler, rebuilding the automatically signed companion, installing it on the paired iPhone and Watch, and verifying capture, sign-out clearing, owner replacement, complication progress, and offline cached rendering on physical hardware.
+Production acceptance requires applying `20260801195000_add_tasks_watch_capture_and_progress.sql` and `20260802214500_fix_tasks_watch_today_progress.sql`, deploying `tasks-widget-actions` with the matching backward-compatible handler, rebuilding the automatically signed companion, installing it on the paired iPhone and Watch, and verifying capture, sign-out clearing, owner replacement, complication progress, and offline cached rendering on physical hardware.
 
 ## Local Validation
 

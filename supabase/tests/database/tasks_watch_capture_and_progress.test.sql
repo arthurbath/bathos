@@ -139,21 +139,21 @@ SELECT is(
 SELECT set_config('garden.bath.tasks_activation', 'on', true);
 
 INSERT INTO public.tasks_todos (
-  id, owner_id, title, lifecycle, completed_at, disposition, deleted_at,
+  id, owner_id, title, lifecycle, completed_at, canceled_at, disposition, deleted_at,
   deletion_root_id, destination, today_section, start_date, order_key,
   entry_channel, last_mutation_channel, client_mutation_id
 ) VALUES
   (
     'ac000000-0000-4000-8000-000000000020',
     'ac000000-0000-4000-8000-000000000001',
-    'Completed today', 'completed', clock_timestamp(), 'present', NULL, NULL,
-    'anytime', 'inbox', (clock_timestamp() AT TIME ZONE 'UTC')::date, 'a1',
+    'Completed today', 'completed', clock_timestamp(), NULL, 'present', NULL, NULL,
+    'anytime', 'inbox', NULL, 'a1',
     'web', 'web', 'ac000000-0000-4000-8000-000000000021'
   ),
   (
     'ac000000-0000-4000-8000-000000000022',
     'ac000000-0000-4000-8000-000000000001',
-    'Deleted today', 'open', NULL, 'deleted', clock_timestamp(),
+    'Deleted today', 'open', NULL, NULL, 'deleted', clock_timestamp(),
     'ac000000-0000-4000-8000-000000000022',
     'anytime', 'inbox', (clock_timestamp() AT TIME ZONE 'UTC')::date, 'a2',
     'web', 'web', 'ac000000-0000-4000-8000-000000000023'
@@ -161,16 +161,30 @@ INSERT INTO public.tasks_todos (
   (
     'ac000000-0000-4000-8000-000000000024',
     'ac000000-0000-4000-8000-000000000001',
-    'Future task', 'open', NULL, 'present', NULL, NULL,
+    'Future task', 'open', NULL, NULL, 'present', NULL, NULL,
     'anytime', NULL, (clock_timestamp() AT TIME ZONE 'UTC')::date + 1, 'a3',
     'web', 'web', 'ac000000-0000-4000-8000-000000000025'
   ),
   (
     'ac000000-0000-4000-8000-000000000026',
     'ac000000-0000-4000-8000-000000000002',
-    'Foreign today', 'completed', clock_timestamp(), 'present', NULL, NULL,
+    'Foreign today', 'completed', clock_timestamp(), NULL, 'present', NULL, NULL,
     'anytime', 'inbox', (clock_timestamp() AT TIME ZONE 'UTC')::date, 'a0',
     'web', 'web', 'ac000000-0000-4000-8000-000000000027'
+  ),
+  (
+    'ac000000-0000-4000-8000-000000000028',
+    'ac000000-0000-4000-8000-000000000001',
+    'Completed before today', 'completed', clock_timestamp() - interval '1 day',
+    NULL, 'present', NULL, NULL, 'anytime', 'inbox', NULL, 'a4',
+    'web', 'web', 'ac000000-0000-4000-8000-000000000029'
+  ),
+  (
+    'ac000000-0000-4000-8000-000000000030',
+    'ac000000-0000-4000-8000-000000000001',
+    'Canceled today', 'canceled', NULL, clock_timestamp(), 'present', NULL, NULL,
+    'anytime', 'inbox', NULL, 'a5',
+    'web', 'web', 'ac000000-0000-4000-8000-000000000031'
   );
 
 SELECT set_config('garden.bath.tasks_activation', 'off', true);
@@ -180,14 +194,14 @@ SELECT is(
     'twc_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC'
   ) #>> '{completedCount}',
   '1',
-  'counts only completed owned present explicit-Today tasks'
+  'counts only completed owned present tasks from the current planning day'
 );
 SELECT is(
   public.tasks_read_today_progress_for_watch(
     'twc_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC'
   ) #>> '{totalCount}',
   '2',
-  'excludes deleted, future, and foreign tasks from Today progress'
+  'counts normalized Today tasks while excluding deleted, canceled, stale, future, and foreign tasks'
 );
 SELECT is(
   public.tasks_read_today_progress_for_watch(

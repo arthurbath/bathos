@@ -47,14 +47,26 @@ struct TasksWatchProgressView: View {
     let entry: TasksWatchProgressEntry
 
     var body: some View {
-        Gauge(value: entry.progress?.fraction ?? 0) {
+        ZStack {
+            Circle()
+                // Accessory complications are rendered as templates in accented
+                // and vibrant modes. Preserve the track/progress distinction in
+                // the alpha channel because WidgetKit may discard RGB colors.
+                .stroke(Color.primary.opacity(0.24), lineWidth: 5)
+
+            Circle()
+                .trim(from: 0, to: entry.progress?.fraction ?? 0)
+                .stroke(
+                    Color.primary,
+                    style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+
             Image(systemName: "checkmark")
-        } currentValueLabel: {
-            Image(systemName: "checkmark")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 16, weight: .black))
+                .foregroundStyle(.primary)
         }
-        .gaugeStyle(.accessoryCircular)
-        .widgetAccentable()
+        .padding(3)
         .containerBackground(.clear, for: .widget)
     }
 }

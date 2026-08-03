@@ -24,20 +24,27 @@ final class TaskWatchConnectivityCoordinator: NSObject, WCSessionDelegate {
     }
 
     func publish(_ credential: TaskWidgetCredential?) {
-        var context: [String: Any] = ["schemaVersion": 1]
-        if let credential {
-            let watchCredential = TaskWatchCredential(
-                schemaVersion: TaskWatchCredential.schemaVersion,
-                ownerId: credential.ownerId,
-                credential: credential.credential,
-                expiresAt: credential.expiresAt
-            )
-            context["credential"] = try? JSONEncoder().encode(watchCredential)
-        } else {
-            context["clear"] = true
-        }
-        pendingContext = context
+        pendingContext = makeCredentialPayload(credential)
         flushContextIfActive()
+    }
+
+    private func currentCredentialPayload() -> [String: Any] {
+        let credential = try? TaskWidgetCredentialStore()?.load()
+        return makeCredentialPayload(credential)
+    }
+
+    private func makeCredentialPayload(
+        _ credential: TaskWidgetCredential?
+    ) -> [String: Any] {
+        let watchCredential = credential.map {
+            TaskWatchCredential(
+                schemaVersion: TaskWatchCredential.schemaVersion,
+                ownerId: $0.ownerId,
+                credential: $0.credential,
+                expiresAt: $0.expiresAt
+            )
+        }
+        return TaskWatchConnectivityMessage.credentialPayload(watchCredential)
     }
 
     private func flushContextIfActive() {
@@ -64,5 +71,29 @@ final class TaskWatchConnectivityCoordinator: NSObject, WCSessionDelegate {
 
     func sessionDidDeactivate(_ session: WCSession) {
         session.activate()
+    }
+
+    func session(
+        _ session: WCSession,
+        didReceiveMessage message: [String: Any],
+        replyHandler: @escaping ([String: Any]) -> Void
+    ) {
+        guard TaskWatchConnectivityMessage.isCredentialRequest(message) else {
+            replyHandler([:])
+            return
+        }
+        replyHandler(currentCredentialPayload())
+    }
+
+    func session(
+        _ session: WCSession,
+        didReceiveUserInfo userInfo: [String: Any]
+    ) {
+        guard TaskWatchConnectivityMessage.isCredentialRequest(userInfo) else { return }
+        let payload = currentCredentialPayload()
+        pendingContext = payload
+        flushContextIfActive()
+        guard session.activationState == .activated else { return }
+        session.transferUserInfo(payload)
     }
 }

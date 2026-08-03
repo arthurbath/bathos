@@ -22,23 +22,31 @@ struct TasksWatchCaptureView: View {
     @ObservedObject var model: TasksWatchModel
 
     var body: some View {
-        VStack(spacing: 10) {
+        ZStack {
             TextFieldLink(prompt: Text("Task Summary")) {
-                Label("Add Task", systemImage: "plus")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Image(systemName: "plus")
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(width: 64, height: 64)
+                    .background(Circle().fill(.green))
+                    .contentShape(Circle())
             } onSubmit: { summary in
                 model.submit(summary)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.green)
+            .buttonStyle(.plain)
             .disabled(model.isSubmitting)
+            .accessibilityLabel("Add Task")
 
             if let status = model.status {
-                Text(status)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                VStack {
+                    Spacer()
+                    Text(status)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .transition(.opacity)
+                }
+                .allowsHitTesting(false)
             }
         }
         .padding()
@@ -52,6 +60,10 @@ final class TasksWatchModel: NSObject, ObservableObject, WCSessionDelegate {
 
     private let session = WCSession.isSupported() ? WCSession.default : nil
     private let client = TaskWatchActionsClient()
+    private var pendingCapture: PendingWatchCapture?
+    private var authorityRequestID: UUID?
+    private var authorityTimeoutTask: Task<Void, Never>?
+    private var statusDismissTask: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -67,40 +79,131 @@ final class TasksWatchModel: NSObject, ObservableObject, WCSessionDelegate {
     func submit(_ value: String) {
         let summary = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !summary.isEmpty, !isSubmitting else { return }
+        let capture = PendingWatchCapture(summary: summary)
+        pendingCapture = capture
+        isSubmitting = true
+        clearStatus()
         guard let credential = try? TaskWatchCredentialStore()?.load() else {
-            status = "Open Tasks on iPhone"
+            showStatus("Connecting to Tasks")
+            requestAuthority()
             return
         }
-        isSubmitting = true
-        status = nil
+        perform(capture, using: credential)
+    }
+
+    private func perform(
+        _ capture: PendingWatchCapture,
+        using credential: TaskWatchCredential
+    ) {
+        pendingCapture = nil
         Task {
             do {
-                try await client.createInboxTask(summary: summary, credential: credential)
-                status = "Added to Inbox"
+                try await client.createInboxTask(
+                    summary: capture.summary,
+                    credential: credential,
+                    clientMutationId: capture.clientMutationID,
+                    operationId: capture.operationID
+                )
+                showStatus("Added to Inbox", dismissAfter: 2)
                 await updateProgress(using: credential)
+                isSubmitting = false
+            } catch TaskWatchError.invalidCredential {
+                try? TaskWatchCredentialStore()?.clear()
+                pendingCapture = capture
+                showStatus("Connecting to Tasks")
+                requestAuthority()
             } catch {
-                status = "Task Could Not Be Added"
+                showStatus("Task Could Not Be Added")
+                isSubmitting = false
             }
-            isSubmitting = false
         }
     }
 
     func refreshProgress() {
-        guard let credential = try? TaskWatchCredentialStore()?.load() else { return }
+        guard let credential = try? TaskWatchCredentialStore()?.load() else {
+            requestAuthority()
+            return
+        }
         Task { await updateProgress(using: credential) }
     }
 
-    private func updateProgress(using credential: TaskWatchCredential) async {
-        guard let progress = try? await client.fetchProgress(credential: credential),
-              let store = TaskWatchProgressStore() else { return }
-        try? store.store(progress)
-        WidgetCenter.shared.reloadTimelines(
-            ofKind: TaskCompanionConstants.watchComplicationKind
+    private func requestAuthority() {
+        guard authorityRequestID == nil else { return }
+        guard let session, session.activationState == .activated else {
+            session?.activate()
+            return
+        }
+
+        let requestID = UUID()
+        authorityRequestID = requestID
+        let request = TaskWatchConnectivityMessage.credentialRequest(
+            identifier: requestID
         )
+        if session.isReachable {
+            session.sendMessage(request) { [weak self] reply in
+                Task { @MainActor in self?.apply(reply) }
+            } errorHandler: { _ in }
+        }
+        session.transferUserInfo(request)
+
+        authorityTimeoutTask?.cancel()
+        authorityTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.authorityRequestDidTimeOut(requestID)
+        }
+    }
+
+    private func authorityRequestDidTimeOut(_ requestID: UUID) {
+        guard authorityRequestID == requestID else { return }
+        authorityRequestID = nil
+        authorityTimeoutTask = nil
+        if pendingCapture != nil {
+            pendingCapture = nil
+            isSubmitting = false
+            showStatus("Could Not Connect to Tasks")
+        }
+    }
+
+    private func clearStatus() {
+        statusDismissTask?.cancel()
+        statusDismissTask = nil
+        withAnimation { status = nil }
+    }
+
+    private func showStatus(_ value: String, dismissAfter seconds: UInt64? = nil) {
+        statusDismissTask?.cancel()
+        withAnimation { status = value }
+        guard let seconds else {
+            statusDismissTask = nil
+            return
+        }
+        statusDismissTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            self?.clearStatus()
+        }
+    }
+
+    private func updateProgress(using credential: TaskWatchCredential) async {
+        do {
+            let progress = try await client.fetchProgress(credential: credential)
+            guard let store = TaskWatchProgressStore() else { return }
+            try store.store(progress)
+            WidgetCenter.shared.reloadTimelines(
+                ofKind: TaskCompanionConstants.watchComplicationKind
+            )
+        } catch TaskWatchError.invalidCredential {
+            try? TaskWatchCredentialStore()?.clear()
+            requestAuthority()
+        } catch {
+            return
+        }
     }
 
     private func apply(_ context: [String: Any]) {
-        guard context["schemaVersion"] as? Int == 1 else { return }
+        guard context["schemaVersion"] as? Int
+                == TaskWatchConnectivityMessage.schemaVersion else { return }
         if context["clear"] as? Bool == true {
             try? TaskWatchCredentialStore()?.clear()
             try? TaskWatchProgressStore()?.clear()
@@ -109,11 +212,16 @@ final class TasksWatchModel: NSObject, ObservableObject, WCSessionDelegate {
             )
             return
         }
-        guard let data = context["credential"] as? Data,
-              let value = try? JSONDecoder().decode(TaskWatchCredential.self, from: data) else {
-            return
-        }
+        guard let value = TaskWatchConnectivityMessage.credential(from: context) else { return }
         try? TaskWatchCredentialStore()?.store(value)
+        authorityRequestID = nil
+        authorityTimeoutTask?.cancel()
+        authorityTimeoutTask = nil
+        if let capture = pendingCapture {
+            perform(capture, using: value)
+        } else {
+            refreshProgress()
+        }
     }
 
     nonisolated func session(
@@ -124,7 +232,9 @@ final class TasksWatchModel: NSObject, ObservableObject, WCSessionDelegate {
         let context = session.receivedApplicationContext
         Task { @MainActor in
             self.apply(context)
-            self.refreshProgress()
+            if (try? TaskWatchCredentialStore()?.load()) == nil {
+                self.requestAuthority()
+            }
         }
     }
 
@@ -134,7 +244,21 @@ final class TasksWatchModel: NSObject, ObservableObject, WCSessionDelegate {
     ) {
         Task { @MainActor in
             self.apply(applicationContext)
-            self.refreshProgress()
         }
     }
+
+    nonisolated func session(
+        _ session: WCSession,
+        didReceiveUserInfo userInfo: [String: Any]
+    ) {
+        Task { @MainActor in
+            self.apply(userInfo)
+        }
+    }
+}
+
+private struct PendingWatchCapture {
+    let summary: String
+    let clientMutationID = UUID()
+    let operationID = UUID()
 }

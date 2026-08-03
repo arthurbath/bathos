@@ -200,6 +200,123 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertTrue(try store.clear())
     }
 
+    func testWatchCredentialRecoveryPayloadContainsNoTaskContent() {
+        let requestID = UUID(
+            uuidString: "ac000000-0000-4000-8000-000000000001"
+        )!
+        let payload = TaskWatchConnectivityMessage.credentialRequest(
+            identifier: requestID
+        )
+
+        XCTAssertTrue(TaskWatchConnectivityMessage.isCredentialRequest(payload))
+        XCTAssertEqual(payload["requestId"] as? String, requestID.uuidString.lowercased())
+        XCTAssertNil(payload["summary"])
+        XCTAssertNil(payload["task"])
+    }
+
+    func testWatchProgressFractionCoversEmptyPartialAndCompleteStates() throws {
+        let ownerID = UUID()
+        let generatedAt = "2099-10-26T12:00:00.123Z"
+        let planningDate = "2099-10-26"
+
+        let empty = TaskWatchTodayProgress(
+            type: "todayProgress",
+            schemaVersion: TaskWatchTodayProgress.schemaVersion,
+            ownerId: ownerID,
+            generatedAt: generatedAt,
+            planningDate: planningDate,
+            completedCount: 0,
+            totalCount: 0
+        )
+        let partial = TaskWatchTodayProgress(
+            type: "todayProgress",
+            schemaVersion: TaskWatchTodayProgress.schemaVersion,
+            ownerId: ownerID,
+            generatedAt: generatedAt,
+            planningDate: planningDate,
+            completedCount: 2,
+            totalCount: 4
+        )
+        let complete = TaskWatchTodayProgress(
+            type: "todayProgress",
+            schemaVersion: TaskWatchTodayProgress.schemaVersion,
+            ownerId: ownerID,
+            generatedAt: generatedAt,
+            planningDate: planningDate,
+            completedCount: 4,
+            totalCount: 4
+        )
+
+        XCTAssertEqual(empty.fraction, 0)
+        XCTAssertEqual(partial.fraction, 0.5)
+        XCTAssertEqual(complete.fraction, 1)
+    }
+
+    func testWatchCredentialResponseRoundTripsTheNarrowCapability() {
+        let credential = TaskWatchCredential(
+            schemaVersion: TaskWatchCredential.schemaVersion,
+            ownerId: UUID(),
+            credential: "twc_" + String(repeating: "W", count: 43),
+            expiresAt: "2099-10-26T12:00:00.123Z"
+        )
+        let payload = TaskWatchConnectivityMessage.credentialPayload(credential)
+
+        XCTAssertEqual(
+            TaskWatchConnectivityMessage.credential(from: payload),
+            credential
+        )
+        XCTAssertNil(payload["summary"])
+    }
+
+    func testWatchCapturePostsDirectlyWithStableMutationIdentifiers() async throws {
+        let credential = TaskWatchCredential(
+            schemaVersion: TaskWatchCredential.schemaVersion,
+            ownerId: UUID(),
+            credential: "twc_" + String(repeating: "W", count: 43),
+            expiresAt: "2099-10-26T12:00:00.123Z"
+        )
+        let clientMutationID = UUID(
+            uuidString: "ac000000-0000-4000-8000-000000000002"
+        )!
+        let operationID = UUID(
+            uuidString: "ac000000-0000-4000-8000-000000000003"
+        )!
+        var capturedRequest: URLRequest?
+        let client = TaskWatchActionsClient { request in
+            capturedRequest = request
+            return (
+                Data(#"{"outcome":"accepted"}"#.utf8),
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+            )
+        }
+
+        try await client.createInboxTask(
+            summary: "Watch capture",
+            credential: credential,
+            clientMutationId: clientMutationID,
+            operationId: operationID
+        )
+
+        XCTAssertEqual(capturedRequest?.url, TaskCompanionConstants.widgetActionsURL)
+        XCTAssertEqual(
+            capturedRequest?.value(forHTTPHeaderField: "Authorization"),
+            "Widget \(credential.credential)"
+        )
+        let body = try XCTUnwrap(capturedRequest?.httpBody)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: body) as? [String: String]
+        )
+        XCTAssertEqual(object["action"], "createInboxTask")
+        XCTAssertEqual(object["summary"], "Watch capture")
+        XCTAssertEqual(object["clientMutationId"], clientMutationID.uuidString.lowercased())
+        XCTAssertEqual(object["operationId"], operationID.uuidString.lowercased())
+    }
+
     func testSnapshotClientUsesTheNarrowCredentialAndValidatesTheOwner() async throws {
         let ownerID = UUID(uuidString: "9b000000-0000-4000-8000-000000000001")!
         let credential = TaskWidgetCredential(
@@ -844,11 +961,19 @@ final class TasksCompanionTests: XCTestCase {
         XCTAssertThrowsError(try invalid.validate())
     }
 
-    func testLargeWidgetNewTaskDeepLinkTargetsConfiguredList() {
-        let url = TaskWidgetPresentationPolicy.largeWidgetNewTaskURL(for: .anytime)
+    func testLargeWidgetNewTaskDeepLinkTargetsTodayInboxOrConfiguredList() {
+        let todayURL = TaskWidgetPresentationPolicy.largeWidgetNewTaskURL(for: .today)
 
-        XCTAssertEqual(url.absoluteString, "bathostasks://new/anytime")
-        XCTAssertEqual(TaskNativeRoute.parse(url), .newTaskInList(.anytime))
+        XCTAssertEqual(todayURL, TaskNativeRoute.newTask.deepLinkURL)
+        XCTAssertEqual(todayURL.absoluteString, "bathostasks://new")
+        XCTAssertEqual(TaskNativeRoute.parse(todayURL), .newTask)
+
+        for listID in [TaskWidgetListID.upcoming, .anytime, .someday] {
+            let url = TaskWidgetPresentationPolicy.largeWidgetNewTaskURL(for: listID)
+
+            XCTAssertEqual(url.absoluteString, "bathostasks://new/\(listID.rawValue)")
+            XCTAssertEqual(TaskNativeRoute.parse(url), .newTaskInList(listID))
+        }
     }
 
     func testWebViewUsesPersistentAppBoundConfiguration() {

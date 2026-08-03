@@ -65,6 +65,54 @@ enum TaskWatchError: Error {
     case rejected
 }
 
+enum TaskWatchConnectivityMessage {
+    static let schemaVersion = 1
+    static let credentialRequestType = "credentialRequest"
+    static let credentialType = "credential"
+
+    static func credentialRequest(identifier: UUID = UUID()) -> [String: Any] {
+        [
+            "type": credentialRequestType,
+            "schemaVersion": schemaVersion,
+            "requestId": identifier.uuidString.lowercased(),
+        ]
+    }
+
+    static func isCredentialRequest(_ payload: [String: Any]) -> Bool {
+        payload["type"] as? String == credentialRequestType
+            && payload["schemaVersion"] as? Int == schemaVersion
+            && (payload["requestId"] as? String).flatMap(UUID.init(uuidString:)) != nil
+    }
+
+    static func credentialPayload(_ credential: TaskWatchCredential?) -> [String: Any] {
+        var payload: [String: Any] = [
+            "type": credentialType,
+            "schemaVersion": schemaVersion,
+        ]
+        if let credential {
+            payload["credential"] = try? JSONEncoder().encode(credential)
+        } else {
+            payload["clear"] = true
+        }
+        return payload
+    }
+
+    static func credential(from payload: [String: Any]) -> TaskWatchCredential? {
+        guard payload["schemaVersion"] as? Int == schemaVersion,
+              (payload["type"] as? String == credentialType
+                || payload["type"] == nil),
+              let data = payload["credential"] as? Data,
+              let credential = try? JSONDecoder().decode(
+                TaskWatchCredential.self,
+                from: data
+              ),
+              (try? credential.validate()) != nil else {
+            return nil
+        }
+        return credential
+    }
+}
+
 struct TaskWatchCredentialStore {
     static let fileName = "task-watch-credential-v1.json"
     let fileURL: URL
@@ -143,7 +191,12 @@ struct TaskWatchActionsClient {
         self.transport = transport
     }
 
-    func createInboxTask(summary: String, credential: TaskWatchCredential) async throws {
+    func createInboxTask(
+        summary: String,
+        credential: TaskWatchCredential,
+        clientMutationId: UUID = UUID(),
+        operationId: UUID = UUID()
+    ) async throws {
         try credential.validate()
         let normalized = summary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty, normalized.count <= 500 else {
@@ -154,8 +207,8 @@ struct TaskWatchActionsClient {
             credential: credential,
             body: [
                 "summary": normalized,
-                "clientMutationId": UUID().uuidString.lowercased(),
-                "operationId": UUID().uuidString.lowercased(),
+                "clientMutationId": clientMutationId.uuidString.lowercased(),
+                "operationId": operationId.uuidString.lowercased(),
             ],
             maximumBytes: 2_048
         )
@@ -192,9 +245,13 @@ struct TaskWatchActionsClient {
         )
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
         let (data, response) = try await transport(request)
-        guard let http = response as? HTTPURLResponse,
-              http.statusCode == 200,
-              data.count <= maximumBytes else {
+        guard let http = response as? HTTPURLResponse else {
+            throw TaskWatchError.rejected
+        }
+        if http.statusCode == 401 {
+            throw TaskWatchError.invalidCredential
+        }
+        guard http.statusCode == 200, data.count <= maximumBytes else {
             throw TaskWatchError.rejected
         }
         return data

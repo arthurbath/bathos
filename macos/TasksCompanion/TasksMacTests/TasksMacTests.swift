@@ -393,6 +393,20 @@ final class TasksMacTests: XCTestCase {
         )
     }
 
+    func testLargeWidgetNewTaskDeepLinkTargetsTodayInboxOrConfiguredList() {
+        let todayURL = TaskWidgetPresentationPolicy.largeWidgetNewTaskURL(for: .today)
+
+        XCTAssertEqual(todayURL, TaskNativeRoute.newTask.deepLinkURL)
+        XCTAssertEqual(TaskNativeRoute.parse(todayURL), .newTask)
+
+        for listID in [TaskWidgetListID.upcoming, .anytime, .someday] {
+            let url = TaskWidgetPresentationPolicy.largeWidgetNewTaskURL(for: listID)
+
+            XCTAssertEqual(url.absoluteString, "bathostasks://new/\(listID.rawValue)")
+            XCTAssertEqual(TaskNativeRoute.parse(url), .newTaskInList(listID))
+        }
+    }
+
     func testSettingsDestinationUsesTheCanonicalWebRoute() {
         XCTAssertEqual(
             TasksMacDestination.settings.nativeRoute.webURL.path,

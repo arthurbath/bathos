@@ -1,8 +1,22 @@
 import SwiftUI
 import UIKit
 
+final class TasksCompanionApplicationDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [
+            UIApplication.LaunchOptionsKey: Any
+        ]? = nil
+    ) -> Bool {
+        TaskWatchConnectivityCoordinator.shared.activate()
+        return true
+    }
+}
+
 @main
 struct TasksCompanionApp: App {
+    @UIApplicationDelegateAdaptor(TasksCompanionApplicationDelegate.self)
+    private var applicationDelegate
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var browserModel = TasksBrowserModel()
 
@@ -13,7 +27,6 @@ struct TasksCompanionApp: App {
                 .ignoresSafeArea(.container, edges: .bottom)
                 .onOpenURL(perform: handleURL)
                 .onAppear {
-                    TaskWatchConnectivityCoordinator.shared.activate()
                     consumeNewTaskControlRequest()
                 }
                 .onChange(of: scenePhase) { _, newPhase in
