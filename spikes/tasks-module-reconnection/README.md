@@ -77,3 +77,5 @@ docker-compose -f spikes/tasks-module-reconnection/docker-compose.yaml down --vo
 docker cp spikes/tasks-module-reconnection/sql/cleanup.sql supabase_db_rsqfokyqntmtdejfwmjs:/tmp/tasks-module-reconnection-cleanup.sql
 docker exec supabase_db_rsqfokyqntmtdejfwmjs psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/tasks-module-reconnection-cleanup.sql
 ```
+
+The cleanup script removes inactive disposable `powersync_1_*` replication slots for the local `postgres` database before dropping the disposable publication. This prevents repeated harness runs from exhausting local Postgres replication-slot capacity. It does not touch active slots or Supabase's internal replication slot.

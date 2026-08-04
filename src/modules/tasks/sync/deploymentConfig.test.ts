@@ -22,6 +22,7 @@ const publicFunctionBoundaryMigration = read(
 const selfHostedExample = read('deploy/tasks-powersync/service.self-hosted.example.yaml');
 const disposableSyncConfig = read('spikes/tasks-module-reconnection/powersync/sync-config.yaml');
 const disposablePublication = read('spikes/tasks-module-reconnection/sql/setup.sql');
+const disposableCleanup = read('spikes/tasks-module-reconnection/sql/cleanup.sql');
 
 describe('Tasks PowerSync deployment configuration', () => {
   const schema = tasksPowerSyncSchema.toJSON() as {
@@ -55,6 +56,13 @@ describe('Tasks PowerSync deployment configuration', () => {
 
   it('keeps the disposable and production owner stream identical', () => {
     expect(disposableSyncConfig).toBe(productionSyncConfig);
+  });
+
+  it('removes only inactive disposable replication slots during local harness cleanup', () => {
+    expect(disposableCleanup).toContain("slot_name LIKE 'powersync_1_%'");
+    expect(disposableCleanup).toContain('database = current_database()');
+    expect(disposableCleanup).toContain('AND NOT active');
+    expect(disposableCleanup).toContain('DROP PUBLICATION IF EXISTS powersync');
   });
 
   it('keeps deployment secrets external and requires verified TLS for self-hosting', () => {

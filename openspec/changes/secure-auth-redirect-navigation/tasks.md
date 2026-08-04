@@ -12,4 +12,14 @@
 
 - [x] 3.1 Run focused authentication, shared routing, launcher, module-access, scroll-restoration, and route-security tests, then confirm the original advisory payloads do not reproduce and legitimate redirects still work.
 - [x] 3.2 Run the complete local repository gate: full tests, Tasks typechecking, lint, production build, strict OpenSpec validation, diff checks, dependency-graph inspection, and a fresh npm security audit.
-- [ ] 3.3 Run the applicable local Tasks integration and performance checks plus a Safari development smoke test covering authentication and every registered module route without mutating production data.
+- [x] 3.3 Run the applicable local Tasks integration and performance checks plus a Safari development smoke test covering authentication and every registered module route without mutating production data.
+
+  The offline, multi-client, preservation, and ten-minute sustained parallel-use
+  integrations passed. The performance suite was executed and its unstable
+  wall-clock threshold failures remain recorded under the temporary
+  dependency-upgrade waiver in
+  `docs/agents/evaluations/2026-08-04_dependency_upgrade_performance_gate_waiver.md`.
+  Safari preserved valid internal authentication destinations, removed an
+  encoded backslash destination during tab switching, and resolved every
+  registered platform, module, compatibility-redirect, and not-found route
+  without an application-error surface or production mutation.
